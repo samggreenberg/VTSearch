@@ -11,11 +11,13 @@ function quota(over: Partial<LabelQuota> = {}): LabelQuota {
     good_quota: 3,
     bad_quota: 4,
     dry_bad_quota: 16,
+    hold_labels: 30,
+    hold_owed: 0,
     ...over,
   };
 }
 
-describe('label-quota (#4643, #4731, #4758)', () => {
+describe('label-quota (#4643, #4731, #4758, #4889)', () => {
   describe('labelsOwed', () => {
     it('names both classes, singular and plural', () => {
       expect(labelsOwed({ goods_owed: 2, bads_owed: 1 })).toBe('2 more Goods and 1 more Bad');
@@ -75,6 +77,19 @@ describe('label-quota (#4643, #4731, #4758)', () => {
     it('owes the first quota only, before the first Good', () => {
       const note = queryNote(quota({ tier: 'query', n_good: 0, n_bad: 0, goods_owed: 3, bads_owed: 4 }));
       expect(note).toContain(' 3 more Goods and 4 more Bads in Train give a trained one.');
+    });
+
+    it('past the quota, names the hold rather than too few labels (#4736, #4889)', () => {
+      const note = queryNote(
+        quota({ tier: 'query', n_good: 12, n_bad: 15, goods_owed: 0, bads_owed: 0, hold_owed: 3 }),
+      );
+      expect(note).not.toContain('Too few labels');
+      expect(note).toContain('keeps its query\'s set until it has 30 labels (this one has 27)');
+      expect(note).toContain("the detector's typed query, keeping the images its text sort keeps in Train");
+      expect(note).toContain('3 more labels, Good or Bad, in Train give a trained one.');
+      expect(quotaNote(quota({ tier: 'query', n_good: 12, n_bad: 17, goods_owed: 0, bads_owed: 0, hold_owed: 1 }))).toContain(
+        '1 more label, Good or Bad,',
+      );
     });
   });
 

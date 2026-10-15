@@ -1,0 +1,13 @@
+embedder,band,pairs,base_short,short,d,se,gained,lost
+siglip2_l,large,245,0.0,0.0,0.0,0.0,0,0
+siglip2_l,medium,245,0.0082,0.0041,-0.0041,0.0041,1,0
+siglip2_l,small,230,0.2957,0.113,-0.1826,0.0523,48,6
+clip_l,large,245,0.0,0.0,0.0,0.0,0,0
+clip_l,medium,245,0.0082,0.0694,0.0612,0.0315,2,17
+clip_l,small,230,0.2957,0.3478,0.0522,0.0454,13,25
+clip,large,245,0.0,0.0,0.0,0.0,0,0
+clip,medium,245,0.0082,0.0857,0.0776,0.0302,1,20
+clip,small,230,0.2957,0.4,0.1043,0.0519,13,37
+embeddinggemma2,large,245,0.0,0.0,0.0,0.0,0,0
+embeddinggemma2,medium,245,0.0082,0.0082,0.0,0.0101,2,2
+embeddinggemma2,small,230,0.2957,0.087,-0.2087,0.0552,52,4

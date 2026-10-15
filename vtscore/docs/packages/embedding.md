@@ -488,11 +488,20 @@ similarity, the VTSBrowse projection - all consume unit vectors without
 re-normalising.
 
 Two properties make applying it at several chokepoints safe: it is
-**idempotent** (re-normalising a unit vector returns it unchanged up to
-float32 rounding, so an embedder that already normalises costs nothing),
-and a **zero or non-finite-norm vector is returned unchanged** rather
-than divided, so it can't mint `inf` / `nan` rows that would poison every
-downstream consumer.
+**idempotent bit for bit** (a vector already unit-norm to within 1e-6
+comes back with the very bytes it went in with, so an embedder that
+already normalises costs nothing), and a **zero or non-finite-norm vector
+is returned unchanged** rather than divided, so it can't mint `inf` /
+`nan` rows that would poison every downstream consumer.
+
+The first property has to hold to the last bit, not to rounding (#4892).
+The pickle loader normalises what ingest stored, and the calibration
+folds' split is seeded from the training vectors' bytes
+(`_split_dither_rng`). When a second pass moved the last bit of a third
+of the vectors, a dataset reloaded after a restart drew other folds than
+the process that imported it, and the same labels gave another line.
+Normalisation itself runs in `float64` and rounds each component to
+`float32` once, so its output sits within about 6e-8 of unit norm.
 
 ---
 

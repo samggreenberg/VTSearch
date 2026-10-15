@@ -17,6 +17,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
+  from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
+  view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods
+  and 4 Bads") and owing nothing. It now says the detector keeps its query's set until 30 labels, how many
+  it has, and how many more labels, Good or Bad, give a trained one. AutoFind's results list held detectors
+  on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
+  `hold_owed`.
+
+- **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
+  the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
+  FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
+  `scripts/install.sh` does. FaceNet's weights also now always download into the model cache
+  (`VTSEARCH_MODELS_DIR`, else `data/models`) rather than under `$HOME`; a host that already holds
+  them in `~/.cache/torch` fetches them once more (~107 MB).
 - **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
   and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
   2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
@@ -239,6 +253,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
+  image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
+  default embedder weights in at build time (CLAP General for `audio`, X-CLIP for `video`), so a fresh
+  container serves on first run without a Hugging Face download. `docker/compose/docker-compose.audio.yml`
+  and `docker-compose.video.yml` build and run the two; any other media type builds with
+  `--build-arg MEDIA_TYPE=<type>`. The half types bake what their media embed as: `document` means
+  document input converted to page images, so it bakes SigLIP; `face` means image input with the faces
+  cropped out, so it bakes FaceNet (and the image installs `facenet-pytorch`). A server locked to
+  `document` now also warms SigLIP at startup, where it used to warm nothing. See
+  [SETUP.md](docs/SETUP.md#single-media-type-audio-only-video-only).
 - **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
   `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
   but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
@@ -828,6 +852,19 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
+  calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the
+  head's own scores of the labels it trained on, and the separation was read from those, so labels that
+  did not separate at all read as separating strongly (2.69 on five yellow smileys Good against five
+  Bad) and the check never came due. The separation now comes from the folds (0 or below), so the check
+  runs. The line itself is unchanged.
+
+- **A dataset reloaded after a restart trains the same line as the process that imported it** (issue
+  #4892). Reloading a dataset moved the last bit of about a third of its stored vectors, and that was
+  enough to change which votes the calibration folds held out. The same labels could then get another
+  line, and another separation for Autopilot's weak-separation check: 2.69 in the process that imported
+  `drawings` against 0.13 after a restart. A reload now holds the vectors the import made, bit for bit.
 
 - **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
   shown through the document viewer, which clipped it to a 300×150 box and offered no image

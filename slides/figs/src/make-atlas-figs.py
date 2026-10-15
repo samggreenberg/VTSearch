@@ -5,7 +5,7 @@ Run from the repo root:
 
     python slides/figs/src/make-atlas-figs.py
 
-Four figures, and they are deliberately three different kinds of thing.
+Four figures, and they are deliberately two different kinds of thing.
 
 `atlas-blindspot` and `atlas-cells` are drawn on **the deck's own plane** — the
 same blue-noise field, the same votes and the same fitted boundary that
@@ -31,10 +31,10 @@ and hard to parse — a fair verdict, and the diagnosis worth keeping is that
 points on a sphere give the eye nothing to judge position against. A floor,
 four posts and a lid do.
 
-`atlas-pvalues` is the only plot: it re-plots published numbers from the #3329
-fit-quality study (`docs/experiments/2026-08-30-fit-quality-3329/`), read from
-that report's aggregate CSVs at build time so the figure cannot drift from the
-numbers the notes quote.
+`atlas-far` is drawn in that same room: the shipped atlas built on its floor,
+and the distance from each item to its cell's centre, which is what the atlas's
+typicality score ranks. A plot of how calibrated that score is (`atlas-pvalues`)
+was cut from the deck as too technical for a feature rarely used (#4872).
 """
 
 import functools
@@ -59,7 +59,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import FULL_BLEED, save  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
-STUDY = _REPO_ROOT / "docs/experiments/2026-08-30-fit-quality-3329/agg"
 
 
 def _intro():
@@ -120,11 +119,12 @@ MIN_NODE = 4
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _canvas() -> tuple[plt.Figure, plt.Axes]:
-    fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
+def _canvas(width: float = CANVAS[0], height: float = CANVAS[1]) -> tuple[plt.Figure, plt.Axes]:
+    """The plane's canvas; *width* or *height* past the plane's own leaves room to its right or above it."""
+    fig, ax = plt.subplots(figsize=(width * UNIT_PT / 72, height * UNIT_PT / 72))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, CANVAS[0])
-    ax.set_ylim(0, CANVAS[1])
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
     ax.set_aspect("equal")
     ax.set_axis_off()
     return fig, ax
@@ -344,62 +344,210 @@ def blindspot_fig() -> None:
 # 2. The atlas — a partition that remembers where you have been
 # ──────────────────────────────────────────────────────────────────────────────
 
-CELLS_STAGES = 6
+CELLS_STAGES = 7
+#: The atlas's tree beside the plane (owner, #4872): the walk goes "from the
+#: top, biggest first", so the top has to be on the slide. The panel's width
+#: and the rows its first three levels stand on, in plane units. The plane
+#: keeps its own shape and the slide fits both, so the plane draws smaller
+#: here than on the slides either side of it: the price of seeing the walk.
+TREE_W = 5.4
+TREE_GAP = 0.45
+#: Room over the plane. The wider canvas fits the slide at a smaller scale and
+#: centres in it, which brings the plane's top-left items up into the title's
+#: notch; a band of headroom moves the plane down out of it, and costs nothing,
+#: since the slide letterboxes this canvas top and bottom anyway.
+TREE_HEADROOM = 1.4
+TREE_LEVEL_Y = (7.3, 5.1, 2.9)
+#: The stubs under a cell that splits again, as on Span's tree: a cell the
+#: picture's deeper split reaches, drawn as where the tree goes on.
+TREE_STUB = 0.55
+#: Gaps between neighbouring nodes on a row, and the extra between two
+#: parents' children, in plane units.
+TREE_NODE_GAP, TREE_GROUP_GAP = 0.14, 0.3
+#: The fade over the walk's cell on page f (owner, #4872): light where the
+#: detector is least sure the cell is Bad, toward the checks, and darker red
+#: away from them. Washes of the deck's Bad red, not the red itself, so the
+#: items over them still read.
+FADE_LIGHT, FADE_DARK = "#fdeaea", "#e9a1a1"
 
 
 def _scores() -> np.ndarray:
-    """A sort score per item: the toy detector's own signed distance.
+    """A sort score per item: how near it sits to the checks, the Goods voted so far.
 
     The probe below is the shipped rule, and the shipped rule reads the sort
-    scores the app is showing. Here that is the second fit — the detector as
-    the loop left it — so the picture's probe is picked from the same numbers
-    its boundary is drawn from rather than from a second invented quantity.
+    scores the app is showing. The toy detector's own decision function is no
+    good for that here: it is an RBF fit to a dozen votes, which far from them
+    all drifts back to its intercept, so the far corner of the plane would
+    outscore the photos beside the checks. Nearness to the checks is what the
+    room reads off the picture, and it is what page f's fade draws (owner,
+    #4872: "light pink toward the checks and darker red away from the checks").
     """
-    pts, _first, second, *_ = INTRO._scene()
-    return second.decision_function(pts)
+    return _goodness(INTRO._scene()[0])
 
 
-def _next_cell() -> int:
-    """The cell the walk stops at: the largest one carrying no vote.
+def _goodness(xy: np.ndarray) -> np.ndarray:
+    """Minus each point's distance to the nearest Good vote: higher toward the checks."""
+    seed_good, _seed_bad = INTRO._seed_votes()
+    pts, _first, _second, _curve, _after, asked, _again, _labeled = INTRO._scene()
+    goods = pts[list(seed_good + (asked,))]
+    near = np.full(len(xy), np.inf)
+    for chunk in range(0, len(xy), 4096):
+        part = xy[chunk : chunk + 4096]
+        near[chunk : chunk + 4096] = np.hypot(*(part[:, None, :] - goods[None, :, :]).transpose(2, 0, 1)).min(axis=1)
+    return -near
 
-    Breadth-first from the root, biggest sibling first, first cell with no
-    evidence wins — which at one level of leaves is just "largest unvoted".
-    """
+
+def _members(depth: int, cell: int) -> np.ndarray:
+    return np.flatnonzero(_cells_at(depth) == cell)
+
+
+def _children(depth: int, cell: int) -> list[int]:
+    """The cells *cell* split into, biggest first, or none if it did not split."""
+    if depth + 1 > _leaf_depth():
+        return []
+    level = _partition()[depth + 1]
+    kids = [int(k) for k in np.flatnonzero(level.parents == cell)]
+    if len(kids) < 2:
+        return []
+    return sorted(kids, key=lambda k: -len(_members(depth + 1, k)))
+
+
+def _voted() -> set[int]:
     seed_good, seed_bad = INTRO._seed_votes()
     _pts, _first, _second, _curve, _after, asked, _again, _labeled = INTRO._scene()
-    voted = set(seed_good + seed_bad + (asked,))
-    cells = _cells_at(_leaf_depth())
-    order = sorted(set(cells.tolist()), key=lambda c: -int((cells == c).sum()))
-    for cell in order:
-        if not (voted & set(np.flatnonzero(cells == cell).tolist())):
-            return cell
+    return set(seed_good + seed_bad + (asked,))
+
+
+def _next_cell() -> tuple[int, int]:
+    """``(depth, cell)`` the walk stops at: breadth first from the top, biggest sibling first.
+
+    The shipped `CoverageAtlas.next_sample` walk: the first cell carrying no
+    vote. The tree beside the plane is laid out in that order, so the walk is
+    the tree read a row at a time, left to right.
+    """
+    voted = _voted()
+    queue = [(0, 0)]
+    while queue:
+        depth, cell = queue.pop(0)
+        if not voted & set(_members(depth, cell).tolist()):
+            return depth, cell
+        queue += [(depth + 1, k) for k in _children(depth, cell)]
     raise SystemExit("every cell carries a vote — the drawing has nothing to explore")
 
 
-def _probe(cell: int) -> int:
-    """Which item of *cell* the atlas asks about: the shipped surprise probe.
+def _probe(depth: int, cell: int) -> int:
+    """Which item of the cell the atlas asks about: the shipped surprise probe.
 
     The region's median score decides what the model presumes about it, and
     the probe is the element that would most cheaply prove the presumption
     wrong: the lowest-scored item of a region it calls good, the highest-scored
     item of one it calls bad. Informative whichever way the answer lands.
     """
+    pts, _first, second, *_ = INTRO._scene()
     scores = _scores()
-    members = np.flatnonzero(_cells_at(_leaf_depth()) == cell)
-    presumed_good = float(np.median(scores[members])) >= 0.0
+    members = _members(depth, cell)
+    presumed_good = float(np.median(second.decision_function(pts[members]))) >= 0.0
     return int(members[scores[members].argmin() if presumed_good else scores[members].argmax()])
+
+
+def _tree_radius(depth: int, cell: int) -> float:
+    """A node's radius: area for the cell's count of items, so "biggest first" can be seen."""
+    return 0.07 + 0.03 * math.sqrt(len(_members(depth, cell)))
+
+
+@functools.lru_cache(maxsize=1)
+def _tree_xy() -> dict[tuple[int, int], tuple[float, float]]:
+    """Each node's centre: the third row laid out left to right in the walk's order, parents over their children."""
+    row: list[tuple[int, int]] = []
+    groups: list[int] = []
+    for k1 in _children(0, 0):
+        for k2 in _children(1, k1):
+            row.append((2, k2))
+            groups.append(k1)
+    xs: list[float] = []
+    for i, node in enumerate(row):
+        r = _tree_radius(*node)
+        if not xs:
+            xs.append(r)
+            continue
+        gap = TREE_NODE_GAP + (TREE_GROUP_GAP if groups[i] != groups[i - 1] else 0.0)
+        xs.append(xs[-1] + _tree_radius(*row[i - 1]) + gap + r)
+    span = xs[-1] + _tree_radius(*row[-1])
+    x0 = CANVAS[0] + TREE_GAP + (TREE_W - span) / 2
+    xy = {node: (x0 + x, TREE_LEVEL_Y[2]) for node, x in zip(row, xs, strict=True)}
+    for k1 in _children(0, 0):
+        kids = [xy[(2, k2)][0] for k2 in _children(1, k1)]
+        xy[(1, k1)] = (sum(kids) / len(kids), TREE_LEVEL_Y[1])
+    tops = [xy[(1, k1)][0] for k1 in _children(0, 0)]
+    xy[(0, 0)] = (sum(tops) / len(tops), TREE_LEVEL_Y[0])
+    assert max(x + _tree_radius(*n) for n, (x, _y) in xy.items()) <= CANVAS[0] + TREE_GAP + TREE_W + 1e-9
+    return xy
+
+
+def _draw_tree(ax: plt.Axes, stage: int) -> None:
+    """The atlas's first three levels, as Span draws its tree: a level a page, then the votes, then the walk's stop."""
+    xy = _tree_xy()
+    shown = {0: 1, 1: 2, 2: 3}
+    voted = _voted()
+    stop = _next_cell()
+    for (depth, cell), (x, y) in xy.items():
+        if stage < shown[depth]:
+            continue
+        if depth:
+            parent = int(_partition()[depth].parents[cell])
+            px, py = xy[(depth - 1, parent)]
+            ax.plot([px, x], [py, y], color=RULE, linewidth=1.5, zorder=2)
+        if depth == 2 and _children(2, cell):
+            for dx in (-0.12, 0.0, 0.12):
+                ax.plot([x, x + dx], [y, y - TREE_STUB], color=RULE, linewidth=1.2, zorder=1)
+        covered = stage >= 4 and bool(voted & set(_members(depth, cell).tolist()))
+        ax.add_patch(plt.Circle((x, y), _tree_radius(depth, cell), facecolor=INK if covered else "white",
+                                edgecolor=SOFT, linewidth=1.4, zorder=4))  # fmt: skip
+        if stage >= 5 and (depth, cell) == stop:
+            ax.add_patch(plt.Circle((x, y), _tree_radius(depth, cell) + 0.12, facecolor="none", edgecolor=BLUE,
+                                    linewidth=3.0, zorder=5))  # fmt: skip
+
+
+#: The asked item's mark on Cover Story. The plane draws smaller there (see
+#: `TREE_W`), and the deck's 13pt "?" would land under the type floor, so the
+#: mark is drawn a size up: the same circle and glyph, scaled together.
+ASK_PT = 16
+
+
+def _ask(ax: plt.Axes, p: np.ndarray) -> None:
+    """`INTRO._circle(..., glyph="?")` at `ASK_PT`: the item the app asks about."""
+    scale = ASK_PT / INTRO.QUERY_PT
+    ax.add_patch(plt.Circle(tuple(p), R * scale, facecolor="white", edgecolor=INK, linewidth=2.6, zorder=5))
+    ax.text(p[0], p[1] + INTRO._glyph_drop("?") * scale, "?", color=INK, fontsize=ASK_PT, fontweight="bold",
+            ha="center", va="baseline", zorder=6)  # fmt: skip
+
+
+def _fade(ax: plt.Axes, chosen: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> None:
+    """Page f's wash over the walk's cell: light toward the checks, where the detector is least sure, darker away."""
+    grid = np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+    inside = chosen.reshape(-1) > 0.5
+    score = np.full(len(grid), np.nan)
+    score[inside] = _goodness(grid[inside])
+    lo, hi = np.nanmin(score), np.nanmax(score)
+    t = ((score - lo) / (hi - lo)).reshape(chosen.shape)
+    light, dark = (np.array(matplotlib.colors.to_rgb(c)) for c in (FADE_LIGHT, FADE_DARK))
+    rgba = np.zeros((*chosen.shape, 4))
+    rgba[..., :3] = dark + (light - dark) * np.nan_to_num(t)[..., None]
+    rgba[..., 3] = (chosen > 0.5).astype(float)
+    ax.imshow(rgba, extent=(xs[0], xs[-1], ys[0], ys[-1]), origin="lower", interpolation="bilinear", zorder=0)
 
 
 def _cells_stage(stage: int) -> plt.Figure:
     pts, _first, _second, _curve, _after, asked, _again, _labeled = INTRO._scene()
     seed_good, seed_bad = INTRO._seed_votes()
-    fig, ax = _canvas()
+    fig, ax = _canvas(CANVAS[0] + TREE_GAP + TREE_W, CANVAS[1] + TREE_HEADROOM)
 
     if stage >= 2:
         _draw_cells(ax, 1 if stage == 2 else _leaf_depth())
+    _draw_tree(ax, stage)
 
-    cell = _next_cell()
-    probe = _probe(cell)
+    depth, cell = _next_cell()
+    probe = _probe(depth, cell)
 
     if stage >= 4:
         # The evidence channels: a cell somebody has voted in is a cell the
@@ -410,9 +558,12 @@ def _cells_stage(stage: int) -> plt.Figure:
         ax.contourf(xs, ys, covered, levels=[0.5, 1.5], colors=["#eef1f5"], zorder=0)
 
     if stage >= 5:
-        xs, ys, raster = _cell_raster(_leaf_depth())
+        xs, ys, raster = _cell_raster(depth)
         chosen = (raster == cell).astype(float)
-        ax.contourf(xs, ys, chosen, levels=[0.5, 1.5], colors=[INTRO.BAND], zorder=0)
+        if stage >= 6:
+            _fade(ax, chosen, xs, ys)
+        else:
+            ax.contourf(xs, ys, chosen, levels=[0.5, 1.5], colors=[INTRO.BAND], zorder=0)
         ax.contour(xs, ys, chosen, levels=[0.5], colors=[BLUE], linewidths=3.0, zorder=3)
 
     voted = {**{i: "good" for i in seed_good + (asked,)}, **{i: "bad" for i in seed_bad}}
@@ -421,8 +572,8 @@ def _cells_stage(stage: int) -> plt.Figure:
             INTRO._check(ax, p)
         elif stage >= 4 and voted.get(i) == "bad":
             INTRO._cross(ax, p)
-        elif stage >= 6 and i == probe:
-            INTRO._circle(ax, p, glyph="?")
+        elif stage >= 7 and i == probe:
+            _ask(ax, p)
         else:
             INTRO._circle(ax, p)
 
@@ -430,12 +581,20 @@ def _cells_stage(stage: int) -> plt.Figure:
 
 
 def cells_fig() -> None:
-    """The atlas itself, drawn on the plane the deck already taught.
+    """The atlas itself, drawn on the plane the deck already taught, with its tree beside it.
 
-    Six pages: the collection; one split; the recursion; the votes landing in
-    cells; the walk stopping at the biggest cell with no evidence in it; and
-    the surprise probe inside that cell.
+    Seven pages: the collection, one cell at the top of the tree; one split;
+    the recursion; the votes landing in cells; the walk, top down and biggest
+    first, stopping at the first cell with no evidence in it; the detector's
+    certainty across that cell; and the surprise probe it picks there. The
+    cell is presumed Bad, so the probe is its highest scorer, the one nearest
+    the checks (owner, #4872: "the NE item, since it's the least red").
     """
+    depth, cell = _next_cell()
+    pts = INTRO._scene()[0]
+    members = _members(depth, cell)
+    probe = _probe(depth, cell)
+    assert probe == members[np.argmax(pts[members, 0] + pts[members, 1])], "the probe should be the cell's NE-most item"
     for stage in range(1, CELLS_STAGES):
         save(_cells_stage(stage), OUT, f"atlas-cells.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
     save(_cells_stage(CELLS_STAGES), OUT, "atlas-cells.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
@@ -798,8 +957,7 @@ def _item(
     through the plane, *including* the rim of one hanging over the plane's edge,
     which is clear of the plane and so stays black.
 
-    *fill* is the sphere's face: white, or `FLAGGED` on Far Out for an item the
-    atlas calls atypical.
+    *fill* is the sphere's face.
     """
     ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor=fill, edgecolor="none", zorder=zorder))
     if plane is None:
@@ -1316,8 +1474,40 @@ FAR_BUILD = 2000
 FAR_SEED = 23
 #: The threshold an item is flagged at: the domain-shift report's own alpha.
 FAR_ALPHA = 0.05
-#: The face of a flagged item: ink, the colour nothing else in the room is.
-FLAGGED = INK
+#: What the notes say the atlas makes of each collection, flagged of drawn.
+FAR_FLAGGED = (2, 68)
+#: The cells whose centres the slide draws: the atlas's own rule (three at a
+#: time) two levels down, nine cells, on the floor it is built on. Like the
+#: plane's partition above, a k-means on positions rather than on the centred
+#: directions the shipped atlas splits: the picture is "how far from your
+#: cell's centre", and that is what the shipped score ranks (owner, #4872).
+FAR_LEVELS = 2
+#: A centre's mark: a white cube, a shape no item has, half sunk in the floor as
+#: every item is (owner, #4884: not a black diamond laid over everything). Its
+#: half-side in world units, sized so the cube stands as big on the page as a
+#: sphere does.
+FAR_CUBE = 0.11
+#: The cube's faces, lit from above: the top white, the near side a shade
+#: down, the right side another. Under the floor each face is seen through the
+#: floor's own wash, as a sphere's crescent is.
+CUBE_FACES = {"top": "white", "front": "#f3f5f8", "right": "#e2e7ee"}
+CUBE_FACES_SUNK = {"front": PLANE_FILL, "right": "#d6dde6"}
+#: The spokes from each item to its cell's centre.
+FAR_SPOKE = {"color": SOFT, "linewidth": 1.2}
+#: How finely a spoke is cut to be tested against what stands in front of it,
+#: in page units, before each change between seen and hidden is refined.
+SPOKE_STEP = 0.01
+#: Every object is painted far to near, two z-steps apiece (a sphere spends 0.3
+#: of its own), the ceiling's after the floor's; the parts of the spokes the eye
+#: can see go over all of them, and the box's three near edges over those.
+Z_FAR_FLOOR, Z_FAR_CEILING, Z_FAR_SPOKES, Z_FAR_NEAR_EDGES = 1.0, 200.0, 400.0, 410.0
+
+
+@functools.lru_cache(maxsize=1)
+def _far_build() -> np.ndarray:
+    rng = np.random.default_rng(FAR_SEED)
+    (u0, u1), (v0, v1) = ITEM_LIMITS
+    return np.column_stack([rng.uniform(u0, u1, FAR_BUILD), rng.uniform(v0, v1, FAR_BUILD)])
 
 
 @functools.lru_cache(maxsize=1)
@@ -1330,10 +1520,9 @@ def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
     """
     from vtscore.coverage.atlas import CoverageAtlas  # noqa: PLC0415
 
-    rng = np.random.default_rng(FAR_SEED)
-    (u0, u1), (v0, v1) = ITEM_LIMITS
-    build = np.column_stack([rng.uniform(u0, u1, FAR_BUILD), rng.uniform(v0, v1, FAR_BUILD), np.zeros(FAR_BUILD)])
-    atlas = CoverageAtlas({i: row for i, row in enumerate(build.astype(np.float32))})
+    build = _far_build()
+    build3 = np.column_stack([build, np.zeros(len(build))])
+    atlas = CoverageAtlas({i: row for i, row in enumerate(build3.astype(np.float32))})
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
 
@@ -1343,148 +1532,243 @@ def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
     return scored(floor, 0.0), scored(ceiling, NEW_H)
 
 
+@functools.lru_cache(maxsize=1)
+def _far_tree() -> list[tuple[np.ndarray, list[np.ndarray]]]:
+    """The floor's first split and each part's own split: ``[(centre, [child centres])]``."""
+    build = _far_build()
+    top = KMeans(n_clusters=SPLIT_K, n_init=10, random_state=0).fit(build)
+    out = []
+    for k in range(SPLIT_K):
+        part = build[top.labels_ == k]
+        sub = KMeans(n_clusters=SPLIT_K, n_init=10, random_state=0).fit(part)
+        out.append((top.cluster_centers_[k], list(sub.cluster_centers_)))
+    return out
+
+
+def _far_centre(u: float, v: float) -> np.ndarray:
+    """The centre of the cell an item routes to: the nearest part, then that part's nearest child, as the atlas walks."""
+    q = np.array([u, v])
+    centre, kids = min(_far_tree(), key=lambda node: float(np.hypot(*(node[0] - q))))
+    return min(kids, key=lambda c: float(np.hypot(*(c - q))))
+
+
 def far_fig() -> None:
     """The atlas finding Out of Its Depth's second collection, drawn in the same room (#4517).
 
-    Four pages: the floor, as the atlas was built on it; the floor scored, the
-    few items the atlas calls atypical filled in; the second collection on the
-    ceiling, as Out of Its Depth showed it; and the ceiling scored, nearly every
-    item filled. No chart: the drift is which spheres go dark.
+    Four pages (owner, #4872: "show the centers in a), the distance lines in
+    b), the second domain in c), and the (longer) distance lines in d)"): the
+    floor with the centres of the atlas's cells; each floor item's spoke to its
+    cell's centre, short; the second collection on the ceiling, as Out of Its
+    Depth showed it; and its spokes, each down to the nearest centre, long.
+    How far an item is from its cell's centre, against how far the cell's own
+    items are, is what the shipped score ranks, and the counts the notes give
+    are that score's (`_far_pvalues`).
     """
+    floor_p, ceiling_p = _far_pvalues()
+    flagged = (int((floor_p < FAR_ALPHA).sum()), int((ceiling_p < FAR_ALPHA).sum()))
+    assert flagged == FAR_FLAGGED, f"the notes say {FAR_FLAGGED} flagged, the atlas says {flagged}"
     for stage in range(1, FAR_STAGES):
         save(_far_stage(stage), OUT, f"atlas-far.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
     save(_far_stage(FAR_STAGES), OUT, "atlas-far.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
+#: The way toward the eye, in world units: the displacement that leaves a point
+#: where it is on the page. Nearer is south, and up (see `_occluded_by_pillar`).
+TOWARD = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+#: A sphere's radius in the world, as its page radius is drawn.
+ITEM_R_WORLD = ITEM_R / PROJ_SCALE
+
+
+def _sunk(colour: str) -> str:
+    """*colour* as seen through a plane: the map that takes white to the plane's fill and black to a sunk rim.
+
+    It is the one the spheres already obey — their white face goes to
+    `PLANE_FILL` under the floor and their black rim to `OUTLINE_SUNK` — taken
+    per channel and applied to anything else seen through the same glass.
+    """
+    hexes = (colour, PLANE_FILL, OUTLINE_SUNK)
+    c, white, black = (np.array([int(h[i : i + 2], 16) for i in (1, 3, 5)]) / 255.0 for h in hexes)
+    out = black + c * (white - black)
+    return "#" + "".join(f"{round(255 * v):02x}" for v in out)
+
+
+def _cube(ax: plt.Axes, u: float, v: float, zorder: float) -> None:
+    """A cell's centre: a cube half sunk in the floor, drawn as a sphere is.
+
+    The camera sees the top, the south face and the east face. The floor cuts
+    the two side faces at half height: above it they are white-ish with ink
+    edges, below it they are seen through the floor in its wash, edged in the
+    sunk grey, and the cut itself is the waterline, in the waterline's grey.
+    """
+    a = FAR_CUBE
+
+    def at(du: float, dv: float, dh: float) -> np.ndarray:
+        return proj(u + du * a, v + dv * a, dh * a)
+
+    sunk_edge = {"color": OUTLINE_SUNK, "linewidth": 1.4, "solid_capstyle": "round"}
+    ink_edge = {"color": INK, "linewidth": 1.7, "solid_capstyle": "round", "solid_joinstyle": "round"}
+    faces = {
+        "front": lambda h0, h1: [at(-1, -1, h0), at(1, -1, h0), at(1, -1, h1), at(-1, -1, h1)],
+        "right": lambda h0, h1: [at(1, -1, h0), at(1, 1, h0), at(1, 1, h1), at(1, -1, h1)],
+    }
+    for name, face in faces.items():
+        ax.add_patch(plt.Polygon(face(-1, 0), closed=True, facecolor=CUBE_FACES_SUNK[name], edgecolor="none",
+                                 zorder=zorder))  # fmt: skip
+        ax.add_patch(plt.Polygon(face(0, 1), closed=True, facecolor=CUBE_FACES[name], edgecolor="none",
+                                 zorder=zorder + 0.1))  # fmt: skip
+    top = [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1), at(-1, 1, 1)]
+    ax.add_patch(plt.Polygon(top, closed=True, facecolor=CUBE_FACES["top"], edgecolor="none", zorder=zorder + 0.1))
+    # Under the floor: the bottom edges and the lower halves of the three near verticals.
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, -1), at(1, -1, -1), at(1, 1, -1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, -1)],
+    ):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.05, **sunk_edge)
+    # The waterline, where the floor cuts the two faces.
+    ax.plot(*np.array([at(-1, -1, 0), at(1, -1, 0), at(1, 1, 0)]).T, color=CELL_LINE, linewidth=1.1,
+            zorder=zorder + 0.15)  # fmt: skip
+    # Above it: the upper halves of the verticals and the top's four edges.
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, 1), at(-1, 1, 1), at(1, 1, 1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, 1)],
+        [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1)],
+    ):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.2, **ink_edge)
+
+
+def _in_polygon(q: np.ndarray, polygon: np.ndarray) -> bool:
+    return bool(MplPath(polygon).contains_point(tuple(q)))
+
+
+class _Scene:
+    """What stands between a point on a spoke and the eye.
+
+    The figure is painted far to near, which settles every sphere and cube
+    against every other; a spoke cannot be, because it runs from one depth to
+    another. So each spoke is cut fine and every piece asks the scene whether
+    anything covers it, and only the pieces nothing covers are drawn, over
+    everything. That one rule is all of the owner's (#4884): a spoke passes
+    behind whichever end is nearer the eye and over the other, a spoke from the
+    ceiling passes in front of the floor's items it crosses, and the piece of
+    one below the ceiling is seen through the ceiling.
+    """
+
+    def __init__(self, floor: np.ndarray, centres: list[np.ndarray], ceiling: np.ndarray | None) -> None:
+        self.floor = [np.array([u, v, 0.0]) for u, v in floor]
+        self.cubes = [np.array([u, v, 0.0]) for u, v in centres]
+        self.ceiling = [] if ceiling is None else [np.array([u, v, NEW_H]) for u, v in ceiling]
+        corners = [(0, 0), (BOX_U, 0), (BOX_U, BOX_V), (0, BOX_V)]
+        self.lid = np.array([proj(u, v, BOX_H) for u, v in corners])
+        self.crescent = _submerged_outline(CLIP_PAD)
+
+    def _behind_sphere(self, point: np.ndarray, q: np.ndarray, centre: np.ndarray) -> bool:
+        c = proj(*centre)
+        if float(np.hypot(*(q - c))) > ITEM_R + CLIP_PAD:
+            return False
+        if point[2] == centre[2]:
+            # In the sphere's own plane: under the cap, unless it is in front of the sunk half.
+            return not _in_polygon(q - c, self.crescent)
+        behind = float((centre - point) @ TOWARD) > 0.0
+        return behind or float(np.linalg.norm(point - centre)) < ITEM_R_WORLD
+
+    @staticmethod
+    def _behind_cube(point: np.ndarray, centre: np.ndarray) -> bool:
+        """Whether the ray from *point* toward the eye meets the cube: the slab test, from t = 0."""
+        half = FAR_CUBE + CLIP_PAD / PROJ_SCALE
+        lo, hi = 0.0, math.inf
+        for k in range(3):
+            near, far = centre[k] - half, centre[k] + half
+            if abs(TOWARD[k]) < 1e-12:
+                if not near <= point[k] <= far:
+                    return False
+                continue
+            t0, t1 = sorted(((near - point[k]) / TOWARD[k], (far - point[k]) / TOWARD[k]))
+            lo, hi = max(lo, t0), min(hi, t1)
+            if lo > hi:
+                return False
+        return True
+
+    def look(self, point: np.ndarray) -> str | None:
+        """``None`` if something covers *point*, else how it is seen: ``"clear"``, or ``"sunk"`` under the lid."""
+        q = proj(*point)
+        if any(self._behind_cube(point, c) for c in self.cubes):
+            return None
+        if any(self._behind_sphere(point, q, c) for c in self.floor + self.ceiling):
+            return None
+        if point[2] < NEW_H - 1e-9 and _in_polygon(q, self.lid):
+            return "sunk"
+        return "clear"
+
+
+def _spoke(ax: plt.Axes, scene: _Scene, start: np.ndarray, end: np.ndarray) -> None:
+    """One spoke, drawn wherever nothing stands in front of it, tinted where the lid is over it."""
+    length = float(np.hypot(*(proj(*end) - proj(*start))))
+    ts = np.linspace(0.0, 1.0, max(2, math.ceil(length / SPOKE_STEP) + 1))
+
+    def at(t: float) -> np.ndarray:
+        return start + t * (end - start)
+
+    looks = [scene.look(at(t)) for t in ts]
+    # Each change between one look and the next, refined to a hair, so a spoke
+    # ends on an object's edge rather than on the nearest step.
+    cuts = [0.0]
+    for i in range(1, len(ts)):
+        if looks[i] != looks[i - 1]:
+            lo, hi = ts[i - 1], ts[i]
+            for _ in range(20):
+                mid = 0.5 * (lo + hi)
+                lo, hi = (mid, hi) if scene.look(at(mid)) == looks[i - 1] else (lo, mid)
+            cuts.append(0.5 * (lo + hi))
+    cuts.append(1.0)
+    for t0, t1 in zip(cuts, cuts[1:], strict=False):
+        look = scene.look(at(0.5 * (t0 + t1)))
+        if look is None:
+            continue
+        colour = FAR_SPOKE["color"] if look == "clear" else _sunk(FAR_SPOKE["color"])
+        ax.plot(*np.array([proj(*at(t0)), proj(*at(t1))]).T, color=colour, linewidth=FAR_SPOKE["linewidth"],
+                solid_capstyle="butt", zorder=Z_FAR_SPOKES)  # fmt: skip
+
+
+def _near_edges(ax: plt.Axes) -> None:
+    """The three edges of the box that stand in front of something: the near right post, and the lid's near and right edges.
+
+    Every other edge is behind everything it crosses on the page, so the
+    wireframe's own strokes under the items are right for them. These three
+    are nearer than the floor's items behind the post and the spokes under the
+    lid (owner, #4884: the post in front of the lower spheres), so they are
+    drawn again on top, in the same weight.
+    """
+    for a, b in (((1, 0, 0), (1, 0, 1)), ((0, 0, 1), (1, 0, 1)), ((1, 0, 1), (1, 1, 1))):
+        ends = [proj(u * BOX_U, v * BOX_V, h * BOX_H) for u, v, h in (a, b)]
+        ax.plot(*np.array(ends).T, color=RULE, linewidth=1.2, zorder=Z_FAR_NEAR_EDGES)
+
+
 def _far_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
     planes = _wireframe(ax)
-    floor_p, ceiling_p = _far_pvalues()
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
-    for index, depth_z in _painted_back_to_front(floor, 0.0):
-        flagged = stage >= 2 and floor_p[index] < FAR_ALPHA
-        _item(ax, proj(*floor[index], 0.0), Z_IN_FRONT + depth_z, planes[0], fill=FLAGGED if flagged else "white")
-    if stage >= 3:
-        ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+    centres = [c for _centre, kids in _far_tree() for c in kids]
+    # The floor's spheres and cubes, far to near: whichever is further south is nearer and covers the other.
+    things = [("item", tuple(p)) for p in floor] + [("cube", tuple(c)) for c in centres]
+    for k, (kind, (u, v)) in enumerate(sorted(things, key=lambda thing: -thing[1][1])):
+        zorder = Z_FAR_FLOOR + 0.5 * k
+        if kind == "item":
+            _item(ax, proj(u, v, 0.0), zorder, planes[0])
+        else:
+            _cube(ax, u, v, zorder)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED) if stage >= 3 else None
+    if ceiling is not None:
         for index, depth_z in _painted_back_to_front(ceiling, 0.0):
-            flagged = stage >= 4 and ceiling_p[index] < FAR_ALPHA
-            _item(
-                ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1], fill=FLAGGED if flagged else "white"
-            )
+            _item(ax, proj(*ceiling[index], NEW_H), Z_FAR_CEILING + 100 * depth_z, planes[1])
+    scene = _Scene(floor, centres, ceiling)
+    if stage >= 2:
+        for u, v in floor:
+            _spoke(ax, scene, np.array([u, v, 0.0]), np.array([*_far_centre(u, v), 0.0]))
+    if stage >= 4:
+        for u, v in ceiling:
+            _spoke(ax, scene, np.array([u, v, NEW_H]), np.array([*_far_centre(u, v), 0.0]))
+    _near_edges(ax)
     return fig
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 4. The p-values — the second job, and what is wrong with it
-# ──────────────────────────────────────────────────────────────────────────────
-
-PVALUES_STAGES = 2
-#: Printed names for the combiners the study compared, in the CSV's own order.
-COMBINER_LABELS = {
-    "median": "median",
-    "mean": "mean — shipped",
-    "deepest": "deepest node only",
-    "fisher": "Fisher",
-    "min": "min",
-}
-
-
-@functools.lru_cache(maxsize=1)
-def _combiners() -> list[dict[str, float | str | bool]]:
-    """The #3329 combiner comparison, read from the study's aggregate CSV."""
-    path = STUDY / "b2_combiner_comparison.csv"
-    if not path.exists():
-        raise SystemExit(f"missing study data: {path}")
-    header, *rows = path.read_text().strip().splitlines()
-    keys = header.split(",")
-    out = []
-    for row in rows:
-        record = dict(zip(keys, row.split(",")))
-        out.append(
-            {
-                "name": record["combiner"],
-                "ks": float(record["ks_uniform_median"]),
-                "frac": float(record["frac_below_05_median"]),
-                "nominal": float(record["nominal_frac_below_05"]),
-                "shipped": record["is_shipped"] == "True",
-            }
-        )
-    return out
-
-
-def _pvalues_stage(stage: int) -> plt.Figure:
-    rows = _combiners()
-    nominal = rows[0]["nominal"]
-    fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
-    fig.subplots_adjust(left=0.36, right=0.955, bottom=0.17, top=0.80)
-
-    ax.set_xlim(0, 0.36)
-    ax.set_ylim(-0.012, 0.36)
-    ax.set_xlabel("Share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
-    ax.set_ylabel("Distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
-    ax.tick_params(labelsize=NOTE_PT, colors=SOFT, length=4)
-    for side in ("top", "right"):
-        ax.spines[side].set_visible(False)
-    for side in ("left", "bottom"):
-        ax.spines[side].set_color(RULE)
-
-    ax.axvline(nominal, color=BLUE, linewidth=2.0, linestyle=(0, (5, 4)), zorder=1)
-    ax.text(
-        nominal + 0.006,
-        0.352,
-        f"\u03b1 = {nominal:g}",
-        color=BLUE,
-        fontsize=NOTE_PT,
-        ha="left",
-        va="top",
-        zorder=4,
-    )
-    ax.axhline(0.0, color=GREEN, linewidth=2.0, zorder=1)
-    # Left end of the line it names: the right end is where the patch-embedder
-    # note goes, and two labels in one corner is one label nobody reads.
-    ax.text(0.004, 0.006, "calibrated", color=GREEN, fontsize=NOTE_PT, ha="left", va="bottom", zorder=4)
-
-    drawn = [r for r in rows if r["shipped"]] if stage == 1 else rows
-    for record in drawn:
-        shipped = bool(record["shipped"])
-        ax.plot(
-            record["frac"],
-            record["ks"],
-            marker="o",
-            markersize=13 if shipped else 9,
-            markerfacecolor=INK if shipped else "white",
-            markeredgecolor=INK,
-            markeredgewidth=2.0,
-            zorder=5,
-        )
-        ax.text(
-            record["frac"],
-            record["ks"] + 0.0135,
-            COMBINER_LABELS[str(record["name"])],
-            color=INK if shipped else SOFT,
-            fontsize=NOTE_PT,
-            fontweight="bold" if shipped else "normal",
-            ha="center",
-            va="baseline",
-            zorder=6,
-        )
-
-    return fig
-
-
-def pvalues_fig() -> None:
-    """The domain-shift verdict, against the two things it should satisfy.
-
-    Across is the number anybody checks — what share of the atlas's own
-    held-out data it calls atypical, which should be the alpha it promises.
-    Up is how far the whole p-value distribution sits from the uniform a
-    calibrated one would be. The shipped combiner is alone in landing on the
-    first and is nowhere near the floor of the second, which is exactly how a
-    spot check passes it for as long as anybody spot-checks.
-    """
-    for stage in range(1, PVALUES_STAGES):
-        save(_pvalues_stage(stage), OUT, f"atlas-pvalues.build{stage}.webp", column=FULL_BLEED, tight=False)
-    save(_pvalues_stage(PVALUES_STAGES), OUT, "atlas-pvalues.webp", column=FULL_BLEED, tight=False)
 
 
 if __name__ == "__main__":
@@ -1492,5 +1776,4 @@ if __name__ == "__main__":
     cells_fig()
     depth_fig()
     far_fig()
-    pvalues_fig()
     print("wrote figures to", OUT)

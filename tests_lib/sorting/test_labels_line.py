@@ -335,6 +335,64 @@ def test_a_line_built_by_hand_reads_separation_in_the_models_spread():
     assert 1.0 < WEAK_SEPARATION_D < 3.0
 
 
+class TestFoldsThatRankTheWrongWay:
+    """#4899: folds that score the held-out Goods below the Bads read as no separation, under today's line.
+
+    The folds are the ones the process that imported `drawings` drew for five
+    yellow smileys Good against five Bad (#4892): each held out one of each, and
+    the Good scored below the Bad both times.  In-sample, the head trained on
+    those very labels puts its Goods on top, and the separation read 2.69.
+    """
+
+    FOLDS = [([0.5090, 0.5239], [1.0, 0.0]), ([0.4974, 0.5235], [1.0, 0.0])]
+
+    def _session(self):
+        rng = np.random.default_rng(4892)
+        scores = np.clip(rng.normal(0.49, 0.02, 240), 0.0, 1.0)
+        order = np.argsort(-scores)
+        # The Goods top the in-sample ranking and the Bads sit a little below them.
+        labels = {int(i): True for i in order[:5]} | {int(i): False for i in order[30:35]}
+        return scores, list(range(scores.size)), labels
+
+    def test_the_separation_is_the_folds_gap_at_most_zero(self):
+        scores, ids, labels = self._session()
+        assert class_score_model(self.FOLDS) is None, "they support no line of their own"
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        assert line is not None and line.held_out is not None
+        assert line.held_out.mu_pos < line.held_out.mu_neg and line.separation < 0
+        floor = corpus_sigma_floor(line.unvoted_scores)
+        assert line.held_out.sigma == max(line.held_out.sigma_raw or 0.0, floor)
+        assert line.separation == pytest.approx((line.held_out.mu_pos - line.held_out.mu_neg) / line.held_out.sigma)
+        assert weak_check_due(line.separation, 10, None), "the labels it exists for are the ones it now checks"
+
+    def test_the_in_sample_stand_in_still_draws_the_line(self):
+        """The owner's ruling (2026-10-15): only the separation moves; the cut is the one before #4899."""
+        scores, ids, labels = self._session()
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        stand_in = fit_labels_line(None, scores, ids, labels)
+        assert line is not None and stand_in is not None
+        assert stand_in.held_out is None and stand_in.separation > WEAK_SEPARATION_D, "what #4892 read: 2.69"
+        assert line.model == stand_in.model
+        for beta in (0.25, 1.0, 4.0):
+            assert line.threshold(beta) == stand_in.threshold(beta)
+
+    def test_a_find_on_another_corpus_keeps_the_folds_verdict(self):
+        scores, ids, labels = self._session()
+        line = fit_labels_line(self.FOLDS, scores, ids, labels)
+        assert line is not None and line.held_out is not None
+        other = np.clip(np.random.default_rng(5).normal(0.48, 0.05, 300), 0.0, 1.0)
+        found = line.on_corpus(other)
+        assert found.held_out is not None and found.separation < 0
+        assert found.held_out.sigma == max(line.held_out.sigma_raw or 0.0, corpus_sigma_floor(other))
+
+    def test_folds_that_rank_the_right_way_carry_no_held_out_model(self):
+        line = fit_labels_line(_orderings(), _corpus())
+        assert line is not None and line.held_out is None
+
+    def test_wrong_way_folds_with_no_labels_still_draw_no_line(self):
+        assert fit_labels_line(self.FOLDS, [0.5, 0.6]) is None
+
+
 class TestWeakCheckDue:
     """#4496: the rule the app's Autopilot and the harness's default arm both check by."""
 

@@ -10,14 +10,19 @@
 
 <!-- build: figs/autopilot-span.build3.webp -->
 
-<!-- **a** — Span is the atlas as a gauge: have our votes been everywhere? The
-     top four levels are forty cells, and forty's the bar. -->
+<!-- build: figs/autopilot-span.build4.webp -->
 
-<!-- **b** — After Boundary: count from the top to the first empty cell. Three,
-     red. The ring's where Diversity starts. -->
+<!-- **a** — Span is the atlas as a gauge: have our votes been everywhere?
+     The top four levels are forty cells. -->
 
-<!-- **c** — Four Diversity picks later, eleven: yellow, which starts at ten.
-     Each pick fills the first empty cell and a path down to its item, so the
-     count jumps past cells earlier votes reached. -->
+<!-- **b** — After asking at the line, darken every cell a vote landed in, and
+     every cell above it. -->
 
-<!-- **d** — All forty: green. (Fewer than forty cells? Then all of them.) -->
+<!-- **c** — Count from the top to the first empty cell: three. That gap is
+     where the atlas walk asks next. -->
+
+<!-- **d** — Four picks later. A pick lands on one photo, so it darkens a path
+     down to it: 02, then 021, then 0212. The count's ten. -->
+
+<!-- **e** — And it asks at the first gap again. The cell after it is already
+     dark, so the count jumps. Span is full at all forty. -->

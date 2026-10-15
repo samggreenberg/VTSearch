@@ -343,6 +343,25 @@ class TestTheQueryHold:
         assert served_quota(ctx.model, ls)["tier"] == TIER_QUERY
 
     @pytest.mark.usefixtures("single_vector")
+    def test_the_cli_says_the_hold_not_the_quota(self, world, capsys):
+        """3 Goods and 4 Bads meet the quota: the CLI names the hold and what it owes, not "under the quota" (#4889)."""
+        from vtscore import cli, cli_progress
+
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make([1, 2, 3], [40, 41, 42, 43])
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY) is True
+        previous = cli_progress.get_format()
+        cli_progress.set_format("text")
+        try:
+            cli._report_centroid("held", ctx, ls)
+        finally:
+            cli_progress.set_format(previous)
+        line = capsys.readouterr().out.strip()
+        assert "under the quota" not in line
+        assert "until it has 30 labels (23 more labels, Good or Bad, for a trained detector)" in line
+
+    @pytest.mark.usefixtures("single_vector")
     def test_at_the_hold_the_trained_head_takes_over(self, world):
         snap, _proto, make, _embedded = world
         ctx = _ctx()

@@ -1,0 +1,9 @@
+where,arm,embedder,precision,per_s,reps,batch,n,x_siglip_time,median_1mcos,max_1mcos
+"CPU, 8 threads",siglip,siglip,fp32,3.805,2,32,64,1.0,0.0,1.1920928955078125e-07
+"CPU, 8 threads",siglip2_l,siglip2_l,fp32,0.2,2,32,64,19.02,0.0,1.1920928955078125e-07
+"CPU, 8 threads",embeddinggemma2,embeddinggemma2,fp32,0.1,2,8,64,38.05,0.0,1.1920928955078125e-07
+V100S-PCIE-32GB,siglip,siglip,fp32,153.76,3,128,512,1.0,0.0,1.1920928955078125e-07
+V100S-PCIE-32GB,siglip@fp16,siglip,fp16,259.44,3,128,512,0.59,1.2516975402832031e-06,8.881092071533203e-06
+V100S-PCIE-32GB,siglip2_l,siglip2_l,fp32,15.37,3,32,512,10.0,0.0,1.1920928955078125e-07
+V100S-PCIE-32GB,siglip2_l@fp16,siglip2_l,fp16,52.47,3,32,512,2.93,2.4139881134033203e-06,5.7220458984375e-05
+V100S-PCIE-32GB,embeddinggemma2,embeddinggemma2,fp32,7.44,2,8,512,20.67,0.0,1.1920928955078125e-07

@@ -2879,6 +2879,194 @@ class TestAdjudicationMigration:
         assert same == [row]
 
 
+class TestATurnedTobacco800Page:
+    """A GEDI file drawn on the page turned upright, over a TIF stored upside down (#4871).
+
+    The numbers are ``tobacco800/dic45f00_1``'s, 1200 x 1575.  Read verbatim,
+    its logo box held no ink at all -- the only blank crop of the corpus's 2,880
+    marks, and a hub in every Tobacco800 re-cluster -- and the completeness pass
+    then boxed the eagle the box was meant for a second time, as mark 2.
+    """
+
+    PAGE = "tobacco800/dic45f00_1"
+    W, H = 1200, 1575
+    SIG, LOGO = (797, 1073, 249, 220), (208, 161, 92, 84)
+    SIG_TURNED, LOGO_TURNED = (154, 282, 249, 220), (900, 1330, 92, 84)
+    EAGLE = (917, 1329, 71, 78)
+    CLASS = "tobacco800/logo_afm90c00-first_1_0"
+    GEDI = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <GEDI xmlns="http://lamp.cfar.umd.edu/GEDI" version="1.0">
+      <DL_DOCUMENT src="dic45f00_1.tif" NrOfPages="1" docTag="xml">
+        <DL_PAGE gedi_type="DL_PAGE" src="dic45f00_1.tif" pageID="1" width="{W}" height="{H}">
+          <DL_ZONE gedi_type="DLSignature" id="None" col="797" row="1073" width="249" height="220"
+                   Overlapped="Yes" AuthorID="Jarrett, J.E."> </DL_ZONE>
+          <DL_ZONE gedi_type="DLLogo" id="None" col="208" row="161" width="92" height="84"> </DL_ZONE>
+        </DL_PAGE>
+      </DL_DOCUMENT>
+    </GEDI>"""
+    SAME = {
+        "left_page_id": "tobacco800/afm90c00-first_1",
+        "left_mark_index": 0,
+        "right_page_id": PAGE,
+        "right_mark_index": 2,
+        "note": "completeness: missing member of tobacco800/logo_afm90c00-first_1_0 confirmed by hand",
+    }
+
+    def _built(self, mods):
+        """The page as the corpus built before #4871 holds it."""
+        page = _page(
+            mods,
+            self.PAGE,
+            "tobacco800",
+            [
+                ("signature", self.SIG, "tobacco800/signature_jarrett_j_e", "gt"),
+                ("logo", self.LOGO, "tobacco800/logo_alk3aa00_1", "clustered"),
+                ("logo", self.EAGLE, self.CLASS, "completeness"),
+            ],
+            w=self.W,
+            h=self.H,
+        )
+        added = [{"page_id": self.PAGE, "kind": "logo", "box": list(self.EAGLE), "class_id": self.CLASS}]
+        return [page], added
+
+    def _turn(self, mods, pages, added, same=None, different=()):
+        shipped = mods["tobacco800"].parse_gedi(self.GEDI)
+        return mods["audit"].turn_pages(pages, shipped, added, [dict(self.SAME)] if same is None else same, different)
+
+    def test_the_page_is_in_the_table(self, mods):
+        assert "dic45f00_1" in mods["tobacco800"].TURNED_180
+
+    def test_turning_is_its_own_inverse(self, mods):
+        turn = mods["tobacco800"].turn_180
+        assert turn(self.LOGO, self.W, self.H) == self.LOGO_TURNED
+        assert turn(self.LOGO_TURNED, self.W, self.H) == self.LOGO
+
+    def test_a_rebuild_reads_the_boxes_turned(self, mods, tmp_path):
+        from PIL import Image
+
+        (tmp_path / "dic45f00_1.xml").write_text(self.GEDI, encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "dic45f00_1.tif")
+        (tmp_path / "abc12d00.xml").write_text(self.GEDI.replace("dic45f00_1", "abc12d00"), encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "abc12d00.tif")
+        pages, _warnings = mods["tobacco800"].build_pages(tmp_path)
+        boxes = {p.page_id: [m.box for m in p.marks] for p in pages}
+        assert boxes[self.PAGE] == [self.SIG_TURNED, self.LOGO_TURNED]
+        # A page not in the table keeps the XML's boxes.
+        assert boxes["tobacco800/abc12d00"] == [self.SIG, self.LOGO]
+
+    def test_the_audit_flags_a_logo_whose_ink_is_where_its_box_turns_to(self, mods, tmp_path):
+        from PIL import Image, ImageDraw
+
+        def page(stem, ink_box):
+            (tmp_path / f"{stem}.xml").write_text(self.GEDI.replace("dic45f00_1", stem), encoding="utf-8")
+            img = Image.new("L", (self.W, self.H), 255)
+            x, y, w, h = ink_box
+            ImageDraw.Draw(img).rectangle([x, y, x + w - 1, y + h - 1], fill=0)
+            img.save(tmp_path / f"{stem}.tif")
+
+        page("dic45f00_1", self.LOGO_TURNED)  # the real case: ink where the box turns to
+        page("abc12d00", self.LOGO)  # an ordinary page: ink where the box is
+        rows = importlib.import_module("turned_gt_audit").audit(tmp_path)
+        flagged = {(r["stem"], r["kind"]) for r in rows if r["flagged"]}
+        # A signature box with nothing in it is not evidence: signatures are a
+        # few strokes, so only logo zones are flagged.
+        assert flagged == {("dic45f00_1", "logo")}
+
+    def test_the_built_page_is_turned_and_the_eagle_folded_into_the_source_box(self, mods):
+        pages, added = self._built(mods)
+        added_after, same, different, changes, problems = self._turn(mods, pages, added)
+        assert not problems
+        page = pages[0]
+        assert [(m.kind, m.box, m.class_id) for m in page.marks] == [
+            ("signature", self.SIG_TURNED, "tobacco800/signature_jarrett_j_e"),
+            ("logo", self.LOGO_TURNED, self.CLASS),
+        ]
+        assert added_after == []
+        assert different == []
+        # The verdict is the reviewer's; only the index it names moves.
+        (row,) = same
+        assert (row["right_page_id"], row["right_mark_index"]) == (self.PAGE, 1)
+        assert row["note"].startswith(self.SAME["note"])  # still read as a completeness row
+        assert "was mark 2" in row["note"]
+        assert any("folds into mark 1" in c for c in changes)
+
+    def test_a_rebuild_after_the_repair_lands_on_the_same_marks(self, mods, tmp_path):
+        from PIL import Image
+
+        completeness = importlib.import_module("completeness")
+        pages, added = self._built(mods)
+        added_after, same, _different, _changes, problems = self._turn(mods, pages, added)
+        assert not problems
+
+        (tmp_path / "dic45f00_1.xml").write_text(self.GEDI, encoding="utf-8")
+        Image.new("1", (self.W, self.H), 1).save(tmp_path / "dic45f00_1.tif")
+        rebuilt, _warnings = mods["tobacco800"].build_pages(tmp_path)
+        assert completeness.replay_added_marks(rebuilt, added_after) == 0
+        assert [m.box for m in rebuilt[0].marks] == [m.box for m in pages[0].marks]
+        # ...and the verdict names a mark the rebuilt page has, the eagle.
+        (row,) = same
+        assert rebuilt[0].marks[row["right_mark_index"]].box == self.LOGO_TURNED
+
+    def test_running_it_again_changes_nothing(self, mods):
+        pages, added = self._built(mods)
+        added_after, same, different, _changes, _problems = self._turn(mods, pages, added)
+        again = self._turn(mods, pages, added_after, same, different)
+        assert again[3] == [] and again[4] == []
+        assert again[1] == same
+
+    def test_a_box_moved_since_the_build_is_reported_not_turned(self, mods):
+        pages, added = self._built(mods)
+        pages[0].marks[1] = mods["common"].Mark("logo", (210, 160, 90, 85), "tobacco800/logo_alk3aa00_1", "gt")
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added)
+        assert any("mark 1" in p and "a person should look" in p for p in problems)
+
+    def test_a_second_instance_elsewhere_on_the_page_is_not_folded(self, mods):
+        pages, _added = self._built(mods)
+        Mark = mods["common"].Mark
+        pages[0].marks[2] = Mark("logo", (40, 40, 80, 80), self.CLASS, "completeness")
+        added = [{"page_id": self.PAGE, "kind": "logo", "box": [40, 40, 80, 80], "class_id": self.CLASS}]
+        added_after, same, _diff, changes, problems = self._turn(mods, pages, added)
+        assert not problems
+        assert len(pages[0].marks) == 3
+        assert added_after == added
+        assert same[0]["right_mark_index"] == 2
+        assert not any("folds" in c for c in changes)
+
+    def test_a_fold_that_would_renumber_a_later_mark_is_refused(self, mods):
+        pages, added = self._built(mods)
+        Mark = mods["common"].Mark
+        pages[0].marks.append(Mark("logo", (40, 40, 80, 80), "tobacco800/logo_other", "completeness"))
+        added.append({"page_id": self.PAGE, "kind": "logo", "box": [40, 40, 80, 80], "class_id": "x"})
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added)
+        assert any("would be renumbered" in p for p in problems)
+
+    def test_a_source_class_somebody_ruled_on_is_not_overwritten(self, mods):
+        pages, added = self._built(mods)
+        ruling = {
+            "left_page_id": self.PAGE,
+            "left_mark_index": 1,
+            "right_page_id": "tobacco800/alk3aa00",
+            "right_mark_index": 1,
+            "note": "membership: rejected",
+        }
+        _added, _same, _diff, _changes, problems = self._turn(mods, pages, added, different=[ruling])
+        assert any("was ruled on" in p for p in problems)
+
+    def test_recorded_members_are_re_pointed_too(self, mods):
+        pages, added = self._built(mods)
+        separation = {
+            "left_page_id": "tobacco800/afm90c00-first_1",
+            "left_mark_index": 0,
+            "left_members": [["tobacco800/afm90c00-first_1", 0], [self.PAGE, 2]],
+            "right_page_id": "tobacco800/zzz00000",
+            "right_mark_index": 0,
+            "note": "",
+        }
+        _added, _same, different, _changes, problems = self._turn(mods, pages, added, different=[separation])
+        assert not problems
+        assert different[0]["left_members"] == [["tobacco800/afm90c00-first_1", 0], [self.PAGE, 1]]
+
+
 class TestSiglipClusterBackend:
     """The ``siglip`` cluster backend named symbols that do not exist.
 

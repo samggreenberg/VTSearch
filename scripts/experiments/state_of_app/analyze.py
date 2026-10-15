@@ -178,6 +178,7 @@ ARMS = {
     ("siglip+dinov3_patch", "max_patch"): "DINOv3 region",
     ("face", "whole_image"): "FaceNet face crop",
     ("embeddinggemma2", "whole_image"): "EmbeddingGemma 2 binary",
+    ("siglip2_l", "whole_image"): "SigLIP 2 L binary",
 }
 #: The State of the App reports are one per production path (owner, 2026-09-24):
 #: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo"). "Face" is FaceNet on
@@ -189,6 +190,8 @@ PATHS = {
     "face": ("face", "whole_image"),
     # Not a production path: the #4837 A/B's arm, the Binary path in EmbeddingGemma 2's space.
     "eg2": ("embeddinggemma2", "whole_image"),
+    # Not a production path either: #4874's arm, the Binary path in SigLIP 2 L's space.
+    "s2l": ("siglip2_l", "whole_image"),
 }
 #: A spot check's round of picks (``vtscore.training.thresholds.spot_check.CHECK_MIN_PICKS``, which a test pins):
 #: how far past a checkpoint a run's next rank frame may be read when the run handed over inside a check round

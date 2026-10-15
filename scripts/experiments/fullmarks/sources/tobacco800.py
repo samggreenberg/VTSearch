@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET  # noqa: S405 - local trusted GT files, see parse_gedi
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -51,6 +52,21 @@ _ZONE_KINDS = {
 _IDENTITY_ATTRS = ("logoid", "logo_id", "authorid", "author_id", "name", "label", "companyname")
 
 _IMAGE_SUFFIXES = {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+
+#: Pages whose GEDI zones were drawn on the page turned the right way up while
+#: the TIF is stored upside down.  The TIF's Orientation tag says "normal", so
+#: nothing turns it, and read verbatim every zone lands on the mirror-image spot
+#: of the page: on ``dic45f00_1`` the logo box held no ink at all and the
+#: signature box sat on the memo header (#4871).  Found by comparing the ink in
+#: every logo zone with the ink at its 180-degree image: this is the only one of
+#: the 432 that is blank where it is and inked where it would be turned.
+TURNED_180 = frozenset({"dic45f00_1"})
+
+
+def turn_180(box: tuple[int, int, int, int], width: int, height: int) -> tuple[int, int, int, int]:
+    """Where *box* lands on a ``width`` x ``height`` page once the page is turned 180 degrees."""
+    x, y, w, h = box
+    return (width - x - w, height - y - h, w, h)
 
 
 def fetch(raw_root: Path) -> Path:
@@ -127,6 +143,22 @@ def parse_gedi(xml_text: str) -> dict[str, list[Mark]]:
     return out
 
 
+def read_gedi(unpacked: Path) -> dict[str, list[Mark]]:
+    """Every GEDI file under *unpacked*, as ``{page image stem: [Mark, ...]}`` exactly as shipped.
+
+    Boxes are the XML's own, so a page in `TURNED_180` comes back in the frame
+    it was annotated in, not the one its image is stored in.
+    """
+    xml_marks: dict[str, list[Mark]] = {}
+    for xml_path in sorted(unpacked.rglob("*.xml")):
+        try:
+            for stem, marks in parse_gedi(xml_path.read_text(encoding="utf-8", errors="replace")).items():
+                xml_marks.setdefault(stem, []).extend(marks)
+        except ET.ParseError:
+            continue
+    return xml_marks
+
+
 def build_pages(unpacked: Path, *, limit: int | None = None) -> tuple[list[Page], list[str]]:
     """Every Tobacco800 page as a :class:`Page`.
 
@@ -136,13 +168,7 @@ def build_pages(unpacked: Path, *, limit: int | None = None) -> tuple[list[Page]
     """
     from PIL import Image
 
-    xml_marks: dict[str, list[Mark]] = {}
-    for xml_path in sorted(unpacked.rglob("*.xml")):
-        try:
-            for stem, marks in parse_gedi(xml_path.read_text(encoding="utf-8", errors="replace")).items():
-                xml_marks.setdefault(stem, []).extend(marks)
-        except ET.ParseError:
-            continue
+    xml_marks = read_gedi(unpacked)
 
     images = sorted(p for p in unpacked.rglob("*") if p.suffix.lower() in _IMAGE_SUFFIXES)
     if limit is not None:
@@ -159,6 +185,8 @@ def build_pages(unpacked: Path, *, limit: int | None = None) -> tuple[list[Page]
         with Image.open(img) as im:
             width, height = im.size
         marks = xml_marks.get(stem, [])
+        if stem in TURNED_180:
+            marks = [replace(m, box=turn_180(m.box, width, height)) for m in marks]
         # Matched means "this GT entry found its image", which is a question
         # about the image, not about whether the entry annotated anything.
         # ``parse_gedi`` does ``out.setdefault(stem, [])`` for every DL_PAGE, so

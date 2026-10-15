@@ -12,6 +12,7 @@
     python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
     python audit_to_corrections.py --task surprise --reviewer <name> --apply   # top-ranked presumed negatives (#4089)
     python audit_to_corrections.py --migrate-adjudications --apply
+    python audit_to_corrections.py --turn-pages --apply          # Tobacco800 GT in the other frame (#4871)
 
 Without ``--apply`` it prints what it would change and touches nothing.
 
@@ -39,6 +40,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -227,6 +229,138 @@ def supersede(
     kept_same = [r for r in old_same if pair_key(r) not in diff_keys]
     kept_diff = [r for r in old_diff if pair_key(r) not in same_keys]
     return kept_same, kept_diff, overturned
+
+
+#: Appended to the note of an adjudication row `turn_pages` re-points, so the
+#: store says why the index it names is not the one the reviewer was shown.
+TURNED_NOTE = " [was mark {old}: the same {kind} as source mark {new} once {page} was turned upright, #4871]"
+
+
+def turn_pages(
+    pages: Sequence[Page],
+    shipped: dict[str, list[Mark]],
+    added_rows: Sequence[dict[str, Any]],
+    same_rows: Sequence[dict[str, Any]],
+    diff_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    """Bring a built corpus into line with ``tobacco800.TURNED_180``.
+
+    A rebuild reads those pages' GEDI boxes turned 180 degrees; a corpus built
+    before has them where the XML put them, on the wrong spot of the page.  Each
+    such mark gets its turned box in place, so its index -- what every
+    adjudication names -- holds.
+
+    Turned, a source mark can land on a mark the completeness pass added
+    *because* the source's box was empty: one instance boxed twice (#4871: the
+    eagle on ``dic45f00_1``).  The added mark is folded into the source one.
+    Its class moves onto the source mark, every adjudication naming it is
+    re-pointed (noted with `TURNED_NOTE`), its ``added_marks.json`` row is
+    dropped, and it leaves the page.  Only the last mark can leave a page
+    without renumbering the rest, so a fold anywhere else is reported, not
+    done.  So is one that would overwrite a class somebody ruled on, or make
+    two adjudication rows name the same pair.
+
+    *shipped* is `tobacco800.read_gedi` output: the boxes as the XML has them.
+    Changes *pages* in place and returns ``(added, same, different, changes,
+    problems)``; with any problem the caller writes nothing.  Running it on a
+    corpus it has already turned changes nothing.
+    """
+    from completeness import OVERLAP  # noqa: PLC0415
+    from sources.tobacco800 import TURNED_180, turn_180  # noqa: PLC0415
+
+    added = [dict(r) for r in added_rows]
+    same = [dict(r) for r in same_rows]
+    different = [dict(r) for r in diff_rows]
+    changes: list[str] = []
+    problems: list[str] = []
+    ruled = {side for row in same + different for side in pair_key(row)}
+
+    for page in pages:
+        stem = page.page_id.partition("/")[2]
+        if page.source != "tobacco800" or stem not in TURNED_180:
+            continue
+        source_marks = shipped.get(stem)
+        if source_marks is None:
+            problems.append(f"{page.page_id}: no GEDI file read for it")
+            continue
+        for i, raw in enumerate(source_marks):
+            turned = turn_180(raw.box, page.width, page.height)
+            mark = page.marks[i] if i < len(page.marks) else None
+            if mark is None or mark.kind != raw.kind:
+                problems.append(f"{page.page_id} mark {i}: not the source's {raw.kind}; a person should look")
+            elif tuple(mark.box) == tuple(raw.box):
+                page.marks[i] = replace(mark, box=turned)
+                changes.append(f"{page.page_id} mark {i} ({raw.kind}): {list(raw.box)} -> {list(turned)}")
+            elif tuple(mark.box) != turned:
+                problems.append(
+                    f"{page.page_id} mark {i}: box {list(mark.box)} is neither the shipped {list(raw.box)} nor "
+                    f"the turned {list(turned)}; a person should look"
+                )
+
+        n_source = len(source_marks)
+        mine = []
+        for row in (r for r in added if r["page_id"] == page.page_id):
+            box = tuple(int(v) for v in row["box"])
+            j = next((k for k in range(n_source, len(page.marks)) if tuple(page.marks[k].box) == box), None)
+            if j is None:
+                problems.append(f"{page.page_id}: added mark {list(box)} is not on the page")
+            else:
+                mine.append((j, row))
+        # Last first, so each fold leaves the next one's index where it was.
+        for j, row in sorted(mine, key=lambda pair: -pair[0]):
+            dup = page.marks[j]
+            bx, by, bw, bh = dup.box
+            i, best = None, 0.0
+            for k, mark in enumerate(page.marks[:n_source]):
+                if mark.kind != dup.kind:
+                    continue
+                mx, my, mw, mh = mark.box
+                ix = max(0, min(bx + bw, mx + mw) - max(bx, mx))
+                iy = max(0, min(by + bh, my + mh) - max(by, my))
+                if ix * iy / max(1, bw * bh) > best:
+                    i, best = k, ix * iy / max(1, bw * bh)
+            if i is None or best < OVERLAP:
+                continue  # a second instance, not this one boxed twice
+            where = f"{page.page_id} mark {j} folds into mark {i}"
+            src = page.marks[i]
+            if j != len(page.marks) - 1:
+                problems.append(f"{where}, but marks after {j} would be renumbered")
+                continue
+            if src.class_id and src.class_id != dup.class_id and (page.page_id, i) in ruled:
+                problems.append(f"{where}, but mark {i}'s class {src.class_id} was ruled on")
+                continue
+            changes.append(
+                f"{where}: {dup.kind} {list(dup.box)} ({dup.provenance}, {dup.class_id}) is source box "
+                f"{list(src.box)}, which was {src.class_id}"
+            )
+            note = TURNED_NOTE.format(old=j, kind=dup.kind, new=i, page=page.page_id)
+            old, new = [page.page_id, j], [page.page_id, i]
+            for rows in (same, different):
+                others = {pair_key(r) for r in rows}
+                for r in rows:
+                    sides = [s for s in ("left", "right") if r[f"{s}_page_id"] == page.page_id]
+                    hit = [s for s in sides if r.get(f"{s}_mark_index") == j]
+                    hit += [s for s in ("left", "right") if old in (r.get(f"{s}_members") or [])]
+                    if not hit:
+                        continue
+                    before = pair_key(r)
+                    for side in sides:
+                        if r.get(f"{side}_mark_index") == j:
+                            r[f"{side}_mark_index"] = i
+                    for side in ("left", "right"):
+                        if old in (r.get(f"{side}_members") or []):
+                            r[f"{side}_members"] = [new if m == old else m for m in r[f"{side}_members"]]
+                    r["note"] = str(r.get("note") or "") + note
+                    after = pair_key(r)
+                    if after[0] == after[1]:
+                        problems.append(f"{where}, but then a row names one mark twice: {describe_pair(r)}")
+                    elif after != before and after in others:
+                        problems.append(f"{where}, but then two rows name one pair: {describe_pair(r)}")
+                    changes.append(f"  re-pointed: {describe_pair(r)}")
+            page.marks[i] = replace(src, class_id=dup.class_id)
+            del page.marks[j]
+            added.remove(row)
+    return added, same, different, changes, problems
 
 
 #: What ``resplit_classes`` writes into a piece's ``audit.notes``.  Parsed, not
@@ -1068,6 +1202,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="rewrite corpus.jsonl with one record per page_id, keeping the longest mark list, then exit",
     )
+    ap.add_argument(
+        "--turn-pages",
+        action="store_true",
+        help="give the Tobacco800 pages in TURNED_180 their turned boxes, folding any hand-added mark that turns out "
+        "to be the same instance into its source mark (#4871), then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -1080,6 +1220,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.dedupe_manifest:
         return dedupe_manifest(args.corpus / "corpus.jsonl", apply=args.apply)
+
+    if args.turn_pages:
+        from cluster_marks import load_adjudication_rows, save_adjudications  # noqa: PLC0415
+        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+        from sources import tobacco800  # noqa: PLC0415
+
+        pages = list(read_manifest(manifest_path))
+        added_path = args.corpus / ADDED_MARKS
+        old_same, old_diff = load_adjudication_rows(adjudications_path)
+        added, same, diff, changes, problems = turn_pages(
+            pages, tobacco800.read_gedi(cfg.RAW / "tobacco800"), load_added_marks(added_path), old_same, old_diff
+        )
+        for line in changes:
+            print(f"  {line}")
+        for problem in problems:
+            print(f"  PROBLEM: {problem}")
+        if problems:
+            return 1
+        if not changes:
+            print("every turned page is already turned")
+            return 0
+        if args.apply:
+            # The stores before the manifest: a fold on the page but not in the
+            # stores would come undone at the next rebuild.
+            save_added_marks(added, added_path)
+            save_adjudications(same, diff, adjudications_path)
+            write_manifest(pages, manifest_path)
+            print(f"wrote {added_path}, {adjudications_path} and {manifest_path}")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
 
     if args.tidy_added_marks:
         # The repair for a store written before saving deduped (#4042): a
