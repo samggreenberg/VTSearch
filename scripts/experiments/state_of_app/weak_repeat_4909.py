@@ -217,9 +217,9 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                      if d["moved"].any() else np.nan, invalid_departures=d["invalid"], f_prefix_mismatch=d["f_mismatch"])  # fmt: skip
         for lo, hi in AREAS:
             a_ = area(F[arm], lo, hi)
-            r[f"area_{lo}_{hi}"] = float(np.nanmean(a_))
+            r[f"meanF_{lo}_{hi}"] = float(np.nanmean(a_))
             g = a_ - area(F[CONTROL], lo, hi)
-            r[f"area_gain_{lo}_{hi}"], r[f"area_se_{lo}_{hi}"] = float(np.nanmean(g)), se_over_classes(g, cls)
+            r[f"meanF_gain_{lo}_{hi}"], r[f"meanF_se_{lo}_{hi}"] = float(np.nanmean(g)), se_over_classes(g, cls)
         for c in CLICKS:
             g = F[arm][:, c] - F[CONTROL][:, c]
             r[f"F_at_{c}"] = float(np.nanmean(F[arm][:, c]))
@@ -230,8 +230,8 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         if arm != CONTROL and dep[arm]["moved"].any():
             m = dep[arm]["moved"]
             g = area(F[arm], 0, T) - area(F[CONTROL], 0, T)
-            r["area_gain_0_200_where_moved"] = float(np.nanmean(g[m]))
-            r["area_se_0_200_where_moved"] = se_over_classes(g[m], cls[m])
+            r["meanF_gain_0_200_where_moved"] = float(np.nanmean(g[m]))
+            r["meanF_se_0_200_where_moved"] = se_over_classes(g[m], cls[m])
         # Clicks spent checking, inside the 200: the weak check's first run, its repeats, and the check before Done.
         for name in ("check_clicks", "weak_picks", "weak_first_picks", "weak_repeat_picks", "done_check_picks",
                      "end_check_picks", "weak_n"):  # fmt: skip
@@ -263,21 +263,31 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
         rows.append(r)
     summary = pd.DataFrame(rows)
 
-    # By band, and by how many weak checks the control ran: the arms can only differ where it ran two or more (r0,
-    # r50) or one (nw). Area gain over 0-200.
+    # By band; by how many weak checks the control ran (the arms can only differ where it ran two or more, r0 and
+    # r50, or one, nw); and, where it ran one, by how the control's session ends (F at click 200): does the weak
+    # check help sessions that fail anyway? Gains in mean F over 0-50 and 0-200.
     n_ctl = col(CONTROL, "weak_n")
     by_n = {"0 weak checks": n_ctl == 0, "1": n_ctl == 1, "2": n_ctl == 2, "3 or more": n_ctl >= 3}
+    end = F[CONTROL][:, T]
+    fired = n_ctl >= 1
+    by_end = {"below 0.2": fired & (end < 0.2), "0.2 to 0.5": fired & (end >= 0.2) & (end < 0.5),
+              "0.5 or more": fired & (end >= 0.5)}  # fmt: skip
     brow = []
     for arm in others:
         g = area(F[arm], 0, T) - area(F[CONTROL], 0, T)
+        g50 = area(F[arm], 0, 50) - area(F[CONTROL], 0, 50)
         ga = after[arm] - after[CONTROL]
-        for split, mask_of in (("band", {bd: band == bd for bd in sorted(set(band))}), ("control's weak checks", by_n)):
+        for split, mask_of in (("band", {bd: band == bd for bd in sorted(set(band))}), ("control's weak checks", by_n),
+                               ("weak check fired, control's F at 200", by_end)):  # fmt: skip
             for lvl, m in mask_of.items():
                 if m.sum() < 2:
                     continue
                 brow.append({"beta": beta, "arm": arm, "split": split, "level": lvl, "runs": int(m.sum()),
-                             "share": float(m.mean()), "area_gain_0_200": float(g[m].mean()),
+                             "share": float(m.mean()), "meanF_gain_0_50": float(g50[m].mean()),
+                             "se_0_50": se_over_classes(g50[m], cls[m]), "meanF_gain_0_200": float(g[m].mean()),
                              "se": se_over_classes(g[m], cls[m]), "after_gain": float(np.nanmean(ga[m])),
+                             "control_F50": float(np.nanmean(F[CONTROL][m, 50])), "arm_F50": float(np.nanmean(F[arm][m, 50])),
+                             "control_F200": float(np.nanmean(F[CONTROL][m, T])), "arm_F200": float(np.nanmean(F[arm][m, T])),
                              "check_clicks": float(np.nanmean(col(arm, "check_clicks")[m])),
                              "control_check_clicks": float(np.nanmean(col(CONTROL, "check_clicks")[m])),
                              "better": float(np.mean(g[m] > 1e-9)), "worse": float(np.mean(g[m] < -1e-9))})  # fmt: skip
@@ -295,7 +305,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                 cat, seed = keys[i].split("|")
                 erow.append({
                     "beta": beta, "arm": arm, "which": tag, "category": cat, "seed": int(seed),
-                    "area_gain_0_200": g[i], "departs_at": dep[arm]["at"][i],
+                    "meanF_gain_0_200": g[i], "departs_at": dep[arm]["at"][i],
                     "control_weak_checks": n_ctl[i], "arm_weak_checks": col(arm, "weak_n")[i],
                     "control_check_clicks": col(CONTROL, "check_clicks")[i], "arm_check_clicks": col(arm, "check_clicks")[i],
                     "F_control_at_100": F[CONTROL][i, 100], "F_arm_at_100": F[arm][i, 100],
@@ -345,7 +355,7 @@ def figure(res: dict[int, dict], path: Path) -> None:
 
 
 def figure_checks(res: dict[int, dict], path: Path) -> None:
-    """The clicks each arm spends checking in 200, by check, beside each session's area gain over the control."""
+    """The clicks each arm spends checking in 200, by check, beside each session's gain in mean F over the control."""
     parts = (("weak_first_picks", "weak check, first run", "#2a78d6"),
              ("weak_repeat_picks", "weak check, repeats", "#9ec5f0"),
              ("done_check_picks", "check before Done", "#c9a227"))  # fmt: skip
@@ -372,8 +382,8 @@ def figure_checks(res: dict[int, dict], path: Path) -> None:
             ax.hist(np.clip(g[moved], -0.08, 0.08), bins=bins, histtype="step", lw=1.6, color=COLOR[arm],
                     label=f"{NAME[arm]} ({moved.mean():.0%} of sessions moved)")  # fmt: skip
         ax.axvline(0, color=MUTED, lw=0.8)
-        ax.set_title(f"Each session's area gain, clicks 0-200, beta {beta}", color=INK, fontsize=11, loc="left")
-        ax.set_xlabel("paired gain in area under F over clicks 0-200 (clipped to ±0.08)", color=MUTED, fontsize=9)
+        ax.set_title(f"Per-session gain in mean F, beta {beta}", color=INK, fontsize=11, loc="left")
+        ax.set_xlabel("paired gain in mean F over clicks 0-200 (clipped to ±0.08)", color=MUTED, fontsize=9)
         ax.set_ylabel("sessions", color=MUTED, fontsize=9)
         _axes_style(ax)
         ax.legend(frameon=False, fontsize=8, loc="upper left")
@@ -429,10 +439,10 @@ def main() -> int:
     s = pd.concat([r["summary"] for r in res.values()])
     with pd.option_context("display.width", 250, "display.max_columns", 80):
         print(s[["beta", "arm", "runs", "departed", "departure_median", "invalid_departures", "f_prefix_mismatch"]
-                + [f"area_{lo}_{hi}" for lo, hi in AREAS] + [f"area_gain_{lo}_{hi}" for lo, hi in AREAS]
-                + [f"area_se_{lo}_{hi}" for lo, hi in AREAS] + ["after", "after_gain", "after_se"]].round(4).to_string(index=False))  # fmt: skip
-        print(s[["beta", "arm"] + [f"gain_at_{c}" for c in CLICKS] + ["area_gain_0_200_where_moved",
-                "area_se_0_200_where_moved"]].round(4).to_string(index=False))  # fmt: skip
+                + [f"meanF_{lo}_{hi}" for lo, hi in AREAS] + [f"meanF_gain_{lo}_{hi}" for lo, hi in AREAS]
+                + [f"meanF_se_{lo}_{hi}" for lo, hi in AREAS] + ["after", "after_gain", "after_se"]].round(4).to_string(index=False))  # fmt: skip
+        print(s[["beta", "arm"] + [f"gain_at_{c}" for c in CLICKS] + ["meanF_gain_0_200_where_moved",
+                "meanF_se_0_200_where_moved"]].round(4).to_string(index=False))  # fmt: skip
         print(s[["beta", "arm", "check_clicks", "check_share", "weak_picks", "weak_first_picks", "weak_repeat_picks",
                  "done_check_picks", "done_check_ran", "weak_n", "weak_any", "weak_repeated", "weak_good_share",
                  "end_check_picks"]].round(3).to_string(index=False))  # fmt: skip
