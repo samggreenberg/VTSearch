@@ -3957,6 +3957,18 @@ def simulate_voting_iterations(  # noqa: C901
             "detector_tier": tier,
         }
 
+    def _media_scorer(ids: list[int]) -> Callable[[StepModel], list[float]]:
+        """A step's scores of *ids*, in order (#4786's line counts).
+
+        Made here rather than in the loop, where pyright cannot settle a nested
+        def's type through the loop's flow ("refers to itself").
+        """
+
+        def score(st: StepModel) -> list[float]:
+            return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+
+        return score
+
     while True:
         picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
@@ -4963,14 +4975,13 @@ def simulate_voting_iterations(  # noqa: C901
                 if on_test is None and details.get("find_line") is not None:
                     on_test = details["find_line"].on_corpus(np.asarray(lc_scores, dtype=np.float64))
 
-                def _lc_score(st: StepModel, ids: list[int] = lc_ids) -> list[float]:
-                    return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+                lc_score = _media_scorer(lc_ids)
 
                 lc_centroid = _centroid_step(
                     good_votes,
                     clips_dict,
                     target_category,
-                    _lc_score,
+                    lc_score,
                     region_voting=region_voting,
                     style_obj=style_obj,
                     line_rule=centroid_line,
@@ -4989,7 +5000,7 @@ def simulate_voting_iterations(  # noqa: C901
                         lc_labels,
                         float(details.get("find_threshold", threshold)),
                         on_test,
-                        _lc_score(lc_centroid),
+                        lc_score(lc_centroid),
                         CENTROID_THRESHOLD,
                     )
                 )

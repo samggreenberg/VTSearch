@@ -7,17 +7,19 @@ check pick belongs to.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 OPENING = ("good", "bad", "more")
 
 
-def _run(early_check=None, *, max_steps=60, **kw):
+def _run(early_check: Any = None, *, max_steps: int = 60, **kw: Any) -> list[dict[str, Any]]:
     from tests_lib.detectors.test_startup_schedule import _seeded_dataset
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     medias, seed_scores = _seeded_dataset(n_pos=40)
-    picks: list = []
+    picks: list[dict[str, Any]] = []
     simulate_voting_iterations(
         medias,
         target_category="target",
@@ -43,9 +45,9 @@ def _first(picks, kind):
 
 
 # Labels that never separate weakly, so only the checks under test run mid-session.
-_NEVER_WEAK = {"weak_separation": -1e9}
+_NEVER_WEAK: dict[str, Any] = {"weak_separation": -1e9}
 # Labels that always do, so the weak prompt fires at its first chance, once.
-_ALWAYS_WEAK = {"weak_separation": 1e9, "weak_min_t": 1, "weak_repeat": 0}
+_ALWAYS_WEAK: dict[str, Any] = {"weak_separation": 1e9, "weak_min_t": 1, "weak_repeat": 0}
 
 
 class TestEarlyCheck:
