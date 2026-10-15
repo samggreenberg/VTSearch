@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`ratio_test_matches` ranks on `|b|^2 - 2ab`, in cache-sized blocks on a CPU** (issue #4515).
+  SIFT descriptors are integers in `[0, 255]`, so every partial sum of the expanded squared distance
+  is an integer below `2**24` and float32 holds it exactly. The two nearest neighbours are found on
+  `|b|^2 - 2ab` (one `baddbmm` with `+inf` on padded rows, then `min`, `scatter_` and `amin`), and
+  `|a|^2` and the square root are added for those two alone, so the pairs are the old `cdist` +
+  `topk` path's, pair for pair. On a CPU a block is `_MATCH_CHUNK_ELEMENTS_CPU` (2M) elements, about
+  a page against a template; the GPU budget stays `_MATCH_CHUNK_ELEMENTS` (32M).
+  `_stored_descriptors` replaces `_device_descriptors`: candidates are widened from their stored
+  dtype straight into the batch. A 1,000-page shortlist takes 2.95 s on 8 EPYC 7713 cores (was
+  6.55 s) and 0.24 s on a V100 (was 0.37 s).
+
 - **The weak-separation check prompts once** (issue #4909). New
   `vtscore.training.thresholds.WEAK_CHECK_REPEAT` (`None`) is `weak_check_due`'s default `cooldown`, so a
   check is due only while none has ended (it was `WEAK_CHECK_COOLDOWN`, 25: again 25 votes after the last
