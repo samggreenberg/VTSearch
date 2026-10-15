@@ -33,7 +33,9 @@ check_dockerfiles = _load_module()
 def context(tmp_path):
     req = tmp_path / "requirements"
     req.mkdir()
-    (req / "base.txt").write_text("# forwards to pyproject.toml\n--extra-index-url https://example.invalid\n-e .[dev]\n")
+    (req / "base.txt").write_text(
+        "# forwards to pyproject.toml\n--extra-index-url https://example.invalid\n-e .[dev]\n"
+    )
     (req / "plain.txt").write_text("numpy\nrequests  # not the project\n")
     (req / "nested.txt").write_text("-r base.txt\n")
     return tmp_path
@@ -66,7 +68,8 @@ def test_requirements_forwarding_to_the_project_before_vtscore_is_flagged(contex
 
 
 def test_copying_vtscore_first_clears_it(context):
-    assert _errors(context, _ISSUE_LAYER.replace("COPY vtsearch/ vtsearch/\n", "COPY vtsearch/ vtsearch/\nCOPY vtscore/ vtscore/\n")) == []
+    fixed = _ISSUE_LAYER.replace("COPY vtsearch/ vtsearch/\n", "COPY vtsearch/ vtsearch/\nCOPY vtscore/ vtscore/\n")
+    assert _errors(context, fixed) == []
 
 
 def test_a_full_copy_first_clears_it(context):
