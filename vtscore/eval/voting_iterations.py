@@ -55,7 +55,7 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -109,6 +109,7 @@ from vtscore.training.thresholds import (
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
+    LabelsLine,
     LineRanking,
     SpotCheck,
     balance_line,
@@ -118,6 +119,9 @@ from vtscore.training.thresholds import (
     done_check_due,
     fbeta_count,
     fit_labels_line,
+    head_count_serves,
+    STOP_LEVEL,
+    stop_level_met,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -285,11 +289,31 @@ def _split_media_ids(
     sim_fraction: float,
     rng: np.random.RandomState,
 ) -> tuple[list[int], list[int]]:
-    """Randomly partition media IDs into simulation and test sets."""
+    """Randomly partition media IDs into simulation and test sets.
+
+    A dataset whose medias carry ``split_group`` (``apptitude``'s app, #4356)
+    is split by group instead: the groups are drawn in a seeded order and each
+    joins the simulation half while it is short of ``sim_fraction``, so no group
+    has medias on both sides and the simulation half overshoots by less than one
+    group. Medias without the key split exactly as before, draw for draw; a
+    dataset where only some carry it is refused, since that is a build bug.
+    """
     all_ids = sorted(clips_dict.keys())
-    shuffled = rng.permutation(all_ids).tolist()
-    n_sim = max(1, int(len(shuffled) * sim_fraction))
-    return shuffled[:n_sim], shuffled[n_sim:]
+    groups = [clips_dict[cid].get("split_group") for cid in all_ids]
+    n_sim = max(1, int(len(all_ids) * sim_fraction))
+    if all(g is None for g in groups):
+        shuffled = rng.permutation(all_ids).tolist()
+        return shuffled[:n_sim], shuffled[n_sim:]
+    if any(g is None for g in groups):
+        raise ValueError("some medias carry split_group and some do not; a grouped split needs every one")
+    members: dict[str, list[int]] = {}
+    for cid, g in zip(all_ids, groups):
+        members.setdefault(str(g), []).append(cid)
+    sim: list[int] = []
+    test: list[int] = []
+    for g in rng.permutation(sorted(members)).tolist():
+        (sim if len(sim) < n_sim else test).extend(members[g])
+    return sim, test
 
 
 def _pool_uncertainty(
@@ -1240,6 +1264,39 @@ def _standalone_calibration_row(
     return row
 
 
+def _line_reading(
+    line: "LabelsLine | None",
+    beta: float | None,
+    corpus_scores: Any = None,
+    on_test: "LabelsLine | None" = None,
+) -> dict[str, Any]:
+    """The labels line's own reading of how well it does, at *beta* (#4878); nothing with no line.
+
+    What a stop rule in the objective's units would read, and the app has all of
+    it at every retrain: the expected F-beta at the line's cut over the Train
+    corpus's unvoted items, over the Train corpus read as unlabelled
+    (*corpus_scores*: a Find on a corpus like this one), and on a fresh corpus
+    in the class model's normals; the labels' d'; and whether the head's count
+    line served.  *on_test* is the line fitted on the withheld half, whose
+    expected F-beta is a diagnostic the app cannot read: it is read off that
+    half's scores (never its labels), beside the F-beta it is estimating.
+    """
+    if line is None or beta is None:
+        return {}
+    b = float(beta)
+    out = {
+        "line_efbeta": round6(line.expected_fbeta(b)),
+        "line_efbeta_fresh": round6(line.expected_fbeta_fresh(b)),
+        "line_separation": round6(float(line.separation)),
+        "line_head_count": int(head_count_serves(line.model)),
+    }
+    if corpus_scores is not None:
+        out["line_efbeta_corpus"] = round6(line.on_corpus(corpus_scores).expected_fbeta(b))
+    if on_test is not None:
+        out["find_efbeta"] = round6(on_test.expected_fbeta(b))
+    return out
+
+
 def _calibration_metric_rows(
     step: StepModel,
     threshold: float,
@@ -1320,6 +1377,15 @@ def _calibration_metric_rows(
     base["train_threshold"] = round6(float(train_threshold))
     base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
     base["find_prevalence"] = round6(find_prevalence)
+    line_ranking = details.get("line_ranking")
+    base.update(
+        _line_reading(
+            find_line,
+            details.get("beta"),
+            corpus_scores=None if line_ranking is None else line_ranking.scores,
+            on_test=details.get("find_on_test"),
+        )
+    )
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
@@ -2562,6 +2628,9 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
+    stop_rule: str = "lights|level",
+    stop_level: float = STOP_LEVEL,
+    stop_cap: Optional[int] = STOP_CAP,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
@@ -2597,6 +2666,7 @@ def simulate_voting_iterations(  # noqa: C901
     weak_repeat: int = WEAK_CHECK_COOLDOWN,
     weak_phase: str = "learned",
     done_check: bool = True,
+    early_check: Optional[int] = None,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -2957,6 +3027,22 @@ def simulate_voting_iterations(  # noqa: C901
         smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
+        stop_rule: What tells the user they can stop (#4878;
+            :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
+            (the default) is the app: Done once every quality light is green, or
+            once the step's labels line expects an F-beta of at least
+            *stop_level* at the run's balance, over its corpus's unvoted items
+            (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, the
+            app's own function), from the first step its class model cuts the line
+            (never while the head's count line serves).  With no balance or no
+            Autopilot flow there is no level to read, and it is the lights alone.
+            ``"lights"`` is the app before #4878; ``"level"`` and
+            ``"lights+level"`` are #4878's other arms and need a balance and the flow.
+        stop_level: The level the rule reads (the app's ``STOP_LEVEL``; #4878 priced 0.3 to 0.7).
+        stop_cap: The click cap (#4903; the app's
+            :data:`~vtscore.eval.autopilot_flow.STOP_CAP`): whatever *stop_rule*,
+            a session holding this many votes goes to the check before Done and
+            to Done.  ``None`` is no cap.  Never binds before the eval's 150 clicks.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3182,6 +3268,21 @@ def simulate_voting_iterations(  # noqa: C901
             ``False`` is the arm before the app ran it, where all green reads
             ``done`` at once; ``spot_check="off"`` and the Inclusion arm never
             check.  Needs the Autopilot flow; ignored without one.
+        early_check: An experiment knob (issue #4664): **every** session is
+            checked at *early_check* votes, on top of the app's own checks (the
+            weak prompt and the check before Done).  Once a run, at the first
+            step from *early_check* votes past the opening: a prompted check
+            already running then, or starting that step, is that session's
+            check; otherwise Autopilot prompts one, however recently another
+            ended (no cooldown), if it can start (something unvoted, and its
+            opening bands fit the budget left).  Its picks are clicks,
+            ``phase == "prompt"`` rows and ``check_kind == "early"`` picks, and
+            the session goes on after it.  A cooldown variant - skip where a
+            check ended in the last ``WEAK_CHECK_COOLDOWN`` votes - is this
+            arm's run where it fires and the arm-free run where it would skip,
+            so it is read off the two without a run of its own.  ``None`` - the
+            default - is the app, which has no such check.  Needs the balance
+            (*beta*) and the phase machine.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3635,7 +3736,13 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
-        flow = AutopilotFlow(startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run)
+        flow = AutopilotFlow(
+            startup=startup_state,
+            smart_gate=smart_gate,
+            good_dry_run=flow_good_dry_run,
+            stop_rule=stop_rule,
+            stop_cap=stop_cap,
+        )
     elif more_walk != "seed":
         raise ValueError(
             "more_walk='detector' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)"
@@ -3646,6 +3753,15 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
+        # An arm that waits on the level, with no line to read or no phase to move, would never stop.
+        raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
+    if early_check is not None and (
+        isinstance(early_check, bool) or not isinstance(early_check, int) or early_check < 1
+    ):
+        raise ValueError(f"early_check must be an integer >= 1 (a vote count) or None; got {early_check!r}")
+    if early_check is not None and (flow is None or beta is None or spot_check == "off"):
+        raise ValueError("early_check needs Autopilot's phase machine, a balance (beta) and a run that checks")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
     learned_picks = 0
     band_picks = 0
@@ -3701,6 +3817,17 @@ def simulate_voting_iterations(  # noqa: C901
                 "style": style or "",
                 "t": len(good_votes) + len(bad_votes),
                 "phase": phase_name or "",
+                # Which check a check pick is in (#4664): the flow's running one
+                # (``weak``, ``done``, ``early``) for a prompted pick - ``weak``
+                # where no flow runs it, as only the weak prompt can - ``end`` for
+                # the end-of-run check's, and blank for every other pick.
+                "check_kind": (
+                    "end"
+                    if phase_name == "check"
+                    else ((flow.spot_check if flow is not None else None) or "weak")
+                    if phase_name == "prompt"
+                    else ""
+                ),
                 "startup_round": startup_round,
                 "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
                 "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
@@ -3760,6 +3887,8 @@ def simulate_voting_iterations(  # noqa: C901
     # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
     # does whether the check before Done runs.
     last_check_end: int | None = None
+    # #4664's early check: settled (run, or skipped) once a run.
+    early_settled = early_check is None
     if flow is not None and (spot_check == "off" or not done_check or beta is None):
         # No check before Done: the arm before the app ran it, a run that never
         # checks, or the Inclusion arm, which has no balance to check.
@@ -3902,6 +4031,18 @@ def simulate_voting_iterations(  # noqa: C901
             "detector_tier": tier,
         }
 
+    def _media_scorer(ids: list[int]) -> Callable[[StepModel], list[float]]:
+        """A step's scores of *ids*, in order (#4786's line counts).
+
+        Made here rather than in the loop, where pyright cannot settle a nested
+        def's type through the loop's flow ("refers to itself").
+        """
+
+        def score(st: StepModel) -> list[float]:
+            return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+
+        return score
+
     while True:
         picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
@@ -3959,6 +4100,31 @@ def simulate_voting_iterations(  # noqa: C901
                 if not picks:
                     break
 
+        if (
+            not early_settled
+            and early_check is not None
+            and flow is not None
+            and t >= early_check
+            and flow.phase not in _OPENING_PHASES
+        ):
+            # #4664: every session is checked at early_check votes, once.  A
+            # prompted check running now or started this step, or one whose
+            # rounds reached that vote (a round casts its picks at once, so it
+            # can step over it), is that check; otherwise the user checks now,
+            # if a check can start.
+            if (check is not None and check.running and check_phase == "prompt") or (
+                last_check_end is not None and last_check_end >= early_check
+            ):
+                early_settled = True
+            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
+                early_settled = True
+                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        last_check_end = t
+                        check, check_phase = started, "prompt"
+                        picks = list(check.pending)
+                        flow.begin_spot_check("early")
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
@@ -4504,6 +4670,7 @@ def simulate_voting_iterations(  # noqa: C901
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
                 last_vote_good=is_positive,
+                level_met=stop_rule != "lights" and stop_level_met(details.get("find_line"), beta, stop_level),
             )
             _settle_done_check()
 
@@ -4883,14 +5050,13 @@ def simulate_voting_iterations(  # noqa: C901
                 if on_test is None and details.get("find_line") is not None:
                     on_test = details["find_line"].on_corpus(np.asarray(lc_scores, dtype=np.float64))
 
-                def _lc_score(st: StepModel, ids: list[int] = lc_ids) -> list[float]:
-                    return _score_media_ids(st, clips_dict, ids, region_aware=region_aware, style_obj=style_obj)
+                lc_score = _media_scorer(lc_ids)
 
                 lc_centroid = _centroid_step(
                     good_votes,
                     clips_dict,
                     target_category,
-                    _lc_score,
+                    lc_score,
                     region_voting=region_voting,
                     style_obj=style_obj,
                     line_rule=centroid_line,
@@ -4909,7 +5075,7 @@ def simulate_voting_iterations(  # noqa: C901
                         lc_labels,
                         float(details.get("find_threshold", threshold)),
                         on_test,
-                        _lc_score(lc_centroid),
+                        lc_score(lc_centroid),
                         CENTROID_THRESHOLD,
                     )
                 )

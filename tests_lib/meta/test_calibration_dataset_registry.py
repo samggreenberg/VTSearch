@@ -186,6 +186,24 @@ class TestFhibeIsRunnable:
             assert ds not in cfg.EXPERIMENT_QUERIES
 
 
+class TestRicoSuaveIsRunnable:
+    """#4356: the genre track opens on the text its labels were reviewed under."""
+
+    def test_it_has_a_roster_the_pile_builds(self, cfg, pc):
+        assert cfg.DATASET_EMBEDDERS["apptitude"]
+        for emb in cfg.DATASET_EMBEDDERS["apptitude"]:
+            assert pc.embeds(cfg.learn_embedder(emb), "apptitude"), f"apptitude x {emb} is never built"
+
+    def test_every_class_types_the_loaders_text(self, cfg):
+        from pilebuild.loaders import apptitude
+
+        assert cfg.EXPERIMENT_QUERIES["apptitude"] == apptitude.ROSTER
+
+    def test_it_is_boxless(self, cfg, pc):
+        assert cfg.BOXED_BY_DATASET["apptitude"] is False
+        assert pc.DATASETS["apptitude"]["boxed"] is False
+
+
 class TestTrainMixCells:
     """#4160: a mixed cell is enumerated per class and opens on its class's text."""
 

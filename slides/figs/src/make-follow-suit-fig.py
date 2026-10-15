@@ -160,8 +160,8 @@ def main() -> int:
     curves = read_curves(CSV)
     # Saved at the canvas's declared bounds: the top margin keeps the title notch
     # empty, and both pages frame the rows identically.
-    save(_figure(curves, today=True), OUT, "follow-suit.png", column=FULL_BLEED, tight=False)
-    save(_figure(curves, today=False), OUT, "follow-suit.build1.png", column=FULL_BLEED, tight=False)
+    save(_figure(curves, today=True), OUT, "follow-suit.webp", column=FULL_BLEED, tight=False)
+    save(_figure(curves, today=False), OUT, "follow-suit.build1.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

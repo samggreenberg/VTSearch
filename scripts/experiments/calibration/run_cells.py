@@ -349,9 +349,9 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} label_quota={cfg.LABEL_QUOTA} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -382,6 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.arms_line_counts import LINE_COUNT_COLUMNS
     from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
+    from vtscore.eval.arms_split_rounding import split_rounding
     from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -449,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
         with (
             sigma_floor(cfg.SIGMA_FLOOR),
             head_count_bads(cfg.HEAD_COUNT_BADS),
+            split_rounding(cfg.SPLIT_ROUNDING),
             query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
         ):
             rows = simulate_voting_iterations(
@@ -505,6 +507,9 @@ def main(argv: list[str] | None = None) -> int:
                 acq_origin=cfg.ACQ_ORIGIN,
                 acq_target_p=cfg.ACQ_TARGET_P,
                 smart_gate=cfg.SMART_GATE,
+                stop_rule=cfg.STOP_RULE,
+                stop_level=cfg.STOP_LEVEL,
+                stop_cap=cfg.STOP_CAP,
                 label_quota=cfg.LABEL_QUOTA,
                 walk_picks=cfg.WALK_PICKS,
                 walk_tol=cfg.WALK_TOL,
@@ -517,6 +522,7 @@ def main(argv: list[str] | None = None) -> int:
                 **({"weak_repeat": cfg.WEAK_REPEAT} if cfg.WEAK_REPEAT is not None else {}),
                 **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
                 **({"done_check": cfg.DONE_CHECK} if cfg.DONE_CHECK is not None else {}),
+                **({"early_check": cfg.EARLY_CHECK} if cfg.EARLY_CHECK is not None else {}),
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
@@ -587,6 +593,7 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_query"] = seed_query
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
+            r["split_rounding"] = cfg.SPLIT_ROUNDING
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
@@ -664,7 +671,8 @@ def main(argv: list[str] | None = None) -> int:
     # `calibration_fraction` joins them for the same reason (issue #3287): it is
     # a run-level knob, so the only other record of which arm a cell belongs to
     # is the directory it was read out of - and a frame that has been
-    # concatenated across arms no longer has one.
+    # concatenated across arms no longer has one.  `split_rounding` (#4864) is
+    # one too.
     main_cols = [
         *CALIBRATION_COLUMNS,
         "embedder",
@@ -672,6 +680,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed_query",
         "seed_embedder",
         "calibration_fraction",
+        "split_rounding",
         "sim_fraction",
         "stratify_target",
         "exclusion_arm",

@@ -925,18 +925,18 @@ def main() -> int:
     dc = _fullmarks_config()
     facts = _fullmarks_facts()
 
-    save(fig_coco_better_bands(pc), OUT, "dataset-coco-better-bands.png", column=FULL_BLEED, tight=False)
-    save(fig_fullmarks_shape(dc, facts), OUT, "dataset-fullmarks-shape.png", column=FULL_BLEED, tight=False)
+    save(fig_coco_better_bands(pc), OUT, "dataset-coco-better-bands.webp", column=FULL_BLEED, tight=False)
+    save(fig_fullmarks_shape(dc, facts), OUT, "dataset-fullmarks-shape.webp", column=FULL_BLEED, tight=False)
 
     for n in range(len(COCO_BETTER_FRAMES) - 1):
         save(
             fig_coco_better_complement(frame=n),
             OUT,
-            f"dataset-coco-better-complement.build{n + 1}.png",
+            f"dataset-coco-better-complement.build{n + 1}.webp",
             column=FULL_BLEED,
             tight=False,
         )
-    save(fig_coco_better_complement(), OUT, "dataset-coco-better-complement.png", column=FULL_BLEED, tight=False)
+    save(fig_coco_better_complement(), OUT, "dataset-coco-better-complement.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

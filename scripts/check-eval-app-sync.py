@@ -114,7 +114,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="autopilot.phase_machine",
         app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
-        harness="vtscore/eval/autopilot_flow.py::next_phase",
+        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights,STOP_CAP",
         kind="ported",
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
@@ -133,7 +133,16 @@ MIRRORS: list[Mirror] = [
             "has closed, so all green reads 'done' rather than 'spot'), moved by beginSpotCheck / "
             "endSpotCheck / skipDoneCheck; the harness's AutopilotFlow spot_check / done_checked, moved by "
             "begin_spot_check / end_spot_check / skip_done_check, read by next_phase as checking / "
-            "done_checked. Whether the check before Done runs is done_check_due, which both call."
+            "done_checked. Whether the check before Done runs is done_check_due, which both call. "
+            "Done's branch also opens on the labels line's level (#4878): the app's checkPhaseTransition reads "
+            "levelMet (the labeling status's level.met, from the library's stop_level_reading) beside the three "
+            "lights, and every light green or the level met is that branch; the harness's AutopilotFlow, under its "
+            "default stop_rule 'lights|level', hands next_phase every light green when stop_lights says the rule "
+            "stops, reading stop_level_met on the step's labels line. And on the click cap (#4903): the app's "
+            "checkPhaseTransition opens that branch once the votes reach STOP_CAP_VOTES (atCap); the harness's "
+            "AutopilotFlow passes stop_lights at_cap once they reach its stop_cap (STOP_CAP by default), and "
+            "stop_lights says stop under every rule. The two numbers are pinned literally by "
+            "TestPortedConstants and the service spec."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -147,9 +156,15 @@ MIRRORS: list[Mirror] = [
             "harness's end-of-budget check (spot_check 'end' and 'weak', rows with phase 'check' past "
             "max_steps) is its measurement of the final line, which no app user can start since the "
             "Check button went: it is never a click. The app also latches doneChecked when a run's first "
-            "labeling-status reading is already all green (the Train view re-entered on a finished "
-            "detector); a harness run starts with no votes, where the lights cannot be green, so it has "
-            "nothing to port."
+            "labeling-status reading already says Done, every light green or the level met (the Train view "
+            "re-entered on a finished detector), and when its first labelset reading already holds the cap "
+            "(noteInitialLabelset); a harness run starts with no votes, where none can hold, so "
+            "it has nothing to port. A run that reaches the cap still in its opening (cappedInOpening, #4903) "
+            "is told Autopilot has stopped and offered the re-sort prompt, but its phase stays the opening's: "
+            "display only, like doneReached, so next_phase has nothing to port; the harness's "
+            "capped_in_opening reads the same condition for a reader asking where such a session stopped. "
+            "The harness's early check (begin_spot_check('early'), early_check=N, #4664) "
+            "is an experiment arm the app does not run: a check at a fixed vote count, which latches nothing."
         ),
     ),
     Mirror(

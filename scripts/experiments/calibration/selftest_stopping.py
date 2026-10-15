@@ -42,6 +42,19 @@ And then the two later additions:
   machine's reading, so it must neither fire the rules nor split a ``done``
   stretch into two episodes.
 
+And the stages (2026-10-14), where the trap is reading a light outside the
+stretch that waits on it:
+
+* the clicks before the stop must be split into opening, Hard, New, the
+  mid-session check and the check before Done, and must add up to the stop;
+* Smart and Stable must be read over Hard's clicks only, and Span over New's
+  only: Span is never green in Hard, because New is the walk that fills it, and
+  a count over every held click names it binding in every session;
+* Stable not yet measuring (too few labels or retrains) must be told apart from
+  Stable measured and short;
+* a light's lapses from green must be counted before the stop, and what broke
+  ``done`` after it.
+
 Run: ``python selftest_stopping.py``
 """
 
@@ -183,6 +196,91 @@ def _gate_frame() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _staged_frame() -> pd.DataFrame:
+    """Two seeds of one session that walks Autopilot's stretches the way the phase machine does.
+
+    One row per vote, except a check's rounds, which close every five clicks:
+
+    * 1-6 the opening (``good``, ``bad``), so clicks 1-7 are the opening's;
+    * Hard from 7, Smart red and Stable warming up (no margins) to 12; at 13 a
+      mid-session check is prompted, two rounds closing at 18 and 23; Hard again
+      from 24, Smart red to 25, then green, Stable short on its average 28-31;
+    * New walks the atlas from 32, Span 9 nodes short of its run's own bar (32);
+      a Stable lapse at 41 sends it back to Hard for one click, then New to 51;
+    * Span green at 52 (``spot``), the check before Done in two rounds closing at
+      57 and 62, and Done at 63;
+    * after the stop Smart breaks Done once, at 71.
+
+    So the clicks before the stop are opening 7, Hard 16, New 19, check 10 and
+    check before Done 11, which add up to the stop at 63.  The metric is
+    ``t / 100``.
+    """
+    phases: dict[int, str] = {}
+    for t in range(1, 81):
+        if t <= 2:
+            phases[t] = "good"
+        elif t <= 6:
+            phases[t] = "bad"
+        elif t <= 13 or 24 <= t <= 31 or t in (41, 71):
+            phases[t] = "hard"
+        elif 14 <= t <= 23:
+            if t in (18, 23):
+                phases[t] = "prompt"
+        elif t <= 51:
+            phases[t] = "new"
+        elif t == 52:
+            phases[t] = "spot"
+        elif t <= 62:
+            if t in (57, 62):
+                phases[t] = "prompt"
+        else:
+            phases[t] = "done"
+    rows = []
+    for seed in range(2):
+        for t, phase in phases.items():
+            opening = t <= 6
+            warm = 7 <= t <= 12
+            smart_red = t <= 25 or t == 71
+            stable_red = opening or warm or 28 <= t <= 31 or t == 41
+            unmeasured = opening or warm
+            rows.append(
+                {
+                    "arm": "walk",
+                    "dataset": "ds",
+                    "category": "cat",
+                    "seed": seed,
+                    "t": t,
+                    "phase": phase,
+                    "smart": "red" if smart_red else "green",
+                    "stable": "red" if opening else ("yellow" if stable_red else "green"),
+                    "span": "green" if t >= 52 else ("yellow" if t >= 32 else "red"),
+                    # Smart unmeasured while warming up, short by 0.01 while red,
+                    # and exactly ON its cutoff once green (a zero margin, which
+                    # is green).
+                    "smart_slope": (
+                        np.nan
+                        if unmeasured
+                        else (S.SMART_FLAT_THRESHOLD - 0.01 if smart_red else S.SMART_FLAT_THRESHOLD)
+                    ),
+                    "smart_slope_t": np.nan if unmeasured else (-3.0 if smart_red else -1.0),
+                    "span_level": 23 if t < 52 else 32,
+                    "span_target": 32,
+                    "stable_flip_rate": np.nan if unmeasured else 0.03,
+                    "stable_confident_flip_rate": np.nan if unmeasured else (0.02 if stable_red else 0.001),
+                    "stable_max_confident_flip_rate": np.nan if unmeasured else (0.03 if stable_red else 0.002),
+                    "stable_flip_rate_early": np.nan if unmeasured else 0.04,
+                    "stable_flip_rate_late": np.nan if unmeasured else 0.03,
+                    "n_good": t // 2,
+                    "n_bad": t - t // 2,
+                    "beta": 1.0,
+                    "fbeta": t / 100.0,
+                    "cost": 1.0 - t / 100.0,
+                    "average_precision": t / 100.0,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _check(label: str, cond: bool, detail: str = "") -> bool:
     print(f"  {'PASS' if cond else 'FAIL'}  {label}{('  — ' + detail) if detail and not cond else ''}")
     return bool(cond)
@@ -291,13 +389,14 @@ def main() -> int:
     )
 
     # --- which rule was binding ----------------------------------------------
-    ok &= _check("the held steps name Stable as the culprit", srow["never"]["blocked_stable"] == 1.0)
+    ok &= _check("Hard's clicks name Stable as the culprit", srow["never"]["blocked_stable"] == 1.0)
     ok &= _check(
-        "...and clear Smart and Span", srow["never"]["blocked_smart"] == 0.0 and srow["never"]["blocked_span"] == 0.0
+        "...and clear Smart, with no Span column to name by construction",
+        srow["never"]["blocked_smart"] == 0.0 and "blocked_span" not in stops.columns,
     )
-    note = S.binding_note(summary)
-    ok &= _check("the binding note names it", "stable" in note and "binding rule" in note, note)
-    tie = S.binding_note(pd.DataFrame([{"blocked_smart": 1.0, "blocked_stable": 1.0, "blocked_span": 0.5}]))
+    note = S.binding_note(summary.loc[summary["arm"] == "never"])
+    ok &= _check("the binding note names it, in Hard", "**stable** is the binding rule in Hard" in note, note)
+    tie = S.binding_note(pd.DataFrame([{"hard_held_smart": 1.0, "hard_held_stable": 1.0, "hard_held_both": 1.0}]))
     ok &= _check(
         "...and reports a tie as one, not as whichever light is listed first",
         "tie as the binding rule" in tie and "**smart**" in tie and "**stable**" in tie and "**span**" not in tie,
@@ -401,8 +500,8 @@ def main() -> int:
         str((mrow["never"]["stable_conf_median"].iloc[0], mrow["never"]["stable_max_median"].iloc[0])),
     )
     ok &= _check(
-        "...and a gate sitting exactly on its bar reads zero, and counts as green",
-        mrow["never"]["span_median"].iloc[0] == 0.0 and mrow["never"]["span_green_share"].iloc[0] == 1.0,
+        "...and Span, read only in New, has nothing to say about a run that never left Hard",
+        mrow["never"]["span_median"].isna().all() and set(mrow["never"]["span_n"]) == {0},
     )
     ok &= _check(
         "the green share is over held steps, and separates a wall from a flap",
@@ -424,12 +523,10 @@ def main() -> int:
         )
     ok &= _check(
         "...and the shares over a blocked step sum to one",
-        np.allclose(gates[["stable_block_avg", "stable_block_max", "stable_block_falling"]].sum(axis=1), 1.0),
-    )
-    ok &= _check(
-        "Span's bar is the run's own, not an assumed 40",
-        np.isclose(grow["avg"]["span_median"].iloc[0], -9.0),
-        str(grow["avg"]["span_median"].iloc[0]),
+        np.allclose(
+            gates[["stable_block_warmup", "stable_block_avg", "stable_block_max", "stable_block_falling"]].sum(axis=1),
+            1.0,
+        ),
     )
 
     # --- the margin table and the pre-#3560 refusal ---------------------------
@@ -445,6 +542,100 @@ def main() -> int:
     ok &= _check(
         "...and says so in place of a table",
         "predate the per-step indicator margins" in S.margin_table(S.summarise_margins(pd.DataFrame())),
+    )
+
+    # --- the stretches: where the clicks before the stop went ------------------
+    staged = _staged_frame()
+    st = S.stopping_points(staged, keys=KEYS, metrics=("fbeta",))
+    r0 = st.iloc[0]
+    ok &= _check("the staged run stops at 63", set(st["t_stop"]) == {63.0}, str(set(st["t_stop"])))
+    want = {"opening": 7.0, "hard": 16.0, "new": 19.0, "check": 10.0, "done_check": 11.0}
+    got = {k: r0[f"clicks_{k}"] for k in want}
+    ok &= _check("its clicks split into the planted stretches", got == want, str(got))
+    ok &= _check("...which add up to the stop", sum(got.values()) == r0["t_stop"], str(sum(got.values())))
+    ok &= _check(
+        "Hard's clicks are read for Smart and Stable: 9 and 11 of 16, 6 of them both",
+        (r0["hard_clicks_smart"], r0["hard_clicks_stable"], r0["hard_clicks_both"]) == (9.0, 11.0, 6.0)
+        and np.isclose(r0["blocked_smart"], 9 / 16)
+        and np.isclose(r0["blocked_stable"], 11 / 16),
+        str((r0["hard_clicks_smart"], r0["hard_clicks_stable"], r0["hard_clicks_both"])),
+    )
+    ok &= _check(
+        "Hard last ended waiting on the light that went green last",
+        r0["hard_exit_light"] == "stable",
+        r0["hard_exit_light"],
+    )
+    ok &= _check(
+        "...and the metric is read where Hard last ended, and at the stop",
+        r0["t_hard_exit"] == 42.0
+        and np.isclose(r0["fbeta_at_hard_exit"], 0.42)
+        and np.isclose(r0["fbeta_at_stop"], 0.63),
+        str((r0["fbeta_at_hard_exit"], r0["fbeta_at_stop"])),
+    )
+    ok &= _check(
+        "lapses before the stop are counted light by light",
+        (r0["lapses_smart"], r0["lapses_stable"], r0["lapses_span"]) == (0, 2, 0),
+        str((r0["lapses_smart"], r0["lapses_stable"], r0["lapses_span"])),
+    )
+    ok &= _check(
+        "...and what broke Done after it",
+        (r0["done_lapses_smart"], r0["done_lapses_stable"], r0["done_lapses_span"]) == (1, 0, 0)
+        and r0["n_done_episodes"] == 2,
+        str((r0["done_lapses_smart"], r0["done_lapses_stable"], r0["n_done_episodes"])),
+    )
+    sst = S.summarise(st, metrics=("fbeta",))
+    note = S.binding_note(sst)
+    ok &= _check(
+        "the note names Stable binding in Hard and gives New's walk in clicks, never Span as a gate",
+        "**stable** is the binding rule in Hard" in note and "19 clicks of walk" in note and "**span**" not in note,
+        note,
+    )
+    table = S.stage_table(sst)
+    ok &= _check(
+        "the stage table carries every stretch and the stop they add up to",
+        "check before Done" in table and "| 63 | 7 | 16 | 19 | 10 | 11 |" in table,
+        table,
+    )
+    ok &= _check(
+        "a frame without lights still splits its clicks, and refuses to name a light",
+        S.stopping_points(staged.drop(columns=list(S.LIGHT_COLUMNS)), keys=KEYS)["clicks_new"].eq(19.0).all()
+        and "Re-run to answer it"
+        in S.binding_note(S.summarise(S.stopping_points(staged.drop(columns=list(S.LIGHT_COLUMNS)), keys=KEYS))),
+    )
+
+    sm = S.margins(staged, keys=KEYS).iloc[0]
+    ok &= _check(
+        "margins read each gate in its own stretch: 16 Hard steps, 19 New",
+        (sm["n_hard"], sm["n_new"]) == (16, 19),
+        str((sm["n_hard"], sm["n_new"])),
+    )
+    ok &= _check(
+        "Span's margin is New's walk to the run's own bar (32), not an assumed 40",
+        sm["span_median"] == -9.0 and sm["span_green_share"] == 0.0,
+        str((sm["span_median"], sm["span_green_share"])),
+    )
+    ok &= _check(
+        "a gate sitting exactly on its bar reads zero, and counts as green",
+        sm["smart_slope_median"] == 0.0 and np.isclose(sm["smart_slope_green_share"], 7 / 10),
+        str((sm["smart_slope_median"], sm["smart_slope_green_share"])),
+    )
+    ok &= _check(
+        "Stable not yet measuring is told apart from Stable measured and short",
+        sm["stable_blocked_n"] == 11
+        and np.isclose(sm["stable_block_warmup"], 6 / 11)
+        and np.isclose(sm["stable_block_avg"], 5 / 11),
+        str((sm["stable_blocked_n"], sm["stable_block_warmup"], sm["stable_block_avg"])),
+    )
+    pooled_mg = S.summarise_margins(S.margins(pd.concat([staged, _gate_frame()]), keys=KEYS), by=())
+    ok &= _check(
+        "shares pool over steps, so Stable's four reasons still sum to one across runs",
+        np.isclose(
+            pooled_mg[["stable_block_warmup", "stable_block_avg", "stable_block_max", "stable_block_falling"]]
+            .sum(axis=1)
+            .iloc[0],
+            1.0,
+        ),
+        pooled_mg.filter(like="stable_block").to_string(),
     )
 
     print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))

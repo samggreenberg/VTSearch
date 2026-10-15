@@ -3,7 +3,7 @@
 
     python slides/figs/src/make-sota-figs.py
 
-Writes `figs/sota-photos.png` and `figs/sota-documents.png`, each with one build
+Writes `figs/sota-photos.webp` and `figs/sota-documents.webp`, each with one build
 stage. Both slides have the same two panels, so the room reads the second the
 way it read the first:
 
@@ -615,8 +615,8 @@ def main() -> int:
     ):
         # Saved at the canvas's declared bounds, so both stages frame the
         # panels identically and the top margin keeps the title notch empty.
-        save(build(data, 2), OUT, f"{stem}.png", column=FULL_BLEED, tight=False)
-        save(build(data, 1), OUT, f"{stem}.build1.png", column=FULL_BLEED, tight=False)
+        save(build(data, 2), OUT, f"{stem}.webp", column=FULL_BLEED, tight=False)
+        save(build(data, 1), OUT, f"{stem}.build1.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

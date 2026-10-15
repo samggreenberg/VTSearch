@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-labels-fit.png)
+![bg fit](figs/calib-labels-fit.webp)
 
-## Curvey<br>and InDiscreet
+## Curvey &<br>InDiscrete
 
-<!-- build: figs/calib-labels-fit.build1.png -->
+<!-- build: figs/calib-labels-fit.build1.webp -->
 
-<!-- build: figs/calib-labels-fit.build2.png -->
+<!-- build: figs/calib-labels-fit.build2.webp -->
 
-<!-- build: figs/calib-labels-fit.build3.png -->
+<!-- build: figs/calib-labels-fit.build3.webp -->
 
 <!-- **a** — So this time all three ideas go into one fit. Up top, the votes,
      each scored by a model that never saw it: three Goods off the top from

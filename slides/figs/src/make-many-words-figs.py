@@ -292,9 +292,9 @@ def _key(fig: Figure) -> None:
 def main() -> int:
     _check()
     # Saved at the canvas's declared bounds, so every page frames the plane identically.
-    save(_many_words(3), OUT, "many-words.png", column=FULL_BLEED, tight=False)
+    save(_many_words(3), OUT, "many-words.webp", column=FULL_BLEED, tight=False)
     for stage in (1, 2):
-        save(_many_words(stage), OUT, f"many-words.build{stage}.png", column=FULL_BLEED, tight=False)
+        save(_many_words(stage), OUT, f"many-words.build{stage}.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

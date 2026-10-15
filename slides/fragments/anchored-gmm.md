@@ -1,22 +1,22 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-fold-anchored-flow.png)
+![bg fit](figs/calib-fold-anchored-flow.webp)
 
 ## Above<br>Average
 
-<!-- build: figs/calib-fold-anchored-flow.build1.png -->
+<!-- build: figs/calib-fold-anchored-flow.build1.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build2.png -->
+<!-- build: figs/calib-fold-anchored-flow.build2.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build3.png -->
+<!-- build: figs/calib-fold-anchored-flow.build3.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build4.png -->
+<!-- build: figs/calib-fold-anchored-flow.build4.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build5.png -->
+<!-- build: figs/calib-fold-anchored-flow.build5.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build6.png -->
+<!-- build: figs/calib-fold-anchored-flow.build6.webp -->
 
-<!-- build: figs/calib-fold-anchored-flow.build7.png -->
+<!-- build: figs/calib-fold-anchored-flow.build7.webp -->
 
 <!-- **a** — The blend averaged two answers; this one combines the evidence
      first. Recap: the pile, the votes, M₀. -->

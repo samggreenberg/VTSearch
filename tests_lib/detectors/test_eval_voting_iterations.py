@@ -126,6 +126,52 @@ class TestSplitClipIds:
         assert sim1 == sim2
         assert test1 == test2
 
+    def test_ungrouped_split_is_the_plain_permutation(self):
+        """No ``split_group`` anywhere: the draw every earlier run made, unchanged."""
+        medias = _make_separable_clips(n_per_cat=10)
+        ids = sorted(medias)
+        shuffled = np.random.RandomState(7).permutation(ids).tolist()
+        assert _split_media_ids(medias, 0.5, np.random.RandomState(7)) == (shuffled[:10], shuffled[10:])
+
+    def test_a_group_never_straddles_the_split(self):
+        """#4356: one app's screens are all voted on or all withheld."""
+        medias = _make_separable_clips(n_per_cat=30)
+        for i, cid in enumerate(sorted(medias)):
+            medias[cid]["split_group"] = f"app{i % 7}"
+        for seed in range(20):
+            sim, test = _split_media_ids(medias, 0.5, np.random.RandomState(seed))
+            assert set(sim).isdisjoint(test)
+            assert len(sim) + len(test) == len(medias)
+            sim_groups = {medias[c]["split_group"] for c in sim}
+            test_groups = {medias[c]["split_group"] for c in test}
+            assert sim_groups.isdisjoint(test_groups)
+            # short of half when it joins: overshoots by less than one group (<= 9 of 60)
+            assert 30 <= len(sim) < 30 + 9
+
+    def test_a_grouped_split_is_seeded(self):
+        medias = _make_separable_clips(n_per_cat=10)
+        for i, cid in enumerate(sorted(medias)):
+            medias[cid]["split_group"] = f"app{i % 5}"
+        a = _split_media_ids(medias, 0.5, np.random.RandomState(3))
+        assert a == _split_media_ids(medias, 0.5, np.random.RandomState(3))
+        assert any(a != _split_media_ids(medias, 0.5, np.random.RandomState(s)) for s in range(4, 10))
+
+    def test_a_partly_grouped_dataset_is_refused(self):
+        medias = _make_separable_clips(n_per_cat=10)
+        medias[sorted(medias)[0]]["split_group"] = "app0"
+        with pytest.raises(ValueError, match="split_group"):
+            _split_media_ids(medias, 0.5, np.random.RandomState(0))
+
+    def test_the_stratified_split_refuses_a_grouped_dataset(self):
+        from vtscore.eval.example_opening import stratified_split
+
+        medias = _make_separable_clips(n_per_cat=10)
+        for cid in medias:
+            medias[cid]["split_group"] = "app0"
+        cat = medias[sorted(medias)[0]]["category"]
+        with pytest.raises(ValueError, match="split_group"):
+            stratified_split(medias, cat, 0.5, np.random.RandomState(0))
+
 
 class TestLabelsetErrorCosts:
     """The Smart indicator's input: every recent model, one current labelset.

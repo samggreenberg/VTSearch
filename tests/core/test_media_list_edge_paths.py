@@ -601,14 +601,14 @@ class TestVoteEdgePaths:
         assert "good" in resp.get_json()["message"]
 
     def test_labelset_source_failure_is_swallowed(self, client, monkeypatch):
-        # A failure scheduling the debounced labelset-source push is logged but
-        # must not fail the vote (the detector-store write already succeeded).
+        # A failure scheduling the labelset-source push (which every detector
+        # write does) is logged but must not fail the vote.
         import vtscore.labels.sync as label_sync
 
-        def _boom():
+        def _boom(*_args, **_kwargs):
             raise RuntimeError("scheduling failed")
 
-        monkeypatch.setattr(label_sync, "sync_to_labelset_source", _boom)
+        monkeypatch.setattr(label_sync, "schedule_labelset_push", _boom)
         resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert resp.get_json()["state"] == "good"
@@ -628,10 +628,10 @@ class TestVoteBulkEdgePaths:
     def test_labelset_source_failure_is_swallowed(self, client, monkeypatch):
         import vtscore.labels.sync as label_sync
 
-        def _boom():
+        def _boom(*_args, **_kwargs):
             raise RuntimeError("scheduling failed")
 
-        monkeypatch.setattr(label_sync, "sync_to_labelset_source", _boom)
+        monkeypatch.setattr(label_sync, "schedule_labelset_push", _boom)
         resp = client.post("/api/medias/vote-bulk", json={"target": "good", "ids": [1, 2]})
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True

@@ -152,6 +152,12 @@ HEAD_COUNT_BADS: float = math.inf
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
 HEAD_COUNT_GOODS = 6
+#: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
+#: the labels line expects at least this F-beta at the session's balance over the corpus it was
+#: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
+#: no change to the session, and the stop comes where the clicks pay
+#: (``docs/experiments/2026-10-14-stop-signal-4878``).
+STOP_LEVEL = 0.5
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -230,6 +236,16 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
     with no held-out Good or no held-out Bad, or when the Goods do not score
     above the Bads on average (a head that ranks the wrong way has no line).
     """
+    model = _pooled_class_model(orderings)
+    return model if model is not None and model.mu_pos > model.mu_neg else None
+
+
+def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScoreModel | None:
+    """:func:`class_score_model` whichever way the folds rank: ``None`` only with no held-out Good or Bad.
+
+    A model whose Goods do not score above its Bads draws no line, but its gap is
+    still what the folds say about the labels' separation (#4899).
+    """
     if not orderings:
         return None
     pos_parts: list[np.ndarray] = []
@@ -251,8 +267,6 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
         return None
     xp, xn = _logit(pos), _logit(neg)
     mu_pos, mu_neg = float(xp.mean()), float(xn.mean())
-    if not mu_pos > mu_neg:
-        return None
     dof = max(1, xp.size + xn.size - 2)
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
     raw = math.sqrt(var)
@@ -290,6 +304,16 @@ def labels_line_threshold(
     :func:`fit_corpus` makes), else the labels' Bad component.  Searched on a
     fine logit grid; a tie keeps the higher cut.
     """
+    x, f = _parametric_fbeta(model, prevalence, beta, negatives)
+    best = float(f.max())
+    i = int(np.flatnonzero(f >= best - 1e-12).max())
+    return _sigmoid(float(x[i]))
+
+
+def _parametric_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(logit grid, expected F-beta of the cut at each point)`` for :func:`labels_line_threshold`."""
     p = min(max(float(prevalence), PREVALENCE_MIN), PREVALENCE_MAX)
     b2 = float(beta) * float(beta)
     mu0, s0 = (negatives.mu, negatives.sigma) if negatives is not None else (model.mu_neg, model.sigma)
@@ -302,10 +326,44 @@ def labels_line_threshold(
     s0_ = norm.sf((x - mu0) / s0)
     with np.errstate(invalid="ignore", divide="ignore"):
         f = (1.0 + b2) * p * s1 / (p * s1 + b2 * p + (1.0 - p) * s0_)
-    f = np.nan_to_num(f, nan=0.0)
-    best = float(f.max())
-    i = int(np.flatnonzero(f >= best - 1e-12).max())
-    return _sigmoid(float(x[i]))
+    return x, np.nan_to_num(f, nan=0.0)
+
+
+def parametric_expected_fbeta(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None = None
+) -> float:
+    """The expected F-*beta* at :func:`labels_line_threshold`'s cut: what the line would score on a fresh corpus.
+
+    A corpus at *prevalence* whose positives score as the labels' Good component
+    and whose negatives as *negatives* (else the Bad component).  Unlike
+    :func:`corpus_expected_fbeta` it counts no item, so it does not fall as a
+    session labels its corpus's positives away: it reads the class model alone.
+    """
+    return float(_parametric_fbeta(model, prevalence, beta, negatives)[1].max())
+
+
+def _corpus_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> np.ndarray:
+    """The expected F-*beta* of each cut of a corpus's items, best first, as :func:`corpus_cut` reads it."""
+    b2 = float(beta) * float(beta)
+    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
+    if tp.size == 0:
+        return tp
+    pos = max(float(total_positives), float(tp[-1]))
+    r = np.arange(1, tp.size + 1, dtype=np.float64)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+
+
+def corpus_expected_fbeta(posteriors_desc: np.ndarray, total_positives: float, beta: float) -> float:
+    """The expected F-*beta* at :func:`corpus_cut`'s cut: what the line expects to return from this corpus.
+
+    0 for a corpus with nothing worth keeping.  It counts the corpus's own
+    unvoted items, so it describes the rest of the session's corpus and falls
+    as the session labels that corpus's positives away, even with the model
+    unchanged; :func:`parametric_expected_fbeta` is the fresh-corpus reading.
+    """
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
+    return float(f.max()) if f.size and f.max() > 0 else 0.0
 
 
 def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_positives: float, beta: float) -> float:
@@ -327,12 +385,7 @@ def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_posit
     n = s.size
     if n == 0:
         return 1.0 + 1e-9
-    b2 = float(beta) * float(beta)
-    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
-    pos = max(float(total_positives), float(tp[-1]))
-    r = np.arange(1, n + 1, dtype=np.float64)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        f = np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
+    f = _corpus_fbeta(posteriors_desc, total_positives, beta)
     k = int(np.argmax(f))
     if not f[k] > 0:
         return 1.0 + 1e-9
@@ -487,6 +540,11 @@ class LabelsLine:
     #: Whether the negatives were modelled by the Bads' own scores, the labels' Bads
     #: being a random sample of this corpus (#4490), rather than by the corpus fit.
     bads_shape: bool = False
+    #: The calibration folds' own model, floored on this corpus, when they ranked the
+    #: held-out Goods no higher than the Bads (#4899).  *model* is then the in-sample
+    #: stand-in, which draws the line as it always has; :attr:`separation` reads this.
+    #: ``None`` when *model* is the folds' own, or the folds held nothing out.
+    held_out: ClassScoreModel | None = None
 
     @property
     def separation(self) -> float:
@@ -495,7 +553,16 @@ class LabelsLine:
         The spread is the one the line was cut with, the class model's own
         floored on this corpus, so the value is free of the logit scale.  Below
         :data:`WEAK_SEPARATION_D` the labels separate weakly (#4496).
+
+        When the folds ranked the held-out Goods no higher than the Bads, it is
+        their gap, at most 0, in their own spread floored on this corpus
+        (:attr:`held_out`, #4899).  The in-sample stand-in that draws the line
+        then was fitted on the head's scores of the labels it trained on, which
+        it always separates: read from it, labels that do not separate at all
+        read as separating strongly, and the weak check never came due.
         """
+        if self.held_out is not None:
+            return (self.held_out.mu_pos - self.held_out.mu_neg) / self.held_out.sigma
         spread = self.model.sigma if self.spread is None else self.spread
         return (self.model.mu_pos - self.model.mu_neg) / spread if spread > 0 else float("inf")
 
@@ -507,12 +574,58 @@ class LabelsLine:
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 
+    def expected_fbeta(self, beta: float) -> float:
+        """The expected F-*beta* of the best cut the class model sees on this corpus's unvoted items (#4878).
+
+        What :func:`corpus_cut` maximises, read at its maximum: the class model's
+        own estimate of how well the line's set does on the rest of the corpus.
+        Read whichever line serves, so it is the class model's estimate even
+        while the head's count line is the one drawn (:func:`head_count_serves`).
+        A line built by hand, with no corpus counted, reads the parametric one.
+        """
+        if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            total = self.unvoted_share * self.unvoted_scores.size
+            return corpus_expected_fbeta(self.unvoted_posteriors, total, beta)
+        return self.expected_fbeta_fresh(beta)
+
+    def expected_fbeta_fresh(self, beta: float) -> float:
+        """The expected F-*beta* the class model gives its line on a fresh corpus like this one (#4878).
+
+        The class model at the spread this corpus floored it to, at this
+        corpus's prevalence and with its negatives' bulk
+        (:func:`parametric_expected_fbeta`): a "Train on X, Find on Y" reading
+        that counts no item, so it does not move as the session's votes take
+        positives out of the corpus.
+        """
+        model = self.model if self.spread is None else replace(self.model, sigma=self.spread)
+        return parametric_expected_fbeta(model, self.prevalence, beta, self.negatives)
+
     def on_corpus(
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
-        line = _line_on(self.model, scores, ids, labels)
+        line = _line_on(self.model, scores, ids, labels, held_out=self.held_out)
         return self if line is None else line
+
+
+def stop_level_reading(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> dict[str, Any]:
+    """What Autopilot's stop reads off the labels line (#4878): ``expected_fbeta``, ``level`` and ``met``.
+
+    ``expected_fbeta`` is :meth:`LabelsLine.expected_fbeta` at *beta*, the
+    line's own estimate of the F-beta of the set it keeps; ``None`` with no
+    line, no balance, or while the head's count line serves
+    (:func:`head_count_serves`), whose class model is too thin to read.  ``met``
+    is whether it reaches *level*.
+    """
+    if line is None or beta is None or head_count_serves(line.model):
+        return {"expected_fbeta": None, "level": float(level), "met": False}
+    expected = float(line.expected_fbeta(float(beta)))
+    return {"expected_fbeta": expected, "level": float(level), "met": expected >= level}
+
+
+def stop_level_met(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> bool:
+    """Whether the labels line expects at least *level* F-beta at *beta* (:func:`stop_level_reading`)."""
+    return bool(stop_level_reading(line, beta, level)["met"])
 
 
 def head_count_serves(model: ClassScoreModel) -> bool:
@@ -707,7 +820,12 @@ def _bads_shape_posteriors(model: ClassScoreModel, unvoted_logits: np.ndarray, *
 
 
 def _line_on(
-    model: ClassScoreModel, scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool] | None
+    model: ClassScoreModel,
+    scores: Any,
+    ids: Iterable[int] | None,
+    labels: Mapping[int, bool] | None,
+    *,
+    held_out: ClassScoreModel | None = None,
 ) -> "LabelsLine | None":
     a = np.asarray(scores, dtype=np.float64)
     keep = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
@@ -745,6 +863,7 @@ def _line_on(
         post[order].copy(),
         fitted.sigma,
         bads_shape,
+        held_out=None if held_out is None else held_out.floored(floor),
     )
 
 
@@ -811,8 +930,18 @@ def fit_labels_line(
     in - in-sample, so the Goods sit high and the line leans precise, which is
     the safe side.  Still the labels alone, never a count on the corpus: the
     fallback before this kept thousands of a corpus at its prevalence (#4452).
+
+    **Folds that rank the wrong way.**  When the folds held Goods and Bads out
+    but scored the Goods no higher than the Bads, the same stand-in draws the
+    line (the owner's ruling, 2026-10-15), and the folds' own model rides on it
+    as :attr:`LabelsLine.held_out`, so its :attr:`~LabelsLine.separation` says
+    what they found: none (#4899).  The stand-in's own separation was read from
+    the labels the head trained on, and labels that did not separate at all
+    read as separating strongly.
     """
-    model = class_score_model(orderings)
+    folds = _pooled_class_model(orderings)
+    model = folds if folds is not None and folds.mu_pos > folds.mu_neg else None
+    wrong_way = folds if model is None else None
     if model is None and labels:
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
         if model is not None:
@@ -821,7 +950,7 @@ def fit_labels_line(
             model = replace(model, neg_logits=None)
     if model is None:
         return None
-    return _line_on(model, corpus_scores, corpus_ids, labels)
+    return _line_on(model, corpus_scores, corpus_ids, labels, held_out=wrong_way)
 
 
 __all__ = [

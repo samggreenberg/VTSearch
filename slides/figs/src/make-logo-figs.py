@@ -52,15 +52,12 @@ INK = "#14181f"
 SOFT = "#5b6472"
 RULE = "#d8dee6"
 
-#: WebP, not PNG, and this is the one figure in the deck that has to be.
-#: Every other generated figure here is line art on white, which is what PNG is
-#: for; these tiles are eight JPEG *photographs* — gradients, drop shadows and
-#: compression noise, upscaled — which is the case `slides/README.md` reserves
-#: WebP for, and the seven cumulative stages each carry every earlier tile
-#: again. As PNG the group weighs 5.0 MB against a stated budget of about
-#: 150 KB per figure. Marp rasterises through Chromium, which reads WebP
-#: natively, and the deck already ships its two UI screenshots this way.
-FIGURE_FORMAT = "webp"
+#: Lossy WebP (`save(photo=True)`), where every other generated figure here is
+#: lossless line art on white: these tiles are eight JPEG *photographs* —
+#: gradients, drop shadows and compression noise, upscaled — and the seven
+#: cumulative stages each carry every earlier tile again. As PNG the group
+#: weighed 5.0 MB against a stated budget of about 150 KB per figure.
+PHOTO = True
 
 #: Points per drawing unit, shared with the calibration schematics so type set
 #: here is the size it is there. See `make-calib-figs.FLOW_UNIT_PT`.
@@ -375,8 +372,8 @@ def _stage(stage: int) -> plt.Figure:
 
 def main() -> None:
     for stage in range(1, STAGES):
-        save(_stage(stage), OUT, f"logo-grid.build{stage}.{FIGURE_FORMAT}", column=FULL_BLEED, tight=False)
-    save(_stage(STAGES), OUT, f"logo-grid.{FIGURE_FORMAT}", column=FULL_BLEED, tight=False)
+        save(_stage(stage), OUT, f"logo-grid.build{stage}.webp", column=FULL_BLEED, tight=False, photo=PHOTO)
+    save(_stage(STAGES), OUT, "logo-grid.webp", column=FULL_BLEED, tight=False, photo=PHOTO)
 
 
 if __name__ == "__main__":

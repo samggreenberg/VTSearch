@@ -12,7 +12,8 @@ Covers:
                                              :class:`OkMessageSchema`
 * ``POST /api/settings-sources/sync``     -> :class:`SyncFromSourceResponseSchema`
 * ``GET  /api/labelset-sources``          -> :class:`SyncSourceEntrySchema`
-* ``GET  /api/detectors/<n>/labelset-source``      -> :class:`SyncSourceConfigSchema`
+* ``GET  /api/labelset-sources/default``  -> :class:`DefaultLabelsetSourceSchema`
+* ``GET  /api/detectors/<n>/labelset-source``      -> :class:`DetectorLabelsetSourceSchema`
 * ``PUT  /api/detectors/<n>/labelset-source``      -> :class:`SetSyncSourceRequestSchema` ->
                                                       :class:`OkMessageSchema`
 * ``POST /api/detectors/<n>/labelset-source/sync`` -> :class:`SyncFromLabelsetSourceResponseSchema`
@@ -131,6 +132,51 @@ class SyncSourceConfigSchema(Schema):
     inherited = fields.Boolean()
 
 
+class DetectorLabelsetSourceSchema(SyncSourceConfigSchema):
+    """Response for ``GET /api/detectors/<name>/labelset-source``.
+
+    The labelset source the detector syncs with, resolved by
+    :func:`vtscore.labels.binding.resolve_labelset_source`.  ``field_values``
+    holds only the detector's *own* values (and only for its owner): the ones
+    the deployment default fixes are never echoed, since they may be
+    credentials.  ``inherited`` is ``true`` when the detector has no binding
+    of its own and follows the deployment default.
+    """
+
+    display_name = fields.String(required=True)
+    fixed_keys = fields.List(fields.String(), required=True)
+    missing_fields = fields.List(fields.String(), required=True)
+
+
+class LabelsetSourceStatusSchema(Schema):
+    """Where a detector's labels sync to, as listed by ``GET /api/detectors/registry``.
+
+    ``missing_fields`` names the source's required fields this detector has no
+    value for; a detector with any is not synced until they are filled in.
+    """
+
+    source_name = fields.String(required=True)
+    display_name = fields.String(required=True)
+    inherited = fields.Boolean(required=True)
+    missing_fields = fields.List(fields.String(), required=True)
+
+
+class DefaultLabelsetSourceSchema(_PluginEntrySchema):
+    """Response for ``GET /api/labelset-sources/default``.
+
+    The deployment-wide labelset source every detector syncs to (the
+    ``default_labelset_source`` server setting), as a plugin entry whose
+    ``fields`` are only the ones a user still fills in - the New Detector form
+    renders exactly these.  ``fixed_keys`` names the fields the admin fixed
+    (their values stay on the server).  ``push_interval_seconds`` is the
+    shortest gap between two pushes of one detector.  The route returns a
+    literal ``null`` when the deployment has no default.
+    """
+
+    fixed_keys = fields.List(fields.String(), required=True)
+    push_interval_seconds = fields.Float(required=True)
+
+
 class SetSyncSourceRequestSchema(Schema):
     """Body for ``PUT /api/settings-sources/active`` and
     ``PUT /api/detectors/<name>/labelset-source``.
@@ -188,13 +234,22 @@ class SyncFromSourceResponseSchema(Schema):
 
 
 class SyncFromLabelsetSourceResponseSchema(Schema):
-    """Response for ``POST /api/detectors/<name>/labelset-source/sync``."""
+    """Response for ``POST /api/detectors/<name>/labelset-source/sync``.
+
+    ``labels`` counts the labels the source held; ``changed`` counts those the
+    pull added to the detector or relabelled in it.
+    """
 
     ok = fields.Boolean(required=True)
     message = fields.String(required=True)
+    labels = fields.Integer()
+    changed = fields.Integer()
 
 
 __all__ = [
+    "DefaultLabelsetSourceSchema",
+    "DetectorLabelsetSourceSchema",
+    "LabelsetSourceStatusSchema",
     "OkMessageSchema",
     "RunSettingsExportRequestSchema",
     "RunSettingsExportResponseSchema",

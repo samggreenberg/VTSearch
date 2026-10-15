@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-question.png)
+![bg fit](figs/test-question.webp)
 
 ## Final Exam
 
-<!-- build: figs/test-question.build1.png -->
+<!-- build: figs/test-question.build1.webp -->
 
-<!-- build: figs/test-question.build2.png -->
+<!-- build: figs/test-question.build2.webp -->
 
-<!-- build: figs/test-question.build3.png -->
+<!-- build: figs/test-question.build3.webp -->
 
 <!-- **a** — Spot Check grades the line on the photos we trained on. Is the
      detector any good on photos it's never seen? That's Test: pick a new

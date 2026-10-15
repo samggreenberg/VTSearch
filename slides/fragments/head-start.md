@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/head-start.png)
+![bg fit](figs/head-start.webp)
 
 ## Head Start
 
-<!-- build: figs/head-start.build1.png -->
+<!-- build: figs/head-start.build1.webp -->
 
-<!-- build: figs/head-start.build2.png -->
+<!-- build: figs/head-start.build2.webp -->
 
-<!-- build: figs/head-start.build3.png -->
+<!-- build: figs/head-start.build3.webp -->
 
 <!-- **a** — Pics on a Plane, with faces. Seven votes in, the app fits an SVM:
      the straight line with the widest gap. Green rings are what Find should

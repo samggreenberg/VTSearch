@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-knob-flow.png)
+![bg fit](figs/calib-knob-flow.webp)
 
 ## At All Costs
 
-<!-- build: figs/calib-knob-flow.build1.png -->
+<!-- build: figs/calib-knob-flow.build1.webp -->
 
-<!-- build: figs/calib-knob-flow.build2.png -->
+<!-- build: figs/calib-knob-flow.build2.webp -->
 
-<!-- build: figs/calib-knob-flow.build3.png -->
+<!-- build: figs/calib-knob-flow.build3.webp -->
 
 <!-- **a** — Before the radios there was a slider, Inclusion, minus ten to plus
      ten: each step doubled the price of a miss or a false alarm. Watch it not

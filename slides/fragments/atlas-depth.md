@@ -1,16 +1,16 @@
 <!-- _class: full -->
 
-![bg fit](figs/atlas-depth.png)
+![bg fit](figs/atlas-depth.webp)
 
 ## Out of Its Depth
 
-<!-- build: figs/atlas-depth.build1.png -->
+<!-- build: figs/atlas-depth.build1.webp -->
 
-<!-- build: figs/atlas-depth.build2.png -->
+<!-- build: figs/atlas-depth.build2.webp -->
 
-<!-- build: figs/atlas-depth.build3.png -->
+<!-- build: figs/atlas-depth.build3.webp -->
 
-<!-- build: figs/atlas-depth.build4.png -->
+<!-- build: figs/atlas-depth.build4.webp -->
 
 <!-- **a** — The atlas has a second job. Same picture: photos, votes, a
      boundary. -->

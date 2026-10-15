@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/test-pool.png)
+![bg fit](figs/test-pool.webp)
 
 ## Good<br>Neighbours
 
-<!-- build: figs/test-pool.build1.png -->
+<!-- build: figs/test-pool.build1.webp -->
 
-<!-- build: figs/test-pool.build2.png -->
+<!-- build: figs/test-pool.build2.webp -->
 
 <!-- **a** — The simple version breaks twice. First, above the line on a sparse
      pile: 29 matches in 2,048 kept. Most picks found nothing. -->

@@ -17,6 +17,57 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
+  you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
+  voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
+  "Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept" read as half of all the
+  matches, and put the range of the set the check ended on beside a count it did not describe. It now reads
+  "Checked the top 64 you hadn't voted on · likely 55–100% right, about half of them found (checked 5) · 32
+  more kept", or "32 more kept, unchecked" before a check, and its tooltip and the check's result screen say
+  the same. Late in a session, once the matches near the top are voted, the check before Done can read low
+  after a session that went well; the note now says why. What the check measures is unchanged.
+
+- **Autopilot stops every session by 200 votes** (issue #4903). Done came only when the quality lights went
+  green or the detector expected an F-beta of 0.5, and 1–2% of sessions reach neither by 400 votes; the app has
+  no horizon, so they went on as long as the user did. Done now also comes at 200 votes, after the same check
+  before Done, and the panel and Toasty say "You have cast 200 votes, as many as Autopilot asks for" when that
+  is what said Done. A session still looking for its first Goods at 200 votes is told **Autopilot has stopped**,
+  with the Goods it found, and offered the **Update Sort Example?** prompt once more; voting on keeps looking.
+  Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
+  small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
+
+- **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
+  set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
+  unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id
+  or the name, and is creator-only. A push now sends the detector file's labels from every dataset (it
+  sent only the active dataset's votes, which overwrote the rest), and a sync merges into the detector
+  instead of only voting what the active dataset holds. Renaming a detector moves a
+  `{detector_name}`-templated labelset file itself: the *Move existing labelset file?* prompt,
+  `pending_labelset_move`, and `POST /api/detectors/registry/<id>/labelset-source/move-file` are gone.
+
+- **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
+  when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
+  line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps
+  is, after the same check before Done. A session that is already good no longer waits on the last
+  light: priced on 2,160 simulated sessions and A/B'd on 6,480 more, it ends a session 5 to 16 clicks
+  sooner for the same F-beta. When that is what said Done, the panel and Toasty quote the F-beta it
+  expects instead of saying every light is green. `GET /api/labeling-status` carries it as `level`
+  (`expected_fbeta`, `level`, `met`).
+
+- **A detector held on its typed query no longer reads "Too few labels"** (issue #4889). A detector made
+  from a typed query keeps its query's set past the label quota until it has 30 labels (#4736). The Test
+  view's note used to blame the quota for that, naming counts the labels already met ("it takes 3 Goods
+  and 4 Bads") and owing nothing. It now says the detector keeps its query's set until 30 labels, how many
+  it has, and how many more labels, Good or Bad, give a trained one. AutoFind's results list held detectors
+  on their own line, and the CLI's message says the same. The `label_quota` payload gains `hold_labels` and
+  `hold_owed`.
+
+- **Faces work in every Docker image** (issue #4886). No image installed `facenet-pytorch`, so in a container
+  the Images → Faces converter found no faces (with only a log warning), and the face localizer and the
+  FaceNet embedder failed to load. Every `docker/Dockerfile*` now installs it, `--no-deps` as
+  `scripts/install.sh` does. FaceNet's weights also now always download into the model cache
+  (`VTSEARCH_MODELS_DIR`, else `data/models`) rather than under `$HOME`; a host that already holds
+  them in `~/.cache/torch` fetches them once more (~107 MB).
 - **A V100 install gets torch `cu126`, and torch is floored at 2.7** (issue #4838). transformers 5.18
   and later call `torch.accelerator.current_accelerator()` while importing any model class, and torch
   2.6 raises there when no GPU is visible: on a CPU-only host, or a GPU host with
@@ -239,6 +290,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
+  `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
+  its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
+  export. Pushes for one detector never overlap and start at least `labelset_source_push_interval_seconds`
+  apart (default 60), so a burst of votes is one write; pending pushes are flushed on shutdown. Loading a
+  detector merges back what its source holds, so a detector whose server lost its data is restored by
+  re-creating it under the same name. Values the admin sets are fixed; the **New Detector** form asks for
+  the source's other fields, and a detector's Dashboard ⋯ menu gains **Auto-export…** to fill them in later
+  (its row warns when one is missing). `GET /api/labelset-sources/default` serves the form, and the
+  registry listing carries each detector's `labelset_source_status`.
+
+- **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
+  image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
+  default embedder weights in at build time (CLAP General for `audio`, X-CLIP for `video`), so a fresh
+  container serves on first run without a Hugging Face download. `docker/compose/docker-compose.audio.yml`
+  and `docker-compose.video.yml` build and run the two; any other media type builds with
+  `--build-arg MEDIA_TYPE=<type>`. The half types bake what their media embed as: `document` means
+  document input converted to page images, so it bakes SigLIP; `face` means image input with the faces
+  cropped out, so it bakes FaceNet (and the image installs `facenet-pytorch`). A server locked to
+  `document` now also warms SigLIP at startup, where it used to warm nothing. See
+  [SETUP.md](docs/SETUP.md#single-media-type-audio-only-video-only).
 - **EmbeddingGemma 2 (audio) embedder** (issue #4837). A new choice for sound collections, built on Google's
   `embeddinggemma-2`. It finds spoken words from a typed description (`someone saying "yes"`), which CLAP cannot,
   but is weaker than CLAP on other sounds and music, so CLAP-general stays the default. It needs transformers
@@ -828,6 +900,19 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
+  calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the
+  head's own scores of the labels it trained on, and the separation was read from those, so labels that
+  did not separate at all read as separating strongly (2.69 on five yellow smileys Good against five
+  Bad) and the check never came due. The separation now comes from the folds (0 or below), so the check
+  runs. The line itself is unchanged.
+
+- **A dataset reloaded after a restart trains the same line as the process that imported it** (issue
+  #4892). Reloading a dataset moved the last bit of about a third of its stored vectors, and that was
+  enough to change which votes the calibration folds held out. The same labels could then get another
+  line, and another separation for Autopilot's weak-separation check: 2.69 in the process that imported
+  `drawings` against 0.13 after a restart. A reload now holds the vectors the import made, bit for bit.
 
 - **A face in Train or Test fills the pane and can be zoomed** (issue #4771). A face crop was
   shown through the document viewer, which clipped it to a 300×150 box and offered no image

@@ -16,12 +16,18 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from vtscore.config.runtime import (
     DEFAULT_BETA,
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
 )
+
+#: Default shortest gap, in seconds, between two pushes of one detector's
+#: labels to its labelset source (#4913).  The app's server setting
+#: ``labelset_source_push_interval_seconds`` overrides it.
+DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL: float = 60.0
 
 
 def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) -> None:
@@ -172,6 +178,20 @@ class CoreConfig:
     # library-only ``CoreConfig(...)`` constructions without the app shim keep
     # working unchanged.
     signpost_vocab: dict[str, list[str]] = field(default_factory=dict)
+
+    # Deployment-wide labelset source every detector syncs its labels to unless
+    # it has a binding of its own (#4913; the app populates it from the
+    # server-tier ``default_labelset_source``).  ``{"source_name": ...,
+    # "field_values": {...}}``; each non-empty value is fixed by the admin.
+    # Read by :func:`vtscore.labels.binding.resolve_labelset_source`.  ``None``
+    # (the default) means no deployment-wide source.
+    default_labelset_source: dict[str, Any] | None = None
+
+    # Shortest gap, in seconds, between two pushes of one detector's labels to
+    # its labelset source (server-tier ``labelset_source_push_interval_seconds``).
+    # Read by :mod:`vtscore.labels.sync`.  Defaulted here so library-only
+    # ``CoreConfig(...)`` constructions keep working unchanged.
+    labelset_source_push_interval: float = DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL
 
     # Deprecated and ignored (#4667).  It was the operator switch that hid the
     # remaining-time estimate on ingest progress bars (#4233); ingest bars now

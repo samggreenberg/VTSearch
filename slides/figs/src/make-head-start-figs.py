@@ -369,12 +369,12 @@ def _running_start(curves: dict, new: bool) -> Figure:
 def main() -> int:
     _check()
     # Saved at the canvas's declared bounds, so every page frames the plane identically.
-    save(_head_start(4), OUT, "head-start.png", column=FULL_BLEED, tight=False)
+    save(_head_start(4), OUT, "head-start.webp", column=FULL_BLEED, tight=False)
     for stage in (1, 2, 3):
-        save(_head_start(stage), OUT, f"head-start.build{stage}.png", column=FULL_BLEED, tight=False)
+        save(_head_start(stage), OUT, f"head-start.build{stage}.webp", column=FULL_BLEED, tight=False)
     curves = read_curves(CURVES)
-    save(_running_start(curves, new=True), OUT, "running-start.png", column=FULL_BLEED, tight=False)
-    save(_running_start(curves, new=False), OUT, "running-start.build1.png", column=FULL_BLEED, tight=False)
+    save(_running_start(curves, new=True), OUT, "running-start.webp", column=FULL_BLEED, tight=False)
+    save(_running_start(curves, new=False), OUT, "running-start.build1.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

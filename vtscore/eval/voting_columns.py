@@ -406,6 +406,12 @@ PICK_COLUMNS: tuple[str, ...] = (
     "style",
     "t",
     "phase",
+    #: Which check a check pick is in (#4664): ``weak``, ``done`` or ``early``
+    #: on a prompted check's picks (``phase == "prompt"``), ``end`` on the
+    #: end-of-run check's (``phase == "check"``), blank on every other pick.
+    #: The phase alone cannot tell a weak-separation check from the check
+    #: before Done.
+    "check_kind",
     #: Index of the schedule round this click was spent in, or -1 outside one.
     "startup_round",
     #: The round's cut on the seed sort, and where that lands in the sort's own
@@ -641,6 +647,21 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "train_threshold",
     "train_prevalence",
     "find_prevalence",
+    # #4878: the labels line's own reading of how well it does, at the row's beta - what a stop rule in the
+    # objective's units would read.  ``line_efbeta`` is the expected F-beta at its cut over the Train corpus's
+    # unvoted items (what ``corpus_cut`` maximises; it falls as the votes take the corpus's positives),
+    # ``line_efbeta_corpus`` the same over the Train corpus read as unlabelled (a Find on a corpus like it),
+    # ``line_efbeta_fresh`` the class model's in its normals (``parametric_expected_fbeta``), ``line_separation``
+    # the labels' d', and ``line_head_count`` 1 where the head's count line served (#4786), 0 where the class
+    # model's cut did, -1 with no line.  ``find_efbeta`` is a diagnostic the app cannot read: the expected
+    # F-beta of Find's line on the withheld half, from that half's scores alone, beside the F-beta it estimates.
+    # NaN / -1 off the base row and with no balance.
+    "line_efbeta",
+    "line_efbeta_corpus",
+    "line_efbeta_fresh",
+    "line_separation",
+    "line_head_count",
+    "find_efbeta",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base

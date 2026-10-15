@@ -58,11 +58,15 @@ WORKDIR /app
 
 # ---------- dependency layer ----------
 # requirements/gpu.txt forwards to pyproject.toml via `-e .[dev,agpl]`, so the
-# package source needs to be present when this layer builds. That means
-# any Python source change busts this layer; full source copy happens here.
+# source of both packages has to be present when this layer builds: the
+# editable install maps only the top-level packages it finds at install time.
+# A package that first arrives with the later `COPY . .` imports only from
+# /app, where it sits on sys.path as a plain directory, and not from a script
+# run anywhere else (#4894). Any Python source change busts this layer.
 COPY requirements/ requirements/
 COPY pyproject.toml ./
 COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
 
 # The image includes the two AGPL-3.0 dependencies (ultralytics, PyMuPDF) by
 # default, so the YOLO and PDF/document features work out of the box in a
@@ -109,6 +113,15 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # tenacity, jinja2) come from `requirements/$REQUIREMENTS`, which declares
 # them on toponymy's behalf through pyproject.toml.
 RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
+
+# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
+# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
+# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
+# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
+# wheel; FaceNet's checkpoint downloads into the models cache on first use.
+RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 # ---------- cuML / RAPIDS layer (GPU UMAP + k-means) ----------
 # cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means

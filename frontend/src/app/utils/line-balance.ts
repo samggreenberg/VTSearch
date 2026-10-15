@@ -35,7 +35,13 @@ export type BalanceStatus = 'unchecked' | 'checked' | 'gate';
  */
 export type BalanceShape = 'advisory' | 'trim';
 
-/** A likely share, from the check's picks alone: of the kept set right (precision), or of all the matches kept (recall). */
+/**
+ * A likely share, from the check's picks alone: of the audited set right
+ * (precision), or of all the matches in it (recall). Both cover only the items
+ * the user had not voted on when the check ran (#4914): the walk samples the
+ * unvoted ranking, and recall's denominator is the mixture's count of the
+ * positives left in it, so the user's own Goods are in neither.
+ */
 export interface LikelyRange {
   lo: number;
   hi: number;
@@ -64,11 +70,11 @@ export interface LineBalance {
   status: BalanceStatus;
   /** How many unvoted items the line keeps. */
   count: number;
-  /** The check's likely share of the kept set that is right; null while unchecked. */
+  /** The check's likely share of the audited set that is right; null while unchecked. */
   precision: LikelyRange | null;
-  /** The check's likely share of all the matches that are in the kept set; null while unchecked. */
+  /** The check's likely share of all the unvoted matches that are in the audited set; null while unchecked. */
   recall: LikelyRange | null;
-  /** The check's F-beta estimate for the kept set; null while unchecked. */
+  /** The check's F-beta estimate for the audited set; null while unchecked. */
   fbeta: number | null;
   /** What a check at this balance would cost; null when the response carried none. */
   schedule: CheckSchedule | null;
@@ -215,7 +221,7 @@ export function staleNote(range: LikelyRange | null): string {
 
 /**
  * The recall range in words, from its midpoint: how many of all the matches
- * the kept set likely holds. Words rather than a second percentage, so the
+ * the checked set likely holds. Words rather than a second percentage, so the
  * state line reads as a sentence; the number is in the tooltip
  * ({@link balanceExplanation}).
  */
@@ -236,17 +242,27 @@ export function foundWords(recall: LikelyRange): string {
  * never from the model. Null when there is no state to report (no line yet,
  * or a sort with no detector behind it). A stale range reads exactly as a
  * current one: only {@link balanceExplanation} says so.
+ *
+ * Nothing in it counts the user's own votes, and it says so (#4914): the line
+ * keeps "N more" beside them, and a check names the set its ranges cover, the
+ * top `audited` the user had not voted on, which under `advisory` is not the
+ * set kept. Late in a session, once the matches near the top are voted, that
+ * set holds few of them, so the ranges can read low after a session that went
+ * well.
  */
 export function balanceSummary(balance: LineBalance | null): string | null {
   if (!balance) return null;
   const kept = balance.count.toLocaleString();
-  if (balance.status === 'unchecked') return `Top ${kept} kept, unchecked`;
+  if (balance.status === 'unchecked') return `${kept} more kept, unchecked`;
   if (balance.status === 'gate') return `${kept} pass the verification gate`;
   const p = balance.precision;
   const r = balance.recall;
-  return p && r
-    ? `Checked · likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}) · ${kept} kept`
-    : `Checked · ${kept} kept`;
+  if (!p || !r) return `Checked · ${kept} more kept`;
+  const audited = (balance.audited ?? balance.count).toLocaleString();
+  return (
+    `Checked the top ${audited} you hadn't voted on · likely ${rangePercent(p)} right, ` +
+    `${foundWords(r)} (checked ${p.labelled}) · ${kept} more kept`
+  );
 }
 
 /**
@@ -259,7 +275,7 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   if (!balance) return null;
   const kept = balance.count.toLocaleString();
   if (balance.status === 'unchecked') {
-    return `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right.`;
+    return `Unchecked: the line keeps the top ${kept} you haven't voted on, and nothing has measured how many of them are right.`;
   }
   if (balance.status === 'gate') {
     return (
@@ -271,18 +287,18 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   const r = balance.recall;
   const audited = (balance.audited ?? balance.count).toLocaleString();
   if (balance.shape === 'advisory') {
-    if (!p || !r) return `A check ended on the top ${audited}; the line keeps its ${kept}.`;
+    if (!p || !r) return `A check ended on the top ${audited} you hadn't voted on; the line keeps the top ${kept}.`;
     return (
-      `A check of ${p.labelled} random picks from the top ${audited} found ${p.right} right, ` +
-      `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them. ` +
-      `The line keeps its ${kept}, where your labels put it: a check informs the line and does not move it.` +
+      `A check of ${p.labelled} random picks from the top ${audited} you hadn't voted on found ${p.right} right, ` +
+      `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches you hadn't voted on among them. ` +
+      `The line keeps the top ${kept} you haven't voted on, where your labels put it: a check informs the line and does not move it.` +
       staleNote(p)
     );
   }
-  if (!p || !r) return `A check ended on the ${kept} items the line keeps.`;
+  if (!p || !r) return `A check ended on the top ${kept} you hadn't voted on, which the line keeps.`;
   return (
-    `A check of ${p.labelled} random picks from the ${kept} items the line keeps found ${p.right} right, ` +
-    `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them: ` +
+    `A check of ${p.labelled} random picks from the top ${kept} you hadn't voted on, which the line keeps, found ${p.right} right, ` +
+    `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches you hadn't voted on among them: ` +
     `the set where the check's balance peaked.` +
     staleNote(p)
   );

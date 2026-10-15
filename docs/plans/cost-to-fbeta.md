@@ -66,7 +66,7 @@ progress whatever the metric.
 | Anchored EM numerics (`_ANCHORED_EM_*`), the native 1-D EM | #3825, #3839, #3585 on convergence; a cost A/B as the guard | Every fused fit | Settled: numerical, not a cut decision |
 | Head: linear SVM at `C = 1` | #3197, #4114, #4219 on oracle cost, AUROC and AP | The ranking | Settled on ranking; re-scored only where AP and AUROC disagreed (#4582) |
 | Opening `g3@top,b4@mid,g20+dry1/16@top` (`PRODUCTION_STARTUP`) | #4222, #4282, #4303 on AP | Autopilot's first ~23 votes | Settled: read on AP |
-| Stopping-point reporting | #3560's plan proposes `cost at stop` / `cost at budget` columns | How every future study reports where a user would have stopped | **#3560** (open): the tables carry the objective |
+| Stopping-point reporting | #3560's plan proposes `cost at stop` / `cost at budget` columns | How every future study reports where a user would have stopped | Settled by #3560: the tables carry the objective |
 | A/B sizing σ ≈ 0.04 per cell, `analyze_ab.py` deciding on `cost` | #3840, #4111 in cost units | Sizes and decides every rerun on this list | **#4584**: on balance-era pairs the objective's σ is about 0.08 at beta 1 and 0.16 at beta 1/4, so a grid sized for Δcost 0.01 resolves 0.02 to 0.04 of F-beta |
 
 Not on the list, and why: the Inclusion knob studies (#2693, #3196, #2865's knob
@@ -115,6 +115,5 @@ cut.
 
 <!-- item-sep -->
 
-- [ ] #3560 — Stopping-point tables carry the objective beside cost
 
 <!-- item-sep -->

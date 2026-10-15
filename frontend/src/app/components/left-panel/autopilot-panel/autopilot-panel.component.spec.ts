@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, type AutopilotState } from '../../../services/autopilot-state.service';
+import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from '../../../services/autopilot-state.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -714,6 +714,103 @@ describe('AutopilotPanelComponent', () => {
     expect(note.textContent).toContain('Nothing left to label');
     // The five-step list is replaced by the terminal note.
     expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
+  });
+
+  describe("Done on the labels line's level (#4878)", () => {
+    /** Span short of green, but the line already expects Done's level of F-beta. */
+    const LEVEL_MET = { ...SPAN_SHORT, stop_rule: 'lights', level: { expected_fbeta: 0.62, level: 0.5, met: true } };
+
+    it('reaches Done with a light short of green, and says what it read instead of "all green"', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(5));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      fixture.componentRef.setInput('labelingStatus', LEVEL_MET);
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25, expectedFbeta: 0.62 });
+      const step = component.steps.find((st) => st.state === 'active')!;
+      expect(step.phase).toBe('improve');
+      expect(step.detail).toBe('Expected F-beta 0.62');
+      // A step past the active one keeps its help and intent, not its detail.
+      const done = component.steps.find((st) => st.phase === 'done')!;
+      expect(done.helpText).toContain('expects an F-beta of 0.62 at your balance');
+      expect(done.helpText).not.toContain('All quality indicators are green');
+      expect(done.intent).toContain('expects an F-beta of 0.62 at your balance');
+    });
+
+    it('keeps "all green" when every light is green, met level or not', async () => {
+      reachDone();
+      fixture.componentRef.setInput('labelingStatus', { ...ALL_GREEN, level: { expected_fbeta: 0.9, level: 0.5, met: true } });
+      await settleZoneless(fixture);
+      expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('All indicators green');
+      expect(component.steps.find((st) => st.phase === 'done')!.helpText).toContain('All quality indicators are green');
+      expect(autopilotState.handoff()?.expectedFbeta).toBeUndefined();
+    });
+  });
+
+  describe('Done on the click cap (#4903)', () => {
+    it('reaches Done at the cap with a light short and the level unmet, and says why', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(100));
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 101));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      expect(autopilotState.state.phase).toBe('new');
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 100));
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: STOP_CAP_VOTES, capVotes: STOP_CAP_VOTES });
+      const step = component.steps.find((st) => st.state === 'active')!;
+      expect(step.phase).toBe('improve');
+      expect(step.detail).toBe(`${STOP_CAP_VOTES} votes`);
+      const done = component.steps.find((st) => st.phase === 'done')!;
+      expect(done.helpText).toContain('as many as Autopilot asks for');
+      expect(done.helpText).not.toContain('All quality indicators are green');
+      expect(done.intent).toContain('as many as Autopilot asks for');
+    });
+
+    it("quotes the level, not the cap, when the level is met too", async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(100));
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 100));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      fixture.componentRef.setInput('labelingStatus', {
+        ...SPAN_SHORT, stop_rule: 'lights', level: { expected_fbeta: 0.62, level: 0.5, met: true },
+      });
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+      expect(autopilotState.handoff()?.capVotes).toBeUndefined();
+      expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('Expected F-beta 0.62');
+    });
+  });
+
+  describe('the click cap in the opening (#4903)', () => {
+    it('says Autopilot has stopped, with the Goods it found, and keeps the steps', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', new Set());
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 1));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      expect(fixture.nativeElement.querySelector('.autopilot-capped')).toBeNull();
+
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      const note = fixture.nativeElement.querySelector('.autopilot-capped');
+      expect(note).toBeTruthy();
+      expect(note.textContent).toContain('Autopilot has stopped');
+      expect(note.textContent).toContain(`In ${STOP_CAP_VOTES} votes it found 0 of the 3 Goods`);
+      expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBeGreaterThan(0);
+      expect(autopilotState.handoff()).toBeNull();
+    });
   });
 
   describe('completion hand-off', () => {

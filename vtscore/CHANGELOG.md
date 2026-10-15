@@ -10,6 +10,88 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
+  app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
+  `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,
+  good_count, bad_count)` reads the app's display-only stop for a session still in its opening at the cap. It
+  never binds inside the eval's 150 clicks.
+
+- **Labelset sources push the detector file's whole labelset, paced, and pull by merging** (issue #4913).
+  `vtscore.labels.sync` is rewritten. Every detector-file write (`vtscore.detectors.store._write_detector` /
+  `queue_detector_write`, through the new `note_detector_written` hook) schedules a push, and the payload
+  is the file's labelset from every dataset plus `detector_meta` - it was the active dataset's votes, so a
+  push from one dataset erased the others' labels at the source. Pushes for one detector never overlap,
+  start at least `CoreConfig.labelset_source_push_interval` seconds apart (new field, default
+  `DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL` = 60), skip a payload the source already holds, run as the
+  detector's creator, and resolve `{detector_*}` templates for that detector rather than the request's;
+  a detector's first push in a process pulls first, and a source that cannot be read is not pushed to.
+  `sync_from_labelset_source(detector_id=None, *, prefer="source")` now merges the source into the
+  detector file (adds what is missing, `prefer` decides a disagreement, removes nothing) and re-derives a
+  loaded detector's votes from it, instead of only voting the active dataset's matches; it needs the
+  detector's JSON file. `sync_to_labelset_source()` keeps its signature and schedules a push for the active
+  detector. Removed: the private `_syncing` / `_sync_lock` re-export guard (a pull now writes once, and the
+  resulting push is a no-op when nothing changed), `_run_pending_sync`, `_push_with_thread_context` and
+  `_push_to_labelset_source`. `DetectorContext.labelset_source` still links a source (in memory), below a
+  registry binding.
+
+- **The labels line reads its own F-beta, and Autopilot's Done stops on it** (issue #4878).
+  `LabelsLine.expected_fbeta(beta)` is the expected F-beta at the line's cut over the corpus's unvoted
+  items (what `corpus_cut` maximises), `LabelsLine.expected_fbeta_fresh(beta)` the class model's on a
+  fresh corpus like it; `corpus_expected_fbeta` and `parametric_expected_fbeta` are the two functions
+  behind them, factored out of `corpus_cut` and `labels_line_threshold`, whose cuts are unchanged.
+  `stop_level_reading(line, beta)` / `stop_level_met` read a line against `STOP_LEVEL` (0.5), and never
+  while the head's count line serves. The eval harness's default stop rule follows the app:
+  `simulate_voting_iterations(stop_rule="lights|level", stop_level=STOP_LEVEL)` and
+  `AutopilotFlow(stop_rule=)`, with `"lights"`, `"level"` and `"lights+level"` as arms; the calibration
+  frame's base row carries `line_efbeta`, `line_efbeta_corpus`, `line_efbeta_fresh`, `line_separation`,
+  `line_head_count` and the diagnostic `find_efbeta`.
+
+- **The calibration folds hold out each class's nearest whole share; the split no longer draws a coin**
+  (issue #4864). `_split_train_counts` sizes each class's holdout as `nearest_holdout(count, fraction)`:
+  the share rounded to the nearest whole vote, halves up, kept between 1 and count − 1, with no
+  whole-labelset stage first. The labels line therefore takes over at one count of Goods and stays (9 on a
+  single-vector space, 5 on a patch space, at two folds); before, a coin seeded from the labelset decided it
+  over a band of Goods counts, redrawn at every vote. Every trained line's fold sizes move by up to one vote
+  per class, on both fold paths. A share that would leave fewer than two votes to train still returns the
+  caller's sentinel. The split sizes no longer read the training vectors' bytes, so #4892's reload drift can
+  no longer move them. Removed: `_dithered_count`, `_split_dither_rng` and `_DITHER_SAMPLE_ROWS` from
+  `vtscore.training.thresholds`; the dithered rule lives on as the eval arm
+  `vtscore.eval.arms_split_rounding.split_rounding("dither")`. New: `nearest_holdout`. The fifth argument
+  of `_split_train_counts` is now the labelset `(X, y)`, which the shipped rule does not read.
+
+- **Folds that rank the held-out Goods at or below the Bads read as no separation** (issue #4899).
+  `fit_labels_line` still draws the line from the head's in-sample scores of the labels there, as before
+  (the owner's ruling), but the folds' own model now rides on the line as `LabelsLine.held_out` (a new
+  trailing field, default `None`; floored on the corpus, and re-floored by `on_corpus`), and
+  `LabelsLine.separation` reads it: the folds' gap, 0 or below. The in-sample model separates the labels
+  its head trained on by construction, so such labels used to read as separating strongly (2.69 on
+  #4892's), and `weak_check_due` never came due on them. `class_score_model` is unchanged. The eval
+  harness's weak-check arm reads the same `separation`, so it follows. Additive: every existing
+  construction of `LabelsLine` keeps its meaning.
+
+- **`l2_normalize` is idempotent bit for bit** (issue #4892). A vector already unit-norm to within 1e-6
+  is returned with the bytes it came in with (as a new array), and a vector that is not is divided by its
+  norm in `float64` and rounded to `float32` once. A second pass used to divide by the `float32` norm
+  again, which moved the last bit of about a third of a dataset's vectors: the pickle loader normalises
+  what ingest stored, so a reloaded dataset held other bytes than the process that imported it, and the
+  calibration folds' split sizes, dithered by an RNG seeded from those bytes (`_split_dither_rng`), could
+  differ. The same labels then gave another labels line and another separation (2.69 against 0.13 on the
+  issue's labels). Fresh embeddings' last bits move once with the new arithmetic; a stored vector now
+  reloads unchanged.
+
+- **`FaceEmbedder` caches its weights in `MODELS_CACHE_DIR`** (issue #4886). Loading now sets
+  `TORCH_HOME` to the model cache when it is unset, as the EUPE and speech-clipper loaders already
+  did, so FaceNet's VGGFace2 checkpoint lands in `<MODELS_CACHE_DIR>/checkpoints` instead of under
+  `$HOME` (where it used to go unless one of those loaders had run first in the process). An explicit
+  `TORCH_HOME` still wins.
+
+- **`predict_embedders_to_preload` resolves a convert-out half type to its conversion target** (issue
+  #4868). A media type with no embedder of its own that declares `converts_to` (`document`) now
+  predicts the default embedder of `converts_to[0]` (the image default for `document`), both for
+  `extra_media_types` and for a registry entry of that type with no `embedder`. It used to predict
+  nothing, so a server locked to `document` warmed no model at startup. Convert-in types (`face`) and
+  full types are unchanged.
+
 - **A typed-query detector's head starts from its typed query too** (issue #4859, priced in #4384). On the
   query's own single-vector space (`vtscore.detectors.query_head.typed_query_prior_applies`), every fit of a
   training pass adds the typed query's unit embedding as a second cheap feature beside the Goods' centroid,
@@ -109,6 +191,31 @@ instead, since every commit on `dev` is effectively a new app release.)
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
 
 ### Added
+
+- **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
+  `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
+  `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
+  `CoreConfig.default_labelset_source`, whose non-empty field values are fixed and overlay the detector's
+  own; the result reports `missing_fields`. Also `labelset_source_status`, `unfixed_fields`,
+  `fixed_field_values`, `deployment_default_labelset_source`, `stored_labelset_source` and `OPT_OUT`. In
+  `vtscore.labels.sync`: `schedule_labelset_push(name)`, `note_detector_written(data)` and
+  `reconcile_labelset_source(name)` (pull with the file winning, then push - run when a detector loads or
+  is linked). In `vtscore.detectors.labelset_ops`: `follow_rename_with_labelset_file(detector_id,
+  old_name=, new_name=)` moves a `{detector_name}`-templated server file to follow a rename.
+
+- **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
+  takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
+  the app's own checks: at the first step from N votes past the opening, a prompted check already running, or one
+  whose rounds reached vote N, counts, and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks
+  with phase `"prompt"`. The pick log (`PICK_COLUMNS`) gains `check_kind`: `weak`, `done` or `early` on a prompted
+  check's picks, `end` on the end-of-run check's, blank on every other. `AutopilotFlow.begin_spot_check` takes
+  `"early"`, which latches nothing. An experiment arm; the app is unchanged.
+
+- **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
+  `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
+  meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
+  `0` otherwise. `LabelQuota.as_dict()` is unchanged. The CLI's `detector_query` event carries both, and its
+  text names the hold rather than calling a held detector "under the quota".
 
 - **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
   scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the

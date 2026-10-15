@@ -276,6 +276,24 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_box_small": dict(_VG_SCALE_TEXTS),
     "vg_box_medium": dict(_VG_SCALE_TEXTS),
     "vg_box_large": dict(_VG_SCALE_TEXTS),
+    # `apptitude` (#4356): the text each screen genre was reviewed under -- the
+    # queues asked "would you want this back searching for <text>?" -- so the
+    # opening types what the labels answer. A copy of the loader's `ROSTER`
+    # (`pilebuild/loaders/apptitude.py`), pinned equal by the registry test.
+    "apptitude": {
+        "settings": "a settings screen",
+        "login": "a login screen",
+        "signup": "a sign-up screen",
+        "onboarding": "an onboarding or tutorial screen",
+        "map": "a map screen",
+        "search": "a search screen",
+        "chat": "a chat or messaging screen",
+        "gallery": "a photo gallery screen",
+        "player": "a media player screen",
+        "cart": "a shopping cart or checkout screen",
+        "browser": "an in-app web browser screen",
+        "splash": "a splash or loading screen",
+    },
 }
 
 
@@ -422,6 +440,9 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim")
         for size in (1024, 640)
     },
+    # Apptitude (#4356): whole app screens, one genre each, opening on the
+    # genre's text. No boxes, so no region arm.
+    "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -491,6 +512,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
     **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim") for size in (1024, 640)},
+    # A screen's genre is the whole screen (#4356).
+    "apptitude": False,
 }
 
 
@@ -1090,6 +1113,11 @@ WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: ``0`` is the arm before Autopilot ran it, where all green reads Done at once.
 _done_check = os.environ.get("CALIB_DONE_CHECK", "").strip().lower()
 DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no", "off")
+#: Issue #4664's early check (``CALIB_EARLY_CHECK=N``): every session is checked at N votes, on top of the app's own
+#: checks (a prompted check running then counts; otherwise Autopilot prompts one, past the opening, no cooldown).  Unset (the default) is the app.  A value that is not a
+#: positive integer is kept as given, for preflight to refuse.
+_EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
+EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
@@ -1121,6 +1149,16 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: What tells the user they can stop (#4878): unset = the app (``lights|level``,
+#: every light green or the labels line's expected F-beta at ``CALIB_STOP_LEVEL``,
+#: the app's 0.5); ``CALIB_STOP_RULE=lights`` is the app before #4878, ``level``
+#: and ``lights+level`` the A/B's other arms.
+STOP_RULE = os.environ.get("CALIB_STOP_RULE", "").strip().lower() or "lights|level"
+STOP_LEVEL = float(os.environ.get("CALIB_STOP_LEVEL", "").strip() or 0.5)
+#: The click cap (#4903): Done at this many votes whatever the stop rule (the app's
+#: 200).  ``CALIB_STOP_CAP=none`` is no cap, every session before #4903.
+_STOP_CAP = os.environ.get("CALIB_STOP_CAP", "").strip().lower()
+STOP_CAP: int | None = None if _STOP_CAP == "none" else int(_STOP_CAP or 200)
 #: The label quota (#4643): unset = the app (Test gives the Goods' centroid from
 #: the first Good until 3 Goods and 4 Bads, or a Good and 16 Bads); ``CALIB_LABEL_QUOTA=off`` is the
 #: pre-#4643 arm, a trained head from the first Good and Bad, which the study
@@ -1258,6 +1296,13 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
+#: Issue #4864's split rounding: ``dither`` sizes the calibration split the way
+#: the app did before #4864, stochastically, with a coin seeded from the labelset
+#: (``vtscore.eval.arms_split_rounding.split_rounding``).  Unset (the default,
+#: ``nearest``: each class's holdout rounded to the nearest whole vote) is the app.
+#: Like :data:`CALIBRATION_FRACTION` it moves the trajectory, so it is a run-level A/B.
+SPLIT_ROUNDING = os.environ.get("CALIB_SPLIT_ROUNDING", "").strip() or "nearest"
 
 #: The Bads half of issue #4786's gate: while the labels line's class model holds few
 #: Goods and fewer than this many Bads, the line keeps the head's count (``vtscore.eval.

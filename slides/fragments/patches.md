@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-patches.png)
+![bg fit](figs/calib-patches.webp)
 
 ## DINO Might
 
-<!-- build: figs/calib-patches.build1.png -->
+<!-- build: figs/calib-patches.build1.webp -->
 
-<!-- build: figs/calib-patches.build2.png -->
+<!-- build: figs/calib-patches.build2.webp -->
 
 <!-- **a** — Region voting runs on DINOv3. Same content space as SigLIP, but
      SigLIP makes ONE point per photo. -->

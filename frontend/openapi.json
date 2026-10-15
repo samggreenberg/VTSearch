@@ -2452,6 +2452,57 @@
         ],
         "type": "object"
       },
+      "DefaultLabelsetSource": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "fixed_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "push_interval_seconds": {
+            "type": "number"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "fields",
+          "fixed_keys",
+          "hidden_from_picker",
+          "icon",
+          "name",
+          "push_interval_seconds",
+          "ui_mode"
+        ],
+        "type": "object"
+      },
       "DemoCategoriesResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2883,45 +2934,40 @@
         ],
         "type": "object"
       },
-      "DetectorLabelsetMoveRequest": {
+      "DetectorLabelsetSource": {
         "additionalProperties": false,
         "properties": {
-          "new_path": {
-            "minLength": 1,
+          "display_name": {
             "type": "string"
           },
-          "old_path": {
-            "minLength": 1,
+          "field_values": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "fixed_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "inherited": {
+            "type": "boolean"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source_name": {
             "type": "string"
           }
         },
         "required": [
-          "new_path",
-          "old_path"
-        ],
-        "type": "object"
-      },
-      "DetectorLabelsetMoveResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "moved": {
-            "type": "boolean"
-          },
-          "new_path": {
-            "type": "string"
-          },
-          "ok": {
-            "type": "boolean"
-          },
-          "old_path": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "moved",
-          "new_path",
-          "ok",
-          "old_path"
+          "display_name",
+          "fixed_keys",
+          "missing_fields",
+          "source_name"
         ],
         "type": "object"
       },
@@ -3063,6 +3109,10 @@
           },
           "is_owner": {
             "type": "boolean"
+          },
+          "labelset_source_status": {
+            "$ref": "#/components/schemas/LabelsetSourceStatus",
+            "nullable": true
           },
           "last_trained_at": {
             "nullable": true,
@@ -3211,11 +3261,6 @@
           },
           "ok": {
             "type": "boolean"
-          },
-          "pending_labelset_move": {
-            "$ref": "#/components/schemas/PendingLabelsetMove",
-            "default": null,
-            "nullable": true
           }
         },
         "required": [
@@ -3345,11 +3390,6 @@
           },
           "old_name": {
             "type": "string"
-          },
-          "pending_labelset_move": {
-            "$ref": "#/components/schemas/PendingLabelsetMove",
-            "default": null,
-            "nullable": true
           },
           "success": {
             "type": "boolean"
@@ -4876,6 +4916,14 @@
           "goods_owed": {
             "type": "integer"
           },
+          "hold_labels": {
+            "description": "Labels a typed-query detector on a single-vector space keeps its query's set until (#4736).",
+            "type": "integer"
+          },
+          "hold_owed": {
+            "description": "On a ``query`` tier whose labels meet the quota, the labels (Good or Bad) still owed before the hold gives the trained head; 0 when the hold is not why (#4889).",
+            "type": "integer"
+          },
           "n_bad": {
             "type": "integer"
           },
@@ -4899,6 +4947,8 @@
           "dry_bad_quota",
           "good_quota",
           "goods_owed",
+          "hold_labels",
+          "hold_owed",
           "n_bad",
           "n_good",
           "tier"
@@ -5006,6 +5056,9 @@
           "good_count": {
             "type": "integer"
           },
+          "level": {
+            "$ref": "#/components/schemas/StopLevel"
+          },
           "smart": {
             "$ref": "#/components/schemas/StatusIndicator"
           },
@@ -5089,6 +5142,33 @@
         "required": [
           "applied",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "LabelsetSourceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "inherited": {
+            "type": "boolean"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "inherited",
+          "missing_fields",
+          "source_name"
         ],
         "type": "object"
       },
@@ -6284,22 +6364,6 @@
         },
         "type": "object"
       },
-      "PendingLabelsetMove": {
-        "additionalProperties": false,
-        "properties": {
-          "new_path": {
-            "type": "string"
-          },
-          "old_path": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "new_path",
-          "old_path"
-        ],
-        "type": "object"
-      },
       "PrecisionCheckResponse": {
         "additionalProperties": false,
         "properties": {
@@ -7419,6 +7483,27 @@
         ],
         "type": "object"
       },
+      "StopLevel": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_fbeta": {
+            "nullable": true,
+            "type": "number"
+          },
+          "level": {
+            "type": "number"
+          },
+          "met": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_fbeta",
+          "level",
+          "met"
+        ],
+        "type": "object"
+      },
       "SubsetRemoveRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7439,6 +7524,12 @@
       "SyncFromLabelsetSourceResponse": {
         "additionalProperties": false,
         "properties": {
+          "changed": {
+            "type": "integer"
+          },
+          "labels": {
+            "type": "integer"
+          },
           "message": {
             "type": "string"
           },
@@ -11443,7 +11534,7 @@
     },
     "/api/detectors/combine": {
       "post": {
-        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry*; no\nlabelset-source is inherited from the sources, and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
+        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry*; no source's\nlabelset-source binding carries over (it follows the deployment default,\nif any), and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
         "operationId": "combine_detectors",
         "requestBody": {
           "content": {
@@ -11804,64 +11895,6 @@
         ]
       }
     },
-    "/api/detectors/registry/{detector_id}/labelset-source/move-file": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "detector_id",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "description": "Called by the frontend when the user confirms the *Move existing\nlabelset file?* prompt that surfaces after a rename leaves the file\nat the OLD template-resolved path on disk.",
-        "operationId": "move_labelset_source_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DetectorLabelsetMoveRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DetectorLabelsetMoveResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid path (e.g. traversal outside allowed base)."
-          },
-          "404": {
-            "description": "Detector not found."
-          },
-          "409": {
-            "description": "Destination already exists."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Move an orphaned labelset file after a detector rename.",
-        "tags": [
-          "detectors_registry"
-        ]
-      }
-    },
     "/api/detectors/registry/{detector_id}/readers": {
       "parameters": [
         {
@@ -11930,6 +11963,7 @@
         }
       ],
       "put": {
+        "description": "A ``{detector_name}``-templated labelset-source file follows the rename\n(see :func:`vtscore.detectors.labelset_ops.follow_rename_with_labelset_file`).",
         "operationId": "rename_registered_detector",
         "requestBody": {
           "content": {
@@ -12097,23 +12131,30 @@
     },
     "/api/detectors/{detector_name}/labelset-source": {
       "get": {
+        "description": "``field_values`` carries the detector's own values, and only for its\nowner; values the deployment default fixes are never echoed.",
         "operationId": "get_detector_labelset_source",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SyncSourceConfig"
+                  "$ref": "#/components/schemas/DetectorLabelsetSource"
                 }
               }
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the labelset source config for a loaded detector, or null.",
+        "summary": "Return the labelset source a detector syncs with, or null.",
         "tags": [
           "sync_sources"
         ]
@@ -12130,7 +12171,7 @@
         }
       ],
       "put": {
-        "description": "A body of ``{}`` or one with empty ``source_name`` clears the source.",
+        "description": "A body of ``{}`` (or an empty ``source_name``) clears the detector's own\nbinding, so it follows the deployment default again, if any.\n``source_name: \"none\"`` opts it out even when a default exists.\nOtherwise the detector syncs with the named source using ``field_values``\n(any values the default fixes for that source are dropped: they always\ncome from the server).  Setting a source pulls what it already holds into\nthe detector, then pushes the detector's labels back to it.",
         "operationId": "set_detector_labelset_source",
         "requestBody": {
           "content": {
@@ -12153,8 +12194,14 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "A field value is missing or not allowed."
+          },
+          "403": {
+            "description": "Only the detector's creator can change where it syncs."
+          },
           "404": {
-            "description": "Detector not loaded or unknown labelset source."
+            "description": "Unknown detector or labelset source."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -12163,7 +12210,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Set or clear the labelset source for a detector.",
+        "summary": "Set, clear, or opt a detector out of its labelset source.",
         "tags": [
           "sync_sources"
         ]
@@ -12182,6 +12229,7 @@
         }
       ],
       "post": {
+        "description": "Labels the source holds and the detector lacks are added, and where the\ntwo disagree the source's label wins; nothing is removed.  The merged\nlabels are then pushed back to the source.",
         "operationId": "sync_detector_labelset_from_source",
         "responses": {
           "200": {
@@ -12194,14 +12242,17 @@
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
           "404": {
-            "description": "Detector not loaded."
+            "description": "Detector not found."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Force a manual import from the detector's labelset source.",
+        "summary": "Pull the labels at the detector's labelset source into it now.",
         "tags": [
           "sync_sources"
         ]
@@ -13820,7 +13871,7 @@
     },
     "/api/labeling-status": {
       "get": {
-        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``, plus a\n``stale`` flag.\n\nThe frontend polls this every 2 s during labeling.  When the per-step\ncache already covers the full ``label_history`` the status is computed\ninline (cheap: cached-model forward passes over the small labeled set).\nWhen the cache is *behind* - the common case on the first poll after a new\nvote, or after a polarity flip truncated the cache - advancing it would\nretrain one-or-more MLPs and score every unlabeled media, so we return the\nlast-computed snapshot immediately with ``stale = true`` and defer the\nadvancement to a background worker (issue #2397).\n\n``stop_rule`` names what ends labeling.  ``\"lights\"`` is Smart, Stable and\nSpan.  A document (tiled structural) dataset answers ``\"dry_run\"`` instead,\nwith the ``dry_run`` readout and the three lights ``off`` (#4488).",
+        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``, plus a\n``stale`` flag.\n\nThe frontend polls this every 2 s during labeling.  When the per-step\ncache already covers the full ``label_history`` the status is computed\ninline (cheap: cached-model forward passes over the small labeled set).\nWhen the cache is *behind* - the common case on the first poll after a new\nvote, or after a polarity flip truncated the cache - advancing it would\nretrain one-or-more MLPs and score every unlabeled media, so we return the\nlast-computed snapshot immediately with ``stale = true`` and defer the\nadvancement to a background worker (issue #2397).\n\n``stop_rule`` names what ends labeling.  ``\"lights\"`` is Smart, Stable and\nSpan all green, or (#4878) the labels line's own expected F-beta at the\ndetector's balance reaching ``STOP_LEVEL``: the ``level`` readout, which the\nfrontend's phase machine reads beside the lights.  A document (tiled\nstructural) dataset answers ``\"dry_run\"`` instead, with the ``dry_run``\nreadout and the three lights ``off`` (#4488).",
         "operationId": "labeling_status_indicator",
         "responses": {
           "200": {
@@ -14042,6 +14093,31 @@
           }
         },
         "summary": "Return a list of all registered labelset source plugins.",
+        "tags": [
+          "sync_sources"
+        ]
+      }
+    },
+    "/api/labelset-sources/default": {
+      "get": {
+        "description": "The source every detector on this instance syncs its labels to unless it\nhas a binding of its own (the ``default_labelset_source`` server setting).\nIts ``fields`` are only those the admin left for users to fill in, which\nis what the New Detector form asks for; the fixed values stay here.",
+        "operationId": "get_default_labelset_source",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultLabelsetSource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the deployment-wide labelset source, or null.",
         "tags": [
           "sync_sources"
         ]

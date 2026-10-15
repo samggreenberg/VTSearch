@@ -1,18 +1,18 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-tilt-flow.png)
+![bg fit](figs/calib-tilt-flow.webp)
 
 ## Walk the Line
 
-<!-- build: figs/calib-tilt-flow.build1.png -->
+<!-- build: figs/calib-tilt-flow.build1.webp -->
 
-<!-- build: figs/calib-tilt-flow.build2.png -->
+<!-- build: figs/calib-tilt-flow.build2.webp -->
 
-<!-- build: figs/calib-tilt-flow.build3.png -->
+<!-- build: figs/calib-tilt-flow.build3.webp -->
 
-<!-- build: figs/calib-tilt-flow.build4.png -->
+<!-- build: figs/calib-tilt-flow.build4.webp -->
 
-<!-- build: figs/calib-tilt-flow.build5.png -->
+<!-- build: figs/calib-tilt-flow.build5.webp -->
 
 <!-- **a** — Then Above Average: it cuts at the midpoint between the bumps, and
      a midpoint never looks at the slider. -->

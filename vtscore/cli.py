@@ -439,7 +439,9 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
     give, here as in Test and AutoFind.  The ``detector_centroid`` event is the
     record that it was not a trained head, and what the labelset still owes.  A
     detector made from a typed query scores as that query's own set there
-    instead (#4758), and says so in a ``detector_query`` event.
+    instead (#4758), and says so in a ``detector_query`` event; past the quota
+    it does until the hold's labels (#4736), and the event then says that is
+    why (#4889).
     """
     from vtscore.detectors.centroid_head import is_centroid_head  # noqa: PLC0415
     from vtscore.detectors.label_quota import labelset_quota, served_quota  # noqa: PLC0415
@@ -459,15 +461,26 @@ def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
     if dry_owed:
         owed = [" and ".join(owed) + f", or {dry_owed} more Bad{'' if dry_owed == 1 else 's'}"]
     serves = f"its typed query's own set ('{query_head_text(det_ctx.model)}')" if query else "the Goods' centroid"
-    cli_progress.emit(
-        "detector_query" if query else "detector_centroid",
-        text=(
+    served = served_quota(det_ctx.model, labelset)
+    if served["hold_owed"]:
+        # Past the quota, held on the typed query (#4736): the quota is not why (#4889).
+        hold_owed = served["hold_owed"]
+        text = (
+            f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels; a detector made from a "
+            f"typed query scores as {serves} until it has {served['hold_labels']} labels "
+            f"({hold_owed} more label{'' if hold_owed == 1 else 's'}, Good or Bad, for a trained detector)."
+        )
+    else:
+        text = (
             f"Detector '{det_name}' has {quota.n_good} Good and {quota.n_bad} Bad labels, under the quota, so it "
             f"scores as {serves}, not a trained detector" + (f" ({' and '.join(owed)} for one)." if owed else ".")
-        ),
+        )
+    cli_progress.emit(
+        "detector_query" if query else "detector_centroid",
+        text=text,
         detector=det_name,
         **({"query": query_head_text(det_ctx.model)} if query else {}),
-        **served_quota(det_ctx.model, labelset),
+        **served,
     )
 
 

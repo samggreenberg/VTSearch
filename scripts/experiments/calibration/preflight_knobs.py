@@ -63,6 +63,7 @@ def _shipped_spot_check(C: Any, T: Any) -> str:
 
 def probe(C: Any) -> list[str]:
     """Check 12's findings for the run *C* (``experiment_config``, imported under its env)."""
+    from vtscore.eval.arms_split_rounding import SPLIT_ROUNDINGS
     from vtscore.eval.live_threshold_rules import SIGMA_FLOORS
     from vtscore.eval.startup_schedule import PRODUCTION_STARTUP, parse_startup_schedule
     from vtscore.eval.voting_iterations import (
@@ -282,6 +283,12 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #4664's early check: an arm the app does not take.
+    if C.EARLY_CHECK is not None:
+        if isinstance(C.EARLY_CHECK, int) and C.EARLY_CHECK >= 1:
+            rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
+        else:
+            refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.
@@ -335,6 +342,11 @@ def probe(C: Any) -> list[str]:
         refuse("sigma_floor", "CALIB_SIGMA_FLOOR", "must be one of %s" % ", ".join(SIGMA_FLOORS))
     elif C.SIGMA_FLOOR != "relative":
         rows.append(("sigma_floor", C.SIGMA_FLOOR, "<unset> = relative, the app's floor (#4492)"))
+    # #4864's split rounding: unset is the app's split sizes, each class's nearest whole share.
+    if C.SPLIT_ROUNDING not in SPLIT_ROUNDINGS:
+        refuse("split_rounding", "CALIB_SPLIT_ROUNDING", "must be one of %s" % ", ".join(SPLIT_ROUNDINGS))
+    elif C.SPLIT_ROUNDING != "nearest":
+        rows.append(("split_rounding", C.SPLIT_ROUNDING, "<unset> = nearest, the app's split sizes (#4864)"))
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.
     from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415
@@ -420,6 +432,18 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
+    if C.STOP_RULE != "lights|level" or C.STOP_LEVEL != 0.5:
+        rows.append(
+            (
+                "stop_rule",
+                f"{C.STOP_RULE}@{C.STOP_LEVEL:g}",
+                "lights|level@0.5 (every light green, or the line's level)",
+            )
+        )
+    from vtscore.eval.autopilot_flow import STOP_CAP  # noqa: PLC0415
+
+    if C.STOP_CAP != STOP_CAP:
+        rows.append(("stop_cap", str(C.STOP_CAP), f"{STOP_CAP} (Done at {STOP_CAP} votes whatever the rule; #4903)"))
     if C.LABEL_QUOTA is not None:
         rows.append(
             (

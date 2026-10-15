@@ -29,6 +29,8 @@ describe('NewDetectorModalComponent', () => {
     // Seed importers back the extra Blank-flow example tabs; the family
     // ships no built-ins, so the default answer is an empty roster.
     httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
+    // No deployment-wide auto-export target unless a test says otherwise (#4913).
+    httpMock.expectOne('/api/labelset-sources/default').flush(null);
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
@@ -386,6 +388,73 @@ describe('NewDetectorModalComponent', () => {
 
   // A text description can't start a detector on a dataset that can't search
   // by text, so the form requires an example item there (#4666).
+  describe('auto-export (#4913)', () => {
+    const autoExport = {
+      name: 'server_json_file',
+      display_name: 'Server JSON File',
+      description: '',
+      icon: '',
+      ui_mode: '',
+      hidden_from_picker: false,
+      fields: [{ key: 'filepath', label: 'Save to (server path)', field_type: 'server_path', required: true }],
+      fixed_keys: [],
+      push_interval_seconds: 60,
+    };
+
+    it('shows no auto-export section when the server has no default target', () => {
+      expect(component.autoExportSource()).toBeNull();
+      expect(fixture.nativeElement.querySelector('vt-labelset-source-fields')).toBeFalsy();
+    });
+
+    it('holds Create until the open fields are filled, then stores them on the new detector', () => {
+      vi.spyOn(component.created, 'emit');
+      component.autoExportSource.set(autoExport as any);
+      component.pendingText.set('dog barking');
+      expect(component.canSubmitBlank).toBe(false);
+      expect(component.blankSubmitTitle).toContain('auto-exported');
+
+      component.autoExportValues.set({ filepath: '/backups/{detector_name}.json' });
+      expect(component.canSubmitBlank).toBe(true);
+      component.submit();
+
+      httpMock.expectOne('/api/detectors/registry').flush({ ok: true, detector: { id: 'd9' } });
+      // Not created (as far as the caller knows) until the values are stored.
+      expect(component.created.emit).not.toHaveBeenCalled();
+      const put = httpMock.expectOne('/api/detectors/d9/labelset-source');
+      expect(put.request.method).toBe('PUT');
+      expect(put.request.body).toEqual({
+        source_name: 'server_json_file',
+        field_values: { filepath: '/backups/{detector_name}.json' },
+      });
+      put.flush({ ok: true, message: 'ok' });
+      expect(component.created.emit).toHaveBeenCalledWith('d9');
+    });
+
+    it('still finishes the create when the values are refused', () => {
+      vi.spyOn(component.created, 'emit');
+      component.autoExportSource.set(autoExport as any);
+      component.autoExportValues.set({ filepath: '../escape.json' });
+      component.pendingText.set('dog barking');
+      component.submit();
+
+      httpMock.expectOne('/api/detectors/registry').flush({ ok: true, detector: { id: 'd10' } });
+      httpMock
+        .expectOne('/api/detectors/d10/labelset-source')
+        .flush({ message: 'Path escapes the allowed directory' }, { status: 400, statusText: 'Bad Request' });
+      expect(component.created.emit).toHaveBeenCalledWith('d10');
+    });
+
+    it('stores nothing when the admin fixed every field', () => {
+      vi.spyOn(component.created, 'emit');
+      component.autoExportSource.set({ ...autoExport, fields: [], fixed_keys: ['filepath'] } as any);
+      component.pendingText.set('dog barking');
+      expect(component.canSubmitBlank).toBe(true);
+      component.submit();
+      httpMock.expectOne('/api/detectors/registry').flush({ ok: true, detector: { id: 'd11' } });
+      expect(component.created.emit).toHaveBeenCalledWith('d11');
+    });
+  });
+
   describe('on a dataset that cannot search by text', () => {
     beforeEach(() => {
       fixture.componentRef.setInput('datasetEmbedder', 'dinov3');
@@ -1012,6 +1081,8 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
     TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 
     httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
+    // No deployment-wide auto-export target unless a test says otherwise (#4913).
+    httpMock.expectOne('/api/labelset-sources/default').flush(null);
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
         { type_id: 'audio', name: 'Audio', icon: 'audio' },
@@ -1072,6 +1143,8 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     TestBed.tick();
 
     httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
+    // No deployment-wide auto-export target unless a test says otherwise (#4913).
+    httpMock.expectOne('/api/labelset-sources/default').flush(null);
     httpMock.expectOne('/api/media-types').flush({
       media_types: [{ type_id: 'image', name: 'Image', icon: 'image' }],
     });

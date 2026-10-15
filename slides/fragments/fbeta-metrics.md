@@ -1,18 +1,18 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-fmetrics.png)
+![bg fit](figs/calib-fmetrics.webp)
 
 ## F-ing Metrics
 
-<!-- build: figs/calib-fmetrics.build1.png -->
+<!-- build: figs/calib-fmetrics.build1.webp -->
 
-<!-- build: figs/calib-fmetrics.build2.png -->
+<!-- build: figs/calib-fmetrics.build2.webp -->
 
-<!-- build: figs/calib-fmetrics.build3.png -->
+<!-- build: figs/calib-fmetrics.build3.webp -->
 
-<!-- build: figs/calib-fmetrics.build4.png -->
+<!-- build: figs/calib-fmetrics.build4.webp -->
 
-<!-- build: figs/calib-fmetrics.build5.png -->
+<!-- build: figs/calib-fmetrics.build5.webp -->
 
 <!-- **a** — Same ten, pictures off. Let's score one cut, Include six. The
      score is F1, up top, and it's built from two numbers, P and R. -->

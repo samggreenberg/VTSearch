@@ -114,6 +114,20 @@ clustered mark rather than guessing;
 `audit_to_corrections.py --migrate-adjudications` recovers the index for a
 pre-#3343 store from the class ids those rows already carry.
 
+A bare endpoint is no key for comparing two rulings either. It keys as mark
+`-1`, which is not a mark, and reading it as one let the owner's 2026-09-14
+merge of `afm90c00-first_1#0` and `bad45f00` sit beside the 09-13 separation it
+overturned, so every Tobacco800 rebuild refused (#4866). The fix has three parts:
+
+- `supersede` and the clash check in `save_adjudications` read a bare endpoint
+  as possibly any mark on its page.
+- `apply_confusable` refuses a class whose listed page carries no mark of it,
+  rather than storing a bare endpoint. Every writer is also backstopped by a
+  check that writes nothing if a new row lacks an index.
+- The migration looks up a merged-away class under its survivor. A stamped row
+  that repeats a row on file is dropped. A stamped row that contradicts a
+  stored ruling replaces it only on `--supersede`.
+
 ## What each source ships
 
 **SPODS** — 1,088 scanned pseudo-official pages, direct download, no
@@ -147,6 +161,12 @@ stamp that decomposes to four means the merge gap is wrong.
 **Tobacco800** — 1,290 real scanned business documents, 412 with a logo, GEDI
 XML ground truth from UMD's LAMP. Its published protocol keeps the 21 logo
 categories with ≥2 occurrences, which cannot support a train-and-search eval.
+One page's XML was drawn on the page turned upright while its TIF is stored
+upside down, so read verbatim its logo box held no ink at all (#4871).
+`sources/tobacco800.py` turns the boxes of the pages in `TURNED_180`, and
+`turned_gt_audit.py` is how that table is found: it compares the ink in every
+logo zone with the ink at its 180-degree image. `audit_to_corrections.py
+--turn-pages` brings a corpus built before a page joined the table into line.
 
 **UCSF IDL** — an open Solr index; measured live 2026-08-25:
 
@@ -662,8 +682,22 @@ single linkage merges in increasing distance order, so a cheaper crossing edge
 elsewhere can fuse the classes and leave the two named representatives as the
 only members held apart. After the membership pass each class is one
 must-linked group before any distance is considered, and one row pins all of
-it. Separations written before that say so: `"pins": "marks"` rather than
-`"pins": "classes"`.
+it: `"pins": "classes"`.
+
+Before the membership pass there is no star, and the `merge` slate runs then by
+design. So a separation with an unverified side also records that class's
+members as they stood when it was ruled on (`left_members` / `right_members`,
+`"pins": "members"`), and `single_linkage` tags every one of them with its side
+and never joins two groups that would hold both sides of one separation
+(#3837). The named marks are hard: a must-link that joins them still refuses
+the build. The recorded members are soft, because they are a presumption that
+later passes check one by one. Where a human must-link puts a member in with
+the other side (a membership rejection later accepted elsewhere, a
+completeness accept), the must-link wins for that group. A row written before
+#3837 says `"pins": "marks"` and still holds only its two marks, unless both
+its classes have since been verified. `separation_check.py` re-clusters the
+real corpus and counts how many ruled-different class pairs each
+representation lets fuse.
 
 Measured on 2,054 real SPODS marks with the 256-bit hash, after the mask
 decomposition was fixed:

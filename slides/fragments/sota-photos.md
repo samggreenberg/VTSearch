@@ -1,12 +1,12 @@
 <!-- _class: full -->
 
-![bg fit](figs/sota-photos.png)
+![bg fit](figs/sota-photos.webp)
 
 ## Photo<br>Finish
 
 <div class="asof">Measured 2026-10-05</div>
 
-<!-- build: figs/sota-photos.build1.png -->
+<!-- build: figs/sota-photos.build1.webp -->
 
 <!-- **a** — How does today's app do on photos? Every COCO Better cell, ten
      times, all three radios, each scored at its own β, so it's not a race. Flat

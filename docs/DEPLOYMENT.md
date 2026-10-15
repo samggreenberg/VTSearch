@@ -230,10 +230,8 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
 `python app.py` runs Flask's built-in dev server and is intended for
-development only. The Docker images already use gunicorn via the CMD in
-`docker/Dockerfile`, `docker/Dockerfile.gpu`, and
-`docker/Dockerfile.labbench`, so this only applies if you are running
-outside Docker.
+development only. Every Docker image under `docker/` already uses gunicorn
+via its CMD, so this only applies if you are running outside Docker.
 
 ### Why `VTSEARCH_SERVER_INIT=1`?
 
@@ -628,7 +626,9 @@ working.
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
   "browse_signpost_vocab": {},
-  "default_settings_source": null
+  "default_settings_source": null,
+  "default_labelset_source": null,
+  "labelset_source_push_interval_seconds": 60
 }
 ```
 
@@ -719,6 +719,28 @@ working.
   out. Template the `field_values` (e.g.
   `{"filepath": "data/user-settings/{username}.json"}`) to personalise it per
   user.
+- `default_labelset_source`: auto-export every detector's labels (#4913). Same
+  `{"source_name": ..., "field_values": ...}` shape as a detector's own
+  labelset-source binding; every detector without one keeps its whole
+  labelset synced to this source as it is labelled, and pulls it back (merging)
+  when it loads. That makes the source the copy that survives losing this
+  server: re-create a detector under the same name and loading it restores its
+  labels. Each **non-empty** value in `field_values` is fixed - users never see
+  or change it - and the New Detector form asks for the source's other fields,
+  storing them on the detector (the Dashboard's **Auto-export…** action edits
+  them later, and flags a detector still missing one). For example, to keep
+  one JSON file per detector on a mounted backup volume, with nothing for
+  users to fill in:
+  `{"source_name": "server_json_file", "field_values": {"filepath": "/mnt/backup/vtsearch/{detector_name}.labels.json"}}`.
+  In a multi-user deployment a `server_path` value is confined to the
+  detector creator's data directory, like every server path a user supplies.
+  `null` (the default) auto-exports nothing.
+- `labelset_source_push_interval_seconds`: the shortest gap between two pushes
+  of one detector's labels to its labelset source (default 60). Pushes for one
+  detector never overlap, and changes made meanwhile ride the next push, so a
+  slow target or a burst of votes costs one write per window; pending pushes
+  are flushed on a normal shutdown. `0` pushes as soon as the previous push
+  lands. Clamped to `[0, 86400]`.
 
 #### Per-user tier — `user_settings.json`
 
@@ -852,6 +874,7 @@ startup sequence runs at WSGI import time. See
 | `docker/Dockerfile` | `docker-compose.yml` | `python:3.12-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
 | `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
 | `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.12-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. |
+| `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg (`VTSEARCH_SOLO_MEDIA_TYPE`), with that type's default embedder weights baked in under `/opt/vtsearch/models` (CLAP General for `audio`, X-CLIP for `video`; for the half types, SigLIP for `document`'s page images and FaceNet for `face` crops). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
 | `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
 

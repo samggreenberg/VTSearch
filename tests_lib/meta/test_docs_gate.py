@@ -56,25 +56,29 @@ class TestRepoIsClean:
     def test_runs_fast_enough_to_gate(self):
         """The gate must stay cheap enough to run on every invocation.
 
-        The bound is deliberately loose. This asserts on **wall clock**, and the
-        suite runs under ``pytest -n auto`` on whatever machine is free — on a
-        shared GRID node it measured 5.10 s against a 5.0 s bound while the same
-        call takes 0.8-1.9 s unloaded, so the tight bound failed a green branch
-        on a 2% overshoot caused entirely by contention. A wall-clock assertion
-        with no headroom is the same flakiness antipattern as a ``time.sleep``
-        synchronisation (see CLAUDE.md).
+        It times **CPU**, not the wall clock. The suite runs under
+        ``pytest -n auto`` on whatever machine is free, so the wall clock
+        measures the node's load: a call that takes 6.9 s alone took 20.7 s
+        with a second suite on the same GRID node (#4906), and a cold page cache
+        alone stretches a 1 s run to 12 s. CPU time is the work the gate does,
+        which is what this test guards. The children's CPU is counted too, so
+        work moved into a subprocess still shows up.
 
-        20 s still catches what the test is for — a gate that grew super-linear
-        in repo size, or reintroduced a per-file subprocess — because the
-        unloaded runtime would have to grow more than tenfold to reach it. It
-        just no longer fails on the machine being busy.
+        The bound is deliberately loose. It catches what the test is for — a
+        gate that grew super-linear in repo size, or reintroduced a per-file
+        subprocess — not tenths of a second.
         """
+        import resource
         import time
 
-        start = time.perf_counter()
+        def cpu_seconds() -> float:
+            children = resource.getrusage(resource.RUSAGE_CHILDREN)
+            return time.process_time() + children.ru_utime + children.ru_stime
+
+        start = cpu_seconds()
         gate.main([])
-        elapsed = time.perf_counter() - start
-        assert elapsed < 20.0, f"check-docs took {elapsed:.1f}s; it runs on every ./run-tests.sh invocation"
+        elapsed = cpu_seconds() - start
+        assert elapsed < 20.0, f"check-docs used {elapsed:.1f}s of CPU; it runs on every ./run-tests.sh invocation"
 
 
 class TestSlugify:
@@ -131,7 +135,7 @@ class TestLinkCheck:
         them against `slides/fragments/` would flag every working slide.
         """
         fragment = REPO_ROOT / "slides" / "fragments" / "__synthetic__.md"
-        assert run("![bg fit](figs/cost-traces.png)", fragment) == []
+        assert run("![bg fit](figs/cost-traces.webp)", fragment) == []
 
     def test_slide_fragment_links_are_still_checked(self):
         """The override changes the base directory, it does not disable the check."""
@@ -140,7 +144,7 @@ class TestLinkCheck:
 
     def test_link_base_override_does_not_leak_to_other_docs(self):
         """A doc outside the override prefix still resolves against its own dir."""
-        assert checks("![bg fit](figs/cost-traces.png)") == ["LINK"]
+        assert checks("![bg fit](figs/cost-traces.webp)") == ["LINK"]
 
 
 class TestAnchorCheck:

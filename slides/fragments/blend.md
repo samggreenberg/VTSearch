@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/calib-blend-flow.png)
+![bg fit](figs/calib-blend-flow.webp)
 
 ## Cross<br>Examination
 
-<!-- build: figs/calib-blend-flow.build1.png -->
+<!-- build: figs/calib-blend-flow.build1.webp -->
 
-<!-- build: figs/calib-blend-flow.build2.png -->
+<!-- build: figs/calib-blend-flow.build2.webp -->
 
-<!-- build: figs/calib-blend-flow.build3.png -->
+<!-- build: figs/calib-blend-flow.build3.webp -->
 
 <!-- **a** — Here's our first, naive try at putting those together. We don't
      use it anymore, but it's where the idea started. Up top is the shared

@@ -112,3 +112,32 @@ class TestLabelingStatusBackgroundRefresh:
             # Single-runner + one coalescing pending slot, by construction.
             assert len(labeling_status_jobs.active_jobs()) <= 2
         _wait_for_refresh()
+
+
+class TestLabelingStatusStopLevel:
+    """#4878: the status carries the labels line's own expected F-beta, which Done also stops on."""
+
+    def test_no_line_reads_nothing(self, client):
+        body = client.get("/api/labeling-status").get_json()
+        assert body["stop_rule"] == "lights"
+        assert body["level"] == {"expected_fbeta": None, "level": 0.5, "met": False}
+
+    def test_the_active_detector_s_line_is_read_at_its_balance(self, client):
+        from vtscore.state import line_knobs
+        from vtscore.state.core import get_active_detector_context
+        from vtscore.training.thresholds import ClassScoreModel, LabelsLine
+
+        ctx = get_active_detector_context()
+        sharp = LabelsLine(ClassScoreModel(mu_pos=3.0, mu_neg=-3.0, sigma=1.0, n_pos=20, n_neg=20), 0.05)
+        ctx.labels_line = sharp
+        try:
+            body = client.get("/api/labeling-status").get_json()
+            beta = line_knobs()["beta"]
+            assert beta is not None
+            assert body["level"]["expected_fbeta"] == sharp.expected_fbeta(beta)
+            assert body["level"]["met"] is True
+            # A model too thin to cut on (the head's count line serves) reads nothing.
+            ctx.labels_line = LabelsLine(ClassScoreModel(3.0, -3.0, 1.0, n_pos=2, n_neg=4), 0.05)
+            assert client.get("/api/labeling-status").get_json()["level"]["met"] is False
+        finally:
+            ctx.labels_line = None

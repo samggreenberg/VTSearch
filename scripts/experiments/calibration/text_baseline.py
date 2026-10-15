@@ -42,12 +42,10 @@ import experiment_config as cfg  # noqa: E402
 
 
 def _split(clips: dict, sim_fraction: float, seed: int) -> tuple[list[int], list[int]]:
-    """Byte-identical to ``_split_media_ids`` under a fresh RandomState(seed)."""
-    rng = np.random.RandomState(seed)
-    all_ids = sorted(clips.keys())
-    shuffled = rng.permutation(all_ids).tolist()
-    n_sim = max(1, int(len(shuffled) * sim_fraction))
-    return shuffled[:n_sim], shuffled[n_sim:]
+    """``_split_media_ids`` itself under a fresh RandomState(seed), so a grouped split (#4356) is honoured too."""
+    from vtscore.eval.voting_iterations import _split_media_ids  # noqa: PLC0415
+
+    return _split_media_ids(clips, sim_fraction, np.random.RandomState(seed))
 
 
 def main() -> int:

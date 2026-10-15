@@ -460,6 +460,13 @@ def predict_embedders_to_preload(
       :func:`vtsearch.settings.get_effective_solo_media_type`) so the
       admin-chosen type has its default embedder warm at startup even
       when no datasets or detectors are registered yet.
+
+    A *convert-out* half type (``document``) has no embedder of its own: its
+    media are only ever searched as what they convert into. So wherever a
+    media type's default is wanted, such a type resolves to the default
+    embedder of its default conversion target (``converts_to[0]``; document
+    pages are images, so the image default). A *convert-in* half type
+    (``face``) has its own embedder and needs no special case.
     - For every embedder name in *extra_embedders*: the embedder itself
       (if it exists in the registry). Used by the solo-mediaEmbedder
       mode (``--solo-embedder TYPE=EMB``) so the CLI-pinned embedder is
@@ -476,6 +483,7 @@ def predict_embedders_to_preload(
     from vtscore.datasets.registry import list_datasets
     from vtscore.detectors.registry import list_detectors
     from vtscore.media import all_embedders, embedders_for_type
+    from vtscore.media import get as get_media_type
 
     valid = {e.name for e in all_embedders()}
 
@@ -483,6 +491,13 @@ def predict_embedders_to_preload(
         if not media_type:
             return ""
         opts = embedders_for_type(media_type)
+        if not opts:
+            # Convert-out half type: warm what its media are embedded as.
+            try:
+                targets = get_media_type(media_type).converts_to
+            except KeyError:
+                targets = []
+            opts = embedders_for_type(targets[0]) if targets else []
         return opts[0].name if opts else ""
 
     def _resolve(entry: dict) -> str:

@@ -230,6 +230,13 @@ def operating_metrics(
         "train_threshold": nan,
         "train_prevalence": nan,
         "find_prevalence": nan,
+        # #4878: the labels line's own reading; the base row fills them.
+        "line_efbeta": nan,
+        "line_efbeta_corpus": nan,
+        "line_efbeta_fresh": nan,
+        "line_separation": nan,
+        "line_head_count": -1,
+        "find_efbeta": nan,
         "gmm_cut": nan,
         "blend_weight": nan,
         "shipped_provenance": "",

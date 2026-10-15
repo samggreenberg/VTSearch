@@ -1,14 +1,14 @@
 <!-- _class: full -->
 
-![bg fit](figs/atlas-blindspot.png)
+![bg fit](figs/atlas-blindspot.webp)
 
 ## Off the Map
 
-<!-- build: figs/atlas-blindspot.build1.png -->
+<!-- build: figs/atlas-blindspot.build1.webp -->
 
-<!-- build: figs/atlas-blindspot.build2.png -->
+<!-- build: figs/atlas-blindspot.build2.webp -->
 
-<!-- build: figs/atlas-blindspot.build3.png -->
+<!-- build: figs/atlas-blindspot.build3.webp -->
 
 <!-- **a** — Back to our plane: a detector, a few votes, lots of unseen
      photos. -->

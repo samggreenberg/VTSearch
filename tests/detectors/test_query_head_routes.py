@@ -179,6 +179,8 @@ class TestFindLabel:
             "good_quota": 3,
             "bad_quota": 4,
             "dry_bad_quota": 16,
+            "hold_labels": 30,
+            "hold_owed": 0,
         }
         assert body["threshold"] == 0.5
         # Ranked by cosine to the query, in the text space.
