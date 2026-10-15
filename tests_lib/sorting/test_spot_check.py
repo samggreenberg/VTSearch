@@ -34,8 +34,12 @@ from vtscore.training.thresholds import (
     balance_schedule,
     band_edges,
     bands_for,
+    BalanceState,
+    balance_state,
     clopper_pearson_lower,
     clopper_pearson_upper,
+    hypergeometric_lower,
+    hypergeometric_upper,
     likely_range,
     line_under,
     range_tail,
@@ -123,9 +127,9 @@ class TestTheSchedule:
 
 
 class TestTheLikelyRange:
-    def test_each_tail_splits_alpha_over_the_sets_bands(self):
-        assert range_tail(1) == CHECK_ALPHA
-        assert range_tail(3) == pytest.approx(CHECK_ALPHA / 3)
+    def test_every_band_is_bounded_at_alpha_whatever_the_bands(self):
+        """#4483 dropped #4272's union split: with exact band bounds and no split the range held the truth in >= 98.9% of checks."""
+        assert range_tail(1) == range_tail(3) == range_tail(5) == CHECK_ALPHA
 
     def test_a_census_is_exact(self):
         rng = likely_range(right=20, labelled=32, candidate=32, tail=0.05)
@@ -135,16 +139,46 @@ class TestTheLikelyRange:
         rng = likely_range(0, 0, 32, 0.05)
         assert (rng.lo, rng.hi) == (0.0, 1.0)
 
-    def test_the_bounds_are_clopper_pearson_and_nest_with_the_tail(self):
-        wide = likely_range(3, 5, 32, range_tail(3))
-        plain = likely_range(3, 5, 32, range_tail(1))
-        assert wide.lo == clopper_pearson_lower(3, 5, range_tail(3))
-        assert wide.hi == clopper_pearson_upper(3, 5, range_tail(3))
-        assert wide.lo < plain.lo < 0.6 < plain.hi < wide.hi
+    def test_a_band_is_bounded_exactly_for_its_size(self):
+        """A band of 8 with 4 of 5 right holds 4 to 7 right items: 50-88%, where Clopper-Pearson read 34-99% (#4483)."""
+        four = likely_range(4, 5, 8, CHECK_ALPHA)
+        assert (four.lo, four.hi) == (4 / 8, 7 / 8) and (four.labelled, four.right) == (5, 4)
+        assert (likely_range(5, 5, 8, CHECK_ALPHA).lo, likely_range(5, 5, 8, CHECK_ALPHA).hi) == (6 / 8, 1.0)
+        assert (likely_range(0, 5, 8, CHECK_ALPHA).lo, likely_range(0, 5, 8, CHECK_ALPHA).hi) == (0.0, 2 / 8)
+        # The bound never leaves what the picks make possible: at least the right ones, at most all but the wrong ones.
+        assert hypergeometric_lower(3, 5, 16, 1e-9) == 3 and hypergeometric_upper(3, 5, 16, 1e-9) == 14
+
+    def test_the_bounds_nest_with_the_tail(self):
+        wide = likely_range(3, 5, 32, CHECK_ALPHA / 3)
+        plain = likely_range(3, 5, 32, CHECK_ALPHA)
+        assert wide.lo <= plain.lo < 0.6 < plain.hi <= wide.hi
+        assert wide.hi - wide.lo > plain.hi - plain.lo
+
+    def test_each_side_misses_at_most_its_tail(self):
+        """The exact bound's promise: whatever a band holds, the picks put either bound past it at most *tail* of the time."""
+        from scipy.stats import hypergeom
+
+        for size in (8, 16, 64):
+            for k in range(size + 1):
+                p = hypergeom.pmf(np.arange(6), size, k, 5)
+                bounds = [likely_range(r, 5, size, CHECK_ALPHA) for r in range(6)]
+                above = sum(p[r] for r, b in enumerate(bounds) if b.lo > k / size + 1e-12)
+                below = sum(p[r] for r, b in enumerate(bounds) if b.hi < k / size - 1e-12)
+                assert above <= CHECK_ALPHA + 1e-12 and below <= CHECK_ALPHA + 1e-12, (size, k)
+
+    def test_never_wider_than_clopper_pearson_at_the_same_tail(self):
+        for size in (8, 16, 32, 64, 128, 1024):
+            for right in range(6):
+                exact = likely_range(right, 5, size, CHECK_ALPHA)
+                cp_lo, cp_hi = (
+                    clopper_pearson_lower(right, 5, CHECK_ALPHA),
+                    clopper_pearson_upper(right, 5, CHECK_ALPHA),
+                )
+                assert exact.hi - exact.lo <= cp_hi - cp_lo + 1e-12, (size, right)
         assert clopper_pearson_lower(0, 5, 0.05) == 0.0 and clopper_pearson_upper(5, 5, 0.05) == 1.0
 
     def test_a_sets_range_is_its_bands_intervals_weighted_by_size(self):
-        """Two bands of 8: one censused at 100%, one with 5 picks 3 right at the tail alpha / 2."""
+        """Two bands of 8, 5 picks each: all right in one, 3 right in the other, each bounded at alpha."""
         r = _ranking(16)
         # 13 positives: the walk's F1 at both bands (12.8 right of 16) beats the first band's (8 of 8).
         check = _start(_unvoted(r), n_pos=13.0, seed=1, start_count=16)
@@ -299,3 +333,68 @@ class TestTheWalk:
         state = check.as_dict()
         assert state["status"] == BALANCE_CHECKED and state["picks"] == [] and state["band"] is None
         assert state["fbeta"] is not None and state["range"]["labelled"] >= 15 and 0.0 <= state["estimate"] <= 1.0
+
+
+class TestTheKeptSetsRange:
+    """#4483 (the owner's ruling of 2026-10-15): a finished check's ranges describe the set the line kept when it started."""
+
+    def _walked(self, kept: int | None, seed: int = 3) -> tuple[LineRanking, SpotCheck]:
+        r = _ranking()
+        return r, _finish(_start(_unvoted(r), n_pos=40.0, seed=seed, kept=kept), right_ids=_top(40))
+
+    def test_the_ranges_are_over_the_kept_set_from_the_picks_that_fell_in_it(self):
+        r, check = self._walked(kept=12)
+        assert check.range_count == 12 and check.k != 12
+        # Band 0 (ranks 0-7) is whole; band 1 counts only ranks 8-11 and its picks there.
+        parts = check.parts_over(12)
+        band1 = [rank for rank in (check._rank[c] for c in check.labels) if 8 <= rank < 12]
+        assert parts == [(8, 5, 5), (4, len(band1), len(band1))]
+        expected_lo = (
+            8 * likely_range(5, 5, 8, CHECK_ALPHA).lo + 4 * likely_range(len(band1), len(band1), 4, CHECK_ALPHA).lo
+        ) / 12
+        state = balance_state(1.0, check, r, also_voted=set(check.labels))
+        assert isinstance(state, BalanceState) and state.kept_at_check == 12 and state.audited == check.k
+        assert state.precision is not None and state.precision.lo == pytest.approx(expected_lo)
+        assert state.precision == check.range_over(12) and state.recall == check.recall_range_over(12)
+        assert state.as_dict()["kept_at_check"] == 12
+
+    def test_a_part_no_pick_reached_is_bounded_by_nothing(self):
+        _, check = self._walked(kept=200)
+        drawn = {
+            b
+            for b in range(check.n_bands)
+            if any(check.edges[b] <= check._rank[c] < check.edges[b + 1] for c in check.labels)
+        }
+        parts = check.parts_over(200)
+        assert sum(size for size, _, _ in parts) == 200
+        for b, (size, labelled, _) in enumerate(parts):
+            assert (labelled > 0) == (b in drawn)
+        undrawn = sum(size for b, (size, _, _) in enumerate(parts) if b not in drawn)
+        rng = check.range_over(200)
+        assert undrawn > 0 and rng is not None and rng.hi - rng.lo >= undrawn / 200 - 1e-12
+
+    def test_without_a_kept_count_the_ranges_describe_the_walks_set(self):
+        r, check = self._walked(kept=None)
+        state = balance_state(1.0, check, r, also_voted=set(check.labels))
+        assert check.range_count == check.k and state.kept_at_check is None
+        assert state.precision == check.range()
+
+    def test_an_empty_kept_set_has_no_range(self):
+        r, check = self._walked(kept=0)
+        state = balance_state(1.0, check, r, also_voted=set(check.labels))
+        assert state.status == BALANCE_CHECKED and state.kept_at_check == 0
+        assert state.precision is None and state.recall is None
+
+    def test_the_kept_count_is_capped_by_the_ranking_and_never_negative(self):
+        assert _start(_unvoted(_ranking(20)), kept=500).kept == 20
+        with pytest.raises(ValueError):
+            _start(_unvoted(_ranking(20)), kept=-1)
+
+    def test_stale_once_the_kept_set_moves(self):
+        r, check = self._walked(kept=12)
+        voted = set(check.labels)
+        check.fingerprint = r.fingerprint(check.range_count, voted)
+        assert not check.is_stale(r, voted)
+        # A vote on an unvoted item in the top 12 moves the set the ranges describe.
+        inside = next(i for i in r.candidate(12, voted))
+        assert check.is_stale(r, voted | {inside})

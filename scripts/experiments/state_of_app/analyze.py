@@ -69,9 +69,10 @@ weak separation, and once before Done) are clicks, ``phase == "prompt"``.  "Fina
 there, and no check pick is credited as a click.  The check's truth is the
 share right of the set its range describes: the top ``check_k`` of the pool's
 unvoted ranking at the last ordinary step (the ``last`` rank frame), which is
-the candidate the check drew its picks from.  Under the advisory check that is
-the set it audited (``check_audited``, #4427), not the set the line keeps.  What the check *should* certify
-is #4358's ruling; until then this reports what it does certify.
+the candidate the check drew its picks from.  Since #4483 ``check_k`` is the
+set the line kept when the check started (``check_kept``); on runs before it,
+the set the walk audited (``check_audited``, #4427), which under the advisory
+check is not the set the line keeps.
 
 **Every attempted run is in every average (owner, 2026-10-07, #4631).**  A run
 that never trains a detector (150 clicks and no Good) writes no metric row, and
@@ -455,13 +456,20 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
     if check is None or check.empty:
         return {"check_status": "", "check_votes": 0}
     end = check.sort_values("t").iloc[-1]
-    # The range describes the set the walk audited (#4427): under the advisory
-    # check (every balance since #4452) that is not the set the line keeps, so
-    # the truth is read on ``check_audited`` when the row records one. A floor
-    # walk records none; its end is the kept set (``floor_count``).
+    # The set the range describes: since #4483 the set the line kept when the
+    # check started (``check_kept``); before it the set the walk audited
+    # (#4427), which under the advisory check (every balance since #4452) is
+    # not the set the line keeps. A floor walk records neither; its end is the
+    # kept set (``floor_count``).
+    ranged = _f(end.get("check_kept"))
     audited = _f(end.get("check_audited"))
     kept = _f(end.get("floor_count"))
-    k = int(audited) if np.isfinite(audited) and audited >= 1 else (int(kept) if np.isfinite(kept) else -1)
+    if np.isfinite(ranged) and ranged >= 0:
+        k = int(ranged)
+    elif np.isfinite(audited) and audited >= 1:
+        k = int(audited)
+    else:
+        k = int(kept) if np.isfinite(kept) else -1
     lo, hi = _f(end.get("range_lo")), _f(end.get("range_hi"))
     truth = nan
     if last_frame is not None and k > 0 and int(last_frame["n_pool"]) > 0:
