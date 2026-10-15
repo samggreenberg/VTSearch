@@ -89,6 +89,7 @@ any run.
 | `resort-prompt` | happy | Your {N clicks} {found only K positives}, and Autopilot needs {M} before it can move on. Switch to a different example sort, or keep clicking with this one. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough. Answering the prompt ends it, and so does opening its media picker. |
 | `autopilot-done` | happy | Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | An Autopilot run that started on an untrained detector finishes with every quality light green. The next vote ends it. |
 | `autopilot-done-level` | happy | Your detector is trained! It expects an F-beta of {F} at your balance. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, when the detector's labels line already expects an F-beta of 0.5 at the balance with a quality light still short of green (#4878). The next vote ends it. |
+| `autopilot-done-cap` | happy | Your detector is trained! That's {N} votes, as many as Autopilot asks for. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, when the votes reached Autopilot's cap of 200 with a quality light still short of green and the labels line short of its level (#4903). The next vote ends it. |
 | `autopilot-ran-dry` | happy | Your detector is trained! {N} of its best matches in a row were not good, so it has likely found what it can. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, on a document dataset, where Autopilot finishes when its best matches run dry rather than on the lights. |
 | `all-labeled` | happy | You've labeled every item in this dataset! Click **Dashboard** to test or run your detector on another dataset. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
 
@@ -99,7 +100,7 @@ any run.
 `resort-prompt`, `{N clicks}` is the votes cast under the current sort,
 `{found only K positives}` how many of them were Good ("found no positives"
 when none), and `{M}` the Good target. In `autopilot-ran-dry`, `{N}` is the
-dry-run length, 16. In `autopilot-done-level`, `{F}` is the F-beta the labels line expects, two decimals.
+dry-run length, 16. In `autopilot-done-level`, `{F}` is the F-beta the labels line expects, two decimals. In `autopilot-done-cap`, `{N}` is the vote count at Done (the cap, plus the check before Done).
 
 ## Test view
 

@@ -349,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} label_quota={cfg.LABEL_QUOTA} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
@@ -509,6 +509,7 @@ def main(argv: list[str] | None = None) -> int:
                 smart_gate=cfg.SMART_GATE,
                 stop_rule=cfg.STOP_RULE,
                 stop_level=cfg.STOP_LEVEL,
+                stop_cap=cfg.STOP_CAP,
                 label_quota=cfg.LABEL_QUOTA,
                 walk_picks=cfg.WALK_PICKS,
                 walk_tol=cfg.WALK_TOL,

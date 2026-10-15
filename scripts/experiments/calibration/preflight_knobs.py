@@ -434,6 +434,10 @@ def probe(C: Any) -> list[str]:
                 "lights|level@0.5 (every light green, or the line's level)",
             )
         )
+    from vtscore.eval.autopilot_flow import STOP_CAP  # noqa: PLC0415
+
+    if C.STOP_CAP != STOP_CAP:
+        rows.append(("stop_cap", str(C.STOP_CAP), f"{STOP_CAP} (Done at {STOP_CAP} votes whatever the rule; #4903)"))
     if C.LABEL_QUOTA is not None:
         rows.append(
             (

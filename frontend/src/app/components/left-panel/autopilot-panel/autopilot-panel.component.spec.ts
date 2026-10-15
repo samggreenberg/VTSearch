@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, type AutopilotState } from '../../../services/autopilot-state.service';
+import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from '../../../services/autopilot-state.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -749,6 +749,46 @@ describe('AutopilotPanelComponent', () => {
       expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('All indicators green');
       expect(component.steps.find((st) => st.phase === 'done')!.helpText).toContain('All quality indicators are green');
       expect(autopilotState.handoff()?.expectedFbeta).toBeUndefined();
+    });
+  });
+
+  describe('Done on the click cap (#4903)', () => {
+    it('reaches Done at the cap with a light short and the level unmet, and says why', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(100));
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 101));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      expect(autopilotState.state.phase).toBe('new');
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 100));
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: STOP_CAP_VOTES, capVotes: STOP_CAP_VOTES });
+      const step = component.steps.find((st) => st.state === 'active')!;
+      expect(step.phase).toBe('improve');
+      expect(step.detail).toBe(`${STOP_CAP_VOTES} votes`);
+      const done = component.steps.find((st) => st.phase === 'done')!;
+      expect(done.helpText).toContain('as many as Autopilot asks for');
+      expect(done.helpText).not.toContain('All quality indicators are green');
+      expect(done.intent).toContain('as many as Autopilot asks for');
+    });
+
+    it("quotes the level, not the cap, when the level is met too", async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(100));
+      fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 100));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      fixture.componentRef.setInput('labelingStatus', {
+        ...SPAN_SHORT, stop_rule: 'lights', level: { expected_fbeta: 0.62, level: 0.5, met: true },
+      });
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+      expect(autopilotState.handoff()?.capVotes).toBeUndefined();
+      expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('Expected F-beta 0.62');
     });
   });
 

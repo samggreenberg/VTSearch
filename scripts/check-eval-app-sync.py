@@ -114,7 +114,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="autopilot.phase_machine",
         app=f"ts:{AUTOPILOT_TS}::checkPhaseTransition(goodCount",
-        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights",
+        harness="vtscore/eval/autopilot_flow.py::next_phase,stop_lights,STOP_CAP",
         kind="ported",
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
@@ -138,7 +138,11 @@ MIRRORS: list[Mirror] = [
             "levelMet (the labeling status's level.met, from the library's stop_level_reading) beside the three "
             "lights, and every light green or the level met is that branch; the harness's AutopilotFlow, under its "
             "default stop_rule 'lights|level', hands next_phase every light green when stop_lights says the rule "
-            "stops, reading stop_level_met on the step's labels line."
+            "stops, reading stop_level_met on the step's labels line. And on the click cap (#4903): the app's "
+            "checkPhaseTransition opens that branch once the votes reach STOP_CAP_VOTES (atCap); the harness's "
+            "AutopilotFlow passes stop_lights at_cap once they reach its stop_cap (STOP_CAP by default), and "
+            "stop_lights says stop under every rule. The two numbers are pinned literally by "
+            "TestPortedConstants and the service spec."
         ),
         divergence=(
             "checkPhaseTransition also latches doneReached (#4621): once a run reaches done, the "
@@ -153,7 +157,8 @@ MIRRORS: list[Mirror] = [
             "max_steps) is its measurement of the final line, which no app user can start since the "
             "Check button went: it is never a click. The app also latches doneChecked when a run's first "
             "labeling-status reading already says Done, every light green or the level met (the Train view "
-            "re-entered on a finished detector); a harness run starts with no votes, where neither can hold, so "
+            "re-entered on a finished detector), and when its first labelset reading already holds the cap "
+            "(noteInitialLabelset); a harness run starts with no votes, where none can hold, so "
             "it has nothing to port."
         ),
     ),

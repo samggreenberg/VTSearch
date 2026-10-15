@@ -79,6 +79,11 @@ export interface AutopilotState {
   /** That expected F-beta, for the panel to quote when the level is what said Done; null without a line. */
   expectedFbeta: number | null;
   /**
+   * The detector holds {@link STOP_CAP_VOTES} votes (#4903): Done comes here
+   * whatever the lights and the level say, so no session goes unstopped.
+   */
+  atCap: boolean;
+  /**
    * True when autopilot started against a detector that already has labels
    * (e.g. trained on DatasetA, now continuing on DatasetB).  In retrain mode
    * every phase uses learned sort; the initial "good"/"bad" phases use
@@ -126,12 +131,23 @@ export interface AutopilotHandoff {
   votes: number;
   dryRun?: number;
   expectedFbeta?: number;
+  /** Done came from the click cap (#4903): the vote count it stopped at. */
+  capVotes?: number;
 }
 
 /** Every quality light green: what said Done before the level could (#4878). */
 export function allLightsGreen(st: AutopilotState): boolean {
   return st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green';
 }
+
+/**
+ * The click cap (#4903): Done once the detector holds this many votes, whatever
+ * the lights and the level say. Every stop rule leaves some sessions unstopped,
+ * and a user Autopilot never tells to stop either quits when they like or labels
+ * on through the collection. The harness mirrors it as `STOP_CAP`
+ * (`vtscore/eval/autopilot_flow.py`).
+ */
+export const STOP_CAP_VOTES = 200;
 
 /** The phases before the first learned sort: no trained detector yet. */
 const OPENING_PHASES: readonly AutopilotPhase[] = ['good', 'bad', 'more'];
@@ -155,6 +171,7 @@ const INITIAL_STATE: AutopilotState = {
   spanTarget: 0,
   levelMet: false,
   expectedFbeta: null,
+  atCap: false,
   retrainMode: false,
   doneReached: false,
   spotCheck: null,
@@ -262,11 +279,16 @@ export class AutopilotStateService {
     this.initialLabelsetKnown.set(true);
     this.startedTrained.set(goodCount > 0 || badCount > 0);
     const retrainMode = goodCount > 0 && badCount > 0;
-    if (retrainMode !== this.stateSubject.value.retrainMode) {
+    // A detector already at the cap (#4903) is past Done: like one whose first
+    // status reads Done, it has nothing to check before Done.
+    const atCap = goodCount + badCount >= STOP_CAP_VOTES;
+    const current = this.stateSubject.value;
+    if (retrainMode !== current.retrainMode || (atCap && !current.doneChecked)) {
       this.stateSubject.next({
-        ...this.stateSubject.value,
+        ...current,
         retrainMode,
-        moreDone: this.stateSubject.value.moreDone || retrainMode,
+        moreDone: current.moreDone || retrainMode,
+        doneChecked: current.doneChecked || atCap,
       });
     }
   }
@@ -322,6 +344,7 @@ export class AutopilotStateService {
       spanStatus: '',
       fracDiversity: 0,
       spanTarget: 0,
+      atCap: false,
       retrainMode,
       doneReached: false,
       spotCheck: null,
@@ -458,6 +481,7 @@ export class AutopilotStateService {
     const rawRemaining = totalCount - goodCount - badCount;
     const sizeKnown = Number.isFinite(totalCount) && totalCount > 0 && rawRemaining >= 0;
     const remainingUnlabeled = sizeKnown ? rawRemaining : Infinity;
+    const atCap = goodCount + badCount >= STOP_CAP_VOTES;
 
     // Cap each phase target at the most votes of that class the dataset could
     // still yield (current votes of that class + everything unlabeled), so a
@@ -489,10 +513,11 @@ export class AutopilotStateService {
       else nextPhase = 'more';
     } else if (!st.moreDone && goodCount < effMoreTarget) {
       nextPhase = 'more';
-    } else if (allLightsGreen(st) || st.levelMet) {
+    } else if (allLightsGreen(st) || st.levelMet || atCap) {
       // Every light is green, or the labels line expects Done's level of F-beta
-      // at the detector's balance (#4878): check the line once before reporting
-      // Done. With nothing left unlabeled there is nothing to check.
+      // at the detector's balance (#4878), or the votes reached the cap (#4903):
+      // check the line once before reporting Done. With nothing left unlabeled
+      // there is nothing to check.
       nextPhase = st.doneChecked || remainingUnlabeled === 0 ? 'done' : 'spot';
     } else if (remainingUnlabeled === 0) {
       // Every item is labeled but the quality indicators never went green
@@ -518,8 +543,9 @@ export class AutopilotStateService {
       || st !== this.stateSubject.value
       || moreDone !== st.moreDone
       || doneReached !== st.doneReached
+      || atCap !== st.atCap
     ) {
-      this.stateSubject.next({ ...st, phase: nextPhase, moreDone, doneReached });
+      this.stateSubject.next({ ...st, phase: nextPhase, moreDone, doneReached, atCap });
     }
   }
 

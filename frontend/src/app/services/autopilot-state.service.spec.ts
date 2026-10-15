@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
-import { AutopilotStateService, type AutopilotState } from './autopilot-state.service';
+import { AutopilotStateService, STOP_CAP_VOTES, type AutopilotState } from './autopilot-state.service';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 import type { StatusIndicator } from '../generated/api-client/models/status-indicator';
 
@@ -497,6 +497,39 @@ describe('AutopilotStateService', () => {
       service.activate();
       service.updateFromLabelingStatus(level(true));
       service.checkPhaseTransition(30, 40);
+      expect(service.state.phase).toBe('done');
+      expect(service.state.doneChecked).toBe(true);
+    });
+  });
+
+  describe('the click cap also says Done (#4903)', () => {
+    const yellow = makeStatus({ status: 'yellow' }, { status: 'green' }, { status: 'red' });
+
+    it('is the harness STOP_CAP', () => {
+      expect(STOP_CAP_VOTES).toBe(200);
+    });
+
+    it('goes to the check before Done at the cap, every light short and the level unmet, then Done', () => {
+      service.activate();
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+      service.checkPhaseTransition(100, STOP_CAP_VOTES - 101);
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.atCap).toBe(false);
+      service.checkPhaseTransition(100, STOP_CAP_VOTES - 100);
+      expect(service.state.atCap).toBe(true);
+      expect(service.state.phase).toBe('spot');
+      service.beginSpotCheck('done');
+      service.endSpotCheck();
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('runs no check on a re-entered detector that already holds the cap', () => {
+      service.activate();
+      service.noteInitialLabelset(100, STOP_CAP_VOTES);
+      service.updateFromLabelingStatus(yellow);
+      service.checkPhaseTransition(100, STOP_CAP_VOTES);
       expect(service.state.phase).toBe('done');
       expect(service.state.doneChecked).toBe(true);
     });

@@ -55,7 +55,7 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -2630,6 +2630,7 @@ def simulate_voting_iterations(  # noqa: C901
     smart_gate: str = "app",
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
+    stop_cap: Optional[int] = STOP_CAP,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
@@ -3037,6 +3038,10 @@ def simulate_voting_iterations(  # noqa: C901
             ``"lights"`` is the app before #4878; ``"level"`` and
             ``"lights+level"`` are #4878's other arms and need a balance and the flow.
         stop_level: The level the rule reads (the app's ``STOP_LEVEL``; #4878 priced 0.3 to 0.7).
+        stop_cap: The click cap (#4903; the app's
+            :data:`~vtscore.eval.autopilot_flow.STOP_CAP`): whatever *stop_rule*,
+            a session holding this many votes goes to the check before Done and
+            to Done.  ``None`` is no cap.  Never binds before the eval's 150 clicks.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3716,7 +3721,11 @@ def simulate_voting_iterations(  # noqa: C901
     flow: Any = None
     if autopilot_fidelity and is_autopilot_strategy(strategy):
         flow = AutopilotFlow(
-            startup=startup_state, smart_gate=smart_gate, good_dry_run=flow_good_dry_run, stop_rule=stop_rule
+            startup=startup_state,
+            smart_gate=smart_gate,
+            good_dry_run=flow_good_dry_run,
+            stop_rule=stop_rule,
+            stop_cap=stop_cap,
         )
     elif more_walk != "seed":
         raise ValueError(
