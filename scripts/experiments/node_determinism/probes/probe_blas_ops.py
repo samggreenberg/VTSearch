@@ -2,13 +2,17 @@
 
 One op a process, so a segfault names its op:
 
-    for op in sgemm ssyrk sgemv dgemm sdot; do for n in 16 64 500; do
-      OPENBLAS_CORETYPE=Haswell OPENBLAS_NUM_THREADS=1 python probe_blas_ops.py $op $n || echo "$op $n: exit $?"
-    done; done
+    python probe_blas_ops.py OP M K      # OP: {s,d}{gemm,syrk,gemv,svd}, or {s,d}gemm_scipy
 
-``A`` is n x 768 and ``B`` 768 x n, float32 from a fixed seed; ``ssyrk`` is ``A @ A.T``,
-which numpy hands to syrk rather than gemm.  On numpy 2.5.4 (OpenBLAS 0.3.34) under
-``OPENBLAS_CORETYPE=Haswell`` an EPYC 9534 segfaults on ``dgemm`` from n = 64.
+``A`` is M x K from a fixed seed; ``gemm`` is ``A @ B`` with ``B`` K x M, ``syrk`` is
+``A @ A.T`` (numpy hands it to syrk rather than gemm), ``gemv`` is ``A @ v``, ``svd`` is
+numpy's economy SVD of ``A`` (LAPACK, which calls GEMM itself; the singular values); ``_scipy``
+runs the GEMM through ``scipy.linalg.blas``, i.e. scipy's own bundled OpenBLAS.  K is the
+reduction length, which OpenBLAS cuts into chunks of its ``GEMM_Q``: on OpenBLAS 0.3.34 a
+Zen 4 host overrides Q under a forced ``OPENBLAS_CORETYPE`` (OpenMathLib/OpenBLAS#6021),
+so a float64 GEMM with K above ~299 overruns the Haswell kernel's stack and segfaults,
+and a float32 one sums in a different order than any other host.  ``openblas_l2.sh``
+drives it.
 """
 
 import hashlib
@@ -17,18 +21,22 @@ import sys
 
 import numpy as np
 
-op, n = sys.argv[1], int(sys.argv[2])
+op, m, k = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+dtype = {"s": np.float32, "d": np.float64}[op[0]]
 rng = np.random.default_rng(0)
-A = rng.standard_normal((n, 768)).astype(np.float32)
-B = rng.standard_normal((768, n)).astype(np.float32)
-ops = {
-    "sgemm": lambda: A @ B,
-    "ssyrk": lambda: A @ A.T,
-    "sgemv": lambda: A @ B[:, 0].copy(),
-    "dgemm": lambda: A.astype(np.float64) @ B.astype(np.float64),
-    "sdot": lambda: np.asarray(np.dot(A[0], B[:, 0])),
-}
-out = np.ascontiguousarray(ops[op]())
-digest = hashlib.sha1(out.tobytes()).hexdigest()[:12]
-node = os.uname().nodename.split(".")[0]
-print(f"{node} numpy={np.__version__} OPENBLAS_CORETYPE={os.environ.get('OPENBLAS_CORETYPE', '-')} {op} n={n} {digest}")
+A = rng.standard_normal((m, k)).astype(dtype)
+B = rng.standard_normal((k, m)).astype(dtype)
+if op.endswith("_scipy"):
+    from scipy.linalg import blas
+
+    out = getattr(blas, op.removesuffix("_scipy"))(1.0, A, B)
+else:
+    out = {
+        "gemm": lambda: A @ B,
+        "syrk": lambda: A @ A.T,
+        "gemv": lambda: A @ B[:, 0].copy(),
+        "svd": lambda: np.linalg.svd(A, full_matrices=False)[1],
+    }[op[1:]]()
+digest = hashlib.sha1(np.ascontiguousarray(out).tobytes()).hexdigest()[:12]
+env = " ".join(f"{v}={os.environ.get(v, '-')}" for v in ("OPENBLAS_CORETYPE", "OPENBLAS_L2_SIZE"))
+print(f"{os.uname().nodename.split('.')[0]}\tnumpy={np.__version__}\t{env}\t{op}\t{m}\t{k}\t{digest}")

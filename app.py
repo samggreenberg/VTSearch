@@ -33,8 +33,17 @@ os.environ[_THREADS_ENV] = _torch_threads
 # documents differently depending on the node the app landed on. Haswell kernels
 # run on both, and were no slower for tiling on the EPYC nodes. Set before numpy
 # loads OpenBLAS; an explicit value wins.
+#
+# OpenBLAS 0.3.34 (numpy 2.5.2 on) re-tunes GEMM blocking on an AMD Zen 4/5 CPU even
+# when the core is forced (#4938, OpenMathLib/OpenBLAS#6021). Under Haswell, float64
+# GEMM and any SVD then overrun a kernel's stack, a segfault, and float32 GEMM sums
+# in another order than on any other CPU. It fires only on a 1 MB L2, and the
+# Haswell table reads the L2 size nowhere else, so reporting 2 MB keeps the Haswell
+# blocking on every CPU.
 if platform.machine() in ("x86_64", "AMD64"):
     os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
+    if os.environ["OPENBLAS_CORETYPE"].lower() == "haswell":
+        os.environ.setdefault("OPENBLAS_L2_SIZE", "2048")
 
 # Configure structured logging: JSON lines by default with per-record
 # request_id / dataset_id / detector_id / user fields. Override via:

@@ -43,11 +43,24 @@ def x86(monkeypatch, expcommon):
 
 
 class TestPinCpuKernels:
-    def test_defaults_all_four(self, expcommon, x86):
+    def test_defaults_all_of_them(self, expcommon, x86):
         env: dict[str, str] = {}
         assert expcommon.pin_cpu_kernels(env) == expcommon.cpu_kernel_pins()
         assert env == expcommon.cpu_kernel_pins()
         assert env["NPY_DISABLE_CPU_FEATURES"] == expcommon.numpy_kernel_pin()
+        assert env["OPENBLAS_CORETYPE"] == "Haswell" and env["OPENBLAS_L2_SIZE"] == "2048"
+
+    @pytest.mark.parametrize("coretype", ["Haswell", "HASWELL"])
+    def test_the_l2_size_goes_with_an_exported_haswell(self, expcommon, x86, coretype):
+        """#4938: the L2 size is what keeps the Haswell blocking on a Zen 4 CPU."""
+        env = {"OPENBLAS_CORETYPE": coretype}
+        assert expcommon.pin_cpu_kernels(env)["OPENBLAS_L2_SIZE"] == "2048"
+
+    def test_but_not_with_another_core(self, expcommon, x86):
+        """Another core's blocking may follow the L2 size, so it is left to report the real one."""
+        env = {"OPENBLAS_CORETYPE": "SkylakeX"}
+        set_now = expcommon.pin_cpu_kernels(env)
+        assert "OPENBLAS_L2_SIZE" not in env and "OPENBLAS_L2_SIZE" not in set_now
 
     def test_an_exported_value_wins(self, expcommon, x86):
         env = {"MKL_CBWR": "AVX2", "NPY_DISABLE_CPU_FEATURES": ""}
@@ -152,11 +165,17 @@ class TestRunCellsPinsFirst:
         assert not bare, "pin_cpu_kernels() must sit under `if __name__ == '__main__':`"
 
 
-def _source_gridenv(tmp_path: Path, python: str | None, **env: str) -> subprocess.CompletedProcess[str]:
-    """Source a copy of ``gridenv.sh`` in a scratch tree; print its numpy pin.
+_GRIDENV_PINS = ("NPY_DISABLE_CPU_FEATURES", "OPENBLAS_CORETYPE", "OPENBLAS_L2_SIZE")
+
+
+def _source_gridenv(
+    tmp_path: Path, python: str | None, var: str = "NPY_DISABLE_CPU_FEATURES", **env: str
+) -> subprocess.CompletedProcess[str]:
+    """Source a copy of ``gridenv.sh`` in a scratch tree; print *var* as it left it.
 
     A copy, so the ``.shadow/`` it creates lands in *tmp_path*, not the checkout.
     *python* is what a bare ``python`` runs (a venv's), or None for one that fails.
+    The pins start unset unless *env* exports them.
     """
     tree = tmp_path / "wt"
     (tree / "scripts" / "experiments").mkdir(parents=True)
@@ -169,10 +188,11 @@ def _source_gridenv(tmp_path: Path, python: str | None, **env: str) -> subproces
     # A wrapper, not a symlink: a venv's python finds its venv from where it was invoked.
     (bin_dir / "python").write_text("#!/bin/sh\n" + ("exit 1\n" if python is None else f'exec "{python}" "$@"\n'))
     (bin_dir / "python").chmod(0o755)
-    base = {k: v for k, v in os.environ.items() if k != "NPY_DISABLE_CPU_FEATURES"}
+    base = {k: v for k, v in os.environ.items() if k not in _GRIDENV_PINS}
     base.update(VTS_PYTHON_MODULE="", VTS_VENV="", PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}", **env)
+    show = f'printf %s "${{{var}-unset}}"'
     return subprocess.run(  # noqa: S603  # fixed argv, a scratch copy of the repo's script
-        ["bash", "-c", 'source "$1/gridenv.sh" && printf %s "${NPY_DISABLE_CPU_FEATURES-unset}"', "_", str(tree)],  # noqa: S607
+        ["bash", "-c", f'source "$1/gridenv.sh" && {show}', "_", str(tree)],  # noqa: S607
         capture_output=True,
         text=True,
         env=base,
@@ -184,6 +204,23 @@ class TestGridenvAgrees:
     def test_openblas_pin(self):
         src = (_ROOT / "gridenv.sh").read_text(encoding="utf-8")
         assert 'export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"' in src
+
+    def test_the_l2_size_goes_with_haswell(self, expcommon, tmp_path):
+        """#4938: the same L2 size the cell runner sets, so the Haswell blocking holds on a Zen 4 CPU."""
+        proc = _source_gridenv(tmp_path, sys.executable, var="OPENBLAS_L2_SIZE")
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == expcommon.cpu_kernel_pins()["OPENBLAS_L2_SIZE"]
+
+    def test_but_not_with_another_core(self, tmp_path):
+        proc = _source_gridenv(tmp_path, sys.executable, var="OPENBLAS_L2_SIZE", OPENBLAS_CORETYPE="SkylakeX")
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == "unset"
+
+    def test_an_exported_l2_size_wins(self, tmp_path):
+        """An empty one included: OpenBLAS then detects the cache, the opt-out."""
+        proc = _source_gridenv(tmp_path, sys.executable, var="OPENBLAS_L2_SIZE", OPENBLAS_L2_SIZE="")
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == ""
 
     @pytest.mark.skipif(platform.machine() != "x86_64", reason="gridenv.sh pins numpy on x86-64 only")
     def test_gridenv_exports_the_same_numpy_pin(self, expcommon, tmp_path):

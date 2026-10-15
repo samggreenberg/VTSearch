@@ -76,6 +76,15 @@ class TestAppPrelude:
         assert 'os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")' in head, "a default, so an explicit value wins"
         assert "import numpy" not in head and "import torch" not in head
 
+    def test_the_prelude_keeps_the_haswell_blocking_on_zen_4(self):
+        """#4938: OpenBLAS 0.3.34 re-tunes a forced Haswell core on a Zen 4 CPU, and GEMM and SVD segfault."""
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[2] / "app.py").read_text(encoding="utf-8")
+        head = src.split("# Configure structured logging", 1)[0]
+        assert 'os.environ.setdefault("OPENBLAS_L2_SIZE", "2048")' in head, "a default, so an explicit value wins"
+        assert head.index('"OPENBLAS_L2_SIZE"') > head.index('"OPENBLAS_CORETYPE"'), "only with the Haswell core"
+
 
 class TestSuiteRunsAtTheLibraryDefault:
     """The *test* process must not inherit the server's allocation-sized default.

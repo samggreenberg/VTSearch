@@ -65,10 +65,16 @@ from pathlib import Path
 # pass of one typed query (+0.3 s), while a CPU embedding job would pay it on
 # every image.  Disabling numpy's AVX-512 targets costs the anchored EM ~40% on
 # an AVX-512 node and nothing on an AVX2 one.
+#
+# ``OPENBLAS_L2_SIZE`` keeps the Haswell pin meaning one thing: OpenBLAS 0.3.34
+# (numpy 2.5.2 on) re-tunes GEMM blocking on a Zen 4 CPU with a 1 MB L2 even under
+# a forced core, which segfaults the Haswell float64 GEMM and any SVD and reorders
+# float32 sums (#4938).  The Haswell table reads the L2 size nowhere else.
 def cpu_kernel_pins() -> dict[str, str]:
-    """The four pins, numpy's chosen for the numpy installed here (:func:`numpy_kernel_pin`)."""
+    """The pins, numpy's chosen for the numpy installed here (:func:`numpy_kernel_pin`)."""
     return {
         "OPENBLAS_CORETYPE": "Haswell",
+        "OPENBLAS_L2_SIZE": "2048",
         "NPY_DISABLE_CPU_FEATURES": numpy_kernel_pin(),
         "MKL_CBWR": "COMPATIBLE",
         "ATEN_CPU_CAPABILITY": "avx2",
@@ -103,7 +109,8 @@ def pin_cpu_kernels(environ: MutableMapping[str, str] | None = None) -> dict[str
     """Default :func:`cpu_kernel_pins` into *environ* (``os.environ``); return what this call set.
 
     Each pin is a default, so an exported value wins, and ``VTS_KERNEL_PINS=0``
-    skips all four (to rerun an arm as it ran before #4110).  x86-64 only: the
+    skips them all (to rerun an arm as it ran before #4110).  ``OPENBLAS_L2_SIZE``
+    goes only with the Haswell core: under another one it would change blocking.  x86-64 only: the
     names mean nothing on another architecture, and numpy warns at import about
     a feature its build cannot dispatch.  The libraries read these when they
     load, so a pin set after numpy or torch is imported would silently do
@@ -116,6 +123,8 @@ def pin_cpu_kernels(environ: MutableMapping[str, str] | None = None) -> dict[str
     if loaded and environ is None:
         raise RuntimeError(f"pin_cpu_kernels() must run before {' and '.join(loaded)} is imported")
     set_now = {k: v for k, v in cpu_kernel_pins().items() if k not in env}
+    if env.get("OPENBLAS_CORETYPE", set_now.get("OPENBLAS_CORETYPE", "")).lower() != "haswell":
+        set_now.pop("OPENBLAS_L2_SIZE", None)
     env.update(set_now)
     return set_now
 
