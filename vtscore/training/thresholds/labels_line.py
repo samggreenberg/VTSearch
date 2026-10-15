@@ -152,6 +152,12 @@ HEAD_COUNT_BADS: float = math.inf
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
 HEAD_COUNT_GOODS = 6
+#: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
+#: the labels line expects at least this F-beta at the session's balance over the corpus it was
+#: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
+#: no change to the session, and the stop comes where the clicks pay
+#: (``docs/experiments/2026-10-14-stop-signal-4878``).
+STOP_LEVEL = 0.5
 
 
 def _logit(scores: Any) -> np.ndarray:
@@ -578,6 +584,26 @@ class LabelsLine:
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
         line = _line_on(self.model, scores, ids, labels)
         return self if line is None else line
+
+
+def stop_level_reading(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> dict[str, Any]:
+    """What Autopilot's stop reads off the labels line (#4878): ``expected_fbeta``, ``level`` and ``met``.
+
+    ``expected_fbeta`` is :meth:`LabelsLine.expected_fbeta` at *beta*, the
+    line's own estimate of the F-beta of the set it keeps; ``None`` with no
+    line, no balance, or while the head's count line serves
+    (:func:`head_count_serves`), whose class model is too thin to read.  ``met``
+    is whether it reaches *level*.
+    """
+    if line is None or beta is None or head_count_serves(line.model):
+        return {"expected_fbeta": None, "level": float(level), "met": False}
+    expected = float(line.expected_fbeta(float(beta)))
+    return {"expected_fbeta": expected, "level": float(level), "met": expected >= level}
+
+
+def stop_level_met(line: "LabelsLine | None", beta: float | None, level: float = STOP_LEVEL) -> bool:
+    """Whether the labels line expects at least *level* F-beta at *beta* (:func:`stop_level_reading`)."""
+    return bool(stop_level_reading(line, beta, level)["met"])
 
 
 def head_count_serves(model: ClassScoreModel) -> bool:

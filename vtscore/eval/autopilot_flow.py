@@ -234,14 +234,16 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 #: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
 SMART_GATES = ("app", "never")
 
-#: What tells the user they can stop (#4878's arms).  ``"lights"`` is the app: Done
-#: once Smart, Stable and Span are all green.  The others read the labels line's
-#: own expected F-beta at the session's beta (``LabelsLine.expected_fbeta``) against
-#: a level the caller sets, and hand :func:`next_phase` the lights that make it
-#: decide accordingly: ``"level"`` stops on the level alone, ``"lights+level"`` on
-#: both, ``"lights|level"`` on either.  A session the rule does not stop with every
-#: light green reads Hard (its pick is Done's), not New, whose atlas walk is over.
-STOP_RULES = ("lights", "level", "lights+level", "lights|level")
+#: What tells the user they can stop (#4878).  ``"lights|level"`` is the app since
+#: #4878: Done once Smart, Stable and Span are all green, or once the labels line
+#: expects at least ``STOP_LEVEL`` F-beta at the session's beta
+#: (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, which the
+#: caller reads and passes as *level_met*).  The rest are arms: ``"lights"`` (the
+#: app before #4878), ``"level"`` (the level alone) and ``"lights+level"`` (both).
+#: :func:`stop_lights` hands :func:`next_phase` the lights that make it decide so;
+#: a session the rule does not stop with every light green reads Hard (its pick is
+#: Done's), not New, whose atlas walk is over.
+STOP_RULES = ("lights|level", "lights", "level", "lights+level")
 
 
 def stop_lights(
@@ -494,7 +496,7 @@ class AutopilotFlow:
         smart_gate: str = "app",
         good_dry_run: int | None = MORE_DRY_RUN,
         done_check: bool = True,
-        stop_rule: str = "lights",
+        stop_rule: str = "lights|level",
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -524,9 +526,10 @@ class AutopilotFlow:
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
-        #: #4878's arms (:data:`STOP_RULES`): what tells the user they can stop.
-        #: ``"lights"`` is the app.  The others read *level_met*, which the
-        #: caller passes to :meth:`update` from the step's labels line.
+        #: What tells the user they can stop (:data:`STOP_RULES`).  The app's,
+        #: ``"lights|level"``, and the level arms read *level_met*, which the
+        #: caller passes to :meth:`update` from the step's labels line; without
+        #: it the app's rule is the lights alone.
         if stop_rule not in STOP_RULES:
             raise ValueError(f"stop_rule must be one of {STOP_RULES}, got {stop_rule!r}")
         self.stop_rule = stop_rule
@@ -675,8 +678,8 @@ class AutopilotFlow:
         exactly as it would have.  *last_vote_good* is the vote just cast; only
         a schedule round with a dry stop (#4222) reads it, and such a round
         refuses a vote without it.  *level_met* is whether the step's labels line
-        expects at least the run's stop level (#4878); only a ``stop_rule`` other
-        than ``"lights"`` reads it.
+        expects at least the run's stop level (#4878); every ``stop_rule`` but
+        ``"lights"`` reads it.
         """
         if self.startup is not None:
             self.startup.on_click(last_vote_good)

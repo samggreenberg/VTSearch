@@ -535,6 +535,13 @@ class TestStopRules:
         with pytest.raises(ValueError, match="stop_rule"):
             AutopilotFlow(stop_rule="vibes")
 
+    def test_the_app_s_rule_is_lights_or_level(self):
+        """Since #4878 the app stops on every light green, or on the line's level."""
+        assert AutopilotFlow().stop_rule == "lights|level"
+        flow = self._flow("lights|level")
+        assert flow.update(9, 9, 500, self.SHORT) == "new", "without the level read it is the lights alone"
+        assert flow.update(9, 9, 500, self.SHORT, level_met=True) == "done"
+
 
 def _doc_phase(good: int, bad: int, *, remaining: float = 500, ran_dry: bool = False, lights: Status = "red") -> str:
     return next_phase(

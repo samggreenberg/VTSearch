@@ -716,6 +716,41 @@ describe('AutopilotPanelComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.ap-step').length).toBe(0);
   });
 
+  describe("Done on the labels line's level (#4878)", () => {
+    /** Span short of green, but the line already expects Done's level of F-beta. */
+    const LEVEL_MET = { ...SPAN_SHORT, stop_rule: 'lights', level: { expected_fbeta: 0.62, level: 0.5, met: true } };
+
+    it('reaches Done with a light short of green, and says what it read instead of "all green"', async () => {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(5));
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      TestBed.tick();
+      fixture.componentRef.setInput('labelingStatus', LEVEL_MET);
+      TestBed.tick();
+      closeDoneCheck();
+      await settleZoneless(fixture);
+
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25, expectedFbeta: 0.62 });
+      const step = component.steps.find((st) => st.state === 'active')!;
+      expect(step.phase).toBe('improve');
+      expect(step.detail).toBe('Expected F-beta 0.62');
+      const done = component.steps.find((st) => st.phase === 'done')!;
+      expect(done.detail).toBe('Expected F-beta 0.62');
+      expect(done.helpText).toContain('expects an F-beta of 0.62 at your balance');
+      expect(done.helpText).not.toContain('All quality indicators are green');
+    });
+
+    it('keeps "all green" when every light is green, met level or not', async () => {
+      reachDone();
+      fixture.componentRef.setInput('labelingStatus', { ...ALL_GREEN, level: { expected_fbeta: 0.9, level: 0.5, met: true } });
+      await settleZoneless(fixture);
+      const done = component.steps.find((st) => st.phase === 'done')!;
+      expect(done.detail).toBe('All indicators green');
+      expect(autopilotState.handoff()?.expectedFbeta).toBeUndefined();
+    });
+  });
+
   describe('completion hand-off', () => {
     it("raises Toasty's hand-off and moves nobody (#4680)", async () => {
       const router = TestBed.inject(Router);

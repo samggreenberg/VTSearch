@@ -14,6 +14,7 @@ import { pairwise } from 'rxjs';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
+  allLightsGreen,
   AutopilotHandoff,
   AutopilotStateService,
   AutopilotPhase,
@@ -104,6 +105,19 @@ const DONE_PLATEAU_HELP = `${PLATEAU_NOTE} You can continue labeling or export y
  */
 function dryRunNote(dryRun: number): string {
   return `${dryRun} of the detector's best matches in a row were not good: the documents it can find are likely found.`;
+}
+
+/**
+ * Done came from the labels line's level, not the lights (#4878): the line
+ * expects Done's level of F-beta at the balance while a light is short of green.
+ * The panel then says what it reads instead of claiming every light is green.
+ */
+function doneByLevel(st: AutopilotState): boolean {
+  return st.levelMet && st.expectedFbeta !== null && !allLightsGreen(st);
+}
+
+function levelNote(st: AutopilotState): string {
+  return `The detector expects an F-beta of ${(st.expectedFbeta ?? 0).toFixed(2)} at your balance.`;
 }
 
 @Component({
@@ -212,6 +226,7 @@ export class AutopilotPanelComponent implements OnInit {
             kind: 'done',
             votes,
             dryRun: curr.dryRunStop ? curr.moreDryRun : undefined,
+            expectedFbeta: !curr.dryRunStop && doneByLevel(curr) ? (curr.expectedFbeta ?? undefined) : undefined,
           });
         } else if (curr.phase === 'exhausted') {
           this.announceCompletion({ kind: 'all-labeled', votes });
@@ -488,7 +503,8 @@ export class AutopilotPanelComponent implements OnInit {
             : 'Checking the line before Done. The step ends when the check finds where the balance peaks.',
         );
       case 'done':
-        return light('green', st.dryRunStop ? dryRunNote(st.moreDryRun) : 'All quality indicators are green.');
+        if (st.dryRunStop) return light('green', dryRunNote(st.moreDryRun));
+        return light('green', doneByLevel(st) ? levelNote(st) : 'All quality indicators are green.');
       case 'improve': {
         // The lowest of the three: it is green exactly when the phase
         // underneath is Done.
@@ -522,6 +538,7 @@ export class AutopilotPanelComponent implements OnInit {
         return 'Vote on a few picks drawn at random from bands of the list. They measure where the line falls and teach the detector, and they count as ordinary votes.';
       case 'done':
         if (this.state.dryRunStop) return `${dryRunNote(this.state.moreDryRun)} You can continue labeling or export your results.`;
+        if (doneByLevel(this.state)) return `${levelNote(this.state)} You can continue labeling or export your results.`;
         return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
       case 'improve':
         return 'Optional. The detector is trained: keep labeling to improve it further, or export your results. Autopilot keeps offering the items that help most.';
@@ -555,6 +572,9 @@ export class AutopilotPanelComponent implements OnInit {
       case 'done':
         if (this.state.dryRunStop) {
           return `Done. ${dryRunNote(this.state.moreDryRun)} Keep labeling for more, or export your results.`;
+        }
+        if (doneByLevel(this.state)) {
+          return `Done. ${levelNote(this.state)} The detector is trained. Keep labeling for more accuracy, or export your results.`;
         }
         return this.state.stablePlateau
           ? `Done. ${PLATEAU_NOTE} Keep labeling if you want, but more votes are unlikely to change the result; or export your results.`
@@ -593,13 +613,14 @@ export class AutopilotPanelComponent implements OnInit {
       case 'spot':
         return st.spotCheck === 'weak' ? 'Labels still overlap' : 'Checking before Done';
       case 'done':
-        return st.dryRunStop ? 'Best matches ran dry' : 'All indicators green';
+        if (st.dryRunStop) return 'Best matches ran dry';
+        return doneByLevel(st) ? `Expected F-beta ${(st.expectedFbeta ?? 0).toFixed(2)}` : 'All indicators green';
       case 'improve':
         // What autopilot is offering now, which follows the phase underneath.
         if (st.phase === 'hard') return 'Showing boundary items';
         if (st.phase === 'new') return 'Showing diverse items';
         if (st.phase === 'spot') return 'Spot checking the line';
-        return 'All indicators green';
+        return doneByLevel(st) ? `Expected F-beta ${(st.expectedFbeta ?? 0).toFixed(2)}` : 'All indicators green';
       default:
         return '';
     }
@@ -623,7 +644,9 @@ export class AutopilotPanelComponent implements OnInit {
       case 'spot':
         return this.state.spotCheck === 'weak'
           ? 'Your Good and Bad labels still overlap, so the check picks the votes that teach the detector where its line falls. Ends when the check is done.'
-          : 'Every indicator is green. Ends when the check is done, and Done follows.';
+          : doneByLevel(this.state)
+            ? `${levelNote(this.state)} Ends when the check is done, and Done follows.`
+            : 'Every indicator is green. Ends when the check is done, and Done follows.';
       case 'improve':
         if (this.state.phase === 'hard') {
           return 'A vote moved Smart or Stable off green, so autopilot is offering items near the cutoff until the detector settles again.';
@@ -631,6 +654,7 @@ export class AutopilotPanelComponent implements OnInit {
         if (this.state.phase === 'new') {
           return 'Smart and Stable are green; autopilot is offering items from parts of the collection your votes do not cover yet, until Span is green again.';
         }
+        if (doneByLevel(this.state)) return `${levelNote(this.state)} More votes can still refine the detector.`;
         return this.state.stablePlateau ? PLATEAU_NOTE : 'All quality indicators are green. More votes can still refine the detector.';
       default:
         return '';

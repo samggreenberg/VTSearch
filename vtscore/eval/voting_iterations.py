@@ -120,6 +120,8 @@ from vtscore.training.thresholds import (
     fbeta_count,
     fit_labels_line,
     head_count_serves,
+    STOP_LEVEL,
+    stop_level_met,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -1260,17 +1262,6 @@ def _standalone_calibration_row(
     if cal_scores is not None:
         row["n_cal_scores"] = int(cal_scores.size)
     return row
-
-
-def _line_level_met(line: "LabelsLine | None", beta: float | None, level: float) -> bool:
-    """Whether the step's labels line expects an F-beta of at least *level* at *beta* (#4878's stop arms).
-
-    Never while the head's count line serves (#4786): its class model is too thin
-    to read, and #4878 priced the rules from the first step the class model cuts.
-    """
-    if line is None or beta is None or head_count_serves(line.model):
-        return False
-    return line.expected_fbeta(float(beta)) >= level
 
 
 def _line_reading(
@@ -2637,8 +2628,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
-    stop_rule: str = "lights",
-    stop_level: float = 0.5,
+    stop_rule: str = "lights|level",
+    stop_level: float = STOP_LEVEL,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     more_walk: str = "seed",
@@ -3035,15 +3026,17 @@ def simulate_voting_iterations(  # noqa: C901
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
         stop_rule: What tells the user they can stop (#4878;
-            :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights"`` (the
-            default) is the app: Done once every quality light is green.
-            ``"level"``, ``"lights+level"`` and ``"lights|level"`` read whether the
-            step's labels line expects an F-beta of at least *stop_level* at the
-            run's balance, over its corpus's unvoted items
-            (``LabelsLine.expected_fbeta``), from the first step its class model
-            cuts the line (never while the head's count line serves).  Needs a
-            balance and the Autopilot flow.
-        stop_level: The level those arms stop at (#4878 priced 0.3 to 0.7).
+            :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
+            (the default) is the app: Done once every quality light is green, or
+            once the step's labels line expects an F-beta of at least
+            *stop_level* at the run's balance, over its corpus's unvoted items
+            (:func:`~vtscore.training.thresholds.labels_line.stop_level_met`, the
+            app's own function), from the first step its class model cuts the line
+            (never while the head's count line serves).  With no balance or no
+            Autopilot flow there is no level to read, and it is the lights alone.
+            ``"lights"`` is the app before #4878; ``"level"`` and
+            ``"lights+level"`` are #4878's other arms and need a balance and the flow.
+        stop_level: The level the rule reads (the app's ``STOP_LEVEL``; #4878 priced 0.3 to 0.7).
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -3735,9 +3728,9 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
-    if stop_rule != "lights" and (flow is None or beta is None):
-        # A level arm with no line to read, or no phase to move, would never stop and look like the app.
-        raise ValueError("stop_rule other than 'lights' needs Autopilot's phase machine and a balance (beta)")
+    if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
+        # An arm that waits on the level, with no line to read or no phase to move, would never stop.
+        raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
     learned_picks = 0
     band_picks = 0
@@ -4596,7 +4589,7 @@ def simulate_voting_iterations(  # noqa: C901
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
                 last_vote_good=is_positive,
-                level_met=stop_rule != "lights" and _line_level_met(details.get("find_line"), beta, stop_level),
+                level_met=stop_rule != "lights" and stop_level_met(details.get("find_line"), beta, stop_level),
             )
             _settle_done_check()
 

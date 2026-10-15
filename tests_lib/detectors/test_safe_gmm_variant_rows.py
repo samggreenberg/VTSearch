@@ -359,7 +359,7 @@ class TestTheDefaultArmDrawsTheLabelsLine:
 
 
 class TestTheStopArms:
-    """#4878: the arms that stop on the labels line's own expected F-beta move the phase, and the app's does not."""
+    """#4878: the stop rules that read the labels line's own expected F-beta move the phase as named."""
 
     @staticmethod
     def _phases(**kw):
@@ -367,11 +367,15 @@ class TestTheStopArms:
         base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
         return [(r["t"], r["phase"], r["line_head_count"]) for r in base], base
 
-    def test_the_app_s_rule_named_is_the_app(self):
+    def test_the_app_s_rule_named_is_the_default(self):
         default, rows_d = self._phases()
-        named, rows_n = self._phases(stop_rule="lights")
+        named, rows_n = self._phases(stop_rule="lights|level")
         assert default == named
         assert [r["threshold"] for r in rows_d] == [r["threshold"] for r in rows_n]
+
+    def test_the_app_s_rule_needs_no_balance_and_is_then_the_lights(self):
+        rows = _run_safe_uncached("max_patch", beta="off", max_steps=8)
+        assert rows, "the Inclusion arm runs under the app's stop rule, reading no level"
 
     def test_a_level_always_met_stops_at_the_first_step_the_class_model_cuts(self):
         phases, _ = self._phases(stop_rule="level", stop_level=0.0)

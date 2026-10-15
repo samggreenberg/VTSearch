@@ -7,7 +7,8 @@
 # STOP4878_ARM runs one of the stop rules the pricing favoured instead, as the A/B the owner asked for:
 # `level` (Done on the level alone), `and` (Done once the lights AND the level hold), `or` (either), each at
 # STOP4878_LEVEL (default 0.5) of the line's expected F-beta (CALIB_STOP_RULE / CALIB_STOP_LEVEL). Unset is the
-# control, today's app, whose run dirs keep the bare name.
+# control, the app as the study ran it (lights; since #4878 the app is lights|level), whose run dirs keep the bare
+# name.
 #
 # The Binary Photo opening, 150 votes, no ceiling (SOTA_PASS=trajectory), on the grid #4743 priced
 # (2026-10-08-b1), 144 classes a seed and a preset. Cells are gzipped.
@@ -66,10 +67,10 @@ launch|pack)
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-3G}"
   export SOTA_BETA="$b" SOTA_DATE="$D-$RUN-b$(btag "$b")" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS=150
   export CALIB_JOB_NAME="$RUN-b$(btag "$b")"
-  if [[ "$RULE" != lights ]]; then
-    export CALIB_STOP_RULE="$RULE" CALIB_STOP_LEVEL="$LEVEL"
-    export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}stop_rule"
-  fi
+  # Named every time: the control is the app as the study ran it (lights), which since #4878 is no longer the
+  # default (lights|level).
+  export CALIB_STOP_RULE="$RULE" CALIB_STOP_LEVEL="$LEVEL"
+  export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}stop_rule"
   if [[ "$1" == pack ]]; then
     export CALIB_PARTITION=gpu CALIB_PACK_GRES="${CALIB_PACK_GRES:-gpu:v100:1}" CALIB_PACK_JOBS="${CALIB_PACK_JOBS:-1}"
     export CALIB_PACK_PAR="${CALIB_PACK_PAR:-24}" CALIB_TIME="${CALIB_TIME:-12:00:00}"

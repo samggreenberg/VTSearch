@@ -24,8 +24,12 @@ from vtscore.training.thresholds import (
     corpus_sigma_floor,
     estimate_positives,
     fit_labels_line,
+    STOP_LEVEL,
+    head_count_serves,
     labels_line_threshold,
     parametric_expected_fbeta,
+    stop_level_met,
+    stop_level_reading,
 )
 from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
@@ -159,6 +163,22 @@ class TestTheLinesOwnReading:
         assert sharp.separation > weak.separation
         assert sharp.expected_fbeta_fresh(1.0) > weak.expected_fbeta_fresh(1.0)
         assert 0.0 < weak.expected_fbeta(1.0) <= 1.0 and 0.0 < sharp.expected_fbeta(1.0) <= 1.0
+
+    def test_the_stop_level_reads_the_line_where_its_class_model_cuts(self):
+        """#4878: Autopilot's Done also reads the line's own expected F-beta against STOP_LEVEL."""
+        line = fit_labels_line(_orderings(n_pos=10), _corpus(), None, {})
+        assert line is not None and not head_count_serves(line.model)
+        reading = stop_level_reading(line, 1.0)
+        assert reading["expected_fbeta"] == pytest.approx(line.expected_fbeta(1.0))
+        assert reading["level"] == STOP_LEVEL == 0.5
+        assert reading["met"] == (reading["expected_fbeta"] >= STOP_LEVEL) == stop_level_met(line, 1.0)
+        assert stop_level_met(line, 1.0, level=0.0) and not stop_level_met(line, 1.0, level=1.01)
+
+    def test_no_line_no_balance_or_a_thin_class_model_reads_nothing(self):
+        thin = fit_labels_line(_orderings(n_pos=2), _corpus(), None, {})
+        assert thin is not None and head_count_serves(thin.model)
+        for line, beta in ((None, 1.0), (thin, 1.0), (fit_labels_line(_orderings(), _corpus(), None, {}), None)):
+            assert stop_level_reading(line, beta, level=0.0) == {"expected_fbeta": None, "level": 0.0, "met": False}
 
     def test_a_corpus_with_nothing_to_keep_reads_zero(self):
         assert corpus_expected_fbeta(np.zeros(5), 0.0, 1.0) == 0.0

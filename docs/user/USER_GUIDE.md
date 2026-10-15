@@ -141,8 +141,9 @@ of them is right or how much of what is there they found, and the note under
 the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
 
 **The spot check.** Autopilot runs it for you, as its **Spot Check.** step
-(see [The phases](#the-phases)): once every quality light is green, just
-before it says **Done!**. There is no button for it; only Autopilot starts a
+(see [The phases](#the-phases)): once every quality light is green, or the
+detector already expects a good result (see below), just before it says
+**Done!**. There is no button for it; only Autopilot starts a
 check. VTSearch cuts the list you haven't voted on into bands from the top
 (the top 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random
 from a band, and shows them one at a time in the centre, where the item
@@ -860,8 +861,14 @@ The phase panel labels them, in order:
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
-5. **Spot Check.** - With every quality light green, Autopilot checks
-   the line before it calls the detector done: a few items drawn at
+5. **Spot Check.** - With every quality light green, or once the
+   detector expects an F-beta of at least 0.5 at your balance (its own
+   estimate of how much of what it returns is right, and how much of what
+   is there it finds), Autopilot checks the line before it calls the
+   detector done. The second way ends a session that is already good
+   without waiting on the last light, and the panel then quotes the
+   F-beta it expects instead of saying every light is green. The check is
+   a few items drawn at
    random from bands of the list, shown in the centre one at a time for
    your Good or Bad (see [How close the line got](#how-close-the-line-got)).
    It measures how much of what the detector returns is right, and its
