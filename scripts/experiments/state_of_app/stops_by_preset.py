@@ -7,7 +7,7 @@ reduces the three to ``stopping_by_preset.csv``, one row per preset and scope (`
 That is what the report's stopping section quotes and what the deck's Past the Exit slide draws
 (``slides/figs/src/make-autopilot-figs.py``).
 
-The columns follow ``docs/plans/stopping-rules-in-eval.md``: the fire rate first, then the stop (the
+The columns follow ``stopping.stopping_table`` (see ``docs/EVAL.md``): the fire rate first, then the stop (the
 Kaplan-Meier median, which carries the sessions that never fired as censored), then the objective at the
 stop against the session's own best. Every column after ``fire_rate`` describes only the sessions that
 fired. Two more come from the per-session rows, because a median of the paired gain hides its spread:
