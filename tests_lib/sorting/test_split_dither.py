@@ -1,27 +1,25 @@
-"""The Train/Calibrate split sizes are dithered, not rounded (issue #3286).
+"""The split before #4864, dithered rather than rounded (issue #3286), kept as an eval arm.
 
-``round`` is round-half-to-even, so at the shipped ``calibration_fraction`` of
-0.5 the odd vote's destination alternated with the vote count - Train at
+``round`` is round-half-to-even, so at a ``calibration_fraction`` of 0.5 the
+odd vote's destination alternated with the vote count - Train at
 ``n % 4 == 1``, Calibrate at ``n % 4 == 3``.  Every run of the eval casts one
 vote per step, so that seesaw was phase-locked across every trajectory and
-survived averaging as a visible 4-vote ripple on the learning curves.
+survived averaging as a visible 4-vote ripple on the learning curves.  #3288
+dithered the sizes; #4864 replaced the dither in the app with each class's
+nearest whole share (``test_split_rounding.py``) and kept the dither as
+``vtscore.eval.arms_split_rounding.split_rounding("dither")``.
 
-These tests pin the three properties the fix rests on: the count is unbiased,
-it is *stable* for a given labelset (the threshold must stay a pure function of
-the votes, or the calibration cache would serve stale orderings), and it is
-*decoherent* between two different labelsets that happen to be the same size,
-which is what makes the ripple average away.
+These tests pin the three properties the dither rests on, so the arm stays the
+rule it was: the count is unbiased, it is *stable* for a given labelset, and it
+is *decoherent* between two different labelsets that happen to be the same
+size.  The fold-orderings contract at the end is the app's.
 """
 
 import numpy as np
 import pytest
 
-from vtscore.training.thresholds import (
-    NO_GOOD_THRESHOLD,
-    _dithered_count,
-    _split_dither_rng,
-    compute_fold_orderings,
-)
+from vtscore.eval.arms_split_rounding import _dithered_count, _split_dither_rng
+from vtscore.training.thresholds import NO_GOOD_THRESHOLD, compute_fold_orderings
 
 
 def _labelset(rng, n, dim=8, n_pos=None):
@@ -123,7 +121,7 @@ class TestFoldOrderingsContract:
         assert first == second
 
     def test_degenerate_fraction_still_returns_the_sentinel(self):
-        """n=4 at fraction 0.99 leaves too few training rows either way it rounds."""
+        """n=4 at fraction 0.99 leaves too few training rows."""
         rng = np.random.RandomState(6)
         X_list, y_list = _labelset(rng, 4, n_pos=2)
         orderings, fallback = compute_fold_orderings(

@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The calibration folds hold out each class's nearest whole share; the split no longer draws a coin**
+  (issue #4864). `_split_train_counts` sizes each class's holdout as `nearest_holdout(count, fraction)`:
+  the share rounded to the nearest whole vote, halves up, kept between 1 and count − 1, with no
+  whole-labelset stage first. The labels line therefore takes over at one count of Goods and stays (9 on a
+  single-vector space, 5 on a patch space, at two folds); before, a coin seeded from the labelset decided it
+  over a band of Goods counts, redrawn at every vote. Every trained line's fold sizes move by up to one vote
+  per class, on both fold paths. A share that would leave fewer than two votes to train still returns the
+  caller's sentinel. The split sizes no longer read the training vectors' bytes, so #4892's reload drift can
+  no longer move them. Removed: `_dithered_count`, `_split_dither_rng` and `_DITHER_SAMPLE_ROWS` from
+  `vtscore.training.thresholds`; the dithered rule lives on as the eval arm
+  `vtscore.eval.arms_split_rounding.split_rounding("dither")`. New: `nearest_holdout`. The fifth argument
+  of `_split_train_counts` is now the labelset `(X, y)`, which the shipped rule does not read.
+
 - **Folds that rank the held-out Goods at or below the Bads read as no separation** (issue #4899).
   `fit_labels_line` still draws the line from the head's in-sample scores of the labels there, as before
   (the owner's ruling), but the folds' own model now rides on the line as `LabelsLine.held_out` (a new

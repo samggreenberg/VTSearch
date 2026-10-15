@@ -12,9 +12,11 @@ and ask whether the sizes' rounding residuals line up across runs.
 
 Rules (each returns how many Goods and Bads train every fold):
 
-* ``dither``  - the app's (:func:`conformal._split_train_counts`), its coin drawn
-  per (run, vote) as the labelset-seeded RNG draws it;
-* ``nearest`` - #4864's arm (:func:`arms_split_rounding._nearest_train_counts`);
+* ``dither``  - the app's when this ran, now the arm
+  (:func:`arms_split_rounding._dithered_counts`), its coin drawn per (run, vote)
+  as the labelset-seeded RNG draws it;
+* ``nearest`` - #4864's arm when this ran, the app's since
+  (:func:`conformal._split_train_counts`);
 * ``round``   - the rule before #3288, ``round()`` on the whole labelset then per
   class: the coherent reference, which the eval's one-vote-per-step clock
   phase-locks across every run.
@@ -50,7 +52,7 @@ common.setup_env()
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from vtscore.eval.arms_split_rounding import _nearest_train_counts  # noqa: E402
+from vtscore.eval.arms_split_rounding import _dithered_counts  # noqa: E402
 from vtscore.training.thresholds import conformal  # noqa: E402
 from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS  # noqa: E402
 
@@ -87,9 +89,9 @@ def train_counts(rule: str, n_good: int, n_bad: int, fraction: float, key: str) 
         # The app seeds the coin from a digest of the labelset, so a draw is fixed for one
         # labelset and fresh at every vote; a per-(run, vote) seed draws the same way.
         rng = np.random.RandomState(zlib.crc32(key.encode()))
-        return conformal._split_train_counts(n, n_good, n_bad, fraction, rng)
+        return _dithered_counts(n, n_good, n_bad, fraction, rng)
     if rule == "nearest":
-        return _nearest_train_counts(n, n_good, n_bad, fraction, None)  # type: ignore[arg-type]
+        return conformal._split_train_counts(n, n_good, n_bad, fraction, None)
     return round_train_counts(n, n_good, n_bad, fraction)
 
 

@@ -4,11 +4,13 @@ Ingest stores every vector L2-normalized, and the pickle loader normalizes what
 it reads again.  Until #4892 the second pass moved the last bit of about a third
 of the vectors, so a dataset reloaded after a restart held other bytes than the
 process that imported it.  Nothing reads a last bit as a quantity, but the
-calibration folds' split sizes are dithered by an RNG seeded from the training
-vectors' bytes (``_split_dither_rng``).  With ten labels at a 0.3 calibration
-share each class trains on 3.5 votes, so the two processes rounded the half
-differently, held out different votes, and the labels' separation (d') read
-2.69 in one and 0.13 in the other on the same labels.
+calibration folds' split sizes were then dithered by an RNG seeded from the
+training vectors' bytes.  With ten labels at a 0.3 calibration share each
+class trained on 3.5 votes, so the two processes rounded the half differently,
+held out different votes, and the labels' separation (d') read 2.69 in one and
+0.13 in the other on the same labels.  Since #4864 the split sizes read no
+bytes (each class holds out its nearest whole share), but the folds' draws and
+the head still do, so the vectors must still come back as they went in.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from vtscore.state.core import DetectorContext
 #: Width of the fixture's vectors, as SigLIP's.
 DIM = 768
 #: The labels: five Goods and five Bads of one class, as the issue's, so the split
-#: is fractional (5 x 7/10 = 3.5 trained per class) and the dither decides it.
+#: is fractional (5 x 7/10 = 3.5 trained per class), which the dither decided then.
 GOOD = range(0, 5)
 BAD = range(5, 10)
 

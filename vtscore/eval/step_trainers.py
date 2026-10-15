@@ -950,8 +950,8 @@ def _gp_train_and_calibrate(
 
     *fold_anchored* is the GP-native threshold (issue #3959).  The calibration
     folds are drawn by the app's own
-    :func:`~vtscore.training.thresholds.compute_fold_orderings` (same dithered
-    split sizes, same stratified draws off ``RandomState(calibration_seed)``),
+    :func:`~vtscore.training.thresholds.compute_fold_orderings` (same split
+    sizes, same stratified draws off ``RandomState(calibration_seed)``),
     with a GP fitted in place of the torch head on each fold.  The fold models
     and their held-out orderings go back in *details* under the keys the app
     path uses, so the shipped fold-anchored estimator

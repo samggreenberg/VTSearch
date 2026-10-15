@@ -19,8 +19,9 @@
 #
 # ARMS.  Today's app, binary SigLIP, coco_better, 144 cells x 5 seeds, 150
 # votes, the user's pool at 1%, beta 1 (as #4583's shipped arm):
-#   dither  - the app (CALIB_SPLIT_ROUNDING unset)
-#   nearest - CALIB_SPLIT_ROUNDING=nearest
+#   dither  - CALIB_SPLIT_ROUNDING=dither (the app when the study ran, e61fedcb7)
+#   nearest - the app since #4864 shipped (CALIB_SPLIT_ROUNDING unset; the arm
+#             CALIB_SPLIT_ROUNDING=nearest when the study ran)
 # REGION.  siglip+dinov3_patch, max_patch, beta 1, #4219's 72 classes x 2
 # seeds, the patch space's shipped 0.5 split (as #4583's region arms):
 #   r_dither, r_nearest.  Its prepare is #4583's (same embedders, same classes).
@@ -99,11 +100,12 @@ require_jobid() {
 }
 
 arm_env() { # sets the knob and the declared divergence for arm $1
+  # Since #4864 shipped, nearest is the app (unset) and the dither is the arm.
   unset CALIB_SPLIT_ROUNDING
   ARM_DIVERGES=""
   case "$1" in
-    dither | r_dither) ;;
-    nearest | r_nearest) export CALIB_SPLIT_ROUNDING=nearest && ARM_DIVERGES=split_rounding ;;
+    dither | r_dither) export CALIB_SPLIT_ROUNDING=dither && ARM_DIVERGES=split_rounding ;;
+    nearest | r_nearest) ;;
     *)
       echo "unknown arm '$1'; expected one of: $ALL_ARMS $REGION_ARMS" >&2
       exit 2
