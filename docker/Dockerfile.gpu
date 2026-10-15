@@ -58,11 +58,15 @@ WORKDIR /app
 
 # ---------- dependency layer ----------
 # requirements/gpu.txt forwards to pyproject.toml via `-e .[dev,agpl]`, so the
-# package source needs to be present when this layer builds. That means
-# any Python source change busts this layer; full source copy happens here.
+# source of both packages has to be present when this layer builds: the
+# editable install maps only the top-level packages it finds at install time.
+# A package that first arrives with the later `COPY . .` imports only from
+# /app, where it sits on sys.path as a plain directory, and not from a script
+# run anywhere else (#4894). Any Python source change busts this layer.
 COPY requirements/ requirements/
 COPY pyproject.toml ./
 COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
 
 # The image includes the two AGPL-3.0 dependencies (ultralytics, PyMuPDF) by
 # default, so the YOLO and PDF/document features work out of the box in a
