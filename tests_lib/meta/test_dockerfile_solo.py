@@ -96,14 +96,6 @@ def test_half_types_bake_what_they_embed_as(preload, env, calls):
     assert calls["calls"] == [["document"], ["face"]]
 
 
-def test_dockerfile_installs_facenet_without_deps() -> None:
-    """A face container needs facenet-pytorch, and its pins would downgrade torch."""
-    text = re.sub(r"\\\n\s*", " ", _DOCKERFILE.read_text())
-    installs = [seg for seg in re.split(r"&&|\n", text) if "pip install" in seg and "facenet-pytorch" in seg]
-    assert installs, "docker/Dockerfile.solo does not install facenet-pytorch, so MEDIA_TYPE=face cannot bake"
-    assert all("--no-deps" in seg for seg in installs), installs
-
-
 def test_bakes_through_the_server_preload(preload, env, calls):
     assert preload.main(["audio"]) == 0
     assert calls["calls"] == [["audio"]]

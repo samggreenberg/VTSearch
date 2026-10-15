@@ -590,7 +590,9 @@ class LabelQuotaSchema(Schema):
     trained head, and a detector made from a typed query gives that query's own
     set instead, from before its first label (#4758); ``goods_owed`` /
     ``bads_owed`` are what the first quota still takes (both 0 once a head is
-    given).
+    given).  Past the quota, a typed-query detector on a single-vector space
+    keeps its query's set until it has ``hold_labels`` labels (#4736), and
+    ``hold_owed`` is then the labels still owed (#4889).
     """
 
     tier = fields.String(
@@ -615,6 +617,21 @@ class LabelQuotaSchema(Schema):
     dry_bad_quota = fields.Integer(
         required=True,
         metadata={"description": "Bads that give a single Good the trained head (#4731)."},
+    )
+    hold_labels = fields.Integer(
+        required=True,
+        metadata={
+            "description": "Labels a typed-query detector on a single-vector space keeps its query's set until (#4736)."
+        },
+    )
+    hold_owed = fields.Integer(
+        required=True,
+        metadata={
+            "description": (
+                "On a ``query`` tier whose labels meet the quota, the labels (Good or Bad) still owed before "
+                "the hold gives the trained head; 0 when the hold is not why (#4889)."
+            )
+        },
     )
 
 

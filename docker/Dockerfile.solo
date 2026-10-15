@@ -94,7 +94,6 @@ RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 # `vts_install_face_deps`: its torch<2.3 / numpy<2 / Pillow<10.3 pins would
 # downgrade the stack, and are empirically unnecessary, so it goes in
 # `--no-deps` on the torch / torchvision / numpy / Pillow already installed.
-# (The other images still lack it: #4886.)
 RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 # ---------- bake the media type's default embedder ----------

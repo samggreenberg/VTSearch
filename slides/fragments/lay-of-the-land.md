@@ -18,9 +18,8 @@
      trained head, in orange. Same outlier cut though, so the same warm
      color. -->
 
-<!-- **c** — Purple is the labels line. Which votes get held out is a random
-     split, so in the striped rows it's the split that decides, and the more
-     purple, the better the odds. -->
+<!-- **c** — Purple is the labels line. It takes over at nine Goods, once the
+     held-out votes hold enough Goods to model, and from there it stays. -->
 
 <!-- **d** — The lighter region is where a text query's own results are still
      what you see, because they beat the head's. The head still trains

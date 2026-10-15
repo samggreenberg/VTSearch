@@ -10,6 +10,45 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The calibration folds hold out each class's nearest whole share; the split no longer draws a coin**
+  (issue #4864). `_split_train_counts` sizes each class's holdout as `nearest_holdout(count, fraction)`:
+  the share rounded to the nearest whole vote, halves up, kept between 1 and count − 1, with no
+  whole-labelset stage first. The labels line therefore takes over at one count of Goods and stays (9 on a
+  single-vector space, 5 on a patch space, at two folds); before, a coin seeded from the labelset decided it
+  over a band of Goods counts, redrawn at every vote. Every trained line's fold sizes move by up to one vote
+  per class, on both fold paths. A share that would leave fewer than two votes to train still returns the
+  caller's sentinel. The split sizes no longer read the training vectors' bytes, so #4892's reload drift can
+  no longer move them. Removed: `_dithered_count`, `_split_dither_rng` and `_DITHER_SAMPLE_ROWS` from
+  `vtscore.training.thresholds`; the dithered rule lives on as the eval arm
+  `vtscore.eval.arms_split_rounding.split_rounding("dither")`. New: `nearest_holdout`. The fifth argument
+  of `_split_train_counts` is now the labelset `(X, y)`, which the shipped rule does not read.
+
+- **Folds that rank the held-out Goods at or below the Bads read as no separation** (issue #4899).
+  `fit_labels_line` still draws the line from the head's in-sample scores of the labels there, as before
+  (the owner's ruling), but the folds' own model now rides on the line as `LabelsLine.held_out` (a new
+  trailing field, default `None`; floored on the corpus, and re-floored by `on_corpus`), and
+  `LabelsLine.separation` reads it: the folds' gap, 0 or below. The in-sample model separates the labels
+  its head trained on by construction, so such labels used to read as separating strongly (2.69 on
+  #4892's), and `weak_check_due` never came due on them. `class_score_model` is unchanged. The eval
+  harness's weak-check arm reads the same `separation`, so it follows. Additive: every existing
+  construction of `LabelsLine` keeps its meaning.
+
+- **`l2_normalize` is idempotent bit for bit** (issue #4892). A vector already unit-norm to within 1e-6
+  is returned with the bytes it came in with (as a new array), and a vector that is not is divided by its
+  norm in `float64` and rounded to `float32` once. A second pass used to divide by the `float32` norm
+  again, which moved the last bit of about a third of a dataset's vectors: the pickle loader normalises
+  what ingest stored, so a reloaded dataset held other bytes than the process that imported it, and the
+  calibration folds' split sizes, dithered by an RNG seeded from those bytes (`_split_dither_rng`), could
+  differ. The same labels then gave another labels line and another separation (2.69 against 0.13 on the
+  issue's labels). Fresh embeddings' last bits move once with the new arithmetic; a stored vector now
+  reloads unchanged.
+
+- **`FaceEmbedder` caches its weights in `MODELS_CACHE_DIR`** (issue #4886). Loading now sets
+  `TORCH_HOME` to the model cache when it is unset, as the EUPE and speech-clipper loaders already
+  did, so FaceNet's VGGFace2 checkpoint lands in `<MODELS_CACHE_DIR>/checkpoints` instead of under
+  `$HOME` (where it used to go unless one of those loaders had run first in the process). An explicit
+  `TORCH_HOME` still wins.
+
 - **`predict_embedders_to_preload` resolves a convert-out half type to its conversion target** (issue
   #4868). A media type with no embedder of its own that declares `converts_to` (`document`) now
   predicts the default embedder of `converts_to[0]` (the image default for `document`), both for
@@ -119,10 +158,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 - **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
   takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
-  the app's own checks: at the first step from N votes past the opening, a prompted check already running counts,
-  and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks with phase `"prompt"`. The pick log gains `check_kind` (`weak`, `done`, `early` or
-  `end` on a check's picks, blank on every other), and `AutopilotFlow.begin_spot_check` takes `"early"`. An
-  experiment arm; the app is unchanged.
+  the app's own checks: at the first step from N votes past the opening, a prompted check already running, or one
+  whose rounds reached vote N, counts, and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks
+  with phase `"prompt"`. The pick log (`PICK_COLUMNS`) gains `check_kind`: `weak`, `done` or `early` on a prompted
+  check's picks, `end` on the end-of-run check's, blank on every other. `AutopilotFlow.begin_spot_check` takes
+  `"early"`, which latches nothing. An experiment arm; the app is unchanged.
+
+- **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
+  `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
+  meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
+  `0` otherwise. `LabelQuota.as_dict()` is unchanged. The CLI's `detector_query` event carries both, and its
+  text names the hold rather than calling a held detector "under the quota".
 
 - **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
   scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the

@@ -461,8 +461,8 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
-| `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643) | `_report_centroid` in `cli.py` |
-| `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758) | `_report_centroid` in `cli.py` |
+| `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643), `hold_labels`, `hold_owed` (`0`) | `_report_centroid` in `cli.py` |
+| `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758), `hold_labels`, `hold_owed` (past the quota, held on the query, #4889) | `_report_centroid` in `cli.py` |
 | `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
 | `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |

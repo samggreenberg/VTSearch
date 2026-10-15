@@ -1,0 +1,43 @@
+{
+  "arms": {
+    "dither": {
+      "load": "720/720 cells with data, 87,252 rows",
+      "n_files": 720,
+      "expected": 720,
+      "complete": true
+    },
+    "nearest": {
+      "load": "720/720 cells with data, 87,635 rows",
+      "n_files": 720,
+      "expected": 720,
+      "complete": true
+    },
+    "r_dither": {
+      "load": "144/144 cells with data, 17,964 rows",
+      "n_files": 144,
+      "expected": 144,
+      "complete": false
+    },
+    "r_nearest": {
+      "load": "144/144 cells with data, 17,894 rows",
+      "n_files": 144,
+      "expected": 144,
+      "complete": false
+    }
+  },
+  "problems": [],
+  "verdict": {
+    "rule": "no rule fires: quality below -0.003 but not by 2 SE",
+    "detail": [
+      "- binary, objective, votes 1-150: \u0394 = -0.0013 \u00b1 0.0007 -> ok",
+      "- binary, objective, after the check: \u0394 = +0.0003 \u00b1 0.0014 -> ok",
+      "- region, objective, votes 1-150: \u0394 = -0.0064 \u00b1 0.0056 -> WORSE than -0.003",
+      "- region, objective, after the check: \u0394 = +0.0049 \u00b1 0.0044 -> ok",
+      "- ripple, binary `nearest` at 0.3/vote: 1.1x noise (p = 0.44)",
+      "- ripple, binary `nearest` at 0.1/vote: 1.8x noise (p = 0.107)",
+      "- ripple, binary `nearest` at 0.4/vote: 1.5x noise (p = 0.19)",
+      "- ripple, region `r_nearest` at 0.5/vote: 2.2x noise (p = 0.143) -> ABOVE 2x",
+      "- ripple, region `r_nearest` at 0.25/vote: 2.0x noise (p = 0.052) -> ABOVE 2x"
+    ]
+  }
+}
