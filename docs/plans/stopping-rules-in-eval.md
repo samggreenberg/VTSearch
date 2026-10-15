@@ -1,11 +1,14 @@
 # Reporting the app's stopping rules in eval studies (issue #3560)
 
-**Status:** the measurement layer has shipped, and the State of the App
-analyzer reports it. The first reading of a real review is done: the 2026-10-08
-Binary Photo review's [stopping section](../experiments/2026-10-08-state-of-the-app-binary-photo/REPORT.md)
-(#4611). The stop fires in about 80% of sessions, around click 80 to 90, and comes early:
-Fβ rises 0.05 to 0.08 after it. What is owed is adopting the convention, and the
-"are the rules any good" questions.
+**Status: done (2026-10-14).** The measurement layer has shipped, the State of
+the App analyzer reports it, the convention is adopted (the `grid-experiments`
+skill's mandatory list and the `state-of-the-app` skill's standing section), and
+the "are the rules any good" questions are answered in
+[the stopping-rules reading](../experiments/2026-10-14-stopping-rules-3560/REPORT.md).
+On today's app Done fires in 87-89% of sessions, at click 71-87, mid-climb:
+F-beta rises +0.06 to +0.08 after it at about the rate it rose before. Smart
+times it, and Smart reads neither the objective nor beta. The open question is a
+stop rule in the objective's units, #4878.
 
 ## Background
 
@@ -72,7 +75,10 @@ issue. No study gets slower for reporting a stopping point.
 
 <!-- item-sep -->
 
-- **Adopt the reporting convention.** Once one study has been through it and the
+- **Adopt the reporting convention.** **Done 2026-10-14:** the stopping block is
+  in the `grid-experiments` skill's mandatory list for every study whose runs
+  walk Autopilot, and a standing section of the State of the App review; the
+  stage table (where the clicks before the stop went) joined it. As first written: once one study has been through it and the
   table has survived a reading, fold it into the mandatory set: the
   `grid-experiments` skill already requires the quality-over-clicks pair and the
   interactive viewer of every simulated-user study, and the stopping block
@@ -102,7 +108,23 @@ issue. No study gets slower for reporting a stopping point.
 
 <!-- item-sep -->
 
-- **Then ask whether the rules are any good.** The measurement above is
+- **Then ask whether the rules are any good.** **Answered 2026-10-14**
+  ([report](../experiments/2026-10-14-stopping-rules-3560/REPORT.md)), on 2,160
+  sessions of today's app:
+  - *Near the run's own best?* No: Done fires mid-climb, the median session
+    0.08-0.10 below its best and 21-39 clicks before it.
+  - *Which light binds, and is it the right one?* Smart, in Hard, at every
+    preset. Stable is mostly still warming up, and Span is a fixed ~19-click
+    walk in New, not a gate. The first reading's "Span is binding" counted
+    every held click; the tooling now reads each light in its own stretch.
+    Smart is not the right one by the objective: it prices a cut no user sees.
+  - *Does it flap because of the rule or the detector?* Span never flaps,
+    Stable barely (0.3 a session at beta 4), and Smart about once a session.
+    Smart's breaks of Done carry no news about the F-beta to come, so for the
+    user they are noise.
+
+  The follow-up, a stop in the objective's units, is #4878. What follows is
+  the question list as first written. The measurement above is
   descriptive: it says where the app's rules fire, not whether firing there was
   right. The questions it makes askable, in the order they get cheaper to
   answer:

@@ -951,20 +951,34 @@ def stopping_md(stops: pd.DataFrame, mg: pd.DataFrame) -> list[str]:
         stopping.stopping_table(by_arm, metric=metric),
         "",
     ]
+    by_band = stopping.summarise(stops, by=("arm", "band"), metrics=STOP_METRICS)
+    out += ["Per band:", "", stopping.stopping_table(by_band, metric=metric), ""]
+    out += [
+        "### Where the clicks before the stop went",
+        "",
+        "Each stretch of Autopilot's walk to Done waits on something different: the opening on its targets, Hard "
+        "on Smart and Stable, New on Span (it is the atlas walk that fills it), and the two checks on their band "
+        "walks, a mid-session one on a weak separation and the one before Done. Means over the sessions that "
+        "fired, so the stretches add up to the stop; the last columns are the objective where Hard last ended "
+        "and at the stop, paired within session (`stopping.stage_table`).",
+        "",
+        stopping.stage_table(by_arm, metric=metric),
+        "",
+        stopping.stage_table(by_band, metric=metric),
+        "",
+    ]
     note = stopping.binding_note(by_arm)
     if note:
-        out += [note, "", "Per band:", ""]
-    else:
-        out += ["Per band:", ""]
-    out += [stopping.stopping_table(stopping.summarise(stops, by=("arm", "band"), metrics=STOP_METRICS), metric=metric)]
+        out += [note, ""]
     out += [
-        "",
         "### How close each gate came, over the clicks it held",
         "",
         "The median margin to green over each run's held clicks (before its stop, or all of them when it never "
-        "stopped): positive is satisfied with that much room, negative is short by that much. In brackets, the "
-        "share of held clicks the gate was green at: a margin just under zero at about half is a rule flapping, "
-        "at 0% a wall. Smart's two gates are an either-or.",
+        "stopped) in the stretch that waits on the gate: Smart's and Stable's over Hard, Span's over New, where "
+        "it is the walk still to go. Positive is satisfied with that much room, negative is short by that much. In "
+        "brackets, the share of those clicks the gate was green at, pooled over runs: a margin just under zero at "
+        "about half is a rule flapping, at 0% a wall. Smart's two gates are an either-or. Stable's warm-up is "
+        "Stable not measuring yet (under five labels of a class, or five retrains).",
         "",
         stopping.margin_table(stopping.summarise_margins(mg, by=("arm",))),
         "",

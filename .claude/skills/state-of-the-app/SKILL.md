@@ -170,12 +170,17 @@ same edit.
     the check *should* certify is #4358; report whatever that ruling becomes.
   - **Ceiling:** the full-label model's AP, and its line, F1 and oracle recall at P.
   - **Click 0:** the text sort's AP and its top K at P.
-  - **Where the app said stop (#3560):** `summary.md`'s stopping block, with
-    `stops.csv` / `margins.csv`: the share of sessions the stopping rules ever
-    fired in, the click they fired at, the objective there against the budget
-    and the run's own best, which light held the rest, and how close each gate
-    came. Not yet a report section: the first review to read it decides
-    whether it becomes one (`docs/plans/stopping-rules-in-eval.md`).
+  - **Where the app said stop (#3560), a standing section:** `summary.md`'s
+    stopping block, with `stops.csv` / `margins.csv`. Report the share of
+    sessions the stopping rules ever fired in, the click they fired at, the
+    objective there against the budget and against the run's own best, where
+    the clicks before the stop went (`stage_table`), which light each stretch
+    waited on, and how close each gate came. Read Smart and Stable over Hard
+    only, and Span over New only: New is the walk that fills Span, so Span is
+    never "the binding light" (the 2026-10-08 review said it was, from a count
+    over every held click). `stops_by_preset.py` gives the per-preset table a
+    report commits. `stop_rules_3560.py` has the deeper read: the objective
+    around the stop, and whether Smart's lapses carry news.
 - **The opening is the text sort (#4605).** The app stays on the text sort
   through Autopilot's opening (Good, Bad, More) and shows a detector only from
   the Hard phase on (vote 8 since #4742), and on a single-vector space (the
