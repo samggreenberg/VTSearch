@@ -253,6 +253,16 @@ def rename_detector(body: dict, name: str):
     if new_path.exists() and new_path != old_path:
         abort(409, message=f"A detector named '{new_name}' already exists")
 
+    from vtscore.detectors.labelset_ops import follow_rename_with_labelset_file
+    from vtscore.detectors.registry import find_by_name, rename_detector as _rename_in_registry
+    from vtscore.state.core import get_detector_context
+
+    reg_entry = find_by_name(name)
+    if reg_entry and new_name != name:
+        # Before the write below, which schedules a push to the new name's
+        # path: a push landing first would leave the old file behind.
+        follow_rename_with_labelset_file(reg_entry["id"], old_name=name, new_name=new_name)
+
     data["name"] = new_name
     _write_detector(new_path, data)
     if new_path != old_path:
@@ -265,24 +275,17 @@ def rename_detector(body: dict, name: str):
         old_path.unlink(missing_ok=True)
 
     # Update the detector registry entry that references this detector
-    from vtscore.detectors.labelset_rename import detect_pending_labelset_move
-    from vtscore.detectors.registry import find_by_name, rename_detector as _rename_in_registry
-    from vtscore.state.core import get_detector_context
-
-    reg_entry = find_by_name(name)
-    pending_move: dict[str, str] | None = None
     if reg_entry:
         registry_id = reg_entry["id"]
         ctx = get_detector_context(registry_id)
         if ctx is not None:
-            pending_move = detect_pending_labelset_move(
-                ctx.labelset_source,
-                detector_id=registry_id,
-                old_name=name,
-                new_name=new_name,
-            )
             ctx.name = new_name
         _rename_in_registry(registry_id, new_name)
+        # The write above scheduled its push before the registry knew the new
+        # name, so it could not see an explicit binding; schedule it again now.
+        from vtscore.labels.sync import schedule_labelset_push
+
+        schedule_labelset_push(new_name, detector_id=registry_id)
 
     # Rename AutoFind entry if present.
     try:
@@ -299,7 +302,6 @@ def rename_detector(body: dict, name: str):
         "success": True,
         "old_name": name,
         "new_name": new_name,
-        "pending_labelset_move": pending_move,
     }
 
 
@@ -422,8 +424,9 @@ def combine_detectors(body: dict):  # noqa: C901
     supported policy today), any element key that appears with disagreeing
     labels across the sources is removed entirely.
 
-    The combined detector is *purely a labelset entry*; no
-    labelset-source is inherited from the sources, and the threshold/MLP
+    The combined detector is *purely a labelset entry*; no source's
+    labelset-source binding carries over (it follows the deployment default,
+    if any), and the threshold/MLP
     are computed later when the detector is activated against a dataset.
     """
     names = body["names"]

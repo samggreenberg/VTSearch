@@ -397,6 +397,27 @@ class ServerSettings(BaseModel):
     # just as with the per-user key.
     default_settings_source: dict[str, Any] | None = None
 
+    # Deployment-wide labelset source (#4913): every detector on this instance
+    # keeps its labels synced to it, so the copy outside the server stays
+    # current as the user labels rather than only when they remember to export.
+    # Same ``{"source_name": ..., "field_values": ...}`` shape as a detector's
+    # own binding. Each *non-empty* value here is fixed by the admin - users
+    # never see or override it - and the New Detector form asks for the rest
+    # (the source's fields left out here), storing them on the detector's
+    # registry entry. A detector with an explicit binding of its own keeps it
+    # (``{"source_name": "none"}`` opts out); the precedence (detector-explicit
+    # > deployment-default > none) is resolved in one place,
+    # :func:`vtscore.labels.binding.resolve_labelset_source`. ``None`` (the
+    # default) means detectors sync only where a binding was set by hand.
+    default_labelset_source: dict[str, Any] | None = None
+
+    # Shortest gap, in seconds, between two pushes of one detector's labels to
+    # its labelset source. A push never overlaps the previous one for the same
+    # detector; changes made meanwhile ride the next push, so a burst of votes
+    # costs one write per window however slow the target is. ``0`` pushes as
+    # soon as the previous push lands (after a 200 ms debounce).
+    labelset_source_push_interval_seconds: Annotated[float, _clamp(0.0, 86400.0)] = 60.0
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""

@@ -7,7 +7,6 @@ import { Media } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { VtDialogService } from '../../services/dialog.service';
 
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
@@ -46,7 +45,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   voteState = inject(VoteStateService);
   labelsetState = inject(LabelsetStateService);
   private settingsState = inject(SettingsStateService);
-  private dialog = inject(VtDialogService);
 
   readonly medias = input<Media[]>([]);
   readonly trainMode = input<TrainModeContext | null>(null);
@@ -243,16 +241,12 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     const trainMode = this.trainMode();
     if (!trainMode?.model?.registry_id) return;
     const registryId = trainMode.model.registry_id;
+    // A ``{detector_name}`` auto-export file follows the rename server-side.
     this.detectorsRegistryApi.renameInRegistry(registryId, newName).subscribe({
-      next: response => {
+      next: () => {
         if (trainMode.model) {
           trainMode.model.name = newName;
         }
-        this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
-          this.dialog,
-          registryId,
-          response.pending_labelset_move,
-        );
       },
     });
   }

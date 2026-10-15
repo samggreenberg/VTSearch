@@ -626,7 +626,9 @@ working.
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
   "browse_signpost_vocab": {},
-  "default_settings_source": null
+  "default_settings_source": null,
+  "default_labelset_source": null,
+  "labelset_source_push_interval_seconds": 60
 }
 ```
 
@@ -717,6 +719,28 @@ working.
   out. Template the `field_values` (e.g.
   `{"filepath": "data/user-settings/{username}.json"}`) to personalise it per
   user.
+- `default_labelset_source`: auto-export every detector's labels (#4913). Same
+  `{"source_name": ..., "field_values": ...}` shape as a detector's own
+  labelset-source binding; every detector without one keeps its whole
+  labelset synced to this source as it is labelled, and pulls it back (merging)
+  when it loads. That makes the source the copy that survives losing this
+  server: re-create a detector under the same name and loading it restores its
+  labels. Each **non-empty** value in `field_values` is fixed - users never see
+  or change it - and the New Detector form asks for the source's other fields,
+  storing them on the detector (the Dashboard's **Auto-export…** action edits
+  them later, and flags a detector still missing one). For example, to keep
+  one JSON file per detector on a mounted backup volume, with nothing for
+  users to fill in:
+  `{"source_name": "server_json_file", "field_values": {"filepath": "/mnt/backup/vtsearch/{detector_name}.labels.json"}}`.
+  In a multi-user deployment a `server_path` value is confined to the
+  detector creator's data directory, like every server path a user supplies.
+  `null` (the default) auto-exports nothing.
+- `labelset_source_push_interval_seconds`: the shortest gap between two pushes
+  of one detector's labels to its labelset source (default 60). Pushes for one
+  detector never overlap, and changes made meanwhile ride the next push, so a
+  slow target or a burst of votes costs one write per window; pending pushes
+  are flushed on a normal shutdown. `0` pushes as soon as the previous push
+  lands. Clamped to `[0, 86400]`.
 
 #### Per-user tier — `user_settings.json`
 

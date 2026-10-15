@@ -295,6 +295,7 @@
                 (unload)="unloadDetector(detector)"
                 (browse)="browseDetector(detector)"
                 (stats)="showDetectorStats(detector)"
+                (autoExport)="modals.openAutoExport(detector.id, detector.name)"
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
                 (setAutofind)="setDetectorAutofind(detector, $event)"
@@ -521,5 +522,14 @@
     [detectorId]="modals.detectorStats.detectorId"
     [detectorName]="modals.detectorStats.detectorName"
     (closed)="modals.closeDetectorStats()"
+  />
+}
+
+@if (modals.autoExport.open) {
+  <vt-auto-export-modal
+    [detectorId]="modals.autoExport.detectorId"
+    [detectorName]="modals.autoExport.detectorName"
+    (closed)="modals.closeAutoExport()"
+    (saved)="onAutoExportSaved()"
   />
 }

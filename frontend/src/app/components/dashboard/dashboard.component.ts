@@ -53,6 +53,7 @@ import { ExportModalComponent } from '../modals/export-modal/export-modal.compon
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
+import { AutoExportModalComponent } from '../modals/auto-export-modal/auto-export-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { topOpenModal } from '../modal/modal.component';
@@ -93,6 +94,7 @@ type DashboardHintId = Extract<
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
+    AutoExportModalComponent,
     IconComponent,
     ToastyHintComponent,
     UsageBarComponent,
@@ -846,15 +848,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Model actions ---
 
   renameDetector(model: DetectorRegistryEntry, newName: string): void {
+    // A ``{detector_name}`` auto-export file follows the rename server-side.
     this.detectorsRegistryApi.renameInRegistry(model.id, newName).subscribe({
-      next: response => {
-        this.datasetState.refresh();
-        this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
-          this.dialog,
-          model.id,
-          response.pending_labelset_move,
-        );
-      },
+      next: () => this.datasetState.refresh(),
     });
   }
 
@@ -1048,6 +1044,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onAddLabelsImported(): void {
+    this.datasetState.refresh();
+  }
+
+  /** The Auto-export dialog saved a detector's values: close it and re-list,
+   *  so the row's "not set up" warning (and any labels the save restored)
+   *  catches up. */
+  onAutoExportSaved(): void {
+    this.modals.closeAutoExport();
     this.datasetState.refresh();
   }
 

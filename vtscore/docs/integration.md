@@ -388,8 +388,10 @@ instead of on disk - you have two options:
 1. **Implement a `LabelsetSource` plugin.** Sources sync detector
    labels bidirectionally with an external store (see
    [extending/labelset-sources.md](extending/labelset-sources.md)).
-   The on-disk JSON still exists as a cache, but your store is the
-   source of truth.
+   The on-disk JSON stays the detector's working record; your store is
+   kept current with it, and merged back in when the detector loads, so
+   it is the copy that survives losing the on-disk one. A deployment can
+   link every detector to one store (`CoreConfig.default_labelset_source`).
 2. **Replace `vtscore.detectors.store` calls.** `save_detector` /
    `load_detector` are thin JSON read/write functions; calling your DB
    equivalent in their place is straightforward. This is more invasive

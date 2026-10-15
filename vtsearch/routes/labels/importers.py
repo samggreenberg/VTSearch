@@ -38,8 +38,8 @@ If ``apply_label`` raises mid-loop, that entry is recorded in the
 entries.  This addresses logical-bug-audit H31: a single bad entry no
 longer aborts the whole import and silently strands the already-applied
 labels behind a 500 response.  The handler still runs the downstream
-sync block (``sync_labels_to_loaded_detector``,
-``sync_to_labelset_source``, ``record_detector_import``) whenever
+sync block (``sync_labels_to_loaded_detector``, whose write also schedules
+the labelset-source push, and ``record_detector_import``) whenever
 ``applied > 0`` so the in-memory detector, the labelset source, and the
 achievement counters all reflect what actually landed.
 
@@ -149,12 +149,10 @@ def _sync_after_import() -> None:
     from both passes counts the import once.
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-    from vtscore.labels.sync import sync_to_labelset_source
     from vtsearch.achievements import record_detector_import
     from vtscore.state.core import get_active_detector_context
 
     sync_labels_to_loaded_detector()
-    sync_to_labelset_source()
     record_detector_import(get_active_detector_context().detector_id)
 
 
@@ -359,10 +357,6 @@ def ingest_missing(body: dict):
         from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
-
-        from vtscore.labels.sync import sync_to_labelset_source
-
-        sync_to_labelset_source()
 
     message = f"Ingested {ingested} media(s), applied {applied} label(s)."
     if failed:

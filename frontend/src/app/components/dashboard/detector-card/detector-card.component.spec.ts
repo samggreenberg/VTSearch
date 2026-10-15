@@ -174,6 +174,65 @@ describe('DetectorCardComponent', () => {
     expect(component.setAutofind.emit).toHaveBeenCalledWith(true);
   });
 
+  describe('auto-export (#4913)', () => {
+    const status = {
+      source_name: 'server_json_file',
+      display_name: 'Server JSON File',
+      inherited: true,
+      missing_fields: [] as string[],
+    };
+
+    async function openMenu(): Promise<HTMLElement[]> {
+      const el = fixture.nativeElement as HTMLElement;
+      (el.querySelector('.overflow-btn') as HTMLElement).click();
+      await settleZoneless(fixture);
+      return Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
+    }
+
+    it('offers no Auto-export… for a detector that syncs nowhere', async () => {
+      const items = await openMenu();
+      expect(items.some((b) => b.textContent?.includes('Auto-export'))).toBe(false);
+    });
+
+    it('offers Auto-export… to the creator and emits it', async () => {
+      vi.spyOn(component.autoExport, 'emit');
+      fixture.componentRef.setInput('detector', { ...mockDetector, created_by: 'sam', labelset_source_status: status });
+      fixture.componentRef.setInput('currentUser', 'sam');
+      await settleZoneless(fixture);
+      const item = (await openMenu()).find((b) => b.textContent?.includes('Auto-export'));
+      expect(item).toBeTruthy();
+      item!.click();
+      expect(component.autoExport.emit).toHaveBeenCalled();
+    });
+
+    it('lists it disabled for someone who did not create the detector', () => {
+      fixture.componentRef.setInput('detector', { ...mockDetector, created_by: 'alice', labelset_source_status: status });
+      fixture.componentRef.setInput('currentUser', 'sam');
+      component.onContextMenu(new MouseEvent('contextmenu'));
+      const item = component.contextMenuItems.find((i) => i.id === 'auto-export');
+      expect(item?.disabled).toBe(true);
+    });
+
+    it('warns under the name while a value is missing, and the warning opens the dialog', async () => {
+      vi.spyOn(component.autoExport, 'emit');
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.autoexport-warning')).toBeFalsy();
+
+      fixture.componentRef.setInput('detector', {
+        ...mockDetector,
+        created_by: 'sam',
+        labelset_source_status: { ...status, missing_fields: ['filepath'] },
+      });
+      fixture.componentRef.setInput('currentUser', 'sam');
+      await settleZoneless(fixture);
+      const warning = el.querySelector('.autoexport-warning') as HTMLButtonElement;
+      expect(warning.textContent).toContain('Auto-export not set up');
+      expect(warning.title).toContain('filepath');
+      warning.click();
+      expect(component.autoExport.emit).toHaveBeenCalled();
+    });
+  });
+
   describe('frozen (AutoFind) detector', () => {
     beforeEach(async () => {
       fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true });

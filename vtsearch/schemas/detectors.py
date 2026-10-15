@@ -74,6 +74,7 @@ from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
+from vtsearch.schemas.settings_io import LabelsetSourceStatusSchema
 from vtsearch.schemas.sorting import BalanceStateSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
@@ -206,28 +207,12 @@ class DetectorRenameRequestSchema(Schema):
     new_name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
 
 
-class PendingLabelsetMoveSchema(Schema):
-    """Labelset file paths that were orphaned by a detector rename.
-
-    Populated on a rename response when the detector has a configured
-    labelset source whose filepath template (``{detector_name}`` /
-    ``{detector_id}``) resolves to a different on-disk location after
-    the rename, and the OLD file still exists.  The frontend uses
-    these paths to prompt the user to move the file and to invoke
-    :class:`DetectorLabelsetMoveRequestSchema` on confirmation.
-    """
-
-    old_path = fields.String(required=True)
-    new_path = fields.String(required=True)
-
-
 class DetectorRenameResponseSchema(Schema):
     """Response for ``PUT /api/detectors/<name>/rename``."""
 
     success = fields.Boolean(required=True)
     old_name = fields.String(required=True)
     new_name = fields.String(required=True)
-    pending_labelset_move = fields.Nested(PendingLabelsetMoveSchema, allow_none=True, load_default=None)
 
 
 class DetectorExamplesRequestSchema(Schema):
@@ -318,6 +303,11 @@ class DetectorRegistryEntrySchema(Schema):
     # tab shows beside it: present on AutoFind detectors only, ``null`` for
     # one never tested.
     test_verdict = fields.Nested(LineTestVerdictSchema, allow_none=True)
+    # Where the detector's labels sync to (#4913): its own labelset-source
+    # binding or the deployment default it inherits, ``null`` when it syncs
+    # nowhere.  The raw binding on the registry entry (``labelset_source``,
+    # with its field values) is deliberately not dumped.
+    labelset_source_status = fields.Nested(LabelsetSourceStatusSchema, allow_none=True)
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -428,23 +418,6 @@ class DetectorRegistryRenameResponseSchema(Schema):
 
     ok = fields.Boolean(required=True)
     name = fields.String(required=True)
-    pending_labelset_move = fields.Nested(PendingLabelsetMoveSchema, allow_none=True, load_default=None)
-
-
-class DetectorLabelsetMoveRequestSchema(Schema):
-    """Body for ``POST /api/detectors/registry/<id>/labelset-source/move-file``."""
-
-    old_path = fields.String(required=True, validate=validate.Length(min=1))
-    new_path = fields.String(required=True, validate=validate.Length(min=1))
-
-
-class DetectorLabelsetMoveResponseSchema(Schema):
-    """Response for ``POST /api/detectors/registry/<id>/labelset-source/move-file``."""
-
-    ok = fields.Boolean(required=True)
-    moved = fields.Boolean(required=True)
-    old_path = fields.String(required=True)
-    new_path = fields.String(required=True)
 
 
 class DetectorRegistryAutofindRequestSchema(Schema):
@@ -1189,8 +1162,6 @@ __all__ = [
     "DetectorExamplesRequestSchema",
     "DetectorExamplesResponseSchema",
     "DetectorLabelsDetailResponseSchema",
-    "DetectorLabelsetMoveRequestSchema",
-    "DetectorLabelsetMoveResponseSchema",
     "DetectorLabelVoteRequestSchema",
     "DetectorLabelVoteResponseSchema",
     "DetectorRegistryAutofindRequestSchema",
@@ -1224,5 +1195,4 @@ __all__ = [
     "FindRequestSchema",
     "FindResponseSchema",
     "FindStatsResponseSchema",
-    "PendingLabelsetMoveSchema",
 ]

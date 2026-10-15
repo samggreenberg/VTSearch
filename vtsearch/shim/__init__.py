@@ -223,6 +223,8 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         projection_min_dist=_settings.get_projection_min_dist(),
         signpost_captioner=dict(_settings.get_browse_signpost_captioner()),
         signpost_vocab={mt: list(terms) for mt, terms in _settings.get_browse_signpost_vocab().items()},
+        default_labelset_source=_settings.get_default_labelset_source(),
+        labelset_source_push_interval=_settings.get_labelset_source_push_interval_seconds(),
     )
 
 

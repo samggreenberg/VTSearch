@@ -36,6 +36,15 @@ not list every commit. Use `git log` for the full history.
   Priced on 2,160 simulated sessions run to 400 votes: the cap ends 6–7% of sessions early, all but a few on
   small objects, at a median F-beta of 0.00–0.04, which 200 more votes would have taken to 0.07–0.14.
 
+- **A detector's labelset-source link is persisted, and pushes the whole labelset** (issue #4913). The link
+  set with `PUT /api/detectors/<id>/labelset-source` lived only on the loaded detector and was lost on
+  unload or restart; it is now stored on the registry entry, works for an unloaded detector, takes the id
+  or the name, and is creator-only. A push now sends the detector file's labels from every dataset (it
+  sent only the active dataset's votes, which overwrote the rest), and a sync merges into the detector
+  instead of only voting what the active dataset holds. Renaming a detector moves a
+  `{detector_name}`-templated labelset file itself: the *Move existing labelset file?* prompt,
+  `pending_labelset_move`, and `POST /api/detectors/registry/<id>/labelset-source/move-file` are gone.
+
 - **Autopilot also says Done once the detector expects a good result** (issue #4878). Done came only
   when the Smart, Stable and Span lights were all green. It now also comes once the detector's labels
   line expects an F-beta of at least 0.5 at your balance, its own estimate of how good the set it keeps
@@ -280,6 +289,17 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
+  `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
+  its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
+  export. Pushes for one detector never overlap and start at least `labelset_source_push_interval_seconds`
+  apart (default 60), so a burst of votes is one write; pending pushes are flushed on shutdown. Loading a
+  detector merges back what its source holds, so a detector whose server lost its data is restored by
+  re-creating it under the same name. Values the admin sets are fixed; the **New Detector** form asks for
+  the source's other fields, and a detector's Dashboard ⋯ menu gains **Auto-export…** to fill them in later
+  (its row warns when one is missing). `GET /api/labelset-sources/default` serves the form, and the
+  registry listing carries each detector's `labelset_source_status`.
 
 - **Audio-only and video-only Docker images** (issue #4868). `docker/Dockerfile.solo` builds the full CPU
   image locked to one media type, named by its required `MEDIA_TYPE` build arg, and bakes that type's
