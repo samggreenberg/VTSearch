@@ -21,7 +21,10 @@ push runs, so it is always the newest state.  Pushes are paced per detector:
   so a slow target or a burst of votes costs one write per window;
 * never sooner than ``_DEBOUNCE_DELAY`` after the change that scheduled it,
   so a burst inside that window is one push;
-* a push whose payload matches what the source is known to hold is skipped.
+* a push whose payload matches what the source is known to hold is skipped;
+* a detector's first push in a process pulls first (see below), so a push
+  never overwrites labels only the source held - the backup of a detector this
+  server lost - and a source that cannot be read is not pushed to at all.
 
 A failed push is logged and leaves the source as it was; the next change
 schedules another.  :func:`flush_pending_label_syncs` lands every pending push
@@ -317,8 +320,24 @@ def _push_detector(name: str) -> None:
         )
         return
     source = resolved.source
+    if source is None:
+        return
+    with _slots_cv:
+        seen = name in _last_synced
+    if not seen:
+        # This process has not read the source yet, so it may hold labels the
+        # file lacks - a backup of a detector this server lost and the user
+        # just re-created.  Pushing blind would overwrite them; merge first
+        # (the file wins a disagreement), and if the source cannot be read,
+        # do not risk overwriting what it holds.
+        remote, _changes = _pull(name, detector_id, prefer="local")
+        if remote is None:
+            logger.warning(
+                "Not syncing detector %r to %s: its current contents could not be read", name, resolved.source_name
+            )
+            return
     data = _read_detector(_detector_path(name))
-    if source is None or data is None:
+    if data is None:
         return
     labelset = _push_payload(data, detector_id)
     digest = _digest(labelset)

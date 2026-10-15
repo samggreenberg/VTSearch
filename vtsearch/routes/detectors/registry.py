@@ -1044,6 +1044,11 @@ def rename_registered_detector(body: dict, detector_id: str):
             ctx.name = new_name
 
     rename_detector(detector_id, new_name)
+    # The write above scheduled its push before the registry knew the new
+    # name, so it could not see an explicit binding; schedule it again now.
+    from vtscore.labels.sync import schedule_labelset_push
+
+    schedule_labelset_push(new_name, detector_id=detector_id)
     return {"ok": True, "name": new_name}
 
 

@@ -281,6 +281,11 @@ def rename_detector(body: dict, name: str):
         if ctx is not None:
             ctx.name = new_name
         _rename_in_registry(registry_id, new_name)
+        # The write above scheduled its push before the registry knew the new
+        # name, so it could not see an explicit binding; schedule it again now.
+        from vtscore.labels.sync import schedule_labelset_push
+
+        schedule_labelset_push(new_name, detector_id=registry_id)
 
     # Rename AutoFind entry if present.
     try:
