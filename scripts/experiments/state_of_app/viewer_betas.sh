@@ -21,8 +21,9 @@
 #                point stays either way, so the page can show where the app said
 #                stop as one dot a run (#4939).
 #
-# Run it on a compute node (srun -p cpu --mem=16G -c 2): it reads every cell of
-# three runs. Run analyze.sh on the -b1 run first, for its text baseline.
+# Run it on a compute node (srun -p cpu --mem=48G -c 2): it reads every cell of
+# three runs, and 24 seeds of them peak at 36 GB over 25 min (#4944). Run
+# analyze.sh on the -b1 run first, for its text baseline.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
