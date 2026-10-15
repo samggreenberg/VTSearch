@@ -283,6 +283,12 @@ def probe(C: Any) -> list[str]:
             rows.append(("band_share", str(C.BAND_SHARE), "<unset> = the app's own picks, no band picks"))
         else:
             refuse("band_share", "CALIB_BAND_SHARE", "must be a positive integer, one pick in N")
+    # #4664's early check: an arm the app does not take.
+    if C.EARLY_CHECK is not None:
+        if isinstance(C.EARLY_CHECK, int) and C.EARLY_CHECK >= 1:
+            rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
+        else:
+            refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.

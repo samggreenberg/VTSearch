@@ -542,7 +542,7 @@ class AutopilotFlow:
         self.more_done = False
         #: The spot check running inside the run, as the app's ``spotCheck``:
         #: ``"weak"`` for weak separation (#4496), ``"done"`` for the check
-        #: before Done, or ``None``.  The caller drives it
+        #: before Done, ``"early"`` for the harness's #4664 arm, or ``None``.  The caller drives it
         #: (:meth:`begin_spot_check` / :meth:`end_spot_check`), since the
         #: check's picks are the caller's.
         self.spot_check: str | None = None
@@ -751,12 +751,13 @@ class AutopilotFlow:
     def begin_spot_check(self, kind: str) -> Phase:
         """A spot check starts inside the run (the app's ``beginSpotCheck``): the phase is ``spot`` until it ends.
 
-        *kind* is ``"weak"`` (weak separation, #4496) or ``"done"`` (the check
-        before Done).  Before any :meth:`update` there is nothing to derive
-        from, and the phase is left as it is.
+        *kind* is ``"weak"`` (weak separation, #4496), ``"done"`` (the check
+        before Done) or ``"early"`` (the eval harness's check at a fixed vote
+        count, #4664, which the app does not run).  Before any :meth:`update`
+        there is nothing to derive from, and the phase is left as it is.
         """
-        if kind not in ("weak", "done"):
-            raise ValueError(f"kind must be 'weak' or 'done', got {kind!r}")
+        if kind not in ("weak", "done", "early"):
+            raise ValueError(f"kind must be 'weak', 'done' or 'early', got {kind!r}")
         if self.spot_check is not None:
             return self.phase
         self.spot_check = kind

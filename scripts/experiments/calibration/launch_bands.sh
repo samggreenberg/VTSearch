@@ -327,6 +327,8 @@ pack)
   # full and another partition has idle nodes (#4490 ran on V100 nodes: CALIB_PARTITION=gpu
   # CALIB_PACK_GRES=gpu:v100:1). CALIB_PACK_JOBS jobs, each running CALIB_PACK_PAR cells at a time. The GPU is
   # hidden and each cell held to $CPUS threads, so a cell computes what an array task on the cpu partition would.
+  # CALIB_PACK_MEM (e.g. 12G) sets the job's memory outright, where cells peak well under CALIB_MEM each (#4664:
+  # 200-click Binary cells at ~0.9 GB); unset, it is CALIB_PACK_PAR x CALIB_MEM.
   IDXS="${2:?usage: launch_bands.sh pack <comma-separated indices>}"
   PJOBS="${CALIB_PACK_JOBS:-1}"
   PAR="${CALIB_PACK_PAR:-16}"
@@ -342,7 +344,7 @@ pack)
     [[ ${#SHARD[@]} -eq 0 ]] && continue
     echo "pack $j: ${#SHARD[@]} cells, $PAR at a time"
     submit "pack$j" --job-name="$JOB_NAME-pack$j" \
-      --mem="$((PAR * MEM_GB))G" --cpus-per-task="$((PAR * CPUS))" --time="$TIME" \
+      --mem="${CALIB_PACK_MEM:-$((PAR * MEM_GB))G}" --cpus-per-task="$((PAR * CPUS))" --time="$TIME" \
       --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
       --output="$LOGS/pack$j-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \
