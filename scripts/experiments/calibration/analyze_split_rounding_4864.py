@@ -78,6 +78,9 @@ HIGHPASS = 20
 N_FLIPS = 2000
 N_BOOT = 1000
 READS = ("objective, votes 1-150", "objective, after the check")
+#: Post hoc (read after the first look at the curves): the votes right after the
+#: first detector shows, where the two rules' lines differ most.
+HANDOVER = {"votes 31-45 (post hoc)": (31, 45)}
 
 
 def highpass(wide: pd.DataFrame) -> pd.DataFrame:
@@ -165,25 +168,52 @@ def shown_only(lc: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame:
     return out[out["app_trained"].fillna(0).astype(int) == 1].drop(columns="app_trained")
 
 
-def switches(lc: pd.DataFrame, band: tuple[int, int]) -> pd.DataFrame:
+def in_sample(lc: pd.DataFrame) -> pd.Series:
+    """Clicks whose class model is ``fit_labels_line``'s in-sample fallback, not the folds' held-out scores.
+
+    When the held-out Goods do not outscore the held-out Bads the folds imply no
+    class model, and the head's own scores of every vote stand in: the model then
+    holds every Good and every Bad.  Its ``n_pos`` is all the Goods, so from
+    ``HEAD_COUNT_GOODS`` Goods it passes the thin-model gate whatever the split
+    held out.  On a 0.3 split a held-out model holds every vote only at 2 Goods
+    and 2 Bads, which is left out of the tag.
+    """
+    return (lc["model_n_pos"] == lc["n_good"]) & (lc["model_n_neg"] == lc["n_bad"]) & (lc["n_bad"] > 2)
+
+
+def _switch_count(kinds: np.ndarray) -> int:
+    return int(np.abs(np.diff(kinds)).sum()) if len(kinds) > 1 else 0
+
+
+def switches(lc: pd.DataFrame, band: tuple[int, int], tag_in_sample: bool = True) -> pd.DataFrame:
     """Per run: switches between the count line and the labels line, over the run and inside *band*.
 
     A click with no class model (``model_n_pos`` NaN: the fallback cut) is left
-    out, so a switch is between the two lines the gate chooses from.
+    out, so a switch is between the two lines the gate chooses from.  The
+    ``held_out_`` columns count again over the clicks whose class model is the
+    folds' (:func:`in_sample` left out): the switches the split's rounding can
+    cause.  *tag_in_sample* is off on the patch space: at a 0.5 split a held-out
+    model holds every vote whenever both counts are even, so the tag cannot tell
+    the two apart there, and its ``held_out_`` columns repeat the totals.
     """
     rows = []
     lo, hi = band
-    for run, g in lc.dropna(subset=["model_n_pos"]).groupby(RUN, sort=False):
+    lc = lc.dropna(subset=["model_n_pos"])
+    lc = lc.assign(in_sample=in_sample(lc) if tag_in_sample else False)
+    for run, g in lc.groupby(RUN, sort=False):
         labels = (g["model_n_pos"].to_numpy() >= HEAD_COUNT_GOODS).astype(int)
-        inside = g[(g["n_good"] >= lo) & (g["n_good"] <= hi)]
-        lab_in = (inside["model_n_pos"].to_numpy() >= HEAD_COUNT_GOODS).astype(int)
+        band_rows = ((g["n_good"] >= lo) & (g["n_good"] <= hi)).to_numpy()
+        held = ~g["in_sample"].to_numpy()
         rows.append(
             {
                 **dict(zip(RUN, run)),
-                "switches": int(np.abs(np.diff(labels)).sum()),
-                "band_switches": int(np.abs(np.diff(lab_in)).sum()) if len(lab_in) > 1 else 0,
-                "band_clicks": len(inside),
+                "switches": _switch_count(labels),
+                "band_switches": _switch_count(labels[band_rows]),
+                "band_clicks": int(band_rows.sum()),
                 "labels_share": float(labels.mean()),
+                "in_sample_clicks": int((~held).sum()),
+                "held_out_switches": _switch_count(labels[held]),
+                "held_out_band_switches": _switch_count(labels[held & band_rows]),
             }
         )
     return pd.DataFrame(rows)
@@ -199,6 +229,63 @@ def band_objective(frame: pd.DataFrame, band: tuple[int, int]) -> pd.Series:
     return v.groupby(RUN)["F"].mean()
 
 
+def coin_experiment(frame: pd.DataFrame, lc: pd.DataFrame) -> pd.DataFrame:
+    """The dither's coin as a randomized trial of the two lines, at each count of Goods (the ``dither`` arm).
+
+    Inside the band the coin, not the run, decides whether a click draws the
+    labels line (the folds held out enough Goods) or the head's count line.  So
+    at one count of Goods, a run's clicks on either line differ only by the
+    coin.  Per run, the mean objective at its labels-line clicks minus at its
+    count-line clicks, over the runs that drew both at that count; SE clustered
+    on category.  Held-out class models only (:func:`in_sample` left out).
+    """
+    v = frame[frame["phase"].fillna("").astype(str).str.strip() != "check"]
+    v = v[(v["app_trained"].fillna(0).astype(int) == 1) & (v["t"] <= HORIZON)]
+    v = v.drop_duplicates(subset=[*RUN, "t"], keep="last").copy()
+    v["F"] = cs.fbeta(v["precision"], v["recall"], 1.0)
+    held = lc.dropna(subset=["model_n_pos"])
+    held = held[~in_sample(held)]
+    j = held.merge(v[[*RUN, "t", "F"]], on=[*RUN, "t"], how="inner")
+    j["kind"] = np.where(j["model_n_pos"] >= HEAD_COUNT_GOODS, "labels", "count")
+    rows = []
+    per_g: dict[int, pd.Series] = {}
+    for g, sub in j.groupby("n_good"):
+        if g < 5 or g > 11:
+            continue
+        per = sub.groupby([*RUN, "kind"])["F"].mean().unstack("kind")
+        both = per.dropna() if {"labels", "count"} <= set(per.columns) else per.iloc[0:0]
+        d = (both["labels"] - both["count"]) if len(both) else pd.Series(dtype=float)
+        per_g[int(g)] = d
+        mean, se, sd, n = cs.clustered(d) if len(d) else (np.nan, np.nan, np.nan, 0)
+        rows.append(
+            {
+                "n_good": int(g),
+                "clicks": len(sub),
+                "labels_share": float((sub["kind"] == "labels").mean()),
+                "runs_both": n,
+                "labels_minus_count": mean,
+                "se": se,
+            }
+        )
+    # Where nearest draws the count line and the dither sometimes the labels line: each run's
+    # differences at 7 and 8 Goods averaged, so a run counts once.
+    pooled = pd.concat([per_g[g] for g in (7, 8) if g in per_g and len(per_g[g])])
+    if len(pooled):
+        mean, se, _, n = cs.clustered(pooled.groupby(level=list(range(pooled.index.nlevels))).mean())
+        sub = j[j["n_good"].isin([7, 8])]
+        rows.append(
+            {
+                "n_good": "7-8",
+                "clicks": len(sub),
+                "labels_share": float((sub["kind"] == "labels").mean()),
+                "runs_both": n,
+                "labels_minus_count": mean,
+                "se": se,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def decomposition(lc: pd.DataFrame, fraction: float, freqs: Sequence[float], rng: np.random.Generator) -> dict:
     """#3286's split-input decomposition on the arm's own recorded split sizes (per fold).
 
@@ -208,7 +295,7 @@ def decomposition(lc: pd.DataFrame, fraction: float, freqs: Sequence[float], rng
     is read on the binary path only.
     """
     rows = lc.dropna(subset=["model_n_pos", "model_n_neg"]).copy()
-    rows = rows[(rows["n_good"] >= 2) & (rows["n_bad"] >= 2)]
+    rows = rows[(rows["n_good"] >= 2) & (rows["n_bad"] >= 2) & ~in_sample(rows)]
     if rows.empty:
         return {}
     out = {}
@@ -289,7 +376,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             continue
         ta, tb = tables[a], tables[b]
         reads: dict[str, pd.Series] = {}
-        for w, (lo, hi) in cs.WINDOWS.items():
+        for w, (lo, hi) in {**cs.WINDOWS, **HANDOVER}.items():
             reads[f"objective, {w}"] = cs.window_mean(ta["F"], lo, hi) - cs.window_mean(tb["F"], lo, hi)
             reads[f"AP, {w}"] = cs.window_mean(ta["ap"], lo, hi) - cs.window_mean(tb["ap"], lo, hi)
         reads["objective, after the check"] = ta["after"] - tb["after"]
@@ -320,8 +407,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         for arm in (a, b):
             if path == "binary":
                 decomp[arm] = decomposition(lcs[arm], ARMS[arm][2], TEST_FREQS[path], rng)
-            sw_all.append(switches(lcs[arm], band).assign(arm=arm, path=path))
+            sw_all.append(switches(lcs[arm], band, tag_in_sample=path == "binary").assign(arm=arm, path=path))
 
+    coin = coin_experiment(frames["dither"], lcs["dither"]) if "dither" in frames else pd.DataFrame()
     paired = pd.DataFrame(paired_rows)
     if not paired.empty:
         paired["resolved"] = paired["delta"].abs() > 2 * paired["se"]
@@ -366,6 +454,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     rip.to_csv(args.out / "ripple.csv", index=False, float_format="%.5g")
     pd.concat(spectra).to_csv(args.out / "spectra.csv", index=False, float_format="%.5g")
     sw.to_csv(args.out / "switches.csv", index=False)
+    coin.to_csv(args.out / "coin.csv", index=False, float_format="%.5g")
     curves_out = pd.DataFrame({arm: t["F"].mean(axis=0) for arm, t in tables.items()})
     curves_out.index.name = "t"
     curves_out.to_csv(args.out / "curves.csv", float_format="%.5g")
@@ -398,10 +487,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             "",
         ]
     if not sw.empty:
-        s = sw.groupby("arm")[["switches", "band_switches", "band_clicks", "labels_share"]].mean()
+        cols = ["switches", "band_switches", "held_out_switches", "held_out_band_switches", "band_clicks"]
+        s = sw.groupby("arm")[[*cols, "labels_share", "in_sample_clicks"]].mean()
         s["runs"] = sw.groupby("arm").size()
         s["runs switching 2+ times"] = sw.assign(m=sw.switches >= 2).groupby("arm")["m"].mean()
+        s["2+ on held-out clicks"] = sw.assign(m=sw.held_out_switches >= 2).groupby("arm")["m"].mean()
+        s["runs with an in-sample click"] = sw.assign(m=sw.in_sample_clicks > 0).groupby("arm")["m"].mean()
         lines += ["## Count line <-> labels line switches per run", "", s.round(3).to_string(), ""]
+    if not coin.empty:
+        lines += [
+            "## The coin as a trial: labels line - count line at one count of Goods (dither)",
+            "",
+            coin.round(4).to_string(index=False),
+            "",
+        ]
     for arm, dd in decomp.items():
         for q, v in dd.items():
             tests = ", ".join(f"{f}: {x['x_noise']:.1f}x (p={x['p']:.3g})" for f, x in v["tests"].items())

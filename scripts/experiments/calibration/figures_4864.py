@@ -10,6 +10,8 @@
 * ``curves.png``         - the objective over votes per arm, and the paired Δ ±2 SE.
 * ``ripple.png``         - the high-passed mean curves' periodograms against the null.
 * ``switches.png``       - count line <-> labels line switches per run, per arm.
+* ``coin.png``           - which line each rule draws by Goods, and the dither's coin
+  as a randomized trial of the two lines at one count of Goods.
 """
 
 from __future__ import annotations
@@ -177,6 +179,40 @@ def switches(data: Path, out: Path) -> None:
     plt.close(fig)
 
 
+def coin(data: Path, out: Path) -> None:
+    """The band's two sides: which line each rule draws by Goods, and what the labels line is worth there."""
+    c = pd.read_csv(data / "coin.csv")
+    c = c[pd.to_numeric(c["n_good"], errors="coerce").notna()].astype({"n_good": int})
+    fig, (a, b) = plt.subplots(1, 2, figsize=(10.5, 3.4))
+    g = c["n_good"]
+    a.step(g, c["labels_share"], where="mid", color=ARM_COLORS["dither"], lw=1.6, label="dither (the app)")
+    a.step(g, (g >= 9).astype(float), where="mid", color=ARM_COLORS["nearest"], lw=1.6, ls="--", label="nearest")
+    a.set_xlabel("Goods voted")
+    a.set_ylabel("share of clicks on the labels line")
+    a.set_title("Which line the gate draws (binary, split 0.3)", fontsize=10)
+    a.legend(frameon=False, fontsize=9)
+    a.grid(alpha=0.3)
+    k = c.dropna(subset=["labels_minus_count"])
+    b.errorbar(k["n_good"], k["labels_minus_count"], yerr=2 * k["se"], fmt="o", color="k", capsize=3)
+    for _, r in k.iterrows():
+        b.annotate(
+            f"{int(r['runs_both'])} runs",
+            (r["n_good"], r["labels_minus_count"]),
+            textcoords="offset points",
+            xytext=(6, 4),
+            fontsize=7,
+        )
+    b.axhline(0, color="k", lw=0.6)
+    b.axvspan(6.5, 8.5, color=ARM_COLORS["nearest"], alpha=0.12, lw=0)
+    b.set_xlabel("Goods voted")
+    b.set_ylabel("objective: labels line - count line\n(same run, ±2 SE)")
+    b.set_title("The dither's coin as a trial (shaded: nearest draws the count line)", fontsize=10)
+    b.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out / "coin.png", dpi=DPI)
+    plt.close(fig)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--step0", type=Path)
@@ -191,6 +227,8 @@ def main() -> int:
         curves(args.data, args.out)
         ripple(args.data, args.out)
         switches(args.data, args.out)
+        if (args.data / "coin.csv").exists():
+            coin(args.data, args.out)
     print(f"wrote {args.out}")
     return 0
 

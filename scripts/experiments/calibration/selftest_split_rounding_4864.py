@@ -127,6 +127,7 @@ def test_switches() -> None:
             "n_good": [6, 7, 8, 8, 9, 12, 13],
             "n_bad": [10] * 7,
             "model_n_pos": [4, 6, np.nan, 4, 6, 6, 4],
+            "model_n_neg": [6] * 7,
         }
     )
     sw = A.switches(lc, (7, 11)).iloc[0]
@@ -142,6 +143,24 @@ def test_switches() -> None:
             "phase": ["hard"] * 7,
             "app_trained": [0, 0, 1, 1, 1, 1, 1],
         }
+    )
+    # The in-sample fallback's clicks hold every vote: 7 Goods pass the gate though the folds held out 2 a fold.
+    fb = pd.DataFrame(
+        {
+            "category": ["b"] * 5,
+            "seed": [0] * 5,
+            "t": range(30, 35),
+            "n_good": [7, 7, 7, 8, 9],
+            "n_bad": [23, 24, 25, 25, 25],
+            "model_n_pos": [4, 7, 4, 4, 6],
+            "model_n_neg": [14, 24, 16, 16, 16],
+        }
+    )
+    fs = A.switches(fb, (7, 11)).iloc[0]
+    check(fs["in_sample_clicks"] == 1, "the in-sample fallback's click is tagged")
+    check(
+        fs["switches"] == 3 and fs["held_out_switches"] == 1,
+        f"its switches are told apart from the split's ({fs['switches']} all, {fs['held_out_switches']} held-out)",
     )
     shown = A.shown_only(lc, frame)
     check(list(shown["t"]) == [3, 4, 5, 6, 7], "only the clicks with a trained detector on screen are kept")

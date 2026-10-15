@@ -94,9 +94,29 @@ def train_counts(rule: str, n_good: int, n_bad: int, fraction: float, key: str) 
 
 
 def read_trajectories(cells: Path) -> tuple[pd.DataFrame, int]:
-    """Every run's (vote, Goods, Bads) where the app trained, from a grid's main cell files."""
+    """Every run's (vote, Goods, Bads) where the app shows a trained detector, from a grid's main cell files.
+
+    Base rows only (:func:`_cells_io._base_rows`): a cell also writes a row per
+    pool and GMM variant at every vote, and those carry ``app_trained = 1`` from
+    the first trained vote whether or not the app shows a detector yet, so
+    reading them would replay votes no user sees.
+    """
+    import _cells_io  # noqa: PLC0415
+
     files = sorted(p for p in cells.glob("task_[0-9][0-9][0-9][0-9].csv*") if "__" not in p.name)
-    cols = ["seed", "category", "style", "t", "n_good", "n_bad", "phase", "app_trained"]
+    cols = [
+        "seed",
+        "category",
+        "style",
+        "t",
+        "n_good",
+        "n_bad",
+        "phase",
+        "app_trained",
+        "gmm_variant",
+        "schedule",
+        "pool_variant",
+    ]
     frames = []
     unreadable = 0
     for f in files:
@@ -105,7 +125,7 @@ def read_trajectories(cells: Path) -> tuple[pd.DataFrame, int]:
         except (OSError, ValueError, EOFError, pd.errors.EmptyDataError):
             unreadable += 1
             continue
-        frames.append(df)
+        frames.append(_cells_io._base_rows(df))
     rows = pd.concat(frames, ignore_index=True)
     rows = rows[rows["phase"].fillna("").astype(str).str.strip() != "check"]
     if "app_trained" in rows:
