@@ -181,20 +181,23 @@ def departure(a: tuple, b: tuple) -> tuple[int, bool, float]:
 
 
 def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
-    keys = sorted(set.intersection(*(set(runs[a]) for a in ARMS)))
-    keys = [k for k in keys if np.isfinite(runs[CONTROL][k]["tq"]) and all("seq" in runs[a][k] for a in ARMS)]
+    """Every arm in *runs* (the control first) against the control, on the runs all of them have."""
+    arms = tuple(a for a in ARMS if a in runs)
+    others = arms[1:]
+    keys = sorted(set.intersection(*(set(runs[a]) for a in arms)))
+    keys = [k for k in keys if np.isfinite(runs[CONTROL][k]["tq"]) and all("seq" in runs[a][k] for a in arms)]
     cls = np.array([k.split("|")[0].split("@")[0] for k in keys])
     band = np.array([k.split("|")[0].split("@")[1] for k in keys])
-    F = {arm: np.vstack([runs[arm][k]["f"] for k in keys]) for arm in ARMS}
-    G = {arm: np.vstack([runs[arm][k]["goods"] for k in keys]) for arm in ARMS}
-    after = {arm: np.array([runs[arm][k]["after"] for k in keys]) for arm in ARMS}
+    F = {arm: np.vstack([runs[arm][k]["f"] for k in keys]) for arm in arms}
+    G = {arm: np.vstack([runs[arm][k]["goods"] for k in keys]) for arm in arms}
+    after = {arm: np.array([runs[arm][k]["after"] for k in keys]) for arm in arms}
 
     def col(arm: str, name: str) -> np.ndarray:
         return np.array([runs[arm][k].get(name, np.nan) for k in keys], dtype=float)
 
     # Pairing: where each arm's picks first leave the control's, and whether a weak check is why.
     dep = {}
-    for arm in OTHERS:
+    for arm in others:
         rows = [departure(runs[arm][k]["seq"], runs[CONTROL][k]["seq"]) for k in keys]
         at = np.array([r[2] for r in rows])
         moved = np.array([r[0] >= 0 for r in rows])
@@ -206,7 +209,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                     "f_mismatch": int((~f_ok).sum())}  # fmt: skip
 
     rows = []
-    for arm in ARMS:
+    for arm in arms:
         r: dict = {"beta": beta, "arm": arm, "runs": len(keys)}
         if arm != CONTROL:
             d = dep[arm]
@@ -265,7 +268,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
     n_ctl = col(CONTROL, "weak_n")
     by_n = {"0 weak checks": n_ctl == 0, "1": n_ctl == 1, "2": n_ctl == 2, "3 or more": n_ctl >= 3}
     brow = []
-    for arm in OTHERS:
+    for arm in others:
         g = area(F[arm], 0, T) - area(F[CONTROL], 0, T)
         ga = after[arm] - after[CONTROL]
         for split, mask_of in (("band", {bd: band == bd for bd in sorted(set(band))}), ("control's weak checks", by_n)):
@@ -282,7 +285,7 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
 
     # Literal examples: per arm, the sessions it helped and hurt most over clicks 0-200, with what the checks did.
     erow = []
-    for arm in OTHERS:
+    for arm in others:
         g = area(F[arm], 0, T) - area(F[CONTROL], 0, T)
         moved = dep[arm]["moved"]
         order = np.argsort(np.where(moved, g, np.nan))
@@ -301,23 +304,23 @@ def analyse_beta(runs: dict[str, dict], beta: int) -> dict:
                     "goods_200_control": G[CONTROL][i, T], "goods_200_arm": G[arm][i, T],
                 })  # fmt: skip
     examples = pd.DataFrame(erow)
-    curves = pd.DataFrame({"beta": beta, "t": GRID_T, **{arm: np.nanmean(F[arm], axis=0) for arm in ARMS}})
+    curves = pd.DataFrame({"beta": beta, "t": GRID_T, **{arm: np.nanmean(F[arm], axis=0) for arm in arms}})
     gains = pd.DataFrame({"beta": beta, "t": GRID_T})
-    for arm in OTHERS:
+    for arm in others:
         d = F[arm] - F[CONTROL]
         gains[arm] = np.nanmean(d, axis=0)
         by = pd.DataFrame(d).groupby(cls).mean()
         gains[f"{arm}_se"] = by.std(ddof=1).to_numpy() / np.sqrt(len(by))
-    return {"summary": summary, "splits": splits, "curves": curves, "gains": gains, "F": F, "after": after,
+    return {"arms": arms, "summary": summary, "splits": splits, "curves": curves, "gains": gains, "F": F, "after": after,
             "examples": examples, "checks": {arm: {n: col(arm, n) for n in ("weak_first_picks", "weak_repeat_picks",
-                                                                          "done_check_picks")} for arm in ARMS}}  # fmt: skip
+                                                                          "done_check_picks")} for arm in arms}}  # fmt: skip
 
 
 def figure(res: dict[int, dict], path: Path) -> None:
     fig, axes = plt.subplots(2, len(res), figsize=(6.5 * len(res), 8.2), squeeze=False)
     for j, (beta, r) in enumerate(sorted(res.items())):
         ax = axes[0, j]
-        for arm in ARMS:
+        for arm in r["arms"]:
             ax.plot(GRID_T, r["curves"][arm], color=COLOR[arm], lw=2 if arm == CONTROL else 1.6, label=NAME[arm])
             ax.plot([T + 4], [np.nanmean(r["after"][arm])], "o", ms=6, mfc="none", mec=COLOR[arm], mew=1.4)
         ax.set_title(f"F{beta} of the returned set over clicks, beta {beta}", color=INK, fontsize=11, loc="left")
@@ -326,7 +329,7 @@ def figure(res: dict[int, dict], path: Path) -> None:
         _axes_style(ax)
         ax.legend(frameon=False, fontsize=8, loc="lower right")
         ax = axes[1, j]
-        for arm in OTHERS:
+        for arm in r["arms"][1:]:
             m, se = r["gains"][arm].to_numpy(), r["gains"][f"{arm}_se"].to_numpy()
             ax.fill_between(GRID_T, m - se, m + se, color=COLOR[arm], alpha=0.18, lw=0)
             ax.plot(GRID_T, m, color=COLOR[arm], lw=2, label=NAME[arm])
@@ -349,27 +352,27 @@ def figure_checks(res: dict[int, dict], path: Path) -> None:
     fig, axes = plt.subplots(2, len(res), figsize=(6.5 * len(res), 8.2), squeeze=False)
     for j, (beta, r) in enumerate(sorted(res.items())):
         ax = axes[0, j]
-        y = np.arange(len(ARMS))[::-1]
-        left = np.zeros(len(ARMS))
+        y = np.arange(len(r["arms"]))[::-1]
+        left = np.zeros(len(r["arms"]))
         for name, label, color in parts:
-            w = np.array([np.nanmean(r["checks"][arm][name]) for arm in ARMS])
+            w = np.array([np.nanmean(r["checks"][arm][name]) for arm in r["arms"]])
             ax.barh(y, w, left=left, color=color, height=0.6, label=label)
             left += w
         for yi, tot in zip(y, left):
             ax.text(tot + 0.8, yi, f"{tot:.0f}", va="center", color=INK, fontsize=9)
-        ax.set_yticks(y, [NAME[a] for a in ARMS], fontsize=8, color=INK)
-        ax.set_title(f"Clicks spent checking in 200, beta {beta} (session mean)", color=INK, fontsize=11, loc="left")
+        ax.set_yticks(y, [NAME[a] for a in r["arms"]], fontsize=8, color=INK)
+        ax.set_title(f"Clicks spent checking in 200, beta {beta}", color=INK, fontsize=11, loc="left")
         _axes_style(ax)
         ax.legend(frameon=False, fontsize=8, loc="lower right")
         ax = axes[1, j]
         bins = np.linspace(-0.08, 0.08, 41)
-        for arm in OTHERS:
+        for arm in r["arms"][1:]:
             g = area(r["F"][arm], 0, T) - area(r["F"][CONTROL], 0, T)
             moved = np.abs(g) > 1e-9
             ax.hist(np.clip(g[moved], -0.08, 0.08), bins=bins, histtype="step", lw=1.6, color=COLOR[arm],
                     label=f"{NAME[arm]} ({moved.mean():.0%} of sessions moved)")  # fmt: skip
         ax.axvline(0, color=MUTED, lw=0.8)
-        ax.set_title(f"Each session's area gain over clicks 0-200, beta {beta}", color=INK, fontsize=11, loc="left")
+        ax.set_title(f"Each session's area gain, clicks 0-200, beta {beta}", color=INK, fontsize=11, loc="left")
         ax.set_xlabel("paired gain in area under F over clicks 0-200 (clipped to ±0.08)", color=MUTED, fontsize=9)
         ax.set_ylabel("sessions", color=MUTED, fontsize=9)
         _axes_style(ax)
@@ -390,7 +393,9 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--docs", type=Path, help="the report's tables dir; figures go beside it")
     ap.add_argument("--procs", type=int, default=8)
+    ap.add_argument("--arms", default=",".join(ARMS), help="the arms to read; the control is always one")
     a = ap.parse_args()
+    arms = tuple(x for x in ARMS if x == CONTROL or x in a.arms.split(","))
     base = pd.read_csv(a.baseline)
     base = base[(base["embedder"] == "siglip") & (base["seed"] < a.seeds)]
     res: dict[int, dict] = {}
@@ -399,12 +404,12 @@ def main() -> int:
         tq = {f"{c}|{int(s)}": float(fbeta([p], [r], beta)[0]) for c, s, p, r in
               zip(base["category"], base["seed"], base[f"text_line_precision_b{beta}"], base[f"text_line_recall_b{beta}"])}  # fmt: skip
         runs = {}
-        for arm in ARMS:
+        for arm in arms:
             steps, picks = load_arm(run_dir(a.root, a.date, a.tag, arm, beta), a.seeds, a.procs)
             runs[arm] = per_run(steps, picks, tq, float(beta))
             counts[f"{arm}-b{beta}"] = len(runs[arm])
             print(f"beta {beta} {arm}: {len(runs[arm])} runs", flush=True)
-        if min(len(runs[arm]) for arm in ARMS) == 0:
+        if min(len(runs[arm]) for arm in arms) == 0:
             print(f"beta {beta}: an arm has no runs yet; skipped")
             continue
         res[beta] = analyse_beta(runs, beta)
