@@ -4,7 +4,9 @@ When a detector with a labelset source whose ``filepath`` template uses
 ``{detector_name}`` is renamed, the old on-disk file becomes orphaned -
 the next sync writes to the NEW resolved path, leaving the OLD file
 behind as garbage.  These helpers detect the orphaned-file situation
-and perform an atomic move when the user confirms.
+and perform an atomic move; :func:`follow_rename_with_labelset_file` does
+both, and the rename routes call it before the renamed detector's first
+push can create the new file.
 
 Only the ``server_json_file`` labelset source has an on-disk
 representation that benefits from a rename move; other source types
@@ -95,3 +97,44 @@ def move_labelset_file(old_path: str, new_path: str) -> bool:
     new_resolved.parent.mkdir(parents=True, exist_ok=True)
     os.replace(old_resolved, new_resolved)
     return True
+
+
+def follow_rename_with_labelset_file(
+    detector_id: str,
+    *,
+    old_name: str,
+    new_name: str,
+) -> dict[str, str] | None:
+    """Move a detector's on-disk labelset source file to follow its rename.
+
+    Resolves the detector's labelset source (see
+    :func:`vtscore.labels.binding.resolve_labelset_source`), and when the
+    rename orphans its file (:func:`detect_pending_labelset_move`) moves it to
+    the new name's path.  Call it **before** writing the renamed detector:
+    that write schedules a push to the new path, and a push that lands first
+    leaves the old file behind (the move never overwrites).
+
+    Returns the ``{"old_path", "new_path"}`` pair that moved, or ``None`` when
+    nothing needed to (or could) move; a failed move is logged, not raised.
+    """
+    from vtscore.detectors.registry import get_detector  # noqa: PLC0415
+    from vtscore.labels.binding import resolve_labelset_source  # noqa: PLC0415
+
+    resolved = resolve_labelset_source(get_detector(detector_id), detector_id=detector_id)
+    if resolved is None:
+        return None
+    pending = detect_pending_labelset_move(
+        {"source_name": resolved.source_name, "field_values": resolved.field_values},
+        detector_id=detector_id,
+        old_name=old_name,
+        new_name=new_name,
+    )
+    if pending is None:
+        return None
+    try:
+        if move_labelset_file(pending["old_path"], pending["new_path"]):
+            logger.info("moved labelset file %s -> %s after a rename", pending["old_path"], pending["new_path"])
+            return pending
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not move labelset file %s after a rename: %s", pending["old_path"], exc)
+    return None

@@ -13,8 +13,6 @@ POST   /api/detectors/registry/load                   Load a detector into memor
 POST   /api/detectors/registry/<id>/unload            Unload a detector from memory.
 DELETE /api/detectors/registry/<id>                   Remove a detector from the registry.
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
-POST   /api/detectors/registry/<id>/labelset-source/move-file
-                                                      Move an orphaned labelset file after a rename.
 PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's AutoFind flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
@@ -51,8 +49,6 @@ from vtsearch.schemas.detectors import (
     DetectorBrowsePositivesReleaseResponseSchema,
     DetectorBrowsePositivesResponseSchema,
     DetectorCancelResponseSchema,
-    DetectorLabelsetMoveRequestSchema,
-    DetectorLabelsetMoveResponseSchema,
     DetectorRegistryAutofindRequestSchema,
     DetectorRegistryAutofindResponseSchema,
     DetectorRegistryCreateRequestSchema,
@@ -172,11 +168,17 @@ def list_registered_detectors():
 
     from vtscore.state.core import get_detector_context
 
+    from vtscore.labels.binding import deployment_default_labelset_source, labelset_source_status
+
     current_user = get_current_user()
     entries = list_detectors_for_user(current_user)
     loaded_ids = get_loaded_detector_ids()
     autofind_names = set(get_autofind_detectors())
+    default_source = deployment_default_labelset_source()
     for entry in entries:
+        # Where the detector's labels sync to (#4913) - status only, never the
+        # binding's field values, which the entry's ``labelset_source`` holds.
+        entry["labelset_source_status"] = labelset_source_status(entry, default=default_source)
         did = entry["id"]
         entry["loaded"] = did in loaded_ids
         entry["autofind"] = entry.get("name", "") in autofind_names
@@ -554,6 +556,14 @@ def _run_detector_load_task(
                         step=1,
                         total_steps=_LOAD_STEPS,
                     )
+                    # Level the detector with its labelset source first, so
+                    # labels kept there (the detector's backup, when this
+                    # server lost its own copy) are restored before they are
+                    # read below.  The file wins a disagreement; a source that
+                    # is behind gets the file's labels pushed to it (#4913).
+                    from vtscore.labels.sync import reconcile_labelset_source
+
+                    reconcile_labelset_source(det_name, detector_id=detector_id)
                     det_data = _read_detector(_detector_path(det_name))
                     if det_data:
                         # The detector's locked embedder type (immutable;
@@ -977,8 +987,12 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 @detectors_registry_bp.alt_response(409, description="A detector with the new name already exists.")
 def rename_registered_detector(body: dict, detector_id: str):
-    """Rename a registered detector and its on-disk labelset file."""
-    from vtscore.detectors.labelset_ops import detect_pending_labelset_move
+    """Rename a registered detector and its on-disk labelset file.
+
+    A ``{detector_name}``-templated labelset-source file follows the rename
+    (see :func:`vtscore.detectors.labelset_ops.follow_rename_with_labelset_file`).
+    """
+    from vtscore.detectors.labelset_ops import follow_rename_with_labelset_file
     from vtscore.detectors.registry import get_detector, is_detector_owner, rename_detector
     from vtscore.state.core import get_detector_context
 
@@ -998,8 +1012,11 @@ def rename_registered_detector(body: dict, detector_id: str):
     # that only re-spells its own name keeps its own file, so it is allowed.
     _abort_if_name_taken(new_name, own_path=_detector_path(old_name), exclude_id=detector_id)
 
-    pending_move: dict[str, str] | None = None
     if old_name and old_name != new_name:
+        # Before the write below, which schedules a push to the new name's
+        # path: a push landing first would leave the old file behind.
+        follow_rename_with_labelset_file(detector_id, old_name=old_name, new_name=new_name)
+
         old_path = _detector_path(old_name)
         det_data = _read_detector(old_path)
         if det_data:
@@ -1021,64 +1038,13 @@ def rename_registered_detector(body: dict, detector_id: str):
             logger.exception("Failed to rename AutoFind entry for %s", detector_id)
 
         # Update the loaded in-memory context so future syncs use the new
-        # name in {detector_name} template substitution, and detect any
-        # orphaned labelset file the rename leaves behind.
+        # name in {detector_name} template substitution.
         ctx = get_detector_context(detector_id)
         if ctx is not None:
-            pending_move = detect_pending_labelset_move(
-                ctx.labelset_source,
-                detector_id=detector_id,
-                old_name=old_name,
-                new_name=new_name,
-            )
             ctx.name = new_name
 
     rename_detector(detector_id, new_name)
-    return {"ok": True, "name": new_name, "pending_labelset_move": pending_move}
-
-
-# ---------------------------------------------------------------------------
-# POST /api/detectors/registry/<detector_id>/labelset-source/move-file
-# ---------------------------------------------------------------------------
-
-
-@detectors_registry_bp.route(
-    "/api/detectors/registry/<detector_id>/labelset-source/move-file",
-    methods=["POST"],
-)
-@detectors_registry_bp.arguments(DetectorLabelsetMoveRequestSchema)
-@detectors_registry_bp.response(200, DetectorLabelsetMoveResponseSchema)
-@detectors_registry_bp.alt_response(400, description="Invalid path (e.g. traversal outside allowed base).")
-@detectors_registry_bp.alt_response(404, description="Detector not found.")
-@detectors_registry_bp.alt_response(409, description="Destination already exists.")
-def move_labelset_source_file(body: dict, detector_id: str):
-    """Move an orphaned labelset file after a detector rename.
-
-    Called by the frontend when the user confirms the *Move existing
-    labelset file?* prompt that surfaces after a rename leaves the file
-    at the OLD template-resolved path on disk.
-    """
-    from vtscore.detectors.labelset_ops import move_labelset_file
-    from vtscore.detectors.registry import get_detector
-
-    if get_detector(detector_id) is None:
-        abort(404, message="Detector not found")
-
-    old_path = body["old_path"]
-    new_path = body["new_path"]
-    try:
-        moved = move_labelset_file(old_path, new_path)
-    except FileExistsError as exc:
-        abort(409, message=str(exc))
-    except ValueError as exc:
-        abort(400, message=str(exc))
-
-    return {
-        "ok": True,
-        "moved": moved,
-        "old_path": old_path,
-        "new_path": new_path,
-    }
+    return {"ok": True, "name": new_name}
 
 
 # ---------------------------------------------------------------------------
