@@ -10,6 +10,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Labelset sources push the detector file's whole labelset, paced, and pull by merging** (issue #4913).
+  `vtscore.labels.sync` is rewritten. Every detector-file write (`vtscore.detectors.store._write_detector` /
+  `queue_detector_write`, through the new `note_detector_written` hook) schedules a push, and the payload
+  is the file's labelset from every dataset plus `detector_meta` - it was the active dataset's votes, so a
+  push from one dataset erased the others' labels at the source. Pushes for one detector never overlap,
+  start at least `CoreConfig.labelset_source_push_interval` seconds apart (new field, default
+  `DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL` = 60), skip a payload the source already holds, run as the
+  detector's creator, and resolve `{detector_*}` templates for that detector rather than the request's;
+  a detector's first push in a process pulls first, and a source that cannot be read is not pushed to.
+  `sync_from_labelset_source(detector_id=None, *, prefer="source")` now merges the source into the
+  detector file (adds what is missing, `prefer` decides a disagreement, removes nothing) and re-derives a
+  loaded detector's votes from it, instead of only voting the active dataset's matches; it needs the
+  detector's JSON file. `sync_to_labelset_source()` keeps its signature and schedules a push for the active
+  detector. Removed: the private `_syncing` / `_sync_lock` re-export guard (a pull now writes once, and the
+  resulting push is a no-op when nothing changed), `_run_pending_sync`, `_push_with_thread_context` and
+  `_push_to_labelset_source`. `DetectorContext.labelset_source` still links a source (in memory), below a
+  registry binding.
+
 - **The labels line reads its own F-beta, and Autopilot's Done stops on it** (issue #4878).
   `LabelsLine.expected_fbeta(beta)` is the expected F-beta at the line's cut over the corpus's unvoted
   items (what `corpus_cut` maximises), `LabelsLine.expected_fbeta_fresh(beta)` the class model's on a
@@ -167,6 +185,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
 
 ### Added
+
+- **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
+  `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
+  `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
+  `CoreConfig.default_labelset_source`, whose non-empty field values are fixed and overlay the detector's
+  own; the result reports `missing_fields`. Also `labelset_source_status`, `unfixed_fields`,
+  `fixed_field_values`, `deployment_default_labelset_source`, `stored_labelset_source` and `OPT_OUT`. In
+  `vtscore.labels.sync`: `schedule_labelset_push(name)`, `note_detector_written(data)` and
+  `reconcile_labelset_source(name)` (pull with the file winning, then push - run when a detector loads or
+  is linked). In `vtscore.detectors.labelset_ops`: `follow_rename_with_labelset_file(detector_id,
+  old_name=, new_name=)` moves a `{detector_name}`-templated server file to follow a rename.
 
 - **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
   takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of

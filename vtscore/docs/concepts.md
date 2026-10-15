@@ -385,7 +385,9 @@ detector. The main groups (the full field list is in
 - Cross-dataset counts: `labelset_good_count`, `labelset_bad_count` -
   enable "Sort by Learned" even when the active dataset isn't the one
   the detector was trained on.
-- Sync state: `labelset_source` (dict of `{source_name, field_values}`).
+- Sync state: `labelset_source` (dict of `{source_name, field_values}`), an
+  in-memory binding; a registered detector's lives on its registry entry
+  (see [packages/labels.md](packages/labels.md#binding)).
 
 Both are `RLock`-protected by the single module-level lock in
 `vtscore/state/core.py`. Both use `__slots__` for memory efficiency

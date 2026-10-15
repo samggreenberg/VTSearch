@@ -1250,6 +1250,11 @@ It has two tabs:
   in Manual mode. The detector keeps it, and Autopilot draws its line there.
   It starts on your last pick, so most detectors never need it opened; you
   can change it later in Manual or Test.
+- **Auto-export** (both tabs, only on a server set up for it) - where the
+  detector's labels are copied as you label, so a copy outside VTSearch stays
+  current (see [Auto-export](#auto-export)). The form asks only for what
+  the server left for you to fill in, such as a file name; often there is
+  nothing to fill in and it just says where the labels go.
 - **Trained** - create a detector pre-trained on labels imported from an
   external source. It shows a label-importer picker (**Import labels
   from**); a stock install offers a JSON or CSV label file on the server
@@ -1606,8 +1611,11 @@ with bulk-action and per-card controls.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export
-    labels** (see [Exporting your work](#exporting-your-work)), and
-    **Move to AutoFind**.
+    labels** (see [Exporting your work](#exporting-your-work)),
+    **Auto-export…** (on a server set up for it; see
+    [Auto-export](#auto-export)), and **Move to AutoFind**. A row whose
+    auto-export still needs a value says **⚠ Auto-export not set up**
+    under its name; click it to fill the value in.
   - **AutoFind** holds finalized detectors. They run automatically
     against every dataset you import (see
     [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset))
@@ -1947,6 +1955,23 @@ gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
+
+#### Auto-export
+
+On a server whose administrator has set it up, you don't have to remember
+to export at all: every detector's labels are copied to one place outside
+VTSearch (a backup folder, say) as you label, at most about once a minute,
+and once more when the server shuts down. The **New Detector** form and the
+**Auto-export…** item in a detector's **⋯** menu show where, and ask for
+anything the server left you to fill in. A detector the server does not
+have every value for is not copied until you fill them in; its row says
+**⚠ Auto-export not set up**.
+
+The copy also comes back. When a detector loads, VTSearch adds any labels
+its copy holds that the detector lacks (the detector's own label wins where
+the two disagree). So if the server loses its data, make a new detector with
+the **same name**: when it loads, its labels are restored from the copy.
+Renaming a detector moves its copy to the new name.
 
 #### Portable ONNX bundles (advanced)
 
