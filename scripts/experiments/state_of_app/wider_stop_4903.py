@@ -161,6 +161,8 @@ def survival(sessions: pd.DataFrame) -> pd.DataFrame:
             row = {"preset": preset, "beta": beta, "rule": rule, "sessions": len(g)}
             row.update({f"stopped_by_{c}": float((fired & (s <= c)).mean()) for c in MARKS})
             row["km_median"] = stopping.km_median(s[fired], np.full(int((~fired).sum()), HORIZON))
+            if rule == "done":
+                row.update(check_split(g))
             row["km_median_at_150"] = stopping.km_median(
                 np.where(fired & (s <= EVAL_HORIZON), s, np.nan),
                 np.full(int((~(fired & (s <= EVAL_HORIZON))).sum()), EVAL_HORIZON),
@@ -200,11 +202,66 @@ def score_leave(fb: np.ndarray, leave: np.ndarray, category: pd.Series) -> dict:
     }
 
 
-def caps(sessions: pd.DataFrame) -> pd.DataFrame:
-    """Per preset, rule and cap: the rule or N clicks, whichever comes first.
+def check_clicks(g: pd.DataFrame) -> float:
+    """The clicks the app's check before Done takes: its Done, less the first click a light or the level said stop.
 
-    ``capped`` is the share of sessions the cap ends; ``forgone`` the mean F-beta those sessions give up, from N
-    to where the rule alone would have left them (its stop, or :data:`HORIZON`), with ``forgone_clicks`` the
+    The mean over the sessions the app's Done stopped.  It is two populations: about half skip the check (a
+    weak-separation check ended in the last 25 votes, ``done_check_due``) and take 0, the rest take 20-30, so
+    the median says nothing; a capped session's check is priced at the mean.
+    """
+    done = _stops(g, "done")
+    first = np.fmin(_stops(g, "lights"), _stops(g, "level"))
+    ok = np.isfinite(done) & np.isfinite(first) & (first <= done)
+    return float(np.mean(done[ok] - first[ok])) if ok.any() else 0.0
+
+
+def check_split(g: pd.DataFrame) -> dict:
+    """The check before Done's two populations: the share that skip it, and the clicks the rest take."""
+    done = _stops(g, "done")
+    first = np.fmin(_stops(g, "lights"), _stops(g, "level"))
+    ok = np.isfinite(done) & np.isfinite(first) & (first <= done)
+    took = (done - first)[ok]
+    ran = took[took > 0]
+    return {
+        "check_skipped": float((took == 0).mean()) if took.size else np.nan,
+        "check_clicks_when_run": float(np.median(ran)) if ran.size else np.nan,
+        "check_clicks_mean": float(took.mean()) if took.size else np.nan,
+    }
+
+
+#: Where a cap counts from.  ``votes``: every vote, the opening's too, so a session still walking for its first
+#: Goods stops at N as well (no check: there is no line to check).  ``trained``: the cap is read where the lights
+#: and the level are, past the opening, so a session that leaves the opening after N stops as soon as it does,
+#: and one that never leaves it is never capped.  ``since``: N votes from the click the session leaves the
+#: opening, so a session that starts training late gets the same budget as one that starts early (one that never
+#: leaves it is never capped; a stop past :data:`HORIZON` reads as leaving there).  A trained session's Done
+#: comes a check after the cap.
+CAP_KINDS = ("votes", "trained", "since")
+
+
+def cap_leave(g: pd.DataFrame, rule: str, cap: int | None, kind: str, check: float) -> tuple[np.ndarray, np.ndarray]:
+    """Each session's leave click under *rule* or *cap*, and where the rule alone would have left it."""
+    s = _stops(g, rule)
+    natural = np.where(np.isfinite(s), s, HORIZON)
+    if cap is None:
+        return natural, natural
+    trained = pd.to_numeric(g["trained_from"], errors="coerce").to_numpy(dtype=float)
+    in_opening = ~np.isfinite(trained) | (trained > cap)
+    if kind == "votes":
+        point = np.where(in_opening, cap, cap + check)
+    elif kind == "trained":
+        point = np.where(np.isfinite(trained), np.maximum(cap, trained) + check, np.inf)
+    else:
+        point = np.where(np.isfinite(trained), trained + cap + check, np.inf)
+    leave = np.clip(np.minimum(natural, np.round(point)), 1, HORIZON)
+    return leave, natural
+
+
+def caps(sessions: pd.DataFrame) -> pd.DataFrame:
+    """Per preset, rule, cap kind (:data:`CAP_KINDS`) and cap: the rule or N clicks, whichever comes first.
+
+    ``capped`` is the share of sessions the cap ends; ``forgone`` the mean F-beta those sessions give up, from the
+    cap to where the rule alone would have left them (its stop, or :data:`HORIZON`), with ``forgone_clicks`` the
     clicks they save; ``forgone_per_100`` the rate, per 100 clicks, at which they would have bought it.
     """
     rows = []
@@ -212,30 +269,32 @@ def caps(sessions: pd.DataFrame) -> pd.DataFrame:
         g = g.reset_index(drop=True)
         fb = _fb(g)
         idx = np.arange(len(g))
+        check = check_clicks(g)
         for rule in RULES:
-            s = _stops(g, rule)
-            natural = np.where(np.isfinite(s), s, HORIZON)
-            for cap in CAPS:
-                n = HORIZON if cap is None else cap
-                leave = np.minimum(natural, n)
-                cut = natural > n
-                at_nat = fb[idx, natural.astype(int) - 1]
-                at_cap = fb[idx, leave.astype(int) - 1]
-                forgone = (at_nat - at_cap)[cut]
-                clicks = (natural - n)[cut]
-                row = {
-                    "preset": preset,
-                    "beta": beta,
-                    "rule": rule,
-                    "cap": "none" if cap is None else str(cap),
-                    "rule_fires_first": float((np.isfinite(s) & (s <= n)).mean()),
-                    "capped": float(cut.mean()),
-                    **score_leave(fb, leave, g["category"]),
-                    "forgone": float(forgone.mean()) if cut.any() else np.nan,
-                    "forgone_clicks": float(clicks.mean()) if cut.any() else np.nan,
-                    "forgone_per_100": float(100 * forgone.sum() / clicks.sum()) if cut.any() else np.nan,
-                }
-                rows.append(row)
+            for kind in CAP_KINDS:
+                for cap in CAPS:
+                    if cap is None and kind != CAP_KINDS[0]:
+                        continue
+                    leave, natural = cap_leave(g, rule, cap, kind, check)
+                    cut = leave < natural
+                    gave_up = (fb[idx, natural.astype(int) - 1] - fb[idx, leave.astype(int) - 1])[cut]
+                    clicks = (natural - leave)[cut]
+                    rows.append(
+                        {
+                            "preset": preset,
+                            "beta": beta,
+                            "rule": rule,
+                            "kind": "none" if cap is None else kind,
+                            "cap": "none" if cap is None else str(cap),
+                            "check_clicks": check,
+                            "capped": float(cut.mean()),
+                            **score_leave(fb, leave, g["category"]),
+                            "forgone": float(gave_up.mean()) if cut.any() else np.nan,
+                            "forgone_clicks": float(clicks.mean()) if cut.any() else np.nan,
+                            "forgone_per_100": float(100 * gave_up.sum() / clicks.sum()) if cut.any() else np.nan,
+                            "never_stopped": float((leave >= HORIZON).mean()),
+                        }
+                    )
     return pd.DataFrame(rows)
 
 
@@ -311,9 +370,15 @@ def never(sessions: pd.DataFrame) -> pd.DataFrame:
                         "opening_no_good@400": float((op[f"n_good@{HORIZON}"].fillna(0) == 0).mean()),
                     }
                 )
-            # When the sessions trained past 150 left the opening: the rules cannot stop a session before it.
-            late = h[pd.to_numeric(h["trained_from"], errors="coerce") > EVAL_HORIZON]
-            row["share_trained_after_150"] = len(late) / len(h)
+            # The sessions that leave the opening late: no rule reads a session before it does.
+            tf = pd.to_numeric(h["trained_from"], errors="coerce")
+            for c in (EVAL_HORIZON, 200):
+                late = h[~(tf <= c)]
+                row[f"share_opening_at_{c}"] = len(late) / len(h)
+                if len(late):
+                    row[f"opening_at_{c}_fbeta@{c}"] = float(late[f"fbeta@{c}"].mean())
+                    row[f"opening_at_{c}_fbeta@400"] = float(late[f"fbeta@{HORIZON}"].mean())
+                    row[f"opening_at_{c}_n_good@{c}"] = float(late[f"n_good@{c}"].mean())
             rows.append(row)
     return pd.DataFrame(rows)
 
@@ -438,26 +503,56 @@ def groups_figure(curves: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
+KIND_LABEL = {"votes": "every vote", "trained": "every vote, past the opening", "since": "votes since the opening"}
+KIND_COLORS = {"votes": "#2a78d6", "trained": "#eb6834", "since": "#1baf7a"}
+
+
 def caps_figure(priced: pd.DataFrame, out: Path) -> None:
-    """The app's Done or a cap at N: the share capped, and the F-beta the capped sessions give up, against N."""
+    """The app's Done or a cap at N, per cap kind: the F-beta it leaves, and the clicks it takes, against no cap."""
     plt = _plt()
-    d = priced[(priced["rule"] == "done") & (priced["cap"] != "none")].assign(n=lambda x: x["cap"].astype(int))
-    fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.4), facecolor=S.SURFACE)
-    colors = {"β 1/4": "#2a78d6", "β 1": "#eb6834", "β 4": "#1baf7a"}
-    for preset, g in d.groupby("preset", sort=False):
-        axes[0].plot(
-            g["n"], g["capped"], color=colors.get(preset, S.INK), marker="o", markersize=4, linewidth=1.8, label=preset
-        )
-        axes[1].plot(
-            g["n"], g["forgone"], color=colors.get(preset, S.INK), marker="o", markersize=4, linewidth=1.8, label=preset
-        )
-    for ax, ylabel in zip(axes, ("share of sessions the cap ends", "F-beta a capped session gives up"), strict=True):
-        S._axes(ax)
-        ax.set_xlabel("cap (clicks)", color=S.INK)
-        ax.set_ylabel(ylabel, color=S.INK)
-    handles, labels = axes[0].get_legend_handles_labels()
+    d = priced[priced["rule"] == "done"]
+    presets = list(dict.fromkeys(d["preset"]))
+    fig, axes = plt.subplots(
+        2,
+        len(presets),
+        figsize=(3.8 * len(presets), 6.2),
+        sharex=True,
+        sharey="row",
+        facecolor=S.SURFACE,
+        squeeze=False,
+    )
+    for col, preset in enumerate(presets):
+        g = d[d["preset"] == preset]
+        base = g[g["kind"] == "none"].iloc[0]
+        for row, (metric, label) in enumerate(
+            (
+                ("fbeta_at_leave", "F-beta at the stop,\nless no cap's"),
+                ("mean_leave", "clicks to the stop,\nless no cap's"),
+            )
+        ):
+            ax = axes[row][col]
+            S._axes(ax)
+            ax.axhline(0, color=S.MUTED, linewidth=0.8)
+            for kind in CAP_KINDS:
+                k = g[g["kind"] == kind].assign(n=lambda x: x["cap"].astype(int)).sort_values("n")
+                ax.plot(
+                    k["n"],
+                    k[metric] - base[metric],
+                    color=KIND_COLORS[kind],
+                    marker="o",
+                    markersize=4,
+                    linewidth=1.8,
+                    label=f"cap counts {KIND_LABEL[kind]}",
+                )
+            if row == 0:
+                ax.set_title(preset, color=S.INK, fontsize=10)
+            else:
+                ax.set_xlabel("cap N (clicks)", color=S.INK)
+            if col == 0:
+                ax.set_ylabel(label, color=S.INK)
+    handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, fontsize=8, labelcolor=S.INK, loc="lower center", ncol=len(labels))
-    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(out, dpi=130, facecolor=S.SURFACE)
     plt.close(fig)
 
