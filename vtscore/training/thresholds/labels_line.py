@@ -329,7 +329,7 @@ def transfer_fold_orderings(
         if src.size and tgt.size and ok.any():
             v = s[ok]
             q = np.searchsorted(src, v, side="left") / float(src.size)
-            mapped = np.quantile(tgt, np.clip(q, 0.0, 1.0))
+            mapped = np.asarray(np.quantile(tgt, np.clip(q, 0.0, 1.0)), dtype=np.float64)
             if tails:
                 x = _logit(v)
                 for past, s_end, t_end in ((v > src[-1], src[-1], tgt[-1]), (v < src[0], src[0], tgt[0])):
@@ -343,7 +343,7 @@ def transfer_fold_orderings(
 
 def fold_transfer_shift(orderings: Sequence[tuple[Any, Any]], transferred: Sequence[tuple[Any, Any]]) -> np.ndarray:
     """``|logit(transferred) - logit(raw)|`` for every scorable held-out score, folds pooled (#4910's gate)."""
-    parts = [np.empty(0)]
+    parts: list[np.ndarray] = [np.empty(0)]
     for (raw, _), (moved, _) in zip(orderings, transferred, strict=True):
         a = np.asarray(raw, dtype=np.float64).ravel()
         b = np.asarray(moved, dtype=np.float64).ravel()
@@ -364,8 +364,8 @@ def fold_transfer_clipped(
     *tails*.  A fold with no haystack reads ``0`` throughout, its scores not
     moved.  *good* is whether the score is a Good's.
     """
-    sides = [np.empty(0, dtype=np.int8)]
-    goods = [np.empty(0, dtype=bool)]
+    sides: list[np.ndarray] = [np.empty(0, dtype=np.int8)]
+    goods: list[np.ndarray] = [np.empty(0, dtype=bool)]
     for k, (scores, labels) in enumerate(orderings):
         a = np.asarray(scores, dtype=np.float64).ravel()
         y = np.asarray(labels, dtype=np.float64).ravel()

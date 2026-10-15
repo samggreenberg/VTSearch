@@ -222,7 +222,7 @@ cancelled each other out!" isn't good news; both mistakes get issues, measured d
 
 | | |
 |---|---|
-| code | dev at 6553a698f plus the arm (1cf7f233c; launcher and analysis f3d0f9628), every task from the frozen worktree `vts-4910-run` |
+| code | dev at 6553a698f plus the arm (1cf7f233c; launcher and analysis f3d0f9628), every task from the frozen worktree `vts-4910-run`. The runs predate #4909 (merged the same day: the weak check prompts at most once a session); every arm ran the weak check as it was, again after 25 votes |
 | harness | `simulate_voting_iterations(labels_scale=, labels_scale_shadow=)`, `CALIB_LABELS_SCALE` / `CALIB_LABELS_SCALE_SHADOW`; `labels_line.transfer_fold_orderings`. Unset is the app: the default arm draws today's line |
 | launcher | `scripts/experiments/state_of_app/fold_transfer_4910.sh` (arms c, q, qt; paths binary and region; `gpack` runs a pack on a V100 node with the GPU hidden) |
 | analysis | `scripts/experiments/state_of_app/fold_transfer_4910.py`; its tables in `tables/` (`closed_loop_*`, `curves_*`, `gate_*`, `gate_by_click_*`, `same_head_curve_*`, `saturation_*`). The set at vote 150 and the same head on an arm's own sessions: `fold_transfer_4910_late.py BETA`; by seed and band: `fold_transfer_4910_robust.py`; the opening pick check: `fold_transfer_4910_picks.py` |
