@@ -1,6 +1,6 @@
 # Rounding the calibration split to the nearest vote instead of dithering it (issue #4864)
 
-**No pre-registered branch fires, so the call is the owner's. `nearest` does what the issue wanted: the labels line
+**No pre-registered branch fires, so the call was the owner's, who shipped `nearest` (2026-10-15). `nearest` does what the issue wanted: the labels line
 switches on once and stays on.** Runs switch between the count line and the labels line 0.56 times instead of 2.0
 (binary) and 0.96 instead of 3.9 (region), and no run flips back and forth, where 30% and 49% of the dither's runs
 do. On the binary path it passes the ship rule: the objective is unchanged over a session (−0.0013 ± 0.0007 over
@@ -167,6 +167,10 @@ below 0.1 / vote; that is the shared shape of the first detector's arrival, and 
   categories, structure the two arms share reaches 2× by itself, so the bar does not separate the arms there.
 
 ## Decision
+
+**Owner's ruling, 2026-10-15: ship `nearest` as it stands.** From that commit on the app's split is
+`nearest` (`nearest_holdout` in `vtscore/training/thresholds/conformal.py`), and the dither is the eval arm
+`CALIB_SPLIT_ROUNDING=dither`. The recommendation below was not taken.
 
 The issue pre-registered three branches:
 
