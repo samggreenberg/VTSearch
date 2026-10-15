@@ -647,7 +647,10 @@ MIRRORS: list[Mirror] = [
             "is the labels' line (_labels_line over fit_labels_line, cut at `beta`) when the retrain fitted "
             "a class model, and the fallbacks otherwise; the harness's default arm passes DEFAULT_BETA and "
             "draws the same line in _preference_line_for_step. The count line (balance_line over "
-            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm."
+            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm. The "
+            "harness's labels_scale (#4910) carries each fold's held-out scores onto the final model's scale "
+            "through that fold's haystack before the class model is fitted, an arm the app does not take; "
+            "its default, None, pools them as scored, as _labels_line does."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "

@@ -21,4 +21,6 @@
 
 <!-- **d** — Put that share on M₀ and the cut's in the valley. Funny thing: the
      plain average measured better. Now it's just a fallback for too few votes.
+     We priced it once more under today's line (#4910): carrying the folds'
+     scores onto M₀ by share loses F-beta late in a session, at every preset.
      -->

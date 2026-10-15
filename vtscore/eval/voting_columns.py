@@ -666,6 +666,23 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "line_separation",
     "line_head_count",
     "find_efbeta",
+    # #4910: the labels line on another fold scale (``labels_scale_shadow``), on the same head and drawing
+    # nothing: its Train cut, its Find line on the withheld half (threshold, set size, F-beta at the row's beta)
+    # and its d'.  ``xfer_*`` say how far the quantile transfer moved the folds' held-out scores (median and 90th
+    # percentile of |transferred - raw| logit), the share of held-out Goods above their fold's whole haystack
+    # (where the plain quantile saturates), and the class model (transferred minus raw, logit units).  NaN / -1
+    # with no shadow and off the base row.
+    "shadow_train_threshold",
+    "shadow_threshold",
+    "shadow_n_flagged",
+    "shadow_fbeta",
+    "shadow_separation",
+    "xfer_dlogit_med",
+    "xfer_dlogit_p90",
+    "xfer_clip_good",
+    "xfer_dmu_pos",
+    "xfer_dmu_neg",
+    "xfer_dsigma",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base

@@ -76,6 +76,7 @@ def probe(C: Any) -> list[str]:
         simulate_voting_iterations,
     )
     from vtscore.training import thresholds as T
+    from vtscore.training.thresholds import FOLD_SCALES
 
     rows: list[tuple[str, str, str]] = []
     refused: list[tuple[str, str, str]] = []
@@ -289,6 +290,17 @@ def probe(C: Any) -> list[str]:
             rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
         else:
             refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
+    # #4910's fold scale: an arm the app does not take; the shadow draws nothing, but it adds row columns.
+    for name, var, value in (
+        ("labels_scale", "CALIB_LABELS_SCALE", C.LABELS_SCALE),
+        ("labels_scale_shadow", "CALIB_LABELS_SCALE_SHADOW", C.LABELS_SCALE_SHADOW),
+    ):
+        if value is None:
+            continue
+        if value not in FOLD_SCALES:
+            refuse(name, var, "must be one of %s" % ", ".join(FOLD_SCALES))
+        elif name == "labels_scale" and value != "raw":
+            rows.append((name, value, "<unset> = raw, each fold model's held-out scores as it scored them (the app)"))
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.

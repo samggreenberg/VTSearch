@@ -329,7 +329,10 @@ slides:
   # F-beta at the three presets, none beat cross-calibration (#4582, at the
   # 0.44% pool). None draws today's line; the fused cut and rank transfer
   # survive only as the fallback for a session whose votes cannot support the
-  # labels' model, and the 70/30 split ships as a null (#4583).
+  # labels' model, and the 70/30 split ships as a null (#4583). Rank transfer
+  # was priced once more inside the labels line (#4910): carrying the folds'
+  # held-out scores onto the final model's scale by quantile loses F-beta at
+  # every preset, and with its tails kept it ties.
   anchored-em
   quantile-transfer
   split-fraction

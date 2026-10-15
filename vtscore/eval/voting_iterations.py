@@ -119,6 +119,7 @@ from vtscore.training.thresholds import (
     done_check_due,
     fbeta_count,
     fit_labels_line,
+    FOLD_SCALES,
     head_count_serves,
     STOP_LEVEL,
     stop_level_met,
@@ -474,6 +475,62 @@ NEW_WALKS = ("atlas", "hard")
 BAND_PHASE = "band"
 
 
+def _scaled_fold_orderings(scale: str | None, orderings: Any, fold_haystacks: Any, final_haystack: Any) -> Any:
+    """The fold orderings the labels line pools under *scale* (#4910); *orderings* themselves under ``None`` / ``"raw"``.
+
+    ``None`` and ``"raw"`` are the app: each fold model's held-out scores as it
+    scored them.  ``"quantile"`` / ``"quantile_tails"`` carry fold *k*'s onto the
+    final model's scale through fold *k*'s haystack
+    (:func:`~vtscore.training.thresholds.transfer_fold_orderings`).  The
+    haystacks are the ones the fold-anchored cut is fitted on, under the same
+    #3308 exclusion as *final_haystack*, and index-aligned with *orderings*: both
+    are the live folds, trimmed together to ``calibrate_count``.
+    """
+    from vtscore.training.thresholds import transfer_fold_orderings  # noqa: PLC0415
+
+    if scale in (None, "raw") or not orderings:
+        return orderings
+    return transfer_fold_orderings(orderings, fold_haystacks, final_haystack, tails=scale == "quantile_tails")
+
+
+def _fold_scale_gate(raw: Any, moved: Any, fold_haystacks: Any) -> dict[str, float]:
+    """How far the transfer moved the folds' held-out scores and the class model (#4910's gate); ``{}`` with no folds.
+
+    ``xfer_dlogit_med`` / ``_p90``: the median and 90th percentile of
+    ``|transferred - raw|`` over every held-out logit.  ``xfer_clip_good``: the
+    share of held-out Goods above their fold's whole haystack, where the plain
+    quantile saturates.  ``xfer_dmu_pos`` / ``_dmu_neg`` / ``_dsigma``: the
+    transferred class model minus the raw one, in logit units, before any
+    floor (``nan`` where either pools no Good or no Bad).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds.labels_line import (  # noqa: PLC0415
+        _pooled_class_model,
+        fold_transfer_clipped,
+        fold_transfer_shift,
+    )
+
+    if not raw:
+        return {}
+    shift = fold_transfer_shift(raw, moved)
+    side, goods = fold_transfer_clipped(raw, fold_haystacks)
+    nan = float("nan")
+    a, b = _pooled_class_model(raw), _pooled_class_model(moved)
+    dmu_pos = dmu_neg = dsigma = nan
+    if a is not None and b is not None:
+        dmu_pos, dmu_neg = b.mu_pos - a.mu_pos, b.mu_neg - a.mu_neg
+        dsigma = (b.sigma if b.sigma_raw is None else b.sigma_raw) - (a.sigma if a.sigma_raw is None else a.sigma_raw)
+    return {
+        "xfer_dlogit_med": float(np.median(shift)) if shift.size else nan,
+        "xfer_dlogit_p90": float(np.quantile(shift, 0.9)) if shift.size else nan,
+        "xfer_clip_good": float(np.mean(side[goods] == 1)) if goods.any() else nan,
+        "xfer_dmu_pos": dmu_pos,
+        "xfer_dmu_neg": dmu_neg,
+        "xfer_dsigma": dsigma,
+    }
+
+
 def _preference_line_for_step(
     ranking: LineRanking,
     details: dict[str, Any],
@@ -481,6 +538,8 @@ def _preference_line_for_step(
     check: "SpotCheck | None",
     labels: "Mapping[int, bool] | None",
     line_shape: "str | None" = None,
+    orderings: Any = None,
+    shadow_orderings: Any = None,
 ) -> tuple[float | None, str]:
     """The line the arm's balance draws over the step's ranking, and its provenance; ``(None, "")`` with none.
 
@@ -492,6 +551,13 @@ def _preference_line_for_step(
     mixture's F-beta argmax under the balance's cap.  Leaves the state the
     row's line columns read in ``details["line_state"]`` and the beta in
     ``details["beta"]``.
+
+    *orderings* replaces the step's fold orderings as the class model's input
+    (``labels_scale``, #4910: the same folds, their scores carried onto the
+    final model's scale); ``None`` reads ``details["fold_orderings"]``, the app.
+    *shadow_orderings* fits a second line on the same ranking that draws
+    nothing - ``details["shadow_line"]``, the other scale on the same head,
+    which the row reads beside its own (``labels_scale_shadow``).
     """
     if beta is None:
         return None, ""
@@ -502,10 +568,13 @@ def _preference_line_for_step(
         # Train side.  ``details["find_line"]`` carries it to the test side,
         # which re-estimates the prevalence on the withheld half the way a
         # Find on a new corpus does.
-        labels_line = fit_labels_line(
-            details.get("fold_orderings") or None, ranking.scores, ranking.ids.tolist(), labels or {}
-        )
+        line_orderings = details.get("fold_orderings") if orderings is None else orderings
+        labels_line = fit_labels_line(line_orderings or None, ranking.scores, ranking.ids.tolist(), labels or {})
         details["find_line"] = labels_line
+        if shadow_orderings is not None:
+            shadow = fit_labels_line(shadow_orderings or None, ranking.scores, ranking.ids.tolist(), labels or {})
+            details["shadow_line"] = shadow
+            details["shadow_train_threshold"] = None if shadow is None else float(shadow.threshold(beta))
         if labels_line is not None:
             kept = labels_line.threshold(beta)
             details["line_state"] = balance_state(beta, check, ranking, threshold=kept)
@@ -539,6 +608,8 @@ def _safe_threshold_for_step(
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
     line_shape: "str | None" = None,
+    labels_scale: "str | None" = None,
+    labels_scale_shadow: "str | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -608,6 +679,18 @@ def _safe_threshold_for_step(
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
+
+    *labels_scale* is the **#4910 arm knob**: the scale the labels line's
+    class model reads the folds' held-out scores on.  ``None`` (every
+    production caller, and the default arm) pools them as each fold model
+    scored them, as the app's ``_labels_line`` does; ``"quantile"`` /
+    ``"quantile_tails"`` carry each fold's onto the final model's scale through
+    that fold's haystack first (:func:`_scaled_fold_orderings`).  Only the
+    labels line reads it: the fold-anchored cut and every variant grid keep the
+    raw orderings.  *labels_scale_shadow* fits the line on another scale beside
+    it on the same head, drawing nothing (``details["shadow_line"]``), and
+    leaves the transfer's size in ``details["fold_scale_gate"]``
+    (:func:`_fold_scale_gate`): the gate a priced run reads first.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -712,7 +795,25 @@ def _safe_threshold_for_step(
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
-    kept, provenance = _preference_line_for_step(ranking, details, beta, check, labels, line_shape)
+    # #4910: the folds' held-out scores on the scale the arm's labels line reads
+    # them on, fold k through fold k's haystack onto the final model's; the
+    # orderings and the haystacks are both the live folds, trimmed together.
+    line_orderings = _scaled_fold_orderings(labels_scale, fold_orderings, fold_haystacks, fit_final)
+    shadow_orderings = None
+    if labels_scale_shadow is not None:
+        shadow_orderings = _scaled_fold_orderings(labels_scale_shadow, fold_orderings, fold_haystacks, fit_final)
+        moved = shadow_orderings if labels_scale in (None, "raw") else line_orderings
+        details["fold_scale_gate"] = _fold_scale_gate(fold_orderings, moved, fold_haystacks)
+    kept, provenance = _preference_line_for_step(
+        ranking,
+        details,
+        beta,
+        check,
+        labels,
+        line_shape,
+        orderings=line_orderings if labels_scale not in (None, "raw") else None,
+        shadow_orderings=shadow_orderings,
+    )
     if kept is not None:
         # No inclusion drew this line: acquisition derives its origin from it.
         details["reporting_line"] = ReportingLine(kept, None, None)
@@ -1382,6 +1483,7 @@ def _calibration_metric_rows(
     base["train_threshold"] = round6(float(train_threshold))
     base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
     base["find_prevalence"] = round6(find_prevalence)
+    base.update(_shadow_columns(details, base_scores, labels))
     line_ranking = details.get("line_ranking")
     base.update(
         _line_reading(
@@ -1668,6 +1770,39 @@ def _fold_arrays(orderings: Any) -> dict[str, Any]:
         if parts
         else np.empty(0, dtype=np.int16),
     }
+
+
+def _shadow_columns(details: dict[str, Any], test_scores: Any, test_labels: Any) -> dict[str, Any]:
+    """The base row's #4910 columns: the shadow scale's line on the same head, and how far the transfer moved.
+
+    ``shadow_train_threshold`` is the shadow line's cut on the Train corpus;
+    ``shadow_threshold`` / ``shadow_n_flagged`` / ``shadow_fbeta`` its Find line on
+    the withheld half, as the row's own Find line is drawn, read at the row's
+    beta; ``shadow_separation`` the d' the weak check would read off it.  The
+    ``xfer_*`` columns are :func:`_fold_scale_gate`'s.  Empty with no shadow (the
+    row's defaults stand); NaN where the shadow has no class model.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+
+    if "shadow_line" not in details or details.get("beta") is None:
+        return {}
+    nan = float("nan")
+    beta = float(details["beta"])
+    out: dict[str, Any] = {k: round6(v) for k, v in (details.get("fold_scale_gate") or {}).items()}
+    shadow = details["shadow_line"]
+    train_thr = details.get("shadow_train_threshold")
+    out["shadow_train_threshold"] = round6(float(train_thr)) if train_thr is not None else nan
+    if shadow is None:
+        return out
+    thr = float(shadow.on_corpus(test_scores).threshold(beta))
+    scores = np.asarray(test_scores, dtype=np.float64)
+    out["shadow_threshold"] = round6(thr)
+    out["shadow_n_flagged"] = int(np.count_nonzero(scores >= thr))
+    out["shadow_fbeta"] = round6(cm.fbeta_metrics(scores, np.asarray(test_labels), thr, beta)["fbeta"])
+    out["shadow_separation"] = round6(float(shadow.separation))
+    return out
 
 
 def _ceiling_find_line(details: dict[str, Any], score_map: dict[int, float], ordered_test: list[int]) -> Any:
@@ -2672,6 +2807,8 @@ def simulate_voting_iterations(  # noqa: C901
     weak_phase: str = "learned",
     done_check: bool = True,
     early_check: Optional[int] = None,
+    labels_scale: Optional[str] = None,
+    labels_scale_shadow: Optional[str] = None,
     label_quota: Optional[bool] = None,
     seed_examples: Optional[int] = None,
     stratify_target: bool = False,
@@ -3290,6 +3427,24 @@ def simulate_voting_iterations(  # noqa: C901
             so it is read off the two without a run of its own.  ``None`` - the
             default - is the app, which has no such check.  Needs the balance
             (*beta*) and the phase machine.
+        labels_scale: An experiment knob (issue #4910): the scale the labels
+            line's class model reads the calibration folds' held-out scores
+            on.  ``None`` - the default - is the app, which pools each fold
+            model's scores as it scored them, while the line is cut on the
+            final model's.  ``"quantile"`` first carries fold *k*'s scores onto
+            the final model's scale by their quantile in fold *k*'s haystack
+            (the fold-anchored cut's own transfer), saturating at the
+            haystack's ends; ``"quantile_tails"`` keeps a score's logit
+            distance past either end instead.  The line, Find's line on the
+            withheld half, the weak check's separation and the stop level all
+            read the transferred model; the fold-anchored cut does not.  Needs
+            the shipped threshold path and a balance.
+        labels_scale_shadow: Fits the labels line on this scale too (``"raw"``,
+            ``"quantile"``, ``"quantile_tails"``), beside the arm's own on the
+            same head and drawing nothing: the base row's ``shadow_*`` columns
+            read it on the withheld half and its ``xfer_*`` columns say how far
+            the transfer moved the folds' scores and the class model (#4910's
+            gate).  ``None`` - the default - fits none.
         label_quota: Whether the withheld half is scored as Test scores it
             under the app's label quota (#4643,
             :mod:`vtscore.detectors.label_quota`).  ``None`` (the default) is
@@ -3769,6 +3924,15 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"early_check must be an integer >= 1 (a vote count) or None; got {early_check!r}")
     if early_check is not None and (flow is None or beta is None or spot_check == "off"):
         raise ValueError("early_check needs Autopilot's phase machine, a balance (beta) and a run that checks")
+    if labels_scale is not None and labels_scale not in FOLD_SCALES:
+        raise ValueError(f"labels_scale must be one of {FOLD_SCALES} or None; got {labels_scale!r}")
+    if labels_scale_shadow is not None and labels_scale_shadow not in FOLD_SCALES:
+        raise ValueError(f"labels_scale_shadow must be one of {FOLD_SCALES} or None; got {labels_scale_shadow!r}")
+    if (labels_scale or labels_scale_shadow) and (not safe_thresholds or beta is None or walk_shape is not None):
+        # Only the labels line reads the scale, and only the shipped path under a balance draws it.
+        raise ValueError(
+            "labels_scale and labels_scale_shadow need safe_thresholds, a balance (beta) and no walk_shape"
+        )
     # #4482's band picks: how many picks past the opening, and how many of them were band picks.
     learned_picks = 0
     band_picks = 0
@@ -4384,6 +4548,8 @@ def simulate_voting_iterations(  # noqa: C901
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
                     line_shape=line_shape,
+                    labels_scale=labels_scale,
+                    labels_scale_shadow=labels_scale_shadow,
                 )
             )
             line_ranking = details.get("line_ranking")

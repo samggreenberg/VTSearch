@@ -221,6 +221,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The eval harness can carry the folds' held-out scores onto the final model's scale before the labels line**
+  (issue #4910). `simulate_voting_iterations` takes `labels_scale` (`None`, the default and the app: each fold
+  model's scores as it scored them; `"quantile"`: fold *k*'s scores carried onto the final model's scale by their
+  quantile in fold *k*'s haystack, as the fold-anchored cut carries its cut; `"quantile_tails"`: the same, keeping a
+  score's logit distance past either end of the haystack) and `labels_scale_shadow`, which fits the line on another
+  scale beside it on the same head and draws nothing. The calibration frame's base row gains `shadow_*` (the
+  shadow's Train cut, its Find line's threshold, set size and F-beta on the withheld half, and its d') and `xfer_*`
+  (how far the transfer moved the held-out logits and the class model, and the share of held-out Goods above their
+  fold's haystack). `vtscore.training.thresholds` gains `FOLD_SCALES`, `transfer_fold_orderings`,
+  `fold_transfer_shift` and `fold_transfer_clipped`. An experiment arm; the app is unchanged.
+
 - **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
   `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
   `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
