@@ -319,7 +319,7 @@ export class DemoPickerComponent {
     this.datasetsListingsApi.getCleaners(embeddableType).subscribe({
       next: (cleaners) => {
         this.cleaners.set(cleaners);
-        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners));
+        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners, embeddableType, this.mediaTypes()));
       },
     });
   }

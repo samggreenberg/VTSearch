@@ -334,6 +334,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
+
 - **A warning before you use a detector on data unlike its training data** (issue #4961). The
   Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
   detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
@@ -974,6 +981,12 @@ not list every commit. Use `git log` for the full history.
   of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
   lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
   server's reason. The rows that failed stay selected, so trying again is one click.
+
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
 
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the

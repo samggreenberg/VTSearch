@@ -237,6 +237,10 @@ describe('ImportDefaultsSettingsComponent', () => {
 
     await create({ defaults: { audio: { source_specs: [] } } });
     expect(component.hasOverridesForActiveType).toBe(false);
+
+    // A saved cleanup choice alone still offers Reset, the only way to clear it here.
+    await create({ defaults: { audio: { cleaners: { trim_silence: { enabled: false } } } } });
+    expect(component.hasOverridesForActiveType).toBe(true);
   });
 
   it('synthesises a native source-spec row when none is saved', async () => {

@@ -605,9 +605,11 @@ An abridged example; the full field list is `UserSettings` in
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the
   frontend's per-type default.
-- `import_defaults_by_media_type`: the embedder, clipper (+ params), and
-  converter rows to auto-fill into the Add Dataset advanced panel for each
-  output media type. Set from Settings → Import Defaults.
+- `import_defaults_by_media_type`: the embedder, clipper (+ params),
+  converter rows and cleanup gates to auto-fill into the Add Dataset advanced
+  panel for each output media type. Set from Settings → Import Defaults, or by
+  the **Save as default** offer after an import (the only way to save the
+  cleanup gates).
 - `settings_source` (not shown; excluded from the defaults endpoint): opt-in
   bidirectional sync. Set it to a plugin name + field values to auto-export
   every settings change and auto-import on the user's first settings access
