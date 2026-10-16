@@ -29,8 +29,8 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
 fired in today's app, at each radio's beta, and what clicking on bought. It is
-re-plotted from the 2026-10-08 Binary Photo review's committed tables
-(`docs/experiments/2026-10-08-state-of-the-app-binary-photo/`:
+re-plotted from the 2026-10-16 Binary Photo review's committed tables
+(`docs/experiments/2026-10-16-state-of-the-app-binary-photo/`:
 `stopping_by_preset.csv` and `objective_by_click.csv`). `EXPECT` pins the numbers the
 notes quote.
 
@@ -84,7 +84,7 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
 #: The State of the App review the measured slide reads: Binary Photo on COCO Better, one session set per radio.
-REPORT_SOTA = _REPO_ROOT / "docs" / "experiments" / "2026-10-08-state-of-the-app-binary-photo"
+REPORT_SOTA = _REPO_ROOT / "docs" / "experiments" / "2026-10-16-state-of-the-app-binary-photo"
 
 # The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): blue is the
 # line, red the losing arm and a Bad, green a Good. The lights borrow red and
@@ -997,9 +997,9 @@ STOP_BUDGET = 150
 #: committed table says anything else, so a new State of the App review is a re-run of this script and then
 #: a look at the notes.
 EXPECT = {
-    0.25: (0.83, 81, 0.075, 0.005, 0.15, 0.60),
-    1.0: (0.82, 83, 0.076, 0.005, 0.09, 0.69),
-    4.0: (0.79, 93, 0.046, 0.003, 0.10, 0.58),
+    0.25: (0.90, 55, 0.070, 0.006, 0.18, 0.54),
+    1.0: (0.90, 58, 0.072, 0.006, 0.11, 0.63),
+    4.0: (0.90, 64, 0.068, 0.005, 0.08, 0.62),
 }
 
 
