@@ -21,7 +21,7 @@ import { BALANCE_STATES, lineBalance, wireBalance } from '../testing/line-balanc
  * left/right-panel HTTP to drain, no `ngOnInit` load storm. Every sort is one
  * call and one `flush`. label-view's own spec keeps the through-the-component
  * coverage (the template bindings and the pair-switch supersession); what lives
- * here is the machinery those tests could not reach cheaply — the "Load more"
+ * here is the machinery those tests could not reach cheaply — the "Load More"
  * re-entrancy guard, the window-metadata mapping, and `quiesce`.
  */
 describe('SortRunnerService', () => {
@@ -108,7 +108,7 @@ describe('SortRunnerService', () => {
     expect(sortState.sortStatus).toBe('Sort failed');
   });
 
-  // --- "Load more" ----------------------------------------------------------
+  // --- "Load More" ----------------------------------------------------------
 
   function seedWindow(): void {
     runner.onTextSort('birds');

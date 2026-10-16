@@ -255,7 +255,7 @@ def notify(
             which fills this in.
         items: Optional list of the specific things the message is about -
             one skipped file, dropped row or failed request per entry. The
-            app shows them behind a *Details* toggle with a *Copy list*
+            app shows them behind a *Details* toggle with a *Copy List*
             button. Capped at :data:`MAX_ITEMS` entries of
             :data:`MAX_ITEM_CHARS` characters each; blank entries are dropped.
 
