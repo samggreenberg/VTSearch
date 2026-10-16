@@ -958,6 +958,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
+  rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
+  player showed the full padded frame, so an item previewed without its black bars and played with them.
+  The player now shows the same picture, with its controls along the cropped picture's bottom edge. This
+  needs a Chromium-based browser (Chrome, Edge); other browsers play the full frame, as before.
+
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
   import did not record them. Whenever a label was rebuilt from its source file (training from a saved

@@ -1078,14 +1078,15 @@ good: a metadata-cleaned unit costs no extra storage, and a reference (thin)
 import keeps its byte savings on it.
 
 The spatial half of that contract, `clip_box`, is *honoured* rather than baked
-in, by three readers that have to agree (the parsing and the crop live once in
-`vtscore/media/video/crop.py`):
+in, by four readers that have to agree (the parsing and the crop live once in
+`vtscore/media/video/crop.py`, plus the player's mirror of the clamp):
 
 | Reader | Why it needs the box |
 |--------|---------------------|
 | `sample_video_frames` (`vtscore/media/video/_frame_sampling.py`) | what the embedder actually sees |
 | the video thumbnailers (`vtscore/media/video/media_type.py`) | so the grid preview frames the same picture |
 | `_fixup_clip_md5_and_embeddings` (`vtscore/datasets/stages/clipper.py`) | folds the box into the boundary-tag MD5 so two crops of one parent don't collide |
+| `VideoPlayerComponent`, via `frontend/src/app/utils/clip-box.ts` | so the detail player shows the picture that was embedded; a TypeScript mirror of `clamp_clip_box`, applied with CSS `object-view-box` |
 
 If you add a media type whose units are likewise metadata-only, follow the same
 shape: narrow the keys, let the readers honour them, and snapshot nothing.
