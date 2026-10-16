@@ -1966,7 +1966,9 @@ instead, since every commit on `dev` is effectively a new app release.)
 - **The simulated session sorts its voting half, not the whole dataset** (issue #5004).
   `simulate_voting_iterations` handed the selector the caller's full `seed_scores` map (or the example
   opening's sort of every media), so the Bad phase's text-sort cut was fitted over the withheld half's
-  cosines too and the rank-space pick measured distances through items it could never pick; a startup
+  cosines too, and over media the cell drops before the split (a scale-banded cell's wrong-band images,
+  a prevalence arm's thinned positives, a haystack arm's thinned negatives), and the rank-space pick
+  measured distances through items it could never pick; a startup
   schedule's cuts and the pick log's `picked_seed_rank`, `picked_seed_percentile` and
   `startup_cut_percentile` were read over the same list. They now read a copy restricted to the sim
   half, which is what the app has loaded, and which `ALContext.embeddings` (so the centroid fallback)
