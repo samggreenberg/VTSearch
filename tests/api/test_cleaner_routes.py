@@ -257,3 +257,95 @@ class TestVariantServing:
         media = medias[cleaned_image_media[0]]
         with client.application.test_request_context(f"/api/medias/{media['id']}/image"):
             assert _variant_media(media) is media
+
+
+# ---------------------------------------------------------------------------
+# A cleaned unit of a reference (thin) import: a recipe, not a snapshot
+# ---------------------------------------------------------------------------
+
+
+def _thin_cleaned_import(folder, media_type: str, cleaner: str, monkeypatch) -> dict:
+    """Import *folder* thin with *cleaner*, re-lazify, and return the one item."""
+    from vtscore.datasets.loader_folder import load_dataset_from_folder
+    from vtscore.datasets.stages import clipper as clipper_stage
+    from vtscore.state import DatasetContext
+
+    monkeypatch.setattr(clipper_stage, "_fixup_clip_md5_and_embeddings", lambda *a, **k: None)
+    imported: dict[int, dict] = {}
+    load_dataset_from_folder(folder, media_type, imported, thin=True)
+    clipper_stage._apply_clipper(
+        imported, f"{media_type}_default", None, chain_steps=[{"kind": "cleaner", "name": cleaner, "params": {}}]
+    )
+    ctx = DatasetContext("_test_thin_cleaned_routes")
+    ctx.medias = imported
+    clipper_stage._relazify_reference_clips_stage(ctx)
+    (item,) = imported.values()
+    return item
+
+
+@pytest.fixture
+def lazy_cleaned_text_media(tmp_path, monkeypatch):
+    """Install a thin-imported text item the whitespace gate rewrote."""
+    src = tmp_path / "doc.txt"
+    src.write_text("hello   world", encoding="utf-8")
+    item = _thin_cleaned_import(tmp_path, "text", "text_whitespace", monkeypatch)
+    assert item["media_string"] is None and "original_media_string" not in item
+    media_id = max(medias.keys(), default=0) + 1
+    item["id"] = media_id
+    medias[media_id] = item
+    try:
+        yield media_id, src
+    finally:
+        medias.pop(media_id, None)
+
+
+@pytest.fixture
+def lazy_cleaned_image_media(tmp_path, monkeypatch):
+    """Install a thin-imported image item the edge-trim gate cropped."""
+    from PIL import Image
+
+    canvas = Image.new("RGB", (64, 64), "white")
+    canvas.paste(Image.new("RGB", (32, 32), "red"), (16, 16))
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    src = tmp_path / "photo.png"
+    src.write_bytes(buf.getvalue())
+    item = _thin_cleaned_import(tmp_path, "image", "image_edge_trim", monkeypatch)
+    assert item["media_bytes"] is None and "original_media_bytes" not in item
+    media_id = max(medias.keys(), default=0) + 1
+    item["id"] = media_id
+    medias[media_id] = item
+    try:
+        yield media_id, src
+    finally:
+        medias.pop(media_id, None)
+
+
+class TestLazyCleanedVariants:
+    def test_text_serves_the_cleaned_text_and_the_original(self, client, lazy_cleaned_text_media):
+        media_id, _src = lazy_cleaned_text_media
+        resp = client.post("/api/medias/batch", json={"ids": [media_id]})
+        assert resp.get_json()[0]["has_original"] is True
+        assert client.get(f"/api/medias/{media_id}/text").get_json()["content"] == "hello world"
+        original = client.get(f"/api/medias/{media_id}/text?variant=original").get_json()
+        assert original["content"] == "hello   world"
+
+    def test_image_original_is_the_untrimmed_file(self, client, lazy_cleaned_image_media):
+        from PIL import Image
+
+        media_id, src = lazy_cleaned_image_media
+        cleaned = client.get(f"/api/medias/{media_id}/image").data
+        with Image.open(io.BytesIO(cleaned)) as img:
+            assert img.size[0] < 64
+        assert client.get(f"/api/medias/{media_id}/image?variant=original").data == src.read_bytes()
+
+    def test_an_edited_source_is_a_404_not_the_edited_file(self, client, lazy_cleaned_text_media):
+        import os
+
+        media_id, src = lazy_cleaned_text_media
+        before = src.stat()
+        src.write_text("goodbye   world", encoding="utf-8")
+        os.utime(src, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+
+        assert client.get(f"/api/medias/{media_id}/text").status_code == 404
+        assert client.get(f"/api/medias/{media_id}/text?variant=original").status_code == 404

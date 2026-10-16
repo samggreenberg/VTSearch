@@ -385,20 +385,26 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
         "changed": changed,
     }
     if metadata_changed:
-        if cleaned.get("clip_start") is not None:
-            entry["clip_start"] = str(cleaned["clip_start"])
-        if cleaned.get("clip_end") is not None:
-            entry["clip_end"] = str(cleaned["clip_end"])
-        if cleaned.get("clip_box") is not None:
-            entry["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
+        entry.update(_cleaned_window(cleaned))
     ch = _content_hash(cleaned)
     if ch is not None:
         entry["content_hash"] = ch
-    if snapshotted:
-        oh = _content_hash(media)
-        if oh is not None:
-            entry["original_hash"] = oh
+    oh = _content_hash(media) if snapshotted else None
+    if oh is not None:
+        entry["original_hash"] = oh
     return [cleaned], [entry]
+
+
+def _cleaned_window(cleaned: dict[str, Any]) -> dict[str, str]:
+    """Return the trail fields recording a metadata-only clean's window / box."""
+    fields: dict[str, str] = {}
+    if cleaned.get("clip_start") is not None:
+        fields["clip_start"] = str(cleaned["clip_start"])
+    if cleaned.get("clip_end") is not None:
+        fields["clip_end"] = str(cleaned["clip_end"])
+    if cleaned.get("clip_box") is not None:
+        fields["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
+    return fields
 
 
 def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:

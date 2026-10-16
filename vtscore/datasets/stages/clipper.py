@@ -260,7 +260,7 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
     reading that file serves the same text (:func:`_source_serves_same`).
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
-    from vtscore.media.lazy_clip import LAZY_CLIP_TYPES, clip_recipe  # noqa: PLC0415
+    from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
 
     for clip in ctx.medias.values():
         source = clip.pop("_lazy_source", None)
@@ -271,11 +271,7 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
                 continue
             clip.pop("original_media_bytes", None)
             clip.pop("original_media_string", None)
-        elif (
-            clip.get("media_type") not in LAZY_CLIP_TYPES
-            and clip_recipe(clip) is None
-            and not _source_serves_same(clip, source)
-        ):
+        elif clip.get("media_type") == "text" and clip_recipe(clip) is None and not _source_serves_same(clip, source):
             continue
         clip["media_path"] = source
         clip["media_bytes"] = None

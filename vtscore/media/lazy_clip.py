@@ -352,7 +352,9 @@ def _replay_from_source(
             if outputs is None:
                 return None
             _replay_memo.put(key, outputs, nbytes=sum(_payload_size(o) for o in outputs))
-        return outputs
+        # Copies, so a later step that edits its input in place cannot reach
+        # the memo every sibling replays from.
+        return [dict(o) for o in outputs]
 
     if steps and steps[0]["kind"] != "cleaner":
         memoised = _replay_memo.get(step_key(0))
@@ -360,7 +362,7 @@ def _replay_from_source(
             picked = _select_chain_output(memoised, steps[0])
             if picked is None:
                 return None
-            return replay_chain_on_media(picked, steps[1:], run_step=lambda i, e, m: run_step(i + 1, e, m))
+            return replay_chain_on_media(dict(picked), steps[1:], run_step=lambda i, e, m: run_step(i + 1, e, m))
 
     source = {"media_type": media_type, "filename": path.name, "media_path": str(path)}
     source.update(load_reference_source(media_type, path))

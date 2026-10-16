@@ -1051,8 +1051,13 @@ payload the first time a cleaner actually changes an item, under
   `?variant=original`, and the detail viewer shows a Clean/Original toggle when
   the flag is set.
 - Because a cleaner rewrites the payload rather than slicing it, a cleaned item
-  from a *reference* (thin) import keeps its bytes materialized — `lazy_clip`
-  has no recipe that reproduces a cleaner's output from the source file.
+  from a *reference* (thin) import is reproduced by replaying its whole chain
+  trail from the source file, and the snapshotting gate's trail entry records
+  `original_hash` so the replayed Original can be checked too. The import keeps
+  only that recipe once a dry run rebuilds both payloads byte for byte, so a
+  cleaner that is not deterministic (same input and params, same output) costs
+  a thin import its byte savings on the items it changed, but nothing worse.
+  See "Reference (no-copy) imports and lazy clips" in `docs/ARCHITECTURE.md`.
 
 A cleaned item is flagged for MD5 + embedding + thumbnail recomputation, and its
 trail entry records `changed`, so provenance's "Derived Via" line lists only the
