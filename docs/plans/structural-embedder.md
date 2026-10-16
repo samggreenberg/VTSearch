@@ -194,9 +194,7 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass each
-  run SIFT once per image. Acceptable for v1; a combined single-detect pass is a
-  cheap later optimisation.
+- [ ] #4996 — Detect SIFT once per image when loading a structural dataset (Sonnet)
 
 <!-- item-sep -->
 
@@ -401,9 +399,8 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 - **Patch v3 (shipped):** structural is the third role in the text/patch/structural
   trio — `DatasetContext.structural_embedder` binds it, score routing resolves
   `structural ▸ patch ▸ text` (`vtscore/embedding/binding.py`), and the
-  dataset-create flow offers the Instance-embedder picker. The living spec for the
-  trio, and its remaining open questions, are in
-  [`patch-embedder.md`](patch-embedder.md).
+  dataset-create flow offers the Instance-embedder picker. The trio's design is in
+  [`ARCHITECTURE.md`](../ARCHITECTURE.md#embedder-binding-and-routing).
 
 ### Tests
 

@@ -24,6 +24,17 @@ not list every commit. Use `git log` for the full history.
   now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
   language or device. Two dataset loads converting at the same time take turns on the one model.
 
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
 - **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
   #4736 a session started from a typed description was meant to keep the description's text ranking behind
   the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps

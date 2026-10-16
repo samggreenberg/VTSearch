@@ -640,6 +640,89 @@ against the full VG source the same band holds **643** categories. So the fix is
 to use `vg_box_small` — built for exactly this — rather than to re-cut the band
 on a dataset that was never sampled for scale.
 
+## `coco_better`: the method bench (#3983)
+
+**`coco_better` is the bench a method comparison runs on.** It is the box-banded
+construction `vg_scale` pioneered, rebuilt on COCO 2017 train+val, with Visual
+Genome removed from the construction entirely (decided 2026-09-18). One
+measurement decided it, not preference:
+[#3983](../../../docs/experiments/2026-09-18-coco-only-supply-3983/REPORT.md)
+found that COCO alone supplies every cell at the shipped `SCALE_N_POS`, the
+thinnest (`bus@small`) at 1.8x the floor, with 49,503 shared-pool candidates
+against the 9,900 needed. What VG still carried by then was about 43% of the
+positives and the whole apparatus for guessing at labels VG cannot give
+([retired](#retired-with-visual-genome-4038)): 4,709 correction rows and 5,904
+human judgements, against a source whose recall over *C* is 0.61
+([the corrections log](../../../docs/experiments/2026-09-17-vg-scale-corrections/REPORT.md)).
+Dropping it costs no difficulty either: off-COCO images are differently
+distributed but not harder on the shipped head
+([#3997](../../../docs/experiments/2026-09-18-vg-diversity-3997/REPORT.md)).
+
+**Why the name.** It is a fixed body of material cut into blocks to spec. Band,
+prevalence and class list are export-time queries (#3987), so nothing
+parameter-like is baked into the name, and that is the point: `vg_scale_any` and
+`vg_scale_deep` exist *because* band and depth were baked into a name, so every
+new question needed a new dataset. A version is described by its parameters
+(`bus@small`, 200:20k, π = 0.99%), and the dataset keeps one name however many
+versions are cut from it.
+
+**What the set is.** Two builds, both current since 2026-09-23: the designated
+`coco_better`, and `coco_better_full` with every image in COCO 2017.
+
+- **49 classes in 144 cells.** Each cell holds 100 positives against a shared
+  pool of 9,900 negatives (+1,000 spares), about 1% prevalence. The three fruit
+  `@small` cells are dropped (`SCALE_DROPPED_CELLS`) because no honest supply
+  fills them.
+- **The owner's rulings are built in:** the merges `enclosed road vehicle` and
+  `single serving drinking vessel` (#4056), `bag or luggage` and
+  `vase or potted plant` (#4119); one unit per class (`ClassRule.unit`); LVIS
+  pile filters for fruit and `book` (#3985); and banding and the simulated drag
+  use the **largest instance**, not the union (#4096).
+- **Each positive carries exactly one region**, the box the simulated user drags.
+
+**Using it in a study:**
+
+- `CALIB_DATASETS=coco_better`. The arms are the whole-image arm (`siglip`) and
+  the region arm (`siglip+dinov3_patch`, which opens in SigLIP and learns in
+  DINOv3 space); `CALIB_COCO_BETTER_EMBEDDERS` overrides them.
+- Other prevalences or pool shapes are cut from `coco_better_full` with
+  `coco_better_export.py`. Nothing is re-embedded.
+- Vectors are unit-norm in the pile (`build_pile.py --verify` enforces it), and
+  the harness renormalises on load (#4095, #4099).
+- **Comparability boundary:** numbers measured on `coco_better` before #4106
+  (2026-09-22) and #4124 (2026-09-23) do not compare with later ones, because
+  membership changed in almost every cell. The old `large` cap is a second
+  boundary ([above](#large-runs-to-the-whole-frame-2026-09-24)).
+- After a rules change, `build_pile.py --datasets coco_better_full,... --relabel`
+  rewrites the full corpus's labels in about 8 minutes. It never re-embeds, and
+  it refuses to write if a vector moved (#4091). The designated build is a
+  `--force` rebuild, about an hour on a v100.
+
+**Use it for method comparisons (owner, 2026-09-23).** The data is never ours to
+choose in the field, so the value is A vs B, or A across settings, with the
+classes and bands as strata to report *across* rather than as the variable under
+study. Data-property studies (#4051, #4043, #3589, #3807) were closed on that
+ruling.
+
+**If the class list ever has to leave COCO's 80**, the comparison is already
+made. **LVIS** is the first choice by some distance. It is built on the *same*
+COCO images, so `COCO_ROOT` and the coordinate space carry over unchanged. Its
+1,203 WordNet synsets come **with written definitions**, which is what
+`SCALE_CLASS_RULES` hand-writes. And its **federated** annotation gives every
+category an explicit set of images a human verified do not contain it, which is
+`labels_exhaustive` as a delivered artifact. The caveats: federated is not
+per-image exhaustive, so #3667's cross-class negative rule needs restating per
+category, and tail categories are thin, so at 100 positives per band the usable
+vocabulary is the head few hundred. After LVIS come **Objects365 v2** (365 dense
+classes over ~2M images: the best raw supply, but no explicit negatives and no
+COCO overlap, so a new pool to embed; its validation split already serves as
+[`o365_better`](#a-second-source-o365_better-4815)), **Open Images V7** (600
+boxable classes with human-verified *negative* image-level labels at scale, but
+`group-of` complicates a box→size rule and the framing differs from COCO's), and
+**ADE20K**: far too thin to build cells from at ~27k images, but the right **gold
+audit set** for silence and box-quality rates, which #3696 measured against no
+reference at all.
+
 ## A second source: `o365_better` (#4815)
 
 `coco_better`'s construction on Objects365 v2's validation split: the same *C*,

@@ -372,18 +372,19 @@ class AudioMediaType(MediaType):
         return ["thumbnail_bytes"]
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
-        from vtscore.media.audio.decode import decode_audio  # noqa: PLC0415
-
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
-        try:
-            audio_data, sr = decode_audio(str(file_path), sr=None, mono=True)
-            duration = len(audio_data) / sr
-        except Exception:
-            duration = 0.0
-        thumbnail = generate_waveform_thumbnail(media_bytes)
-        return {"media_bytes": media_bytes, "duration": duration, "thumbnail_bytes": thumbnail}
+        # One decode of the bytes in hand serves both the duration and the
+        # waveform; for AAC/M4A each decode is its own ffmpeg subprocess.
+        audio_data, sr = _decode_audio_bytes(media_bytes)
+        if audio_data is None or not sr:
+            return {"media_bytes": media_bytes, "duration": 0.0, "thumbnail_bytes": None}
+        return {
+            "media_bytes": media_bytes,
+            "duration": len(audio_data) / sr,
+            "thumbnail_bytes": _render_waveform(audio_data),
+        }
 
     # ------------------------------------------------------------------
     # HTTP serving

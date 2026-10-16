@@ -30,7 +30,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 ## Embedders, detectors, media
 
-- [`patch-embedder.md`](patch-embedder.md)
 - [`structural-embedder.md`](structural-embedder.md)
 - [`half-media-types.md`](half-media-types.md)
 - [`media-cleaners.md`](media-cleaners.md)
@@ -41,7 +40,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`population-anchored-calibration.md`](population-anchored-calibration.md)
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
 - [`calibration-experiment.md`](calibration-experiment.md)
-- [`cost-to-fbeta.md`](cost-to-fbeta.md)
 - [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
 
 ## Scoring and eval
@@ -49,7 +47,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`max-patch-experiment.md`](max-patch-experiment.md)
 - [`set-scorer-experiment.md`](set-scorer-experiment.md)
 - [`coverage-atlas.md`](coverage-atlas.md)
-- [`coco-better.md`](coco-better.md)
 
 ## Platform / CLI
 
@@ -64,5 +61,4 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 ## Cross-cutting audits
 
 - [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md)
-- [`codebase-audit-2026-09.md`](codebase-audit-2026-09.md)
 - [`documentation-accuracy.md`](documentation-accuracy.md)

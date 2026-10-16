@@ -2,7 +2,7 @@
 
 A detector locks exactly one **embedder type** at create time - one of
 ``"semantic"``, ``"patch_semantic"``, ``"structural"`` (see
-``docs/plans/patch-embedder.md`` → "Per-detector embedder type").  It is the
+``docs/ARCHITECTURE.md`` → "Per-detector embedder type").  It is the
 *kind* of vector space the detector's MLP trains and scores in, not a specific
 embedder name: the detector is compatible with any dataset (of the same
 ``media_type``) that binds an embedder of that type, and the MLP re-derives

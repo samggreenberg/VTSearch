@@ -2,13 +2,14 @@
 
 Library tier: the cache is Flask-free process-global state, so it belongs in
 ``tests_lib``.  Covers score-key handling, above-threshold counting, window
-slicing, LRU eviction, the sort-generation (token) guard, and the per-dataset
-gate.
+slicing, LRU eviction by entries and by rows, the sort-generation (token)
+guard, and the per-dataset gate.
 """
 
 from __future__ import annotations
 
 from vtscore.state.sort_results_cache import (
+    SORT_CACHE_MAX_ROWS,
     SORT_WINDOW_HEAD,
     SORT_WINDOW_TAIL,
     SortResultsCache,
@@ -136,6 +137,55 @@ class TestSortResultsCache:
         token = cache.store(_ranking(3), 0.5)
         cache.reset_for_tests()
         assert cache.page(token, 0, 10) is None
+
+
+class TestRowCap:
+    """The rows held across all rankings are bounded too, not only their count (#4978)."""
+
+    def test_evicts_the_oldest_until_under_the_cap(self):
+        cache = SortResultsCache(max_rows=10)
+        t1 = cache.store(_ranking(3), 0.5)
+        t2 = cache.store(_ranking(3), 0.5)
+        t3 = cache.store(_ranking(3), 0.5)
+        t4 = cache.store(_ranking(6), 0.5)  # 15 rows: t1 and t2 go, leaving 9
+        assert cache.page(t1, 0, 10) is None
+        assert cache.page(t2, 0, 10) is None
+        assert cache.page(t3, 0, 10) is not None
+        assert cache.page(t4, 0, 10) is not None
+
+    def test_the_newest_survives_alone_over_the_cap(self):
+        cache = SortResultsCache(max_rows=10)
+        t1 = cache.store(_ranking(3), 0.5)
+        t2 = cache.store(_ranking(25), 0.5)
+        assert cache.page(t1, 0, 10) is None
+        page = cache.page(t2, offset=20, limit=10)
+        assert page is not None
+        assert page["total"] == 25
+        assert [r["id"] for r in page["results"]] == [20, 21, 22, 23, 24]
+
+    def test_paging_keeps_a_ranking_warm_against_the_row_cap(self):
+        cache = SortResultsCache(max_rows=10)
+        t1 = cache.store(_ranking(4), 0.5)
+        t2 = cache.store(_ranking(4), 0.5)
+        cache.page(t1, 0, 10)  # touch t1 -> now most-recently-used
+        cache.store(_ranking(4), 0.5)  # 12 rows: the LRU, now t2, goes
+        assert cache.page(t1, 0, 10) is not None
+        assert cache.page(t2, 0, 10) is None
+
+    def test_the_entry_cap_still_applies_under_the_row_cap(self):
+        cache = SortResultsCache(max_entries=2, max_rows=100)
+        t1 = cache.store(_ranking(1), 0.5)
+        cache.store(_ranking(1), 0.5)
+        cache.store(_ranking(1), 0.5)
+        assert cache.page(t1, 0, 10) is None
+
+    def test_the_default_cap_is_sort_cache_max_rows(self):
+        # One shared row repeated: a list of pointers, so this stays cheap.
+        cache = SortResultsCache()
+        t1 = cache.store([{"id": 0, "score": 1.0}] * SORT_CACHE_MAX_ROWS, 0.5)
+        t2 = cache.store(_ranking(1), 0.5)  # one row over the cap: t1 goes
+        assert cache.page(t1, 0, 10) is None
+        assert cache.page(t2, 0, 10) is not None
 
 
 class _Line:
