@@ -170,8 +170,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--settings",
         type=str,
         help=(
-            "Path to a settings JSON file containing autorun processors. "
-            "Used with --autodetect. Defaults to data/settings.json."
+            "Path to the server-tier settings JSON file, in place of the default "
+            "data/settings.json. The web server reads and writes it; --autodetect "
+            "reads its autofind_detectors and the rest of the run's settings from it "
+            "(a --pipeline file names it as settings: instead)."
         ),
     )
     parser.add_argument(
@@ -813,10 +815,24 @@ def _dispatch_autodetect(
     )
 
 
+def _apply_env_overrides_headless() -> None:
+    """Apply the ``VTSEARCH_*`` admin overrides no flag set, as the server's startup does.
+
+    Only one of them changes a headless run today: the retention stamp a
+    saved dataset gets (``VTSEARCH_DATASET_MAX_AGE_DAYS``, which every LabBench
+    image pins). The rest restrict the web UI and are inert here, but applying
+    the whole registry keeps the two paths from drifting apart again (#4970).
+    A malformed value is warned about on stderr, never on stdout, which may be
+    the ``--progress-format json`` stream.
+    """
+    admin_overrides.apply_env_overrides(warn=lambda msg: print(msg, file=sys.stderr, flush=True))
+
+
 def _start_headless_run(args, parser) -> None:
-    """Wire progress output and authenticate ``--user``: the setup a headless
-    run needs before it produces any output, shared by ``--autodetect`` and
-    ``--pipeline`` so the two honour the same flags."""
+    """Wire progress output, apply the env-var admin overrides, and authenticate
+    ``--user``: the setup a headless run needs before it produces any output,
+    shared by ``--autodetect`` and ``--pipeline`` so the two honour the same
+    flags."""
     # Wire the CLI progress format (text/json) before any pipeline call
     # produces output. In JSON mode we also re-route the process-wide media
     # progress callback from update_progress (which resolves per-thread, so
@@ -833,6 +849,7 @@ def _start_headless_run(args, parser) -> None:
     # half of its promise.
     notifications.subscribe(cli_progress.notification_subscriber)
 
+    _apply_env_overrides_headless()
     _authenticate_cli_user(args, parser)
 
 
@@ -885,7 +902,17 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
 
 def _run_server(args, app, initialize_server) -> None:
-    """Activate the chosen login provider, run the port preflight, and serve."""
+    """Point at ``--settings``, activate the chosen login provider, run the port preflight, and serve."""
+    # Before anything reads a setting: the startup banner and the embedder
+    # preload in initialize_server both do. The same flag points a headless
+    # run at its settings file, so it means one thing on both paths (#4970).
+    settings_path = getattr(args, "settings", None)
+    if settings_path:
+        from vtsearch.settings import set_settings_path
+
+        set_settings_path(settings_path)
+        print(f"\U0001f4c4 Server settings file: {settings_path}", flush=True)
+
     # Activate the chosen login provider before starting the server.
     login_choice = getattr(args, "login", None)
     if login_choice == "trivial":
