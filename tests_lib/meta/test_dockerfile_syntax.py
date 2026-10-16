@@ -97,7 +97,7 @@ def test_parser_catches_inline_try_except_syntax_error() -> None:
 
 def test_parser_skips_non_dash_c_python_invocations() -> None:
     """Real script files (``python scripts/foo.py``) are out of scope."""
-    text = 'RUN python -u scripts/preload_siglip.py\nRUN python -c "print(1)"\n'
+    text = 'RUN python -u scripts/preload_default_embedder.py image\nRUN python -c "print(1)"\n'
     assert _find_python_c_snippets(text) == ["print(1)"]
 
 

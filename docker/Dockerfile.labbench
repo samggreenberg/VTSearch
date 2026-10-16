@@ -1,35 +1,56 @@
 # -----------------------------------------------------------------
-# VTSearch: LabBench CPU image (image search with SigLIP only)
+# VTSearch: LabBench CPU image (one media type, its default embedder only)
 #
-# Streamlined for the LabBench environment: browsing/voting on an
-# image dataset using the SigLIP embedder. Bakes the SigLIP model
-# weights into the image at build time so the container is ready to
-# serve immediately on first run (no Hugging Face download needed).
+# Streamlined for the LabBench environment: browsing/voting on a dataset of
+# one media type with that type's default embedder. The image installs only
+# what that type needs, and bakes the embedder's weights in at build time so
+# the container is ready to serve immediately on first run (no Hugging Face
+# download needed).
+#
+# MEDIA_TYPE picks the type, as in docker/Dockerfile.solo, and defaults to
+# image. Each supported type has its own requirements/labbench-<type>.txt;
+# the build fails, listing the supported ids, for any other value:
+#
+#   image   SigLIP          (the default)
+#   audio   CLAP General
+#
+# That table is informational. The baked and locked embedder is whatever the
+# server warms for the type at startup, because the build runs that very
+# preload (scripts/preload_default_embedder.py); this file names no model.
+# What it does pin is the requirements file, curated for that embedder, so a
+# change of default that needs new dependencies fails the bake step loudly
+# rather than shipping an image that cannot load its own embedder.
+#
+# Unlike Dockerfile.solo (the full CPU image, every embedder installed), the
+# other embedders for the type are not installed here, which is why the
+# embedder is locked too.
 #
 # Streamlining knobs (all baked into this image; no flags required):
 #
-#   * Seeded ``data/settings.json`` sets ``solo_media_type = "image"``
-#     (an admin-set server restriction users cannot change) and seeded
-#     ``data/default/user_settings.json`` sets
-#     ``solo_embedder_per_media_type = {"image": "siglip"}``, so the
-#     dataset-importer modal hides both its mediaType picker and the
-#     embedder dropdown. Users can override the embedder in
-#     Settings → Import Defaults; the mediaType lock is fixed.
-#   * Seeded ``data/settings.json`` also sets ``hidden_plugins`` so the
-#     Aud2Img (spectrogram) converter and the Downloaded Demo Media
-#     importer are dropped from every picker / listing API response.
-#     See ``vtsearch.settings.get_effective_hidden_plugins`` for the
-#     merge semantics; the same effect is achievable at runtime with
-#     ``--hide-plugin converters:audio2image --hide-plugin importers:demo``
-#     in dev-mode invocations. ``VTSEARCH_DATASET_MAX_AGE_DAYS=14`` (below)
-#     caps dataset retention at 14 days for every user; it overrides the
-#     persisted file for the process lifetime and is not editable via the
-#     settings API.
+#   * VTSEARCH_SOLO_MEDIA_TYPE (set below) is the admin-set lock: it hides
+#     the mediaType pickers in the dataset-importer and new-detector flows,
+#     filters converters to ones that output this type, and preloads the
+#     type's default embedder at startup. Users cannot change it. Being an
+#     env var rather than a seeded settings file, it also holds when the
+#     image is redeployed onto an existing /app/data volume.
+#   * VTSEARCH_DATASET_MAX_AGE_DAYS=14 (below) caps dataset retention at 14
+#     days for every user; it overrides the persisted file for the process
+#     lifetime and is not editable via the settings API.
+#   * scripts/seed_labbench_settings.py seeds the data volume: the default
+#     user's ``solo_embedder_per_media_type`` locks the type to the baked
+#     embedder (the importer hides its embedder dropdown; users can override
+#     it in Settings > Import Defaults), and ``hidden_plugins`` drops the
+#     Downloaded Demo Media importer plus any plugin the slim requirements
+#     leave without its dependencies (for image, the Aud2Img converter). The
+#     same hides are available at runtime with ``--hide-plugin`` in
+#     dev-mode invocations.
 #
 # Build (from repo root):
 #   docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
+#   docker build -f docker/Dockerfile.labbench --build-arg MEDIA_TYPE=audio -t vtsearch:labbench-audio .
 # Run:
 #   docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
+# Or use docker/compose/docker-compose.labbench.yml / docker-compose.labbench-audio.yml.
 # -----------------------------------------------------------------
 
 # ---------- frontend build stage ----------
@@ -48,20 +69,16 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements/*.txt change) ----
+# ---------- core dependency layer (shared by every MEDIA_TYPE) ----------
+# requirements/labbench.txt is what every LabBench image needs whatever its
+# media type: the framework, the numeric and model stack, Browse. It is
+# installed before MEDIA_TYPE is declared, so an image and an audio build
+# share this layer and the two below.
 COPY requirements/labbench.txt requirements/
-COPY pyproject.toml ./
-COPY vtsearch/__init__.py vtsearch/__init__.py
-
-# Copy package source so `pip install -e .` finds it.
-COPY vtsearch/ vtsearch/
-COPY vtscore/ vtscore/
-
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements/labbench.txt && \
-    pip install --no-cache-dir --no-deps -e .
+        -r requirements/labbench.txt
 
 # ---------- VTSBrowse signpost naming (toponymy) ----------
 # Docker builds never run scripts/install.sh, so this step mirrors its
@@ -89,26 +106,52 @@ RUN pip install --no-cache-dir apricot-select && \
 # unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
 # Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
 # wheel; FaceNet's checkpoint downloads into the models cache on first use.
+# Only an image build reaches the face path (it needs torchvision, which
+# labbench-image.txt adds); in an audio build the package is inert.
 RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
-# ---------- pre-download SigLIP weights into the image ----------
-# Bake weights into a non-volume path so they survive volume mounts on
-# /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
+# ---------- the media type's dependencies ----------
+# MEDIA_TYPE is declared here, after the shared layers above. The check names
+# the supported types before pip would fail on a missing requirements file.
+ARG MEDIA_TYPE=image
+COPY requirements/labbench-*.txt requirements/
+RUN if [ ! -f "requirements/labbench-${MEDIA_TYPE}.txt" ]; then \
+        echo "MEDIA_TYPE='${MEDIA_TYPE}' has no LabBench image. Supported:" \
+            $(ls requirements/labbench-*.txt | sed 's|.*/labbench-||; s|\.txt$||') \
+            "(docker/Dockerfile.solo builds the full image for any media type)." >&2; \
+        exit 2; \
+    fi && \
+    pip install --no-cache-dir \
+        --prefer-binary \
+        -r "requirements/labbench-${MEDIA_TYPE}.txt"
+
+# ---------- the app itself ----------
+# `--no-deps`: the requirements files above are this image's whole
+# dependency set, so pyproject.toml's (the full app's) must not reach it.
+COPY pyproject.toml LICENSE NOTICE ./
+COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
+RUN pip install --no-cache-dir --no-deps -e .
+
+# ---------- bake the media type's default embedder ----------
+# Weights go to a non-volume path so a volume mounted on /app/data cannot mask
+# them; the app reads the cache location from VTSEARCH_MODELS_DIR. TORCH_HOME
+# points at the same place so a torch.hub-loaded checkpoint is baked there too
+# rather than under root's $HOME, which the runtime user cannot see.
 #
-# scripts/preload_siglip.py uses huggingface_hub.snapshot_download so we
-# only fetch the repo files; torch is not imported and the model is not
-# constructed during the build. That is much faster, uses far less RAM,
-# and emits per-file tqdm progress so the build never looks like a hang.
-# PYTHONUNBUFFERED + python -u keep those prints flowing to BuildKit.
-# Tip: run `docker build --progress=plain ...` to see step output live.
+# The step loads the embedder exactly as the server does at startup, so it is
+# also the build-time proof that the slim requirements can run it.
+# PYTHONUNBUFFERED + python -u keep the download progress flowing to BuildKit
+# (run `docker build --progress=plain ...` to see it live), and
 # HF_HUB_DOWNLOAD_TIMEOUT makes a stalled connection error out (and
 # huggingface_hub auto-retry) instead of blocking the build forever.
 ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
+    TORCH_HOME=/opt/vtsearch/models \
     HF_HUB_DOWNLOAD_TIMEOUT=120 \
     PYTHONUNBUFFERED=1
-COPY scripts/preload_siglip.py scripts/preload_siglip.py
+COPY scripts/preload_default_embedder.py scripts/preload_default_embedder.py
 RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
-    python -u scripts/preload_siglip.py
+    python -u scripts/preload_default_embedder.py "$MEDIA_TYPE"
 
 # ---------- application layer ----------
 COPY . .
@@ -122,64 +165,12 @@ COPY --from=frontend /static/ /app/static/
 ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
-# Seed the data volume so the LabBench container launches in its
-# streamlined image-only / SigLIP-only configuration. Docker copies these
-# files into a fresh named volume on first creation, so a new deployment
-# comes ready-to-serve without any first-run setup, and users can still
-# tweak any of these from the in-app Settings dialog afterwards.
-#
-# Server-tier (``data/settings.json``):
-#
-# * ``hidden_plugins`` drops the Aud2Img (spectrogram) converter and the
-#   Downloaded Demo Media importer from every picker / listing API
-#   response. The Aud2Img converter is useless without librosa
-#   (omitted from ``requirements/labbench.txt``) and the demo importer
-#   needs outbound network access this container doesn't expect to have.
-#   Hidden plugins remain importable by name for any backend code that
-#   names them directly; this is a UI declutter, not a security gate.
-#
-# * ``dataset_max_age_days=14`` gives every dataset created on this
-#   server a two-week age-off: it's stamped with an ``expires_at`` 14
-#   days out and auto-removed from the registry once that passes. This
-#   keeps the shared LabBench volume from accumulating stale datasets
-#   indefinitely. The same 14-day cap is also pinned via the
-#   ``VTSEARCH_DATASET_MAX_AGE_DAYS`` env var below, which overrides the
-#   persisted file for the process lifetime (so a redeploy onto a
-#   pre-existing volume still gets the cap, even though the seeded file
-#   above is only written into a fresh volume). The value is not editable
-#   via the settings API.
-#
-# * ``solo_media_type=image`` locks the dataset-importer and
-#   new-detector flows to image mediaType; the mediaType picker
-#   disappears entirely. It is an admin-set server restriction, so it
-#   applies to every user and is not editable via the settings API (the
-#   Server settings tab shows it read-only). The ``--solo-media-type``
-#   CLI flag would do the same, but there is no argv in the
-#   gunicorn-launched server path, so the setting is seeded into the file
-#   instead.
-#
-# Per-user tier (``data/default/user_settings.json``; the
-# ``DefaultLoginProvider`` resolves to the ``default`` user):
-#
-# * ``solo_embedder_per_media_type={"image": "siglip"}`` hides the
-#   embedder dropdown for image flows and silently uses SigLIP; the
-#   only image embedder we ship in this image.
-RUN mkdir -p /app/data /app/data/default && \
-    printf '%s\n' \
-      '{' \
-      '  "dataset_max_age_days": 14,' \
-      '  "solo_media_type": "image",' \
-      '  "hidden_plugins": {' \
-      '    "converters": ["audio2image"],' \
-      '    "importers": ["demo"]' \
-      '  }' \
-      '}' \
-      > /app/data/settings.json && \
-    printf '%s\n' \
-      '{' \
-      '  "solo_embedder_per_media_type": {"image": "siglip"}' \
-      '}' \
-      > /app/data/default/user_settings.json
+# Seed the data volume (data/settings.json and data/default/user_settings.json)
+# so a LabBench container launches streamlined. Docker copies these files into
+# a fresh named volume on first creation, so a new deployment comes
+# ready-to-serve without any first-run setup. What is seeded, and why, is in
+# the script's docstring.
+RUN python scripts/seed_labbench_settings.py "$MEDIA_TYPE" /app/data
 
 # Runtime data directory (settings, embeddings, datasets, media files).
 # Mount a volume here to persist user data across container restarts.
@@ -188,8 +179,8 @@ VOLUME /app/data
 
 # Run as a non-root user. See the CPU Dockerfile for the rationale and
 # the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
-# /opt/vtsearch/models is also opened up so the baked-in HuggingFace
-# snapshot stays readable when the runtime UID is unknown at build time.
+# /opt/vtsearch/models is also opened up so the baked weights stay
+# readable when the runtime UID is unknown at build time.
 RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
     chgrp -R 0 /app /home/vtsearch /opt/vtsearch && \
     chmod -R g=u /app /home/vtsearch /opt/vtsearch
@@ -202,6 +193,7 @@ EXPOSE 5000
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
     VTSEARCH_SERVER_INIT=1 \
-    VTSEARCH_DATASET_MAX_AGE_DAYS=14
+    VTSEARCH_DATASET_MAX_AGE_DAYS=14 \
+    VTSEARCH_SOLO_MEDIA_TYPE=${MEDIA_TYPE}
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
