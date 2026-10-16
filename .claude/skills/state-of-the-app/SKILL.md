@@ -398,7 +398,9 @@ follows:
   owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
   holds every session set, the starting photos folded into the dataset name
   (`viewer.py --beta-run BETA=DIR::DATASET`), and people shown as strata
-  (`viewer.py --category-map`, from `fhibe/person_strata.py`).
+  (`viewer.py --category-map`, from `fhibe/person_strata.py`). A stratum pools its people, but
+  each person is still a run (#4944). Until then a page read a stratum's dozen people at seed 0 as
+  one run: their spot-check gaps went uncarried, and its stops were the earliest of them.
 - **Strata replace classes and bands:** FHIBE's subject annotations (age, pronoun, natural skin
   colour, ancestry) and the census's face-size band. Report across them; the data is still the
   bench, not the subject.
