@@ -235,6 +235,52 @@ class TestPartialImportNoPick:
         assert EMBEDDER in msg
 
 
+class TestNamedVectorsAreWidthChecked:
+    """A vector an importer files under an embedder's name must be that embedder's width.
+
+    The shape a ``fetch_record`` hook or a ``run()`` override hands in:
+    ``media["embeddings"] = {name: vec}``, with nothing at the door to check it.
+    """
+
+    def _named(self, vec: np.ndarray) -> dict[int, dict]:
+        media = _media(1, None)
+        media["embeddings"] = {EMBEDDER: vec}
+        media["embedder"] = EMBEDDER
+        return {1: media}
+
+    def test_a_named_vector_of_the_wrong_width_is_rejected(self):
+        emb = _fake_embedder()
+        emb.embedding_dim = DIM
+        medias = self._named(np.ones(DIM + 2, dtype=np.float32))
+
+        with mock.patch("vtscore.media.get_embedder", return_value=emb), pytest.raises(MismatchedVectorError) as exc:
+            embed_missing(medias, EMBEDDER)
+
+        msg = str(exc.value)
+        assert "1.wav" in msg and str(DIM + 2) in msg and EMBEDDER in msg
+        assert emb.embed_media_bulk.call_count == 0
+
+    def test_a_named_vector_of_the_declared_width_passes(self):
+        emb = _fake_embedder()
+        emb.embedding_dim = DIM
+        vec = np.arange(DIM, dtype=np.float32)
+        medias = self._named(vec)
+
+        with mock.patch("vtscore.media.get_embedder", return_value=emb):
+            embed_missing(medias, EMBEDDER)
+
+        np.testing.assert_array_equal(media_embedding(medias[1], EMBEDDER), vec)
+
+    def test_an_embedder_that_declares_no_width_is_not_checked(self):
+        emb = _fake_embedder()
+        medias = self._named(np.ones(DIM + 2, dtype=np.float32))
+
+        with mock.patch("vtscore.media.get_embedder", return_value=emb):
+            embed_missing(medias, EMBEDDER)
+
+        assert media_embedding(medias[1], EMBEDDER).shape == (DIM + 2,)
+
+
 class TestPartialImportExplicitPick:
     def test_pick_still_stamps_and_embeds_the_rest(self):
         """The named-pick path (GUI import with a pick) is unchanged."""
