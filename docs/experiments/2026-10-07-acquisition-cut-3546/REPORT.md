@@ -13,8 +13,8 @@ which under the balance had saturated into a rank pin nobody chose. Against toda
 | objective after the check | +0.000 ± 0.004 | +0.003 ± 0.002 | **+0.008 ± 0.003** |
 | objective, mean over votes 1–150 | −0.000 ± 0.002 | +0.002 ± 0.001 | **+0.008 ± 0.001** |
 
-It is never resolvably worse than today's cut on any read. Part of #4581; the plan is
-[`docs/plans/cost-to-fbeta.md`](../../plans/cost-to-fbeta.md).
+It is never resolvably worse than today's cut on any read. Part of #4581; the rerun rules are in
+[`docs/EVAL.md`](../../EVAL.md#re-measuring-a-decision-taken-on-an-older-metric).
 
 ## What today's cut is
 

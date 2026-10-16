@@ -45,7 +45,7 @@ Optional but commonly overridden:
 | `display_name` | `name` | Friendlier label for the picker UI |
 | `embedding_dim` | `None` | Output dimensionality, declared without loading weights (tooling and the generated inventories read it) |
 | `is_default` | `False` | Exactly one embedder per media type should return `True` - that one is what `embedders_for_type(t)[0]` returns |
-| `_embed_text_impl(text)` | `None` | Text-query hook - override this, NOT `embed_text`, which L2-normalizes the result for you. Leave the default to disable text-query sort; otherwise return a vector in the same space as `_embed_media_impl` |
+| `_embed_text_impl(text)` | `None` | Text-query hook - override this, NOT `embed_text`, which L2-normalizes the result for you. Leave the default (and set `supports_text` to `False`, whose default is `True`) to disable text-query sort; otherwise return a vector in the same space as `_embed_media_impl` |
 | `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`). Keep the default unless you have measured that the ensemble beats the typed query on your checkpoint - it is a loss on most (#3127/#3341) |
 | `_embed_media_bulk_impl(medias)` | per-item loop | Native bulk hook for service embedders or batched GPU forward passes |
 | `_patch_forward_impl(media)` | `None` | For patch-capable image encoders; required when `supports_patch_regions = True` |
@@ -73,7 +73,9 @@ Out-of-tree, the simplest path is to symlink your `embedder_<name>.py`
 into the right directory - the scan uses
 `importlib.util.spec_from_file_location` so symlinked files load
 cleanly. There is no `vtscore.embedders` entry-point group; embedders
-are tied to a specific media-type package by directory placement.
+are tied to a specific media-type package by directory placement, or
+registered by hand from your own code with
+`vtscore.media.register_embedder(YourEmbedder())`.
 
 ## Lazy model loading
 
@@ -118,7 +120,7 @@ point of view:
 
 The framework writes downloaded weights to
 `vtscore.config.MODELS_CACHE_DIR` (which honours `VTSEARCH_MODELS_DIR`,
-fallback `data/models`). Library callers running outside an app shim
+falling back to `models/` under `vtscore.config.DATA_DIR`). Library callers running outside an app shim
 should reference this constant directly:
 
 ```python
@@ -149,8 +151,10 @@ for embedders that don't batch internally. Override
 
 Overrides that batch internally are responsible for emitting their own
 progress updates. `embed_medias(dict[int, dict])` is a sugar wrapper
-that delegates to `embed_media_bulk` and returns id-keyed vectors -
-importers usually call this.
+that delegates to `embed_media_bulk` and returns id-keyed vectors.
+Importers never call an embedder themselves: the load pipeline's embed
+stage (`vtscore.datasets.stages.embedding.embed_missing`) bulk-embeds
+whatever they return without a vector.
 
 `patch_forward(media)` is for patch-based image encoders (DINOv2,
 DINOv3, EUPE). Set `supports_patch_regions = True` and implement
@@ -161,15 +165,17 @@ default in place and the patch pipeline skips their datasets entirely.
 
 ## Capability flags
 
-Three flags on the subclass change framework behaviour:
+These flags on the subclass change framework behaviour:
 
 | Flag | Default | When to set |
 |------|---------|-------------|
 | `supports_text` | `True` | Set `False` for vision-only or patch-only encoders that don't have a text tower. The frontend hides text-search affordances for datasets using them. |
 | `supports_patch_regions` | `False` | Set `True` for patch-based image encoders that implement `_patch_forward_impl`. The dataset loader runs the patch pass after the standard CLS pass. |
+| `supports_geometric_verification` | `False` | Set `True` for structural (local-feature) encoders that implement `_local_features_forward_impl`. The dataset loader then stores per-image local features for the geometric re-rank. |
 | `license_notice` | `None` | Non-`None` when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend surfaces this as a warning chip in the picker. |
+| `eval_only` | `False` | Set `True` for a research arm: still resolvable by name through `get_embedder()`, but withheld from every picker, from the per-media-type default and from `GET /api/embedders`. |
 
-All three appear in `MediaEmbedder.to_dict()` and the
+All but `eval_only` appear in `MediaEmbedder.to_dict()` and the
 `GET /api/embedders` payload.
 
 ## Worked example
@@ -291,6 +297,12 @@ import pytest
 from vtscore.media import embedders_for_type, get_embedder
 
 
+def _has_module(name: str) -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec(name) is not None
+
+
 class TestMiniLMRegistration:
     def test_is_registered(self):
         names = [e.name for e in embedders_for_type("text")]
@@ -307,7 +319,7 @@ class TestMiniLMEmbed:
         reason="sentence-transformers not installed",
     )
     def test_embed_text_returns_vector(self):
-        from my_pkg.embedder_minilm import TextMiniLMEmbedder
+        from vtscore.media.text.embedder_minilm import TextMiniLMEmbedder
 
         emb = TextMiniLMEmbedder()
         vec = emb.embed_text("hello world")
@@ -315,12 +327,6 @@ class TestMiniLMEmbed:
         assert vec.shape == (384,)
         # Normalized
         assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4
-
-
-def _has_module(name: str) -> bool:
-    import importlib.util
-
-    return importlib.util.find_spec(name) is not None
 ```
 
 See [`tests_lib/detectors/test_new_embedders.py`](../../../tests_lib/detectors/test_new_embedders.py)

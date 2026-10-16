@@ -50,9 +50,9 @@ Three properties matter to callers:
 
 - **Lookup / evidence:** `lookup(vector_id)` (leaf name), `label(vector_id, good)`,
   `unlabel(vector_id)`, `n_pos(name)` / `n_neg(name)`, `reset_labeled()`,
-  `labeled_ids()`.
-- **Coverage:** `coverage_level()`, `next_sample(...)`, `total_nodes()`,
-  `depth()`, `span_info()`.
+  `labeled_ids` (property).
+- **Coverage:** `coverage_level()`, `next_sample(...)`, `total_nodes`
+  (property), `depth()`, `span_info()`.
 - **Typicality:** `typicality_pvalues(matrix)`, `typicality_pvalue(vector)`.
 - **Persistence:** `to_serializable()` / `CoverageAtlas.from_serializable(data)`
   (skips the k-means build; raises `ValueError` on an unknown or missing

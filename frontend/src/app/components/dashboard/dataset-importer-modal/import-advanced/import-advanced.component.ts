@@ -109,7 +109,7 @@ export class ImportAdvancedComponent {
   readonly selectedEmbedderChange = output<string>();
 
   /** Optional second/third embedders of the v3 trio
-   *  (``docs/plans/patch-embedder.md`` → "V3").  The primary picker above can be
+   *  (``docs/ARCHITECTURE.md`` → "Embedder binding and routing").  The primary picker above can be
    *  any embedder (including a single-vector one); these two *add* a
    *  patch-capable embedder for region search/voting and a structural embedder
    *  for instance matching, so a dataset can bind one of each role.  Both

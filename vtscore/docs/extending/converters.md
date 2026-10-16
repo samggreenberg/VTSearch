@@ -64,7 +64,8 @@ encoder for the same kind, write an [embedder](embedders.md).
 because every framework call site passes a populated `params` dict.
 
 `name` is auto-derived as `f"{source_type}2{target_type}"` - don't
-override it. It is the registry key, so two converters with the same
+override it (the app's demo picker rebuilds the name from the type
+pair). It is the registry key, so two converters with the same
 source / target pair clash: a third-party one is skipped in favour of the
 built-in. Keep the pairing unique.
 
@@ -205,9 +206,10 @@ The registry ([`vtscore/converters/__init__.py`](../../converters/__init__.py))
 scans this directory for `.py` files (excluding `__init__.py` and
 `base.py`) and registers any module-level `CONVERTER` sentinel. No
 `__init__.py` edits are needed for the discovery itself - it's
-filesystem-driven - but the package's existing `__init__.py` imports
-all built-in converter classes for legacy `from vtscore.converters
-import Audio2ImageMediaConverter` users.
+filesystem-driven. The package's `__init__.py` also re-exports the
+built-in converter classes (all but `Image2FaceMediaConverter`) for
+`from vtscore.converters import Audio2ImageMediaConverter` callers;
+a new converter needn't be added there.
 
 Out-of-tree, ship a Python distribution with a `vtscore.converters`
 entry point (see below).

@@ -10,10 +10,9 @@ third-party distribution can `pip install` one in. Subclass
 ([`vtscore/exporters/base.py`](../../exporters/base.py)), declare
 your `fields`, and implement a method per payload kind you support.
 
-The class was called `LabelsetExporter` for historical reasons, which
-described one of the three payloads it has always accepted. It is now
-`ResultsExporter`; `LabelsetExporter` remains a permanent module-level
-alias, so existing imports and subclasses keep working untouched.
+`LabelsetExporter` is a permanent module-level alias of
+`ResultsExporter`, so imports and subclasses written against that name
+keep working untouched.
 
 **App-side counterpart:** [`docs/EXTENDING-plugins.md § Adding a
 Results Exporter`](../../../docs/EXTENDING-plugins.md#adding-a-results-exporter)
@@ -48,7 +47,7 @@ Optional overrides:
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `icon: str` | `"📤"` | Emoji rendered in the UI |
-| `opens_url: bool` | `False` | Set `True` when `export()` always returns an `"open_url"` - see [Opening a URL in the browser](#opening-a-url-in-the-browser) |
+| `opens_url: bool` | `False` | Set `True` when your export method always returns an `"open_url"` - see [Opening a URL in the browser](#opening-a-url-in-the-browser) |
 | `export(results, field_values)` | raises | Legacy single-method form. The named methods delegate here when unoverridden, which keeps pre-existing plugins working; prefer the named methods in new code |
 | `export_cli(results, field_values)` | delegates to `export_find_results()` | Override only when CLI-supplied values need different handling (rare) |
 
@@ -89,13 +88,20 @@ deliver an empty export.
         "<detector_name>": {
             "detector_name": "...",
             "threshold": 0.5,
-            "total_hits": 15,
-            "hits": [{"id": 1, "score": 0.82, "media": {...}}, ...],
+            "balance": {...},  # may be absent or None
+            "total_hits": 15,  # positives only
+            "hits": [{"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "...", ...}, ...],
+            "negative_hits": [...],
         },
         ...
     },
+    "missing_detectors": [...],
 }
 ```
+
+Each hit is built by `vtscore.utils.hits.build_media_hit`; the
+`ResultsExporter.export_find_results` docstring has the full key list
+(origin, `custom_metadata`, clip bounds) and what `balance` holds.
 
 **Label exports** (from the label-export modal with `enrich=true`):
 
@@ -140,9 +146,9 @@ about a scored run, would likewise declare `export_labelset()` alone.
 
 ### Legacy single-method exporters
 
-Before the kinds were named, an exporter implemented one `export()` and
-told the two dict shapes apart itself with `if "labels" in results`.
-That still works and is not going away: the default
+An exporter written against the single-method contract implements one
+`export()` and tells the two dict shapes apart itself with
+`if "labels" in results`. That still works and is not going away: the default
 `export_find_results()` and `export_labelset()` both delegate to
 `export()`, so an out-of-tree plugin written against the old contract
 needs no changes. Such an exporter is credited with *both* kinds - there
@@ -153,7 +159,7 @@ methods, and buys accurate picker filtering.
 ## Template-variable interpolation
 
 Declare the variables a field accepts in its `template_vars` tuple; the
-framework substitutes them before `export()` is called:
+framework substitutes them before your export method is called:
 
 ```python
 PluginField(
@@ -165,45 +171,45 @@ PluginField(
 )
 ```
 
-| Variable | Resolves to |
-|----------|-------------|
-| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp - unique per run, so consecutive exports don't overwrite each other |
-| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs, e.g. `results_{YYYY}.{MM}.{DD}.csv` |
-| `{detector_name}` / `{detector_id}` | Active detector identity |
-| `{username}` | Current user (single-user installs: `"default"`) |
-
-**Don't substitute by hand, and don't omit `template_vars`.** The
-framework pass sanitises every resolved value with
-`sanitize_template_value`, so a malicious `{detector_name}` containing
-`../` can't escape the per-user data directory in multi-user mode; a
-hand-rolled `str.replace` chain gets that wrong. And a field that
-doesn't declare `template_vars` gets *no* substitution at all - the
-user's `{YYYYMMDD}` ends up literally in the filename. Declaring a name
-outside the supported set raises `ValueError` on the first request, so
-typos fail loudly.
+The supported names, the sanitising of each resolved value, and why a
+field must declare them rather than substitute by hand (an undeclared
+`{YYYYMMDD}` reaches your body as a literal) are in
+[Template variables](README.md#template-variables). For an exporter, the
+point of `{YYYYMMDD-HHMMSS}` in a default path is that it is unique per
+run, so consecutive exports don't overwrite each other.
 
 **Declaring is also what makes the GUI show the value.** Run-now plugin
 forms resolve a field's *declared* variables client-side while building
 the form, so a field carrying `default="{detector_name}"` opens showing
 the detector's real name instead of the raw placeholder - visible and
 editable before the user hits Export. Resolving the active detector
-inside your `export()` body instead gets you an empty box in the UI and
+inside your export method instead gets you an empty box in the UI and
 a value that appears out of nowhere on submit.
 
 ## Server-path and URL validation
 
 **A declared field is already validated.** Because a field typed
-`url` is passed through `vtscore.security.validate_url` and a field
+`url` is passed through `vtscore.security.url_validation.validate_url` and a field
 typed `server_path` (or `folder`) through `confine_server_filepath()`
-before your `export()` runs — see [Framework-side
+before your export method runs — see [Framework-side
 normalization](README.md#framework-side-normalization) — the correct
 exporter body just uses the value:
 
 ```python
+from vtscore.security.url_validation import guarded_session
+
+
 def export_find_results(self, results: dict, field_values: dict) -> dict:
     path = Path(field_values["filepath"])   # already stripped, substituted, confined
-    requests.post(field_values["url"], json=results, timeout=30, allow_redirects=False)
+    with guarded_session() as session:
+        session.post(field_values["url"], json=results, timeout=30, allow_redirects=False)
 ```
+
+Send a request to a user-supplied URL on `guarded_session()`, as the
+built-in `webhook` exporter does, rather than through bare `requests`:
+`validate_url` vets the addresses the hostname resolved to when it ran,
+and the session re-checks the address each connection actually reaches,
+which closes the DNS-rebinding gap between the two lookups.
 
 Use `field_values[key]`, never a copy of the raw request value you
 stashed elsewhere: for path fields the pass writes back the *approved,
@@ -270,7 +276,7 @@ Four things this shape gets right, and that yours should too:
   containing `&` or `#`.
 - **Cap the length.** URLs stop working somewhere around 2000
   characters. Truncate deliberately and say so in `"message"` (the
-  built-in `open_url` exporter reports "first 100 of 5,000 item(s)")
+  built-in `open_url` exporter reports "first 100 of 5000 item(s)")
   rather than emitting a URL that silently opens the wrong selection.
 - **Assume the URL is public.** It reaches the destination site's logs
   and the user's browser history. Identifiers, not content.
@@ -278,7 +284,7 @@ Four things this shape gets right, and that yours should too:
 Set `opens_url = True` only if you *always* return a URL. The flag does
 two jobs: it labels the button before anything runs, and it tells the
 Export modal to claim the new tab *inside the click handler* and
-navigate it when your `export()` returns. That ordering is the whole
+navigate it when your export method returns. That ordering is the whole
 game - a `window.open()` fired from the response instead is exactly what
 a popup blocker exists to stop, and it fails silently. An exporter that
 returns a URL only sometimes (a webhook whose remote hands back a
@@ -286,7 +292,7 @@ permalink) leaves the flag `False`; the URL still opens on a best-effort
 basis, with the success toast's **Open** button as the fallback.
 
 **You don't need an `export_cli` override for this.** The CLI has no
-browser, so it surfaces the `open_url` your `export()` returned rather
+browser, so it surfaces the `open_url` your export method returned rather
 than dropping it: printed under the confirmation message in text mode,
 and carried as an `open_url` field on the `export_complete` event under
 `--progress-format json`, where a wrapping script can open it. Don't
@@ -321,7 +327,7 @@ app.py --list-plugins`.
 ## Worked example
 
 A minimal third-party exporter that POSTs labels (and only labels - it
-ignores autodetect-results payloads) to a webhook with HMAC signing.
+refuses a scored run) to a webhook with HMAC signing.
 
 ```python
 # my_pkg/exporter.py
@@ -332,9 +338,8 @@ import hmac
 import json
 from typing import Any
 
-import requests
-
 from vtscore.exporters.base import PluginField, ResultsExporter
+from vtscore.security.url_validation import guarded_session
 
 
 class SignedWebhookExporter(ResultsExporter):
@@ -374,17 +379,18 @@ class SignedWebhookExporter(ResultsExporter):
         body = json.dumps(labelset, sort_keys=True).encode("utf-8")
         signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
 
-        resp = requests.post(
-            url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "X-Signature": f"sha256={signature}",
-            },
-            timeout=30,
-            allow_redirects=False,
-        )
-        resp.raise_for_status()
+        with guarded_session() as session:
+            resp = session.post(
+                url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Signature": f"sha256={signature}",
+                },
+                timeout=30,
+                allow_redirects=False,
+            )
+            resp.raise_for_status()
 
         n = len(labelset["labels"])
         return {
@@ -404,15 +410,15 @@ And the `pyproject.toml`:
 signed_webhook = "my_pkg.exporter:EXPORTER"
 ```
 
-After `pip install`, the exporter appears in the export modal and the
-CLI: `python app.py --autodetect --dataset … --settings … --exporter
-signed_webhook --url https://… --hmac-secret …`.
+After `pip install`, the exporter appears in the Export modal's labelset
+picker. It has no CLI use: `--autodetect --exporter` hands an exporter a
+scored run, which this one refuses with `UnsupportedPayloadError`.
 
 ## Testing pattern
 
 Library-tier exporter tests belong in `tests_lib/io/`. The autouse
 fixtures (see [`tests_lib/conftest.py`](../../../tests_lib/conftest.py))
-reset every registry and stub embedders; `_allow_test_tmp_paths`
+reset library-tier global state and stub embedders; `_allow_test_tmp_paths`
 widens path validation so `validate_server_filepath` accepts the test
 tmp directory.
 
@@ -447,17 +453,18 @@ class TestSignedWebhookExport:
             status_code = 200
             def raise_for_status(self): pass
 
-        def _fake_post(url, data, headers, timeout, allow_redirects):
-            captured["url"] = url
-            captured["data"] = data
-            captured["headers"] = headers
-            return _Resp()
+        class _Session:
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+            def post(self, url, data, headers, timeout, allow_redirects):
+                captured.update(url=url, data=data, headers=headers)
+                return _Resp()
 
         # Call the payload method directly: it takes already-normalized
         # field_values, so a unit test can hand it a plain dict without
         # going through a route. (The legacy export() is not implemented
         # on this class and would raise NotImplementedError.)
-        with patch("my_pkg.exporter.requests.post", _fake_post):
+        with patch("my_pkg.exporter.guarded_session", _Session):
             result = exp.export_labelset(results, {
                 "url": "https://example.com/hook",
                 "hmac_secret": "s3cret",

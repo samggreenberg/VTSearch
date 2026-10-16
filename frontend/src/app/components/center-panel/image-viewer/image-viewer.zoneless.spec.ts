@@ -220,7 +220,7 @@ describe('ImageViewerComponent', () => {
   });
 
   /**
-   * Item 10 of the v2 patch-embedder plan (docs/plans/patch-embedder.md):
+   * Region voting (docs/ARCHITECTURE.md → "Embedder binding and routing"):
    * pure-function coverage for the screen↔image coordinate transform under
    * non-trivial pan / zoom / rotate. The transform is what lets the user draw
    * a box that stays anchored on the right image pixels regardless of how the
@@ -362,7 +362,7 @@ describe('ImageViewerComponent', () => {
   });
 
   /**
-   * Item 11 of the v2 patch-embedder plan: a box drawn at one zoom level
+   * Region voting: a box drawn at one zoom level
    * stays anchored on the same image pixels when the user zooms in/out.
    * The box is stored in normalised image coordinates and the CSS overlay
    * lives inside `.region-stage` which is rotated/scaled with the image
@@ -396,7 +396,7 @@ describe('ImageViewerComponent', () => {
   });
 
   /**
-   * Item 13 of the v2 patch-embedder plan: a subsequent zero-area Shift-drag
+   * Region voting: a subsequent zero-area Shift-drag
    * click does not clear an already-drawn box. (Before the v2 sticky-armed-
    * state work this was a real bug: tooSmall release nuked the prior box.)
    */

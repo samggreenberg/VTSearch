@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
 - **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
   #4736 a session started from a typed description was meant to keep the description's text ranking behind
   the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
@@ -322,6 +340,13 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
 
 - **A warning before you use a detector on data unlike its training data** (issue #4961). The
   Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
@@ -957,6 +982,18 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
+  #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
+  of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
+  lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
+  server's reason. The rows that failed stay selected, so trying again is one click.
+
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
 
 - **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
   label set's Good and Bad piles are read from the server by a background poll and again after every

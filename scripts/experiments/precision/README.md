@@ -5,7 +5,8 @@ matter? fp16 makes the `siglip2_l` forward **4.2x** faster, but it changes the
 vectors, and the whole pre-embedded pile plus every published result is fp32.
 
 The knob under test is `VTSEARCH_EMBED_PRECISION` (default `fp32`, i.e.
-unchanged). See `docs/DEPLOYMENT.md` for the modes.
+unchanged). See `docs/DEPLOYMENT.md` for the modes. Report:
+[`docs/experiments/2026-08-17-embed-precision-3143/REPORT.md`](../../../docs/experiments/2026-08-17-embed-precision-3143/REPORT.md).
 
 ## Run it
 

@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -72,10 +72,16 @@ export class DetectorsRegistryApiService {
     return this.http.post(url, params);
   }
 
-  deleteFromRegistry(detectorId: string): Observable<DetectorRegistryDeleteResponse> {
-    return deleteRegisteredDetector(this.http, this.config.rootUrl, {
-      detector_id: detectorId,
-    }).pipe(map((r) => r.body));
+  /** Pass *context* to tag the request, e.g. with {@link SKIP_ERROR_TOAST}
+   *  when the caller reports a failure itself (the Dashboard's bulk delete
+   *  sums a batch's failures into one toast). */
+  deleteFromRegistry(detectorId: string, context?: HttpContext): Observable<DetectorRegistryDeleteResponse> {
+    return deleteRegisteredDetector(
+      this.http,
+      this.config.rootUrl,
+      { detector_id: detectorId },
+      context,
+    ).pipe(map((r) => r.body));
   }
 
   renameInRegistry(

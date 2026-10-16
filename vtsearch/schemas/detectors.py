@@ -117,7 +117,7 @@ class _DetectorSummarySchema(Schema):
     # The detector's locked embedder type (the *kind* of vector space it
     # trains/scores in): "semantic" / "patch_semantic" / "structural".  Chosen at
     # create time, immutable.  Empty for a legacy detector that has neither a
-    # type nor a (migratable) primary name.  See patch-embedder.md →
+    # type nor a (migratable) primary name.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
 
@@ -297,7 +297,7 @@ class DetectorRegistryEntrySchema(Schema):
     embedder = fields.String()
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural"), chosen at create time.  Drives the dashboard's
-    # type-based detector/dataset compatibility gate.  See patch-embedder.md →
+    # type-based detector/dataset compatibility gate.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
     # The newest test verdict the detector keeps (#4526), which the AutoFind
@@ -340,7 +340,7 @@ class DetectorRegistryCreateRequestSchema(Schema):
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural").  Empty lets the server pick (sole type a single-type
     # dataset supplies, else 400 on a multi-type dataset).  A concrete embedder
-    # name is also accepted and classified.  See patch-embedder.md →
+    # name is also accepted and classified.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String(load_default="")
     # The detector's balance, F-beta's beta (#4665): which way its line leans
