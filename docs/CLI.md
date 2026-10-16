@@ -10,6 +10,7 @@ Everything here goes through one entry point, `python app.py`. With no workflow 
 
 - [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, [saving the dataset or `--tempimport`](#saving-the-dataset-to-the-dashboard---tempimport), exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
 - [Pipeline file](#pipeline-file) — the same run declared in YAML, for cron and CI
+- [Headless runs vs. the web server](#headless-runs-vs-the-web-server) — which startup steps, settings and flags each path applies, and why
 - [Web server modes](#web-server-modes) — port, logging, gunicorn, login providers, and the admin-set restrictions (solo media type, hidden plugins, retention, …)
 - [Inspecting plugins and the API schema](#inspecting-plugins-and-the-api-schema)
 
@@ -652,7 +653,9 @@ The flags that configure the process rather than describe the run apply to a
 pipeline run as they do to `--autodetect`: `--user` / `--api-key` (see [Which
 user's AutoFind list runs](#which-users-autofind-list-runs)),
 `--progress-format`, `-v`, and the admin overrides under [Web server
-modes](#web-server-modes) (`--solo-media-type`, `--hide-plugin`, …):
+modes](#web-server-modes) (`--solo-media-type`, `--hide-plugin`, …). Most of
+those overrides change nothing in a headless run; [Headless runs vs. the web
+server](#headless-runs-vs-the-web-server) lists which ones do:
 
 ```bash
 python app.py --pipeline nightly.yaml --user alice --api-key "$ALICE_KEY" --progress-format json
@@ -743,6 +746,61 @@ The shorter `import_labels` form is still accepted: `importer: <name>` given as
 a plain string, with `file: <path>` as shorthand for the importer's `filepath`
 field.
 
+## Headless runs vs. the web server
+
+`python app.py` takes one of two paths. With `--autodetect` (or `--tempimport`)
+or `--pipeline` it runs **headless**: it imports, scores and exports, then
+exits. Otherwise it starts the **web server**. Gunicorn's
+`VTSEARCH_SERVER_INIT=1` import counts as the server path. Everything in
+`app.py` that runs before `argv` is parsed is shared by both paths, but the
+two startups differ after that. This table lists every difference and why it
+is there; each one is intended.
+
+| Setting or step | Web server | Headless run | Why |
+|---|---|---|---|
+| Startup banners (mode, admin overrides in force, import hooks, Help-modal doc links) | Printed to stdout | Not printed | A headless run's stdout carries its results, and is pure NDJSON under `--progress-format json`. |
+| Embedder preload (each registered dataset's and detector's embedder, plus the `--solo-media-type` / `--solo-embedder` ones) | Warmed at startup | None. The run loads the embedder its dataset needs the first time it embeds | Warming embedders the run never uses costs minutes and memory. |
+| GC freeze after the preload (`VTSEARCH_GC_FREEZE`) | Yes | No | It keeps garbage-collection pauses out of interactive requests, and a run serves no requests. |
+| Stall diagnostics (GC-pause log, heartbeat watchdog, `VTSEARCH_STALL_*`, the diagnostics-bars log line) | Started | Not started | The bars measure request and phase latency on an interactive server (#3853); a run has neither. |
+| Web-UI admin overrides: `--solo-media-type`, `--solo-embedder`, `--hide-plugin`, `--support-email`, `--semantic-only`, `--autopilot-only` (flag, env var or settings key) | Shape the UI, the listing routes and, for `--semantic-only`, the create and import routes | Validated, so a bad value still exits 2, then inert: nothing headless reads them. `--hide-plugin` hides nothing from `--list-plugins`, and a hidden plugin can still be named with `--importer` / `--exporter`; `--semantic-only` does not refuse a patch or structural embedder; `--solo-embedder` does not choose the run's embedder | They control what a web user is offered. The person running the CLI names plugins and embedders explicitly, and hidden plugins stay callable by name on the server too. |
+| `--on-dataset-imported` / `VTSEARCH_ON_DATASET_IMPORTED` | Called after every import a user starts from the web app | The flag's module is imported (a typo exits 2), but the hook never fires. The variable is not read | The hooks are for imports a user waits on in the web app ([EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). |
+| Login: `--login` on the server; `--user` + `--api-key` headless | `--login` activates the provider; `--user` and `--api-key` are ignored | `--user` + `--api-key` authenticate against the same `data/api_keys.json`; `--login` is ignored | The server authenticates each request; a run authenticates once, as the user it runs as. |
+| `--port`, `VTSEARCH_PORT`, the single-instance lock, the port preflight, the dev server's SSE cap | Applied | None | A run binds no port and takes no lock, so it can run beside a server on the same data directory. |
+| `--local` | Changes the mode banner | Ignored | Banner text only. |
+| `--progress-format`, plugin notifications | Progress goes to the SSE stream; notifications become toasts | `text` or `json` on stdout; notifications are printed | No browser is watching a headless run. |
+
+These are the same on both paths, including the ones that once differed:
+
+- **Native thread count, OpenBLAS kernels, logging** (`VTSEARCH_TORCH_THREADS`,
+  `OPENBLAS_CORETYPE`, `VTSEARCH_LOG_LEVEL`, `VTSEARCH_LOG_FORMAT`,
+  `VTSEARCH_DIAGNOSE`, `-v`). `app.py` sets these at import, before it parses
+  `argv`, so a headless run gets the server's thread count too: the CPU
+  allocation, unless the variable says otherwise. Only code that imports
+  `vtscore` without `app.py` defaults to 1 thread.
+- **The `VTSEARCH_*` admin-override variables.** Both paths apply them, and an
+  explicit flag still wins. The only one that changes a headless run is
+  `VTSEARCH_DATASET_MAX_AGE_DAYS`, which sets the expiry stamp on the dataset a
+  saving run saves. A malformed value is warned about on stderr, never on the
+  NDJSON stdout.
+- **Dataset retention.** `--dataset-max-age-days`, its variable and the
+  persisted `dataset_max_age_days` key all stamp a dataset that either path
+  saves.
+- **`--settings FILE`.** Both paths read and write the server-tier settings from
+  `FILE`. A headless run switches to it before it imports, so the save uses
+  that file's saved-datasets directory, retention and concurrency gates. A
+  pipeline file names it as `settings:`.
+- **Runtime preparation** (`initialize_models`). Both warm sklearn's threadpool
+  controller before any worker thread starts, which avoids a loader-lock
+  deadlock, and seed the fast `packages_distributions` before transformers is
+  imported (#3715). A headless `--dry-run` loads nothing and skips this step.
+- **`VTSEARCH_SERVER_INIT=1`.** It applies only when gunicorn imports `app.py`.
+  Under `python app.py` it is ignored, so a headless run in a Docker image
+  (which sets the variable for every process) gets none of the server's
+  startup.
+- **The default user, per-user settings and settings sources.** Without a login
+  or `--user`, both paths run as `default`. Each user's `settings_source` syncs
+  lazily the first time that user's settings are read.
+
 ## Web server modes
 
 **Development (Flask dev server)**: bind to `0.0.0.0:5000`:
@@ -793,8 +851,23 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 initialization, embedder preloading) that `python
 app.py` runs; gunicorn imports `app.py` rather than executing its
 `__main__` block, so the env var is what triggers initialization. The
-bundled Docker images already run gunicorn this way. See
+bundled Docker images already run gunicorn this way. The variable only
+applies on import: under `python app.py` it is ignored, so a headless run in
+a container (where the image sets it for every process) stays headless. See
 [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
+
+**Server settings file** (`--settings FILE`): read and write the server-tier
+settings from `FILE` instead of `data/settings.json`. This is the same flag
+that points an `--autodetect` run at its settings, so it means the same thing
+on both paths:
+
+```bash
+python app.py --settings /srv/vtsearch/settings.json
+```
+
+Startup prints the file in force. Per-user settings files are unaffected.
+Gunicorn never parses `argv`, so to move the file there, relocate the whole
+data directory with `VTSEARCH_DATA_DIR`.
 
 **Authentication mode** (`--login`): select the login provider (dev
 server only; set up the provider in code when running under gunicorn).
