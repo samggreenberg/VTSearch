@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
+  #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
+  `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
+  before loading the next, and a failed load is not cached. The slot's lock is held across inference as
+  well as the load, because the module-level `CONVERTER` singleton runs on every dataset-load thread and
+  neither engine runs two inferences at once on one model. The private `_make_paddleocr` now takes the
+  resolved device instead of resolving it.
+
 - **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue
   #4976). The worker used to skip binding a context its `dataset_id` / `detector_id` no longer resolved to
   and run the target anyway, so a job parked while its dataset was unloaded computed over the empty

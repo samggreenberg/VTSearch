@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from vtscore.converters._model_slot import ModelSlot
 from vtscore.converters.base import MediaConverter
 from vtscore.plugins import PluginField
 
@@ -27,7 +28,10 @@ class Audio2TextMediaConverter(MediaConverter):
     ~75 MB on disk; ``base`` ~145 MB; ``small`` ~480 MB; ``medium``
     ~1.5 GB; ``large`` ~3 GB. Inference runs on the device resolved from
     ``VTSEARCH_DEVICE`` (CUDA when a usable GPU is visible, CPU otherwise; see
-    :func:`vtscore.config.resolve_device`), with FP16 enabled on CUDA.
+    :func:`vtscore.config.resolve_device`), with FP16 enabled on CUDA. The
+    loaded model is kept on the instance and reused for every file until a
+    different size or device is asked for (see
+    :class:`~vtscore.converters._model_slot.ModelSlot`).
 
     User-configurable parameters
     ----------------------------
@@ -63,6 +67,11 @@ class Audio2TextMediaConverter(MediaConverter):
             required=False,
         ),
     ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        # One Whisper model, reused across every file in a conversion run.
+        self._model_slot = ModelSlot()
 
     @property
     def source_type(self) -> str:
@@ -101,23 +110,29 @@ class Audio2TextMediaConverter(MediaConverter):
 
         resolved = resolve_device()
         whisper_device = resolved if resolved.startswith("cuda") else "cpu"
+        load_model = whisper.load_model
 
         try:
-            model = whisper.load_model(model_size, device=whisper_device)
-        except Exception:
-            logger.error("Failed to load Whisper model %r", model_size, exc_info=True)
-            if owns_temp:
-                audio_path.unlink(missing_ok=True)
-            return []
+            # Held through transcribe as well as the load: a shared model
+            # cannot run two transcriptions at once (see ModelSlot).
+            with self._model_slot.lock:
+                try:
+                    model = self._model_slot.get(
+                        (load_model, model_size, whisper_device),
+                        lambda: load_model(model_size, device=whisper_device),
+                    )
+                except Exception:
+                    logger.error("Failed to load Whisper model %r", model_size, exc_info=True)
+                    return []
 
-        try:
-            kwargs: dict[str, Any] = {"fp16": whisper_device.startswith("cuda")}
-            if language:
-                kwargs["language"] = language
-            result = model.transcribe(str(audio_path), **kwargs)
-        except Exception:
-            logger.error("Transcription failed on %s", filename, exc_info=True)
-            return []
+                try:
+                    kwargs: dict[str, Any] = {"fp16": whisper_device.startswith("cuda")}
+                    if language:
+                        kwargs["language"] = language
+                    result = model.transcribe(str(audio_path), **kwargs)
+                except Exception:
+                    logger.error("Transcription failed on %s", filename, exc_info=True)
+                    return []
         finally:
             if owns_temp:
                 audio_path.unlink(missing_ok=True)
