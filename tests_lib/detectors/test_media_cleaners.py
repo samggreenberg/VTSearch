@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 import pytest
 from vtscore.media.cleaner import MediaCleaner
+from vtscore.media.embedder import MediaEmbedder
 from vtscore.utils.hashing import content_md5
 
 
@@ -120,6 +121,51 @@ class _WindowTrimVideoCleaner(MediaCleaner):
         return cleaned
 
 
+class _BoxVideoCleaner(MediaCleaner):
+    """Fourth test cleaner: records a tighter pixel box and leaves the window alone.
+
+    Run after :class:`_WindowTrimVideoCleaner`, the unit's window comes from one
+    step and its box from another, so an embed that reads either off the wrong
+    step shows up.
+    """
+
+    @property
+    def name(self) -> str:
+        return "video_test_box"
+
+    @property
+    def media_type(self) -> str:
+        return "video"
+
+    def clean(self, media: dict[str, Any]) -> dict[str, Any]:
+        cleaned = dict(media)
+        cleaned["clip_box"] = [4, 12, 96, 88]
+        return cleaned
+
+
+class _RecordingVideoEmbedder(MediaEmbedder):
+    """A video embedder that keeps every media dict it is handed."""
+
+    def __init__(self) -> None:
+        self._model = True
+        self.seen: list[dict[str, Any]] = []
+
+    @property
+    def name(self) -> str:
+        return "video_test_recorder"
+
+    @property
+    def media_type_id(self) -> str:
+        return "video"
+
+    def _load_models_impl(self) -> None:  # pragma: no cover - model is pre-set
+        self._model = True
+
+    def _embed_media_impl(self, media: dict) -> np.ndarray:
+        self.seen.append(dict(media))
+        return np.ones(4, dtype=np.float32)
+
+
 @pytest.fixture
 def registered_cleaners():
     """Register the test cleaners for one test, then restore the registry."""
@@ -129,11 +175,27 @@ def registered_cleaners():
     media_registry.register_cleaner(_UpperTextCleaner())
     media_registry.register_cleaner(_SuffixTextCleaner())
     media_registry.register_cleaner(_WindowTrimVideoCleaner())
+    media_registry.register_cleaner(_BoxVideoCleaner())
     try:
         yield
     finally:
         media_registry._cleaner_registry.clear()
         media_registry._cleaner_registry.update(before)
+
+
+@pytest.fixture
+def recording_video_embedder():
+    """Register a :class:`_RecordingVideoEmbedder` for one test, then restore the registry."""
+    import vtscore.media as media_registry
+
+    embedder = _RecordingVideoEmbedder()
+    before = dict(media_registry._embedder_registry)
+    media_registry.register_embedder(embedder)
+    try:
+        yield embedder
+    finally:
+        media_registry._embedder_registry.clear()
+        media_registry._embedder_registry.update(before)
 
 
 def _make_text_media(media_id: int, text: str) -> dict:
@@ -658,6 +720,42 @@ class TestCleanerReplay:
         assert result is not None
         assert result[1] == b"HELLO WORLD, EDITED"
 
+    def test_replay_embeds_a_video_unit_with_its_window_and_box(
+        self, registered_cleaners, recording_video_embedder, tmp_path, monkeypatch
+    ):
+        """A video label re-embeds the slice the dataset embedded (#4994).
+
+        Video cleaners clean by metadata, so the unit is the source file plus a
+        window and a box.  The replay used to copy the file to a tempfile and
+        embed it bare, which sampled the whole video, uncropped.
+        """
+        from vtscore.datasets import clipper_chain
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
+
+        monkeypatch.setattr("vtscore.media.video.decode.probe", lambda path: None)
+        src = tmp_path / "clip_1.mp4"
+        src.write_bytes(b"video-payload")
+
+        clips = {1: _make_video_media(1)}
+        steps = [
+            {"kind": "cleaner", "name": "video_test_window", "params": {}},
+            {"kind": "cleaner", "name": "video_test_box", "params": {}},
+        ]
+        clipper_chain.apply_chain_to_clips(clips, steps)
+        dataset_input = _build_clip_embed_input(clips[1], "video")
+        trail = clipper_chain.parse_trail(clips[1]["origin"]["params"]["clipper_chain"])
+        assert trail is not None
+
+        result = clipper_chain.replay_chain_on_file(src, trail, recording_video_embedder.name)
+        assert result is not None
+        assert result[1] is None  # still metadata-only: no clip bytes to hash
+
+        [seen] = recording_video_embedder.seen
+        assert seen["media_path"] == str(src.resolve())
+        assert (seen["clip_start"], seen["clip_end"], seen["clip_box"]) == (0.5, 1.5, [4, 12, 96, 88])
+        unit_keys = ("clip_start", "clip_end", "clip_box")
+        assert {k: seen[k] for k in unit_keys} == {k: dataset_input[k] for k in unit_keys}
+
 
 #: Every shipped cleaner that takes parameters, with a value for each one that
 #: differs from its default.  At the defaults the round trip below would pass
@@ -717,7 +815,7 @@ class TestCleanerParamsRoundTrip:
         monkeypatch.setattr(type(cleaner), "clean", spy_clean)
         monkeypatch.setattr(
             "vtscore.detectors.resolver.embed_file",
-            lambda path, media_type, embedder_name="": np.ones(4, dtype=np.float32),
+            lambda path, media_type, embedder_name="", **_: np.ones(4, dtype=np.float32),
         )
 
         src = tmp_path / "source.bin"

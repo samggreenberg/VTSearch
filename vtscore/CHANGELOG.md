@@ -1934,6 +1934,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A video label re-embeds its own window and crop** (issue #4994). `replay_chain_on_file` copied a
+  video unit to a tempfile and embedded the path alone, so the frame sampler never saw the unit's
+  `clip_start` / `clip_end` / `clip_box` and sampled the whole video, uncropped. A video unit whose
+  steps were all metadata-only is now embedded from the source file with those fields, the values the
+  dataset's embed used. `embed_file` gains a keyword-only `extra_fields` merged into the embedder's
+  media dict (additive). The replay also probes a video source's `duration`, which the tiling
+  clipper reads: without it no tiled trail replayed, and the resolver fell back to the whole file.
+  That fallback (`_apply_clip_and_embed`) now passes a video origin's legacy `clip_start` /
+  `clip_end` / `clip_box` too.
+
 - **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
   params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,
   `VideoBlankTrimCleaner` and `VideoLetterboxCropCleaner` did not override it, so their `cleaner` steps

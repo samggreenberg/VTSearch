@@ -531,14 +531,11 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
     else:
         base["media_bytes"] = clip.get("media_bytes")
     if media_type == "video":
+        from vtscore.datasets.clipper_chain import _video_unit_fields  # noqa: PLC0415
+
         if clip.get("media_path"):
             base["media_path"] = clip["media_path"]
-        if "clip_start" in clip:
-            base["clip_start"] = clip["clip_start"]
-        if "clip_end" in clip:
-            base["clip_end"] = clip["clip_end"]
-        if clip.get("clip_box") is not None:
-            base["clip_box"] = clip["clip_box"]
+        base.update(_video_unit_fields(clip))
     return base
 
 
