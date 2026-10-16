@@ -22,7 +22,8 @@ DIM = 16
 SEED = 3
 #: Far outside a cosine's range, so the withheld half would dominate any cut or rank it reached.
 EXTREME = 10.0
-SCHEDULE = "g3@top,n6@q0.5,b4@mid"
+#: Every cut kind a round reads off the sort: ``top``, the GMM midpoint, a rank quantile.
+SCHEDULE = "g3@top,b4@mid,n6@q0.5"
 
 
 def _world(n_pos: int = 40, n_neg: int = 120, seed: int = 0) -> tuple[dict[int, dict], dict[int, float]]:
@@ -42,7 +43,7 @@ def _world(n_pos: int = 40, n_neg: int = 120, seed: int = 0) -> tuple[dict[int, 
     return medias, scores
 
 
-def _run(seed_scores, **kwargs):
+def _run(seed_scores, *, max_steps: int = 18, **kwargs):
     """One session, with every ``ALContext`` the selector was handed (its phase, seed-sort ids and pool)."""
     medias, _ = _world()
     contexts: list[tuple] = []
@@ -60,7 +61,7 @@ def _run(seed_scores, **kwargs):
             medias,
             "target",
             seed=SEED,
-            max_steps=18,
+            max_steps=max_steps,
             calibrate_count=2,
             spot_check="off",
             pick_sink=picks,
@@ -98,14 +99,20 @@ def runs():
 @pytest.fixture(scope="module")
 def schedule_runs():
     _medias, scores = _world()
-    plain = _run(scores, startup_schedule=SCHEDULE)
+    plain = _run(scores, startup_schedule=SCHEDULE, max_steps=24)
     _sim, test = _halves(plain[2])
-    return plain, _run(_extreme(scores, test), startup_schedule=SCHEDULE)
+    return plain, _run(_extreme(scores, test), startup_schedule=SCHEDULE, max_steps=24)
+
+
+def _columns(picks, cols):
+    """*cols* of every pick, NaN read as ``None`` so two logs compare by value."""
+    return [tuple(None if isinstance(p[c], float) and np.isnan(p[c]) else p[c] for c in cols) for p in picks]
 
 
 def _seed_columns(picks):
-    cols = ("t", "phase", "picked_id", "picked_seed_rank", "picked_seed_percentile", "picked_seed_score")
-    return [tuple(p[c] for c in cols) for p in picks]
+    return _columns(
+        picks, ("t", "phase", "picked_id", "picked_seed_rank", "picked_seed_percentile", "picked_seed_score")
+    )
 
 
 class TestTheSelectorSortsTheVotingHalf:
@@ -146,7 +153,7 @@ class TestAScheduleCutsTheVotingHalf:
     def test_the_cuts_and_the_picks_ignore_the_withheld_cosines(self, schedule_runs):
         (_rows, picks, _contexts), (_xrows, xpicks, _xcontexts) = schedule_runs
         cols = ("t", "startup_round", "startup_cut", "startup_cut_percentile", "picked_id", "picked_seed_rank")
-        assert [tuple(p[c] for c in cols) for p in xpicks] == [tuple(p[c] for c in cols) for p in picks]
+        assert _columns(xpicks, cols) == _columns(picks, cols)
 
     def test_each_rounds_cut_is_drawn_over_the_voting_half(self, schedule_runs):
         (_rows, picks, contexts), _extreme_run = schedule_runs

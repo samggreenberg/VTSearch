@@ -1940,6 +1940,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **The simulated session sorts its voting half, not the whole dataset** (issue #5004).
+  `simulate_voting_iterations` handed the selector the caller's full `seed_scores` map (or the example
+  opening's sort of every media), so the Bad phase's text-sort cut was fitted over the withheld half's
+  cosines too and the rank-space pick measured distances through items it could never pick; a startup
+  schedule's cuts and the pick log's `picked_seed_rank`, `picked_seed_percentile` and
+  `startup_cut_percentile` were read over the same list. They now read a copy restricted to the sim
+  half, which is what the app has loaded, and which `ALContext.embeddings` (so the centroid fallback)
+  already was. The typed query's Test keeps the full map: it reads the withheld half's cosines. No label
+  leaked (the cosines are the query's), but which Bads a default-arm session voted could depend on the
+  size and make-up of its withheld half, so vote orders from earlier runs can differ.
+
 - **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
   params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,
   `VideoBlankTrimCleaner` and `VideoLetterboxCropCleaner` did not override it, so their `cleaner` steps
