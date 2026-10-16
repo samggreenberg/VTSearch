@@ -86,7 +86,7 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
     in the text half's space, and there are two ways to have those vectors:
 
     * the media already carries them.  ``media["embeddings"]`` is a dict keyed
-      by embedder name (three-slot embedders, ``docs/plans/patch-embedder.md``),
+      by embedder name (three-slot embedders, ``docs/ARCHITECTURE.md``),
       so one media can hold a SigLIP vector and a DINOv3 vector at once.  This
       is the shape production would ship, and it needs no second file.
     * the pile stores one embedder per cell pickle, which is what it actually

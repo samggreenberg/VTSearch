@@ -410,7 +410,10 @@ ranking** on datasets past 20 k items. Page until `has_more` is `false` (or
 until `offset + results.length == total`) when you need the whole order.
 
 The full ranking is held server-side in a process-global LRU cache of the 8
-most recent sorts. Nothing is persisted: it holds only the lightweight
+most recent sorts, holding at most 2 000 000 rows across them
+(`SORT_CACHE_MAX_ROWS`). The newest sort always stays, so on a dataset of a
+million items or more an older sort's token can expire after one or two newer
+sorts. Nothing is persisted: it holds only the lightweight
 `{id, score}` / `{id, similarity}` rows, never embeddings or model weights.
 
 ### Sort page
@@ -669,7 +672,7 @@ y1]` for the row whose score won - the whole image when the
 image-level row wins, otherwise the single winning grid cell.
 Region-annotated Good votes (`region_box` on `LabeledElement`) train
 on the raw patch nearest the user's box; Bad votes flood the whole
-stack (a region-aware asymmetric loss). See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
+stack (a region-aware asymmetric loss). See [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md#embedder-binding-and-routing)
 for the design.
 
 ### Example sort (upload)

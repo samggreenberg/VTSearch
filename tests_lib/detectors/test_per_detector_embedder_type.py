@@ -1,4 +1,4 @@
-"""Per-detector embedder *type* routing (docs/plans/patch-embedder.md).
+"""Per-detector embedder *type* routing (docs/ARCHITECTURE.md).
 
 A detector locks one embedder **type** - ``semantic`` / ``patch_semantic`` /
 ``structural`` - and trains/scores in whichever concrete embedder of that type

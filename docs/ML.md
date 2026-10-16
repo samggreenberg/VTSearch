@@ -396,7 +396,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 
 Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type). Each embedder declares its output dimensionality via the `embedding_dim` descriptor property (the "Dim" column above).
 
-Most media types ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce the raw `H × W × D` patch grid (196 vectors on a DINOv3 14×14), enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
+Most media types ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce the raw `H × W × D` patch grid (196 vectors on a DINOv3 14×14), enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`ARCHITECTURE.md`](ARCHITECTURE.md#embedder-binding-and-routing) for the full design.
 
 Embedders carry capability flags consumed by the routes layer and the frontend:
 
