@@ -144,9 +144,10 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
   the new embedder-keyed MLP is trained fresh from the existing votes on the next
   Learned sort. Votes are embedder-agnostic (`(media_id, label, region_box?)`), so
   they re-use cleanly.
-- A structural-keyed detector carries two learned objects (Stage-1 retrieval MLP on
-  VLAD vectors + the match-statistic verification classifier); both re-derive from
-  votes and are never persisted.
+- A structural-keyed detector's one learned object is its Stage-1 retrieval head on
+  VLAD vectors; Stage 2 scores every fit with the inlier gate, since #4169 removed
+  the match-statistic verification classifier. The head re-derives from votes and
+  is never persisted.
 
 ### Loader / exporter / importer impact
 
