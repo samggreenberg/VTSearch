@@ -44,7 +44,7 @@
     }
   </form>
 
-  <div modal-footer>
+  <div class="form-actions" modal-footer>
     <button type="button" class="btn btn--secondary" [disabled]="submitting()" (click)="close()" title="Discard and close the dialog">Cancel</button>
     <button type="button" class="btn btn--primary" [disabled]="!canSubmit" (click)="submit()" title="Combine the selected detectors into a new one">
       {{ submitting() ? 'Combining…' : 'Combine' }}

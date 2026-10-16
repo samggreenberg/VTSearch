@@ -13,9 +13,10 @@ Reads the per-click log `run_cells.py` writes (`task_*__picks.csv`).
 
     python analyze_phases.py --exp /expscratch/$USER/scale-3156-fixed
 
-Caveat carried from `pick_sheets.py`: `picked_seed_percentile` is a position in
-the text sort over ALL medias, while a run walks only the simulation split
-(~half at the default `sim_fraction`), so it overstates depth-into-the-pool.
+Caveat carried from `pick_sheets.py`: since #5004 `picked_seed_percentile` is a
+position in the text sort of the simulation split the run walks. A pick log
+written before it placed the pick in the sort over ALL medias: the withheld half
+too and, on a scale-banded cell, the wrong-band images that sit near its top.
 """
 
 from __future__ import annotations

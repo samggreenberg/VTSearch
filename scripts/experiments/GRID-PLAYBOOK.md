@@ -78,17 +78,19 @@ so one allocation processes a *series* of units on the GPU it grabbed**:
   for the whole cluster) counts every array task from the moment it is queued,
   so a `%6` throttle does not make a 720-task array cheap. #4668's sixteen such
   arrays filled 85% of it and the last four were refused (#4701).
-  `python3 scripts/slurm/job_records.py --tasks N` says whether N more fit.
+  `python3 scripts/slurm/job_records.py --tasks N` says whether N more fit, and
+  `calibration/drive_chunks.sh` feeds several arms' cells to the queue in small
+  chunks.
 
 ## 4. Know which mount you are on
 
-**[HLTCOE]** Three mounts, three jobs. Putting work on the wrong one is the most
+**[HLTCOE]** Four mounts, four jobs. Putting work on the wrong one is the most
 common self-inflicted wound here.
 
 | mount | size | use it for |
 |---|---|---|
 | `/exp/$USER` | **50 G** | the checkout and its venv. Nothing else. |
-| `/expscratch/$USER` | **500 G**, flash | the embedding pile, study outputs, archives |
+| `/expscratch/$USER` | **~1 T**, flash | the embedding pile, study outputs, worktrees, archives |
 | `/scratch/jobs/$USER/$SLURM_JOB_ID` | ~286 G, node-local | per-job temp; wiped when the job ends |
 | `/exp/scale26` | 25 T, shared | staged source datasets (read-mostly, ~94% full) |
 
@@ -114,25 +116,19 @@ embedded. `source scripts/experiments/pile/pile_env.sh` points
 reads cells in place instead of re-embedding. Full docs:
 `scripts/experiments/pile/README.md`.
 
-**Datasets.** `visual_genome_m` (4193, boxed), `caltech101_m` (838, boxless),
-`coco_val` (4952, boxed), and the box-size-banded VG sets `vg_box_small` /
-`vg_box_medium` / `vg_box_large` (12000 each, boxed), drawn from the whole VG
-source rather than the demo pipeline's 4% slice.
-
-**Embedders.** `siglip` (768-d, the shipped default), `siglip2_l` (1152-d,
-premium) and `dinov3_patch` (768-d). Differing dims mean `siglip` and
-`siglip2_l` galleries are **not** interchangeable. The middle rungs
-(`siglip_l`, `siglip2`) were dropped deliberately — see the pile README for the
-tradeoff that buys.
+**What is in it.** The grid is `pile_config.DATASETS` x `pile_config.EMBEDDERS`
+(`coco_better` and its siblings; SigLIP, CLIP and `dinov3_patch` columns, among
+others), and `build_pile.py --list` shows which cells are on disk. Differing
+embedding dims mean galleries are **not** interchangeable across embedders.
 
 **Which arms can region-vote.** Region voting drags a ground-truth box and pools
 it over a patch grid, so it needs **both** halves:
 
 | | boxed dataset | patch embedder | region-votes? |
 |---|:--:|:--:|:--:|
-| `visual_genome_m` / `coco_val` / `vg_box_*` x `dinov3_patch` | yes | yes | **yes** |
-| any boxed dataset x `siglip` or `siglip2_l` | yes | no | no — **binary** |
-| `caltech101_m` x anything | no | — | no — **binary** |
+| `coco_better` / `coco_val` / `visual_genome_m` x `dinov3_patch` | yes | yes | **yes** |
+| any boxed dataset x a single-vector embedder (`siglip`, `clip`, …) | yes | no | no — **binary** |
+| a boxless dataset (`caltech101_m`, …) x anything | no | — | no — **binary** |
 
 `dinov3_patch` is the only patch-capable embedder, so it is the only way to get
 a region arm. **A boxed dataset on a single-vector embedder does not error — it
@@ -155,14 +151,15 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 ## 6. Environment gotchas
 
 - **libpython:** the venv's `python` fails to load `libpython3.12.so` on the login
-  node until you `module load python/3.12.3` — source the project's grid-env
-  wrapper before anything.
+  node until you `module load python/3.12.3`. `source gridenv.sh` (repo root)
+  does that and activates the venv; source it before anything.
 - **Editable-finder shadow trap:** with multiple worktrees, a worktree's `app.py`
   can silently import the *other* checkout's package via the editable install.
   Pin the intended worktree with the shadow-module `PYTHONPATH` trick. A study's
   stage scripts get this for free from `scripts/experiments/_expcommon.py`, which
-  every per-study `common.py` delegates to — the fix lives there and nowhere else,
-  because it fails without an error when it is wrong.
+  the per-study `common.py` files delegate to (`umap_params/common.py` predates
+  it), and a shell wrapper gets it from `gridenv.sh`. Use those rather than a
+  copy, because the trap fails without an error when the fix is wrong.
 - **GPU nodes are `Exclusive_Process`** (**[HLTCOE]**): one CUDA process at a time —
   serialize GPU stages within a job.
 
@@ -179,8 +176,7 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 ## Memory is a per-user quota, not just a per-job request
 
 `cpu_limit` (the `cpu` partition's QOS) caps **cpu=360 and mem=1126400M (1100 GiB)
-per user** as of 2026-10-13; until then it was cpu=240 and mem=1100000M (1074 GiB).
-It moves, so read it rather than this line:
+per user** as of 2026-10-13. It moves, so read it rather than this line:
 
 ```bash
 scontrol show assoc_mgr qos=cpu_limit flags=qos | grep -m1 -o 'MaxTRESPU=[^ ]*'

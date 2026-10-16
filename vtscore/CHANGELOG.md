@@ -8,7 +8,81 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+## [Unreleased]
+
 ### Changed
+
+- **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
+  produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
+  after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`
+  set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it; the
+  tracker holds at most `max_kept_failures` (new constructor argument, default 20), dropping the
+  oldest first, and `dismiss_task` refuses a task that is still running. Every import's task sets
+  `keep_failure`, so code that waited for a failed import's task to age out must dismiss it; other
+  tasks lapse as before. `create_task` also takes `created_by=` (defaulting to the current user)
+  and `source=` (what the task reads; imports set it from their origin), and a snapshot carries
+  `created_by`, `source`, `keep_failure` and, once the task has finished, `finished_at`.
+  `LoadingTasksTracker.visible_to(tasks, viewer)` drops other users' kept failures from a snapshot,
+  and `initial_snapshot(viewer)` / `stream_progress_events(viewer=)` apply it per SSE connection.
+  The rest is additive.
+
+- **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
+  `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
+  them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature
+  back-fill skips those media instead of decoding and detecting them again. A lazy unit is embedded
+  through a copy (`embed_view`), so the embed pass copies any side channel the embedder stored on that
+  copy back onto the media. The back-fill still derives features for media that arrive embedded without
+  them (a pickle reload). Vectors, features and `sift_vlad_doc`'s tile vectors are bit-identical to the
+  two-pass output; the embed stage is ~2.5x faster on CPU.
+
+  **For library consumers:** calling `embed_media_bulk` on a structural embedder now also writes
+  `local_features` onto each media dict it embeds.
+
+- **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
+  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
+  same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
+  through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
+  which keeps its behaviour), and the result is served only if it still hashes to the trail's last
+  `content_hash`. `lazy_original_bytes` replays the trail before its first cleaner and checks it against
+  the new `original_hash` trail key, which the gate that takes the `original_*` snapshot now records
+  (`original_hash(trail)` / `pre_clean_steps(trail)` read it). These recipes are exclusive
+  (`recipe_is_exclusive`): `MediaType._resolve_media_bytes` / `_resolve_media_string` return nothing when
+  the replay no longer matches, never the source file; `_resolve_media_string` now consults lazy recipes
+  at all. `has_original_payload` is also true for such a unit (`has_lazy_original`).
+  `_relazify_reference_clips_stage` drops a cleaned unit's payload and snapshot only after a dry run
+  rebuilds both byte for byte. The embed and side-channel back-fill passes hand embedders
+  `embed_view(media)`, which resolves a lazy unit's payload from its recipe instead of exposing its
+  `media_path`. `_ByteBoundedLRU.put` takes an optional `nbytes`. Additive for plugins: a cleaner that is
+  not deterministic only keeps its units materialized.
+
+- **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
+  #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
+  `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
+  before loading the next, and a failed load is not cached. The slot's lock is held across inference as
+  well as the load, because the module-level `CONVERTER` singleton runs on every dataset-load thread and
+  neither engine runs two inferences at once on one model. The private `_make_paddleocr` now takes the
+  resolved device instead of resolving it.
+
+- **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue
+  #4976). The worker used to skip binding a context its `dataset_id` / `detector_id` no longer resolved to
+  and run the target anyway, so a job parked while its dataset was unloaded computed over the empty
+  fallback context, ended `done` and was cached for its signature. It now ends `status = "error"` with
+  `job.error` naming the missing context (`"dataset <id> is no longer loaded"`), never runs the target,
+  and still promotes the pending slot. New keyword `JobManager(..., binds_context=True)`: a manager whose
+  targets name every context they touch, using the ids only as a tag, passes `False` to bind nothing and
+  require nothing. `archive_thumbnail_jobs` does, since its sweep warms every loaded dataset.
+
+  **For library consumers:** a job started under ids that name no registered context now errors rather
+  than running unbound. Register the contexts first, omit the ids, or build the manager with
+  `binds_context=False`.
+
+- **`AudioMediaType.media_response` types the payload by its container** (issue #4981). It returned
+  `audio/wav` and a `media_<id>.wav` download name whatever the bytes, though an MP3 / FLAC / OGG / M4A
+  import keeps its file verbatim. New `vtscore.media.audio.sniff.sniff_audio_format(data)` returns
+  `(mimetype, extension)` from the leading bytes (`RIFF`, `fLaC`, `OggS`, `ftyp` at offset 4, `ID3` or an
+  MPEG frame sync, an ADTS frame sync), defaulting to `("audio/wav", ".wav")`; `media_response` uses it,
+  keeping the `media_<id>` stem. Additive for callers; a WAV payload is served exactly as before.
 
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
@@ -233,6 +307,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
+  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
+  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
+  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
+  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
+  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
+  message. Additive.
 
 - **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
   looks for each face MTCNN finds again in the photo turned a quarter each way
@@ -1939,6 +2021,38 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A video label re-embeds its own window and crop** (issue #4994). `replay_chain_on_file` copied a
+  video unit to a tempfile and embedded the path alone, so the frame sampler never saw the unit's
+  `clip_start` / `clip_end` / `clip_box` and sampled the whole video, uncropped. A video unit whose
+  steps were all metadata-only is now embedded from the source file with those fields, the values the
+  dataset's embed used. `embed_file` gains a keyword-only `extra_fields` merged into the embedder's
+  media dict (additive). The replay also probes a video source's `duration`, which the tiling
+  clipper reads: without it no tiled trail replayed, and the resolver fell back to the whole file.
+  That fallback (`_apply_clip_and_embed`) now passes a video origin's legacy `clip_start` /
+  `clip_end` / `clip_box` too.
+
+- **The simulated session sorts its voting half, not the whole dataset** (issue #5004).
+  `simulate_voting_iterations` handed the selector the caller's full `seed_scores` map (or the example
+  opening's sort of every media), so the Bad phase's text-sort cut was fitted over the withheld half's
+  cosines too, and over media the cell drops before the split (a scale-banded cell's wrong-band images,
+  a prevalence arm's thinned positives, a haystack arm's thinned negatives), and the rank-space pick
+  measured distances through items it could never pick; a startup
+  schedule's cuts and the pick log's `picked_seed_rank`, `picked_seed_percentile` and
+  `startup_cut_percentile` were read over the same list. They now read a copy restricted to the sim
+  half, which is what the app has loaded, and which `ALContext.embeddings` (so the centroid fallback)
+  already was. The typed query's Test keeps the full map: it reads the withheld half's cosines. No label
+  leaked (the cosines are the query's), but which Bads a default-arm session voted could depend on the
+  size and make-up of its withheld half, so vote orders from earlier runs can differ.
+
+- **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
+  snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every
+  vote, media read and request state sync for the length of the fit (minutes at scale). It now
+  snapshots the medias and `media_revision` under the lock, fits without it, and re-takes it to install
+  the atlas and replay the active detector's votes. When the medias changed during the fit, the atlas
+  is discarded and the build retried once (*on_progress* counts from zero again); a second lost race
+  keeps the dataset's current atlas. `build_coverage_atlas_for_context` installs under the lock with the
+  same check, where it used to install a fit over since-changed medias. Signatures are unchanged.
 
 - **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
   params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,

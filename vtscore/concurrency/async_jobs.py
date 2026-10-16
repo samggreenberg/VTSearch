@@ -279,7 +279,14 @@ class JobManager:
     result instead of re-running.
     """
 
-    def __init__(self, name: str, max_history: int = 8, *, user_visible: bool = True) -> None:
+    def __init__(
+        self,
+        name: str,
+        max_history: int = 8,
+        *,
+        user_visible: bool = True,
+        binds_context: bool = True,
+    ) -> None:
         self._name = name
         #: Whether this manager's jobs are surfaced in ``/api/jobs/active``.
         #: Internal refreshes and warm-ups set this ``False``: they are not
@@ -287,6 +294,14 @@ class JobManager:
         #: manager - visible or not - still belongs in ``JOB_MANAGERS``, which
         #: is what ``reset_all_async_jobs_for_tests`` walks.
         self.user_visible = user_visible
+        #: Whether a job runs inside the dataset / detector contexts its
+        #: ``dataset_id`` / ``detector_id`` name.  When ``True`` (the default)
+        #: the worker binds them as its active contexts, and a job whose
+        #: context was unloaded before its worker started fails rather than
+        #: running against the empty fallback.  A manager whose targets name
+        #: every context they touch, and so use the ids only as a tag, sets
+        #: ``False``: its jobs bind nothing and run whatever is still loaded.
+        self.binds_context = binds_context
         self._lock = threading.RLock()
         self._jobs: dict[str, AsyncJob] = {}
         self._current_id: str | None = None
@@ -344,7 +359,10 @@ class JobManager:
         ``dataset_id`` / ``detector_id`` identify the (dataset, detector)
         pair the job is running against; the values are stashed on the
         :class:`AsyncJob` so ``/api/jobs/active`` can enumerate busy pairs
-        for the top-bar pulldown's spinner glyph.
+        for the top-bar pulldown's spinner glyph.  Unless the manager was
+        built with ``binds_context=False``, the worker also binds them as its
+        active contexts, and a job whose context is no longer loaded when its
+        worker starts ends ``error`` without running *target*.
         """
         # Capture the user that triggered this start() so background work
         # touching per-user settings resolves to the right user.
@@ -433,8 +451,23 @@ class JobManager:
             thread_detector_context,
         )
 
-        ds_ctx = get_context(job.dataset_id) if job.dataset_id else None
-        det_ctx = get_detector_context(job.detector_id) if job.detector_id else None
+        ds_ctx = det_ctx = None
+        if self.binds_context:
+            ds_ctx = get_context(job.dataset_id) if job.dataset_id else None
+            det_ctx = get_detector_context(job.detector_id) if job.detector_id else None
+            # A parked job can outlive its dataset or detector: nothing cancels
+            # it on unload.  Running it anyway would compute over the empty
+            # fallback context and report that as ``done`` (and cache it), so
+            # fail it without invoking the target (#4976).
+            reason = None
+            if job.dataset_id and ds_ctx is None:
+                reason = f"dataset {job.dataset_id} is no longer loaded"
+            elif job.detector_id and det_ctx is None:
+                reason = f"detector {job.detector_id} is no longer loaded"
+            if reason is not None:
+                logging.getLogger(__name__).warning("%s job not run: %s", self._name, reason)
+                self._fail(job, reason)
+                return
         with ExitStack() as stack:
             # Bind the job so ``check_job_cancelled`` in the deep training /
             # eval loops can honour a cancel of this *running* job.
@@ -463,11 +496,7 @@ class JobManager:
             return
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).exception("%s job failed", self._name)
-            with self._lock:
-                job.status = "error"
-                job.error = str(exc) or exc.__class__.__name__
-                job.done_event.set()
-            self._promote_pending_if_any()
+            self._fail(job, str(exc) or exc.__class__.__name__)
             return
 
         next_job: AsyncJob | None = None
@@ -486,6 +515,18 @@ class JobManager:
 
         if next_job is not None and next_target is not None:
             self._spawn_thread(next_job, next_target)
+
+    def _fail(self, job: AsyncJob, error: str) -> None:
+        """Mark *job* ``error`` with *error* and hand off to the pending slot.
+
+        A failed job is never stored as ``_last_done``, so
+        :meth:`cached_for` cannot serve it.
+        """
+        with self._lock:
+            job.status = "error"
+            job.error = error
+            job.done_event.set()
+        self._promote_pending_if_any()
 
     def _take_pending_locked(self) -> tuple[AsyncJob, Callable[[AsyncJob], Any]] | None:
         """Pop the pending slot for promotion, honouring cancellation.
@@ -623,8 +664,11 @@ signpost_relabel_jobs = JobManager("signpost-relabel", user_visible=False)
 #: parked pending job.  Like the two managers above it is an internal warm-up,
 #: not a user-visible training job, so it is ``user_visible=False`` (no
 #: ``/api/jobs/active`` spinner): browse is fully functional while it runs,
-#: just colder.
-archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False)
+#: just colder.  The sweep names each context it warms, so a job's
+#: ``dataset_id`` only tags the load that kicked it (the CLI cancels by it);
+#: ``binds_context=False`` lets a kick whose dataset was unloaded while it was
+#: parked still warm the datasets that remain.
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False, binds_context=False)
 
 #: Logical name → :class:`JobManager` lookup: **every** singleton manager in
 #: the process, whether or not it is user-visible.  The string keys of the

@@ -633,7 +633,7 @@ class TestVoteEndpointRegionBox:
     def test_bad_vote_with_region_box_rejected(self, client):
         """No-votes are always image-level by design; sending a region_box
         with a bad-vote is a client bug and the endpoint refuses to silently
-        drop it.  See the patch-embedder v2 interaction-design notes."""
+        drop it.  See docs/ARCHITECTURE.md → "Embedder binding and routing"."""
         from vtsearch.state import (
             bad_votes,
             vote_region_boxes,

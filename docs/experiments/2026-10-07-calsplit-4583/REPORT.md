@@ -6,8 +6,8 @@ Since #4452 the line is drawn from the labels alone, and its class model is the 
 both knobs feed today's line by a different route. This study re-measured them on today's app, on the objective
 (#4427: F-beta of the withheld half above the threshold the app holds, at the preset's own beta). At every
 preset, no change moves the objective by more than 0.006. None moves AP. The one consistent effect is on how
-much the line returns: holding out more votes (0.5) returns more, by 92 items at beta 4. Part of #4581; the plan
-is [`docs/plans/cost-to-fbeta.md`](../../plans/cost-to-fbeta.md).
+much the line returns: holding out more votes (0.5) returns more, by 92 items at beta 4. Part of #4581; the rerun rules
+are in [`docs/EVAL.md`](../../EVAL.md#re-measuring-a-decision-taken-on-an-older-metric).
 
 ## What was run
 

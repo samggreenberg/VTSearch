@@ -427,7 +427,8 @@ export class ServerFolderPickerComponent {
   }
 
   /** Fetch the cleanup gates registered for *mediaType* and seed the
-   *  selection from each cleaner's ``default_enabled`` flag. */
+   *  selection from the saved import default, else each cleaner's
+   *  ``default_enabled`` flag. */
   private loadCleaners(mediaType: string): void {
     if (!mediaType) {
       this.cleaners.set([]);
@@ -437,7 +438,7 @@ export class ServerFolderPickerComponent {
     this.datasetsListingsApi.getCleaners(mediaType).subscribe({
       next: (cleaners) => {
         this.cleaners.set(cleaners);
-        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners));
+        this.selectedCleaners.set(this.importDefaults.defaultCleanerSelection(cleaners, mediaType, this.mediaTypes()));
       },
     });
   }
@@ -588,6 +589,8 @@ export class ServerFolderPickerComponent {
       this.sourceSpecs(),
       this.embedders(),
       this.clippers(),
+      this.selectedCleaners(),
+      this.cleaners(),
     );
     this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }

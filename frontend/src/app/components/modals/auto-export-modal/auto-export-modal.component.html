@@ -28,7 +28,7 @@
     <p class="error-text">{{ error() }}</p>
   }
 
-  <div modal-footer>
+  <div class="form-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()" title="Close without saving">Cancel</button>
     @if (binding() && fields().length) {
       <button

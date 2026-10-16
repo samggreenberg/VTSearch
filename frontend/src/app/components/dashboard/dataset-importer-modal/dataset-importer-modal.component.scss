@@ -19,10 +19,6 @@
   }
 }
 
-// No top margin: `.modal-body` already spaces the footer, and a margin here
-// would push the buttons off-centre from the Advanced toggle beside them.
-.form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); }
-
 // The importer forms indent from the tab rows above them. When the source
 // picker shows none (a lone category holding a lone importer, #4669), there
 // is nothing to indent from, so zero the indent for the sibling forms too.

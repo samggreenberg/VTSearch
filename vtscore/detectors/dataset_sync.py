@@ -449,7 +449,7 @@ def _embedder_of_active_dataset(det_ctx=None) -> str:
     primary whenever the active dataset can supply it (so a valid cached model
     survives a dataset switch), else the dataset score precedence (so a genuine
     mismatch invalidates).  See :func:`keying_embedder_for_snap` and
-    patch-embedder.md → "Per-detector primary embedder".  For a single-embedder
+    ``docs/ARCHITECTURE.md`` → "Per-detector embedder type".  For a single-embedder
     dataset the primary *is* that one embedder, so this returns it unchanged -
     byte-for-byte the pre-per-detector behaviour.
     """
