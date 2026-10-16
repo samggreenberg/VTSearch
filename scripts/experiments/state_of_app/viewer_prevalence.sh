@@ -7,7 +7,8 @@
 # Its prevalence scenarios are session sets of their own (state_of_app/launch.sh's SOTA_POOL_PREVALENCE /
 # SOTA_CELL_PREVALENCE), in <root>/<date>-<scenario>-b025|b1|b4. This puts them beside the review's on one page:
 # the scenario is folded into the dataset name ("coco_better, pool 1%"), as the Face page folds its starting photos,
-# and the chips are the presets (#4636). Each scenario's click 0 is its own text baseline.
+# and the chips are the presets (#4636). Each scenario's click 0 is its own text baseline. The page opens on each
+# dataset, one line each (`--default-dataset each`): the three prevalences pooled would mean nothing.
 #
 #   SOTA_PREV_SCENARIOS  "<dir tag>=<label>" pairs split on "|", default "h0.01=pool at 1%|p0.001=0.1% whole cell"
 #   <beta>               one preset only (0.25, 1 or 4): three prevalences x three presets are over the repo's
@@ -65,10 +66,11 @@ PY
 export VTS_REPO="$WT"
 cd "$CALIB"
 title="State of the App: $DATE, at three prevalences"
-[[ -n "$ONLY" ]] && title="$title, beta $ONLY"
+# The preset as the page's chips name it.
+case "$ONLY" in 0.25) title="$title, β 1/4" ;; 1) title="$title, β 1" ;; 4) title="$title, β 4" ;; esac
 python viewer.py "${args[@]}" --baseline "$MERGED" --out "$OUT" --runs-budget-mb 0 \
   --title "$title" \
   --subtitle "coco_better, every class at every size: the review's own sessions at the bench's 0.44%, the user's pool thinned to 1% (the withheld half stays at 0.44%), and the whole cell thinned to 0.1%; one set of sessions per preset beta (#4636, #4959)" \
   --embedder-label "siglip=SigLIP binary" --embedder-label "siglip+dinov3_patch=DINOv3 region" \
-  --hide-metrics cost
+  --hide-metrics cost --default-dataset each
 echo "done: $OUT"

@@ -409,7 +409,8 @@
   })();
 
   const state = {
-    dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
+    // A page whose datasets mean nothing pooled opens on each of them (#4959: one bench at three prevalences).
+    dataset: P.datasets.length > 1 ? (VIEW.dataset === "each" ? EACH : ALL) : P.datasets[0],
     band: ALL,
     category: ALL,
     metric: (OFFERED.find((m) => m.key === VIEW.metric) || OFFERED.find((m) => m.key === OPEN_ON) || OFFERED[0]).key,
