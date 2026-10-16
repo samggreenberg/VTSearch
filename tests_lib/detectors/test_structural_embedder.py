@@ -370,3 +370,129 @@ class TestTwoStageBuildingBlock:
         assert good.inlier_count > bad.inlier_count
         assert good.model_ok is True
         assert bad.model_ok is False
+
+
+class TestOneDetectionPerImage:
+    """#4996: loading a structural dataset runs SIFT once per image, not once per product.
+
+    The embed pass keeps the features its VLAD vector came from, so the
+    ``local_features`` back-fill finds them and skips the image.  The outputs
+    must be exactly what the two separate passes produced.
+    """
+
+    N = 4
+
+    def _medias(self, tmp_path, n: int = N) -> dict[int, dict]:
+        from PIL import Image
+
+        medias = {}
+        for i in range(n):
+            path = tmp_path / f"img_{i}.png"
+            Image.fromarray(_textured_image(seed=10 + i), mode="L").save(path)
+            medias[i + 1] = {"media_type": "image", "embeddings": {}, "media_path": str(path)}
+        return medias
+
+    @staticmethod
+    def _count_detections(monkeypatch) -> list[int]:
+        calls: list[int] = []
+        real = SiftMatcher.detect_and_describe
+
+        def spy(self, *args, **kwargs):
+            calls.append(1)
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(SiftMatcher, "detect_and_describe", spy)
+        return calls
+
+    @staticmethod
+    def _embed_stage(medias: dict[int, dict], emb) -> None:
+        from unittest import mock
+
+        from vtscore.datasets.stages.embedding import embed_missing
+
+        # A fresh instance, not the registered singleton the session fixture stubs.
+        with mock.patch("vtscore.media.get_embedder", return_value=emb):
+            embed_missing(medias, emb.name)
+
+    @staticmethod
+    def _two_pass_reference(medias: dict[int, dict], emb_cls):
+        """The vectors and compact features the separate embed and back-fill passes produce."""
+        emb = emb_cls()
+        inputs = [{"media_path": m["media_path"]} for m in medias.values()]
+        vectors = [emb.embed_media(m) for m in inputs]
+        features = [f.compact() for f in emb.local_features_forward_bulk(inputs)]
+        return vectors, features
+
+    def test_the_embed_stage_detects_each_image_once(self, tmp_path, monkeypatch):
+        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+
+        medias = self._medias(tmp_path)
+        calls = self._count_detections(monkeypatch)
+        self._embed_stage(medias, ImageSiftVladEmbedder())
+
+        assert len(calls) == self.N
+        for m in medias.values():
+            assert m["embeddings"]["sift_vlad"] is not None
+            assert m["local_features"].count > 0
+
+    def test_vectors_and_features_equal_the_two_pass_outputs(self, tmp_path):
+        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+
+        medias = self._medias(tmp_path)
+        ref_vectors, ref_features = self._two_pass_reference(medias, ImageSiftVladEmbedder)
+        self._embed_stage(medias, ImageSiftVladEmbedder())
+
+        for m, vec, feats in zip(medias.values(), ref_vectors, ref_features):
+            got = m["local_features"]
+            np.testing.assert_array_equal(m["embeddings"]["sift_vlad"], vec)
+            np.testing.assert_array_equal(got.keypoints, feats.keypoints)
+            np.testing.assert_array_equal(got.descriptors, feats.descriptors)
+            # Stored compact, as the back-fill stores them.
+            assert got.keypoints.dtype == np.float16 and got.descriptors.dtype == np.uint8
+
+    def test_the_backfill_still_covers_an_already_embedded_media(self, tmp_path, monkeypatch):
+        """A pickle reload brings the vector back without the features; the back-fill derives them."""
+        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+
+        medias = self._medias(tmp_path, n=2)
+        _, ref_features = self._two_pass_reference(medias, ImageSiftVladEmbedder)
+        reloaded = np.ones(DEFAULT_VLAD_CENTROIDS * SIFT_DESCRIPTOR_DIM, dtype=np.float32)
+        medias[1]["embeddings"] = {"sift_vlad": reloaded}
+        medias[1]["embedder"] = "sift_vlad"
+
+        calls = self._count_detections(monkeypatch)
+        self._embed_stage(medias, ImageSiftVladEmbedder())
+
+        # One detection embeds media 2, one back-fills media 1.
+        assert len(calls) == 2
+        np.testing.assert_array_equal(medias[1]["embeddings"]["sift_vlad"], reloaded)
+        for m, feats in zip(medias.values(), ref_features):
+            np.testing.assert_array_equal(m["local_features"].keypoints, feats.keypoints)
+            np.testing.assert_array_equal(m["local_features"].descriptors, feats.descriptors)
+
+    def test_document_tile_vectors_are_unchanged(self, tmp_path, monkeypatch):
+        """``sift_vlad_doc`` derives its tiles from ``local_features``, so they must not move either."""
+        import vtscore.media.structural_tiles as st
+        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+
+        from tests_lib.detectors.test_structural_tiles import _cache_projection
+
+        models_dir = tmp_path / "models"
+        _cache_projection(models_dir)
+        real_load = st.load_tile_projection
+        monkeypatch.setattr(st, "load_tile_projection", lambda *_a, **_k: real_load(models_dir, dim=16))
+        st._load_cached.cache_clear()
+
+        medias = self._medias(tmp_path)
+        ref_vectors, ref_features = self._two_pass_reference(medias, ImageSiftVladDocEmbedder)
+        projection = st.load_tile_projection()
+        calls = self._count_detections(monkeypatch)
+        self._embed_stage(medias, ImageSiftVladDocEmbedder())
+
+        assert len(calls) == self.N
+        for m, vec, feats in zip(medias.values(), ref_vectors, ref_features):
+            np.testing.assert_array_equal(m["embeddings"]["sift_vlad_doc"], vec)
+            ref_tiles = st.tile_vectors(feats, projection)
+            assert m["tile_vectors"].count > 0
+            np.testing.assert_array_equal(m["tile_vectors"].vectors, ref_tiles.vectors)
+            np.testing.assert_array_equal(m["tile_vectors"].boxes, ref_tiles.boxes)

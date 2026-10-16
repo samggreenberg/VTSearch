@@ -255,13 +255,16 @@ def bulk_patch_forward_image_files(
     batch_size: int,
     on_progress: ProgressCallback,
     label: str,
+    verb: str = "Patch-embedding",
 ) -> list[Optional[Any]]:
     """Run a batched patch-forward over PIL-decoded images.
 
     Same threaded decode + per-batch GPU call shape as
     :func:`bulk_embed_image_files`, but *forward_pil_batch* returns a
     list of :class:`PatchEmbedOutput`-typed objects (one per input image)
-    so callers can attach side-channel state per-image.
+    so callers can attach side-channel state per-image.  Any per-image
+    object works; *verb* leads the progress message (``"{verb} {label}..."``)
+    for a caller whose pass is not a patch forward.
     """
     total = len(medias)
     results: list[Optional[Any]] = [None] * total
@@ -270,7 +273,7 @@ def bulk_patch_forward_image_files(
 
     batch_size = max(1, int(batch_size))
     for end, chunk_indices, chunk_images in _iter_decoded_batches(medias, batch_size):
-        on_progress("embedding", f"Patch-embedding {label}...", end, total)
+        on_progress("embedding", f"{verb} {label}...", end, total)
 
         if not chunk_images:
             continue

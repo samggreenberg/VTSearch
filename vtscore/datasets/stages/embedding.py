@@ -449,7 +449,9 @@ def _side_channel_passes(emb) -> list[_SideChannel]:
       have no patch data, which is what an already-embedded dataset that never
       ran the patch pass would otherwise get;
     * **local features** (``local_features``): structural embedders (SIFT/VLAD),
-      the keypoints Stage 2 verifies, stored compact (fp16/uint8);
+      the keypoints Stage 2 verifies, stored compact (fp16/uint8).  The shipped
+      ones attach them during the embed pass, from the detection that made the
+      vector (#4996), so this pass reaches only media that arrived embedded;
     * **tile vectors** (``tile_vectors``): document structural embedders, the
       tiled Stage 1 (#3928), derived from the local features and so after them.
       A key of their own, not ``patch_grid``: the tiles overlap, where

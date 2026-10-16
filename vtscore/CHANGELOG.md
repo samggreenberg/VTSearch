@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
+  `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
+  them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature
+  back-fill skips those media instead of decoding and detecting them again. The back-fill still derives
+  features for media that arrive embedded without them (a pickle reload). Vectors, features and
+  `sift_vlad_doc`'s tile vectors are bit-identical to the two-pass output; the embed stage is ~2.5x faster
+  on CPU.
+
+  **For library consumers:** calling `embed_media_bulk` on a structural embedder now also writes
+  `local_features` onto each media dict it embeds.
+
 - **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
   `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
   image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the

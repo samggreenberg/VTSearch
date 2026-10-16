@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
 - **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
   changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
   keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
