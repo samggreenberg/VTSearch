@@ -71,10 +71,39 @@ need to think about sort modes or selection strategies directly.
 > scenes - and a detector that learns to find the **yellow smiley faces**
 > among them. VTSearch draws the pictures itself, so you can make the very
 > same ones and follow along (see
-> [Step by step](#step-by-step-your-first-search)). Screenshots come in light
-> and dark variants and follow your theme automatically - the in-app Help
-> panel shows the one matching your current theme, and on GitHub/GitLab the
-> `<picture>` element above picks the variant matching your site appearance.
+> [Step by step](#step-by-step-your-first-search)). Screenshots follow your
+> light or dark theme.
+
+### Words this guide uses
+
+- **Dataset** - a collection of media items (audio clips, images, text,
+  videos, document pages, or faces cropped from photos) imported into
+  VTSearch. Every dataset holds one kind of media, its **media type**.
+- **Embedder** - the model that reads every item as a dataset is imported and
+  turns it into a *fingerprint* (an embedding), so items can be compared with
+  each other and with your words. A detector works only on datasets set up
+  with a compatible embedder.
+- **Detector** - what you train: it scores every item by how well it matches
+  what you are looking for. A detector *is* its labels; VTSearch rebuilds it
+  from them whenever it loads.
+- **Good** and **Bad** - your answer on one item: what you are looking for,
+  or not. The guide also calls an answer a *vote* or a *label*.
+- **Train**, **Test** and **Find** - the three buttons under the Dashboard's
+  tables: teach a detector with your answers, measure how far to trust its
+  line on a dataset, and collect its matches without opening a view.
+- **Autopilot** - the guided mode that picks which item to show you next and
+  says when the detector is done. The **Manual** tab (in Train) and the
+  **Review** tab (in Test) let you choose yourself.
+- **The line** and **the Threshold** - the cut through a detector's ranking
+  between its matches and the rest, and the setting that says which way it
+  leans (below).
+- **Spot check** - a few items drawn at random from the list for you to
+  answer, which measure how much of what the line keeps is right.
+- **Drafts** and **AutoFind** - the two tabs of the Dashboard's **Detectors**
+  card: detectors you are still building, and detectors you trust to run on
+  every dataset you import.
+- **Toasty** - King Toasty, the toast in the logo, who stands beside the next
+  thing to click (see [Toasty's hints](#toastys-hints)).
 
 ### Matches, the line, precision and recall
 
@@ -106,152 +135,11 @@ In the Test view, the Test autopilot measures both on the collection in
 front of you: **Right** is the likely share of what the line keeps that is a
 match, and **Found** the likely share of all the matches it keeps, each from
 random picks you voted on rather than from the detector's own guess (see
-[Testing a detector](#testing-a-detector)).
-
-#### How close the line got
-
-A detector draws its line at a **Threshold**: which of the two mistakes it
-leans toward. You set it at the top of the left panel, on a spectrum from
-**False Positives** to **False Negatives** with three radio buttons under
-it (see [Threshold](#3-threshold)). Toward False Positives the line returns
-the most, with more wrong ones in it; toward False Negatives it returns only
-the surest, and misses more. You pick it when you create the detector (the
-New Detector form starts on your last pick, the middle radio until you have
-one), and Autopilot, which has no Threshold of its own, draws the line there.
-Moving it later in Manual or Test changes it for that detector only. Each
-radio is a **balance** of precision and recall - how many wrong items you
-will take in the results against how many right ones you will accept
-missing - and the line is drawn where that balance is best: the middle radio
-weighs the two mistakes equally, the False Positives radio counts a miss as
-the dearer mistake, the False Negatives radio a wrong item. (For the
-statisticians: the three are F-beta at 4, 1 and 1/4.)
-
-The line is where your labels put it. VTSearch holds out each of your votes
-in turn, scores it with a detector that never saw it, and learns from those
-scores how high a match and how high a non-match tend to score. It then
-estimates how common matches are in the collection in front of you, and
-draws the line where the balance your radio asks for is best for a
-collection like that. The line keeps every item above it that you haven't
-voted on - as many as clear it, and on a collection with nothing like your
-target, few or none. Nothing caps it at a fixed number. Because the line comes
-from your labels, it travels with them: export the detector, run it on
-another collection, and VTSearch draws the line the same way there.
-Until you **check** the items above the line, nothing has measured how much
-of them is right or how much of what is there they found, and the note under
-the Threshold says so: **32 more kept, unchecked** (or however many it kept
-besides the items you voted on).
-
-**The spot check.** Autopilot runs it for you, as its **Spot Check.** step
-(see [The phases](#the-phases)): once every quality light is green, or the
-detector already expects a good result (see below), just before it says
-**Done!**. There is no button for it; only Autopilot starts a
-check. VTSearch cuts the list you haven't voted on into bands from the top
-(the top 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random
-from a band, and shows them one at a time in the centre, where the item
-usually is. Vote each one Good or Bad with the usual keys: → for Good, ← for
-Bad, and ↓ to go back and change one. The last vote of a round sends it, and
-the check moves to the next band. **Stop check** ends it early, and Autopilot
-carries on; **Continue** ends a finished one. If a check ended in your last 25
-answers, Autopilot skips this one: that check has just measured the line. It
-also runs none when you come back to a detector whose lights were already all
-green when Autopilot started: the session that finished it had its check. Test
-runs no spot check: it is where you test the Threshold you set here, not
-where you set it.
-
-**When your labels still overlap**, a check is worth doing now rather than
-later. If the detector scores your Good and Bad answers close together, a note
-under the Threshold says your labels still overlap. A check's picks, spread
-evenly down the list, are exactly the answers that show the detector where its
-line falls, so Autopilot runs the Spot Check step at that point too, once it
-has started learning from your answers, and again 25 answers later if your
-labels still overlap. Measured on COCO, sessions whose labels overlap returned
-far fewer wrong pictures and found more right ones for the same number of
-clicks.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
-  <img src="assets/floor-check.light.webp" alt="Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
-</picture>
-
-The picks come in the order they were drawn, which is random, with no rank
-and no score. They are a sample from the band, not the top of the list. A
-round is 5 picks from one band, whatever the radio.
-
-The check **walks** the list. It starts with the top bands (the top 32 on
-the middle and False Negatives radios, the top 128 on False Positives), one
-round each. Once those are in, it weighs the
-picks by the size of their bands to estimate how many of the set are right,
-reads that against the detector's own count of how many matches the whole
-list holds to estimate how many it found, and scores the set on the balance
-your radio asks for. While a longer list scores better, the check says
-**Better so far: checking the next 32** and draws from the next band down;
-the first time a longer list scores worse it says **Past the peak: checking
-a shorter list** and steps back without drawing again. It ends on the set
-where the balance peaked, or at either end of the list: on a long list of
-good matches that can be hundreds, on a short or sparse one as few as 8.
-**The check does not move the line**: it measures, and your picks become
-votes that the next retrain learns from like any other, but the line stays
-where your labels put it. What it reports is about the items the line kept,
-as they stood when the check started: of those, it counts the picks that
-fell among them. The check's last screen says what it found - **Checked the
-36 kept you hadn't voted on: likely 55–80% right, about half of them found
-(checked 12).** and **The line keeps the top 30 you haven't voted on, where
-your labels put it: the check informs the line and does not move it. The
-ranges are what the picks say about the 36 it kept when the check started;
-the Goods you had already voted on count in neither.** - and the note under
-the Threshold then shows the same result:
-
-- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
-  of them found (checked 12) · 30 more kept** - when the check started the
-  line kept 36 items you hadn't voted on; now, with the check's own picks
-  voted and the line re-drawn, it keeps 30 more besides your votes. The range
-  is how much of those 36 is likely right; the phrase after it is how much of
-  the matches you hadn't voted on they likely held (**few of them**, **about a quarter**, **about half**,
-  **about three quarters** or **nearly all of them**). Hovering the note
-  gives both as numbers. The note names no cause for a poor result: a dataset with very few
-  matches and a detector that can't yet tell them apart look the same from
-  here.
-
-**Neither range counts your own votes.** The check samples only the items
-you haven't voted on, so the Goods you have already found are in neither the
-share right nor the share found. Late in a session, once you have voted on
-most of the matches near the top, the items left there hold few of them, so
-the check before **Done!** can read low after a session that went well.
-
-**The likely range** says how much of the items the line kept, when the
-check started, is probably right. It comes from your picks alone, never from
-the detector's own guess: the picks that fell in each band's part of that
-set bound that part, exactly for its size (in a band of 8, 4 right of 5
-means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
-picks a band it is still wide; that width is the honest answer to "how close
-did we get?". The **found** phrase is the rougher of the two: it reads
-the same picks against the detector's own estimate of how many matches the
-list holds, which is the one thing the picks cannot measure. The check
-decides where to stop on the picks' plain share, so the range says how sure
-the picks are, and the count says where the balance peaked. The Test view does
-not show this range: there the Test autopilot measures the line on the
-collection you are testing, and its result pane draws its own ranges.
-
-**A range measures the list as it was when you checked it.** Your check
-votes are ordinary votes, so they train the detector like any other. Later
-votes retrain it, and the line moves with what your labels now say, so the
-items at the line change. The range stays on screen as it
-was, and hovering it says it was measured before your later votes. **Check**
-again for a fresh one: a check needs something to have changed since the
-last, and any vote does that. A check belongs to the radio it was run on:
-move to another radio and the line is unchecked there until you check it
-too; move back and the earlier check shows again.
-
-Cancelling or closing the check leaves the Threshold as it was. The rounds you
-finished stay as votes.
-
-Everything that uses the matches works on the line in every state: the
-*Unverified Good* count, Test's review walk, **To Dataset**, **Export**
-and **Browse** all act on the items above it. An AutoFind or command-line run
-has nobody to vote, so it can't be checked: it exports the line your labels
-draw for that collection and records it as unchecked, with a line in the run's log and a
-`balance` entry beside the threshold in exports that carry the full results
-(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+[Testing a detector](#testing-a-detector)). How the line is drawn, and how the
+**Threshold** leans it, is under [Threshold](#3-threshold); how Autopilot
+checks the line before it calls a detector done is under
+[How close the line got](#how-close-the-line-got). You can leave both alone
+for your first search.
 
 ---
 
@@ -492,8 +380,8 @@ VTSearch ships two populated categories, which boil down to two choices:
 
 - **Demo datasets** (the **Demo** tab) - two importers, neither of which
   needs data of your own:
-  - **Downloaded Media** - a catalogue of open datasets across all five
-    media types (audio, image, text, video, document), narrowed by a
+  - **Downloaded Media** - a catalogue of open datasets of audio, images,
+    text, video and documents, narrowed by a
     **per-media-type dropdown** so you can filter to just audio, just
     images, and so on. Each demo downloads on first use (from a few MB
     to over 10 GB depending on the dataset and size; see
@@ -629,8 +517,8 @@ A folder (or archive) often holds more than one kind of media: photos, the
 PDFs that go with them, a few recordings. Each kind needs its own dataset,
 and importing the folder once per kind means reading it once per kind. Tick
 **Multi-Dataset**, the box above the *Dataset media type* dropdown on the
-**Folder**, **Manifest**, **Local Folder** and **Local Files** importers (and
-on any Services importer that lists a media type), and the dropdown gives way
+**Folder** and **Manifest** importers (and on any Services importer that lists
+a media type), and the dropdown gives way
 to a **Datasets to make** list: one row per kind of media, each a dataset of
 its own. The folder is read once; every ticked row becomes a dataset named
 after the import and the kind (`holiday – Image`, `holiday – Document`), with
@@ -724,9 +612,9 @@ dialog is open announce themselves with a **View Results** notice
 instead, so none of them is lost. The dialog's **Browse** button opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
-**&larr; Back** there brings you back to the Dashboard with the results
-open again. While the dialog is open, the server starts building the map
-of the Good results whenever it has nothing else to do, so Browse often
+**&larr; Back to Find Results** there brings you back to the Dashboard with
+the results open again. While the dialog is open, the server starts building
+the map of the Good results whenever it has nothing else to do, so Browse often
 opens straight away. Like every AutoFind, the runs also go to your Settings
 **AutoFind** exporter when you have picked one.
 
@@ -741,7 +629,7 @@ accepts this: instead of a `.txt`/`.list` paths file, point the
 paths AND their vectors; VTSearch reads the paths from disk and reuses
 the supplied vectors.
 
-VTSearch accepts two NPZ layouts:
+VTSearch accepts three NPZ layouts:
 
 1. **`filenames` + `vectors` arrays** - produced by
    `np.savez(path, filenames=names, vectors=vecs)` where `names` is
@@ -751,33 +639,30 @@ VTSearch accepts two NPZ layouts:
    `np.savez(path, **{name: vec for name, vec in zip(names, vecs)})`.
    Each archive key is a filename; the corresponding value is its
    vector.
+3. **`filenames` + one `vectors_<embedder>` array per embedder** (for
+   example `vectors_siglip` and `vectors_dinov3_patch`), so one archive
+   fills every embedder a dataset is set up with.
 
 The vector dimension and the embedding model must match what
 VTSearch would have used (e.g. 512-d CLAP for audio, 768-d SigLIP for
-images). Embedding-model selection is **not** persisted inside the
-NPZ - the importer's *Embedder* setting still controls which model
-is used for any file that doesn't have a pre-computed vector, and
-also acts as the model identifier recorded on each media. Pick an
-embedder that matches the vectors in your NPZ.
+images). An NPZ may name the embedder that made its vectors in a scalar
+`embedder_name`; VTSearch rejects a name it doesn't know for the media
+type, and records it on each item it has a vector for. The importer's
+*Embedder* setting still analyzes any file that doesn't have a
+pre-computed vector. Pick an embedder that matches the vectors in your
+NPZ.
 
 ### Archive members, no extraction (WebDataset shards)
 
-Some corpora are too large to unpack. WebDataset-style collections pack
-tens of thousands of audio/video chunks inside a handful of multi-GB
-`shard_*.tar` (or `.zip`) files - the multivent-raw `videos/` set alone
-is **4.1 TB across 667 shards** - so extracting a second on-disk copy
-is a non-starter. The **Files → Manifest** importer handles this case too:
-point its *Paths file* field at a `.npz` that references members inside
-tar/zip shards, and VTSearch loads a chosen subset of those chunks
-**without unpacking anything**. The importer auto-detects the archive-member
-shape (a manifest with a `members` array) and switches to the
-no-extraction path - there is no separate tab or mode to pick. Each
-imported media records only `{archive path, member name}` and streams that
-single tar/zip member on demand (HTTP Range), so playing a clip transfers a
-few seconds of bytes rather than the whole shard. Nothing is written to
-disk, and no member data is read at import time - the importer only walks
-each referenced shard's tar headers to confirm the member exists and record
-its size.
+Some collections are too large to unpack: WebDataset-style corpora pack
+tens of thousands of audio or video chunks inside a handful of multi-GB
+`shard_*.tar` (or `.zip`) files. The **Files → Manifest** importer handles
+this case too: point its *Paths file* field at a `.npz` that references
+members inside tar/zip shards, and VTSearch loads a chosen subset of those
+chunks **without unpacking anything**. It recognises this kind of manifest
+by its `members` array, so there is no separate tab or mode to pick. Each
+item reads only its own member from the shard when you play or view it, and
+nothing is copied to disk.
 
 Set the *Dataset media type* to the kind of media the referenced members
 hold (e.g. `video` or `audio`). Because the manifest supplies the
@@ -799,12 +684,9 @@ entry per row:
 **Clip windows.** When rows carry `clip_start` / `clip_end`, the *same*
 member can appear in several rows as distinct **sub-file clip windows**
 (e.g. ≈14 × 10 s CLAP windows per chunk), each becoming its own
-searchable media with its own pre-computed vector. Windowed media are
-**display-only**: the byte routes always serve the whole member and the
-player seeks/loops within `[clip_start, clip_end]` - VTSearch never
-slices an AAC/MP4 member server-side. Each window gets a content-id that
-folds in the window, so de-duplication, voting, and labels stay unique
-per window.
+searchable item with its own pre-computed vector. The player plays the
+whole member but seeks to, and loops within, the window's extents. Each
+window is its own item for voting, labels and de-duplication.
 
 The vector dimension and embedder must match what VTSearch uses for that
 media type, exactly as for the [`.npz` manifest importer](#pre-computed-embeddings-npz)
@@ -874,10 +756,11 @@ The phase panel labels them, in order:
    ranking the Text sort uses. If you don't see anything good,
    Autopilot eventually offers to change what it sorts by; you can also
    find a few matches yourself on the **Manual** tab (see
-   [Get Autopilot unstuck](howto/unstick-autopilot.md)). If 200 votes go
-   by without the Goods it needs, Autopilot stops: the panel says
-   **Autopilot has stopped** and how many it found, and it offers the
-   change of sort once more. Your search may not reach what you are after
+   [Get Autopilot unstuck](howto/unstick-autopilot.md)). Once you have one
+   Good, 16 picks in a row with no Good end the phase with the Goods you
+   have: the sort has run dry. If 200 votes go by without the Goods it
+   needs, Autopilot stops: the panel says **Autopilot has stopped** and how
+   many it found, and it offers the change of sort once more. Your search may not reach what you are after
    in this collection; voting on keeps looking, and if the Goods turn up
    Autopilot checks the line and calls the detector done straight away.
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
@@ -912,8 +795,9 @@ The phase panel labels them, in order:
    your Good or Bad (see [How close the line got](#how-close-the-line-got)).
    It measures how much of what the detector returns is right, and its
    answers train the detector like any others. It runs once a session;
-   while your Good and Bad labels still overlap, Autopilot runs it earlier
-   too, and the panel goes back to the phase it interrupted afterwards.
+   while your Good and Bad labels still overlap, Autopilot also runs one
+   earlier (once a session), and the panel goes back to the phase it
+   interrupted afterwards.
 
 The current phase carries one light that shows how close it is to done.
 It starts as a **red** circle, turns **yellow** once the phase is past
@@ -954,20 +838,18 @@ On a collection of document pages, where a detector finds logos and
 stamps by matching their shape, Autopilot has a different four phases.
 After the initial goods and bads, **Find More Goods.** offers the
 detector's own best matches, re-ranked after every vote, with no
-20-good target. It ends when **16 of them in a row were not good**:
-the top of the ranking has run dry, and the documents the detector can
-find are likely found. That is **Done!**, with the same **Detector
-Trained** dialog. There is no Refine Boundary or Explore Diversity
+target number of Goods. It ends when **16 of them in a row were not
+good**: the top of the ranking has run dry, and the documents the detector
+can find are likely found. That is **Done!**, with the same hand-off from
+Toasty. There is no Refine Boundary, Explore Diversity or Spot Check
 phase.
 
 The phase's light counts that run (yellow from 8, green at 16), and a
 good match starts the count again. On the Manual tab the three status
 indicators give way to one readout, **Dry run n/16**: your votes in a
-row since the last good one. This stop was measured on FullMarks
-document sessions at 5,000 to 200,000 pages, and with a quarter of the
-matches removed (issue #4488). In the largest collections some matches
-rank too low for any amount of clicking to reach (issue #4493), so a
-dry run there means the detector has found what it can.
+row since the last good one. In very large collections some matches rank
+too low for any amount of clicking to reach, so a dry run there means the
+detector has found what it can.
 
 ### The collapsed bar
 
@@ -999,6 +881,125 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
 
 Raising these numbers trains a more thorough detector at the cost of
 more labelling effort.
+
+### How close the line got
+
+Until something **checks** the items above the line, nothing has measured how
+much of them is right or how much of what is there they found, and the note
+under the Threshold says so: **32 more kept, unchecked** (or however many it
+kept besides the items you voted on).
+
+**The spot check.** Autopilot runs it for you, as its **Spot Check.** step,
+just before it says **Done!** (see [The phases](#the-phases)). There is no
+button for it; only Autopilot starts a check. VTSearch cuts the list you
+haven't voted on into bands from the top (the top 8, the next 8, then 16, 32,
+64, and so on), draws 5 items at random from a band, and shows them one at a
+time in the centre, where the item usually is. Vote each one Good or Bad with
+the usual keys: → for Good, ← for Bad, and ↓ to go back and change one. The
+last vote of a round sends it, and the check moves to the next band. **Stop
+check** ends it early, and Autopilot carries on; **Continue** ends a finished
+one. If a check ended in your last 25
+answers, Autopilot skips this one: that check has just measured the line. It
+also runs none when you come back to a detector that had already reached
+**Done!** when Autopilot started: the session that finished it had its check.
+Test runs no spot check: it is where you test the Threshold you set in Train,
+not where you set it.
+
+**When your labels still overlap**, Autopilot checks sooner. If the detector
+scores your Good and Bad answers close together, a note under the Threshold
+says your labels still overlap. A check's picks, spread evenly down the list,
+are exactly the answers that show the detector where its line falls, so
+Autopilot runs the Spot Check step at that point too, once you have given it
+10 answers to learn from. It does this once a session, and never
+on faces cropped from photos, whose few matches are usually found before a
+check could help. Measured on COCO, sessions whose labels overlap returned
+far fewer wrong pictures and found more right ones for the same number of
+clicks.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
+  <img src="assets/floor-check.light.webp" alt="Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
+</picture>
+
+The picks come in the order they were drawn, which is random, with no rank
+and no score. They are a sample from the band, not the top of the list. A
+round is 5 picks from one band, whatever the radio.
+
+The check **walks** the list. It starts with the top bands (the top 32 on
+the middle and False Negatives radios, the top 128 on False Positives), one
+round each. Once those are in, it weighs the
+picks by the size of their bands to estimate how many of the set are right,
+reads that against the detector's own count of how many matches the whole
+list holds to estimate how many it found, and scores the set on the balance
+your radio asks for. While a longer list scores better, the check says
+**Better so far: checking the next 32** and draws from the next band down;
+the first time a longer list scores worse it says **Past the peak: checking
+a shorter list** and steps back without drawing again. It ends on the set
+where the balance peaked, or at either end of the list: on a long list of
+good matches that can be hundreds, on a short or sparse one as few as 8.
+**The check does not move the line**: it measures, and your picks become
+votes that the next retrain learns from like any other, but the line stays
+where your labels put it. What it reports is about the items the line kept,
+as they stood when the check started: of those, it counts the picks that
+fell among them. The check's last screen says what it found - **Checked the
+36 kept you hadn't voted on: likely 55–80% right, about half of them found
+(checked 12).** and **The line keeps the top 30 you haven't voted on, where
+your labels put it: the check informs the line and does not move it. The
+ranges are what the picks say about the 36 it kept when the check started;
+the Goods you had already voted on count in neither.** - and the note under
+the Threshold then shows the same result:
+
+- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 12) · 30 more kept** - when the check started the
+  line kept 36 items you hadn't voted on; now, with the check's own picks
+  voted and the line re-drawn, it keeps 30 more besides your votes. The range
+  is how much of those 36 is likely right; the phrase after it is how much of
+  the matches you hadn't voted on they likely held (**few of them**, **about a quarter**, **about half**,
+  **about three quarters** or **nearly all of them**). Hovering the note
+  gives both as numbers. The note names no cause for a poor result: a dataset with very few
+  matches and a detector that can't yet tell them apart look the same from
+  here.
+
+**Neither range counts your own votes.** The check samples only the items
+you haven't voted on, so the Goods you have already found are in neither the
+share right nor the share found. Late in a session, once you have voted on
+most of the matches near the top, the items left there hold few of them, so
+the check before **Done!** can read low after a session that went well.
+
+**The likely range** says how much of the items the line kept, when the
+check started, is probably right. It comes from your picks alone, never from
+the detector's own guess: the picks that fell in each band's part of that
+set bound that part, exactly for its size (in a band of 8, 4 right of 5
+means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
+picks a band it is still wide; that width is the honest answer to "how close
+did we get?". The **found** phrase is the rougher of the two: it reads
+the same picks against the detector's own estimate of how many matches the
+list holds, which is the one thing the picks cannot measure. The check
+decides where to stop on the picks' plain share, so the range says how sure
+the picks are, and the count says where the balance peaked. The Test view does
+not show this range: there the Test autopilot measures the line on the
+collection you are testing, and its result pane draws its own ranges.
+
+**A range measures the list as it was when you checked it.** Your check
+votes are ordinary votes, so they train the detector like any other. Later
+votes retrain it, and the line moves with what your labels now say, so the
+items at the line change. The range stays on screen as it
+was, and hovering it says it was measured before your later votes. A fresh
+range comes only from Autopilot's next check, which needs the list to have
+changed since the last one; any vote does that. A check belongs to the radio
+it was run on: move to another radio and the line is unchecked there until a
+check runs on it; move back and the earlier check shows again.
+
+**Stop check** leaves the Threshold as it was. The rounds you finished stay as
+votes.
+
+Everything that uses the matches works on the line in every state: the
+*Unverified Good* count, Test's review walk, **To Dataset**, **Export**
+and **Browse** all act on the items above it. An AutoFind or command-line run
+has nobody to vote, so it can't be checked: it exports the line your labels
+draw for that collection and records it as unchecked, with a line in the run's log and a
+`balance` entry beside the threshold in exports that carry the full results
+(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
 ---
 
@@ -1057,45 +1058,62 @@ but in Manual mode you choose directly.
 ### 3. Threshold
 
 A spectrum from **False Positives** to **False Negatives**, with three radio
-buttons under it: one under each third. Pick which way the detector's line
-should lean. Each radio is a **balance** of precision and recall - how many
-wrong items you will take in the results against how many right ones you
-will accept missing - and the line (see
+buttons under it, one under each third: which of the two mistakes the
+detector's line leans toward. In Train it sits on the Manual tab, under the
+two rows above; in Test it is at the top of the left panel; and the New
+Detector form asks for it under **Advanced ▾**. Toward False Positives the
+line returns the most, with more wrong ones in it; toward False Negatives it
+returns only the surest, and misses more; the middle radio (the default)
+weighs the two mistakes equally. Each radio is a **balance** of precision and
+recall - how many wrong items you will take in the results against how many
+right ones you will accept missing - and the line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
-is drawn where that balance is best. It keeps the top of the ranking, among
-the items you haven't voted on: up to the top 128 on the False Positives
-radio, and up to the top 32 on the middle and False Negatives radios, fewer
-when the detector's own estimate says the balance peaks sooner. Toward False
-Positives the line returns the most, and more of it may be wrong; toward
-False Negatives it returns only the surest, and misses more; the middle
-radio (the default) weighs the two mistakes equally. The radios carry no
+is drawn where that balance is best: the False Positives radio counts a miss
+as the dearer mistake, the False Negatives radio a wrong item. (For the
+statisticians: the three are F-beta at 4, 1 and 1/4.) The radios carry no
 numbers because what the line keeps is measured, not promised: a check says
-how close it got. Hover a radio for what it does. Changing the Threshold
+how close it got. Hover a radio for what it does; the **?** beside
+**Threshold:** explains it in two short sentences.
+
+The detector keeps its Threshold: it is saved with the detector. Autopilot,
+which has no Threshold of its own, draws the line there, and the next New
+Detector form starts on your last pick (the middle radio until you have one).
+Moving it later, in Manual or Test, changes it for that detector only, and
 moves the line over the scores the detector already has; the ranking itself
-does not change. The detector keeps the change: it is the Threshold Autopilot
-uses from then on, and the one the next New Detector form starts on.
+does not change. A Threshold set some other way, such as from the command
+line, shows on the nearest of the three radios, and moves to it. Leave it on
+the middle radio unless you want to lean toward catching everything (False
+Positives) or toward only the surest matches (False Negatives).
+
+**The line is where your labels put it.** VTSearch holds out each of your
+votes in turn, scores it with a detector that never saw it, and learns from
+those scores how high a match and how high a non-match tend to score. It then
+estimates how common matches are in the collection in front of you, and draws
+the line where the balance your radio asks for is best for a collection like
+that. The line keeps every item above it that you haven't voted on - as many
+as clear it, and on a collection with nothing like your target, few or none.
+Nothing caps it at a fixed number. While the detector has only a handful of
+Goods, the line keeps instead the items that stand out from the rest of its
+scores (more of them toward False Positives), until there are Goods enough
+for your labels to place it. Because the line comes from your labels, it
+travels with them: export the detector, run it on another collection, and
+VTSearch draws the line the same way there.
 
 Once the list is ranked by the detector (a **Learned** sort, or Test), the
-note under the spectrum says what the Threshold is doing to the line, in one
-of two states:
+note under the spectrum says what the line keeps:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
   on, besides your votes, and nothing has measured them yet.
 - **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
-  of them found (checked 12) · 30 more kept** - a check walked the items you
-  hadn't voted on; the note says how much of the 36 the line kept when it
-  started is likely right, and how much of the matches you hadn't voted on
-  they likely held. The line keeps its own 30 more now, where your labels put
-  it.
+  of them found (checked 12) · 30 more kept** - a spot check has measured
+  it; see [How close the line got](#how-close-the-line-got).
+- **12 pass the verification gate** - on a pattern-matching (**Structural**)
+  detector the line is where its verification stage stops, not a cut on a
+  ranking, so no check applies to it.
 
-The range a check measured is a number. Autopilot's **Spot Check.** step
-runs a spot check of the list: 5 random picks from each band of it, which you
-vote on, walking deeper while a longer list scores better on the balance and
-stopping where it peaks. See
-[How close the line got](#how-close-the-line-got) for the check and its
-likely range. Test shows the same note and runs no check: there you test the
-Threshold, and it is too late to label more to set it. The **?**
-beside **Threshold:** explains it in two short sentences.
+In Test the note reads that collection's test result instead (*Untested*, or
+*Tested · …*; see [The Test autopilot](#the-test-autopilot)), and there is no
+spot check: Test is where you test the Threshold you set in Train.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:
 the line always keeps the top of one ranking, so everything it keeps on the
@@ -1104,13 +1122,6 @@ band of borderline items. That makes a two-pass workflow natural: work
 toward False Negatives first, then move toward False Positives and review
 the newly admitted band - the items just above the moved line (see
 [Catch the borderline matches](howto/borderline-matches.md)).
-
-Each detector keeps its own Threshold while VTSearch runs, and one you
-haven't set yet starts from the last one you picked. Leave it on the middle
-radio unless you want to lean toward catching everything (False Positives)
-or toward only the surest matches (False Negatives). A Threshold set some
-other way, such as from the command line, shows on the nearest of the three
-radios, and moves to it.
 
 ---
 
@@ -1249,9 +1260,7 @@ It has two tabs:
   two-row tab bar as the Add Dataset dialog, offering three sources out of
   the box: **Downloaded Media** (the path of a file inside a downloaded demo
   dataset), **Server File** (the path of one file on the server), and
-  **URL** (VTSearch downloads the file for you). The last two are *datasource importers* -
-  single-item fetchers that render as a small form, and the extension
-  point where a plugin can add another place to fetch one example from.
+  **URL** (VTSearch downloads the file for you); plugins can add more.
   Picked examples stack vertically, each with its own **Remove**
   button; use **+ Add** below the stack to append another (from the picker's
   sources; only the first example can come from your own computer). An
@@ -1368,10 +1377,11 @@ end, as Train's do:
 
 1. **Score.** The detector scores every item and the Threshold draws its
    line. The light is the pass's progress.
-2. **Check the matches.** Picks from above the line, the band holding the
-   line first (where the detector is least sure and the set is largest), then
-   whichever band would narrow the answer most. The light tracks how narrow
-   the likely range for the share right has got.
+2. **Check the matches.** Picks from above the line: a round from every
+   band there, starting with the band holding the line (where the detector
+   is least sure and the set is largest) and working up, then whichever band
+   would narrow the answer most. The light tracks how narrow the likely range
+   for the share right has got.
 3. **Check the misses.** Picks from below the line, the band just under it
    first, then one band deeper a round until the step has spent its picks,
    so the answer rests on picks from deep in the list and not only on the
@@ -1380,19 +1390,21 @@ end, as Train's do:
    up nothing. The light tracks the range for the share of all the matches
    found.
 4. **Done!** The ranges have stopped moving usefully. You click until Done,
-   not until the dataset runs out: forty picks a side is the most a phase
-   asks for.
+   not until the dataset runs out: Check the matches stops at 20 picks (or
+   once every band above the line has had a round, if that takes more), and
+   Check the misses at 40.
 
 **Nothing to test** replaces the phases when the line keeps fewer than one
 round of pictures on this collection: move the **Threshold** toward **False
 Positives** to keep more, or train the detector further.
 
-The **Threshold** sits above the phases, as in Train. It is live between
-phases and frozen while one runs, because moving the line would move the
-bands under the picks. The note under it reads this collection's result
-(*Tested · likely 70-85% right, about half of them found (checked 32) · 64
-kept*), or *Untested*; it never shows the check Train ran, which measured the
-training collection and would read as this one's.
+The **Threshold** sits above the phases (and above the list on **Review**).
+It is frozen from the first round of picks until **Done!**, because moving
+the line would move the bands under the picks. The note under it reads this
+collection's result (*Tested · likely 70–85% right, about half of them found
+(checked 32) · 64 kept*), or *Untested · top 64 kept*; it never shows the
+check Train ran, which measured the training collection and would read as
+this one's.
 
 ### The result
 
@@ -1579,7 +1591,8 @@ eight tabs:
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
   largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Enable achievements** toggle, **Hide All** / **Show All** for
+  panel, the **Hide left panel** / **Hide right panel in Train and Test**
+  toggles, the **Enable achievements** toggle, **Hide All** / **Show All** for
   [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
   mode and thumbnail size).
 - **AutoFind** - what exporter to send AutoFind results to, and whether
@@ -1606,8 +1619,13 @@ eight tabs:
 - **Import Defaults** - default embedder, clipper, and converters per
   media type.
 - **Server** - read-only settings fixed when the server started and
-  shared by everyone, including the **Solo media type** restriction.
+  shared by everyone, including the **Solo media type** and **Autopilot
+  only** restrictions.
 - **Sorting** - options that control how the trained ranking behaves.
+
+Settings save as you change them. The buttons at the bottom of the window
+export them to a file, import them again, or put everything back to
+**Default** (see [Save and restore your settings](howto/save-your-settings.md)).
 
 ---
 
@@ -1621,9 +1639,10 @@ with bulk-action and per-card controls.
   <img src="assets/dashboard-manage.light.webp" alt="A dataset row and a detector row selected, with the per-row overflow (⋯) menu open" width="720" />
 </picture>
 
-- **Datasets** - every dataset on the server. Each row shows
-  **Type**, **# Items**, **Created**, **Age-Off**, **Creator**, and
-  **Readers**. A row that isn't in memory shows an inline **Load**
+- **Datasets** - every dataset on the server. Each row shows **Type**,
+  **# Items** and **Created**; **Age-Off** appears when the server deletes
+  old datasets, and **Creator** / **Readers** on servers where people log in.
+  A row that isn't in memory shows an inline **Load**
   button, which disappears once the dataset is loaded. The name has a
   pencil for **Rename**, **Delete** is an inline button, and the
   remaining actions (**Browse dataset**, **Run AutoFind**, **Stats**, and -
@@ -1718,7 +1737,8 @@ time:
   one at a time), or when a detector with no labels is ticked among others
   (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
-  dataset, and **Test** or **Find** once the selected detector is trained.
+  dataset, **Test** or **Find** once the selected detector is trained, and
+  **Find** alone when you have ticked several datasets or detectors.
 
 While one of his hints is up, the reason under a disabled **Train**, **Test**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add
@@ -1816,10 +1836,9 @@ barking."
 Some names come with a visible hedge: `~ Foraging birds`, in italics and
 without the slight shadow the other names carry. That marks the broadest
 couple of zoom bands, where a region covers so much ground that no single
-name really describes it - measured across 2832 regions, roughly half the
-regions at those bands have no majority category at all. The name is still
-the best short answer to "what is over here", and it is still worth
-steering by; the `~` is there so you read it as a direction rather than a
+name really describes it: about half the regions there have no majority
+category at all. The name is still the best short answer to "what is over
+here", and it is still worth steering by; the `~` is there so you read it as a direction rather than a
 label. Names at the finer bands, and names lettered from a dataset's own
 category paths, never carry it.
 
@@ -2006,9 +2025,8 @@ with a copy-paste scoring snippet. Where **Export labels** moves a
 detector *between VTSearch instances*, this hands a frozen scorer to
 someone who doesn't run VTSearch at all.
 
-It is deliberately **not** a menu item - most people never need it, and
-sitting beside **Export labels** it read as a confusing second "export".
-Reach it directly instead, either way round:
+It is **not** on any menu, since most people never need it. Reach it one of
+two ways:
 
 - **From the API**, against a loaded dataset:
   `POST /api/detectors/{detector_id}/portable-bundle` (see
@@ -2044,20 +2062,19 @@ Two ways to bring in existing work:
   <img src="assets/import-detector.light.webp" alt="The Load-sort detector picker: choose a saved detector to score a fresh dataset" width="720" />
 </picture>
 
-- **Labels** - the right panel's **Import Labels** button opens a
-  label-importer picker - a server-driven list of import sources, each with
-  its own small form - that populates your vote piles from the chosen
-  source. The detector card's **Import Labels** overflow item uses the same
-  sources but adds the labels to that detector directly, whether or not it
+- **Labels** - the right panel's **Import Labels** button opens a list of
+  import sources, each with its own small form, and adds the labels it reads
+  to your vote piles. The detector card's **Import Labels** overflow item uses
+  the same sources but adds the labels to that detector directly, whether or not it
   is open. Useful for continuing labelling across sessions or merging work
   from multiple labellers; see [Add labels you already have](howto/import-labels.md).
   New Detector's **Trained** tab makes a new detector from a file of labels
   exported from VTSearch.
 - **Detectors** - the **Load** sort mode's **Sort by Detector** option
-  lists the saved detectors already in the registry, so you can score a
-  fresh dataset with one without retraining. (There is no separate
-  detector-file upload step in the labeling UI; detectors come in via the
-  registry and via [Test](#testing-a-detector).)
+  lists the saved detectors on the Dashboard, so you can rank a fresh
+  dataset by one without retraining; [Test](#testing-a-detector) and **Find**
+  run one over a whole dataset. To bring in a detector from another
+  VTSearch, see [Move a detector to another VTSearch](howto/move-a-detector.md).
 
 ---
 
@@ -2195,10 +2212,11 @@ it back on starts every count again from zero.
   **Marquee** toggle is on (or `Shift` is held) the gesture belongs to the
   region draw instead, so it does not zoom.
 - **Right-click a media item** for a context menu: **Sort by similarity
-  to this**, **Crop, then sort by similarity…** (audio/image), **Use as
-  detector seed**, and **Crop, then use as detector seed…**. The crop
-  options open the **crop modal**, where you trim an image region or
-  audio span before using the item as a sort example or detector seed.
+  to this**, **Crop, then sort by similarity…**, **Use as detector seed**,
+  **Crop, then use as detector seed…**, and, on faces cut from photos,
+  **Show in photo**. The crop options, on audio and images only, open the
+  **crop modal**, where you trim an image region or audio span before using
+  the item as a sort example or detector seed.
 - **The Autopilot resort prompt.** While Autopilot is looking for
   positives by sorting on an example, VTSearch periodically stops to say
   how that sort is going (**Update Sort Example?**): one line of

@@ -8,6 +8,8 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+## [Unreleased]
+
 ### Changed
 
 - **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue

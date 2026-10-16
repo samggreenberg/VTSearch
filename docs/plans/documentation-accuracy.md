@@ -100,25 +100,6 @@ separately.
 
 <!-- item-sep -->
 
-- **Hand-restated API schemas.** `docs/api/medias.md` and `docs/api/datasets.md` still restate long
-  response schemas that `frontend/openapi.json` already carries. Accurate as of the 2026-09-28
-  audit, but they will drift; slim them to purpose, non-obvious semantics and a pointer to the spec,
-  as `settings.md` now does.
-
 <!-- item-sep -->
 
-- **Small code-side drift the doc audit found but did not fix.** `slides/render.sh`: its usage line
-  omits `png` / `--no-pageno`, and the comment above the `PIPESTATUS` check says the script has no
-  `pipefail` though it sets `set -euo pipefail` (so the check may be dead). `docker/Dockerfile*`:
-  the "OMP/MKL thread limits are already set in app.py" comment is misleading — `app.py` overwrites
-  them with the CPU allocation. `slides/figs/ui-autopilot.webp` is referenced by nothing.
-  `scripts/experiments/pile/launch_pile.sh`'s header still shows a `--force` rebuild of `vg_scale`,
-  which can no longer be rebuilt; `scripts/experiments/max_patch/queue_all.sh` defaults
-  `NCELLS=240` against a 288-cell grid. `docs/user/screenshots.manifest.ts` pins
-  `settings-appearance` to the Solo-media-type section though the shot shows the Appearance pane.
-  `frontend/src/app/models/projection.models.ts` hand-writes three types the generated client
-  already has (FRONTEND.md records it as a known exception). `vtscore/eval/label_curve_main.py`'s
-  docstring uses `flowers102_s`, which is not a registered demo; `vtscore/exporters/__init__.py`
-  still labels its registry "labelset exporter"; `DetectorRegistryCreateRequestSchema.trainable` is
-  accepted and never read; the labelset-source routes name a detector-id path parameter
-  `detector_name`.
+- [ ] #4966 — Code-side drift found by the 2026-10-16 docs audit (Haiku for the bulk; Sonnet for the code items)

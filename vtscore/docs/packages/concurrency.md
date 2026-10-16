@@ -8,8 +8,8 @@ it, and capping how many run at once.
 `__init__.py` - it is a PEP 420 implicit namespace package, so it exports
 nothing of its own and `from vtscore.concurrency import JobManager` raises
 `ImportError`. Every snippet below imports from the module that defines the
-name: `async_jobs`, `progress`, `memory_budget`, or `events`. The same is
-true of `vtscore.security`.
+name (`async_jobs`, `progress`, `memory_budget`, `gate`, `notifications`).
+The same is true of `vtscore.security`.
 
 ## Contents
 
@@ -152,6 +152,10 @@ still promoted so a queued follow-up runs. The manager is
 thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
+`start()` captures `vtscore.state.current_user.get_current_user()` as
+`job.user` (`"default"` when neither a request resolver nor a
+`thread_user` binding names someone).
+
 Context binding: unless the manager was built with
 `binds_context=False`, the worker binds the contexts that `start()`'s
 `dataset_id` / `detector_id` name as its thread-local active ones, so the
@@ -167,12 +171,12 @@ nothing. `archive_thumbnail_jobs` is one: its sweep warms every loaded
 dataset, so a kick whose own dataset was unloaded still runs for the rest.
 
 When a job spawns its daemon thread, the manager enters the Flask-free
-`vtscore.state.current_user.thread_user(job.user)` context manager
-before invoking the target so per-user settings resolution works from
-inside the worker; the context manager clears the thread-local on exit.
-`JobManager` never imports from `vtsearch.auth` — the whole point of the
-`current_user` extraction is that `start()` stands alone. Library-only
-consumers leave `user=None`.
+`thread_user(job.user)` context manager, plus `thread_dataset_context` /
+`thread_detector_context` for the job's `dataset_id` / `detector_id` when
+the manager binds context (above), before invoking the target, so per-user settings and the
+active-context proxies resolve from inside the worker. Each context manager
+restores the previous binding on exit. `JobManager` never imports from
+`vtsearch.auth`, so `start()` works in a Flask-free process.
 
 ### Module-level managers and `JOB_MANAGERS`
 
@@ -288,14 +292,17 @@ the clock resets. After 5 seconds of elapsed work the raw ETA is
 value is never the raw estimate: it is snapped to a coarse ladder of
 round values (`_ETA_LADDER`: 10 s … 24 h) and only moves to a
 neighbouring rung once the smoothed estimate overshoots the boundary by
-15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch.
+15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch. When the
+caller reports a `step` / `total_steps` structure, the ETA is instead
+extrapolated from the whole-job `overall` fraction, with its rate window
+rebased at every forward step boundary.
 A tracker built with `publish_eta=False` never publishes one:
 `eta_seconds` stays `None` on every snapshot while `current`/`total` and
 `overall` update as usual. The ingest paths (dataset import, staging
 import, labelset missing-media fetch) always build theirs that way: an
-import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()`,
-which once read the `CoreConfig.hide_ingest_eta` switch, is deprecated and
-always returns `True`.
+import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()` is
+deprecated and always returns `True`; it stays importable for out-of-tree
+callers.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -398,8 +405,8 @@ positional arguments alone.
 
 ## Per-thread progress callback
 
-Background loading threads inside `vtscore.datasets` and
-`vtscore.embedding.loader` write progress through a per-thread callback,
+Background loading threads inside `vtscore.datasets` (the loaders and
+downloaders) and the media types' demo sources write progress through a per-thread callback,
 not directly to a tracker. This is the **only** resolution there is: a
 thread that bound nothing reports into a no-op, not into a shared sink.
 
@@ -522,7 +529,7 @@ n_workers = cap_workers_by_memory(
 
 Available-memory detection prefers `/proc/meminfo`'s `MemAvailable:`,
 falls back to `sysconf(SC_AVPHYS_PAGES) * SC_PAGE_SIZE`, and lastly
-uses a 1 GiB floor. The function always returns at least 1.
+assumes 1 GiB available. The function always returns at least 1.
 
 ---
 
@@ -551,7 +558,7 @@ misconfigured setting cannot deadlock the pipeline.
 ```python
 from vtscore.concurrency.gate import ConcurrencyGate
 
-gate = ConcurrencyGate(lambda: CoreConfig.from_settings().concurrent_downloads)
+gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
 if gate.acquire(timeout=30):
     try:
         ...
@@ -583,9 +590,13 @@ to each tracker's notify stream, and emits
 
 The generator subscribes to each tracker, drains a private bounded
 queue per client, and unsubscribes in a `finally` block on disconnect.
-Heartbeats every 5 seconds keep the connection alive and re-emit the
-task channels so clients see finished tasks vanish once the stale-prune
-window elapses. This module is thin wiring - most library consumers
+Every 5 seconds (`HEARTBEAT_SECONDS`) it emits a named `heartbeat` event
+and re-emits every channel's snapshot: task channels so clients see
+finished tasks vanish once the stale-prune window elapses, tracker
+channels so a client whose queue overflowed recovers a dropped terminal
+frame. Between those, an idle stream writes a bare SSE comment every
+`KEEPALIVE_SECONDS` (1 s) so a vanished client's write fails fast and its
+slot is released. This module is thin wiring - most library consumers
 don't need to touch it.
 
 It also carries one channel that is *not* a tracker: `NOTIFICATION_CHANNEL`

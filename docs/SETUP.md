@@ -6,7 +6,7 @@ to [Running the app](#running-the-app) in order, then open the
 and train your first detector. [Docker](#docker) replaces the Python and Node
 steps if you would rather not install them, and the [SLURM](#running-on-a-slurm-gpu-cluster)
 section is for shared GPU clusters. You will need Python 3.11+, Git, and (for the
-frontend build) Node.js 20.19+.
+frontend build) Node.js 20.19+, 22.12+ or 24+.
 
 ## Table of Contents
 
@@ -207,6 +207,7 @@ bash scripts/install.sh gpu          # force the GPU install (auto-detect the CU
 bash scripts/install.sh cu118        # force the GPU install with an explicit tag (CUDA 11.8, older drivers)
 bash scripts/install.sh cu126        # ... CUDA 12.6 (Volta through Hopper)
 bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
+bash scripts/install.sh cu129        # ... CUDA 12.9 (Turing through Blackwell; the only tag that gets cuML)
 ```
 
 Expect several minutes either way; pip goes quiet for tens of seconds at a time
@@ -304,7 +305,7 @@ and everything else works unchanged. See
 
 ## Building the frontend
 
-The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 20.19+** (or 22.12+ / 24+) and **npm**. Angular 21's engine range accepts all three; the shipped Dockerfiles use `node:20-slim`. The install commands below use Node 22 as the LTS default, but a Node 20.19+ install already on your machine works without upgrading.
+The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 20.19+, 22.12+ or 24+** and **npm**: that is Angular 21's engine range (`^20.19 || ^22.12 || >=24`), which leaves out the odd-numbered 21 and 23 (the Angular CLI only warns on them). The shipped Dockerfiles use `node:20-slim`. The install commands below use Node 22 as the LTS default, but a Node 20.19+ install already on your machine works without upgrading.
 
 Check if they're installed:
 
@@ -380,15 +381,12 @@ server flags — login providers, admin restrictions, logging verbosity — are 
 If the first model download or dataset import fails behind a proxy or on an
 offline host, see [DEPLOYMENT.md § Network dependencies](DEPLOYMENT.md#network-dependencies).
 
-`python app.py` uses Flask's built-in dev server (fine for development but **not recommended for production**). For production, run under gunicorn using the bundled config:
-
-```bash
-VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
-```
-
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, embedder preloading) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
-
-The Docker images already use this configuration (see [Docker](#docker) below).
+`python app.py` uses Flask's built-in dev server, which is fine for development
+but **not for production**. For production, run under gunicorn
+(`VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app`); why the
+variable is needed, the single-worker config and tuning are in
+[DEPLOYMENT.md § Running under gunicorn](DEPLOYMENT.md#running-under-gunicorn).
+The Docker images below already run that way.
 
 ## Docker
 
@@ -420,7 +418,11 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 > `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
 > stage that runs `npm ci` and `npm run build:prod` inside the image, so
 > you do **not** need to build the Angular app on the host first; any
-> stale checked-in `static/` is overwritten with the freshly built bundle.
+> stale bundle already in the host's `static/` is overwritten with the
+> freshly built one.
+>
+> Which image to pick, and what each one is for, is tabled in
+> [DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image).
 
 ### GPU
 
@@ -438,6 +440,12 @@ Or with plain Docker:
 docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
+
+The GPU images ship torch's `cu129` build, so the host driver must accept
+CUDA 12.9 and the GPU must be Turing or newer: a V100 (Volta) host needs a
+local `bash scripts/install.sh cu126` instead. See
+[DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image) for the
+accepted driver branches.
 
 ### LabBench (slim, image or audio)
 
@@ -534,9 +542,11 @@ new-detector flow the embedded type (#4891).
 ### All image embedders
 
 `docker/Dockerfile.image-embedders` (CPU) and
-`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that bundle
-every supported image embedder — SigLIP (the default), SigLIP 2, CLIP, DINOv2,
-DINOv3 and EUPE — with their weights baked in. DINOv3 is gated on Hugging Face,
+`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that install
+every image embedder and bake in the weights of SigLIP (the default), SigLIP 2,
+CLIP, DINOv2, DINOv3 and EUPE. The two SO400M embedders (SigLIP-L and
+SigLIP2-L) are installed but not baked: they download into the `/app/data`
+volume the first time someone picks one. DINOv3 is gated on Hugging Face,
 so to bake it, run the cache script once on the host with your own token before
 building; no token enters the build. Without it the build still succeeds and
 DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
@@ -657,7 +667,7 @@ with a shared filesystem.
    > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
    > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
 
-3. **Build the frontend** (needs Node.js 20.19+; see [Building the
+3. **Build the frontend** (needs Node.js 20.19+, 22.12+ or 24+; see [Building the
    frontend](#building-the-frontend)):
 
    ```bash
@@ -731,8 +741,9 @@ with a shared filesystem.
 
 3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
    terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
-   press **Enter** to restart the app. Press **q** then Enter to release the
-   node and quit.
+   press **Enter** to restart the app. Type **i** then Enter first to rerun
+   `scripts/install.sh` when dependencies changed; **q** then Enter releases
+   the node and quits.
 
 > Interactive SLURM jobs don't persist — you re-allocate each session. Only run
 > **one** `app.py` per allocation; VTSearch keeps all model/dataset state in one
@@ -856,13 +867,10 @@ dependencies automatically and supports grouped test subsets:
 ./run-tests.sh sorting api  # multiple groups
 ```
 
-Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
-`downloads`, `integration`, `cli`, `converters`, `projection`, `meta`,
-`frontend`, `slides`, `docs` (plus `gpu` and `vtscore-clean`, which run
-separately). A bare `./run-tests.sh` on a branch that changes only markdown
-narrows itself to the `docs` gate automatically. See
-[`docs/TESTING.md`](TESTING.md#test-groups) for what each group covers and which
-gates a group run skips.
+The group list, what each group covers, and which gates a group run skips
+are in [TESTING.md § Test Groups](TESTING.md#test-groups). A bare
+`./run-tests.sh` on a branch that changes only markdown narrows itself to the
+`docs` gate automatically.
 
 You can also run pytest directly:
 
@@ -914,7 +922,7 @@ The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_
 - **Run tests**: See [Running the tests](#running-the-tests) above.
 - **Learn the codebase**: See [ARCHITECTURE.md](ARCHITECTURE.md#key-concepts)
   for the core vocabulary (media items, votes, media types, processors,
-  origins) and the module-by-module map, and
+  origins) and the package-level map, and
   [FRONTEND.md](FRONTEND.md) for the Angular SPA.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
   exporters from the command line.
