@@ -105,9 +105,8 @@ same edit.
     paired by seed. It is still two paths as they ship, not an A/B.
 - **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
   of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages that
-  move as soon as a report merges to `dev` (first set to follow releases to
-  `main`, then switched the same day). A report commits its viewer so the link
-  has one. See
+  move as soon as a report merges to `dev`. A report commits its viewer so the
+  link has one. See
   [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
 - **The viewer carries every balance (owner, 2026-10-07, #4636):** the
   committed viewer holds all three session sets, a chip per beta the sessions
@@ -152,10 +151,8 @@ same edit.
   ground-truth box (owner ruling on #3321).
 - **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
   retired that objective, and since #4272 the default arm's line is a kept
-  set (the floor's until #4413; then the balance's count line, the mixture's
-  F-beta argmax capped at 32; since #4452 the balance's labels line), so a
-  review scored in cost reads the change
-  of objective as a regression. Cost is gone from the
+  set (today the balance's labels line, #4452), so a review scored in cost
+  reads the change of objective as a regression. Cost is gone from the
   headline, the tables and the figures, not moved to an appendix.
   **The precision floor is written *P*, not *X*** (owner, 2026-09-30).
   The set, as `analyze.py` reports it:
@@ -189,7 +186,8 @@ same edit.
     report commits. `stop_rules_3560.py` has the deeper read: the objective
     around the stop, and whether Smart's lapses carry news.
 - **The opening is the text sort (#4605).** The app stays on the text sort
-  through Autopilot's opening (Good, Bad, More) and shows a detector only from
+  through Autopilot's opening (Good, then Bad; photos have no More walk since
+  #4740) and shows a detector only from
   the Hard phase on (vote 8 since #4742), and on a single-vector space (the
   Binary path) not before 30 votes: until then a typed-query session keeps the
   text sort on screen while Autopilot asks from the head (#4736, `app_trained`
@@ -204,11 +202,12 @@ same edit.
   the opening's detectors as what the session shows. (A document dataset's
   dry-run walk is on the learned sort in the app, but the harness flags it 0;
   the document reviews use their own analyzer.)
-- **Every attempted run is in every average (owner, 2026-10-07, #4631).** A
-  run that never trains a detector (150 clicks and no Good; 37 of 1,440 per
-  preset on the 2026-10-05 Binary review, chair@small in all 10 seeds) writes
-  no metric row. A mean over the runs with a value drops exactly the sessions
-  the app failed. Such a run scores **what its session shows: the typed
+- **Every attempted run is in every average (owner, 2026-10-07, #4631).** Some
+  runs never get a detector the app shows (232 of 6,480 per preset on the
+  2026-10-16 Binary review, nearly all at small), and in a review run before
+  #4758 a run with no Good wrote no metric row at all (`never_trained`). A mean
+  over the runs with a value drops exactly the sessions the app failed. A run
+  the app never shows a detector scores **what its session shows: the typed
   query's own set**, at every click, at the end and after the check. That is
   the opening rule above for a run that never leaves the opening. Its AP is
   the text sort's, and its check's effect is 0.
@@ -293,12 +292,14 @@ same edit.
   `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
   the end check's rows and picks feed only the check's own columns, never a
   curve, a checkpoint or an image's credit. Mid-session, Autopilot also runs
-  the check when the labels separate weakly (`weak_check_due`, past its
-  text-sort opening), and once before Done, the first time every light is
-  green (`done_check`): those rows carry `phase == "prompt"`, count in `t` and
-  the 150-vote budget, and read as ordinary clicks in every curve and credit.
-  The weak prompt never runs on face crops (#4799); the check before Done
-  does, as the app's does. The first `done` follows the check before Done.
+  the check once when the labels separate weakly (`weak_check_due`, past its
+  text-sort opening; once a session since #4909), and once before Done, the
+  first time the stop rule fires (`done_check`): every light green, or the
+  labels line expecting F-beta of at least `STOP_LEVEL` (#4878,
+  `autopilot_flow.STOP_RULES`). Those rows carry `phase == "prompt"`, count in
+  `t` and the 150-vote budget, and read as ordinary clicks in every curve and
+  credit. The weak prompt never runs on face crops (#4799); the check before
+  Done does, as the app's does. The first `done` follows the check before Done.
 - **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
   checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
@@ -336,7 +337,8 @@ The document path (`sift_vlad_doc`, the tiled Stage 1 from #3928 / #4391)
 differs from the photo paths, and the owner settled how its review works:
 
 - **Harness:** `scripts/experiments/fullmarks/app_replay_tiled.py`, which calls
-  the app's own `maybe_structural_rerank(_example)`. `vtscore.eval` has no
+  the app's own `maybe_structural_rerank(_example)`; the review's run is its
+  closed loop, `sota_documents.py`. `vtscore.eval` has no
   structural path, and porting one is not a precondition for the review.
 - **Bench:** FullMarks (current frozen version), its roster classes and
   #4162's `own_verified` pools. The opening (click 0) is example sort with the
@@ -399,8 +401,8 @@ follows:
   (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each;
   `CALIB_PARTITION=cpu` packs them on the cpu partition instead, about 3.7 min a cell there) and
   analyse with `fhibe/sota_face_analyze.sh`. **To add workers to a running review, submit them on
-  the SAME claims dir** (`<set>-logs/claims-*`, as `pack` wraps them): a second `pack` opens a new
-  claims dir and runs every task again.
+  the SAME claims dir** (`SOTA_FACE_CLAIMS_DIR=<set>-logs/claims-*`, the dir the first `pack`
+  printed): a second `pack` without it opens a new claims dir and runs every task again.
 - **Publishing:** the report may name FHIBE subject IDs, to point at hard or glitched cases (the
   owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
   holds every session set, the starting photos folded into the dataset name
@@ -424,7 +426,7 @@ SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per p
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
 python by_click.py --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --baseline <text_baseline.csv> --embedder siglip --out <dir>/objective_by_click.csv   # the objective at EVERY click, the typed query until the app shows a run's detector (the opening's end, #4605): the slides' left panel reads it
-srun -p cpu --mem=16G -c 2 -t 60 bash viewer_betas.sh <date>   # the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html
+srun -p cpu --mem=48G -c 2 -t 60 bash viewer_betas.sh <date>   # after analyze.sh on -b1 (its text baseline); the committed viewer: every session set on one page, a chip per beta (#4636) -> <date>-betas/viewer.html; 24 seeds peak at 36 GB
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 python compare_paths.py --binary <binary report dir> --region <region report dir> --out <region report dir>/figures   # the two paths side by side (#4655): two figures, the table on stdout; reads committed CSVs, runs anywhere
 ```
@@ -555,7 +557,7 @@ https://samggreenberg.github.io/VTSearch/sota/binary-photo/             -> the n
 https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its interactive viewer
 ```
 
-and likewise `region-photo/` and `document-logo/`. `.github/workflows/publish-sota.yml`
+and likewise `region-photo/`, `document-logo/` and `face/`. `.github/workflows/publish-sota.yml`
 rebuilds them with `scripts/publish-sota-site.py` on each **push to `dev`**
 that touches a report, so a report has its link as soon as it merges. Three
 things keep a report on its link:
@@ -580,26 +582,14 @@ things keep a report on its link:
   only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
   offer cost (#4576), nor the cost cut as its dotted line (#4939); a page built before that gets all three from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
-  Its averaged line carries a run's last scored value through a spot check's
-  rounds (#4624): a run inside a prompted check is scored once per round of
-  picks, and a mean over "the runs with a row at this click" skipped it between
-  rounds, which skipped exactly the weak sessions and drew a dip at the end of
-  every session as the checks ran out of budget. A page built before that gets
-  the carry from its own per-seed lines with `viewer.py --reskin <page>
-  --fill-gaps` (refused on a page whose per-seed lines were thinned; rebuild
-  it). `analyze.py`'s curves and `by_click.py` already carried. A click where
-  a run has no detector (before its first Good, or every click of a run that
-  never got one; before its first Good and Bad in a review run before #4643)
-  is scored as the empty returned set, the nothing Test gives that labelset,
-  so the runs that never trained are in its mean as losses
-  (`curves.score_empty_sets`); from a run's first row on, Autopilot's opening
-  included, it draws the harness's detector: under the label quota, the typed
-  query's own set from the first vote since #4758, else the Goods' centroid
-  from the first Good (#4640, #4643, above). A detector that flags nothing counts its precision as 0 rather than
-  undefined; a page built before that is rebuilt with `analyze.sh`, since a
-  reskin has no prevalence to put AP at.
-  The report's own tables score a run with no detector at the typed query its
-  session shows instead (owner, 2026-10-07, #4631; see the standing decisions):
+  How the page averages (the carry through a spot check's rounds, #4624; the
+  empty set before a run's first row and precision 0 on an empty set,
+  `curves.score_empty_sets`) is the general viewer's, in the `grid-experiments`
+  skill's "The interactive viewer", which also says which older pages take
+  `viewer.py --reskin <page> --fill-gaps` and which are rebuilt from their
+  results. What it draws through the opening is the standing decision above
+  (#4640). The report's own tables score a run with no detector at the typed
+  query its session shows instead (owner, 2026-10-07, #4631; see the standing decisions):
   the viewer has no opening rule, and the report says so in one line.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).

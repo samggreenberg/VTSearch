@@ -144,8 +144,8 @@ plugin resolves at runtime is by definition not in the declared list.
 
 `PluginField.to_dict()` returns the JSON shape served by every plugin
 listing endpoint; the keys mirror the dataclass attributes 1-to-1 (with
-the exception of `include_in_origin` and `origin_serializer`, which are
-server-side only).
+the exception of `include_in_origin`, `origin_serializer` and
+`opened_in_browser`, which are server-side only).
 
 ## Field-value normalization
 
@@ -214,12 +214,15 @@ the first docstring line; `icon` is the first letter of `display_name`
 (rendered as a boxed letter). Explicit declarations always win. A family
 base opts out of derivation with `_is_plugin_family_base = True`.
 
-`ui_mode="form"` tells the frontend to render the generic form built
-from `fields`. `"file_upload"` skips the form and uses the native file
-picker (e.g. the local-folder importer). `"custom"` declares that the
-frontend has a dedicated UI block. `"none"` means the plugin has no
-user-facing UI at all - the GUI exporter uses this because the
-frontend handles its result-display directly.
+`ui_mode="form"` declares that the plugin is driven by the generic form
+built from `fields`. `"file_upload"` declares a native file picker instead
+(the pickle importer). `"custom"` declares that the frontend has a
+dedicated UI block (the local-folder, local-files, demo and
+combine-datasets importers). `"none"` means the plugin has no user-facing
+UI at all; no shipped plugin sets it (the GUI exporter is kept out of
+pickers with `hidden_from_picker` instead). Today the one reader is
+`GET /api/dataset/importers`, which lists only `"form"` importers; the
+dataset-import modal picks its view from `ImporterBase.picker_view`.
 
 ### Inherited methods
 
@@ -282,7 +285,7 @@ filled in once the outer discovery completes.
 Discovery walks `package_dir.iterdir()` in sorted order (so output is
 deterministic) and skips dot/underscore prefixes. Sub-packages
 (directories with `__init__.py`) are always scanned; flat `.py`
-modules are scanned only when `discover_modules=True`. Symlinked
+modules (other than `base.py`) are scanned only when `discover_modules=True`. Symlinked
 entries are loaded via `importlib.util.spec_from_file_location`
 because Python's default `FileFinder` can miss symlinks on some
 platforms. Directories whose name contains a `.` are skipped to avoid
@@ -474,9 +477,9 @@ The mapping is:
 | `field_type` | Marshmallow field |
 |--------------|-------------------|
 | `text`, `url`, `password`, `folder`, `server_path`, `email` | `fields.String` (with non-empty-after-strip validator when required) |
-| `number` (integer-looking) | `fields.Integer` |
-| `number` (float-looking) | `fields.Float` |
-| `select` | `fields.String` + `validate.OneOf(options)` (static options only) |
+| `number` (integer-looking) | `fields.Integer`, plus `validate.Range` from `min` / `max` |
+| `number` (float-looking) | `fields.Float`, plus `validate.Range` from `min` / `max` |
+| `select` | `fields.String` + `validate.OneOf(options)` (static options only; not for `allow_free_text`) |
 | `checkbox` | `fields.Function` deserialising `"true"`/`"false"`/bool/int → `bool` |
 | `file` | skipped (populated from `request.files` after schema load) |
 
@@ -504,7 +507,7 @@ Three implementations satisfy it, one per ingress:
 
 Write plugin bodies against the `UploadedFile` surface and they work on
 all three. `wrap_cli_file_fields(fields, field_values)` does the CLI
-wrapping; the default `run_cli` of label importers calls it for you.
+wrapping; the default `run_cli` of dataset and label importers calls it for you.
 
 ## End-to-end: writing a third-party plugin
 
@@ -567,7 +570,7 @@ After `pip install -e .`:
 ```python
 >>> from vtscore.exporters import get_exporter, list_exporters
 >>> [e.name for e in list_exporters()]
-['email_smtp', 'gui', 'open_url', 'portable_detector', 'server_csv_file', 'server_json_file', 'stdout', 'webhook']
+['email_smtp', 'gui', 'open_url', 'portable_detector', 'server_csv_file', 'server_json_file', 'webhook', 'stdout']
 >>> exp = get_exporter("stdout")
 >>> exp.export_find_results({"detectors_run": 1, "results": {}}, {"indent": "4"})
 {

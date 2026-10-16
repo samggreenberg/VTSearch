@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from vtscore.projection import pyramid as pyramid_mod
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
     Pyramid,
@@ -162,6 +163,28 @@ def test_tile_member_ids_caches_per_level():
 
     # A second fetch returns the same cached object — no recompute.
     assert tile_member_ids(pyr, proj, level, tx, ty) is pyr._member_index[level][(tx, ty)]
+
+
+def test_hilbert_order_computed_once_across_levels(monkeypatch):
+    """The level-independent Hilbert permutation is shared by every level's re-bin."""
+    calls = 0
+    real_hilbert_order = pyramid_mod._hilbert_order
+
+    def counting_hilbert_order(coords: np.ndarray, bits: int = 16) -> np.ndarray:
+        nonlocal calls
+        calls += 1
+        return real_hilbert_order(coords, bits)
+
+    monkeypatch.setattr(pyramid_mod, "_hilbert_order", counting_hilbert_order)
+
+    proj = _projection(_cluster_cloud())
+    pyr = build_pyramid(proj, n_levels=4)
+    for level in (0, 1, 2):
+        (_lvl, tx, ty) = next(key for key in pyr.tiles if key[0] == level)
+        assert tile_member_ids(pyr, proj, level, tx, ty)
+
+    assert set(pyr._member_index) == {0, 1, 2}
+    assert calls == 1
 
 
 def test_tile_member_ids_empty_for_missing_tile():

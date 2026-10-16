@@ -112,7 +112,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private warmSub: Subscription | null = null;
 
   constructor() {
-    // Per run, not once: a toast's View results can swap another run into
+    // Per run, not once: a toast's View Results can swap another run into
     // the open dialog.
     effect(() => {
       const { run_id: runId, dataset_id: datasetId } = this.data();

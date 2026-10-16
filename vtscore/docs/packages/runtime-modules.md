@@ -14,7 +14,10 @@ single-instance lock.
 
 (`vtscore/config/` also sits at the top level but is large enough to
 have its own page: [`config.md`](config.md). The CLI modules likewise -
-see [`cli.md`](cli.md).)
+see [`cli.md`](cli.md). The two host-seam modules are covered with the
+other app hooks: `achievements_hooks.py` in
+[`architecture.md`](../architecture.md#dependency-direction), `host_seams.py`
+in [`integration.md`](../integration.md#putting-the-seams-back-in-tests).)
 
 ---
 
@@ -91,7 +94,7 @@ two heavyweight CPU clustering steps move to the GPU:
 | Consumer | CPU | GPU |
 |----------|-----|-----|
 | [Projection](projection.md) UMAP | `umap-learn` | `cuml.manifold.UMAP` |
-| [Coverage atlas](state.md#coverage-atlas) hierarchical k-means | `sklearn.cluster.KMeans` | `cuml.cluster.KMeans` |
+| [Coverage atlas](coverage.md) hierarchical k-means | `sklearn.cluster.KMeans` | `cuml.cluster.KMeans` |
 
 ```python
 def cuml_enabled() -> bool: ...

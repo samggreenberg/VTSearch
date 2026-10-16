@@ -19,13 +19,15 @@ click; `s` is the item's rank in the opening text sort, so a run that keeps
 picking from deep in the sort is visibly doing something different from one
 working the top.
 
-**`s` is a rank over the WHOLE dataset, not over the pool the run walks.**
-``voting_iterations`` builds ``seed_rank`` from every id in ``seed_scores``
-while ``pool = sorted(sim_ids)`` is the simulation split -- about half of them
-under the default ``sim_fraction=0.5``. So ``s227`` is not "the app went 227
-deep": roughly half of those items were never available to pick. The sheet
-prints this in its footer, because a rank with an unstated denominator is
-exactly the kind of number that gets quoted without it.
+**`s` is a rank in the sort the run walks, since #5004.** ``voting_iterations``
+builds ``seed_rank`` over the simulation split alone (``pool = sorted(sim_ids)``,
+the media the app would have loaded), so ``s227`` is 227 deep into the pool. A
+pick log written before #5004 ranked every id in ``seed_scores``: the withheld
+half too (about as many again under the default ``sim_fraction=0.5``) and, on a
+scale-banded cell, the wrong-band images dropped before the split. Its ``s``
+overstates depth-into-the-pool by about 2x. The sheet prints this in its footer,
+because a rank with an unstated denominator is exactly the kind of number that
+gets quoted without it.
 """
 
 from __future__ import annotations
@@ -160,8 +162,8 @@ def main(argv: list[str] | None = None) -> int:
 
     draw.text(
         (PAD, sheet.height - 13),
-        "s = rank in the full text sort over all medias; the run walks only the "
-        "simulation split (~half), so s overstates depth-into-the-pool by ~2x",
+        "s = rank in the text sort of the simulation split the run walks; a pick log "
+        "from before #5004 ranked all medias, so its s is ~2x deeper than the pool",
         fill="#a8a29e",
         font=font,
     )

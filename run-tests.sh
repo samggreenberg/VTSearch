@@ -21,7 +21,7 @@
 #                   docs (markdown-only: every cheap gate, plus the few tests
 #                   that read a doc — see the note below), gpu
 #
-# Each group is a folder under tests/ AND tests_lib/. Marker assignment is
+# Each group is a folder under tests/, tests_lib/, or both. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
 # by the respective conftest.  tests_lib/ holds Flask-free library tests
 # (see vtscore/docs/architecture.md).
@@ -39,9 +39,9 @@
 # ---------------------------------------------------------------------------
 # How the run is staged
 #
-# Nothing tests in CI, so a *full* `./run-tests.sh` remains the only real gate and
-# still runs every check. What changed is the shape of the run, because the
-# stages are independent of each other and the box has more than one core:
+# Nothing tests in CI, so a *full* `./run-tests.sh` is the only real gate and
+# runs every check. The run is staged, because the stages are independent of
+# each other and the box has more than one core:
 #
 #   1. Cheap gates, serial, fail-fast (~8s total). Linters, doc invariants,
 #      snapshot drift. These are quick enough that stopping at the first
@@ -70,12 +70,13 @@
 #
 # Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
 # skip the whole-repo gates in stages 3 and 4 that are not about the code you
-# just changed: pyright, pip-audit, the vulture whitelist check, and the
-# frontend suite. That keeps the edit/test loop in
-# the seconds it should be instead of paying ~2.5min of whole-repo checks to run
-# a five-second group. The skip is announced on every group run, because the
-# full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
-# the complete chain on a group run.
+# just changed — pyright, pip-audit and the vulture whitelist check. That keeps
+# the edit/test loop in the seconds it should be instead of paying ~2.5min of
+# whole-repo checks to run a five-second group. The skip is announced on every
+# group run and named in the verdict, because the full run is what actually
+# gates a push. Set VTSEARCH_FULL_GATES=1 to force those three back on for a
+# group run. The frontend gates follow the group, not that variable: the build
+# and npm audit run for `core` and `frontend`, Vitest for `frontend` alone.
 #
 # `slides` goes further and is the one group that also gates a push, because a
 # change confined to slides/ cannot reach anything else in the repo: nothing

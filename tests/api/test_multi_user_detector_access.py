@@ -24,7 +24,9 @@ from vtscore.detectors.registry import (
     list_detectors_for_user,
     register_detector,
     set_detector_readers,
+    update_detector_readers,
 )
+from vtscore.security.readers import ReadersUpdate
 
 
 def _make_detector(name="det", created_by="alice", readers=None, **kw):
@@ -125,6 +127,14 @@ class TestSetReaders:
         set_detector_readers(e["id"], [], "alice")
         assert can_user_access_detector(e["id"], "bob") is False
 
+    def test_update_reports_each_case(self):
+        e = _make_detector("sr4", created_by="alice")
+        assert update_detector_readers(e["id"], ["bob"], "alice") is ReadersUpdate.UPDATED
+        assert update_detector_readers(e["id"], ["carol"], "bob") is ReadersUpdate.NOT_CREATOR
+        assert update_detector_readers("nope", ["bob"], "alice") is ReadersUpdate.NOT_FOUND
+        assert can_user_access_detector(e["id"], "bob") is True
+        assert can_user_access_detector(e["id"], "carol") is False
+
 
 # ---------------------------------------------------------------------------
 # API endpoint tests (default user = "default")
@@ -152,6 +162,17 @@ class TestReadersEndpoint:
     def test_set_readers_nonexistent(self, client):
         resp = client.put("/api/detectors/registry/nope/readers", json={"readers": ["bob"]})
         assert resp.status_code == 404
+
+    def test_status_does_not_depend_on_message_wording(self, client, monkeypatch):
+        # #5000: the status used to come from finding "creator" in the message.
+        monkeypatch.setattr(ReadersUpdate, "message", lambda self, kind: "Refused")
+        e = _make_detector("api4", created_by="other_user")
+        resp = client.put(f"/api/detectors/registry/{e['id']}/readers", json={"readers": ["bob"]})
+        assert resp.status_code == 403
+        assert resp.get_json()["message"] == "Refused"
+        resp = client.put("/api/detectors/registry/nope/readers", json={"readers": ["bob"]})
+        assert resp.status_code == 404
+        assert resp.get_json()["message"] == "Refused"
 
 
 class TestRegistryListingFiltered:

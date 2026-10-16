@@ -9,6 +9,7 @@ describe('ToastService', () => {
   let loadingTasks$: Subject<LoadingTask[]>;
   let detectorLoadingTasks$: Subject<LoadingTask[]>;
   let notifications$: Subject<ServerNotification>;
+  let failedBeforeConnect: ReturnType<typeof vi.fn>;
 
   function task(overrides: Partial<LoadingTask>): LoadingTask {
     return {
@@ -27,12 +28,13 @@ describe('ToastService', () => {
     loadingTasks$ = new Subject<LoadingTask[]>();
     detectorLoadingTasks$ = new Subject<LoadingTask[]>();
     notifications$ = new Subject<ServerNotification>();
+    failedBeforeConnect = vi.fn(() => false);
     TestBed.configureTestingModule({
       providers: [
         ToastService,
         {
           provide: ProgressEventsService,
-          useValue: { loadingTasks$, detectorLoadingTasks$, notifications$ },
+          useValue: { loadingTasks$, detectorLoadingTasks$, notifications$, failedBeforeConnect },
         },
       ],
     });
@@ -142,6 +144,15 @@ describe('ToastService', () => {
     detectorLoadingTasks$.next([task({ task_id: 'y', status: 'idle', error: 'oom', name: 'Det' })]);
     expect(service.toasts.length).toBe(1);
     expect(service.toasts[0].message).toBe('Detector load failed');
+  });
+
+  it('does not toast a dataset failure that predates the connection (#4973)', () => {
+    // Failed imports stay on the channel until dismissed, so every page load
+    // replays them; the dashboard row reports those, not a fresh toast.
+    failedBeforeConnect.mockImplementation((id: string) => id === 'old');
+    loadingTasks$.next([task({ task_id: 'old', error: 'disk full' }), task({ task_id: 'new', error: 'oom' })]);
+    expect(service.toasts.length).toBe(1);
+    expect(service.toasts[0].detail).toBe('n: oom');
   });
 
   it('does not re-toast the same failed task_id twice', () => {

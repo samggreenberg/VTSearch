@@ -71,10 +71,10 @@ describe('ToastContainerComponent', () => {
     await settleZoneless(fixture);
     const btn = fixture.nativeElement.querySelector('.toast-stack__dismiss-all');
     expect(btn).toBeTruthy();
-    expect(btn.textContent).toContain('Dismiss all (2)');
+    expect(btn.textContent).toContain('Dismiss All (2)');
   });
 
-  it('clears the whole stack when Dismiss all is clicked', async () => {
+  it('clears the whole stack when Dismiss All is clicked', async () => {
     toast.error({ message: 'First' });
     toast.error({ message: 'Second' });
     await settleZoneless(fixture);
@@ -91,12 +91,12 @@ describe('ToastContainerComponent', () => {
         (b) => b.textContent?.trim() === label,
       );
 
-    it('offers no Details or Copy list on a toast without items', async () => {
+    it('offers no Details or Copy List on a toast without items', async () => {
       toast.warning({ message: 'Plain warning', detail: 'Nothing to list' });
       await settleZoneless(fixture);
 
       expect(buttonLabelled('Details')).toBeUndefined();
-      expect(buttonLabelled('Copy list')).toBeUndefined();
+      expect(buttonLabelled('Copy List')).toBeUndefined();
     });
 
     it('keeps the list collapsed until Details is clicked, then shows every item', async () => {
@@ -112,7 +112,7 @@ describe('ToastContainerComponent', () => {
 
       const rows = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('.toast__items li'));
       expect(rows.map((li) => li.textContent?.trim())).toEqual(['a.wav', 'b.wav', 'c.wav']);
-      expect(buttonLabelled('Hide details')?.getAttribute('aria-expanded')).toBe('true');
+      expect(buttonLabelled('Hide Details')?.getAttribute('aria-expanded')).toBe('true');
     });
 
     it('copies the items one per line and confirms with Copied!', async () => {
@@ -122,7 +122,7 @@ describe('ToastContainerComponent', () => {
         toast.warning({ message: 'Dropped 2 item(s)', items: ['a.wav', 'b.wav'] });
         await settleZoneless(fixture);
 
-        buttonLabelled('Copy list')?.click();
+        buttonLabelled('Copy List')?.click();
         await settleZoneless(fixture);
 
         expect(writeText).toHaveBeenCalledWith('a.wav\nb.wav');

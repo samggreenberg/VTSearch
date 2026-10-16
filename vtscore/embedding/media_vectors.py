@@ -1,7 +1,7 @@
 """Per-media embedding vector access (dict-keyed).
 
-Phase 2 of the three-slot embedder work (``docs/plans/patch-embedder.md`` →
-"V3 — design") moved a media's embedding from a single ``media["embedding"]``
+The three-slot embedder binding (``docs/ARCHITECTURE.md`` →
+"Embedder binding and routing") moved a media's embedding from a single ``media["embedding"]``
 ndarray to ``media["embeddings"]`` — a dict keyed by embedder name — so the
 vectors of multiple bound embedders can coexist on one media.  Phase 2c
 **dropped the singular mirror entirely**: ``media["embeddings"]`` is now the

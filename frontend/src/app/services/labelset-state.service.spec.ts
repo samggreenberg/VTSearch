@@ -137,6 +137,71 @@ describe('LabelsetStateService', () => {
     }
   });
 
+  describe('out-of-order labels-detail reads', () => {
+    // A poll GET is in flight, the user flips 'a' from Good to Bad, and the
+    // post-vote refresh() issues a second GET. Each read resolves on its own
+    // Subject so the test picks the order.
+    let pollRead: Subject<DetectorLabelsDetailResponse>;
+    let refreshRead: Subject<DetectorLabelsDetailResponse>;
+    const before = { good: [view('a', 'good')], bad: [], media_type: 'audio' };
+    const after = { good: [], bad: [view('a', 'bad')], media_type: 'audio' };
+
+    function resolve(read: Subject<DetectorLabelsDetailResponse>, resp: DetectorLabelsDetailResponse): void {
+      read.next(resp);
+      read.complete();
+    }
+
+    async function startPollThenVote(): Promise<void> {
+      response = before;
+      service.setModel('m1');
+      pollRead = new Subject<DetectorLabelsDetailResponse>();
+      refreshRead = new Subject<DetectorLabelsDetailResponse>();
+      getLabelsDetail.mockClear();
+      getLabelsDetail.mockReturnValueOnce(pollRead).mockReturnValueOnce(refreshRead);
+
+      service.startPolling(1500);
+      await vi.advanceTimersByTimeAsync(0);
+      // The vote POST resolves synchronously, so refresh() runs right away.
+      service.vote('a', 'bad');
+      expect(getLabelsDetail).toHaveBeenCalledTimes(2);
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      service.stopPolling();
+      vi.useRealTimers();
+    });
+
+    it('drops an older poll read that resolves after the newer refresh()', async () => {
+      await startPollThenVote();
+
+      resolve(refreshRead, after);
+      expect(service.good).toEqual([]);
+      expect(service.bad).toEqual([view('a', 'bad')]);
+
+      // The poll read the server before the vote committed; applying it would
+      // snap 'a' back into Good.
+      resolve(pollRead, before);
+      expect(service.good).toEqual([]);
+      expect(service.bad).toEqual([view('a', 'bad')]);
+    });
+
+    it('applies both reads when they resolve in order', async () => {
+      await startPollThenVote();
+
+      resolve(pollRead, before);
+      expect(service.good).toEqual([view('a', 'good')]);
+      expect(service.bad).toEqual([]);
+
+      resolve(refreshRead, after);
+      expect(service.good).toEqual([]);
+      expect(service.bad).toEqual([view('a', 'bad')]);
+    });
+  });
+
   it('a fetch error leaves the current labelset intact', () => {
     response = { good: [view('a', 'good')], bad: [], media_type: 'audio' };
     service.setModel('m1');

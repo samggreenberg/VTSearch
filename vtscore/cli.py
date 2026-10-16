@@ -1228,8 +1228,8 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     for group in by_type.values():
         # Empty name = the framework's own resolution order (the embedder the
         # media already carry, else the media-type default).  The CLI has no
-        # embedder pick to forward; ``--solo-embedder`` narrows the registry
-        # that resolution reads rather than naming a pick here.
+        # embedder pick to forward.  ``--solo-embedder`` plays no part: it
+        # preselects the web importer's picker and nothing here reads it.
         embed_missing(group, "", on_progress=cli_progress.progress_callback)
 
     unembedded = [mid for mid in sorted(medias) if media_embedding(medias[mid]) is None]
@@ -2614,7 +2614,27 @@ def _run_source(
     detection has run (:func:`_delete_after_detection`).  A source with
     ``outputs`` is several datasets from one importer run, each saved, scored
     and exported on its own (:func:`_run_multi_source`).
+
+    *settings_path* is applied first, before the save: the import reads the
+    server-tier settings too (the saved-datasets directory, the retention
+    stamp, the download and embedding gates), so a run whose settings switched
+    over only at the scoring step saved its dataset under the default file's.
+
+    A run that will load media then gets the same runtime preparation the
+    server's startup does (:func:`~vtscore.embedding.initialize_models`), before
+    the first worker thread exists: it warms sklearn's threadpool controller
+    while the process is still single-threaded (the loader-lock/GIL deadlock
+    guard) and seeds the stat-free ``packages_distributions`` before anything
+    imports transformers (#3715).  A dry run loads nothing and skips it.
     """
+    if settings_path:
+        from vtscore.config import CoreConfig  # noqa: PLC0415
+
+        CoreConfig.from_settings(settings_path=settings_path)
+    if not dry_run:
+        from vtscore.embedding import initialize_models  # noqa: PLC0415
+
+        initialize_models()
     if spec.outputs:
         _run_multi_source(
             spec,

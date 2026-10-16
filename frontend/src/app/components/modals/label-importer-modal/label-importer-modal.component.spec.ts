@@ -122,6 +122,18 @@ describe('LabelImporterModalComponent', () => {
     expect(cards.length).toBe(2);
   });
 
+  // #4990: the action row used to sit inside the form <div>, where vt-modal's
+  // `[modal-footer]` slot never sees it (projection only matches top-level
+  // content), so the buttons scrolled with the body instead of staying pinned.
+  it('projects the action buttons into the modal footer', async () => {
+    await flushInit();
+    (fixture.nativeElement.querySelector('.picker-card') as HTMLButtonElement).click();
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.modal-footer .form-actions .btn--primary')?.textContent).toContain('Import');
+    expect(el.querySelector('.modal-body .form-actions')).toBeNull();
+  });
+
   it('coerces static string options into {value,label} pairs', async () => {
     await flushInit();
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;

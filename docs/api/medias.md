@@ -5,6 +5,10 @@
 > Media, vote, and sort endpoints are scoped to the active dataset/detector via
 > the [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
 > Vote- and label-mutating routes **require** them (400 otherwise).
+>
+> This page covers purpose and non-obvious semantics. Exact request and
+> response fields are in the [OpenAPI spec](../API.md#machine-readable-schema)
+> (`frontend/openapi.json`).
 
 ---
 
@@ -16,15 +20,7 @@
 GET /api/medias/ids
 ```
 
-→ Lightweight JSON array of stubs, one per media in the loaded dataset:
-
-```json
-[
-  { "id": 0, "media_type": "audio", "embedder": "clap-fused" },
-  { "id": 1, "media_type": "audio", "embedder": "clap-fused" }
-]
-```
-
+→ Lightweight JSON array of stubs, one per media in the loaded dataset.
 Every stub carries `id` and `media_type`; `embedder` (and the plural
 `embedders` array, when a media was embedded by more than one embedder, e.g.
 a semantic + region-patch pair) is included when present.  Display-worthy
@@ -44,31 +40,11 @@ Content-Type: application/json
 ```
 
 → JSON array of full metadata objects for the requested IDs (unknown IDs
-are silently omitted):
-
-```json
-[
-  {
-    "id": 0,
-    "media_type": "audio",
-    "filename": "media_0.wav",
-    "md5": "abc123...",
-    "custom_metadata": {
-      "duration": 5.0,
-      "file_size": 160044,
-      "category": "sine",
-      "frequency": 440
-    },
-    "origin_name": "media_0.wav",
-    "description": "A 440 Hz sine wave"
-  }
-]
-```
-
-Every returned item contains `id`, `media_type`, `filename`, `md5`, and
-`custom_metadata`.  `origin_name`, `description`, `embedder`, `embedders`
-(plural array, when present), `has_original`, and `clip_*` keys are included
-when present.
+are silently omitted). Every item carries `id`, `media_type`, `filename`,
+`md5` and `custom_metadata`; the optional keys appear only when present.
+On byte-sliced audio clips `clip_start` / `clip_end` are left out (the served
+WAV is already the clip, so the absolute offsets would seek past its end);
+they still reach the UI as `custom_metadata` provenance.
 
 `has_original: true` marks an item a
 [MediaCleaner](../EXTENDING-media.md#adding-a-media-cleaner) rewrote at load
@@ -186,7 +162,9 @@ from the canonical item: the `original` variant regenerates the thumbnail
 GET /api/medias/{media_id}/audio
 ```
 
-→ `audio/wav` binary stream.
+→ `audio/wav` binary stream, with an `ETag`. An item stored as an archive
+member streams that member with `Range` support instead, typed by its
+container (e.g. `audio/aac`, `audio/mp4`).
 404 if media not found.
 
 ### Stream video
@@ -250,16 +228,15 @@ media should be in *after* the call, so un-voting is an explicit
 
 The call is **idempotent**: sending the state the media is already in is a
 no-op — it does not append to the label history, does not credit achievements,
-and returns the existing click-time. (This is deliberate: with toggle
-semantics, two stale-view tabs clicking the same media alternated
-ADD/REMOVE on the server and inflated the achievement counters.)
+and returns the existing click-time, so two stale-view tabs clicking the same
+media cannot flip it back and forth or inflate the achievement counters.
 
 **Optional `region_box`** (`"good"` targets only): a 4-float array
 `[x0, y0, x1, y1]` in normalised image coordinates (`0..1`,
 pre-rotation) that annotates *which region of the image* the user
 is voting good on. Persisted alongside the vote and consumed by
-region-aware head training (the trainer pools the box's patch-grid
-cells on the fly). The box is dropped when the vote is removed
+region-aware head training (on a patch dataset the vote trains on the raw
+patch nearest the box; see [learned sort](#learned-sort)). The box is dropped when the vote is removed
 (`target: "none"`) or switched good → bad; sending one with a
 `"bad"` or `"none"` target is rejected.
 
@@ -283,7 +260,7 @@ drawn*, not *who was driving*, and the two come apart — a user can pick the
 | Field | Values | Meaning |
 |-------|--------|---------|
 | `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `check`, `test`, `unknown` | Which UI flow drove the vote (`check` is a spot-check pick, `test` a Test-mode pick that never trains). |
-| `phase` | `good`, `bad`, `hard`, `new` | Autopilot phase; ignored unless `flow` is `autopilot`. |
+| `phase` | `good`, `bad`, `more`, `hard`, `new` | Autopilot phase; ignored unless `flow` is `autopilot`. |
 | `select_mode` | `top`, `hard`, `new` | How the item was drawn off the ranking. |
 | `sort_kind` | `learned`, `text`, `load` | Which ranking the user was looking at. |
 | `rank_at_vote` | integer ≥ 0 | The item's position in that ranking. |
@@ -376,23 +353,12 @@ and [label-file sort](#label-file-sort) — do **not** return a bare
 `example-sort-{by-id,server,origin}` routes return it too, but never window
 it; see [example sort by id](#example-sort-by-loaded-media-id)):
 
-```json
-{
-  "results": [{"id": 0, "similarity": 0.8234}],
-  "threshold": 0.5123,
-  "acq_threshold": null,
-  "sort_token": "9f1c…",
-  "total": 250000,
-  "above_threshold": 1840,
-  "has_more_below": true
-}
-```
-
 | Field | Meaning |
 |-------|---------|
 | `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
 | `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
-| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Carried by the learned sort, the text sort since #4136 and the example sorts since #4732; `null` on the label-file sort, where a client falls back to `threshold`. |
+| `acq_threshold` | The acquisition cut: the rank position Autopilot's Hard / New picks sample around. Set by the learned, text and example sorts; `null` on the label-file sort, where a client falls back to `threshold`. |
+| `balance` | The [line state](labeling.md#the-line-state) of `threshold`; `null` on every sort but the learned sort. |
 | `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page), [`GET /api/sort/collapsed`](#sort-collapsed-to-photos) and, on a text or example sort, [`GET /api/sort/line`](#sort-line). Also the sort-generation token: a re-sort mints a new one. |
 | `total` | Length of the **full** ranking — `>= results.length`. |
 | `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
@@ -410,7 +376,10 @@ ranking** on datasets past 20 k items. Page until `has_more` is `false` (or
 until `offset + results.length == total`) when you need the whole order.
 
 The full ranking is held server-side in a process-global LRU cache of the 8
-most recent sorts. Nothing is persisted: it holds only the lightweight
+most recent sorts, holding at most 2 000 000 rows across them
+(`SORT_CACHE_MAX_ROWS`). The newest sort always stays, so on a dataset of a
+million items or more an older sort's token can expire after one or two newer
+sorts. Nothing is persisted: it holds only the lightweight
 `{id, score}` / `{id, similarity}` rows, never embeddings or model weights.
 
 ### Sort page
@@ -428,17 +397,9 @@ deep into a large sort without receiving the whole list up front.
 | `offset` | `0` | Start index into the full ranking; `>= 0`. |
 | `limit` | `200` | Window size, `1`–`2000`. |
 
-→
-```json
-{
-  "results": [{"id": 4021, "score": 0.4412}],
-  "offset": 600,
-  "limit": 200,
-  "total": 250000,
-  "threshold": 0.5123,
-  "has_more": true
-}
-```
+→ `{results, offset, limit, total, threshold, has_more}`: the rows
+`[offset, offset + limit)` of the full ranking. `threshold` is the line the
+ranking now carries, which a [`GET /api/sort/line`](#sort-line) redraw updates.
 
 404 when the token is unknown, has been evicted from the cache, or belongs to
 a different dataset than the active `X-Dataset-Id` — in every case the client
@@ -460,33 +421,8 @@ finds it. Takes the `sort_token` of any sort, including
 query is as for [`/api/sort/page`](#sort-page), with `offset` / `limit` counting
 rows of the grouped list.
 
-→
-```json
-{
-  "results": [
-    {
-      "source_dataset_id": "9f2c…",
-      "source_media_id": 412,
-      "score": 0.9412,
-      "faces": [
-        {"media_id": 3, "score": 0.9412, "box": [0.12, 0.30, 0.25, 0.48], "vote": "good"},
-        {"media_id": 8, "score": 0.2210, "box": [0.61, 0.28, 0.70, 0.41], "vote": null}
-      ]
-    },
-    {
-      "source_dataset_id": null,
-      "source_media_id": null,
-      "score": 0.8120,
-      "faces": [{"media_id": 5, "score": 0.8120, "box": null, "vote": null}]
-    }
-  ],
-  "offset": 0,
-  "limit": 200,
-  "total": 2,
-  "face_total": 3,
-  "has_more": false
-}
-```
+→ `{results, offset, limit, total, face_total, has_more}`, each row
+`{source_dataset_id, source_media_id, score, faces: [{media_id, score, box, vote}]}`.
 
 - **A row is a photo**, scored as its best face; rows keep the order of their
   best faces. `faces` are every face of the ranking cut from that photo, best
@@ -547,20 +483,23 @@ POST /api/sort
 
 **Body:** `{"text": "dog barking"}`
 
-Embeds the text query using the media type's embedding model, then sorts all
+Embeds the text query with the dataset's text embedder, then sorts all
 medias by cosine similarity, and draws two lines over the ranking (issue
-#4136): `threshold`, the **display** line the green region ends at, is the
-guarded rule of #3826 (the mixture midpoint only when the two fitted
-components are separated, else the bulk's median + 3 robust sigmas; the
+#4136). `threshold` is the **display** line the green region ends at, drawn
+at the balance now set: at a balance of 1 or below it is the **count line**
+(#4603), which keeps a balance-scaled multiple of the estimated number of
+matches; above 1 (or with fewer than 50 media) it is the guarded rule of
+#3826 (the mixture midpoint only when the two fitted components are
+separated, else the bulk's median + 3 robust sigmas). The
 `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint` environment variable restores the plain
-midpoint), and `acq_threshold`, the **acquisition** cut Autopilot's Bad phase
-samples around, is always the mixture midpoint. The split exists because the
-guarded line is the better thing to paint and the worse place to sample
-negatives (see [`docs/ML.md`](../ML.md#threshold-calibration)).
+midpoint at every balance. `acq_threshold`, the **acquisition** cut
+Autopilot's Bad phase samples around, is always the mixture midpoint and does
+not move with the balance. The split exists because the display line is the
+better thing to paint and the worse place to sample negatives (see
+[`docs/ML.md`](../ML.md#threshold-calibration)).
 
 → A [windowed sort response](#sort-response-shape-windowing) whose rows are
-`{"id": 0, "similarity": 0.8234}`, with both `threshold` and `acq_threshold`
-set.
+`{"id", "similarity"}`, with both `threshold` and `acq_threshold` set.
 
 When the dataset's embedder is patch-region-aware (e.g.
 `dinov3_patch`), each result additionally carries
@@ -570,19 +509,14 @@ gallery card to draw a faint outline. Boxes that cover the full
 image (the single-vector fallback `[0, 0, 1, 1]`) are suppressed by
 the frontend.
 
-Returns HTTP 400 + `{"supports_text": false, ...}` when the dataset's
-embedder doesn't support text queries.
+400 when `text` is blank, no medias are loaded, or the dataset binds no
+text-capable embedder.
 
 ### Text sort progress (SSE)
 
 Text-sort progress streams on the `sort` channel of
-[`/api/events`](events.md):
-
-```json
-{"status": "sorting", "message": "Computing similarities…", "current": 50, "total": 100}
-```
-
-Status is `"idle"` or `"sorting"`.
+[`/api/events`](events.md), as a progress object whose `status` is `"idle"`
+or `"sorting"`.
 
 ### Learned sort
 
@@ -607,13 +541,11 @@ Pass `{"wait": true}` in the body to block until the job finishes and receive
 the result inline (used by tests; the frontend leaves it `false`):
 
 → A [windowed sort response](#sort-response-shape-windowing) whose rows are
-`{"id": 0, "score": 0.9234}`.
+`{"id", "score"}`.
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
-poll — is that same windowed envelope: `results`, `threshold`,
-`acq_threshold`, `balance`, `sort_token`, `total`, `above_threshold`,
-`has_more_below`. This is the only sort with a detector behind it, so the only
-one whose `balance` is non-`null`; `balance` is the
+poll — is that same windowed envelope. This is the only sort with a detector
+behind it, so the only one whose `balance` is non-`null`; `balance` is the
 [line state](labeling.md#the-line-state) of `threshold`: the set the line
 keeps, and what the spot check found on it.
 
@@ -627,15 +559,27 @@ from this ranking; from the first payload without it, it shows this ranking.
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and
-New picks read a threshold as a *rank position* rather than a boundary, so they
-sample around a cut taken four inclusion steps below the reporting one
-(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it.
-The [text sort](#text-sort) carries the same pair since #4136 (its
-`acq_threshold` is the mixture midpoint); it is `null` on the two sorts that
-draw one line (`/api/example-sort`, `/api/label-file-sort`), where a client
-should fall back to `threshold`. See
+New picks read a threshold as a *rank position* rather than a boundary. It is
+the score where the labels line's corpus posterior falls to even odds
+(`ACQUISITION_TARGET_PRECISION`, 0.5); a detector with no labels line falls
+back to a cut four inclusion steps stricter than the line
+(`ACQUISITION_INCLUSION_OFFSET`), and a typed-query or Goods'-centroid head
+samples at its cosines' midpoint (`vtscore.state.core.detector_acquisition_threshold`).
+Nothing shown to the user reads it. The [text](#text-sort) and example sorts
+carry the same pair; it is `null` on the label-file sort, which draws one
+line, where a client should fall back to `threshold`. See
 [`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the
-measurement behind the offset.
+measurements behind it.
+
+On patch datasets the head is max-pooled over each image's score-row
+stack (the image-level vector plus every raw patch of its
+`patch_grid`), and each result carries `"best_region": [x0, y0, x1,
+y1]` for the row whose score won - the whole image when the
+image-level row wins, otherwise the single winning grid cell.
+Region-annotated Good votes (`region_box` on `LabeledElement`) train
+on the raw patch nearest the user's box; Bad votes flood the whole
+stack (a region-aware asymmetric loss). See [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md#embedder-binding-and-routing)
+for the design.
 
 #### Learned sort result (poll)
 
@@ -662,28 +606,24 @@ Sets the cancel flag on the job; the training loop polls it cooperatively.
 Returns `{"ok": true}` (HTTP 200) even when the job has already finished — the
 contract is "make sure it's no longer running". Unknown `job_id`: HTTP 404.
 
-On patch datasets the head is max-pooled over each image's score-row
-stack (the image-level vector plus every raw patch of its
-`patch_grid`), and each result carries `"best_region": [x0, y0, x1,
-y1]` for the row whose score won - the whole image when the
-image-level row wins, otherwise the single winning grid cell.
-Region-annotated Good votes (`region_box` on `LabeledElement`) train
-on the raw patch nearest the user's box; Bad votes flood the whole
-stack (a region-aware asymmetric loss). See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
-for the design.
-
 ### Example sort (upload)
 
 ```
 POST /api/example-sort
 ```
 
-**Form:** `file`: media file to use as the query example.
+**Form:** `file`: media file to use as the query example; optional
+`crop_params` (a JSON object, audio `{"start", "end"}` or image
+`{"box": [...]}`) crops it server-side before embedding.
 
-Embeds the uploaded file and sorts by cosine similarity.
+Embeds the uploaded file with the dataset's score embedder and sorts by cosine
+similarity. The display `threshold` is the line a Goods'-centroid head draws
+on the same corpus (counting only unvoted media, and redrawn with the balance
+through [`GET /api/sort/line`](#sort-line)); `acq_threshold` is the
+two-Gaussian midpoint.
 
 → A [windowed sort response](#sort-response-shape-windowing) whose rows are
-`{"id": 0, "similarity": 0.8234}`.
+`{"id", "similarity"}`.
 
 `best_region` is included per-result on patch-region-aware datasets,
 same shape as text sort.
@@ -700,18 +640,18 @@ Sorts all medias by similarity to an already-loaded media item. When
 `crop_params` is absent the media's existing embedding vector is reused (no
 fetch, no re-embed); when set, the media's bytes are materialised, cropped,
 and re-embedded before sorting. Powers the right-click "sort by similarity" /
-"crop then sort" context-menu actions.
-
-→ `{"results": [...], "threshold": 0.5123}`
+"crop then sort" context-menu actions. The line leaves the example itself,
+and the voted media, out of its count.
 
 The three `example-sort-{by-id,server,origin}` routes return the
 [sort envelope](#sort-response-shape-windowing) but never window it: `results`
 is always the full ranking and `has_more_below` is `false`. They mint a
-`sort_token` all the same, since #4760, so a balance change can redraw their
-line through [`GET /api/sort/line`](#sort-line).
+`sort_token` all the same, so a balance change can redraw their line through
+[`GET /api/sort/line`](#sort-line).
 
-400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
-media's bytes are unavailable when cropping is requested.
+400 if no medias loaded, `media_id` not in the loaded snapshot, or the media
+has no embedding. 404 if the media's bytes are unavailable when cropping is
+requested.
 
 ### Example sort (server files)
 
@@ -732,7 +672,8 @@ their own instances rather than being averaged into a query that matches
 neither. `crop_params` describes a single example, so
 it is rejected (400) when more than one filename is given.
 
-→ `{"results": [...], "threshold": 0.5123}`
+→ The unwindowed [sort envelope](#sort-response-shape-windowing). 400 for an
+empty or escaping filename, 404 for a missing file.
 
 ### List server media files
 
@@ -740,7 +681,8 @@ it is rejected (400) when more than one filename is given.
 GET /api/server-media-files
 ```
 
-→ `{"files": [{"name": "example", "filename": "example.wav", "size_bytes": 160044}]}`
+→ `{"files": [{"name", "filename", "size_bytes"}]}`: every file in the user's
+`example_media/` directory (dot-files skipped); `name` is the filename's stem.
 
 ### Example sort (origin)
 
@@ -749,10 +691,15 @@ POST /api/example-sort-origin
 ```
 
 **Body:** `{"origin": {"importer": "server_folder", "params": {"path": "/data/sounds"}}, "key": "subdir/audio123.wav"}`
+(optionally with `"crop_params"`)
 
-Sorts by similarity to a file resolved from an origin dict.
+Sorts by similarity to a file resolved from an origin dict. Path-like origin
+params are confined to the user's allowed directory (400 otherwise). An
+archive-member source that re-supplies the item's stored vector sorts on that
+vector and cannot be cropped (400).
 
-→ `{"results": [...], "threshold": 0.5123}`
+→ The unwindowed [sort envelope](#sort-response-shape-windowing). 404 if no
+file is found at `key`.
 
 ### Upload server media file
 
@@ -829,9 +776,9 @@ multipart when it declares a `file` field). The spec carries no body schema
 for that reason; see [Routes with no typed schema](../API.md#routes-with-no-typed-schema).
 
 Runs the importer and saves each returned item's bytes into the per-user
-`example_media/` directory.
+`example_media/` directory (an item with no bytes is skipped).
 
-→
+→ (201)
 ```json
 {
   "items": [
@@ -909,13 +856,17 @@ POST /api/label-file-sort
 ```
 
 **Form:** `file`: JSON file with a `labels` array. Each entry has `label`
-(`"good"` / `"bad"`) and a `path`/`file`/`filename` pointing to an audio file.
+(`"good"` / `"bad"`) and a `path`/`file`/`filename` naming a media file on the
+server (confined to the user's allowed directory).
 
-Trains the detector head on the labeled files, then scores all loaded medias.
+Embeds the labeled files with the dataset's score embedder, trains a head on
+them, then scores all loaded medias. Entries with another label, no path, an
+escaping or missing file, or no vector are skipped.
 
 → A [windowed sort response](#sort-response-shape-windowing) plus `loaded` and
-`skipped` counts for the label file:
-`{"results": [...], "threshold": 0.5123, "acq_threshold": null, "sort_token": "…", "total": 10, "above_threshold": 4, "has_more_below": false, "loaded": 10, "skipped": 2}`
+`skipped` counts for the label file; `acq_threshold` is `null`. 400 when the
+file is not a JSON label file, fewer than two entries load, or the loaded ones
+lack a good/bad split.
 
 ---
 
@@ -927,21 +878,9 @@ Trains the detector head on the labeled files, then scores all loaded medias.
 GET /api/votes
 ```
 
-→
-```json
-{
-  "good": [0, 3, 7],
-  "bad": [1, 5],
-  "verified": [3],
-  "click_times": {"0": 1234567890.123},
-  "learned_scores": {"0": 0.9234},
-  "labelset_good_count": 12,
-  "labelset_bad_count": 9,
-  "good_region_boxes": {"3": [0.2, 0.3, 0.55, 0.7]}
-}
-```
-
-Every key is always present. `verified` lists the ids the human has explicitly
+→ `{good, bad, verified, click_times, learned_scores, labelset_good_count,
+labelset_bad_count, good_region_boxes}`: the active pair's vote state, with
+media ids as the keys of the three maps. Every key is always present. `verified` lists the ids the human has explicitly
 verified this session (Find mode splits verified from the unverified work
 queue); it is empty outside Find mode. `labelset_good_count` /
 `labelset_bad_count` are the **active detector's** persisted label counts,
@@ -1008,21 +947,7 @@ GET /api/labels/export
   materialised in memory server-side. The top-level `available_columns` list
   (see `enrich`) is omitted in this mode.
 
-→ LabelSet JSON with per-element origin and MD5 info:
-
-```json
-{
-  "labels": [
-    {
-      "origin": {"importer": "demo", "params": {"name": "esc50"}},
-      "origin_name": "dog_bark_001.wav",
-      "md5": "abc123...",
-      "label": "good"
-    }
-  ]
-}
-```
-
+→ LabelSet JSON, `{"labels": [...]}`, with per-element origin and MD5 info.
 Only `md5` and `label` are guaranteed on an entry; `origin`, `origin_name`,
 `filename`, `category`, `metadata`, and `region_box` (good votes cast on a
 region) appear when the underlying element has them. The export is a faithful
@@ -1063,7 +988,8 @@ Otherwise, the file is embedded using the dataset's embedder, inserted as
 a new media item, and then voted.
 
 → `{"ok": true, "media_id": 123, "is_new": true}` (201 if new, 200 if existing)
-400 if no file, empty file, or invalid label. 400 if no dataset loaded.
+400 if no file, empty file, or invalid label; also 400 if no dataset is
+loaded, it has no embedder, or the upload doesn't embed.
 
 ---
 
@@ -1073,23 +999,19 @@ a new media item, and then voted.
 POST /api/labels/fill-from-sort
 ```
 
-**Body:**
+**Body:** `{"sort_results": [{"id": 0, "score": 0.8}], "threshold": 0.5, "sides": "good", "confirm": false}`
 
-```json
-{
-  "sort_results": [{"id": 0, "score": 0.8}],
-  "threshold": 0.5,
-  "sides": "good",
-  "confirm": false
-}
-```
+Labels the currently **unlabeled** loaded items on one or both sides of
+`threshold` (`sides`: `"good"` (the default), `"bad"` or `"both"`); a row's
+score is its `score`, else its `similarity`, and items already voted are left
+alone.
 
-`sides`: `"good"`, `"bad"`, or `"both"`.
-
-When `confirm` is `false` (dry run):
+When `confirm` is `false` (the default; a dry run):
 
 → `{"good_count": 15, "bad_count": 10}`
 
-When `confirm` is `true`:
+When `confirm` is `true`, the labels are applied and persisted:
 
-→ `{"good_applied": 15, "bad_applied": 10, "results": {...}}`
+→ `{"good_applied": 15, "bad_applied": 10, "results": {...}}`, where
+`results` is a results dict any [exporter](io.md) accepts. A persistence
+failure rolls the votes back and returns 500.

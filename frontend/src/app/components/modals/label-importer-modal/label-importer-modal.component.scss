@@ -1,13 +1,10 @@
+// The `.importer-picker` list layout and the selectable option cards
+// (`.picker-card`) are shared primitives in `frontend/src/scss/_components.scss`;
+// only the modal-width cap is local.
 .importer-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
   width: var(--modal-w-sm);
   max-width: 100%;
 }
-
-// The selectable option cards use the shared `.picker-card` primitive
-// (`frontend/src/scss/_components.scss`).
 
 .importer-form {
   display: flex;
@@ -21,13 +18,6 @@
 // `_components.scss`. The back button used to carry a small bottom
 // margin to space it from the form below; the parent `.importer-form`
 // already provides `gap: var(--space-lg)` (12px) which is plenty.
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}
 
 .add-media-section {
   margin-top: var(--space-xl);
