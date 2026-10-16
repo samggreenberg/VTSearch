@@ -319,10 +319,14 @@ class TestPush:
 
 
 class TestPacing:
-    def test_a_burst_of_writes_is_one_push(self, tmp_path, counting_save):
+    def test_a_burst_of_writes_is_one_push(self, tmp_path, counting_save, monkeypatch):
+        # Hold the armed push for the flush. With the real 200ms debounce a
+        # loaded machine can fire it mid-burst, and the flush then pushes again.
+        monkeypatch.setattr(label_sync, "_DEBOUNCE_DELAY", 3600.0)
         _make_detector("burst", [GOOD_A], binding=_binding(tmp_path / "burst.json"))
         for i in range(20):
             _rewrite_labels("burst", [GOOD_A, {"md5": f"{i:032d}", "label": "bad"}])
+        assert counting_save == []  # every write folded into the one armed push
         flush_pending_label_syncs()
         assert len(counting_save) == 1
         # ...carrying the newest labels, read when the push ran.
@@ -406,7 +410,9 @@ class TestPacing:
         assert max_active == 1
         assert _md5s(payloads[1]["labels"]) == {GOOD_A["md5"], BAD_B["md5"], GOOD_C["md5"]}
 
-    def test_reset_drops_a_pending_push_without_running_it(self, tmp_path):
+    def test_reset_drops_a_pending_push_without_running_it(self, tmp_path, monkeypatch):
+        # The push must still be pending when the reset lands, however slow the machine.
+        monkeypatch.setattr(label_sync, "_DEBOUNCE_DELAY", 3600.0)
         _make_detector("dropped", [GOOD_A], binding=_binding(tmp_path / "d.json"))
         _rewrite_labels("dropped", [GOOD_A, BAD_B])
         token = label_sync._slots["dropped"].token
