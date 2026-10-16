@@ -1,8 +1,10 @@
 import io
 import wave
 
+import pytest
+
 from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE, generate_wav
-from vtscore.media.audio.media_type import _render_waveform, generate_waveform_thumbnail
+from vtscore.media.audio.media_type import AudioMediaType, _render_waveform, generate_waveform_thumbnail
 
 
 class TestGenerateWaveformThumbnail:
@@ -118,6 +120,65 @@ class TestGenerateWaveformThumbnail:
         result = generate_waveform_thumbnail(aac_bytes)
         assert result is not None
         assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+class TestAudioLoadMediaData:
+    """``load_media_data`` decodes the bytes it is given exactly once (#4980)."""
+
+    @pytest.fixture
+    def decode_calls(self, monkeypatch):
+        from vtscore.media.audio import decode as decode_mod
+
+        calls = []
+        real = decode_mod.decode_audio
+
+        def _counting(source, **kwargs):
+            calls.append(source)
+            return real(source, **kwargs)
+
+        monkeypatch.setattr(decode_mod, "decode_audio", _counting)
+        return calls
+
+    def test_decodes_once_for_duration_and_thumbnail(self, tmp_path, decode_calls):
+        wav_bytes = generate_wav(440.0, 1.5)
+        path = tmp_path / "a.wav"
+        path.write_bytes(wav_bytes)
+
+        data = AudioMediaType().load_media_data(path, media_bytes=wav_bytes)
+
+        assert len(decode_calls) == 1
+        assert decode_calls[0] == wav_bytes
+        assert data["media_bytes"] is wav_bytes
+        assert data["duration"] == pytest.approx(1.5)
+        assert data["thumbnail_bytes"] == generate_waveform_thumbnail(wav_bytes)
+        assert data["thumbnail_bytes"][:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_uses_given_bytes_not_the_path(self, tmp_path, decode_calls):
+        """The path is never decoded: a missing file still yields its duration."""
+        wav_bytes = generate_wav(440.0, 0.5)
+
+        data = AudioMediaType().load_media_data(tmp_path / "missing.wav", media_bytes=wav_bytes)
+
+        assert len(decode_calls) == 1
+        assert data["duration"] == pytest.approx(0.5)
+        assert data["thumbnail_bytes"] is not None
+
+    def test_reads_the_file_when_no_bytes_are_given(self, tmp_path, decode_calls):
+        wav_bytes = generate_wav(440.0, 1.0)
+        path = tmp_path / "a.wav"
+        path.write_bytes(wav_bytes)
+
+        data = AudioMediaType().load_media_data(path)
+
+        assert len(decode_calls) == 1
+        assert data["media_bytes"] == wav_bytes
+        assert data["duration"] == pytest.approx(1.0)
+        assert data["thumbnail_bytes"] is not None
+
+    def test_undecodable_bytes_keep_the_failure_shape(self, tmp_path):
+        data = AudioMediaType().load_media_data(tmp_path / "bad.wav", media_bytes=b"not audio data")
+
+        assert data == {"media_bytes": b"not audio data", "duration": 0.0, "thumbnail_bytes": None}
 
 
 class TestGenerateWav:
