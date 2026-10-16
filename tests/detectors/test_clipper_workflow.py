@@ -22,6 +22,8 @@ from vtsearch.state import (
 )
 from vtscore.utils.hashing import content_md5
 
+from tests_shared.embedding_stubs import EMBEDDING_DIM
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -477,11 +479,26 @@ class TestLabelImportWithClips:
 
 
 class TestCrossDatasetClipEmbedding:
-    """resolve_label_embeddings uses clip params to embed the clipped content."""
+    """resolve_label_embeddings uses clip params to embed the clipped content.
+
+    ``_apply_clip_and_embed`` falls back to embedding the whole file when the
+    clip step raises or returns nothing, so a result alone proves nothing:
+    each clipped test asserts that ``clip_bytes`` is the clipped content and
+    that the embedding differs from the whole-file one.  The session-wide
+    stub embedder seeds off the embedded bytes, so distinct content gives
+    distinct vectors.
+    """
+
+    @staticmethod
+    def _assert_embedding(embedding):
+        assert isinstance(embedding, np.ndarray)
+        assert embedding.dtype == np.float32
+        assert embedding.shape == (EMBEDDING_DIM,)
 
     def test_apply_clip_and_embed_audio(self, tmp_path):
         """Audio clip params cause the resolver to slice before embedding."""
-        from vtscore.detectors.resolver import _apply_clip_and_embed
+        from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
+        from vtscore.media.audio.wav import wav_duration
 
         wav = generate_wav(440, 5.0)
         wav_path = tmp_path / "test.wav"
@@ -498,20 +515,29 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        # This should slice to [0, 2] seconds before embedding.
-        # Won't have a real embedder in tests, so just verify it doesn't crash
-        # and falls back gracefully.
-        _apply_clip_and_embed(wav_path, "audio", origin)
-        # Result may be None if no embedder is loaded, which is fine.
-        # The important thing is the function handles clip params without error.
+        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        assert result is not None
+        embedding, clip_bytes = result
+        self._assert_embedding(embedding)
+
+        # The [0, 2] s slice was embedded, not the 5 s file.
+        assert clip_bytes is not None
+        assert len(clip_bytes) < len(wav)
+        assert wav_duration(clip_bytes) == 2.0
+
+        again, _ = _apply_clip_and_embed(wav_path, "audio", origin)
+        np.testing.assert_array_equal(embedding, again)
+        assert not np.array_equal(embedding, embed_file(wav_path, "audio"))
 
     def test_apply_clip_and_embed_image(self, tmp_path):
         """Image clip params cause the resolver to crop before embedding."""
         from PIL import Image
 
-        from vtscore.detectors.resolver import _apply_clip_and_embed
+        from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
 
-        img = Image.new("RGB", (300, 100), color=(255, 0, 0))
+        # Red left third, blue elsewhere, so a crop of the wrong region shows.
+        img = Image.new("RGB", (300, 100), color=(0, 0, 255))
+        img.paste((255, 0, 0), (0, 0, 100, 100))
         img_path = tmp_path / "test.png"
         img.save(img_path, format="PNG")
 
@@ -525,12 +551,24 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        _apply_clip_and_embed(img_path, "image", origin)
-        # May be None without a real embedder.
+        result = _apply_clip_and_embed(img_path, "image", origin)
+        assert result is not None
+        embedding, clip_bytes = result
+        self._assert_embedding(embedding)
+
+        # The 100x100 red box was embedded, not the 300x100 image.
+        assert clip_bytes is not None
+        with Image.open(io.BytesIO(clip_bytes)) as cropped:
+            assert cropped.size == (100, 100)
+            assert cropped.convert("RGB").getcolors() == [(100 * 100, (255, 0, 0))]
+
+        again, _ = _apply_clip_and_embed(img_path, "image", origin)
+        np.testing.assert_array_equal(embedding, again)
+        assert not np.array_equal(embedding, embed_file(img_path, "image"))
 
     def test_apply_clip_and_embed_text(self, tmp_path):
         """Text clip params cause the resolver to extract the sentence before embedding."""
-        from vtscore.detectors.resolver import _apply_clip_and_embed
+        from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
 
         text = "First sentence. Second sentence. Third sentence."
         text_path = tmp_path / "test.txt"
@@ -545,18 +583,31 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        _apply_clip_and_embed(text_path, "text", origin)
+        result = _apply_clip_and_embed(text_path, "text", origin)
+        assert result is not None
+        embedding, clip_bytes = result
+        self._assert_embedding(embedding)
+        assert clip_bytes == b"Second sentence."
+
+        again, _ = _apply_clip_and_embed(text_path, "text", origin)
+        np.testing.assert_array_equal(embedding, again)
+        assert not np.array_equal(embedding, embed_file(text_path, "text"))
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
         """Without clipper params, behaves like normal embed_file."""
-        from vtscore.detectors.resolver import _apply_clip_and_embed
+        from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
 
         wav = generate_wav(440, 2.0)
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(wav)
 
         origin = {"importer": "server_folder", "params": {"path": str(tmp_path)}}
-        _apply_clip_and_embed(wav_path, "audio", origin)
+        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        assert result is not None
+        embedding, clip_bytes = result
+        self._assert_embedding(embedding)
+        assert clip_bytes is None
+        np.testing.assert_array_equal(embedding, embed_file(wav_path, "audio"))
 
 
 # ---------------------------------------------------------------------------
