@@ -307,7 +307,7 @@ def _metadata_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
     return any(before.get(k) != after.get(k) for k in CLEANED_METADATA_KEYS)
 
 
-def _snapshot_original(source: dict[str, Any], cleaned: dict[str, Any]) -> None:
+def _snapshot_original(source: dict[str, Any], cleaned: dict[str, Any]) -> bool:
     """Stamp *cleaned* with *source*'s payload under the ``original_*`` keys.
 
     A no-op when *cleaned* already carries a snapshot: with several cleaners in
@@ -316,15 +316,18 @@ def _snapshot_original(source: dict[str, Any], cleaned: dict[str, Any]) -> None:
     than the output of the previous gate.  Most cleaners no-op on most items and
     an unchanged item stores nothing, which keeps the storage cost well below a
     blanket 2x.
+
+    Returns ``True`` iff this call took the snapshot.
     """
     if any(cleaned.get(k) is not None for k in ORIGINAL_PAYLOAD_KEYS):
-        return
+        return False
     if source.get("media_bytes") is not None:
         cleaned["original_media_bytes"] = source["media_bytes"]
     if source.get("media_string") is not None:
         cleaned["original_media_string"] = source["media_string"]
     if source.get("duration") is not None:
         cleaned["original_duration"] = source["duration"]
+    return True
 
 
 def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:
@@ -341,7 +344,11 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
     actually did something without re-deriving it, ``content_hash`` of the
     cleaned payload so cross-dataset replay embeds the same bytes, and the
     post-clean window / box of a metadata-only clean so the trail says what the
-    gate did (the legacy origin keys still describe the last *clipper*).
+    gate did (the legacy origin keys still describe the last *clipper*).  The
+    gate that took the ``original_*`` snapshot also records ``original_hash``,
+    the content hash of that snapshot, so a reference import can drop the
+    snapshot and still check a replayed Original against it (see
+    :func:`original_hash`).
     """
     from vtscore.media import get_cleaner
 
@@ -353,6 +360,7 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
     payload_changed = _payload_changed(media, cleaned)
     metadata_changed = _metadata_changed(media, cleaned)
     changed = payload_changed or metadata_changed
+    snapshotted = False
     if payload_changed:
         if cleaned is media:
             # A cleaner that mutated its input in place leaves us no pre-clean
@@ -360,7 +368,7 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
             # storing the cleaned bytes twice under both key sets.
             log.warning("clipper_chain: cleaner %r mutated its input in place; no Original kept", cleaner.name)
         else:
-            _snapshot_original(media, cleaned)
+            snapshotted = _snapshot_original(media, cleaned)
     if changed:
         # Cleaners build their output with ``dict(media)``, which carries the
         # parent's ingest-time thumbnail forward. That thumbnail now describes
@@ -377,16 +385,26 @@ def _run_cleaner_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
         "changed": changed,
     }
     if metadata_changed:
-        if cleaned.get("clip_start") is not None:
-            entry["clip_start"] = str(cleaned["clip_start"])
-        if cleaned.get("clip_end") is not None:
-            entry["clip_end"] = str(cleaned["clip_end"])
-        if cleaned.get("clip_box") is not None:
-            entry["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
+        entry.update(_cleaned_window(cleaned))
     ch = _content_hash(cleaned)
     if ch is not None:
         entry["content_hash"] = ch
+    oh = _content_hash(media) if snapshotted else None
+    if oh is not None:
+        entry["original_hash"] = oh
     return [cleaned], [entry]
+
+
+def _cleaned_window(cleaned: dict[str, Any]) -> dict[str, str]:
+    """Return the trail fields recording a metadata-only clean's window / box."""
+    fields: dict[str, str] = {}
+    if cleaned.get("clip_start") is not None:
+        fields["clip_start"] = str(cleaned["clip_start"])
+    if cleaned.get("clip_end") is not None:
+        fields["clip_end"] = str(cleaned["clip_end"])
+    if cleaned.get("clip_box") is not None:
+        fields["clip_box"] = ",".join(str(v) for v in cleaned["clip_box"])
+    return fields
 
 
 def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict[str, Any]], list[ChainStep]]:
@@ -482,15 +500,48 @@ def _trail_cleaned(trail: list[ChainStep]) -> bool:
 
 
 def has_original_payload(media: dict[str, Any]) -> bool:
-    """True iff *media* carries a pre-clean snapshot of its payload.
+    """True iff *media* has a pre-clean payload to offer as its "Original".
 
     Drives the media payload's ``has_original`` flag and the detail viewer's
     Clean/Original toggle: only a unit some cleaner actually changed has an
-    "Original" worth offering.  Keyed on the payload keys alone -
-    ``original_duration`` is metadata *about* the original, not something the
-    variant routes can stream on its own.
+    "Original" worth offering.  That payload is either a stored snapshot
+    (the ``original_media_*`` keys; ``original_duration`` alone does not
+    count, being metadata *about* the original rather than something the
+    variant routes can stream) or, for a cleaned unit of a reference import,
+    a replay recipe (:func:`vtscore.media.lazy_clip.has_lazy_original`).
     """
-    return media.get("original_media_bytes") is not None or media.get("original_media_string") is not None
+    if media.get("original_media_bytes") is not None or media.get("original_media_string") is not None:
+        return True
+    from vtscore.media.lazy_clip import has_lazy_original  # noqa: PLC0415
+
+    return has_lazy_original(media)
+
+
+def original_hash(trail: list[ChainStep]) -> str | None:
+    """Return the content hash of the Original snapshot *trail* recorded, or ``None``.
+
+    Stamped by :func:`_run_cleaner_step` on the one gate that took the
+    snapshot.  ``None`` for a trail no cleaner changed, and for one recorded
+    before the hash existed.
+    """
+    for entry in trail:
+        if entry.get("kind") == "cleaner" and entry.get("original_hash"):
+            return str(entry["original_hash"])
+    return None
+
+
+def pre_clean_steps(trail: list[ChainStep]) -> list[ChainStep]:
+    """Return the steps of *trail* that produced a unit's Original.
+
+    The Original is the payload the *first* cleaner saw (see
+    :func:`_snapshot_original`), so it is the trail cut just before that
+    cleaner.  For a sub-clip that is the clip, not its source file: a cleaned
+    audio tile's Original is the pre-clean tile.
+    """
+    for i, entry in enumerate(trail):
+        if entry.get("kind") == "cleaner":
+            return trail[:i]
+    return list(trail)
 
 
 def apply_chain_to_clips(  # noqa: C901
@@ -749,7 +800,92 @@ _FINAL_EXT_BY_TYPE = {
 }
 
 
-def replay_chain_on_file(  # noqa: C901
+def _step_io_types(step: ChainStep) -> tuple[str, str] | None:
+    """Return a chain step's ``(input, output)`` media types, or ``None`` if unknown.
+
+    An unknown converter is ``None``; an unknown clipper or cleaner raises
+    ``KeyError``, as the registries do.
+    """
+    from vtscore.converters import get_converter
+    from vtscore.media import get_cleaner, get_clipper
+
+    if step["kind"] == "clipper":
+        t = get_clipper(step["name"]).media_type
+        return t, t
+    if step["kind"] == "cleaner":
+        t = get_cleaner(step["name"]).media_type
+        return t, t
+    conv = get_converter(step["name"])
+    if conv is None:
+        return None
+    return conv.source_type, conv.target_type
+
+
+#: A function that runs one recorded non-cleaner step on a media and returns
+#: every output, or ``None`` when the step cannot run.  Called with the step's
+#: index in the trail, so a caller can memoise outputs shared by sibling units.
+StepRunner = Callable[[int, ChainStep, dict[str, Any]], list[dict[str, Any]] | None]
+
+
+def _run_recorded_step(_index: int, entry: ChainStep, media: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Run one recorded clipper / converter trail entry on *media* (no memo)."""
+    from vtscore.converters import get_converter
+    from vtscore.media import get_clipper
+
+    params = entry.get("params") or {}
+    if entry["kind"] == "clipper":
+        clipper = get_clipper(entry["name"])
+        if params:
+            clipper = clipper.with_params(params)
+        return clipper.clip(media)
+    conv = get_converter(entry["name"])
+    if conv is None:
+        return None
+    return conv.convert_normalized(media, params)
+
+
+def replay_chain_on_media(
+    media: dict[str, Any],
+    steps: list[ChainStep],
+    run_step: StepRunner | None = None,
+) -> dict[str, Any] | None:
+    """Re-run a recorded trail on *media* and return the final unit, or ``None``.
+
+    *media* is what the trail's first step saw.  Each clipper / converter
+    entry re-selects the sub-output it recorded with
+    :func:`_select_chain_output` (content-hash first, refusing to guess), and
+    each cleaner entry re-runs its gate.  ``None`` means some step produced
+    nothing to select.  *run_step* runs the non-cleaner steps; the default
+    runs each from scratch.
+
+    A cleaner's output is taken unchecked: it has exactly one output, so there
+    is no sibling to confuse it with.  Whether that output still matches the
+    recording is the caller's call: the label resolver accepts drift (re-running
+    the same gate beats embedding the uncleaned file), and the lazy recipe in
+    :mod:`vtscore.media.lazy_clip` refuses it.
+    """
+    from vtscore.media import get_cleaner
+
+    run = run_step or _run_recorded_step
+    for index, entry in enumerate(steps):
+        if entry["kind"] == "cleaner":
+            cleaner = get_cleaner(entry["name"])
+            params = entry.get("params") or {}
+            if params:
+                cleaner = cleaner.with_params(params)
+            media = cleaner.clean(media)
+            continue
+        outputs = run(index, entry, media)
+        if outputs is None:
+            return None
+        picked = _select_chain_output(outputs, entry)
+        if picked is None:
+            return None
+        media = picked
+    return media
+
+
+def replay_chain_on_file(
     file_path: Path,
     steps: list[ChainStep],
     embedder_name: str = "",
@@ -771,63 +907,28 @@ def replay_chain_on_file(  # noqa: C901
     The chain must start with a step whose input type matches the source
     file's media type (the resolver infers this from the trail's first
     step).
+
+    A cleaner step's output is taken even when its content hash differs from
+    the recording (see :func:`replay_chain_on_media`): re-running the same
+    gate on the same source is the best available reproduction, and it beats
+    embedding the *uncleaned* file, which would put the label's vector in a
+    different distribution from the dataset's.
     """
-    from vtscore.converters import get_converter
     from vtscore.detectors.resolver import embed_file
-    from vtscore.media import get_cleaner, get_clipper
 
     if not steps:
         return None
 
-    # Infer the source media type from the first step.
-    first = steps[0]
-    if first["kind"] == "clipper":
-        source_type = get_clipper(first["name"]).media_type
-    elif first["kind"] == "cleaner":
-        source_type = get_cleaner(first["name"]).media_type
-    else:
-        conv = get_converter(first["name"])
-        if conv is None:
-            return None
-        source_type = conv.source_type
+    # Infer the source media type from the first step, the output type from the last.
+    first_types = _step_io_types(steps[0])
+    last_types = _step_io_types(steps[-1])
+    if first_types is None or last_types is None:
+        return None
+    current_type = last_types[1]
 
-    media = _load_source_as_media(file_path, source_type)
-    current_type = source_type
-
-    for entry in steps:
-        if entry["kind"] == "clipper":
-            clipper = get_clipper(entry["name"])
-            params = entry.get("params") or {}
-            if params:
-                clipper = clipper.with_params(params)
-            outputs = clipper.clip(media)
-            current_type = clipper.media_type
-        elif entry["kind"] == "cleaner":
-            cleaner = get_cleaner(entry["name"])
-            params = entry.get("params") or {}
-            if params:
-                cleaner = cleaner.with_params(params)
-            # A cleaner has exactly one output, so there is no sibling to
-            # confuse it with and nothing for `_select_chain_output`'s
-            # refuse-to-guess logic to protect against. Take the output even
-            # when its content hash differs from the recording: re-running the
-            # same gate on the same source is the best available reproduction,
-            # and it beats falling back to embedding the *uncleaned* file
-            # (which would put the label's vector in a different distribution
-            # from the dataset's).
-            media = cleaner.clean(media)
-            current_type = cleaner.media_type
-            continue
-        else:
-            conv = get_converter(entry["name"])
-            if conv is None:
-                return None
-            outputs = conv.convert_normalized(media, entry.get("params") or {})
-            current_type = conv.target_type
-        picked = _select_chain_output(outputs, entry)
-        if picked is None:
-            return None
-        media = picked
+    media = replay_chain_on_media(_load_source_as_media(file_path, first_types[0]), steps)
+    if media is None:
+        return None
 
     # Write the final clip to a tempfile and embed it.
     ext = _FINAL_EXT_BY_TYPE.get(current_type, ".bin")

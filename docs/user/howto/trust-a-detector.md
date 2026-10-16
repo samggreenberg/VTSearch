@@ -27,8 +27,9 @@ is usual. The ranges on the right narrow as you go.
 
 With the verdict up, two checks below it say how far the result carries:
 
-1. **Compare against**: pick the dataset the detector was trained on
-   (`drawings` here). VTSearch can't tell which one that was, so it asks.
+1. **Compare against**: the dataset the detector was trained on
+   (`drawings` here). VTSearch picks the loaded dataset that holds most of
+   the detector's labelled examples; pick another if that is the wrong one.
 2. **Training-domain overlap** says how much of *this* dataset looks unlike
    the one you picked: here "**3%** of this dataset looks atypical vs
    **drawings** — largely in-domain".
@@ -52,6 +53,13 @@ The two checks answer the same question from different ends:
 - **Evidence coverage** compares the *detector's own examples* with this
   dataset, so it works even when you don't have the training data. A large
   share means many calls are guesses.
+
+The first check also runs earlier, on its own: the moment you pick a detector
+and a dataset, before you test anything. When its verdict is *likely domain
+shift*, a warning says so ("**31%** of this dataset looks atypical vs
+**drawings**: likely domain shift"), and its **Test it** button opens this
+pane. It warns once for each detector and dataset, and only when the dataset
+the detector learned from is loaded.
 
 The verdict after each figure (*largely in-domain* or *likely domain shift*;
 *mostly backed by labeled evidence* or *often calling without support*) is

@@ -80,8 +80,12 @@ Validate anything you build from `origin["params"]` before touching the
 filesystem or the network: origins come back from labelset files, which
 may have been written elsewhere. The built-ins confine keys to the
 source root (`LocalFolderSource.fetch_item` rejects a key that escapes
-it); a network source should run URLs through
-`vtscore.security.url_validation.validate_url`.
+it); a network source should fetch through
+`vtscore.security.url_validation.fetch_validated_url` (or
+`open_validated_stream` for a large file), which re-checks every
+redirect hop and the connected peer. A one-off `validate_url` followed by
+a plain HTTP client does not: a public URL can redirect to an internal
+host.
 
 ## `FetchedItem`: returning more than a path
 
@@ -104,9 +108,9 @@ the current dataset only; never cache it to disk yourself.
 
 In-tree, a source is a **flat module**:
 `vtscore/datasets/sources/<your_source>.py`, exposing
-`SOURCE = YourSourceFactory()`. The registry scans module files, not
-sub-packages, so a source defined in a sub-directory's `__init__.py` is
-never seen.
+`SOURCE = YourSourceFactory()`. The registry scans sub-packages as well
+as module files, so a sub-directory whose `__init__.py` exposes `SOURCE`
+is also found, but every built-in is a flat module; follow that shape.
 
 Out-of-tree, point an entry point at the factory instance:
 
@@ -137,13 +141,12 @@ resolving origins stamped by a hypothetical `http_mirror` importer whose
 from __future__ import annotations
 
 import tempfile
-import urllib.request
 from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import quote
 
 from vtscore.datasets.sources.base import FetchedItem, MediaItem, MediaSource
-from vtscore.security.url_validation import validate_url
+from vtscore.security.url_validation import fetch_validated_url
 
 
 class HttpMirrorSource(MediaSource):
@@ -163,14 +166,15 @@ class HttpMirrorSource(MediaSource):
     def fetch_item(self, key: str) -> FetchedItem:
         if not key or key.startswith("/") or ".." in Path(key).parts:
             return FetchedItem(path=None)
-        url = validate_url(self._base + quote(key))
+        try:
+            # Validates the URL and every redirect hop (ValueError on a
+            # private address; requests errors are OSErrors).
+            data = fetch_validated_url(self._base + quote(key))
+        except (OSError, ValueError):
+            return FetchedItem(path=None)
         dest = Path(self._tmp.name) / key
         dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 - validated above
-                dest.write_bytes(resp.read())
-        except OSError:
-            return FetchedItem(path=None)
+        dest.write_bytes(data)
         return FetchedItem(path=dest)
 
     def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
@@ -212,12 +216,6 @@ from unittest.mock import patch
 from my_pkg.mirror_source import SOURCE, HttpMirrorSource
 
 
-class _Resp:
-    def __enter__(self): return self
-    def __exit__(self, *exc): return False
-    def read(self): return b"RIFF...."
-
-
 def test_factory_needs_a_base_url():
     assert SOURCE.create_from_origin({"importer": "http_mirror", "params": {}}) is None
     src = SOURCE.create_from_origin(
@@ -230,8 +228,7 @@ def test_factory_needs_a_base_url():
 def test_resolve_path_falls_back_to_filename():
     src = HttpMirrorSource("https://example.com/audio")
     try:
-        with patch("urllib.request.urlopen", return_value=_Resp()), \
-             patch("my_pkg.mirror_source.validate_url", side_effect=lambda u: u):
+        with patch("my_pkg.mirror_source.fetch_validated_url", return_value=b"RIFF...."):
             item = src.resolve_path(origin_name="", filename="bark.wav")
         assert item.path is not None and item.path.read_bytes() == b"RIFF...."
     finally:
@@ -246,7 +243,7 @@ def test_rejects_traversal():
         src.cleanup()
 ```
 
-`validate_url` resolves the hostname to screen private addresses, which
-is why the test stubs it alongside `urlopen`. The built-in sources'
+`fetch_validated_url` resolves the hostname to screen private addresses
+before it makes the request, which is why the test stubs it. The built-in sources'
 tests under `tests_lib/datasets/` and `tests_lib/io/` cover archive
 extraction and the resolver's cleanup timing.

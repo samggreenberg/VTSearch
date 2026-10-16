@@ -9,6 +9,7 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { settleResource } from '../../testing/settle-resource';
@@ -974,13 +975,8 @@ describe('DashboardComponent', () => {
     expect(activeCtx.intentDatasetId).toBe('');
     expect(component.selectedDatasetIds.size).toBe(0);
 
-    // Each delete triggers a registry refresh; drain them.
-    for (const req of httpMock.match('/api/datasets/registry')) {
-      if (!req.cancelled) req.flush({ datasets: [] });
-    }
-    for (const req of httpMock.match('/api/detectors/registry')) {
-      if (!req.cancelled) req.flush({ detectors: [] });
-    }
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
   it('leaves the active context alone when the bulk delete spares the active dataset', async () => {
@@ -1006,6 +1002,145 @@ describe('DashboardComponent', () => {
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+  });
+
+  // #4984: the bulk delete used to refresh the registry once per DELETE as
+  // each one landed, and said nothing about the batch when some failed. It
+  // now settles once, after every DELETE has answered.
+  describe('bulk delete settles once per batch', () => {
+    const datasets = [
+      { id: 'd1', name: 'DS1', media_type: 'audio' },
+      { id: 'd2', name: 'DS2', media_type: 'audio' },
+      { id: 'd3', name: 'DS3', media_type: 'audio' },
+    ];
+    const detectors = [
+      { id: 'm1', name: 'det1', media_type: 'audio' },
+      { id: 'm2', name: 'det2', media_type: 'audio' },
+      { id: 'm3', name: 'det3', media_type: 'audio' },
+    ];
+    const inUse = { code: 409, status: 'Conflict', message: 'It is in use' };
+
+    beforeEach(() => {
+      flushInitialRequests(datasets, detectors);
+      vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
+    });
+
+    it('refreshes the registry once, after the last dataset DELETE', async () => {
+      selection.selectOnly('dataset', ['d1', 'd2', 'd3']);
+      const warning = vi.spyOn(component['toast'], 'warning');
+      const error = vi.spyOn(component['toast'], 'error');
+
+      await component.deleteSelectedDatasets();
+      const deletes = httpMock.match((r) => r.method === 'DELETE');
+      expect(deletes.map((r) => r.request.url)).toEqual([
+        '/api/datasets/registry/d1',
+        '/api/datasets/registry/d2',
+        '/api/datasets/registry/d3',
+      ]);
+      // The batch reports its own failures, so no DELETE may raise the global toast too.
+      expect(deletes.every((r) => r.request.context.get(SKIP_ERROR_TOAST))).toBe(true);
+
+      deletes[0].flush({ ok: true });
+      deletes[1].flush({ ok: true });
+      httpMock.expectNone('/api/datasets/registry');
+      deletes[2].flush({ ok: true });
+
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors });
+      expect(component.selectedDatasetIds.size).toBe(0);
+      expect(warning).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    });
+
+    it('keeps a failed dataset selected and reports it in one toast', async () => {
+      selection.selectOnly('dataset', ['d1', 'd2', 'd3']);
+      const warning = vi.spyOn(component['toast'], 'warning');
+      const error = vi.spyOn(component['toast'], 'error');
+
+      await component.deleteSelectedDatasets();
+      httpMock.expectOne('/api/datasets/registry/d1').flush({ ok: true });
+      httpMock.expectOne('/api/datasets/registry/d2').flush(inUse, { status: 409, statusText: 'Conflict' });
+      // Nothing moves until the whole batch has answered.
+      expect([...component.selectedDatasetIds].sort()).toEqual(['d1', 'd2', 'd3']);
+      httpMock.expectNone('/api/datasets/registry');
+      httpMock.expectOne('/api/datasets/registry/d3').flush({ ok: true });
+
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [datasets[1]] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors });
+      TestBed.tick();
+
+      expect([...component.selectedDatasetIds]).toEqual(['d2']);
+      expect(component.datasets.map((d) => d.id)).toEqual(['d2']);
+      expect(error).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith({
+        message: 'Could not delete 1 of 3 datasets',
+        detail: 'It is still selected, so you can try again.',
+        items: ['"DS2": It is in use'],
+      });
+    });
+
+    it('raises an error, not a warning, when a lone dataset delete fails', async () => {
+      selection.selectOnly('dataset', ['d1']);
+      const error = vi.spyOn(component['toast'], 'error');
+
+      await component.deleteSelectedDatasets();
+      httpMock.expectOne('/api/datasets/registry/d1').flush(inUse, { status: 409, statusText: 'Conflict' });
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors });
+
+      expect([...component.selectedDatasetIds]).toEqual(['d1']);
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith({ message: 'Could not delete dataset "DS1"', detail: 'It is in use' });
+    });
+
+    it('refreshes the registry once, after the last detector DELETE', async () => {
+      selection.selectOnly('detector', ['m1', 'm2', 'm3']);
+      const warning = vi.spyOn(component['toast'], 'warning');
+
+      await component.deleteSelectedDetectors();
+      const deletes = httpMock.match((r) => r.method === 'DELETE');
+      expect(deletes.length).toBe(3);
+      expect(deletes.every((r) => r.request.context.get(SKIP_ERROR_TOAST))).toBe(true);
+
+      deletes[0].flush({ ok: true });
+      deletes[1].flush({ ok: true });
+      httpMock.expectNone('/api/detectors/registry');
+      deletes[2].flush({ ok: true });
+
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+      expect(component.selectedDetectorIds.size).toBe(0);
+      expect(warning).not.toHaveBeenCalled();
+    });
+
+    it('keeps a failed detector selected and reports it in one toast', async () => {
+      selection.selectOnly('detector', ['m1', 'm2', 'm3']);
+      const warning = vi.spyOn(component['toast'], 'warning');
+      const activeCtx = TestBed.inject(ActiveContextService);
+      activeCtx.setActivePair('d1', 'm1');
+
+      await component.deleteSelectedDetectors();
+      httpMock.expectOne('/api/detectors/registry/m1').flush({ ok: true });
+      httpMock.expectOne('/api/detectors/registry/m2').flush({ ok: true });
+      httpMock.expectOne('/api/detectors/registry/m3').flush(inUse, { status: 409, statusText: 'Conflict' });
+
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [detectors[2]] });
+      TestBed.tick();
+
+      expect([...component.selectedDetectorIds]).toEqual(['m3']);
+      expect(component.detectors.map((d) => d.id)).toEqual(['m3']);
+      // The active detector went with the batch; the active dataset did not.
+      expect(activeCtx.datasetId).toBe('d1');
+      expect(activeCtx.modelId).toBe('');
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith({
+        message: 'Could not delete 1 of 3 detectors',
+        detail: 'It is still selected, so you can try again.',
+        items: ['"det3": It is in use'],
+      });
+    });
   });
 
   // #4380: the bulk-delete confirmation ran the question, the enumerated

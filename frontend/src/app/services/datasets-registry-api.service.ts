@@ -87,10 +87,16 @@ export class DatasetsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
-  deleteRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {
-    return deleteRegisteredDataset(this.http, this.config.rootUrl, {
-      dataset_id: datasetId,
-    }).pipe(map((r) => r.body));
+  /** Pass *context* to tag the request, e.g. with {@link SKIP_ERROR_TOAST}
+   *  when the caller reports a failure itself (the Dashboard's bulk delete
+   *  sums a batch's failures into one toast). */
+  deleteRegistered(datasetId: string, context?: HttpContext): Observable<DatasetRegistryOkResponse> {
+    return deleteRegisteredDataset(
+      this.http,
+      this.config.rootUrl,
+      { dataset_id: datasetId },
+      context,
+    ).pipe(map((r) => r.body));
   }
 
   renameRegistered(

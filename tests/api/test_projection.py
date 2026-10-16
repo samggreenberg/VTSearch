@@ -20,7 +20,7 @@ import pytest
 
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.projection import Projection, build_pyramid
-from vtscore.state.core import get_active_context
+from vtscore.state.core import DatasetContext, get_active_context, register_context
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +121,9 @@ class TestProjectionMeta:
             release.wait(timeout=30)
 
         # Occupy the single runner with an unrelated job (a different dataset id
-        # so the build we fire next can't coalesce into it).
+        # so the build we fire next can't coalesce into it).  That dataset must
+        # be loaded, or the blocker fails without running (#4976).
+        register_context(DatasetContext("__other__"))
         projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
         assert started.wait(timeout=5)
 
@@ -169,6 +171,7 @@ class TestProjectionMeta:
 
         # Park the build in the pending slot so its job is inspectable and
         # nothing races with the phase we stamp on it below.
+        register_context(DatasetContext("__other__"))
         projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
         assert started.wait(timeout=5)
 

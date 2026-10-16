@@ -4,8 +4,10 @@ Angular SPA for the VTSearch media explorer. Built with Angular CLI 21.2 and Typ
 
 ## Prerequisites
 
-- **Node.js 22+** (LTS recommended)
+- **Node.js 20.19+, 22.12+, or 24+** (Angular 21's engine range; the Dockerfiles build on `node:20-slim`)
 - **npm** (bundled with Node.js)
+
+Install steps per OS are in [`../docs/SETUP.md` § Building the frontend](../docs/SETUP.md#building-the-frontend).
 
 ## Development server
 
@@ -72,8 +74,8 @@ npx ng update @angular/core@<N> @angular/cli@<N> @angular/cdk@<N>
 `@angular/build` is a direct devDependency and `ng update` does not always carry
 it along, so bump it in the same step (`npx ng update @angular/build@<N>`, or by
 hand) and check `npm ls @angular/build` afterwards. Do **not** reintroduce
-`@angular-devkit/build-angular` to get it: that package was removed in #3439
-because nothing here uses its builders, and it drags the whole webpack toolchain
+`@angular-devkit/build-angular` to get it: nothing here uses its builders (#3439),
+and it drags the whole webpack toolchain
 (and its unfixable advisories) back into the tree.
 
 Per step, expect: a **TypeScript floor** bump and a possible **Node floor** bump
@@ -91,10 +93,10 @@ detector → sort).
   `@angular/build:*` builders (not the `@angular-devkit/build-angular:*`
   aliases) — **required**, because the `@angular/build:unit-test` runner warns
   and fails to inherit polyfills when `buildTarget` points at a devkit alias.
-  Since #3439 the alias package isn't installed at all, so naming one now fails
+  The alias package isn't installed at all (#3439), so naming one fails
   outright rather than degrading quietly.
   `test` (watch) / `test:ci` (`ng test --no-watch`) each have a `pretest*` hook
-  regenerating the API client.
+  regenerating the API client and the build stamp.
 - **Dedicated `test` build configuration.** `angular.json`'s `test` target points
   at its own `build:test` configuration rather than `development`, so the spec
   polyfills stay decoupled from the production build. Both polyfill arrays are

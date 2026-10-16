@@ -28,6 +28,45 @@ not list every commit. Use `git log` for the full history.
   failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
   there.
 
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
+- **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
+  #4736 a session started from a typed description was meant to keep the description's text ranking behind
+  the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
+  it there, so the detector's ranking took the screen from the 8th vote as before. The payload now carries
+  it. Test, Find, AutoFind and export were unaffected: they apply the hold on the server.
+
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
   and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
@@ -327,6 +366,23 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
+
+- **A warning before you use a detector on data unlike its training data** (issue #4961). The
+  Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
+  detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
+  looks atypical vs photos: likely domain shift") with a **Test it** button. It warns once per detector
+  and dataset, never blocks anything, and is silent when the check cannot run (training dataset not
+  loaded or without an atlas, another embedder, a patch embedder). VTSearch now works out which dataset a
+  detector was trained on from where its labelled examples live, so the test pane's **Compare against**
+  picker starts on that dataset instead of the first one in the list. `GET /api/find/training-domain`
+  serves both.
 
 - **An audio LabBench image** (issue #4958). `docker/Dockerfile.labbench` takes a `MEDIA_TYPE` build arg,
   as `docker/Dockerfile.solo` does, so its slim build (only that type's dependencies, the media type and
@@ -952,6 +1008,49 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
+  #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
+  of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
+  lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
+  server's reason. The rows that failed stay selected, so trying again is one click.
+
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
+
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
+- **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
+  original file, but the server labelled every one `audio/wav` and offered it for download as
+  `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
+  `.wav` and a strict client could refuse it. The type and file extension now come from the file itself;
+  clips cut from a sound are WAV and still say so.
+
+- **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
+  Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
+  import did not record them. Whenever a label was rebuilt from its source file (training from a saved
+  label set, or bringing labels into another dataset), the gate ran at its default settings rather than
+  the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
+  are now recorded and reused, and an item's Derived Via line lists them.
+
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
 
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between

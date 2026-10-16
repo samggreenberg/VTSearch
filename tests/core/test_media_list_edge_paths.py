@@ -209,12 +209,48 @@ class TestResolveBytesFallbacks:
         assert resp.status_code == 404
 
     def test_unknown_extension_defaults_audio_mimetype(self, client):
-        # A filename mimetypes can't classify drives _audio_member_mimetype's
-        # "no guess -> audio/wav" default.
+        # Off the archive path the filename plays no part: the bytes are
+        # sniffed, and RIFF is WAV.
         mid = _inject(filename="soundfile_no_extension", media_bytes=b"RIFFxyz")
         resp = client.get(f"/api/medias/{mid}/audio")
         assert resp.status_code == 200
         assert resp.content_type == "audio/wav"
+
+
+# ---------------------------------------------------------------------------
+# Audio routes type the payload by its container (#4981)
+# ---------------------------------------------------------------------------
+
+_MP3 = b"ID3\x04\x00\x00\x00\x00\x00\x00" + b"\xff\xfb\x90\x64" * 8
+_FLAC = b"fLaC\x00\x00\x00\x22" + b"\x00" * 32
+
+
+class TestAudioContentType:
+    def test_mp3_import_is_served_as_mpeg(self, client):
+        # An MP3 import keeps its file verbatim, so /audio serves MP3 bytes and
+        # must say so, in the type and in the download name.
+        mid = _inject(filename="song.mp3", media_bytes=_MP3)
+        resp = client.get(f"/api/medias/{mid}/audio")
+        assert resp.status_code == 200
+        assert resp.data == _MP3
+        assert resp.content_type == "audio/mpeg"
+        assert f"media_{mid}.mp3" in resp.headers["Content-Disposition"]
+
+    def test_flac_import_is_served_as_flac_by_media_route(self, client):
+        mid = _inject(filename="song.flac", media_bytes=_FLAC)
+        resp = client.get(f"/api/medias/{mid}/media")
+        assert resp.status_code == 200
+        assert resp.data == _FLAC
+        assert resp.content_type == "audio/flac"
+        assert f"media_{mid}.flac" in resp.headers["Content-Disposition"]
+
+    def test_wav_clip_stays_wav(self, client):
+        wav = generate_wav(440.0, 0.1)
+        mid = _inject(filename="song.mp3", media_bytes=wav)  # a WAV slice cut from an MP3
+        resp = client.get(f"/api/medias/{mid}/audio")
+        assert resp.status_code == 200
+        assert resp.content_type == "audio/wav"
+        assert f"media_{mid}.wav" in resp.headers["Content-Disposition"]
 
 
 # ---------------------------------------------------------------------------

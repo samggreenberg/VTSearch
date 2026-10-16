@@ -243,7 +243,7 @@ class AppSettingsSchema(Schema):
     last_embedder_per_media_type = _PerMediaTypeStringDict()
 
     # Per-user, ``{media_type_id: {embedder, clipper, clipper_params,
-    # source_specs}}``, which defaults the Add Dataset modal auto-fills when
+    # source_specs, cleaners}}``, which defaults the Add Dataset modal auto-fills when
     # the user picks an importer whose output is the matching mediaType.
     # See ``UserSettings.import_defaults_by_media_type`` for the value
     # shape; the field is declared as a free-form dict here because the
@@ -339,8 +339,10 @@ class SettingsUpdateSchema(Schema):
     autofind_on_import = fields.Boolean()
     autofind_cli_delete_dataset = fields.Boolean()
 
-    saved_datasets_dir = fields.String()
-    detectors_dir = fields.String()
+    # NB: saved_datasets_dir and detectors_dir are intentionally absent - they
+    # are server-tier storage paths for every user, set by the operator in the
+    # settings file, not editable via PUT /api/settings (#4965). They are
+    # dump_only in AppSettingsSchema.
     # NB: dataset_max_age_days is intentionally absent - it is a server-tier
     # retention policy set via --dataset-max-age-days (or the settings file),
     # not editable via PUT /api/settings. It is dump_only in AppSettingsSchema.

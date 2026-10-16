@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 
+import { HttpContext } from '@angular/common/http';
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
-import { EMPTY, timer } from 'rxjs';
-import { catchError, filter, switchMap, take } from 'rxjs/operators';
+import { EMPTY, forkJoin, Observable, of, timer } from 'rxjs';
+import { catchError, filter, map, switchMap, take } from 'rxjs/operators';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
@@ -61,6 +63,7 @@ import { topOpenModal } from '../modal/modal.component';
 import { HintId, HintsService } from '../../services/hints.service';
 import { datasetMediaWords } from '../../utils/media-words';
 import { typedQuery } from '../../utils/label-quota';
+import { apiErrorMessage } from '../../utils/api-error';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 /** Toasty's Dashboard hints, in the order {@link DashboardComponent.dashboardHint} tries them. */
@@ -656,17 +659,65 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.wasDeletingSelectedDatasetsConfirm.set(true);
     }
     if (!ok) return;
-    for (const dataset of targets) {
-      this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
-        next: () => {
-          this.dashSelection.deselect('dataset', dataset.id);
-          if (this.activeContext.datasetId === dataset.id || this.activeContext.intentDatasetId === dataset.id) {
-            this.activeContext.setActivePair('', '');
-          }
-          this.datasetState.refresh();
-        },
-      });
-    }
+    this.deleteAll(targets, (id, context) => this.datasetsRegistryApi.deleteRegistered(id, context)).subscribe(
+      ({ deleted, failed }) => {
+        for (const id of deleted) this.dashSelection.deselect('dataset', id);
+        if (deleted.has(this.activeContext.datasetId) || deleted.has(this.activeContext.intentDatasetId)) {
+          this.activeContext.setActivePair('', '');
+        }
+        this.datasetState.refresh();
+        this.reportFailedDeletes('dataset', 'datasets', targets.length, failed);
+      },
+    );
+  }
+
+  /**
+   * Send one DELETE per target and settle the batch once, when every request
+   * has answered: which ids went, and which did not and why. Each request
+   * opts out of the global error toast so that the caller can report the
+   * batch in one toast ({@link reportFailedDeletes}) instead of one per
+   * failed row.
+   */
+  private deleteAll<T extends { id: string; name: string }>(
+    targets: T[],
+    del: (id: string, context: HttpContext) => Observable<unknown>,
+  ): Observable<{ deleted: Set<string>; failed: { target: T; reason: string }[] }> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return forkJoin(
+      targets.map((target) =>
+        del(target.id, context).pipe(
+          map(() => ({ target, reason: null as string | null })),
+          catchError((err: unknown) => of({ target, reason: apiErrorMessage(err, 'Request failed') })),
+        ),
+      ),
+    ).pipe(
+      map((outcomes) => ({
+        deleted: new Set(outcomes.filter((o) => o.reason === null).map((o) => o.target.id)),
+        failed: outcomes.flatMap((o) => (o.reason === null ? [] : [{ target: o.target, reason: o.reason }])),
+      })),
+    );
+  }
+
+  /** One toast for a bulk delete's failures, if it had any. The failed rows
+   *  stay selected, so trying again is one click. */
+  private reportFailedDeletes(
+    one: string,
+    many: string,
+    total: number,
+    failed: { target: { name: string }; reason: string }[],
+  ): void {
+    if (failed.length === 0) return;
+    const opts =
+      total === 1
+        ? { message: `Could not delete ${one} "${failed[0].target.name}"`, detail: failed[0].reason }
+        : {
+            message: `Could not delete ${failed.length} of ${total} ${many}`,
+            detail: `${failed.length === 1 ? 'It is' : 'They are'} still selected, so you can try again.`,
+            items: failed.map((f) => `"${f.target.name}": ${f.reason}`),
+          };
+    // Some went and some did not is a partial result; none went is a failure.
+    if (failed.length === total) this.toast.error(opts);
+    else this.toast.warning(opts);
   }
 
   onDeleteSelectedDatasetsAnimationEnd(): void {
@@ -717,20 +768,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.wasDeletingSelectedDetectorsConfirm.set(true);
     }
     if (!ok) return;
-    for (const model of targets) {
-      this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
-        next: () => {
-          this.dashSelection.deselect('detector', model.id);
-          if (this.activeContext.modelId === model.id || this.activeContext.intentModelId === model.id) {
-            this.activeContext.setActivePair(this.activeContext.datasetId, '');
-          }
-          this.datasetState.refresh();
-        },
-        error: () => {
-          // Global error interceptor surfaces the failure in the banner.
-        },
-      });
-    }
+    this.deleteAll(targets, (id, context) => this.detectorsRegistryApi.deleteFromRegistry(id, context)).subscribe(
+      ({ deleted, failed }) => {
+        for (const id of deleted) this.dashSelection.deselect('detector', id);
+        if (deleted.has(this.activeContext.modelId) || deleted.has(this.activeContext.intentModelId)) {
+          this.activeContext.setActivePair(this.activeContext.datasetId, '');
+        }
+        this.datasetState.refresh();
+        this.reportFailedDeletes('detector', 'detectors', targets.length, failed);
+      },
+    );
   }
 
   /**

@@ -358,7 +358,10 @@ MIRRORS: list[Mirror] = [
             "the harness too. The per-detector balance of #4665 is not such a default: it is the "
             "user's own pick, asked for when the detector is created, and the form starts on the "
             "user's setting - DEFAULT_BETA when unset - so a detector nobody chose a balance for "
-            "still resolves to the harness's default."
+            "still resolves to the harness's default. Every harness entry point that draws a line "
+            "reaches the default through it - voting_iterations, al_benchmark, and since #4971 "
+            "runner.eval_learned_sort (python -m vtscore.eval --mode learned) - so a caller that "
+            "skips it is caught by that caller's tests, not by this digest."
         ),
         divergence=(
             "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "

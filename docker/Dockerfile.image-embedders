@@ -52,9 +52,9 @@
 # on first use.
 #
 # SigLIP stays the default; it's marked is_default=True on the embedder
-# class and is the only entry in `autoload_media_embedders` seeded into
-# the default settings below. The other five sit on disk and only warm
-# when explicitly selected.
+# class. The image locks no media type and seeds no settings, so a fresh
+# volume warms no embedder at startup: all six baked ones sit on disk and
+# each loads from there the first time it is used.
 #
 # DINOv2 / DINOv3 / EUPE are vision-only; they do not embed text, so
 # the UI hides the "Text sort" affordance for datasets embedded with
@@ -273,12 +273,11 @@ COPY --from=frontend /static/ /app/static/
 ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
-# Seed default settings so SigLIP is preloaded at startup (the other
-# embedders stay cold until explicitly selected; they all live on
-# disk thanks to the RUNs above, so first selection is a from-cache
-# load rather than a HF download).
-RUN mkdir -p /app/data && \
-    printf '{\n  "autoload_media_embedders": ["siglip"]\n}\n' > /app/data/settings.json
+# No settings are seeded. At startup the server warms the embedders the
+# registered datasets and detectors use (predict_embedders_to_preload), so a
+# fresh volume warms none; the baked ones load from disk on first use (the
+# RUNs above put them there) rather than from a HF download.
+RUN mkdir -p /app/data
 
 # Runtime data directory (settings, embeddings, datasets, media files).
 # Mount a volume here to persist user data across container restarts.

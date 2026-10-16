@@ -47,10 +47,11 @@ from vtscore.datasets.registry import (
     get_loaded_ids as _reg_loaded_ids,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
-    set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
+    update_readers as _reg_update_readers,
 )
+from vtscore.security.readers import ReadersUpdate
 from vtsearch.schemas.datasets import (
     DatasetAutofindRequestSchema,
     DatasetDomainShiftResponseSchema,
@@ -490,70 +491,19 @@ def dataset_domain_shift(dataset_id: str):
     was priced and failed.  See
     ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
     """
-    import numpy as np
-
     from vtsearch.auth import get_current_user
-    from vtsearch.state import get_active_context, get_context
-    from vtscore.embedding.binding import embedder_supports_patch_regions
-    from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.coverage.atlas import domain_shift_report
+    from vtsearch.state import get_active_context
+    from vtsearch.training_domain import DomainShiftUnavailable, domain_shift_against
 
     entry = _reg_get(dataset_id)
     if entry is None:
         abort(404, message="Dataset not found in registry")
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
-    ref_ctx = get_context(dataset_id)
-    if ref_ctx is None:
-        abort(400, message="Load the reference dataset before running a domain-shift check")
-    atlas = ref_ctx.coverage_atlas
-    if atlas is None:
-        abort(400, message="Reference dataset has no coverage atlas; build it first")
-
-    active_ctx = get_active_context()
-    if active_ctx.dataset_id == dataset_id:
-        abort(400, message="Active dataset and reference dataset are the same")
-    # Typicality p-values are meaningless across embedding spaces: refuse
-    # instead of returning confident nonsense (the atlas geometry is stamped
-    # by its dataset's embedder).
-    active_entry = _reg_get(active_ctx.dataset_id)
-    ref_embedder = entry.get("embedder", "")
-    active_embedder = (active_entry or {}).get("embedder", "")
-    if ref_embedder != active_embedder:
-        abort(
-            400,
-            message=(
-                f"Embedder mismatch: reference uses {ref_embedder or 'unknown'!r}, "
-                f"active dataset uses {active_embedder or 'unknown'!r}"
-            ),
-        )
-    # Patch spaces are too diffuse for the atlas's fixed-alpha guard to carry
-    # information — measured, not assumed: on ``dinov3_patch`` it fires on 80%
-    # of the reference dataset's *own* held-out data against 93% for a
-    # different corpus, a separation of 0.13, i.e. close to a constant.  Both
-    # obvious repairs (dropping the path averaging, refitting alpha per
-    # embedder) were priced and made it worse.  Refusing is the honest answer;
-    # returning a verdict here answers a direct question with noise.  See
-    # docs/experiments/2026-08-30-fit-quality-3329/REPORT.md (B4-B6).
-    if embedder_supports_patch_regions(ref_embedder):
-        abort(
-            400,
-            message=(
-                f"Domain-shift checks are not supported for patch embedders "
-                f"({ref_embedder!r}): the typicality guard does not separate "
-                f"in-domain from out-of-domain data in a patch space"
-            ),
-        )
-
-    vectors = [
-        np.asarray(emb, dtype=np.float32)
-        for media in active_ctx.medias.values()
-        if (emb := media_embedding(media)) is not None
-    ]
-    if not vectors:
-        abort(400, message="Active dataset has no embeddings to compare")
-    report = domain_shift_report(atlas, np.stack(vectors))
-    return {"reference_dataset_id": dataset_id, **report}
+    try:
+        return domain_shift_against(dataset_id, get_active_context())
+    except DomainShiftUnavailable as e:
+        abort(400, message=str(e))
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autofind", methods=["POST"])
@@ -719,10 +669,11 @@ def update_dataset_readers(body: dict, dataset_id: str):
     from vtsearch.auth import get_current_user
 
     readers = body["readers"]
-    ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(dataset_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("dataset"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("dataset"))
     return {"ok": True, "readers": readers}
 
 

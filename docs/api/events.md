@@ -1,11 +1,10 @@
 # Progress events (SSE)
 
+[← Back to API index](../API.md)
+
 VTSearch streams progress for every long-running operation through a
 single [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
-endpoint. Replaces the per-tracker REST polling endpoints
-(`/api/dataset/progress`, `/api/sort/progress`, `/api/find/progress`,
-`/api/dataset/loading-tasks`, `/api/detectors/loading-tasks`,
-`/api/eval/voting-iterations`).
+endpoint; there are no per-operation progress-polling routes.
 
 ## Endpoint
 
@@ -136,7 +135,7 @@ into a toast via `ToastService`. `level` is one of `info`, `success`,
 `warning`, `error`; the first two auto-dismiss, the last two stay until the
 user closes them. `detail`, `source` and `items` may be `null`. `items` lists
 the specific things the message is about, one string each (at most 1000); the
-toast shows them behind a **Details** toggle with a **Copy list** button.
+toast shows them behind a **Details** toggle with a **Copy List** button.
 
 Unlike every other channel this one has no snapshot, which has three
 consequences worth designing around:

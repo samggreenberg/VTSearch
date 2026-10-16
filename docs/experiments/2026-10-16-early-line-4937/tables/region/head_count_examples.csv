@@ -1,0 +1,4 @@
+beta,percentile,session,seed,vote,held-out Goods,kept / best,withheld positives,F / best,"class model's cut instead: kept, F"
+1.0,10,chair@medium,0,28,4,33 / 86,55,0.14 / 0.17,"249, 0.14"
+1.0,50,tie@small,0,25,2,52 / 23,53,0.34 / 0.39,"63, 0.33"
+1.0,90,microwave@medium,0,25,4,314 / 30,47,0.23 / 0.52,"84, 0.44"
