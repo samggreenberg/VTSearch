@@ -62,15 +62,6 @@ cropping (can eat context the detector needs), audio noise reduction
 
 <!-- item-sep -->
 
-- **Persist the cleanup selection as an import default** — the embedder /
-  clipper / source-spec pickers all remember the user's per-media-type choice
-  via `ImportDefaultsService` (`snapshotImportConfig` →
-  `maybeOfferSaveImportDefaults`), but `defaultCleanerSelection` deliberately
-  ignores saved defaults and always seeds from each cleaner's
-  `default_enabled`. Add `cleaners` to `ImportDefaultsForMediaType` and to the
-  save-offer snapshot/equality checks so a user who always disables a gate
-  isn't re-ticking it on every import.
-
 <!-- item-sep -->
 
 - **Thin imports lose their byte-savings on cleaned items** —

@@ -11,6 +11,7 @@ import {
   EmbedderInfo,
   ImportDefaultsForMediaType,
   MediaTypeInfo,
+  SavedCleanerChoice,
   SourceSpec,
 } from '../../../../../models/api.models';
 import { defaultSpecListFor, getTabLabel, toTypeId } from './media-type.util';
@@ -56,8 +57,25 @@ function shallowSpecsEqual(a: SourceSpec[] | undefined, b: SourceSpec[] | undefi
   return true;
 }
 
+/** Equality for saved cleanup choices: same cleaner names, same enabled
+ *  flags, and - for an enabled cleaner - the same parameter overrides. */
+function cleanerChoicesEqual(
+  a: Record<string, SavedCleanerChoice> | undefined,
+  b: Record<string, SavedCleanerChoice> | undefined,
+): boolean {
+  const ka = Object.keys(a || {});
+  if (ka.length !== Object.keys(b || {}).length) return false;
+  for (const name of ka) {
+    const x = (a as Record<string, SavedCleanerChoice>)[name];
+    const y = b?.[name];
+    if (!y || !!x.enabled !== !!y.enabled) return false;
+    if (x.enabled && !shallowParamsEqual(x.params, y.params)) return false;
+  }
+  return true;
+}
+
 /** Per-user "sticky" import config: solo mediaType/embedder locks, saved
- *  embedder/clipper/converter defaults per media type, and the
+ *  embedder/clipper/converter/cleanup defaults per media type, and the
  *  post-import "save these as default?" toast offer.
  *
  *  Shared by every picker view (generic form / server-folder /
@@ -169,14 +187,23 @@ export class ImportDefaultsService {
     };
   }
 
-  /** Cleanup selection for a freshly-fetched cleaner list: every cleaner the
-   *  registry marks ``default_enabled``, with no parameter overrides.
-   *
-   *  Unlike the embedder / clipper / source-spec pickers this does not consult
-   *  the user's saved per-media-type import defaults; cleanup selections are
-   *  not persisted yet (see ``docs/plans/media-cleaners.md``). */
-  defaultCleanerSelection(cleaners: CleanerInfo[]): CleanerSelection[] {
-    return cleaners.filter((c) => c.default_enabled).map((c) => ({ name: c.name, params: {} }));
+  /** Cleanup selection for a freshly-fetched cleaner list, in registry
+   *  order.  A cleaner the user's saved default for *mediaType* names takes
+   *  the saved choice (enabled flag plus params, dropping any param the
+   *  cleaner no longer declares); any other cleaner - all of them when
+   *  nothing is saved, or one registered since the save - follows its
+   *  ``default_enabled``.  Saved names no longer registered are ignored. */
+  defaultCleanerSelection(cleaners: CleanerInfo[], mediaType: string, mediaTypes: MediaTypeInfo[]): CleanerSelection[] {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType, mediaTypes)?.cleaners || {};
+    const out: CleanerSelection[] = [];
+    for (const c of cleaners) {
+      const choice = saved[c.name];
+      if (!(choice ? choice.enabled : c.default_enabled)) continue;
+      const declared = new Set((c.parameters || []).map((p) => p.key));
+      const params = Object.fromEntries(Object.entries(choice?.params || {}).filter(([k]) => declared.has(k)));
+      out.push({ name: c.name, params });
+    }
+    return out;
   }
 
   /** Build a source-specs list for a freshly-opened picker, preferring
@@ -202,8 +229,8 @@ export class ImportDefaultsService {
     return filtered;
   }
 
-  /** Snapshot of the per-view import-config (embedder/clipper/specs) the
-   *  user submitted, normalised to the same shape as the persisted
+  /** Snapshot of the per-view import-config (embedder/clipper/specs/cleanup)
+   *  the user submitted, normalised to the same shape as the persisted
    *  defaults. */
   snapshotImportConfig(
     typeId: string,
@@ -213,6 +240,8 @@ export class ImportDefaultsService {
     sourceSpecs: SourceSpec[],
     availableEmbedders: EmbedderInfo[],
     availableClippers: ClipperInfo[],
+    selectedCleaners: CleanerSelection[],
+    availableCleaners: CleanerInfo[],
   ): ImportDefaultsForMediaType {
     const out: ImportDefaultsForMediaType = {};
     const isDefaultEmbedder = !embedder || !!availableEmbedders.find((e) => e.name === embedder)?.is_default;
@@ -231,11 +260,40 @@ export class ImportDefaultsService {
     if (nonNative.length > 0) {
       out.source_specs = nonNative.map((s) => ({ ...s, params: { ...s.params } }));
     }
+    const cleaners = this.cleanerChoicesIfNonDefault(selectedCleaners, availableCleaners);
+    if (cleaners) out.cleaners = cleaners;
+    return out;
+  }
+
+  /** The cleanup selection as saved choices for every listed cleaner, or
+   *  ``null`` when it is the registry's own (each ``default_enabled``
+   *  cleaner on with no param overrides, every other one off). */
+  private cleanerChoicesIfNonDefault(
+    selected: CleanerSelection[],
+    available: CleanerInfo[],
+  ): Record<string, SavedCleanerChoice> | null {
+    const byName = new Map((selected || []).map((s) => [s.name, s]));
+    const hasParams = (s: CleanerSelection | undefined) => !!s && Object.keys(s.params || {}).length > 0;
+    const isRegistryDefault = available.every((c) => {
+      const sel = byName.get(c.name);
+      return c.default_enabled ? !!sel && !hasParams(sel) : !sel;
+    });
+    if (isRegistryDefault) return null;
+    const out: Record<string, SavedCleanerChoice> = {};
+    for (const c of available) {
+      const sel = byName.get(c.name);
+      out[c.name] = sel && hasParams(sel) ? { enabled: true, params: { ...sel.params } } : { enabled: !!sel };
+    }
     return out;
   }
 
   private hasMeaningfulOverrides(cfg: ImportDefaultsForMediaType): boolean {
-    return !!(cfg.embedder || cfg.clipper || (cfg.source_specs && cfg.source_specs.length > 0));
+    return !!(
+      cfg.embedder ||
+      cfg.clipper ||
+      (cfg.source_specs && cfg.source_specs.length > 0) ||
+      (cfg.cleaners && Object.keys(cfg.cleaners).length > 0)
+    );
   }
 
   private importDefaultsEqual(a: ImportDefaultsForMediaType, b: ImportDefaultsForMediaType): boolean {
@@ -243,6 +301,7 @@ export class ImportDefaultsService {
     if ((a.clipper || '') !== (b.clipper || '')) return false;
     if (!shallowParamsEqual(a.clipper_params, b.clipper_params)) return false;
     if (!shallowSpecsEqual(a.source_specs, b.source_specs)) return false;
+    if (!cleanerChoicesEqual(a.cleaners, b.cleaners)) return false;
     return true;
   }
 
@@ -258,7 +317,7 @@ export class ImportDefaultsService {
     const typeLabel = getTabLabel(mediaTypes, typeId) || typeId;
     this.toastService.success({
       message: `Save these as default for ${typeLabel} imports?`,
-      detail: 'Your embedder, clipper, and converter picks will be auto-filled next time.',
+      detail: 'Your embedder, clipper, converter, and cleanup picks will be auto-filled next time.',
       action: {
         label: 'Save as default',
         onClick: () => this.persistImportDefaults(typeId, cfg, mediaTypes),
