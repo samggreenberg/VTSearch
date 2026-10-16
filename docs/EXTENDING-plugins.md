@@ -344,7 +344,7 @@ def run(self, field_values):
 | `message` | Headline, one short sentence. Truncated at 300 characters |
 | `level`   | `"info"` (default), `"success"`, `"warning"`, or `"error"`. The first two fade after a few seconds; the last two stay until the user dismisses them |
 | `detail`  | Optional second line with the specifics — which endpoint, how many, why. Truncated at 2000 characters |
-| `items`   | Optional list of the things the message is about, one string each — every skipped file, not the first ten. The toast shows them behind a **Details** toggle with a **Copy list** button. At most 1000 entries of 300 characters |
+| `items`   | Optional list of the things the message is about, one string each — every skipped file, not the first ten. The toast shows them behind a **Details** toggle with a **Copy List** button. At most 1000 entries of 300 characters |
 
 Your `display_name` is attached automatically as the notification's source,
 so the toast says which plugin spoke. Code that isn't a `PluginBase`

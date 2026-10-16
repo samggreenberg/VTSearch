@@ -29,7 +29,7 @@
       } @else if (row.kind === 'loadmore') {
         <div class="media-load-more">
           <button class="btn btn--secondary btn--sm" (click)="onLoadMore()" [disabled]="loadingMore()">
-            {{ loadingMore() ? 'Loading…' : 'Load more' }}
+            {{ loadingMore() ? 'Loading…' : 'Load More' }}
           </button>
         </div>
       } @else {
@@ -76,7 +76,7 @@
     @if (hasMore()) {
       <div class="media-load-more">
         <button class="btn btn--secondary btn--sm" (click)="onLoadMore()" [disabled]="loadingMore()">
-          {{ loadingMore() ? 'Loading…' : 'Load more' }}
+          {{ loadingMore() ? 'Loading…' : 'Load More' }}
         </button>
       </div>
     }

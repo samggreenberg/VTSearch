@@ -123,7 +123,7 @@ into a toast via `ToastService`. `level` is one of `info`, `success`,
 `warning`, `error`; the first two auto-dismiss, the last two stay until the
 user closes them. `detail`, `source` and `items` may be `null`. `items` lists
 the specific things the message is about, one string each (at most 1000); the
-toast shows them behind a **Details** toggle with a **Copy list** button.
+toast shows them behind a **Details** toggle with a **Copy List** button.
 
 Unlike every other channel this one has no snapshot, which has three
 consequences worth designing around:

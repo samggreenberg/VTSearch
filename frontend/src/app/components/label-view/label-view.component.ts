@@ -148,7 +148,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  Drives the center-pane "nothing left to label" message so the pane is
    *  never left blank with a stale item stuck in the metadata strip. */
   readonly autopilotExhausted = signal(false);
-  /** True while a windowed-sort "Load more" page fetch is in flight. Aliased
+  /** True while a windowed-sort "Load More" page fetch is in flight. Aliased
    *  from the runner that owns it, so the template binding is unchanged. */
   readonly loadingMoreSort = this.sortRunner.loadingMoreSort;
   /** True when the manual (non-Autopilot) advance has nothing left to move to:
