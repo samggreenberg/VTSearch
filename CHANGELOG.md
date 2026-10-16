@@ -334,6 +334,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
+
 - **A warning before you use a detector on data unlike its training data** (issue #4961). The
   Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
   detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
