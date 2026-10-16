@@ -354,8 +354,7 @@ the one thing a seed does do.
 Optional `embedder_type` locks the embedder kind the detector learns in
 (`semantic`, `patch_semantic`, or `structural`; a concrete embedder name is
 also accepted and classified). Empty lets the server pick the sole kind the
-dataset supplies. (The schema also accepts a `trainable` flag, which nothing
-reads.)
+dataset supplies.
 
 Optional `beta` is the detector's **balance** (#4665): F-beta's beta, which
 way its line leans between false positives and false negatives, clamped to

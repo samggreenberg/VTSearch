@@ -583,7 +583,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
-- **Dead code audit** (manual, pre-release): `python scripts/vulture-audit.py` — the script owns the invocation (scan paths, excludes, ignore lists, confidence floor), so there is nothing to copy-paste. Scans every tier that defines or consumes first-party Python: `vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`. Run before each release; the **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
+- **Dead code audit** (manual, pre-release): `python scripts/vulture-audit.py` — the script owns the invocation (scan paths, excludes, ignore lists, confidence floor), so there is nothing to copy-paste. Scans every tier that defines or consumes first-party Python: `vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `tests_shared/`, `scripts/`. Run before each release; the **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
 - **Check the vulture whitelist**: `python scripts/vulture-audit.py --check-whitelist` (a `./run-tests.sh` lane; fails when an entry in `.vulture-whitelist.py` suppresses no finding). This is the half of vulture that *is* mechanically checkable — it keeps the whitelist from asserting things nothing can verify — and it means adding an entry is no longer free: whitelist what is genuinely reflective, delete what is genuinely dead.
 
 ## Testing reference

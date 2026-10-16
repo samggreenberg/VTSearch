@@ -10,7 +10,7 @@ Angular app (`frontend/src/app/`), projection backend in `vtscore/projection/`
 (library tier, Flask-free). It adds a **dataset-only** workflow (no detector,
 no labels/votes, no MLP/eval) alongside Find and Train: a 2-D UMAP projection
 of the content-embedding space, drawn as a pannable/zoomable tiled field of
-**hexagons** (audio/text) or **squares** (image/video/document), where hovering
+**hexagons** (text) or **squares** (image, video, document, face, audio), where hovering
 a bin previews a representative item. Bin color encodes item count (density);
 zooming subdivides bins (level-of-detail). It reuses VTSearch's importers,
 embedders, embedding matrix, media serving, clipper, and concurrency stack.

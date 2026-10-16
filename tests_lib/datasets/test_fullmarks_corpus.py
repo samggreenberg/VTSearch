@@ -4495,8 +4495,8 @@ class TestDistractorPullPlan:
 class TestFetchThrottle:
     """Concurrency is only defensible because it gives ground.
 
-    UCSF is a shared public archive and README/GRID-RUNBOOK both warn against
-    widening the pull.  The measurement that justifies 3 concurrent fetches --
+    UCSF is a shared public archive and GRID-RUNBOOK warns against widening
+    the pull.  The measurement that justifies 3 concurrent fetches --
     ~120k requests at ~3/s with zero 429/503/509, and 4,003 failures that were
     all per-document 403s -- shows we are *below* their limit, not where it is.
     So the pool has to detect the limit rather than assume it, and these pin the

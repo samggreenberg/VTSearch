@@ -41,7 +41,7 @@ export class LabelsetSourcesApiService {
 
   /** The source *detectorId* syncs with, or `null` when it syncs nowhere. */
   getDetectorSource(detectorId: string): Observable<DetectorLabelsetSource | null> {
-    return getDetectorLabelsetSource(this.http, this.config.rootUrl, { detector_name: detectorId }).pipe(
+    return getDetectorLabelsetSource(this.http, this.config.rootUrl, { detector_ref: detectorId }).pipe(
       map((r) => r.body ?? null),
     );
   }
@@ -55,7 +55,7 @@ export class LabelsetSourcesApiService {
     fieldValues: Record<string, string>,
   ): Observable<OkMessage> {
     return setDetectorLabelsetSource(this.http, this.config.rootUrl, {
-      detector_name: detectorId,
+      detector_ref: detectorId,
       body: { source_name: sourceName, field_values: fieldValues },
     }).pipe(map((r) => r.body));
   }

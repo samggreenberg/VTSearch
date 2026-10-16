@@ -80,7 +80,7 @@ class LoudnessDetector(Detector):
         return "audio"
 
     def load_model(self) -> None:
-        """Optional: load heavyweight resources once before first use."""
+        """Optional: nothing calls this for you; a processor with a model calls it from detect()."""
         pass
 
     def detect(self, media: dict[str, Any]) -> bool:
@@ -346,10 +346,11 @@ Four behaviours of this layer are worth knowing before you debug it:
   build (`_run_single` swallows the exception and returns `None`), so a
   processor removed from a factory dict later just disappears from the results
   rather than erroring.
-- **Instances are per-request.** Nothing caches a built processor, so
-  `load_model()` runs again on every call. Cache heavy resources on the
-  instance (`if self._model is not None: return`, as the in-tree processors do)
-  and expect the load cost once per request.
+- **Instances are per-request.** Nothing caches a built processor, and nothing
+  in the framework calls `load_model()`: your typed method calls it, so its
+  load runs again on every request. Cache heavy resources on the instance
+  (`if self._model is not None: return`, as the in-tree processors do) and
+  expect the load cost once per request.
 - **The stored `media_type` is what routes it.** `POST /api/autorun-*` takes
   `media_type` from the request body and never cross-checks it against your
   class's `media_type` property; `/api/auto-extract` selects processors by that

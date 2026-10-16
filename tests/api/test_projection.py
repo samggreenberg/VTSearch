@@ -594,9 +594,12 @@ class TestProjectionSubset:
         resp = client.post("/api/projection/build", json={"ids": []})
         assert resp.status_code == 409
 
-    def test_subset_bad_ids_returns_400(self, client):
-        assert client.post("/api/projection/build", json={"ids": "nope"}).status_code == 400
-        assert client.post("/api/projection/build", json={"ids": ["a", "b"]}).status_code == 400
+    def test_subset_bad_ids_returns_422(self, client):
+        assert client.post("/api/projection/build", json={"ids": "nope"}).status_code == 422
+        assert client.post("/api/projection/build", json={"ids": ["a", "b"]}).status_code == 422
+
+    def test_an_unknown_subset_flag_is_refused(self, client):
+        assert client.get("/api/projection/meta?subset=maybe").status_code == 422
 
     def test_subset_unknown_ids_returns_409(self, client):
         """Ids that aren't in the dataset yield nothing to project."""

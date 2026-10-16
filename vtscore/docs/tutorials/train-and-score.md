@@ -445,7 +445,7 @@ The same shape generalises to:
 
 - **Images** (`from vtscore.media import image`, SigLIP, 768-D).
 - **Text** (`from vtscore.media import text`, E5, 768-D).
-- **Video** (`from vtscore.media import video`, X-CLIP, 768-D).
+- **Video** (`from vtscore.media import video`, X-CLIP, 512-D).
 - **Documents** (`from vtscore.media import document` plus a converter).
 
 Mix media types by combining datasets via the

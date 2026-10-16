@@ -539,9 +539,10 @@ def learned_sort(body: dict):
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.  It sits four inclusion steps stricter than the line:
-        # under a balance no inclusion drew that line, so none is passed and it
-        # is derived from the line itself (#4245).
+        # carries one.  Its fallback, when neither a head's own line nor the
+        # target precision (#3546) answers, sits four inclusion steps stricter
+        # than the line: under a balance no inclusion drew that line, so none
+        # is passed and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
         # What the balance says about the line rides with it (#4247, #4413).

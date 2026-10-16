@@ -1046,7 +1046,7 @@
         "properties": {
           "default_path": {
             "default": "",
-            "description": "Suggested initial relative sub-path for this source, for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
+            "description": "Suggested initial relative sub-path for this source. Empty for every source, since each one's root is already the right starting point.",
             "type": "string"
           },
           "directories": {
@@ -3046,10 +3046,6 @@
           "text_query": {
             "default": "",
             "type": "string"
-          },
-          "trainable": {
-            "default": false,
-            "type": "boolean"
           }
         },
         "required": [
@@ -6554,6 +6550,26 @@
         ],
         "type": "object"
       },
+      "ProjectionBuildRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Discard the existing layout and re-fit UMAP (the Browser's Re-project).",
+            "type": "boolean"
+          },
+          "ids": {
+            "default": null,
+            "description": "Project only these media, into the ephemeral subset layout.",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "ProjectionBuildResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9526,7 +9542,7 @@
     },
     "/api/browse-media-files": {
       "get": {
-        "description": "Query parameters:\n\n* ``source``: one of ``demo:<name>`` or ``folder``.\n* ``path``: relative sub-path within the root (default ``\"\"``).\n\nReturns::\n\n    {\n        \"directories\": [{\"name\": \"dog\"}, {\"name\": \"cat\"}, ...],\n        \"files\": [\n            {\"name\": \"bark.wav\", \"path\": \"dog/bark.wav\", \"size_bytes\": 12345},\n            ...\n        ]\n    }",
+        "description": "Query parameters:\n\n* ``source``: one of ``demo:<name>``, ``folder``, or ``server_fs``.\n* ``path``: relative sub-path within the root (default ``\"\"``).\n\nReturns::\n\n    {\n        \"directories\": [\n            {\"name\": \"dog\", \"path\": \"dog\", \"modified_at\": \"2026-01-02 03:04\"},\n            ...\n        ],\n        \"files\": [\n            {\n                \"name\": \"bark.wav\",\n                \"path\": \"dog/bark.wav\",\n                \"size_bytes\": 12345,\n                \"modified_at\": \"2026-01-02 03:04\",\n            },\n            ...\n        ],\n        \"root_path\": \"/abs/path/of/the/source/root\",\n        \"default_path\": \"\",\n    }",
         "operationId": "browse_media_files",
         "parameters": [
           {
@@ -9906,7 +9922,7 @@
     },
     "/api/dataset/cancel": {
       "post": {
-        "description": "Cancels every active loading task, then waits briefly for one of them to\nact on the flag.  Cancellation is cooperative, so a flag set with no worker\nleft to observe it stops nothing.  A cancel that reached nothing answers\n``409``, and any stale progress it found is cleared on the way out.",
+        "description": "Cancels every active loading task, then waits briefly for each of them to\nact on the flag.  Cancellation is cooperative, so a flag set with no worker\nleft to observe it stops nothing.  A cancel that reached nothing answers\n``409``, and any stale progress it found is cleared on the way out.",
         "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
@@ -10162,7 +10178,7 @@
         "operationId": "detect_media_type",
         "parameters": [
           {
-            "description": "One of ``demo:<name>`` or ``folder`` (matches ``/api/browse-media-files``).",
+            "description": "One of ``demo:<name>``, ``folder``, or ``server_fs`` (matches ``/api/browse-media-files``).",
             "in": "query",
             "name": "source",
             "required": false,
@@ -11224,6 +11240,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "Empty name after stripping."
+          },
           "403": {
             "description": "Only the dataset creator can rename it."
           },
@@ -11312,6 +11331,9 @@
           },
           "403": {
             "description": "Only the dataset creator can unload it."
+          },
+          "404": {
+            "description": "Dataset not found."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12139,7 +12161,7 @@
         ]
       }
     },
-    "/api/detectors/{detector_name}/labelset-source": {
+    "/api/detectors/{detector_ref}/labelset-source": {
       "get": {
         "description": "``field_values`` carries the detector's own values, and only for its\nowner; values the deployment default fixes are never echoed.",
         "operationId": "get_detector_labelset_source",
@@ -12172,7 +12194,7 @@
       "parameters": [
         {
           "in": "path",
-          "name": "detector_name",
+          "name": "detector_ref",
           "required": true,
           "schema": {
             "minLength": 1,
@@ -12226,11 +12248,11 @@
         ]
       }
     },
-    "/api/detectors/{detector_name}/labelset-source/sync": {
+    "/api/detectors/{detector_ref}/labelset-source/sync": {
       "parameters": [
         {
           "in": "path",
-          "name": "detector_name",
+          "name": "detector_ref",
           "required": true,
           "schema": {
             "minLength": 1,
@@ -13595,7 +13617,7 @@
     },
     "/api/indicator-score-history": {
       "get": {
-        "description": "Reads only the per-step cache advanced by the ``/api/labeling-status``\nbackground worker; **no models are retrained and the cache is never\nadvanced here**, so the response is always fast regardless of dataset size\nor label-history length.\n\nWhen the cache does not yet cover the whole ``label_history`` the response\ncarries ``complete: false`` and an empty ``history``.  Clients should then\nfall back to ``POST /api/eval/train-and-score``, which computes the same\nseries on a background thread with live progress and cancellation.\n\nThis route used to call the ``calculate_*_over_time`` helpers directly.\nThose advance the cache via ``_ensure_cache`` - retraining one MLP per\nuncached label step plus a forward pass over the unlabeled pool, and on a\ncold cache a full hierarchical-k-means coverage-atlas build - all inline on\nthe request thread under ``_progress_lock``.  Since ``/api/labeling-status``\ndeliberately defers exactly that work to a background worker (issue #2397),\nthe cache is behind for most of a labeling session, and this endpoint\nabsorbed the entire deferred build: tens of seconds on a mid-size dataset,\ngrowing with both media count and vote count.",
+        "description": "Reads only the per-step cache advanced by the ``/api/labeling-status``\nbackground worker; **no models are retrained and the cache is never\nadvanced here**, so the response is always fast regardless of dataset size\nor label-history length.\n\nWhen the cache does not yet cover the whole ``label_history`` the response\ncarries ``complete: false`` and an empty ``history``.  Clients should then\nfall back to ``POST /api/eval/train-and-score``, which computes the same\nseries on a background thread with live progress and cancellation.\n\nIt does not call the ``calculate_*_over_time`` helpers, because those\nadvance the cache via ``_ensure_cache`` - retraining a model per uncached\nlabel step plus a forward pass over the unlabeled pool, and on a cold cache\na full hierarchical-k-means coverage-atlas build - all inline on the request\nthread under ``_progress_lock``.  ``/api/labeling-status`` defers exactly\nthat work to a background worker (#2397), so the cache is behind for most\nof a labeling session, and advancing it here would put the whole deferred\nbuild on this request: tens of seconds on a mid-size dataset, growing with\nboth media count and vote count.",
         "operationId": "indicator_score_history",
         "parameters": [
           {
@@ -14135,7 +14157,7 @@
     },
     "/api/learned-sort": {
       "post": {
-        "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool (votes polls, thumbnails, and even\nmedia bytes).  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, balance and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
+        "description": "Training is GIL-bound, so run inline it would stall every other request\nserved by the small ``gthread`` pool (votes polls, thumbnails, and even\nmedia bytes).  The endpoint hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, balance and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
         "operationId": "learned_sort",
         "requestBody": {
           "content": {
@@ -15139,7 +15161,7 @@
         }
       ],
       "post": {
-        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time, so two stale-view\ntabs that race the same media cannot alternate ADD/REMOVE on the\nserver or inflate the achievement counter beyond the number of real\nlabeling decisions (logical-bug-audit H1).\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "operationId": "vote_media",
         "requestBody": {
           "content": {
@@ -15259,7 +15281,7 @@
     },
     "/api/precision-check/votes": {
       "post": {
-        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the band is labelled the walk moves on: the next\nband the set under test still owes is dealt, or the set is decided and the\nwalk goes deeper (a new band is dealt), shallower, or ends.  The response\ncarries the check's new state and the balance's, whose line a finished\ncheck re-draws (to the set it ended on under ``trim``).",
+        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the band is labelled the walk moves on: the next\nband the set under test still owes is dealt, or the set is decided and the\nwalk goes deeper (a new band is dealt), shallower, or ends.  The response\ncarries the check's new state and the balance's.  A finished check never\nmoves the line: its ranges say how right the set the line keeps is.",
         "operationId": "vote_precision_check",
         "requestBody": {
           "content": {
@@ -15352,8 +15374,18 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type.\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``ids`` projects only the supplied media (e.g. the positive results of a\nFind run), fitting UMAP on just their high-d vectors into an ephemeral\nsubset layout held alongside the full-dataset one.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
+        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type.  A malformed\n``ids`` is a 422; an *empty* one is well-formed with nothing to project,\nwhich the service reports as a 409 like every other nothing-to-project\ncase.\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``ids`` projects only the supplied media (e.g. the positive results of a\nFind run), fitting UMAP on just their high-d vectors into an ephemeral\nsubset layout held alongside the full-dataset one.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectionBuildRequest"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {
@@ -15367,6 +15399,9 @@
           },
           "409": {
             "description": "Dataset is empty or has no embeddings."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -15382,6 +15417,18 @@
       "get": {
         "description": "The \"street signs\" the browse canvas letters over the map (see\n``docs/plans/vtsbrowse-toponymy.md``): one entry per named region, each a\ntext + a 2-D anchor in the frozen layout + the pyramid zoom level it\nbelongs to.  The payload is tiny \u2014 the client fetches it once per\n``projection_id``.\n\nLabels are optional decoration: a projection whose labeling pipeline\nhasn't run (or that predates it) answers an empty list, not an error, and\n``status`` is ``\"idle\"`` only when no projection is built at all.  A label\nset computed for a *different* layout than the active pyramid's is treated\nas absent \u2014 anchors are meaningless off their own layout.",
         "operationId": "projection_labels",
+        "parameters": [
+          {
+            "description": "Read the ephemeral subset layout rather than the full-dataset one.",
+            "in": "query",
+            "name": "subset",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15392,6 +15439,9 @@
               }
             },
             "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -15407,6 +15457,18 @@
       "get": {
         "description": "The bin shape is derived from the dataset's media type, not a query\nparameter.  When the pyramid is ready, includes bounds, zoom levels, cell\nsizing, point count, the dataset's media type, and the ``bin_shape`` the\ncanvas should render.",
         "operationId": "projection_meta",
+        "parameters": [
+          {
+            "description": "Read the ephemeral subset layout rather than the full-dataset one.",
+            "in": "query",
+            "name": "subset",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15417,6 +15479,9 @@
               }
             },
             "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -15473,6 +15538,29 @@
       "get": {
         "description": "The bin shape is derived from the dataset's media type.  Because the\nprojection is frozen at ingest, tiles are immutable for the life of the\ndataset and can be cached aggressively by the client.",
         "operationId": "get_tile",
+        "parameters": [
+          {
+            "description": "Read the ephemeral subset layout rather than the full-dataset one.",
+            "in": "query",
+            "name": "subset",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Cache token (``<projection_id>:<content_version>``) the client appends so each layout's immutable tiles get their own URL. The server ignores it.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": null,
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15486,6 +15574,9 @@
           },
           "404": {
             "description": "Tile not found or projection not ready."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -16947,7 +17038,7 @@
       "name": "detectors_export"
     },
     {
-      "description": "On-demand embedding of a media file (multipart) or text snippet (JSON). The dispatch route is dual-mode and not described in the spec; see the module docstring.",
+      "description": "On-demand embedding of a media file (multipart) or text snippet (JSON). The dispatch route is dual-mode, so the spec carries no request or response schema for it; see the module docstring.",
       "name": "embed"
     },
     {
