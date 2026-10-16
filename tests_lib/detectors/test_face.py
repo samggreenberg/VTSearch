@@ -693,6 +693,7 @@ class TestImage2FaceSideways:
         detector = self._detector(img, true_pts, wrong_pts, turned_conf=0.7)
         faces = conv._kept_faces(detector.detect(img, landmarks=True), *img.size, 0.5, 0.0, 1)
         again = conv._sideways_landmarks(detector, img, faces)
+        assert again[0].landmarks is not None and faces[0].landmarks is not None
         assert np.array_equal(again[0].landmarks, faces[0].landmarks)
 
     def test_only_quarter_turns_are_searched(self):
@@ -716,6 +717,7 @@ class TestImage2FaceSideways:
             conv, "_make_detector", return_value=self._detector(img, true_pts, wrong_pts, fail_turns=True)
         ):
             (face,) = conv._detect_faces(img, 0.5, 0.0, 1, sideways=True)
+        assert face.landmarks is not None
         assert np.allclose(face.landmarks, wrong_pts)
 
     def test_the_search_is_off_by_default(self):
