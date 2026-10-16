@@ -31,8 +31,7 @@ is seeded from it on first read; a detector that keeps one ignores it. It is nev
 | Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |
 | Browse panel sizes | `browse_graphics`, `browse_panel_width`, `browse_details_panel_width`, `browse_details_metadata_width` | `browse_graphics`: `auto` / `full` / `reduced`. Widths are clamped CSS px. |
 | Embedders | `solo_embedder_per_media_type`, `last_embedder_per_media_type` | `solo_embedder_per_media_type` locks a media type to one embedder (`""` opts that type out of a CLI-set lock); invalid type/embedder pairs are a 400. `last_embedder_per_media_type` is written by the load pipeline — accepted by `PUT` but ignored. |
-| Storage paths | `saved_datasets_dir`, `detectors_dir` | Path-validated; confined to the user's data dir in multi-user deployments. |
-| **Read-only** (admin / computed) | `solo_media_type`, `semantic_only`, `autopilot_only`, `hidden_plugins`, `dataset_max_age_days`, `support_email`, `docs_links`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `browse_signpost_vocab`, `effective_solo_embedder_per_media_type` | Returned by `GET`, not accepted by `PUT` (dropped like any unknown key). Set by the operator via CLI flags, env vars, or the settings file; each reports the value actually in force (see `vtsearch/admin_overrides.py`). |
+| **Read-only** (admin / computed) | `saved_datasets_dir`, `detectors_dir`, `solo_media_type`, `semantic_only`, `autopilot_only`, `hidden_plugins`, `dataset_max_age_days`, `support_email`, `docs_links`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `browse_signpost_vocab`, `effective_solo_embedder_per_media_type` | Returned by `GET`, not accepted by `PUT` (dropped like any unknown key), and skipped by a settings import or sync. Set by the operator via CLI flags, env vars, or the settings file; each override reports the value actually in force (see `vtsearch/admin_overrides.py`). |
 
 ### Update settings
 
@@ -53,10 +52,18 @@ PUT /api/settings
 - **422** for anything the schema catches — a wrong type (`"volume": "x"`) or
   an enum value outside its set (`"theme": "pink"`) — with the standard
   `errors` envelope; **400** for a setter-level failure (unknown media type,
-  embedder, or exporter; an empty or escaping directory path).
+  embedder, or exporter).
 - **Numeric ranges clamp** rather than fail: `{"volume": 5}` stores `1.0`,
   `{"beta": 10}` stores `4.0`.
-- **Unknown and read-only keys are silently dropped.**
+- **Unknown and read-only keys are silently dropped.** That includes every
+  server-tier key: those are the operator's, never one user's to change.
+- **The same rule covers an import and a sync.** A
+  [settings import](io.md#run-settings-import) or a settings-source sync
+  writes each key through the checks `PUT` runs (`plan_user_write` in
+  `vtsearch/settings.py`), so neither can store a value `PUT` would refuse.
+  A file's `beta`, `calibrate_count` or `calibration_fraction` drops stale
+  thresholds/heads on loaded detectors as `PUT` does, except that an imported
+  `beta` is the user's balance, not a balance pick on the active detector.
 
 ### Get default settings
 
@@ -135,7 +142,10 @@ any): `{}` or an empty `source_name`. To opt out even when a default exists:
 POST /api/settings-sources/sync
 ```
 
-Imports settings from the active source into the app.
+Imports settings from the active source into the app. Only the user's own
+settings are applied, as for a [settings import](io.md#run-settings-import):
+server-tier keys and invalid values in the source are skipped, and `keys`
+lists what was applied. The automatic re-sync follows the same rule.
 
 → `{"ok": true, "message": "Imported 5 setting(s) from source.", "keys": ["volume", "theme", ...]}`
 

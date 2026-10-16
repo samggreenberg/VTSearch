@@ -7264,9 +7264,6 @@
             "nullable": true,
             "type": "number"
           },
-          "detectors_dir": {
-            "type": "string"
-          },
           "enable_achievements": {
             "type": "boolean"
           },
@@ -7299,9 +7296,6 @@
           "panel_pct_right": {},
           "popup_metadata_shown": {},
           "popup_preview_size": {},
-          "saved_datasets_dir": {
-            "type": "string"
-          },
           "show_animations": {
             "enum": [
               "show",
@@ -15917,7 +15911,7 @@
         ]
       },
       "put": {
-        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400 and\nleave every key in the body unchanged.",
+        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / an unknown media type, embedder\nor exporter) raise 400 and leave every key in the body unchanged.\nServer-tier keys are not in the schema, so they are dropped like any\nunknown key: no user can set one through this route (or through an\nimport or a sync; see :func:`vtsearch.settings.plan_user_write`).",
         "operationId": "update_settings",
         "requestBody": {
           "content": {
@@ -15941,7 +15935,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Setter-level validation failure (range, one-of, path traversal)."
+            "description": "Setter-level validation failure (range, one-of, unknown media type / embedder / exporter)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
