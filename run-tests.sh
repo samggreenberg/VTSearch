@@ -118,8 +118,9 @@ _self="$(pwd)/$(basename "$0")"
 # Memory headroom check.
 #
 # The gates in this script are the memory-hungry part of the repo, not pytest:
-# `pyright` runs under node with a ~1.8 GB default heap, and the Angular
-# `build:prod` wants a comparable amount. On a small machine the run does not
+# `pyright` runs under node and peaks around 5.4G RSS on one thread (it takes
+# a second thread only when 12G is free; see stage 3), and the Angular
+# `build:prod` is node too and also memory-hungry. On a small machine the run does not
 # fail cleanly — node aborts with "Ineffective mark-compacts near heap limit",
 # or the kernel's OOM killer takes whatever it likes, including the shell that
 # launched the run. That is not hypothetical either: a 3 GB box died this way
@@ -135,7 +136,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
         echo "============================================================"
         echo "LOW MEMORY: ${_mem_avail_gb}G available; a full run wants ~6G"
         echo ""
-        echo "pyright (node, ~1.8G heap) and the Angular build are what need"
+        echo "pyright (node, ~5.4G peak) and the Angular build are what need"
         echo "it. Below this they tend to die as an OOM kill rather than a"
         echo "test failure, and can take the session with them."
         echo ""
@@ -727,18 +728,27 @@ fi
 # ends the run in ~2.5min instead of being printed after pytest; see the
 # staging note at the top for the measurements.
 #
-# `--threads 2`, not more: on a 4-vCPU box pyright took ~200s single-threaded,
-# 86-117s on 2 threads and 110-188s on 4. Measured, not derived; re-measure
-# before changing it on a bigger box.
+# Two threads when there is memory for them, one otherwise. On a 4-vCPU box
+# pyright took ~200s on one thread, 86-117s on two and 110-188s on four, so
+# two is the most worth having. But each thread holds its own copy of the
+# program: peak RSS was ~5.4G on one thread and ~9.6G on two. Below 12G
+# available a second thread risks an OOM kill (see the memory check at the
+# top), and a slow pass beats a dead one. Measured, not derived; re-measure
+# before changing either number.
 #
 # The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
 # pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
 # pull.
 # ---------------------------------------------------------------------------
 if $_run_whole_repo_gates; then
-    echo "Checking types (pyright)..."
+    _pyright_threads=1
+    if [[ -r /proc/meminfo ]] \
+        && awk '/^MemAvailable:/ {exit !($2 >= 12 * 1048576)}' /proc/meminfo; then
+        _pyright_threads=2
+    fi
+    echo "Checking types (pyright, $_pyright_threads thread(s))..."
     _pyright_start=$SECONDS
-    if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright --threads 2; then
+    if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright --threads "$_pyright_threads"; then
         _blocked "pyright found type errors"
         exit 1
     fi
