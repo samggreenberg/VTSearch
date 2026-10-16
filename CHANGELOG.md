@@ -1016,6 +1016,12 @@ not list every commit. Use `git log` for the full history.
   the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
   the poll had slowed. A read now applies only when no newer read has already been applied.
 
+- **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
+  original file, but the server labelled every one `audio/wav` and offered it for download as
+  `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
+  `.wav` and a strict client could refuse it. The type and file extension now come from the file itself;
+  clips cut from a sound are WAV and still say so.
+
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
   import did not record them. Whenever a label was rebuilt from its source file (training from a saved
