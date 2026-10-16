@@ -12,6 +12,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
+  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
+  same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
+  through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
+  which keeps its behaviour), and the result is served only if it still hashes to the trail's last
+  `content_hash`. `lazy_original_bytes` replays the trail before its first cleaner and checks it against
+  the new `original_hash` trail key, which the gate that takes the `original_*` snapshot now records
+  (`original_hash(trail)` / `pre_clean_steps(trail)` read it). These recipes are exclusive
+  (`recipe_is_exclusive`): `MediaType._resolve_media_bytes` / `_resolve_media_string` return nothing when
+  the replay no longer matches, never the source file; `_resolve_media_string` now consults lazy recipes
+  at all. `has_original_payload` is also true for such a unit (`has_lazy_original`).
+  `_relazify_reference_clips_stage` drops a cleaned unit's payload and snapshot only after a dry run
+  rebuilds both byte for byte. The embed and side-channel back-fill passes hand embedders
+  `embed_view(media)`, which resolves a lazy unit's payload from its recipe instead of exposing its
+  `media_path`. `_ByteBoundedLRU.put` takes an optional `nbytes`. Additive for plugins: a cleaner that is
+  not deterministic only keeps its units materialized.
+
 - **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
   #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
   `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model

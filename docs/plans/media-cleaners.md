@@ -66,8 +66,6 @@ cropping (can eat context the detector needs), audio noise reduction
 
 <!-- item-sep -->
 
-- [ ] #4992 — Let a thin import keep only a recipe for cleaned items (Opus)
-
 <!-- item-sep -->
 
 - [ ] #4993 — Show a video unit's letterbox crop in the player (Sonnet)

@@ -25,6 +25,7 @@ from vtscore.embedding.media_vectors import (
     set_media_embedding,
 )
 from vtscore.embedding.precomputed import require_dim
+from vtscore.media.lazy_clip import embed_view
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
@@ -325,7 +326,9 @@ def _run_embed_pass(
     who = f"The {_embedder_label(emb)} embedder"
     missing_ids = [mid for mid, _ in missing]
 
-    inputs = [m for _, m in missing]
+    # A lazy unit (a reference clip, a cleaned unit) is handed over as a view
+    # that resolves its own payload: its ``media_path`` names the whole source.
+    inputs = [embed_view(m) for _, m in missing]
     try:
         with emb.progress_scope(on_progress):
             vectors = emb.embed_media_bulk(inputs)
@@ -414,7 +417,7 @@ def _run_backfill_pass(
         return
     try:
         with emb.progress_scope(on_progress):
-            outputs = forward(inputs)
+            outputs = forward([embed_view(m) for m in inputs])
     except Exception:
         logging.getLogger(__name__).exception(fail_message, media_type, len(inputs))
         outputs = [None] * len(inputs)

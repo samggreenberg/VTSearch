@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
 - **Transcribing audio and reading text from images load their model once, not once per file** (issue
   #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
   they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for

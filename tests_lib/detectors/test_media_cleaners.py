@@ -785,26 +785,51 @@ class TestApplyClipperStageWithCleaners:
         assert params["clipper"] == "text_default"
         assert clips[1]["media_string"] == "HELLO"
 
-    def test_cleaned_reference_media_keeps_its_bytes(self, registered_cleaners):
-        """Re-lazifying a cleaned item would serve and re-embed the *uncleaned*
-        source: lazy_clip has no recipe that reproduces a cleaner's output."""
+    def test_cleaned_reference_media_keeps_only_a_recipe(self, registered_cleaners, tmp_path):
+        """A cleaned item goes back to a reference once its trail, replayed from
+        the source, rebuilds both the cleaned payload and the Original; it then
+        serves the *cleaned* text, never the source file it points at."""
+        import vtscore.media as media_registry
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips, has_original_payload
         from vtscore.datasets.stages.clipper import _relazify_reference_clips_stage
         from vtscore.state import DatasetContext
 
+        src = tmp_path / "doc_1.txt"
+        src.write_text("hello", encoding="utf-8")
+        clips = {1: _make_text_media(1, "hello")}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "text_test_upper", "params": {}}])
+        cleaned = clips[1]
+        cleaned["_lazy_source"] = str(src)
         ctx = DatasetContext("cleaner-relazify-test")
-        cleaned = _make_text_media(1, "HELLO")
-        cleaned["original_media_string"] = "hello"
-        cleaned["_lazy_source"] = "/data/text/doc_1.txt"
-        plain = _make_text_media(2, "world")
-        plain["_lazy_source"] = "/data/text/doc_2.txt"
-        ctx.medias.update({1: cleaned, 2: plain})
+        ctx.medias.update(clips)
 
         _relazify_reference_clips_stage(ctx)
 
-        assert cleaned["media_string"] == "HELLO"
         assert "_lazy_source" not in cleaned
-        assert plain["media_string"] is None
-        assert plain["media_path"] == "/data/text/doc_2.txt"
+        assert cleaned["media_string"] is None
+        assert "original_media_string" not in cleaned
+        assert has_original_payload(cleaned)
+        assert media_registry.get("text")._resolve_media_string(cleaned) == "HELLO"
+
+    def test_cleaned_reference_media_keeps_its_bytes_when_the_replay_cannot_run(self, registered_cleaners):
+        """With no readable source the dry run cannot rebuild the payload, and
+        dropping it would lose the only copy - so the item keeps both."""
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.datasets.stages.clipper import _relazify_reference_clips_stage
+        from vtscore.state import DatasetContext
+
+        clips = {1: _make_text_media(1, "hello")}
+        apply_chain_to_clips(clips, [{"kind": "cleaner", "name": "text_test_upper", "params": {}}])
+        cleaned = clips[1]
+        cleaned["_lazy_source"] = "/data/text/doc_1.txt"
+        ctx = DatasetContext("cleaner-relazify-test")
+        ctx.medias.update(clips)
+
+        _relazify_reference_clips_stage(ctx)
+
+        assert "_lazy_source" not in cleaned
+        assert cleaned["media_string"] == "HELLO"
+        assert cleaned["original_media_string"] == "hello"
 
 
 # ---------------------------------------------------------------------------

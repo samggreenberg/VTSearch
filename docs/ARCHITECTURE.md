@@ -1180,13 +1180,37 @@ nothing. In single-user / no-auth mode it is a pass-through, matching
 `get_file_access_base_dir`. The network-side twin of that guard is
 `fetch_validated_url`, which `media_url` fetches go through for the same reason.
 
-Clippers on reference parents transiently hydrate the parent's bytes from its
-source file (tagging it with `_lazy_source`), clip as normal, then re-lazify
-the resulting clips back to references (`vtscore/datasets/stages/clipper.py`);
-converter chains re-lazify similarly via a byte-bounded LRU cache
-(`vtscore/media/lazy_clip.py`). A chain that mixes a converter and a clipper,
-and the demo-dataset / standalone-PDF conversion paths, still fall back to
-full materialization rather than lazy resolution.
+Clippers and cleaners on reference parents transiently hydrate the parent's
+payload from its source file (tagging it with `_lazy_source`; audio, image and
+text), clip and clean as normal, then re-lazify the resulting units back to
+references (`vtscore/datasets/stages/clipper.py`); converter chains re-lazify
+similarly via a byte-bounded LRU cache (`vtscore/media/lazy_clip.py`). A chain
+that mixes a converter and a clipper, and the demo-dataset / standalone-PDF
+conversion paths, still fall back to full materialization rather than lazy
+resolution. Text clips stay materialized too: they have no slice recipe, and
+text is small.
+
+A unit some cleaner rewrote (a silence trim, an edge trim, a whitespace pass)
+is no slice of its source, so its recipe is its whole chain trail
+(`origin.params['clipper_chain']`): `lazy_clip` reloads the source exactly as
+the import hydrated it, re-runs every recorded step through
+`clipper_chain.replay_chain_on_media`, and serves the result only while its
+content hash equals the one the trail recorded. Its "Original" is the same
+trail cut before the first cleaner (for a sub-clip that is the pre-clean clip,
+not the source file), checked against the `original_hash` the snapshotting gate
+recorded. The import drops a cleaned unit's payload and `original_*` snapshot
+only after a dry run of both replays reproduces them byte for byte; otherwise
+the unit keeps both, as before. These recipes are exclusive: when the source is
+edited after import, or a library upgrade changes a re-encode, the unit and its
+Original serve **nothing** (a 404, and a logged warning naming the file) rather
+than falling through to the edited or uncleaned source. A sibling memo keeps the
+replay of N cleaned tiles of one recording to one tiling of it.
+
+Anything that embeds a lazy unit after import — a detector whose embedder the
+dataset lacks, a side-channel back-fill — is handed `lazy_clip.embed_view(media)`
+instead of the media: a copy whose payload resolves from the recipe on read and
+which carries no `media_path`, since every embedder falls back to that path and
+for a lazy unit it names the whole source.
 
 ### LabelSet (`vtscore/datasets/labelset.py`)
 
