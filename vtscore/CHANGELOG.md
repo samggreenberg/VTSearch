@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue
+  #4976). The worker used to skip binding a context its `dataset_id` / `detector_id` no longer resolved to
+  and run the target anyway, so a job parked while its dataset was unloaded computed over the empty
+  fallback context, ended `done` and was cached for its signature. It now ends `status = "error"` with
+  `job.error` naming the missing context (`"dataset <id> is no longer loaded"`), never runs the target,
+  and still promotes the pending slot. New keyword `JobManager(..., binds_context=True)`: a manager whose
+  targets name every context they touch, using the ids only as a tag, passes `False` to bind nothing and
+  require nothing. `archive_thumbnail_jobs` does, since its sweep warms every loaded dataset.
+
+  **For library consumers:** a job started under ids that name no registered context now errors rather
+  than running unbound. Register the contexts first, omit the ids, or build the manager with
+  `binds_context=False`.
+
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
   `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
