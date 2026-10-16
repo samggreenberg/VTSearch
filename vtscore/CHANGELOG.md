@@ -1917,6 +1917,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`ratio_test_matches(..., cache=True)` caches nothing on a CPU** (issue #4941). The #4469 cache
+  checks each entry by a weak reference to its numpy array, but on a CPU the stored tensor is a view
+  that holds that array, so the reference never expired and the cache pinned up to
+  `DEVICE_DESCRIPTOR_LIMIT_BYTES` (4 GiB) of dropped descriptor arrays. A CPU has no upload to save,
+  so `_stored_descriptors` returns the plain view there; the values are the same. A rebuilt
+  `structural_stage1` tile matrix now calls `release_device_descriptors()` on every device, where only
+  the CUDA scorer did, so an MPS session drops the old page set's descriptors too.
+
 - **Stable no longer counts a balance change as flips** (issue #4745).
   `vtscore.detectors.labeling_progress.inject_live_model` takes `beta=`, the
   balance its `threshold` was drawn at (default `None`, for a caller with

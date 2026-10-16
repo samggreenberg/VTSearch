@@ -27,7 +27,13 @@ from typing import Any, NamedTuple, Optional, Sequence
 
 import numpy as np
 
-from vtscore.media.structural import DEFAULT_MIN_INLIERS, MatchStats, StructuralFeatures, StructuralMatcher
+from vtscore.media.structural import (
+    DEFAULT_MIN_INLIERS,
+    MatchStats,
+    StructuralFeatures,
+    StructuralMatcher,
+    release_device_descriptors,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -124,6 +130,7 @@ def _tile_matrix(snap: dict[Any, dict]) -> tuple[list[Any], np.ndarray, np.ndarr
     _MATRIX_CACHE.clear()  # one dataset at a time: the matrix is large
     _GPU_CACHE.clear()  # its device copy goes with it (the key is the matrix's id)
     _CPU_CACHE.clear()  # and so does its float32 copy
+    release_device_descriptors()  # the old pages' cached candidate descriptors, on any device (#4941)
     entry = (ids, matrix, starts)
     _MATRIX_CACHE[key] = entry
     return entry
@@ -207,8 +214,6 @@ def _gpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -
         if _GPU_CACHE.get("key") != key:
             _GPU_CACHE.clear()
             # A new matrix is a new page set: the cached candidate descriptors (#4469) belong to the old one.
-            from vtscore.media.structural import release_device_descriptors  # noqa: PLC0415
-
             release_device_descriptors()
             # Hand the previous matrix (and anything else cached but unused) back to the device first:
             # memory PyTorch's allocator holds does not count as free, and on a 32 GB card that

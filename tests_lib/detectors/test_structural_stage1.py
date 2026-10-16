@@ -204,6 +204,19 @@ class TestTiledStage1:
         snap[0] = dict(snap[0], tile_vectors=snap[1]["tile_vectors"])  # a reload swaps objects
         assert s1._tile_matrix(snap) is not first
 
+    def test_a_new_page_set_releases_the_cached_candidate_descriptors(self, tiled):
+        # #4941: only the CUDA scorer released them, so off CUDA the old dataset's pages stayed cached.
+        from vtscore.media import structural
+
+        snap = tiled(4)
+        s1._tile_matrix(snap)
+        page = np.zeros((10, SIFT_DESCRIPTOR_DIM), dtype=np.uint8)
+        structural._stored_descriptors(page, "meta", cache=True)  # a device that is not the CPU
+        s1._tile_matrix(snap)  # the same pages: nothing changes
+        assert structural._DEVICE_DESCRIPTORS
+        s1._tile_matrix(tiled(3))
+        assert not structural._DEVICE_DESCRIPTORS and structural._DEVICE_DESCRIPTOR_BYTES[0] == 0
+
 
 class TestVerificationCache:
     def test_a_new_vote_verifies_only_its_own_template(self):

@@ -928,6 +928,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
+  To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between
+  retrains (issue #4469). Without a GPU there was nothing to copy, but the cache still kept each page's
+  descriptors alive after the page's features were dropped. A long session, or a switch to another
+  collection, could leave up to 4 GB of memory held. Without a GPU nothing is cached now, at no cost in
+  speed. With one, the cache is emptied whenever the collection's pages change, on an Apple GPU as well
+  as on CUDA.
+
 - **The server no longer crashes on newer AMD CPUs with numpy 2.5.2 or later** (issue #4938). The server
   pins OpenBLAS to its Haswell kernels on every x86 machine (issue #4481). The OpenBLAS bundled with numpy
   2.5.2 and later re-tunes that pin on an AMD Zen 4 or Zen 5 CPU (EPYC 9004/9005, Ryzen 7000/9000). A
