@@ -269,6 +269,39 @@ class TestFaceLabels:
         subject = next(k for k in plain if not k & mod.EXTRA_BIT)
         assert plain[subject]["media_bytes"] != rolled[subject]["media_bytes"]
 
+    def test_a_sideways_arm_pairs_with_the_roll_arm(self, mod, pc, release, converter, monkeypatch):
+        """``sideways`` (#4788) may change a face's landmarks, never which faces are kept or their ids."""
+        photos = sorted(mod.read_photos(release), key=lambda p: p.pid)
+
+        class _Plain:
+            """Each photo's annotated face and a stray, upright landmarks; no face in any turned copy."""
+
+            def __init__(self):
+                self.order = list(photos)
+
+            def detect(self, img, landmarks=False):
+                if img.size[0] < img.size[1]:  # a turned copy of a landscape photo
+                    return None, [None], None
+                p = self.order.pop(0)
+                x0, y0, x1, y1 = p.face
+                pts = np.asarray([[x0 + 0.3 * (x1 - x0), y0 + 0.4 * (y1 - y0)], [x0 + 0.7 * (x1 - x0), y0 + 0.4 * (y1 - y0)],
+                                  [x0 + 0.5 * (x1 - x0), y0 + 0.6 * (y1 - y0)], [x0 + 0.35 * (x1 - x0), y0 + 0.8 * (y1 - y0)],
+                                  [x0 + 0.65 * (x1 - x0), y0 + 0.8 * (y1 - y0)]])  # fmt: skip
+                return [list(p.face), [150, 100, 190, 140]], [0.99, 0.9], np.stack([pts, pts + [130, 70]])
+
+        built = {}
+        for name, extra in (("fhibe_faces_t_roll", {}), ("fhibe_faces_t_side", {"sideways": True})):
+            spec = {"boxed": False, "kind": "fhibe", "long_side": 200, "media_type": "face", "align": "roll", **extra}
+            monkeypatch.setitem(pc.DATASETS, name, spec)
+            det = _Plain()
+            monkeypatch.setattr(converter, "_make_detector", lambda det=det: det)
+            built[name] = {}
+            mod.load(name, built[name], "face")
+        roll, side = built["fhibe_faces_t_roll"], built["fhibe_faces_t_side"]
+        assert set(roll) == set(side)
+        # No turned copy found a face, so every crop is the roll arm's own.
+        assert all(roll[k]["media_bytes"] == side[k]["media_bytes"] for k in roll)
+
     def test_every_aligned_dataset_names_a_mode_image2face_has(self, pc):
         from vtscore.converters.image2face import ALIGN_MODES
 

@@ -119,7 +119,7 @@ automatically.
 | `audio2image`    | `Audio2ImageMediaConverter`    | audio → image    | `spectrogram_type`, `n_mels`, `time_window_s`, `colormap` | `librosa` + `matplotlib` |
 | `audio2text`     | `Audio2TextMediaConverter`     | audio → text     | `model_size`, `language` | `openai-whisper` (`import whisper`) |
 | `image2text`     | `Image2TextMediaConverter`     | image → text     | `language`, `threshold` | PaddleOCR |
-| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align` | `facenet-pytorch` (MTCNN), opt-in |
+| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align`, `sideways` | `facenet-pytorch` (MTCNN), opt-in |
 | `video2image`    | `Video2ImageMediaConverter`    | video → image    | `n_clips` / `seconds_per_frame` (mutually clearing) | `vtscore.media.video.decode` |
 | `video2audio`    | `Video2AudioMediaConverter`    | video → audio    | `ffmpeg_timeout` | FFmpeg |
 | `document2image` | `Document2ImageMediaConverter` | document → image | - | PyMuPDF (`agpl` extra) |

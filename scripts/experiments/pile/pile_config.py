@@ -177,6 +177,20 @@ DATASETS: dict[str, dict] = {
         for tag, align in (("roll", "roll"), ("sim", "similarity"))
         for size in (1024, 640)
     },
+    # `roll` plus image2face's `sideways` search (#4788): the same faces and boxes, each face's
+    # landmarks from the quarter turn MTCNN is most confident of. Pairs with `fhibe_faces_roll_*`.
+    **{
+        f"fhibe_faces_side_{size}": {
+            "boxed": False,
+            "kind": "fhibe",
+            "long_side": size,
+            "media_type": "face",
+            "align": "roll",
+            "sideways": True,
+            "on_request": True,
+        }
+        for size in (1024, 640)
+    },
     # `coco_better`'s construction on a second source (#4815): the same *C*, the
     # same three bands and the same shared-pool rule, drawn from Objects365 v2's
     # validation split instead of COCO. It exists to CONFIRM method comparisons

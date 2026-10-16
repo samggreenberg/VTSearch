@@ -33,7 +33,9 @@ detector's raw box (padding is applied after, exactly as ``image2face`` does):
 ``image2face``'s own ``align`` (``none`` when unset), so ``fhibe_faces_roll_*``
 and ``fhibe_faces_sim_*`` are the same detections, ids and labels as
 ``fhibe_faces_*``, cropped turned upright. Only the pixels differ, so the arms
-pair cell for cell.
+pair cell for cell. ``sideways`` (#4788) is ``image2face``'s too: each face's
+landmarks may come from a quarter-turned copy, while the faces and boxes stay
+the plain pass's, so ``fhibe_faces_side_*`` pairs the same way.
 
 A photo whose subject MTCNN missed yields no subject crop, so the crop arm's
 identity scores are conditional on finding the face. The census's per-band hit
@@ -242,7 +244,7 @@ def photo_media(p: Photo, data: bytes, size: tuple[int, int], embedder_name: str
 
 
 def face_crops(
-    converter, img, p: Photo, scale: float, align: str = "none"
+    converter, img, p: Photo, scale: float, align: str = "none", sideways: bool = False
 ) -> tuple[dict | None, list[tuple[bytes, int, int]], int]:
     """``(subject_crop, extra_crops, n_dropped)`` from the app's ``image2face`` on *img*.
 
@@ -255,7 +257,8 @@ def face_crops(
     """
     from vtscore.converters.image2face import crop_face  # noqa: PLC0415
 
-    threshold, padding, min_size, align = converter._resolve_params({"align": align})
+    params = converter._resolve_params({"align": align, "sideways": "true" if sideways else "false"})
+    threshold, padding, min_size, align = params.threshold, params.padding, params.min_size, params.align
     detector = converter._make_detector()
     if detector is None:
         raise SystemExit("fhibe: image2face has no MTCNN (facenet-pytorch missing); refusing to build an empty arm")
@@ -263,6 +266,8 @@ def face_crops(
     kept = converter._kept_faces(detector.detect(img, landmarks=True), w, h, threshold, padding, min_size)
     if not kept:
         return None, [], 0
+    if params.sideways:
+        kept = converter._sideways_landmarks(detector, img, kept)
     face = [c * scale for c in p.face]
     scored = [(iou(face, list(k.raw)), k) for k in kept]
     scored.sort(key=lambda t: (-t[0], -t[1].conf))
@@ -305,6 +310,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     copies = stage(root, photos, long_side)
     faces = spec.get("media_type") == "face"
     align = spec.get("align", "none")
+    sideways = bool(spec.get("sideways", False))
     converter = None
     if faces:
         from vtscore.converters.image2face import CONVERTER as converter  # noqa: PLC0415, N811
@@ -318,7 +324,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
             if not faces:
                 medias[p.pid] = photo_media(p, data, size, embedder_name)
                 continue
-            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width, align)
+            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width, align, sideways)
         if subject is not None:
             medias[p.pid] = face_media(p.pid, subject, p.subject, p, embedder_name)
             found += 1
@@ -330,7 +336,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         dropped += n_drop
     if faces:
         log(
-            f"  fhibe: {dataset} (align {align}): subject found in {found:,} of {len(photos):,} photos "
+            f"  fhibe: {dataset} (align {align}{', sideways' if sideways else ''}): subject found in {found:,} of {len(photos):,} photos "
             f"({missed:,} missed), {extra:,} other faces kept as negatives, {dropped:,} ambiguous dropped"
         )
     else:
