@@ -525,8 +525,9 @@ class TestCrossDatasetClipEmbedding:
         assert len(clip_bytes) < len(wav)
         assert wav_duration(clip_bytes) == 2.0
 
-        again, _ = _apply_clip_and_embed(wav_path, "audio", origin)
-        np.testing.assert_array_equal(embedding, again)
+        again = _apply_clip_and_embed(wav_path, "audio", origin)
+        assert again is not None
+        np.testing.assert_array_equal(embedding, again[0])
         assert not np.array_equal(embedding, embed_file(wav_path, "audio"))
 
     def test_apply_clip_and_embed_image(self, tmp_path):
@@ -562,8 +563,9 @@ class TestCrossDatasetClipEmbedding:
             assert cropped.size == (100, 100)
             assert cropped.convert("RGB").getcolors() == [(100 * 100, (255, 0, 0))]
 
-        again, _ = _apply_clip_and_embed(img_path, "image", origin)
-        np.testing.assert_array_equal(embedding, again)
+        again = _apply_clip_and_embed(img_path, "image", origin)
+        assert again is not None
+        np.testing.assert_array_equal(embedding, again[0])
         assert not np.array_equal(embedding, embed_file(img_path, "image"))
 
     def test_apply_clip_and_embed_text(self, tmp_path):
@@ -589,8 +591,9 @@ class TestCrossDatasetClipEmbedding:
         self._assert_embedding(embedding)
         assert clip_bytes == b"Second sentence."
 
-        again, _ = _apply_clip_and_embed(text_path, "text", origin)
-        np.testing.assert_array_equal(embedding, again)
+        again = _apply_clip_and_embed(text_path, "text", origin)
+        assert again is not None
+        np.testing.assert_array_equal(embedding, again[0])
         assert not np.array_equal(embedding, embed_file(text_path, "text"))
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
