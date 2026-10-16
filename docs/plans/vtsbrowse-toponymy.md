@@ -96,12 +96,18 @@
 
 <!-- item-sep -->
 
-- **Captioner total-failure cache staleness** — when a captioner is enabled but
-  its model can't load at all, `FallbackTextProvider` serves tags for every
-  item yet stamps them under the *captioner* signature, so a later run with the
-  model repaired won't recompute (the signature still matches). Acceptable
-  best-effort for now; revisit alongside the "Post-hoc text persistence"
-  follow-up if captioner adoption makes it bite.
+- **Captioner-failure cache staleness** — when a captioner is enabled but its
+  model can't load, `FallbackTextProvider` serves tags for every item (and for
+  any single item that won't decode, even when the model loads), yet stamps
+  them with the composite signature (`<captioner>|fallback=<tags>`), which does
+  not record which half produced an item. So a later run with the model
+  repaired won't recompute: the signature still matches. The persisted region
+  labels carry the same signature (`signpost_prep.py`), so recomputing the
+  texts alone would not rebuild the signs, and letting degraded texts miss the
+  cache means every build retries a model load that may fail slowly offline;
+  that retry policy is the real decision. Acceptable best-effort for now;
+  revisit alongside the "Post-hoc text persistence" follow-up if captioner
+  adoption makes it bite.
 
 <!-- item-sep -->
 

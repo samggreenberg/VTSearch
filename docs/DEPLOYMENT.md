@@ -158,6 +158,11 @@ never runs. Setting `VTSEARCH_SERVER_INIT=1` tells `app.py` to also run
 `initialize_server()` at import time. The Dockerfiles set this env var
 automatically.
 
+It applies only when `app.py` is imported. Under `python app.py` the
+variable is ignored, because the `__main__` block already decides whether a
+server starts. So a `python app.py --autodetect` run inside a container
+stays headless even though the image sets the variable for every process.
+
 ### `gunicorn.conf.py`
 
 The bundled config pins a single worker with 8 gthread threads:

@@ -660,3 +660,28 @@ A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it
 When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — both sides are still pinned — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
 
 Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.
+
+## Re-measuring a decision taken on an older metric
+
+The objective has changed under the studies more than once, and it will again. Until late September 2026 every detector decision was read on `cost = w_fp · FPR + w_fn · FNR` (`inclusion_cost_weights` in `vtscore/training/thresholds/knobs.py`), nearly always at Inclusion 0, so at `FPR + FNR`, as a paired Δcost against a 0.01 tolerance. The preference then became a precision floor (#4224, #4269, #4272) and, on 2026-10-01, an F-beta balance (#4413; presets 1/4, 1 and 4 since #4448). Since #4427 the objective is **the F-beta, at the preset's beta, of the withheld half above the threshold the app holds**, and since #4452 that threshold is the labels line ([`ML.md`](ML.md#threshold-calibration)).
+
+#4581 asked which Cost-era decisions would have gone differently on F-beta. [#4582's re-scoring](experiments/2026-10-06-cost-fbeta-rescore-4582/REPORT.md) holds the answer one decision at a time; the ones it handed on were rerun as [#4583](experiments/2026-10-07-calsplit-4583/REPORT.md), [#3546](experiments/2026-10-07-acquisition-cut-3546/REPORT.md) and [#4359](experiments/2026-10-07-smart-bound-4359/REPORT.md). The rules below are what that pass settled, written for the next metric change.
+
+### What decides whether a decision is owed a re-measurement
+
+A decision taken on an older metric is owed a run on the current objective when both hold:
+
+1. **It is still on the shipped path.** A rule that only ever placed something the app has since stopped using is retired, not re-measured. At the Cost → F-beta switch, every rule that only placed the *line* (the GMM midpoint, the blend, the fused rank transfer) was retired by #4452's labels line, and the [F1 ladder](experiments/2026-10-05-ladder-fbeta-4519/REPORT.md) had already read them. What survived was whatever the labels line still reads (the calibration folds), whatever the fused estimator still feeds (acquisition, the Smart light, the no-class-model fallback), and the opening.
+2. **What it moved is where a cut lands or what gets asked**, not ranking quality alone. A verdict read on oracle cost, AUROC or AP agrees with any monotone metric and is settled. A verdict whose ship rule was a cost tolerance, or whose gain was an FNR drop against flat FPR (a lower cut), is the kind F-beta re-weighs, and at three betas it can re-weigh three ways.
+
+Numerical choices (EM tolerances, solver settings) and data, infrastructure and timing studies move no cut, so they are settled by construction. So is a study that priced a control the app has retired: the Inclusion-knob studies priced a knob that no longer exists (#4269), and the floor-era rules priced a promise the balance gave up on purpose (#4413).
+
+Two lessons from that switch bound every rerun. The *reading* of a metric decides as much as the metric: #4409 shipped on a rank-count re-draw of the line and was reverted on the threshold the app holds (#4427). And a bench's prevalence is a knob of its own (#4201): the 5% pool made the ladder's midpoint rungs look like progress whatever the metric.
+
+### How a rerun is run
+
+- **The default arm is today's app** ([above](#the-eval-default-arm-is-the-app)): the balance, the labels line, the weak check. Each preset runs its own sessions (`CALIB_BETA` ∈ {0.25, 1, 4}) and is scored at its own beta.
+- **Score the objective**: F-beta of the withheld half above the threshold the app holds, unchecked and after the check, with AP beside it (a cut decision should leave AP alone) and the returned set's size and precision, which is what the user sees. Never a rank-count re-draw of the line.
+- **Bench and pools**: `coco_better`, 144 cells × 5 seeds, 150 clicks, the user's pool at 1% (`CALIB_HAYSTACK_PREVALENCE=0.01`) with the withheld half at the bench's own 0.44%. Where the old decision was taken at another prevalence (several Cost-era ones were at 5 to 7%), add that pool once, so the metric and the prevalence are read apart.
+- **Pair by cell and seed**, same commit for every arm, and size the grid with the objective's σ, not the old metric's. [#4584](experiments/2026-10-07-objective-sigma-4584/README.md) measured it on balance-era pairs and set the defaults `preflight.sh --resolve-delta` sizes with (0.13 / 0.08 / 0.10 at beta 1/4 / 1 / 4). A grid sized on the cost σ (about 0.04 per cell, #3840) resolves two to three times coarser on F-beta than it was meant to.
+- **Re-score before re-running.** Every Cost-era row carries `precision` and `recall`, so F-beta at any beta is derivable from the cells that still exist on `/expscratch`. Do that first and hand only the decisions that flip to a grid; #4582 is the worked example.

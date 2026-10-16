@@ -472,6 +472,14 @@ loading uses - the new dataset is not yet active, so the helper must
 operate on the passed-in `ctx` directly. A fresh context has no votes,
 so unlike `build_coverage_atlas` it replays nothing.
 
+Both builders run the k-means fit outside `_state_lock`. They snapshot
+the medias and `media_revision` under the lock, fit without it, and take
+it again only to install the atlas (and, for `build_coverage_atlas`, to
+replay the votes). If the dataset's medias changed during the fit, the
+atlas is discarded and the build retried once from a fresh snapshot; if
+they change during the retry too, the dataset keeps its current atlas.
+An explicit `media_dict` is installed without that check.
+
 `coverage_atlas_next_sample` accepts an optional `scores` dict
 (typically `DetectorContext.last_learned_scores`). When supplied, the
 picker looks at the node's median score: above the threshold it returns

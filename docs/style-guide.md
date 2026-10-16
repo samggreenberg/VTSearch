@@ -371,7 +371,7 @@ The canonical back-button markup:
 | `.picker-card__title` | `--font-lg`, `--weight-semibold`. The one canonical title size - don't restyle it. |
 | `.picker-card__desc`  | `--font-sm`, `--text-secondary`. |
 
-**Only the card is shared; the container isn't (yet).** `.importer-picker` / `.exporter-picker` name the list wrapper, but the shared rule's responsive grid is currently overridden by every consumer, each of which declares its own `display: flex; flex-direction: column` locally (component-scoped rules win via Angular's encapsulation specificity bump). So set the container layout you actually want in your component SCSS rather than assuming the global one applies. Reconciling the two is tracked in `docs/plans/codebase-audit-2026-08.md`.
+**Only the card is shared; the container isn't (yet).** `.importer-picker` / `.exporter-picker` name the list wrapper, but the shared rule's responsive grid is currently overridden by every consumer, each of which declares its own `display: flex; flex-direction: column` locally (component-scoped rules win via Angular's encapsulation specificity bump). So set the container layout you actually want in your component SCSS rather than assuming the global one applies. Reconciling the two is tracked in #4987.
 
 The form half of a picker modal uses `.importer-form` (flex column, `gap: var(--space-lg)`) wrapping `.form-group` fields (§2.3), with `.back-btn` at the top of the inner view (§2.4 → Back vs Cancel).
 

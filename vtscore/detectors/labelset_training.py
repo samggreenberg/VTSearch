@@ -476,7 +476,7 @@ def populate_label_embeddings(
     # Labels are resolved and embedded in the same space the model-invalidation
     # and re-embed checks key on, so the label cache stays valid across an
     # active-dataset switch that keeps binding the same concrete embedder of the
-    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # detector's type.  See ``docs/ARCHITECTURE.md`` → "Per-detector
     # embedder type".
     embedder_name = keying_embedder_for_snap(det_ctx, snap)
     _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
@@ -833,7 +833,7 @@ def populate_label_local_features(
     # Labels are resolved and embedded in the same space the model-invalidation
     # and re-embed checks key on, so the label cache stays valid across an
     # active-dataset switch that keeps binding the same concrete embedder of the
-    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # detector's type.  See ``docs/ARCHITECTURE.md`` → "Per-detector
     # embedder type".
     embedder_name = keying_embedder_for_snap(det_ctx, snap)
     embedder = None

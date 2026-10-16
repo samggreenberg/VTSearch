@@ -9,8 +9,9 @@ imported (see "Resolution chain for 'active context'" in
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state.core import (
@@ -20,6 +21,11 @@ from vtscore.state.core import (
     get_active_context,
     get_active_detector_context,
 )
+
+if TYPE_CHECKING:
+    from vtscore.coverage.atlas import CoverageAtlas
+
+logger = logging.getLogger(__name__)
 
 # Above this item count the coverage atlas is *not* built automatically at
 # dataset load: hierarchical k-means over millions of vectors costs minutes and
@@ -67,6 +73,77 @@ def resync_coverage_atlas_to_detector(
             atlas.label(cid, good=False)
 
 
+def _fit_coverage_atlas(
+    medias: dict[int, dict[str, Any]],
+    on_progress: Callable[[int, int], None] | None,
+) -> CoverageAtlas | None:
+    """Fit a 3-way Coverage Atlas over *medias*' embeddings.
+
+    Returns ``None`` when no media has an embedding.  Takes no lock and
+    touches no context: this is the expensive hierarchical k-means, so
+    callers snapshot *medias* under ``_state_lock`` and call this outside it.
+    """
+    import numpy as np
+
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
+
+    vectors: dict[int, np.ndarray] = {}
+    for cid, media in medias.items():
+        emb = media_embedding(media)
+        if emb is not None:
+            vectors[cid] = np.asarray(emb, dtype=np.float32)
+
+    if not vectors:
+        return None
+
+    return CoverageAtlas(
+        vectors,
+        k=3,
+        max_depth=auto_max_depth(len(vectors), k=3),
+        on_progress=on_progress,
+    )
+
+
+def _build_and_install_coverage_atlas(
+    ds_ctx: DatasetContext,
+    on_progress: Callable[[int, int], None] | None,
+    *,
+    det_ctx: DetectorContext | None = None,
+    media_dict: dict[int, dict[str, Any]] | None = None,
+) -> None:
+    """Fit an atlas outside ``_state_lock`` and install it on *ds_ctx* under it.
+
+    Same shape as ``get_embedding_matrix``: snapshot the medias and
+    ``media_revision`` under the lock, fit unlocked, then re-take the lock to
+    install the atlas (and replay *det_ctx*'s votes into it, when given).
+    When the fit read *ds_ctx*'s own medias and they changed meanwhile, the
+    atlas describes medias the dataset no longer holds: it is discarded and
+    the build retried once from a fresh snapshot.  A second lost race leaves
+    *ds_ctx*'s current atlas in place.  An explicit *media_dict* is the
+    caller's, so its result is installed without the check.
+    """
+    for _attempt in range(2):
+        with _state_lock:
+            snapshot = dict(media_dict if media_dict is not None else ds_ctx.medias)
+            revision = ds_ctx.media_revision
+
+        atlas = _fit_coverage_atlas(snapshot, on_progress)
+
+        with _state_lock:
+            if media_dict is None and ds_ctx.media_revision != revision:
+                continue
+            ds_ctx.coverage_atlas = atlas
+            if det_ctx is not None:
+                # Replay existing labels so the atlas reflects the current vote state.
+                resync_coverage_atlas_to_detector(ds_ctx, det_ctx)
+            return
+
+    logger.info(
+        "Discarded the coverage atlas for dataset %s: its medias changed during both builds",
+        ds_ctx.dataset_id,
+    )
+
+
 def build_coverage_atlas(
     media_dict: dict[int, dict[str, Any]] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
@@ -80,34 +157,17 @@ def build_coverage_atlas(
 
     *on_progress*, when provided, is called as ``on_progress(current, total)``
     to report how many k-means clustering fits have been completed so far.
+
+    The k-means fit runs without ``_state_lock``, which is taken only to
+    snapshot the medias and to install the result, so other requests are not
+    blocked for the length of the build.  If the dataset's medias change during
+    the fit, the build is retried once (*on_progress* counts from zero again);
+    if they change during that one too, the dataset keeps its current atlas.
     """
-    import numpy as np
-
-    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
-
     with _state_lock:
         ds_ctx = get_active_context()
-        source = media_dict if media_dict is not None else ds_ctx.medias
-        vectors: dict[int, np.ndarray] = {}
-        for cid, media in source.items():
-            emb = media_embedding(media)
-            if emb is not None:
-                vectors[cid] = np.asarray(emb, dtype=np.float32)
-
-        if not vectors:
-            ds_ctx.coverage_atlas = None
-            return
-
-        atlas = CoverageAtlas(
-            vectors,
-            k=3,
-            max_depth=auto_max_depth(len(vectors), k=3),
-            on_progress=on_progress,
-        )
-        ds_ctx.coverage_atlas = atlas
-
-        # Replay existing labels so the atlas reflects the current vote state.
-        resync_coverage_atlas_to_detector(ds_ctx, get_active_detector_context())
+        det_ctx = get_active_detector_context()
+    _build_and_install_coverage_atlas(ds_ctx, on_progress, det_ctx=det_ctx, media_dict=media_dict)
 
 
 def build_coverage_atlas_for_context(
@@ -118,33 +178,11 @@ def build_coverage_atlas_for_context(
 
     Unlike :func:`build_coverage_atlas` this does not touch the active
     context - it operates entirely on *ctx*.  Used by parallel dataset
-    loading where the new dataset is not yet active.
+    loading where the new dataset is not yet active.  It builds outside
+    ``_state_lock`` and handles a media change during the fit the same way.
     """
-    import numpy as np
-
-    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
-
-    with _state_lock:
-        medias_snapshot = dict(ctx.medias)
-
-    vectors: dict[int, np.ndarray] = {}
-    for cid, media in medias_snapshot.items():
-        emb = media_embedding(media)
-        if emb is not None:
-            vectors[cid] = np.asarray(emb, dtype=np.float32)
-
-    if not vectors:
-        ctx.coverage_atlas = None
-        return
-
-    atlas = CoverageAtlas(
-        vectors,
-        k=3,
-        max_depth=auto_max_depth(len(vectors), k=3),
-        on_progress=on_progress,
-    )
-    ctx.coverage_atlas = atlas
     # Fresh context has no votes - nothing to replay.
+    _build_and_install_coverage_atlas(ctx, on_progress)
 
 
 def build_coverage_atlas_serializable(
@@ -160,26 +198,8 @@ def build_coverage_atlas_serializable(
     want to cache the atlas at creation so reloads restore it instead of
     paying the hierarchical-k-means rebuild every time.
     """
-    import numpy as np
-
-    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
-
-    vectors: dict[int, np.ndarray] = {}
-    for cid, media in medias.items():
-        emb = media_embedding(media)
-        if emb is not None:
-            vectors[cid] = np.asarray(emb, dtype=np.float32)
-
-    if not vectors:
-        return None
-
-    atlas = CoverageAtlas(
-        vectors,
-        k=3,
-        max_depth=auto_max_depth(len(vectors), k=3),
-        on_progress=on_progress,
-    )
-    return atlas.to_serializable()
+    atlas = _fit_coverage_atlas(medias, on_progress)
+    return atlas.to_serializable() if atlas is not None else None
 
 
 def restore_coverage_atlas_from_cache(ctx: DatasetContext, cached: object) -> bool:

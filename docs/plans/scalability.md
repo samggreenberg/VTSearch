@@ -310,10 +310,7 @@ embedder. Shares the S11 approach.
 
 <!-- item-sep -->
 
-- **Frontend "Build coverage atlas" button:** surface a trigger for
-  `POST /api/datasets/registry/<id>/coverage-atlas` when a loaded dataset has no
-  tree (auto-build is skipped above 50 k). No dataset/tree-status panel hosts it
-  today, so it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
+- [ ] #4995 — Add a "Build coverage atlas" control to the dataset Stats window (Sonnet)
 
 <!-- item-sep -->
 
