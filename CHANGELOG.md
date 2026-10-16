@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
 - **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
   #4736 a session started from a typed description was meant to keep the description's text ranking behind
   the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps

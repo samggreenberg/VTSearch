@@ -10,6 +10,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
+  #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
+  `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
+  before loading the next, and a failed load is not cached. The slot's lock is held across inference as
+  well as the load, because the module-level `CONVERTER` singleton runs on every dataset-load thread and
+  neither engine runs two inferences at once on one model. The private `_make_paddleocr` now takes the
+  resolved device instead of resolving it.
+
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
   `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
