@@ -1295,12 +1295,14 @@ def _load_importer_chunked(
 def _check_multi_output(importer: Any) -> None:
     """Refuse an ``outputs`` list for an importer that makes one dataset per run.
 
-    The same two conditions the Add Dataset form's *Multi-Dataset* box checks
+    The rule the Add Dataset form's *Multi-Dataset* box reads
     (``supports_multi_output`` in the importer's listing): the importer has not
     opted out, and it declares a ``media_type`` field for the outputs to
     multiply.
     """
-    if not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields):
+    from vtscore.datasets.importers.base.core import _supports_multi_output  # noqa: PLC0415
+
+    if not _supports_multi_output(importer):
         raise ValueError(
             f"Importer {importer.name!r} produces one dataset per run; it does not accept an outputs list."
         )

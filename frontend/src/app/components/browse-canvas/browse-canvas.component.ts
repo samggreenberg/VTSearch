@@ -145,7 +145,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * the colormap's dedicated one-item colour (`single`) painted as a hard-edged
    * (sharp-cornered) rectangle, so a lone item reads as "exactly one" and stands
    * out against the background. ``0`` disables both (cells fall back to the faint
-   * dark separator). Only takes effect in {@link thumbnailMode} (image/video).
+   * dark separator). Only takes effect in {@link thumbnailMode} (every type with a thumbnail).
    */
   readonly thumbnailBorder = input(0);
   /**
@@ -1026,7 +1026,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // canvas (free), and the extra ring is re-rendered from the source level's
     // bins, painting whatever the off-view prefetch already warmed: cached
     // thumbnails in thumbnail mode, colour-mapped hexes in flat-density mode
-    // (audio/text). Both come straight from the tile cache, so the ring fills the
+    // (text). Both come straight from the tile cache, so the ring fills the
     // margin for every media type rather than only thumbnail ones. The shrunk
     // blit then covers the canvas with real content. Zoom-in needs no overscan
     // (the frame grows past the viewport), so it stays the cheap copy.
@@ -1474,7 +1474,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * tile / thumbnail lands with its own redraw, so a later draw re-runs this
    * check until the view is whole; a one-shot timer, armed the first time we
    * start waiting on thumbnails, releases the cover if an image hangs. Pure
-   * density media (audio/text) paint no thumbnails, so it fires as soon as the
+   * density media (text) paint no thumbnails, so it fires as soon as the
    * visible tiles are in.
    */
   private maybeReportFirstView(): void {
@@ -1925,10 +1925,10 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
-    // Image/video datasets paint a thumbnail per cell; warm the off-view ring's
+    // Thumbnail datasets paint a thumbnail per cell; warm the off-view ring's
     // thumbnails (a pan) and the finer level's centre thumbnails (a zoom-in) on
     // idle so they're decoded before the cells appear. Pure-density media
-    // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
+    // (text) draw no thumbnails, so there's nothing to warm. Warming follows
     // the same resolution tier (capped /thumbnail vs full-res /image) and the same
     // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
     // it only reaches it sooner, and visible thumbnails (which bump recency) are
@@ -2507,7 +2507,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // Render the overscan ring for every media type: without it the revealed
     // edge is bare background (a black gap) until the glide lands. The ring comes
     // straight from the cached tiles — thumbnails in thumbnail mode, colour-mapped
-    // hexes in flat-density mode (audio/text) — so both slide in real content.
+    // hexes in flat-density mode (text) — so both slide in real content.
     const doBorder = marginX > 1 || marginY > 1;
     this.panSnapW = this.width + 2 * Math.ceil(marginX);
     this.panSnapH = this.height + 2 * Math.ceil(marginY);

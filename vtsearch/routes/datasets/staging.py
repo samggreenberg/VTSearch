@@ -744,10 +744,10 @@ def import_dataset(importer_name: str):
     _abort_if_outputs_semantic_only(outputs)
 
     if outputs:
-        # The importer listing's ``supports_multi_output``: the importer has not
-        # opted out, and it declares a ``media_type`` field for the outputs to
-        # multiply.
-        if not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields):
+        from vtscore.datasets.importers.base.core import _supports_multi_output  # noqa: PLC0415
+
+        # The importer listing's ``supports_multi_output``.
+        if not _supports_multi_output(importer):
             abort(400, message=f"Importer {importer_name!r} produces one dataset per run; 'outputs' is not accepted.")
         task_ids = _run_multi_output_load_in_background(
             importer,

@@ -26,6 +26,17 @@ from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_val
 from .outputs import OutputSpec
 
 
+def _supports_multi_output(importer: Any) -> bool:
+    """Whether *importer* takes an ``outputs`` list, one dataset per entry.
+
+    It has not opted out (:attr:`ImporterBase.multi_output`) and it declares a
+    ``media_type`` field for the outputs to multiply.  The listing reports it as
+    ``supports_multi_output``; the import route and the CLI refuse ``outputs``
+    without it.
+    """
+    return bool(getattr(importer, "multi_output", True)) and any(f.key == "media_type" for f in importer.fields)
+
+
 class ImporterBase(PluginBase):
     """Thin abstract base class for dataset importers.
 
@@ -219,7 +230,7 @@ class ImporterBase(PluginBase):
         d["picker_view"] = self.picker_view
         d["category"] = self.category
         d["fields"] = d["fields"] + [_dataset_name_field().to_dict()]
-        d["supports_multi_output"] = self.multi_output and any(f.key == "media_type" for f in self.fields)
+        d["supports_multi_output"] = _supports_multi_output(self)
 
         # For each media type the user can select, list N→M converters
         # that produce that type; the UI can show a datagrid of
