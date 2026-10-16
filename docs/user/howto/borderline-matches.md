@@ -93,9 +93,9 @@ there. Nothing on screen marks which pictures are new: they are the ones just
 above the line, and every one you check moves to the right-hand panel.
 
 Stop when the pictures above the line stop being matches. If you see only
-misses, go back to the radio you had. If you are still finding real matches,
-there is no further step toward False Positives: the line already keeps the
-most it can.
+misses, go back to the radio you had. If you are still finding real matches
+on the False Positives radio, the Threshold goes no further: the pictures
+below the line are left for you to check by hand.
 
 ## Step 4: See the trade-off
 
@@ -128,10 +128,10 @@ Threshold there.
 
 ## Where the setting goes
 
-The detector keeps its Threshold while VTSearch runs, and the Threshold
-decides where the line sits the next time you run this detector, on this dataset
-or any other. The line decides which unchecked pictures count as matches when
-you **Export** or use **To Dataset**
+The detector keeps its Threshold (it is saved with the detector), and the
+Threshold decides where the line sits the next time you run this detector, on
+this dataset or any other. The line decides which unchecked pictures count as
+matches when you **Export** or use **To Dataset**
 ([Send your matches somewhere](export-matches.md)).
 
 Pictures that crossed the line when it moved count as *corrections* (the
@@ -143,6 +143,7 @@ along with the ones you checked by hand.
 
 - [Decide how far to trust a detector](trust-a-detector.md): the rest of the
   result pane.
-- [Manual mode](../USER_GUIDE.md#3-threshold), in the user guide,
-  describes the same Threshold while you train, and the spot check that
-  measures it.
+- [Threshold](../USER_GUIDE.md#3-threshold), in the user guide, describes
+  the same Threshold while you train and how the line is drawn;
+  [How close the line got](../USER_GUIDE.md#how-close-the-line-got) covers
+  the spot check that measures it.
