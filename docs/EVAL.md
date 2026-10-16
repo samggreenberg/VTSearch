@@ -50,7 +50,7 @@ python -m vtscore.eval [OPTIONS]
 | `--datasets ID [ID ...]` | Only evaluate these dataset IDs | all |
 | `--mode {text,learned,both}` | Which evaluation to run | `both` |
 | `--k K [K ...]` | k values for P@k / R@k | `5 10 20` |
-| `--train-fraction F` | Fraction of clips used for training in learned-sort | `0.5` |
+| `--train-fraction F` | Fraction of learned-sort's simulation half that is voted (the other half is held out for test) | `0.5` |
 | `--seed N` | Random seed for reproducible splits | `42` |
 | `--output FILE` | Write JSON results to FILE | none |
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
@@ -69,7 +69,7 @@ python -m vtscore.eval [OPTIONS]
 # Text sort only, on image datasets, save JSON
 python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output results.json --plot-dir eval_output
 
-# Learned sort with a different train/test split
+# Learned sort voting more of the simulation half
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
 # Learned sort at the Inclusion 0 cut, the line every learned-sort run measured
@@ -132,7 +132,7 @@ Text sort evaluation measures how well embedding-based search ranks clips. For e
 
 ### Learned sort metrics
 
-Learned sort evaluation simulates voting, trains a binary classifier, then measures on a held-out test set. It cuts at the line the app draws, the labels line under the default balance, and records that `threshold` and its `beta` with each category's metrics:
+Learned sort evaluation splits each category's media into a simulation half and a held-out test half, votes `--train-fraction` of the simulation half, trains a binary classifier on the simulation half alone, then scores the test half with it. The threshold is fitted on the simulation half's unvoted rest, never on the test half, as in `simulate_voting_iterations` (#5003). It cuts at the line the app draws, the labels line under the default balance, and records that `threshold` and its `beta` with each category's metrics:
 
 - **Accuracy:** Fraction of correct predictions.
 - **Precision:** Of items predicted positive, fraction that is actually positive.
@@ -200,7 +200,7 @@ For more control (looping over parameter values, running voting-iteration simula
 
 ### Example: sweep over train fractions
 
-This script evaluates learned-sort quality at different train/test split ratios:
+This script evaluates learned-sort quality at different vote fractions of the simulation half:
 
 ```python
 #!/usr/bin/env python

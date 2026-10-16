@@ -83,7 +83,10 @@ def main() -> None:
         "--train-fraction",
         type=float,
         default=0.5,
-        help="Fraction of medias used for training in learned-sort eval (default: 0.5).",
+        help=(
+            "Fraction of learned-sort's simulation half that is voted; the rest of that half is "
+            "the unlabeled haystack, and the other half is held out for test (default: 0.5)."
+        ),
     )
     parser.add_argument(
         "--seed",

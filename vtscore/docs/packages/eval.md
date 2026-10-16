@@ -212,17 +212,29 @@ Returns a list of `QueryMetrics`. Pass `enrich=True` to use wrapper-
 averaged text embeddings; pass `start_time` (a `time.monotonic()`
 baseline) to populate `elapsed_seconds` on each result.
 
-### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, calibrate_count=2, calibration_fraction=None, start_time=None, region_voting=False, beta=None)`
+### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, calibrate_count=2, calibration_fraction=None, start_time=None, region_voting=False, beta=None, sim_fraction=0.5)`
 
 `vtscore/eval/runner.py`. For each query/category: split target-
-category vs. other medias, take `train_fraction` of each as training
-data, build the synthetic `good_votes` / `bad_votes` dicts, call
-`train_and_score` from [`vtscore.detectors`](detectors.md) at the
-balance `beta`, and measure accuracy / precision / recall / F1 on the
-held-out test set at the threshold it returns. Returns a list of
-`LearnedSortMetrics`. Honours `calibrate_count` and
-`calibration_fraction` exactly the way the production training path
-does, and takes its threshold from the same shipped estimator.
+category vs. other medias, hold out `1 - sim_fraction` of each as the
+test half, vote `train_fraction` of each class in the remaining
+simulation half (the synthetic `good_votes` / `bad_votes` dicts), call
+`train_and_score` from [`vtscore.detectors`](detectors.md) on the
+simulation half alone at the balance `beta`, score the test half with
+the model it returns, and measure accuracy / precision / recall / F1
+there at the threshold it returns. Returns a list of
+`LearnedSortMetrics`; `num_train` counts the votes and `num_test` the
+test half. Honours `calibrate_count` and `calibration_fraction` exactly
+the way the production training path does, and takes its threshold from
+the same shipped estimator.
+
+The test half never reaches `train_and_score` (#5003): the threshold is
+fitted on the unvoted remainder of the snapshot it is given, so that
+remainder is the simulation half's unvoted items, as in
+`simulate_voting_iterations`. With `train_fraction=1.0` the whole
+simulation half is voted and the estimator has nothing unlabeled to fit
+on. A structural dataset (media carrying `local_features`) is refused
+with a `ValueError`: its threshold is the Stage-2 inlier gate's, which
+the head's scores for the test half are not on the scale of.
 
 `beta` is resolved by `vtscore.training.thresholds.resolve_line_knobs`.
 `None` (the default) is the app's default balance, `DEFAULT_BETA`, so
@@ -262,7 +274,7 @@ Args:
 | `dataset_ids`             | List of eval dataset ids, or `None` for all                   |
 | `mode`                    | `"text"`, `"learned"`, or `"both"`                            |
 | `k_values`                | k values for P@k / R@k (default `[5, 10, 20]`)                |
-| `train_fraction`          | Train/test split for learned-sort (default 0.5)               |
+| `train_fraction`          | Fraction of learned-sort's simulation half that is voted; the other half is held out for test (default 0.5) |
 | `seed`                    | Random seed (default 42)                                      |
 | `enrich`                  | Use wrapper-averaged text embeddings (default False)          |
 | `calibrate_count`         | Cross-cal folds (default 2)                                   |
@@ -443,7 +455,7 @@ Notable flags:
 | `--datasets ID [ID ...]` | Restrict to these eval dataset ids                           |
 | `--mode {text,learned,both}` | Which evaluation to run                                  |
 | `--k K [K ...]`          | k values for P@k / R@k                                       |
-| `--train-fraction F`     | Learned-sort split ratio                                     |
+| `--train-fraction F`     | Fraction of learned-sort's simulation half that is voted     |
 | `--seed N`               | Random seed                                                  |
 | `--enrich-descriptions`  | Wrapper-averaged text embeddings                             |
 | `--calibrate-count K`    | Cross-cal folds                                              |

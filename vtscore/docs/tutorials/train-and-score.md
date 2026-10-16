@@ -404,7 +404,8 @@ from vtscore.eval.runner import eval_learned_sort
 for media in held_out.values():
     media["category"] = "dog" if "dog" in media["filename"] else "other"
 
-# Trains on a random `train_fraction` slice per query and scores the rest.
+# Holds out half of each query's media, votes a `train_fraction` slice of the
+# other half, and scores the held-out half.
 metrics_list = eval_learned_sort(
     held_out,
     [EvalQuery("a dog barking", "dog")],
@@ -418,11 +419,12 @@ for metrics in metrics_list:
 ```
 
 `eval_learned_sort` is in `vtscore/eval/runner.py` (it is not re-exported
-from `vtscore.eval`). It simulates a voting session per query - train
-positives become Good votes, train negatives Bad votes - calls
-`train_and_score` on the full media set, and measures
-accuracy / precision / recall / F1 on the held-out half at the line the
-app draws: the labels line under its default balance. Pass `beta` to pin
+from `vtscore.eval`). It simulates a voting session per query on one
+half of the media - voted positives become Good votes, voted negatives
+Bad votes - calls `train_and_score` on that half alone, so the threshold
+is fitted on its unvoted rest and never on the items it is scored on,
+and measures accuracy / precision / recall / F1 on the held-out half at
+the line the app draws: the labels line under its default balance. Pass `beta` to pin
 another balance, or `beta="off"` for the Inclusion 0 cut. Each result
 records the `threshold` it was measured at. A query whose category has fewer than 2
 positives or 2 negatives is skipped, so the returned list can be shorter
