@@ -34,8 +34,10 @@ on these contexts.
 vote / click / coverage / lookup helpers (and `collapse_near_duplicates`,
 `phash_image`, `simhash_text`). **Not** re-exported - import from the
 submodule: the request-missing tier (`register_request_context_predicate`,
-`is_request_missing_*`, `RequestMissingContextError` in `core`),
-everything in `sort_results_cache` and `current_user`.
+`is_request_missing_*`, `RequestMissingContextError` in `core`), the
+line and balance helpers in `core` (`recut_detector_threshold`,
+`recompute_detector_thresholds`, `user_beta`, `detector_balance_state`,
+`human_voted_ids`), everything in `sort_results_cache` and `current_user`.
 
 - [The two context classes](#the-two-context-classes)
 - [The resolution chain](#the-resolution-chain)
@@ -137,12 +139,17 @@ canonical persisted form.
 | `cached_labelset` | `LabelSet \| None` | Parsed labelset, reused across requests |
 | `cached_labelset_mtime` / `cached_labelset_media_type` | `float` / `str` | Mtime and media type of the JSON the cache was built from |
 | `labelset_source` | `dict \| None` | An in-memory labelset-source binding (library callers); a registered detector's binding lives on its registry entry. See [labels.md](labels.md#binding) |
-| `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another balance or inclusion re-runs only the cheap cut |
+| `calibration_cache` | `tuple[Any, CalibrationFolds, tuple[tuple[int, ...], ...]] \| None` | Fingerprint → per-fold held-out scores and models, plus the training row behind each held-out score. Deliberately *excludes* the operating point, so a re-cut at another balance or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
-| `precision_floor_cache` | `None` | Retired (#4362): always `None`. It held the #4220 estimate a retrain parked for the Find Stats curve, which went in #4360 |
+| `precision_floor_cache` | `None` | Retired (#4362): always `None`, kept so an out-of-tree reader sees "no estimate" rather than an `AttributeError` |
 | `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance's state counts the unvoted items of it the line keeps, and the spot check draws its bands from it |
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The balance's last finished spot check (kept across retrains; its ranges go `stale`) and the one running now |
-| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496), and so does whether Autopilot's check before Done runs (`done_check_due`) |
+| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: once it is set the weak-separation prompt no longer fires (`weak_check_due`, #4909), and Autopilot's check before Done counts its cooldown from it (`done_check_due`) |
+| `gate_passed` | `frozenset[int] \| None` | A structural detector's line: the items the verification gate passed on the last re-rank (#4505), counted by the balance in place of `line_ranking` |
+| `line_test` | `LineTest \| None` | Test mode's sample running on this detector's Find session, or the last finished one ([training.md](training.md#the-test-sample-linetest-linebudgets-line_phase-found_words)) |
+| `labels_line` | `LabelsLine \| None` | The line the labels imply, fitted by the last retrain (#4452): a balance change re-cuts it without a retrain |
+| `centroid_line` | `CentroidLine \| None` | The line of a head the label quota gives (the Goods' centroid, #4732, or a typed query, #4758), redrawn at a new balance on the same scores; read only while `model` is such a head |
+| `beta` / `beta_seeded` | `float \| None` / `bool` | The detector's balance and whether it has been seeded yet (see [Setting-persistence hooks](#setting-persistence-hooks)) |
 
 Everything in this table is in-memory only. `model`,
 `label_embeddings`, `label_local_features`
@@ -284,9 +291,11 @@ register_dataset_context_resolver(_flask_dataset_resolver)
 
 Library-only consumers leave the default resolver in place
 (`_default_context_resolver()` returns `None`) and use the thread-local
-tier. A consumer running library code from a worker thread calls
-`set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)` at
-the start and `set_thread_*_context(None)` at the end. There is no
+tier. A consumer running library code from a worker thread scopes it
+with `thread_dataset_context(ctx)` / `thread_detector_context(ctx)`, which
+restore the previous thread-local on exit (or calls
+`set_thread_*_context(ctx)` at the start and `set_thread_*_context(None)`
+at the end). There is no
 "unregister resolver" - installing a new one replaces the previous.
 
 ---
@@ -348,13 +357,13 @@ Everything below lives in `vtscore/state/votes.py`.
 | `clear_votes()` | Drop all votes, history, click times, region boxes |
 | `apply_label(cid, label, *, silent=False, region_box=None, record_achievement=True, count_streak=True, provenance=None)` | Set label unconditionally (for imports). `silent=True` skips history + atlas evidence |
 | `apply_label_with_click_time(cid, label, *, provenance=None)` | Same as `apply_label` but assigns a click-time ordinal |
-| `apply_labels_bulk_with_click_time(labels, replace_all=False, *, record_achievement=True, preserve_verified=False)` | Apply many labels under a single lock acquisition; returns the set of applied IDs |
+| `apply_labels_bulk_with_click_time(labels, replace_all=False, *, record_achievement=True, preserve_verified=False)` | Apply many labels under a single lock acquisition; returns the IDs skipped because they were verified (empty unless `preserve_verified`) |
 | `add_label_to_history(cid, label)` | Append `(cid, label, time)` to `label_history` |
 | `add_textsort_suggestion(text)` / `get_textsort_suggestions()` | LRU of recent queries |
 | `update_learned_scores(scores)` / `get_learned_scores()` | Cache last `train_and_score` output |
 | `set_find_initial_labels(labels)` / `get_find_initial_labels()` | Snapshot of detector-assigned labels |
 | `set_find_scores(scores)` / `get_find_scores()` | The raw scores a Find run produced |
-| `find_queue_ids(label_filter)` | Find-run IDs in score order, filtered by `"good"` / `"bad"` / `"all"` |
+| `find_queue_ids(label_filter)` | Find-run IDs in score order: `"unverified_good"` (the above-cut items not yet verified) or `"good"` (verified Goods, then those); `[]` for any other filter |
 | `find_boundary_next(side, exclude=None) -> dict` | The next unverified item just above / below the Find cut |
 | `rethreshold_unverified_find_items()` | Re-apply the detector's cut to Find items the user hasn't verified |
 
@@ -375,8 +384,10 @@ State transitions:
 
 - Target equals current → no-op (under `toggle_vote`, clicking the
   current label computes target `"none"`, i.e. un-vote).
-- `"none"` on a labelled item → remove the vote and its atlas evidence.
-- Opposite label → flip; the labeling-progress cache is invalidated
+- `"none"` on a labelled item → remove the vote, its click time and its
+  atlas evidence.
+- Opposite label → flip.
+- Either change to a labelled item invalidates the labeling-progress cache
   **from the point where this media first appeared in the training data**.
   Earlier cached steps (whose models never included it) are preserved.
 - No prior vote → apply, assign click-time, count as atlas evidence.
@@ -553,9 +564,11 @@ from `vtscore.state.sort_results_cache` (not re-exported).
 | `SORT_WINDOW_THRESHOLD` (20,000) | Below this the full ranking is transmitted unchanged; at or above it, windowing engages |
 | `SORT_WINDOW_HEAD` (500) / `SORT_WINDOW_TAIL` (200) | Above-threshold rows, and past-boundary context rows, in the initial window |
 | `initial_window_end(total, above_threshold)` | End index (exclusive) of that initial window |
-| `result_score(result)` / `count_above_threshold(results, threshold)` | Read a row's score under either key; count rows above a cut |
+| `result_score(result)` / `count_above_threshold(results, threshold)` | Read a row's score under either key; count rows at or above a cut |
 | `SortResultsCache(max_entries=8)`, `.store(...)` / `.page(...)` | LRU of full lists: stash one and mint a token; page into a stored one |
 | `.derived(token, key, build, *, dataset_id=None)` / `.forget_derived(token, key)` | A view built once over a stored list (`build(results)`) and kept with it, evicted with it; the app keeps Collapse to photos' grouping here (#4751) |
+| `.redraw(token, beta, *, dataset_id=None)` | Redraw a stored text or example sort's line at another balance through the `RedrawableLine` passed to `.store(..., line=)` (#4760); the ranking does not move |
+| `sort_results_cache` | The process-wide instance |
 
 Only the lightweight ranking rows (`{"id", "score"}` or
 `{"id", "similarity"[, "best_region"]}`) are cached - never embeddings
@@ -589,8 +602,10 @@ username to a data directory.
 Some library helpers - `get_beta`, `set_beta`, `set_calibrate_count`,
 `set_calibration_fraction` - read or write
 user-pref values that a **host** owns. The library exposes the hook
-surface; the host installs the persistence callbacks. Library-only
-consumers see purely in-memory mutation.
+surface; the host installs the persistence callbacks. With none installed,
+`set_beta` moves only the in-memory balance (and a registered detector's
+JSON, below), and `set_calibrate_count` / `set_calibration_fraction` change
+nothing their getters read, since those read `CoreConfig.from_settings()`.
 
 ```python
 # vtscore/state/__init__.py
