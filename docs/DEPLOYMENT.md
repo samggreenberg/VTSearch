@@ -606,6 +606,12 @@ that misses in `user_settings.json` falls through to `data/settings.json`, which
 is what lets the CLI's `--settings` flat file and single-user deployments keep
 working.
 
+**Only the operator sets the server tier.** No user's own write reaches it:
+`PUT /api/settings` drops server-tier keys, and a settings import or a
+settings-source sync skips them, so a file a user imports can neither repoint
+the storage directories nor lift an operator lock. Change these keys here, or
+through their CLI flag or environment variable.
+
 #### Server tier — `data/settings.json`
 
 ```json
@@ -634,7 +640,8 @@ working.
 ```
 
 - `saved_datasets_dir`, `detectors_dir`: infrastructure directories
-  (overridable for custom data layouts).
+  (overridable here for custom data layouts; the Settings dialog shows them
+  read-only).
 - `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings`:
   concurrency gates for dataset loading. The download gate covers the
   bandwidth/disk-bound import phase; the embed gate covers CPU/GPU-bound

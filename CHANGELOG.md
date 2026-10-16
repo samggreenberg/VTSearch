@@ -965,6 +965,18 @@ not list every commit. Use `git log` for the full history.
   the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
   are now recorded and reused, and an item's Derived Via line lists them.
 
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
+
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between
   retrains (issue #4469). Without a GPU there was nothing to copy, but the cache still kept each page's
