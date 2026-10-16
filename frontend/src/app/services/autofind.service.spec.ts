@@ -98,7 +98,7 @@ describe('AutoFindService', () => {
     expect(toast.success).toHaveBeenCalledTimes(1);
     const opts = toast.success.mock.calls[0][0];
     expect(opts.message).toBe('AutoFind finished on "Birds": 5 hits');
-    expect(opts.action.label).toBe('View results');
+    expect(opts.action.label).toBe('View Results');
 
     opts.action.onClick();
     expect(service.results()).toEqual(run);

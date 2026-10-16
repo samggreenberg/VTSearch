@@ -32,6 +32,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
 | `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
 | `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
+| `vtscore/media/structural_tiles.py` | Tiled VLAD: the structural Stage 1 for document pages |
 | `vtscore/media/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
 | `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
 
@@ -122,7 +123,8 @@ media type may have zero, one, or many embedders.
 `_resolve_media_bytes(media)` / `_resolve_media_string(media)` read content
 in this order: `media_bytes` / `media_string` in memory → a lazy-clip recipe
 in `origin.params` (see `vtscore/media/lazy_clip.py`) → an archive member →
-`media_path` on disk → `media_url` (fetched through the SSRF guard). So
+`media_path` on disk → `media_url` (fetched through the SSRF guard);
+`_resolve_media_string` skips the lazy-clip and archive-member steps. So
 implementations transparently handle in-memory, thin, derived and
 URL-backed items.
 
@@ -209,7 +211,9 @@ per-item hook the load pipeline
 (`vtscore/datasets/clipper_chain.py::_run_clipper_step`) calls before
 `clip`, used by auto-routing clippers such as `video_auto`. The
 **resolved** clipper's name and parameters are recorded in each clip's
-origin, so replay is deterministic.
+origin, so replay is deterministic. The parameters recorded are the extra
+keys the clipper's `to_dict()` adds beyond its descriptor, so a
+parameterised clipper overrides `to_dict()` to report its current values.
 
 `resolve_for_durations(durations)` is **reserved and inert**: nothing calls
 it. It stays because it is published contract; put routing logic in
@@ -246,7 +250,7 @@ clipper chooser; registration order is run order.
 
 Which processors run automatically on load is decided by the host
 application; the library only ships the ABCs and the in-tree
-implementations. See [../../docs/EXTENDING-processors.md](../../../docs/EXTENDING-processors.md).
+implementations. See [`docs/EXTENDING-processors.md`](../../../docs/EXTENDING-processors.md).
 
 ---
 
@@ -257,7 +261,7 @@ implementations. See [../../docs/EXTENDING-processors.md](../../../docs/EXTENDIN
 | `MediaResponse(data, mimetype, download_name="")` | `base.py` | Dataclass: bytes (or a dict) of a MIME type, with a download name. Framework-agnostic return of `MediaType.media_response`. |
 | `DemoDataset` | `base.py` | Dataclass describing one downloadable demo dataset: `id`, `label`, `description`, `categories`, `source`, `required_folder`, slicing bounds (`slice_start` / `slice_end` / `slice_frac_*`), `items_per_category`, `download_size_mb`. |
 | `ProgressCallback` | `vtscore/concurrency/progress.py` (re-exported) | `Callable[[str, str, int, int], None]` - `(status, message, current, total)`; `0, 0` means indeterminate. See [concurrency.md](concurrency.md). |
-| `crop_file_bytes(file_path, media_type, params)` | `cropping.py` | Crop one file without a clipper pipeline. `"audio"`: `{"start", "end"}` seconds; `"image"`: `{"box": [x1, y1, x2, y2]}` in original-image pixels. `ValueError` for other types. |
+| `crop_file_bytes(file_path, media_type, params)` | `cropping.py` | Crop one file without a clipper pipeline. `"audio"`: `{"start", "end"}` seconds; `"image"`: `{"box": [x1, y1, x2, y2]}` in original-image pixels as displayed (after EXIF orientation). `ValueError` for other types. |
 
 ---
 
@@ -345,7 +349,7 @@ CLEANERS = [AudioSilenceTrimCleaner()]
 
 Full walkthroughs:
 [extending/media-types.md](../extending/media-types.md) (library tier) and
-[../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md) (app tier).
+[`docs/EXTENDING-media.md`](../../../docs/EXTENDING-media.md) (app tier).
 In short: create `vtscore/media/<type>/` with `media_type.py` (subclass
 `MediaType`), `__init__.py` exposing `MEDIA_TYPE` / `CLIPPERS` (and
 optionally `CLEANERS`), and one `embedder_<name>.py` per embedder ending in

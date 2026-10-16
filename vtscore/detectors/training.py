@@ -70,7 +70,7 @@ def detector_score_embedder(det_ctx: Any, snap: dict[int, dict[str, Any]] | None
     primary, fall back to each media's own vector", so the resolver's ``""``
     for an empty snap has to become ``None`` before it reaches them.  Kept as a
     public name because out-of-tree code may import it.  See
-    ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
+    ``docs/ARCHITECTURE.md`` → "Per-detector embedder type".
     """
     from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
 

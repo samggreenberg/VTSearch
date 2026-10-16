@@ -143,7 +143,7 @@ labels = {
     "1-100032-A-0.wav": "good",      # dog
     "1-110389-A-0.wav": "good",      # dog
     "2-114587-A-0.wav": "good",      # dog
-    "1-30226-A-7.wav": "bad",        # rooster
+    "1-30226-A-7.wav": "bad",        # insects
     "1-103298-A-9.wav": "bad",       # crow
     "1-105019-A-3.wav": "bad",       # cow
 }
@@ -156,7 +156,7 @@ print(f"Labelled {len(labelled)} items.")
 ```
 
 ESC-50 uses `<fold>-<clip_id>-A-<category_id>.wav`; category 0 is "dog",
-category 7 is "rooster", etc. Replace these filenames with whatever you
+category 7 is "insects", etc. Replace these filenames with whatever you
 actually have. Six labels is enough - the linear head is small.
 
 ## Step 3: Train the detector
@@ -172,7 +172,8 @@ y_list = [1.0 if label == "good" else 0.0 for _, label in labelled]
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# Train. LINEAR_SVM_HEAD is what the app passes on every production fit.
+# Train. LINEAR_SVM_HEAD is the plain linear SVM; the app's production fits
+# pass LINEAR_SVM_PRIOR_HEAD, the same fit started from the Goods' centroid.
 model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
 
 # Calibrate the decision threshold via 2-fold cross-validation, on the same
@@ -185,14 +186,17 @@ threshold = calculate_cross_calibration_threshold(
 print(f"Trained detector; threshold = {threshold:.3f}")
 ```
 
-The production head is a single `Linear(512, 1)` - the
-`hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel in `vtscore/training/mlp.py` -
-fitted to the class-balanced maximum-margin boundary by liblinear. `LINEAR_HEAD`
-(`0`) fits the same architecture with balanced BCE-with-logits (logistic
-regression) and a positive `hidden_dim` builds the older MLP
+The head is a single `Linear(512, 1)` - the `hidden_dim=LINEAR_SVM_HEAD`
+(`-1`) sentinel in `vtscore/training/mlp.py` - fitted to the class-balanced
+maximum-margin boundary by liblinear. The production head,
+`LINEAR_SVM_PRIOR_HEAD` (`-3`), is the same fit with the Goods' centroid made a
+cheap direction, so a head fitted to a few labels starts near the centroid.
+`LINEAR_HEAD` (`0`) fits the same architecture with balanced BCE-with-logits
+(logistic regression), `LINEAR_LOGREG_HEAD` (`-2`) fits logistic regression to
+convergence, and a positive `hidden_dim` builds an MLP
 (`Linear(512, H) → ReLU → Dropout → Linear(H, 1)`, `H` auto-sized by
-`_auto_hidden_dim`); both now survive only for the eval harness and tests. See
-[docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
+`_auto_hidden_dim`); those, and the plain SVM, are eval arms and test fixtures.
+See [docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
 The default seed makes training deterministic.
 
 ## Step 4: Score all loaded items
@@ -389,7 +393,7 @@ This is what an autodetect job does - the CLI wraps the same calls in
 ## Step 8: Evaluate the detector
 
 If you have ground-truth labels for the held-out set, run the eval
-runner to get precision / recall / AP:
+runner to get precision / recall / F1:
 
 Ground truth lives **on the medias**, not in a separate dict: the harness
 reads `media["category"]` (or `media["categories"]` for multi-label data)
@@ -448,8 +452,9 @@ The same shape generalises to:
 - **Video** (`from vtscore.media import video`, X-CLIP, 768-D).
 - **Documents** (`from vtscore.media import document` plus a converter).
 
-Mix media types by combining datasets via the
-[`combine_datasets` importer](../packages/datasets.md#importers).
+To merge several saved datasets of the **same** media type into one,
+use the [`combine_datasets` importer](../packages/datasets.md#importers)
+(it rejects a mix of media types).
 
 ## Where to next
 

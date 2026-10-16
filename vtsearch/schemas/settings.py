@@ -243,7 +243,7 @@ class AppSettingsSchema(Schema):
     last_embedder_per_media_type = _PerMediaTypeStringDict()
 
     # Per-user, ``{media_type_id: {embedder, clipper, clipper_params,
-    # source_specs}}``, which defaults the Add Dataset modal auto-fills when
+    # source_specs, cleaners}}``, which defaults the Add Dataset modal auto-fills when
     # the user picks an importer whose output is the matching mediaType.
     # See ``UserSettings.import_defaults_by_media_type`` for the value
     # shape; the field is declared as a free-form dict here because the

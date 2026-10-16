@@ -28,8 +28,8 @@ for the background-job runner the builds ride on.
 | `vtscore/projection/umap_projection.py` | Stage 1 - `fit_projection`, the `Projection` dataclass, `remove_ids` |
 | `vtscore/projection/compaction.py` | Stage 1.5 - `compact_layout`, slide clusters together to close the empty oceans |
 | `vtscore/projection/pyramid.py` | Stage 2 - `build_pyramid`, `Pyramid` / `Tile` / `HexCell` / `LevelMeta`, `rebin_like`, `tile_member_ids` |
-| `vtscore/projection/hexbin.py` | Vectorised d3-style hexagonal binning (no d3 dependency) |
-| `vtscore/projection/squarebin.py` | Vectorised square-grid binning |
+| `vtscore/projection/hexbin.py` | Vectorised d3-style hexagonal binning (no d3 dependency): `hexbin_assign(points, radius)` -> per-point `(q, r)` cells, `hex_center(q, r, radius)` |
+| `vtscore/projection/squarebin.py` | Vectorised square-grid binning, same shape: `squarebin_assign`, `square_center` |
 | `vtscore/projection/persistence.py` | Serialisation helpers shared with the ZIP container |
 | `vtscore/projection/params.py` | `resolve_projection_params` / `ProjectionParams` / `projection_embedder_for` - the one resolver for the knobs a layout is fit under |
 
@@ -79,7 +79,8 @@ nothing about the dataset's embedder or the operator's settings.
 Production callers resolve the knobs with
 `vtscore/projection/params.py::resolve_projection_params(ctx)`, which
 applies, in order: an explicit `CoreConfig` override
-(`projection_n_neighbors` / `projection_min_dist`), the per-embedder
+(`projection_n_neighbors` / `projection_min_dist`, counted only when it
+differs from the global default), the per-embedder
 tuned default (`PROJECTION_DEFAULTS_BY_EMBEDDER`), then the global
 default. Every knob is stamped onto the returned `Projection`.
 
@@ -199,8 +200,9 @@ clusterable UMAP are dropped on the floor at the end of the build.
 ### The pipeline, and why it splits where it does
 
 `signpost_prep.prep_signposts` is the single entry point, called by the ingest
-projection stage, by the lazy Browse build, and by the Find→Browse
-subset build. It splits the work by cost profile:
+projection stage, by the lazy Browse build, by the Find→Browse
+subset build, and by `signpost_serve`'s background self-heal of a stale
+set. It splits the work by cost profile:
 
 - **Per-media texts** are the only full-corpus model cost - Toponymy's
   contrastive keyphrase mining reads *every* object's text, not just the
@@ -223,9 +225,13 @@ already cached.
 
 ### Text providers
 
-Providers are registered per media type. The zero-shot tier matches each
-media against a fixed vocabulary by cosine: CLAP against AudioSet-527
-for audio, SigLIP against OpenImages-600 for images, top-5 each. The
+Providers are registered per media type
+(`signpost_texts.register_signpost_text_provider` /
+`register_signpost_captioner`). Text media use their own content. The
+zero-shot tier matches each media against a fixed vocabulary by cosine:
+CLAP against AudioSet-527 for audio, SigLIP against OpenImages-600 for
+images, top-5 each; an operator can replace a type's vocabulary through
+the server-tier `browse_signpost_vocab` setting. The
 generative tier (`signpost_captioners`) instead produces free text -
 `Qwen/Qwen2.5-VL-3B-Instruct` for images,
 `MU-NLPC/whisper-small-audio-captioning` for audio - and is **opt-in per

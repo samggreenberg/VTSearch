@@ -2,8 +2,8 @@
 
 A dataset binds **up to one text-capable embedder**, **up to one
 patch-capable embedder**, and **up to one structural (geometric
-verification) embedder** (the v3 "three-slot" trio in
-``docs/plans/patch-embedder.md``).  Text sort runs against the text
+verification) embedder** (the "three-slot" trio in
+``docs/ARCHITECTURE.md`` → "Embedder binding and routing").  Text sort runs against the text
 embedder; region similarity, region voting, and the detector MLP run
 against the patch embedder; instance retrieval + geometric re-rank run
 against the structural embedder; all three can coexist on one dataset.
@@ -377,7 +377,7 @@ def score_marker_embedder(media: dict[str, Any]) -> str:
     """Concrete embedder name a detector MLP is keyed to for *media*.
 
     This is the v3 model-keying marker (the "embedder" component of the
-    ``(detector, dataset, embedder)`` MLP key in ``docs/plans/patch-embedder.md``).
+    ``(detector, dataset, embedder)`` MLP key; ``docs/ARCHITECTURE.md`` → "Per-detector embedder type").
     It resolves to the **score** embedder (structural ▸ patch ▸ text, the
     routing table) when a role slot is bound, and falls back to *media*'s
     primary embedder *name* for a slot-less single-vector dataset (e.g.
@@ -458,7 +458,7 @@ def keying_embedder_for_snap(det_ctx: Any, snap: dict[int, dict[str, Any]] | Non
     """The marker to compare against ``det_ctx.embedder`` for cache invalidation.
 
     Under the *per-detector embedder type* model (see
-    ``docs/plans/patch-embedder.md`` → "Per-detector embedder type"), a detector
+    ``docs/ARCHITECTURE.md`` → "Per-detector embedder type"), a detector
     locks an embedder **type** (semantic / patch_semantic / structural) and
     scores in whatever concrete embedder of that type the active dataset
     supplies.  So the model/label caches stay valid as long as the active

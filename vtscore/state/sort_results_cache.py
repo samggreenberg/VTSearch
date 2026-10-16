@@ -11,8 +11,9 @@ Only in-memory, and only the lightweight ranking rows (``{"id", "score"}`` or
 ``{"id", "similarity"[, "best_region"]}``) — never embeddings or MLP weights, so
 this stays within the "No Persisted Vectors or MLPs" rule (nothing is
 serialised; the list is re-derived on the next sort).  The cache is bounded to
-the most recent ``max_entries`` sorts (LRU), so it cannot grow without bound as
-users re-sort.
+the most recent ``max_entries`` sorts and to ``max_rows`` rows across them
+(LRU), so re-sorting neither grows it without bound nor, on a 1 M-item dataset,
+pins gigabytes of ranking rows (#4978).
 
 The ``sort_token`` doubles as the **sort-generation token**: a client holding a
 token from one ranking cannot accidentally page into a newer ranking, because a
@@ -55,6 +56,12 @@ SORT_WINDOW_HEAD = 500
 #: K_BELOW — rows just past the boundary to include for context.
 SORT_WINDOW_TAIL = 200
 
+#: Cap on the ranking rows the cache holds across all its sorts (#4978).  A row
+#: is a small dict, about 250 bytes (336 with ``best_region``), so eight 1 M-item
+#: rankings would pin about 2 GB; this keeps the cache under about 0.7 GB.  The
+#: newest ranking is kept even when it alone is longer, so a fresh sort can page.
+SORT_CACHE_MAX_ROWS = 2_000_000
+
 
 def initial_window_end(total: int, above_threshold: int) -> int:
     """End index (exclusive) of the initial transmitted window.
@@ -91,14 +98,19 @@ def count_above_threshold(results: list[dict], threshold: float | None) -> int:
 class SortResultsCache:
     """LRU cache of full sorted result lists, keyed by an opaque token.
 
+    Bounded twice: at most *max_entries* rankings, and at most *max_rows* rows
+    across them (see :meth:`store`).  Views kept by :meth:`derived` are not
+    counted, but go with their ranking.
+
     Thread-safe: sort routes ``store`` from request threads (and background
     learned-sort workers), while ``/api/sort/page`` reads concurrently.
     """
 
-    def __init__(self, max_entries: int = 8) -> None:
+    def __init__(self, max_entries: int = 8, max_rows: int = SORT_CACHE_MAX_ROWS) -> None:
         self._lock = threading.Lock()
         self._entries: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_entries = max_entries
+        self._max_rows = max_rows
 
     def store(
         self,
@@ -111,8 +123,11 @@ class SortResultsCache:
     ) -> str:
         """Store *results* under a fresh token and return it.
 
-        Evicts the least-recently-used entries beyond ``max_entries``.  The
-        stored list is held by reference (not copied): callers must not mutate a
+        Evicts the least-recently-used entries beyond ``max_entries``, then
+        until the rankings left hold at most ``max_rows`` rows between them.
+        The new entry always stays, even when it alone is over ``max_rows``, so
+        a fresh sort of a very large dataset can still be paged.  The stored
+        list is held by reference (not copied): callers must not mutate a
         results list after handing it off.  *line* is how to redraw *threshold*
         at another balance (see :meth:`redraw`); ``None`` for a sort whose line
         is not redrawn here.
@@ -129,6 +144,11 @@ class SortResultsCache:
             self._entries.move_to_end(token)
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)
+            rows = sum(len(entry["results"]) for entry in self._entries.values())
+            # The new entry is last, so evicting from the front never reaches it.
+            while rows > self._max_rows and len(self._entries) > 1:
+                _, evicted = self._entries.popitem(last=False)
+                rows -= len(evicted["results"])
         return token
 
     def page(

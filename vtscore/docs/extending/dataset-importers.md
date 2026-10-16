@@ -11,7 +11,8 @@ right `pyproject.toml` block. Subclass
 (`vtscore/datasets/importers/base/` is a **package**, not a module:
 `core.py` holds `ImporterBase`, `dataset_importer.py` the
 `DatasetImporter` subclass, `specs.py` the `SourceSpec` dataclass,
-`origin.py` the origin builders, and `naming.py` the display-name
+`outputs.py` the `OutputSpec` multi-dataset helpers, `origin.py` the
+origin-serialisation helpers, and `naming.py` the display-name
 helpers; `base/__init__.py` re-exports all of them, so
 `from vtscore.datasets.importers.base import DatasetImporter, PluginField`
 is the import you want),
@@ -59,7 +60,7 @@ Then either:
   overriding `_fetch_records_bulk_impl()` for batched / concurrent
   fetches; used by service-style importers (see the
   [worked example](#worked-example) below - no in-tree importer takes
-  this path today, since every built-in one is folder-shaped).
+  this path today, since every built-in one overrides `run()`).
 
 Expose a module-level `IMPORTER = YourImporter()` so the registry picks
 it up. The sentinel must be an already-instantiated plugin object, not
@@ -128,10 +129,13 @@ Every media should carry an `origin` dict that identifies the importer
 and parameters needed to refetch the same content. The framework
 automatically calls `build_origin(field_values)` after `run()` and
 applies the result to every media whose `origin` is `None`, so the
-common case requires no work. Override `build_origin()` only when the
-default (importer name + stringified field values) is too coarse;
-e.g. when the importer fans out across multiple sources within a
-single dataset.
+common case requires no work. The default (importer name + stringified
+field values) is tuned declaratively: `PluginField.include_in_origin`
+(off by default for `file` and `password` fields),
+`PluginField.origin_serializer`, and the class attributes
+`extra_origin_keys` / `origin_suppressed`. Override `build_origin()`
+only when those can't express what you need; e.g. when the importer
+fans out across multiple sources within a single dataset.
 
 `origin` flows through the registry, through dataset pickle export /
 import, and is what `vtscore.datasets.sources.get_source_for_origin`
@@ -197,9 +201,10 @@ The first three hooks all hand back raw source-type media; the
 framework runs converters and ingests.  Only `run()` gives up that
 help in exchange for full control.  The built-in `server_folder`
 importer is the canonical `run()`-shaped example; the per-source-type
-hooks have no in-tree user, so read the ABC in
-`vtscore/datasets/importers/base/dataset_importer.py` for their exact
-contract.
+hooks have no in-tree user. A worked example of each hook is in
+[`docs/EXTENDING-plugins.md` § Multi-media imports](../../../docs/EXTENDING-plugins.md#multi-media-imports);
+the ABC in `vtscore/datasets/importers/base/dataset_importer.py` is the
+exact contract.
 
 The default `fetch_source_media()` delegates to `list_records()` +
 `fetch_record()`, and the default `fetch_all_source_media()`
@@ -226,27 +231,23 @@ media the row stands for, which names the dataset), and the
 per-dataset embedder / clipper / cleaners the pipeline applies.
 
 The base class handles it with no change on your side:
-`run_outputs(field_values, outputs, thin)` yields `(output, medias)`
-by running `run()` once per output on `output.narrow(field_values)`
-(the shared values with that output's `media_type` and `source_specs`
-folded in), and `run_outputs_chunked(field_values, outputs,
-chunk_size, thin)` does the same through `run_chunked()`. The host
-drives the chunked hook when `supports_chunked` is `True`, the plain
-one otherwise. `parse_output_specs(raw)` turns a request's `outputs`
-list (or its JSON) into validated `OutputSpec`s, and
-`output_dataset_name(base, output)` is the `"<base> – <Category>"`
-naming rule.
+`run_outputs(field_values, outputs, thin)` and
+`run_outputs_chunked(field_values, outputs, chunk_size, thin)` yield
+`(output, medias)` by running `run()` / `run_chunked()` once per output
+on `output.narrow(field_values)`; the host drives the chunked one when
+`supports_chunked` is `True`. `parse_output_specs(raw)` validates a
+request's `outputs`, and `output_dataset_name(base, output)` names each
+dataset (`"<base> – <Category>"` unless the output carries its own
+`dataset_name`).
 
-Override the hook your importer's loading mode uses when acquiring
-the source is the expensive part and can be shared: acquire once,
-yield each output from the acquired copy (the very `OutputSpec`
-objects you were given), and clean up in a `finally` around the loop.
-Set the class attribute `multi_output = False` on an importer whose
-run is fixed to one dataset; `to_dict()` then reports
-`supports_multi_output: false` and the app offers no multi-dataset
-mode for it. [`docs/EXTENDING-plugins.md` § Multi-dataset
-imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports)
-has the worked override and what the app's pipeline does per output.
+Override the hook your loading mode uses only when acquiring the source
+is expensive and can be shared, and yield the very `OutputSpec` objects
+you were given. Set `multi_output = False` on an importer whose run is
+fixed to one dataset; `to_dict()` then reports
+`supports_multi_output: false` (as it does for any importer without a
+`media_type` field) and the app offers no multi-dataset mode for it.
+The worked override and what the app's pipeline does per output are in
+[`docs/EXTENDING-plugins.md` § Multi-dataset imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports).
 
 ## Reporting progress
 
@@ -265,14 +266,15 @@ module returns it; both come from the same per-thread lookup, and both
 are inert when no load is in flight (a unit test calling your importer
 directly, say).
 
-There is no process-wide progress sink to fall back to. Reporting from a
-thread that bound nothing discards the tick rather than publishing it
-somewhere nobody is watching — a channel with no owner cannot say when
-its work ended, which is what made a finished import indistinguishable
-from a wedged one (#3167).
+There is no process-wide progress sink to fall back to: reporting from a
+thread that bound nothing discards the tick. A worker thread you spawn
+yourself must therefore bind the parent's sink before it reports -
+capture `cb = resolve_progress_callback()` in the parent and call
+`set_thread_progress(cb)` (same module) at the top of the worker.
 
 Status strings are conventional, not enforced: `"downloading"`,
-`"embedding"`, `"importing"`. The dataset-loading pipeline keys on the
+`"loading"` (what the default per-record loop emits), `"embedding"`,
+`"importing"`. The dataset-loading pipeline keys on the
 first `"embedding"` status to swap between the download
 concurrency-gate and the embed concurrency-gate ([`vtscore/datasets/load_pipeline.py`](../../datasets/load_pipeline.py)),
 so service-style importers that interleave both phases should emit the
@@ -355,20 +357,20 @@ run behaviour without any app dependency.
 A minimal third-party importer that pulls records from a hypothetical
 JSON-line catalogue API. Each line of the catalogue has an `id`, a
 public `url`, and a pre-computed embedding (perfect for the
-service-style hook path because no per-file download or embedding is
-needed.
+service-style hook path, because no per-file download or embedding is
+needed).
 
 ```python
 # my_pkg/catalogue_importer.py
 from __future__ import annotations
 
 import json
-import urllib.request
 from typing import Any
 
 import numpy as np
 
 from vtscore.datasets.importers.base import DatasetImporter, PluginField
+from vtscore.security.url_validation import fetch_validated_url
 
 
 class CatalogueImporter(DatasetImporter):
@@ -390,9 +392,10 @@ class CatalogueImporter(DatasetImporter):
         # field_type="url" means the framework already ran validate_url on
         # this value (SSRF guard) before run() was reached - see
         # "Framework-side normalization" in the plugin README.
-        url = field_values["catalogue_url"]
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
-            return [json.loads(line) for line in resp if line.strip()]
+        # fetch_validated_url also re-checks every redirect hop and the
+        # address each socket actually connects to (DNS rebinding).
+        body = fetch_validated_url(field_values["catalogue_url"])
+        return [json.loads(line) for line in body.splitlines() if line.strip()]
 
     def fetch_record(
         self,
@@ -432,5 +435,5 @@ After `pip install`, the importer is discoverable via
 the CLI as `python app.py --autodetect --importer catalogue
 --catalogue-url https://… --settings settings.json`, and the dataset
 loads with one media per catalogue line (no downloads, no embedding,
-just the pre-computed vectors. The actual bytes are fetched lazily
+just the pre-computed vectors). The actual bytes are fetched lazily
 when the UI needs to play a clip.

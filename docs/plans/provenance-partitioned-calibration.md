@@ -39,7 +39,7 @@ surfacing context the study measured as trustworthy.
   round-trips through labelset export/import. **Shipped as separate axes, not
   the single fused `surfaced_by` enum this plan first proposed:** `flow ∈
   {autopilot, list_review, find_verify, labelset_review, seed_example, import,
-  bulk, undo, check, test, unknown}`, `phase ∈ {good, bad, hard, new}` (autopilot only),
+  bulk, undo, check, test, unknown}`, `phase ∈ {good, bad, more, hard, new}` (autopilot only),
   `select_mode ∈ {top, hard, new}`, `sort_kind ∈ {learned, text, load}`, plus
   `rank_at_vote` and `score_at_vote`. The fused enum labelled votes by *who was
   driving* while the bias this plan exists to repair tracks *how the item was
@@ -131,15 +131,19 @@ fraction of cells where the starvation fallback engaged.
 
 - **Re-derive this plan before running it.** It is motivated by the conformal
   miss budget, and its metrics are in Inclusion units (FNR excess at
-  Inclusion 0-3), but the line is now the F-beta balance's set, measured by a
-  spot check of uniform picks (#4413). The bias it targets does carry over: a
+  Inclusion 0-3), but the line is now the labels line (#4452): a class model
+  fitted to the calibration folds' held-out scores of the votes, cut where the
+  expected F-beta peaks at the detector's balance. The bias it targets does
+  carry over, and onto exactly the votes this plan partitions: on Binary Photo
+  the class model's Good component sits 0.26 to 0.35 logit above the withheld
+  positives, and the excess is selection, not scale (#4936). Earlier, a
   posterior fitted on score-picked votes was thought unbiased under
   score-only selection, which is what reviewing the model's own sorted list
   is, and #4256 measured that it is not - learned-sort draws alone, against a
   consistent reference pool, broke 83% of its 50%-precision promises. Votes
   selected by a *different* ranker are worse (#4222: text-sort selection
   broke 51% of them at a 20-Good opening). Before it runs, restate its
-  hypotheses against the balance's line, or retire it in favour of random
+  hypotheses against the labels line, or retire it in favour of random
   verification (#4257). #4267 ruled for random verification, so retiring it
   is the expected outcome.
 

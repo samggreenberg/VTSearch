@@ -40,6 +40,17 @@ from vtscore.state.core import (
 )
 
 
+def _load(*pairs: tuple[str, str]) -> None:
+    """Register an empty dataset and detector context under each id pair.
+
+    A job started under ids that resolve to no context fails without running
+    (#4976), so a test that starts one under ids loads them first.
+    """
+    for dataset_id, detector_id in pairs:
+        register_context(DatasetContext(dataset_id))
+        register_detector_context(DetectorContext(detector_id))
+
+
 def _make_target(release: threading.Event, started: threading.Event, marker: list):
     """Return a target that records its signature, then waits to be released."""
 
@@ -272,6 +283,7 @@ class TestPendingIsolation:
     """
 
     def test_start_for_different_pair_supersedes_pending(self):
+        _load(("ds-1", "det-1"), ("ds-2", "det-2"))
         mgr = JobManager("test")
         first_release = threading.Event()
         first_started = threading.Event()
@@ -317,6 +329,7 @@ class TestPendingIsolation:
         assert ran == ["sig-A", "sig-C"]
 
     def test_same_pair_still_coalesces(self):
+        _load(("ds-1", "det-1"))
         mgr = JobManager("test")
         first_release = threading.Event()
         first_started = threading.Event()
@@ -419,9 +432,10 @@ class TestThreadContextPropagation:
             unregister_context("ds-ctx-A")
             unregister_detector_context("det-ctx-A")
 
-    def test_run_skips_when_ids_resolve_to_no_context(self):
-        """Unknown / unloaded ids must not crash and must not set a context."""
-        mgr = JobManager("ctx-test")
+    def test_unbound_manager_treats_ids_as_a_tag(self):
+        """``binds_context=False``: the ids are neither bound nor required."""
+        register_context(DatasetContext("ds-tag"))
+        mgr = JobManager("ctx-test", binds_context=False)
         captured: dict = {}
 
         def target(job: AsyncJob) -> None:
@@ -432,11 +446,12 @@ class TestThreadContextPropagation:
         job = mgr.start(
             signature=("sig",),
             target=target,
-            dataset_id="never-registered",
+            dataset_id="ds-tag",
             detector_id="never-registered",
         )
         assert job.done_event.wait(timeout=5)
         assert job.status == "done"
+        assert job.dataset_id == "ds-tag"
         assert captured["ds"] is None
         assert captured["det"] is None
 
@@ -490,6 +505,97 @@ class TestThreadContextPropagation:
         finally:
             unregister_context("ds-ctx-B")
             unregister_detector_context("det-ctx-B")
+
+
+class TestUnloadedContext:
+    """A job whose dataset or detector is gone when its worker starts must
+    fail, not run against the empty fallback context (#4976).
+
+    Nothing cancels a parked job on unload, so the promoted job used to
+    compute over zero medias / votes, end ``done`` and be cached for its
+    signature.
+    """
+
+    def test_ids_that_resolve_to_nothing_fail_without_running(self):
+        mgr = JobManager("unload-test")
+        ran = threading.Event()
+
+        job = mgr.start(
+            ("sig",),
+            lambda job: ran.set(),
+            dataset_id="never-registered",
+            detector_id="never-registered",
+        )
+        assert job.done_event.wait(timeout=5)
+        assert job.status == "error"
+        assert job.error == "dataset never-registered is no longer loaded"
+        assert not ran.is_set()
+
+    @pytest.mark.parametrize(
+        ("unload", "error"),
+        [
+            (lambda: unregister_context("ds-B"), "dataset ds-B is no longer loaded"),
+            (lambda: unregister_detector_context("det-B"), "detector det-B is no longer loaded"),
+        ],
+        ids=["dataset", "detector"],
+    )
+    def test_parked_job_whose_context_is_unloaded_fails_and_hands_off(self, monkeypatch, unload, error):
+        from vtscore.state import core
+
+        _load(("ds-A", "det-A"), ("ds-B", "det-B"))
+        mgr = JobManager("unload-test")
+        ran: list = []
+
+        a_release = threading.Event()
+        a_started = threading.Event()
+        mgr.start(("sig-A",), _make_target(a_release, a_started, ran), dataset_id="ds-A", detector_id="det-A")
+        assert a_started.wait(timeout=5)
+
+        b_ran = threading.Event()
+
+        def b_target(job: AsyncJob) -> None:
+            b_ran.set()
+            job.result = "computed over the empty context"
+
+        b = mgr.start(("sig-B",), b_target, dataset_id="ds-B", detector_id="det-B")
+        assert b.status == "pending"
+        unload()
+
+        # Hold B's worker at its context lookup, so a third job can park
+        # behind B while B is the running job.
+        real_get_context = core.get_context
+        resolving = threading.Event()
+        gate = threading.Event()
+
+        def held_get_context(dataset_id: str):
+            if dataset_id == "ds-B":
+                resolving.set()
+                gate.wait(timeout=5)
+            return real_get_context(dataset_id)
+
+        monkeypatch.setattr(core, "get_context", held_get_context)
+
+        a_release.set()
+        assert resolving.wait(timeout=5)
+        assert b.status == "running"
+        c_release = threading.Event()
+        c_release.set()
+        c = mgr.start(
+            ("sig-C",), _make_target(c_release, threading.Event(), ran), dataset_id="ds-A", detector_id="det-A"
+        )
+        assert c.status == "pending"
+        gate.set()
+
+        assert b.done_event.wait(timeout=5)
+        assert b.status == "error"
+        assert b.error == error
+        assert not b_ran.is_set()
+        assert b.result is None
+        assert mgr.cached_for(("sig-B",)) is None
+        # The failure still hands off to the job parked behind it.
+        assert c.done_event.wait(timeout=5)
+        assert c.status == "done"
+        assert ran == [("sig-A",), ("sig-C",)]
 
 
 def _cancellable_target(started: threading.Event, marker: list):
@@ -574,6 +680,7 @@ class TestRunningJobCancellation:
         assert mgr.cached_for("sig-A") is None
 
     def test_cancelled_running_job_promotes_pending(self):
+        _load(("ds-1", "det-1"))
         mgr = JobManager("cancel-test")
         started = threading.Event()
         marker: list = []
@@ -799,6 +906,7 @@ class TestSingletonRegistry:
                 check_job_cancelled()
                 time.sleep(0.01)
 
+        _load(("ds1", "det1"))
         job = labeling_status_jobs.start("sig", _target, dataset_id="ds1", detector_id="det1")
         try:
             assert started.wait(timeout=5)
@@ -822,6 +930,7 @@ class TestBusyReason:
                 check_job_cancelled()
                 job.cancel_event.wait(0.01)
 
+        _load(("ds", "det"))
         job = manager.start("sig", _target, dataset_id="ds", detector_id="det")
         assert started.wait(timeout=5)
         return job

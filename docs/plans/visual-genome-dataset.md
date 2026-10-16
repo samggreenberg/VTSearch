@@ -13,7 +13,7 @@ VG is the first demo dataset with per-image **multi-label** ground truth (an ima
   is not the way out**: #3618 measured all 2,516,939 VG objects and every one
   carries a `names` list of length **one**, so there is no alias to read. A
   richer map has to come from `synsets`, or be measured the way `vg_scale`'s
-  now-retired `name_evidence.py` did it (see [`coco-better.md`](coco-better.md)) —
+  now-retired `name_evidence.py` did it (see [the pile README](../../scripts/experiments/pile/README.md#retired-with-visual-genome-4038)) —
   box agreement and repair precision per spelling, rather than string similarity.
 
 <!-- item-sep -->
