@@ -318,6 +318,17 @@ slides:
   # Conclusion
   outline-hold-the-line +end
 
+  # Achievements (#4967), after Conclusion for now (owner): the app's light
+  # gamification layer, which is no part of the calibration argument. The tiers
+  # and the score, on one entry; all ten entries, the five that count how much
+  # and the five that count how often and how widely; and how an unlock is told,
+  # a toast once and the trophy's dot until the panel is opened. All three are
+  # drawn from the shipped catalog and the app's own badge
+  # (`make-achievement-figs.py`), so they carry no date.
+  achievement-tiers
+  achievement-entries
+  achievement-unlock
+
   # Appendix, for questions. First, what the work since the first rule bought
   # (#4548): each preset off its own sessions against cross-calibration, scored
   # at its own beta, on the pool thinned to 1% positive. Moved here from
