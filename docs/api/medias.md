@@ -672,7 +672,7 @@ y1]` for the row whose score won - the whole image when the
 image-level row wins, otherwise the single winning grid cell.
 Region-annotated Good votes (`region_box` on `LabeledElement`) train
 on the raw patch nearest the user's box; Bad votes flood the whole
-stack (a region-aware asymmetric loss). See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
+stack (a region-aware asymmetric loss). See [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md#embedder-binding-and-routing)
 for the design.
 
 ### Example sort (upload)

@@ -55,8 +55,8 @@ class LabeledElement:
         region_box: Normalised ``(x0, y0, x1, y1)`` box on the source
             image when the user drew a region as part of a yes-vote;
             ``None`` for image-level votes (the perpetual default for
-            no-votes, and the v1 default for every vote).  See the
-            patch-embedder v2 design for region-vote semantics.
+            no-votes, and the v1 default for every vote).  See
+            ``docs/ARCHITECTURE.md`` → "Embedder binding and routing" for region-vote semantics.
     """
 
     md5: str
@@ -178,7 +178,7 @@ class LabelSet:
                 map populated by yes-votes that designated a region.  Each
                 box is attached to the corresponding good vote's
                 :class:`LabeledElement`.  Ignored for bad votes (no-votes
-                are always image-level - see the patch-embedder v2 design).
+                are always image-level - see ``docs/ARCHITECTURE.md``).
             vote_provenance: Optional ``media_id -> provenance dict`` map
                 recording how each vote was surfaced (which flow / autopilot
                 phase / sort / rank).  Written into the element's ``metadata``
