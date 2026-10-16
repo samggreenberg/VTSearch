@@ -288,7 +288,7 @@ class MediaVoteRequestSchema(Schema):
     media and the server alternated ADD/REMOVE on every click.
 
     ``region_box`` is a 4-tuple of normalised image coords (``[x0, y0,
-    x1, y1]`` in ``[0, 1]``). Per the patch-embedder v2 design, only
+    x1, y1]`` in ``[0, 1]``). By design (``docs/ARCHITECTURE.md``), only
     good votes may carry a region; the handler rejects ``"bad"`` /
     ``"none"`` targets that carry a region_box.
 

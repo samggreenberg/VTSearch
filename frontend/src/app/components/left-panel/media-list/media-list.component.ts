@@ -45,7 +45,7 @@ interface OrderedItem {
 
 /**
  * One virtualized grid row: a run of cards, the full-width threshold marker, or
- * the full-width "Load more" trigger appended when the ranking is windowed.
+ * the full-width "Load More" trigger appended when the ranking is windowed.
  */
 type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' } | { kind: 'loadmore' };
 
@@ -323,7 +323,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
       if (current.length === cols) flush();
     }
     flush();
-    // A windowed ranking gets a trailing full-width "Load more" row.
+    // A windowed ranking gets a trailing full-width "Load More" row.
     if (this.hasMore()) rows.push({ kind: 'loadmore' });
     this.gridRows = rows;
   }
@@ -335,7 +335,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   /**
    * Auto-page when the virtual viewport scrolls to (or near) the trailing
-   * "Load more" row, giving infinite-scroll UX. Guarded by ``loadingMore`` so a
+   * "Load More" row, giving infinite-scroll UX. Guarded by ``loadingMore`` so a
    * burst of scroll events during a fetch doesn't fire duplicate requests.
    */
   private maybeAutoLoadMore(): void {

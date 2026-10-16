@@ -5,8 +5,9 @@ This file records what was deleted, when, why it was safe, and how to rebuild
 it, so a later session does not go looking for an input that is gone. Add a
 dated section per cleanup, newest first.
 
-Before deleting a directory, the checks (`GRID-PLAYBOOK.md`, and the
-2026-09-18 lesson that a tool's *default argument* counts as reading a path):
+Before deleting a directory, run these checks (the second is
+[`lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md`](lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md):
+a tool's *default argument* counts as reading a path):
 
 1. the study's issue is closed or `solved`, and its report is merged;
 2. `git grep` over `scripts/` and `vtscore/` finds no tool whose default reads the
@@ -131,6 +132,39 @@ evidence stays: the 60-vote arm (`2026-10-12-hold4736v60-b{025,1,4}`) and the Re
 
 Rebuild: the first is `hold_4736.sh` with `HOLD4736_STEPS=30` (its dirs are then `…hold4736v30-b*`); the
 smoke is `line_4786.sh` with `LINE4786_ARM=smoke4736 LINE4786_SEEDS=1` and `launch.sh pack 5,10,100,120`.
+
+## 2026-10-11: 254 GB (`/expscratch/sgreenberg` was at 100%, 2.8 GB free)
+
+The volume filled while three sessions' runs were writing: #4783's arrays held their pending tasks, and
+#4788's session run could not pass preflight. No cell was truncated. Two owner-approved deletes took it from
+1,022 G used to 794 G (78%, 231 G free).
+
+**#4776's raw cells, 62 GB** (deleted by the #4776 session, owner-approved): the `results/cells` of
+`fhibe/<release>-derived/runs/2026-10-10-4776*` and `2026-10-10-4776prior*`, and of
+`state-of-the-app/2026-10-10-{handover4776,prior4776}-b*`. The report's aggregates are in PR #4787. Its own
+section, below, has the table and the rebuild.
+
+**Closed studies, 192 GB, 11:17** (`/expscratch/sgreenberg/logs/scratch-delete-4788.sh`, job 970903). All four
+checks above passed; the owner approved all three groups proposed:
+
+| path | GB | study | why it is safe |
+|---|---:|---|---|
+| `acq-sweep-4428` | 68 | #4428 | closed; report `docs/experiments/2026-10-02-acquisition-sweep-4428/` |
+| `p-aware-acq-4409` | 27 | #4409 | closed; report `docs/experiments/2026-10-01-acquisition-fbeta-4409/` |
+| `labels-4452` | 50 | #4452 | closed; shipped, and later reports cite it (no report of its own) |
+| `presets-4448` | 21 | #4448 | closed; shipped, and later reports cite it (no report of its own) |
+| `fhibe/<release>-derived/runs/2026-10-09-k{1,4}/results/cells` | 13 | #4699 | report merged (`2026-10-09-fhibe-baseline-4699`) |
+| `.../runs/2026-10-09-4731-{ctl,dry16,dry16q16}-k1/results/cells` | 5.9 | #4731 | report merged |
+| `.../runs/2026-10-10-4732-k{1,4}/results/cells` | 3.3 | #4732 | report merged |
+| `.../runs/2026-10-10-4743-{app,ctl}-k1/results/cells` | 4.3 | #4743 | report merged |
+| `.../runs/2026-10-10-repro-sota-*` | 0.1 | #4777 | its check is recorded in that report |
+
+**Kept on purpose:** in `2026-10-09-k{1,4}`, `identities.txt`, `results/prepare_info.json` and
+`results/crops`, which `fhibe/sota_face.sh` and `sota_face_analyze.sh` read by default (the face review's
+bench and prepared grid). Every FHIBE run dir's `logs/` and `grid_shape.json`, and all analysis dirs.
+
+Rebuild: a FHIBE run's cells come back from `fhibe/launch.sh` (or `sota_face.sh`) at the report's commit, with
+the same identity file. The sweeps' drivers are committed in their report dirs.
 
 ## 2026-10-11: 62 GB (`/expscratch/sgreenberg` was at 100%)
 

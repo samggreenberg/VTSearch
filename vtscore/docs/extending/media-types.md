@@ -43,9 +43,10 @@ behaviour (`loops`), and content extraction
 
 ```
 vtscore/media/<your_type>/
-├── __init__.py            # exposes MEDIA_TYPE and CLIPPERS sentinels
+├── __init__.py            # exposes MEDIA_TYPE, CLIPPERS and (optionally) CLEANERS sentinels
 ├── media_type.py          # MediaType subclass
 ├── clipper.py             # MediaClipper subclasses (the "default" + any tiling variants)
+├── cleaner.py             # optional MediaCleaner subclasses
 ├── embedder_<name>.py     # one file per embedder, each exposing EMBEDDER
 └── embedder_<other>.py    # additional embedders
 ```
@@ -57,11 +58,13 @@ walks every sub-package of `vtscore.media`, imports the package, and:
   `register()`;
 - registers every clipper in the `CLIPPERS` list via
   `register_clipper()`;
+- registers every cleaner in the `CLEANERS` list via
+  `register_cleaner()`;
 - scans the sub-package for any `embedder*.py` file or `embedder*/`
   sub-package, imports it, and registers its `EMBEDDER` sentinel via
   `register_embedder()`.
 
-Symlinked files and symlinked directories are loaded via
+Symlinked embedder files and directories are loaded via
 `importlib.util.spec_from_file_location`, so a custom embedder can
 live outside the source tree and be wired in by symlinking one file.
 
@@ -166,9 +169,10 @@ route layer converts it into a `flask.Response`; library callers can
 use the same value directly.
 
 For text-type media, use the `_resolve_media_string(media)` helper to
-honour `media_bytes` / `media_path` / `media_url` in priority order;
-for binary media, use `_resolve_media_bytes(media)`. Both are inherited
-from `MediaType`.
+honour `media_string` / `media_path` / `media_url` in priority order;
+for binary media, use `_resolve_media_bytes(media)`, which also derives
+a lazy clip's or an archive member's bytes before falling back to
+`media_path` / `media_url`. Both are inherited from `MediaType`.
 
 ## What happens automatically
 

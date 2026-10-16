@@ -1068,7 +1068,7 @@ def vote_media(body: dict, media_id: int):
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
     ``"bad"`` and ``"none"`` targets must not include ``region_box``; by
-    design no-votes are image-level always (patch-embedder v2).
+    design no-votes are image-level always (``docs/ARCHITECTURE.md``).
 
     An optional ``provenance`` block records how the item was surfaced
     (flow / autopilot phase / select mode / sort / rank / score).  It is

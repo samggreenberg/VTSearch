@@ -113,8 +113,8 @@ doesn't matter at the operating point.
 
 <!-- item-sep -->
 
-- [ ] #2895 — Rerun the region-style study on today's threshold stack (Opus
-  4.8; prerequisite — its residual-regret measurement is this experiment's
+- [ ] #2895 — Rerun the region-style study on today's threshold stack (Opus;
+  prerequisite — its residual-regret measurement is this experiment's
   motivation)
 
 <!-- item-sep -->

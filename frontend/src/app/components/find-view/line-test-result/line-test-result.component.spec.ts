@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { LineTestResultComponent } from './line-test-result.component';
 import { PairScopeService } from '../../../services/pair-scope.service';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -204,6 +205,79 @@ describe('LineTestResultComponent (#4524)', () => {
     el = await show(wireLineTest(wireDone({ kept_at: keptAt })));
     expect(el.querySelector('.kept-note')!.textContent).toContain('Kept from your test of 2026-10-05');
     expect(el.querySelector('.kept-note')!.textContent).toContain('its 65 picks still hold');
+  });
+
+  describe('Training-domain overlap (#4961)', () => {
+    const SHIFT = {
+      reference_dataset_id: 'photos',
+      n_items: 200,
+      alpha: 0.05,
+      frac_atypical: 0.31,
+      expected_atypical: 0.05,
+      z_score: 9,
+      median_pvalue: 0.2,
+      shifted: true,
+    };
+
+    /** Loaded datasets on the active one's embedder: 'drawings' first, the training set 'photos' second. */
+    function loadRegistry(): void {
+      TestBed.inject(DatasetStateService).refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({
+        datasets: [
+          { id: 'ds1', name: 'Screenshots', media_type: 'image', embedder: 'clip', loaded: true },
+          { id: 'drawings', name: 'Drawings', media_type: 'image', embedder: 'clip', loaded: true },
+          { id: 'photos', name: 'Photos', media_type: 'image', embedder: 'clip', loaded: true },
+        ],
+      });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    }
+
+    function compareAgainst(el: HTMLElement): string {
+      return (el.querySelector('.domain-ref-select') as HTMLSelectElement).value;
+    }
+
+    it('compares against the dataset holding the detector\'s examples, and reuses its report', async () => {
+      loadRegistry();
+      const el = await show(wireLineTest(wireDone()));
+      flushChecks();
+      httpMock.expectOne('/api/find/training-domain').flush({
+        reference_dataset_id: 'photos',
+        reference_dataset_name: 'Photos',
+        labels_total: 52,
+        labels_in_reference: 40,
+        labels_in_active: 0,
+        reason: '',
+        domain_shift: SHIFT,
+      });
+      await settleZoneless(fixture);
+
+      expect(compareAgainst(el)).toBe('photos');
+      expect(el.querySelector('.domain-chip')!.textContent).toContain('31%');
+      expect(el.querySelector('.domain-chip')!.textContent).toContain('vs Photos');
+      expect(el.querySelector('.domain-chip')!.textContent).toContain('likely domain shift');
+      // The report came with the reference: the picker does not ask for it again.
+      httpMock.expectNone('/api/datasets/registry/photos/domain-shift');
+    });
+
+    it('falls back to the first candidate when no loaded dataset holds the examples', async () => {
+      loadRegistry();
+      const el = await show(wireLineTest(wireDone()));
+      flushChecks();
+      httpMock.expectOne('/api/find/training-domain').flush({
+        reference_dataset_id: '',
+        reference_dataset_name: '',
+        labels_total: 52,
+        labels_in_reference: 0,
+        labels_in_active: 0,
+        reason: "None of the loaded datasets holds the detector's labelled examples",
+        domain_shift: null,
+      });
+      httpMock.expectOne('/api/datasets/registry/drawings/domain-shift').flush({ ...SHIFT, reference_dataset_id: 'drawings', shifted: false, frac_atypical: 0.03 });
+      await settleZoneless(fixture);
+
+      expect(compareAgainst(el)).toBe('drawings');
+      expect(el.querySelector('.domain-chip')!.textContent).toContain('largely in-domain');
+    });
   });
 
   it('says there is nothing to test', async () => {

@@ -941,7 +941,7 @@ def load_demo_source(
         with open(audio_path, "rb") as f:
             wav_bytes = f.read()
 
-        media_fields = media_type.load_media_data(audio_path)
+        media_fields = media_type.load_media_data(audio_path, media_bytes=wav_bytes)
         clips[clip_id] = {
             "id": clip_id,
             "media_type": _MEDIA_TYPE_ID,

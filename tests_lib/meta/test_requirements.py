@@ -1,9 +1,10 @@
 """Validate that slim requirements files include the core framework deps.
 
-The slim files (image-embedders.txt, labbench.txt, etc.) are hand-edited flat
+The slim files (image-embedders.txt, labbench*.txt, etc.) are hand-edited
 lists used by specialised Docker images.  They do not forward to pyproject.toml
 via `-e .`, so missing entries silently produce broken images.  This test
-catches that class of bug at CI time.
+catches that class of bug at CI time.  A file is judged with its ``-r``
+includes, since that is what pip installs from it.
 """
 
 from __future__ import annotations
@@ -79,10 +80,23 @@ def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+#: ``-r other.txt`` / ``--requirement other.txt``: pip installs that file too.
+_INCLUDE = re.compile(r"^(?:-r|--requirement)[\s=]+(\S+)")
+
+
 def _parse_packages(path: Path) -> set[str]:
+    """Every package installing *path* gets, following its ``-r`` includes.
+
+    A per-media-type LabBench file (``labbench-audio.txt``) is the shared core
+    plus that type's deps, so it is judged on what pip actually installs.
+    """
     pkgs: set[str] = set()
     for line in path.read_text().splitlines():
         line = line.strip()
+        include = _INCLUDE.match(line)
+        if include:
+            pkgs |= _parse_packages(path.parent / include.group(1))
+            continue
         if not line or line.startswith("#") or line.startswith("-"):
             continue
         name = re.split(r"[>=<!;\[\]]", line)[0].strip()

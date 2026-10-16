@@ -24,7 +24,7 @@ from vtscore.concurrency import progress as progress_mod
 from vtscore.concurrency.async_jobs import AsyncJob, projection_jobs
 from vtscore.projection import Projection, build_pyramid
 from vtscore.projection import service as svc
-from vtscore.state.core import DatasetContext
+from vtscore.state.core import DatasetContext, register_context
 
 
 def _fake_fit(matrix, ids, **kwargs):
@@ -39,6 +39,11 @@ def _faked_fit():
 
 
 def _ctx(name: str = "svc", n: int = 6, media_type: str = "text") -> DatasetContext:
+    """A loaded dataset of *n* embedded medias.
+
+    Registered, because a projection job whose dataset is not loaded fails
+    without running (#4976).
+    """
     ctx = DatasetContext(name)
     rng = np.random.default_rng(0)
     for cid in range(1, n + 1):
@@ -48,6 +53,7 @@ def _ctx(name: str = "svc", n: int = 6, media_type: str = "text") -> DatasetCont
             "embedder": "clap",
             "embeddings": {"clap": rng.standard_normal(8).astype(np.float32)},
         }
+    register_context(ctx)
     return ctx
 
 

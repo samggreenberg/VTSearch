@@ -126,7 +126,7 @@
     @if (hasMore()) {
       <div class="photo-load-more">
         <button type="button" class="btn btn--secondary btn--sm" (click)="loadMore()" [disabled]="loading()">
-          {{ loading() ? 'Loading…' : 'Load more photos' }}
+          {{ loading() ? 'Loading…' : 'Load More Photos' }}
         </button>
       </div>
     } @else if (loading() && shown().length === 0) {

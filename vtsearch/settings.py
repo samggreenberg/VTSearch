@@ -590,7 +590,7 @@ def get_user_settings() -> dict[str, Any]:
     Used by the settings-export route and the per-user sync source so an
     export only carries this user's preferences - not the shared
     server-tier infrastructure keys (``saved_datasets_dir``,
-    ``autoload_media_embedders`` etc.) and not other users' files.
+    ``hidden_plugins`` etc.) and not other users' files.
     """
     from vtsearch.auth import get_current_user
 

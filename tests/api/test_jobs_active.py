@@ -17,6 +17,23 @@ from vtscore.concurrency.async_jobs import (
     learned_sort_jobs,
     list_active_pairs,
 )
+from vtscore.state.core import (
+    DatasetContext,
+    DetectorContext,
+    register_context,
+    register_detector_context,
+)
+
+
+def _load(*pairs: tuple[str, str]) -> None:
+    """Register an empty dataset and detector context under each id pair.
+
+    A job started under ids that resolve to no context fails without running
+    (#4976), so it would never show as running.
+    """
+    for dataset_id, detector_id in pairs:
+        register_context(DatasetContext(dataset_id))
+        register_detector_context(DetectorContext(detector_id))
 
 
 def _blocking_target(release: threading.Event):
@@ -37,6 +54,7 @@ class TestApiJobsActive:
         assert body == {"busy_pairs": []}
 
     def test_lists_running_pair_with_job_type(self, client):
+        _load(("ds-1", "det-1"))
         release = threading.Event()
         try:
             learned_sort_jobs.start(
@@ -61,6 +79,7 @@ class TestApiJobsActive:
 
     def test_merges_job_types_on_same_pair(self, client):
         """A pair with jobs on multiple managers gets one entry, all types listed."""
+        _load(("ds-1", "det-1"))
         release_a = threading.Event()
         release_b = threading.Event()
         try:
@@ -113,6 +132,7 @@ class TestListActivePairs:
     def test_includes_pending_jobs(self):
         """The pulldown spinner should reflect work that's about to run, not just
         what's executing this instant; pending counts."""
+        _load(("ds-1", "det-1"), ("ds-2", "det-2"))
         release = threading.Event()
         try:
             learned_sort_jobs.start(

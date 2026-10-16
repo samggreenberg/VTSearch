@@ -8,7 +8,30 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+## [Unreleased]
+
 ### Changed
+
+- **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
+  #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
+  `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
+  before loading the next, and a failed load is not cached. The slot's lock is held across inference as
+  well as the load, because the module-level `CONVERTER` singleton runs on every dataset-load thread and
+  neither engine runs two inferences at once on one model. The private `_make_paddleocr` now takes the
+  resolved device instead of resolving it.
+
+- **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue
+  #4976). The worker used to skip binding a context its `dataset_id` / `detector_id` no longer resolved to
+  and run the target anyway, so a job parked while its dataset was unloaded computed over the empty
+  fallback context, ended `done` and was cached for its signature. It now ends `status = "error"` with
+  `job.error` naming the missing context (`"dataset <id> is no longer loaded"`), never runs the target,
+  and still promotes the pending slot. New keyword `JobManager(..., binds_context=True)`: a manager whose
+  targets name every context they touch, using the ids only as a tag, passes `False` to bind nothing and
+  require nothing. `archive_thumbnail_jobs` does, since its sweep warms every loaded dataset.
+
+  **For library consumers:** a job started under ids that name no registered context now errors rather
+  than running unbound. Register the contexts first, omit the ids, or build the manager with
+  `binds_context=False`.
 
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
@@ -218,8 +241,31 @@ instead, since every commit on `dev` is effectively a new app release.)
   study's default arm changes; `head="linear_svm"` is the arm before. Priced in #4776 and #4785:
   Find's mean F-beta over votes 1-50 +0.037 to +0.073 on FHIBE face crops, +0.004 to +0.007 on COCO
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
+- **`python -m vtscore.eval --mode learned` measures the app's line** (issue #4971).
+  `eval_learned_sort` and `run_eval` take `beta` (default `None`, resolved by `resolve_line_knobs` to
+  `DEFAULT_BETA`) and pass it to `train_and_score`, so precision, recall and F1 are measured at the
+  labels line the app draws under its default balance (#4452). They were measured at the Inclusion 0
+  cut, which no user sees; `beta="off"` (the CLI's new `--beta off`) is that arm. A number pins a
+  balance in `[0.25, 4]`. `LearnedSortMetrics` gains `threshold` and `beta`, the cut each category was
+  measured at and the balance that drew it, and `DatasetResult.to_dict` writes both.
+- **`SortResultsCache` bounds the rows it holds, not only its entries** (issue #4978). `store()`
+  evicted only beyond `max_entries` (8), so re-sorting a 1M-item dataset a few times kept about 2 GB
+  of ranking rows. It now also evicts least-recently-used rankings until those left hold at most
+  `max_rows` rows between them; the newest ranking always stays, even alone over the cap, so a fresh
+  sort can be paged. `SortResultsCache.__init__` takes `max_rows: int = SORT_CACHE_MAX_ROWS`, the new
+  module constant (2,000,000). Additive.
 
 ### Added
+
+- **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
+  looks for each face MTCNN finds again in the photo turned a quarter each way
+  (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most
+  confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
+  boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
+  `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
+  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
+  face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
+  MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
 
 - **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
   `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
@@ -1916,6 +1962,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
+  snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every
+  vote, media read and request state sync for the length of the fit (minutes at scale). It now
+  snapshots the medias and `media_revision` under the lock, fits without it, and re-takes it to install
+  the atlas and replay the active detector's votes. When the medias changed during the fit, the atlas
+  is discarded and the build retried once (*on_progress* counts from zero again); a second lost race
+  keeps the dataset's current atlas. `build_coverage_atlas_for_context` installs under the lock with the
+  same check, where it used to install a fit over since-changed medias. Signatures are unchanged.
+
+- **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
+  params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,
+  `VideoBlankTrimCleaner` and `VideoLetterboxCropCleaner` did not override it, so their `cleaner` steps
+  recorded `params: {}` and `replay_chain_on_file` ran them at their defaults. Each now adds its current
+  parameter values to `to_dict()`, as the parameterised clippers do, so `all_cleaners_dict()` carries
+  them too. A third-party cleaner with `parameters` needs the same override
+  (`vtscore/docs/extending/clippers.md`).
 
 - **`ratio_test_matches(..., cache=True)` caches nothing on a CPU** (issue #4941). The #4469 cache
   checks each entry by a weak reference to its numpy array, but on a CPU the stored tensor is a view

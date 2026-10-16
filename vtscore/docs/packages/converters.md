@@ -91,7 +91,7 @@ The contract:
 - Each returned dict must contain at minimum `"filename"` and the
   data fields expected by the target media type (e.g. `"media_bytes"`
   + `"duration"` for image/audio/video, `"media_string"` for text). It
-  does **not** include `"id"`, `"embedding"`, or `"md5"` - the runner
+  does **not** include `"id"`, `"embeddings"`, or `"md5"` - the runner
   and embed stage assign those.
 - The *source* media carries `media_bytes` in a full import but only
   `{filename, media_path}` in reference (*thin*) mode. Read binary
@@ -119,7 +119,7 @@ automatically.
 | `audio2image`    | `Audio2ImageMediaConverter`    | audio → image    | `spectrogram_type`, `n_mels`, `time_window_s`, `colormap` | `librosa` + `matplotlib` |
 | `audio2text`     | `Audio2TextMediaConverter`     | audio → text     | `model_size`, `language` | `openai-whisper` (`import whisper`) |
 | `image2text`     | `Image2TextMediaConverter`     | image → text     | `language`, `threshold` | PaddleOCR |
-| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align` | `facenet-pytorch` (MTCNN), opt-in |
+| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align`, `sideways` | `facenet-pytorch` (MTCNN), opt-in |
 | `video2image`    | `Video2ImageMediaConverter`    | video → image    | `n_clips` / `seconds_per_frame` (mutually clearing) | `vtscore.media.video.decode` |
 | `video2audio`    | `Video2AudioMediaConverter`    | video → audio    | `ffmpeg_timeout` | FFmpeg |
 | `document2image` | `Document2ImageMediaConverter` | document → image | - | PyMuPDF (`agpl` extra) |
@@ -294,9 +294,11 @@ The origin `params` (all values stored as strings):
 - **Empty strings count as unset.** `normalize_params` drops `""` for
   any field that has a default or is optional, so a blank UI input
   falls back to the declared default.
-- **`name` defaults to `f"{source}2{target}"`.** Two converters with
-  the same source/target pair must override `name` on one of them, or
-  one shadows the other in the registry.
+- **`name` is `f"{source}2{target}"`; keep the pair unique.** Two
+  converters for the same source/target pair collide in the registry
+  (an entry-point one is skipped in favour of the built-in). Don't
+  override `name` to dodge that: the app's demo picker rebuilds a
+  converter's name from the type pair.
 - **`apply_converter_to_demo` mutates `medias` in place.** Snapshot
   first if you need the originals.
 

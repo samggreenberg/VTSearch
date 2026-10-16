@@ -91,7 +91,7 @@ The `linear` arm (old early-stopped logistic head) against the SVM, mean over cl
 - **Binary voting, SigLIP only.** Region voting (max-pooling, per-bag sample weights) uses the same `Linear(D,1)` but was not run. The issue requires it before a ship decision; it is the follow-up.
 - **One C.** C = 1 for both heads, as shipped. #4115 finds C = 0.1 ranks better for the SVM; the logistic head's best C was not swept in the loop.
 - **Mis-votes.** The issue's tie-breaker (#3197's Stage A mis-vote conditions) was not run, because the loop result is not a tie. #3197's replay found the converged logistic head more robust to flipped votes, which would count in its favour.
-- The per-band result is a report across strata of the bench, not a claim about object size in general (see the coco-better plan's method-bench ruling).
+- The per-band result is a report across strata of the bench, not a claim about object size in general (see the method-bench ruling in `scripts/experiments/pile/README.md`).
 
 ## Reproduce
 

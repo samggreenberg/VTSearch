@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import type { AutoFindBrowsePrepResponse } from '../generated/api-client/models/auto-find-browse-prep-response';
 import type { AutoFindRunResponse } from '../generated/api-client/models/auto-find-run-response';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
@@ -12,12 +13,14 @@ import type { FindLabelRequest } from '../generated/api-client/models/find-label
 import type { FindLabelResponse } from '../generated/api-client/models/find-label-response';
 import type { FindStatsResponse } from '../generated/api-client/models/find-stats-response';
 import type { FindEvidenceCoverageResponse } from '../generated/api-client/models/find-evidence-coverage-response';
+import type { FindTrainingDomainResponse } from '../generated/api-client/models/find-training-domain-response';
 import type { FindCorrectionsToDetectorResponse } from '../generated/api-client/models/find-corrections-to-detector-response';
 import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
 import { endFindSessionRoute } from '../generated/api-client/fn/detector-find/end-find-session-route';
 import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
 import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
+import { findTrainingDomain } from '../generated/api-client/fn/detector-scoring/find-training-domain';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
 import { getAutofindRun } from '../generated/api-client/fn/detector-scoring/get-autofind-run';
 import { prepAutofindRunBrowse } from '../generated/api-client/fn/detector-scoring/prep-autofind-run-browse';
@@ -63,6 +66,18 @@ export class DetectorsFindApiService {
    *  measure (no scored Find run / no resolvable labelset). Pure read. */
   getEvidenceCoverage(): Observable<FindEvidenceCoverageResponse> {
     return findEvidenceCoverage(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Training-domain overlap of the active dataset against the dataset the
+   *  active detector was trained on: the loaded dataset holding most of its
+   *  labelled examples. Needs no Find run; `domain_shift` is null (with a
+   *  `reason`) when there's nothing to compare. Best-effort, so a failure is
+   *  the caller's to handle and raises no error toast. Pure read. */
+  getTrainingDomain(): Observable<FindTrainingDomainResponse> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return findTrainingDomain(this.http, this.config.rootUrl, undefined, context).pipe(
+      map((r) => r.body),
+    );
   }
 
   /** Fold the Find corrections into the active detector's labelset and retrain

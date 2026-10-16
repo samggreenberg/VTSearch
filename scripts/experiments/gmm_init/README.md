@@ -74,7 +74,8 @@ grid ran, gated against inputs nobody re-ran.
 | self-test | `selftest_analyze_3825.py` | planted answers for the analyzer's joins, rates and counts |
 
 `launch_3825.sh` drives it (`gate`, `bench`, `ab`, `abanalyze`, `analyse`,
-`status`).
+`status`). Report:
+[`docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`](../../../docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md).
 
 ### Three things to know before reusing this
 
@@ -110,3 +111,5 @@ the stepping is exact, and `analyze_3839.py` refuses to run unless it matches bi
 for bit. `gate_3839.py` is `gate_3825.py` with this module installed, sharded
 (`launch_3839.sh gate`). The A/B (`run_cells_arm_3839.py`) pairs against #3840's
 `v_ll1e-8` grid rather than running its own baseline: same commit, same cells.
+Report:
+[`docs/experiments/2026-09-22-anchored-maxiter-3839/REPORT.md`](../../../docs/experiments/2026-09-22-anchored-maxiter-3839/REPORT.md).

@@ -68,7 +68,7 @@ EMBEDDING_KEY = "face"
 
 def detections(row: dict, conv, params: tuple) -> list[tuple[int, object]]:
     """``(media id, FaceDetection)`` for every face the loader would keep in this photo, in its order."""
-    threshold, padding, min_size, _ = params
+    threshold, padding, min_size = params[:3]
     if row["boxes"] is None:
         return []
     w, h = row["size"]

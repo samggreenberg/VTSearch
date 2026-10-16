@@ -1,10 +1,10 @@
 """Bake one media type's default embedder weights into ``$VTSEARCH_MODELS_DIR``.
 
-Used by ``docker/Dockerfile.solo``, which locks an image to a single media type
-(``VTSEARCH_SOLO_MEDIA_TYPE``). On its first boot such a container preloads
-that type's default embedder (``initialize_server`` in ``app.py``), so without
-this step every fresh container would download the weights from Hugging Face
-before it could serve.
+Used by ``docker/Dockerfile.solo`` and ``docker/Dockerfile.labbench``, which
+lock an image to a single media type (``VTSEARCH_SOLO_MEDIA_TYPE``). On its
+first boot such a container preloads that type's default embedder
+(``initialize_server`` in ``app.py``), so without this step every fresh
+container would download the weights from Hugging Face before it could serve.
 
 The build step runs the very call the server makes at startup,
 :func:`vtscore.embedding.preload_predicted_embedders` with

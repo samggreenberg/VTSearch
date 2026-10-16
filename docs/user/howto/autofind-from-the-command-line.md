@@ -72,7 +72,9 @@ python app.py --autodetect --importer server_folder --path /data/drawings-new \
 - `--exporter server_csv_file --filepath hits.csv` is where the matches go.
   Leave both out to use the destination from Step 2; with neither, the
   matches are printed.
-- Every detector on the **AutoFind** tab that works on images is run. On a
+- Every detector on the **AutoFind** tab that can score pictures is run: an
+  image detector directly, and a text or face detector on the text or faces
+  found in the pictures. On a
   server where people log in, add `--user` and `--api-key` to run a
   particular person's list; without them, the command runs the list of the
   built-in default user, which is the one you edit on a server without
