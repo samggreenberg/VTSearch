@@ -317,6 +317,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A warning before you use a detector on data unlike its training data** (issue #4961). The
+  Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
+  detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
+  looks atypical vs photos: likely domain shift") with a **Test it** button. It warns once per detector
+  and dataset, never blocks anything, and is silent when the check cannot run (training dataset not
+  loaded or without an atlas, another embedder, a patch embedder). VTSearch now works out which dataset a
+  detector was trained on from where its labelled examples live, so the test pane's **Compare against**
+  picker starts on that dataset instead of the first one in the list. `GET /api/find/training-domain`
+  serves both.
+
 - **An audio LabBench image** (issue #4958). `docker/Dockerfile.labbench` takes a `MEDIA_TYPE` build arg,
   as `docker/Dockerfile.solo` does, so its slim build (only that type's dependencies, the media type and
   the embedder locked, datasets aged off after 14 days, the demo importer hidden) is no longer images

@@ -30,6 +30,7 @@ from vtsearch.schemas.detectors import (
     FindLabelRequestSchema,
     FindLabelResponseSchema,
     FindStatsResponseSchema,
+    FindTrainingDomainResponseSchema,
 )
 from vtsearch.state import snapshot_medias
 
@@ -611,6 +612,28 @@ def find_evidence_coverage():
 
     report = evidence_coverage_report(pos, neg, np.stack(q_vecs), np.asarray(q_pred, dtype=bool))
     return {"available": True, **report}
+
+
+@detector_scoring_bp.route("/api/find/training-domain", methods=["GET"])
+@detector_scoring_bp.response(200, FindTrainingDomainResponseSchema)
+def find_training_domain():
+    """Training-domain overlap of the active dataset against the dataset the active detector was trained on.
+
+    The same report as ``GET /api/datasets/registry/<id>/domain-shift``, with
+    the reference worked out rather than picked: the loaded dataset, among those
+    the caller can read, that holds the most of the detector's Good / Bad
+    examples (matched by origin or MD5).  The active dataset wins a tie, so a
+    detector used on the dataset it was trained on reads as nothing to compare.
+
+    It needs no scored Find run, so the SPA calls it whenever a detector meets a
+    dataset, to warn before the user relies on the detector there (#4961).
+    ``domain_shift`` is null (with a ``reason``) rather than a 4xx whenever the
+    check cannot run, including every refusal of the domain-shift route.
+    Pure read; no new state.
+    """
+    from vtsearch.training_domain import training_domain_check
+
+    return training_domain_check()
 
 
 @detector_scoring_bp.route("/api/find/corrections-to-detector", methods=["POST"])
