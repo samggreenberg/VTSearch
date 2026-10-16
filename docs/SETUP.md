@@ -25,7 +25,7 @@ frontend build) Node.js 20.19+.
   - [Prerequisites](#prerequisites-1)
   - [CPU (default)](#cpu-default)
   - [GPU](#gpu)
-  - [LabBench (SigLIP-only image search)](#labbench-siglip-only-image-search)
+  - [LabBench (slim, image or audio)](#labbench-slim-image-or-audio)
   - [Single media type (audio-only, video-only)](#single-media-type-audio-only-video-only)
   - [All image embedders](#all-image-embedders)
   - [Data persistence](#data-persistence)
@@ -439,24 +439,52 @@ docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
 
-### LabBench (SigLIP-only image search)
+### LabBench (slim, image or audio)
 
-For the LabBench deployment (image search with the SigLIP
-embedder), use the streamlined `docker/Dockerfile.labbench` variant. It skips
-audio, video, document, text, and extractor plugin dependencies, and **bakes
-the SigLIP model weights into the image at build time** so the container is
-ready to serve immediately on first run (no Hugging Face download).
+`docker/Dockerfile.labbench` is the streamlined image for the LabBench
+deployment: one media type, searched with that type's default embedder, and
+nothing else installed. Pick the type with the `MEDIA_TYPE` build arg: `image`
+(the default, searched with SigLIP) or `audio` (CLAP General). The build
+installs only that type's dependencies (`requirements/labbench.txt` plus
+`requirements/labbench-<type>.txt`) and **bakes the embedder's weights into the
+image**, so the container is ready to serve immediately on first run (no
+Hugging Face download).
 
 ```bash
-docker compose -f docker/compose/docker-compose.labbench.yml up
+docker compose -f docker/compose/docker-compose.labbench.yml up          # image (SigLIP)
+docker compose -f docker/compose/docker-compose.labbench-audio.yml up    # audio (CLAP General)
 ```
 
 Or with plain Docker:
 
 ```bash
 docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
+docker build -f docker/Dockerfile.labbench --build-arg MEDIA_TYPE=audio -t vtsearch:labbench-audio .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 ```
+
+Any other `MEDIA_TYPE` fails the build with the list of supported ones;
+[`docker/Dockerfile.solo`](#single-media-type-audio-only-video-only) builds the
+full image for any media type. Whichever type it is built for, a LabBench
+container is streamlined the same way:
+
+- **The media type is locked** (`VTSEARCH_SOLO_MEDIA_TYPE`): the importer and
+  new-detector flows hide their mediaType pickers, and converters are limited
+  to ones that output the type. The lock is an environment variable, so it
+  holds when the image is redeployed onto an existing volume.
+- **The embedder is locked to the baked one**: the type's other embedders are
+  not installed, so the importer hides its embedder dropdown.
+- **Datasets age off after 14 days** (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`).
+- **Plugins that cannot work are hidden**: the Downloaded Demo Media importer
+  (it needs outbound network access) and anything the slim dependencies cannot
+  run (for `image`, the Aud2Img spectrogram converter).
+
+The embedder lock and the hidden plugins are seeded into the `/app/data`
+volume (by `scripts/seed_labbench_settings.py`), and Docker only seeds a fresh
+volume, so a volume an earlier LabBench image populated keeps that image's
+values. That is why `docker-compose.labbench-audio.yml` mounts its own
+`vtsearch-labbench-audio-data` volume rather than the `vtsearch-data` the other
+compose files share.
 
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
 so the baked weights are not masked when `/app/data` is mounted as a volume.
@@ -464,7 +492,7 @@ so the baked weights are not masked when `/app/data` is mounted as a volume.
 ### Single media type (audio-only, video-only)
 
 `docker/Dockerfile.solo` is the full CPU image locked to one media type, the
-way LabBench is locked to images. Pick the type with the `MEDIA_TYPE` build arg;
+way a LabBench image is. Pick the type with the `MEDIA_TYPE` build arg;
 the build bakes that type's default embedder weights into the image (CLAP
 General for `audio`, X-CLIP for `video`), so a fresh container serves on first
 run without a Hugging Face download. The importer and new-detector flows hide
@@ -540,7 +568,8 @@ docker compose -f docker/compose/docker-compose.yml build           # CPU
 docker compose \
   -f docker/compose/docker-compose.yml \
   -f docker/compose/docker-compose.gpu.yml build                    # GPU
-docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (SigLIP-only)
+docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (image, SigLIP)
+docker compose -f docker/compose/docker-compose.labbench-audio.yml build  # LabBench (audio, CLAP General)
 docker compose -f docker/compose/docker-compose.audio.yml build     # Audio-only
 docker compose -f docker/compose/docker-compose.video.yml build     # Video-only
 docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml build  # All image embedders (GPU)
