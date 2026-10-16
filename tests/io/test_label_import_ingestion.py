@@ -500,9 +500,9 @@ class TestClippedReingest:
 
         rng = np.random.default_rng(42)
 
-        # _apply_clip_and_embed's video branch falls through to embed_file
-        # (legacy _clip_to_bytes returns None for video).  We just need
-        # embed_file to return a non-None embedding so the function
+        # _apply_clip_and_embed embeds a video origin with embed_file (the
+        # whole file plus its window; video clips are metadata-only).  We just
+        # need embed_file to return a non-None embedding so the function
         # reaches the boundary-tag MD5 path.
         fake_video = tmp_path / "movie.mp4"
         fake_video.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"x" * 1024)

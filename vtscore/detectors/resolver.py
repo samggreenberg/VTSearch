@@ -384,12 +384,24 @@ def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:
     return _resolve_with_stack(stack, parent_origin, origin_name=source_file)
 
 
-def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.ndarray | None:
+def embed_file(
+    file_path: Path,
+    media_type: str,
+    embedder_name: str = "",
+    *,
+    extra_fields: dict[str, Any] | None = None,
+) -> np.ndarray | None:
     """Embed a media file using the appropriate embedder for the media type.
 
     If *embedder_name* is given, that specific embedder is used (matching by
     name); if it is not found or not given, the first registered embedder for
     the media type is used as a fallback.
+
+    *extra_fields* are merged into the media dict the embedder receives, on top
+    of :func:`~vtscore.media.embedder.media_from_path`'s.  A video unit needs
+    this: it is the whole parent file plus a ``clip_start`` / ``clip_end`` /
+    ``clip_box`` that the frame sampler honours, so the path alone embeds the
+    wrong slice.
     """
     from vtscore.media import embedders_for_type, get_embedder
 
@@ -418,8 +430,11 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
         embedder = avail[0]
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
+    media = media_from_path(file_path)
+    if extra_fields:
+        media.update(extra_fields)
     try:
-        result = embedder.embed_media(media_from_path(file_path))
+        result = embedder.embed_media(media)
     except Exception:
         log.warning(
             "embed_file: %s.embed_media(%s) raised an exception",
@@ -575,6 +590,20 @@ def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[
         return None
 
 
+def _embed_uncut(
+    file_path: Path, media_type: str, embedder_name: str, **kwargs: Any
+) -> tuple[np.ndarray, bytes | None] | None:
+    """Embed *file_path* whole: ``(embedding, None)``, or ``None`` when the embed fails.
+
+    The ``None`` clip bytes tell the caller nothing was cut out of the file.
+    *kwargs* go to :func:`embed_file`.
+    """
+    embedding = embed_file(file_path, media_type, embedder_name, **kwargs)
+    if embedding is None:
+        return None
+    return embedding, None
+
+
 def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
@@ -585,9 +614,11 @@ def _apply_clip_and_embed(
 
     If the origin contains clip parameters (``clip_start``/``clip_end`` for
     audio, ``clip_box`` for images, or a text sentence clipper), the file is
-    clipped first and the clipped content is embedded.  Falls back to
-    :func:`embed_file` when no clip params apply (e.g. video, or an
-    unrecognised clipper) or when the clip step raises.
+    clipped first and the clipped content is embedded.  Video is clipped by
+    metadata, not bytes, so a video origin's ``clip_start`` / ``clip_end`` /
+    ``clip_box`` go to the embedder alongside the whole file.  Falls back to
+    :func:`embed_file` when no clip params apply (e.g. an unrecognised
+    clipper) or when the clip step raises.
 
     Returns ``(embedding, clip_bytes)`` where ``clip_bytes`` is the bytes
     that were actually embedded, i.e. the sliced/cropped content for
@@ -609,25 +640,25 @@ def _apply_clip_and_embed(
         # Fall through to legacy/full-file embed.
 
     if not params.get("clipper"):
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
+
+    if media_type == "video":
+        # Reached when a trail failed to replay, or the origin has none: the
+        # legacy keys still name the last clipper's window, which beats the
+        # whole file.  Cleaner steps stamp no legacy keys, so a cleaner's
+        # narrowing or box is not among them.
+        from vtscore.datasets.clipper_chain import _video_unit_fields  # noqa: PLC0415
+
+        return _embed_uncut(file_path, media_type, embedder_name, extra_fields=_video_unit_fields(params))
 
     try:
         clipped = _clip_to_bytes(file_path, media_type, params)
     except Exception:
         log.debug("_apply_clip_and_embed: %s clip failed, falling back", media_type, exc_info=True)
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     if clipped is None:
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     data, suffix = clipped
     embedding = _embed_via_tempfile(data, suffix, media_type, embedder_name)

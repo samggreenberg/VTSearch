@@ -469,7 +469,7 @@ with resolve_file_context(origin, origin_name, filename) as path:
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
 | `resolve_file_context(origin, origin_name="", filename="")`          | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
 | `resolve_file_from_origin(origin, origin_name="", filename="")`      | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
-| `embed_file(file_path, media_type, embedder_name="")`                | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. Returns the vector or `None`. |
+| `embed_file(file_path, media_type, embedder_name="", *, extra_fields=None)` | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`, with `extra_fields` merged into that media dict (a video unit's `clip_start` / `clip_end` / `clip_box`). Returns the vector or `None`. |
 | `resolve_label_embeddings(labels, media_type, progress_callback=None, *, embedder_name="")` | Batch entry point. Returns `ResolvedLabels`.            |
 
 `ResolvedLabels` is a dataclass with `embeddings`, `labels`,
@@ -482,10 +482,12 @@ from `parent_importer` / `parent_path` / `parent_url` params and
 recurses), and `example_media` (the detector-exemplar sentinel, resolved
 to its `example_media_dir()` byte-cache file under the same traversal
 confinement the seeding path applies). Clipped origins - audio `clip_start`/`clip_end`, image
-`clip_box`, text `clip_index`, and origin-stored clipper chains - are
-handled transparently: the chain is replayed on the resolved source
-file via `vtscore.datasets.clipper_chain.replay_chain_on_file` before
-embedding.
+`clip_box`, text `clip_index`, video `clip_start`/`clip_end`/`clip_box`, and
+origin-stored clipper chains - are handled transparently: the chain is
+replayed on the resolved source file via
+`vtscore.datasets.clipper_chain.replay_chain_on_file` before embedding. A
+video unit is never cut: it is embedded from the source file with its window
+and box passed to the embedder, as the dataset embedded it.
 
 ---
 

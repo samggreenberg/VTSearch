@@ -671,7 +671,8 @@ def _load_source_as_media(file_path: Path, source_media_type: str) -> dict[str, 
 
     Text reads as UTF-8 string; everything else reads as bytes. The dict
     contains the minimum keys that built-in clippers and converters look
-    at: ``media_bytes`` / ``media_string``, ``filename``, and ``type``.
+    at: ``media_bytes`` / ``media_string``, ``filename``, and ``type``, plus
+    a video's ``duration``.
     """
     media: dict[str, Any] = {
         "media_type": source_media_type,
@@ -682,7 +683,34 @@ def _load_source_as_media(file_path: Path, source_media_type: str) -> dict[str, 
         media["media_string"] = file_path.read_text(encoding="utf-8", errors="replace")
     else:
         media["media_bytes"] = file_path.read_bytes()
+    if source_media_type == "video":
+        # The video tiling clipper reads the length off the dict, where the
+        # loader put it, rather than from the payload.  Without it a tiled
+        # trail re-tiles to one output and the replay refuses to pick.  Probed
+        # the way ``VideoMediaType.load_thin_media_data`` does, so the tiles
+        # come out the same.
+        from vtscore.media.video import decode  # noqa: PLC0415
+
+        info = decode.probe(file_path)
+        media["duration"] = info.duration if info is not None else 0.0
     return media
+
+
+def _video_unit_fields(media: dict[str, Any]) -> dict[str, Any]:
+    """Return the fields that say which part of its parent file a video unit is.
+
+    A video unit is the parent's whole payload plus ``clip_start`` /
+    ``clip_end`` (its time window) and ``clip_box`` (its pixel region), which
+    :func:`~vtscore.media.video._frame_sampling.sample_video_frames` honours.
+    The dataset's embed (``_build_clip_embed_input``) and a label's replay
+    (:func:`replay_chain_on_file`) both take them from here, so the two embed
+    the same slice.  Also reads ``origin.params``, which carries the same keys
+    in string form.
+    """
+    fields = {key: media[key] for key in ("clip_start", "clip_end") if key in media}
+    if media.get("clip_box") is not None:
+        fields["clip_box"] = media["clip_box"]
+    return fields
 
 
 def _output_matches_entry(out: dict[str, Any], entry: ChainStep) -> bool:
@@ -902,7 +930,9 @@ def replay_chain_on_file(
     clipper, because video clippers are metadata-only (they record
     ``clip_start`` / ``clip_end`` but do not slice the underlying bytes,
     so the clip's bytes equal the parent's bytes; caller should switch
-    to a boundary-tag MD5 scheme for those clips).
+    to a boundary-tag MD5 scheme for those clips).  For the same reason a
+    video unit is embedded from *file_path* itself, with its window and
+    box passed to the embedder, as the dataset embedded it.
 
     The chain must start with a step whose input type matches the source
     file's media type (the resolver infers this from the trail's first
@@ -926,9 +956,20 @@ def replay_chain_on_file(
         return None
     current_type = last_types[1]
 
-    media = replay_chain_on_media(_load_source_as_media(file_path, first_types[0]), steps)
+    source = _load_source_as_media(file_path, first_types[0])
+    source_bytes = source.get("media_bytes")
+    media = replay_chain_on_media(source, steps)
     if media is None:
         return None
+
+    if current_type == "video" and source_bytes is not None and media.get("media_bytes") == source_bytes:
+        # Every step was metadata-only, so the unit is the source file plus a
+        # window and a box.  A tempfile copy would carry the bytes but drop
+        # the fields that say which slice of them to embed.
+        embedding = embed_file(file_path, current_type, embedder_name, extra_fields=_video_unit_fields(media))
+        if embedding is None:
+            return None
+        return embedding, None
 
     # Write the final clip to a tempfile and embed it.
     ext = _FINAL_EXT_BY_TYPE.get(current_type, ".bin")
