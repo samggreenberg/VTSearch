@@ -293,7 +293,7 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
 #: that is a decision** (2026-09-07).
-#: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
+#: :func:`~pilebuild.scale_core.band_for` summarises a class's boxes in an
 #: image by their **union**, which is what the harness's SIMULATED Good vote
 #: drags and is what #3156 measured -- and the build keeps every instance box
 #: behind it
@@ -1103,7 +1103,7 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
 #: nor absence**: it is not a positive (we cannot say the object is there) and it
 #: bars the image from the shared negative pool (we cannot say it is not). That
 #: is the ``excluded`` third state the construction already has -- see
-#: :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the contaminated
+#: ``lift_ambiguous`` in the retired ``vg_scale`` loader (#4038). It removed the contaminated
 #: negatives; recovering the missing positives needs a human pass.
 #:
 #: **Three kinds of name land here, and they share one treatment because they
@@ -1919,7 +1919,7 @@ def scale_vg_group_why(cls: str, key: str) -> str:
 #: promotion. Listed one by one rather than derived from :data:`SCALE_CLASSES`,
 #: because deriving it would mark a *newly added* class audited without anyone
 #: having looked -- which is the exact failure this flag exists to make visible.
-#: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
+#: The retired ``vg_scale`` loader (#4038) named the unaudited classes on every
 #: build, since the rebuild is when this stops being cheap to fix (#3605).
 #:
 #: **A cleared human review is not this flag.** #3588 reviewed its thirteen at
@@ -3104,7 +3104,7 @@ SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "9900"))
 #: **1,000 since the #3588 promotion, up from 300 — and the reason is no longer
 #: the one that raised it.** It was raised to survive a correction pass over a
 #: contaminated pool: a shared negative is evaluable in *every* cell
-#: (:func:`pilebuild.loaders.vg_scale._evaluable` returns the whole cell list for
+#: (:func:`pilebuild.scale_core._evaluable` returns the whole cell list for
 #: an image with no categories), so a verdict finding a car in a pool image does
 #: not retire it from `car` alone — the image stops being clean and leaves all
 #: twenty-five. Against the negative pass's measured **14% ± 7** joint rate that
@@ -3216,7 +3216,7 @@ def aspect_transferable(vg_wh: tuple[int, int], coco_wh: tuple[int, int]) -> boo
 
     One implementation, so that anything asking "do these two copies frame the
     same thing?" asks it the same way -- the treatment
-    :func:`pilebuild.loaders.vg_scale.band_for` got for the banding question.
+    :func:`pilebuild.scale_core.band_for` got for the banding question.
 
     It is a function rather than a bare ``> MAX_ASPECT_DRIFT`` because the two
     readings of that constant are indistinguishable at a glance and were both
@@ -3664,7 +3664,7 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
 #: **Empty since the #3588 promotion, and that is the table working, not rotting.**
 #: The two tables cannot be merged because they are read at different times by
 #: different code: :data:`SCALE_VG_NAMES` widens the ``vg_scale`` READ and is
-#: folded by :func:`pilebuild.loaders.vg_scale.canonicalise` on every build, so an
+#: was folded by ``canonicalise`` (the retired ``vg_scale`` loader's) on every build, so an
 #: entry there for a class outside *C* changes the built dataset on the strength
 #: of a name nobody has reviewed. This one is read only by the slate makers, which
 #: band a candidate without touching the pickle. When the candidate is promoted
@@ -3686,8 +3686,8 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {}
 #:
 #: Same three-valued treatment, for the same reason: a box under one of these is
 #: evidence in neither direction, so it is dropped from the bands *and* bars its
-#: image from the shared negative pool. :func:`pilebuild.loaders.vg_scale.lift_ambiguous`
-#: does both, and exempts any image COCO annotates exhaustively or a reviewer has
+#: image from the shared negative pool. ``lift_ambiguous`` (the retired ``vg_scale``
+#: loader's, #4038) did both, and exempts any image COCO annotates exhaustively or a reviewer has
 #: ruled on -- there the question is already answered and the spelling is ignored.
 #:
 #: Empty since the #3588 promotion; `glass`, the entry that named this table, is

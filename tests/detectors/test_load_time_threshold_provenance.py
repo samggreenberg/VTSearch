@@ -1,4 +1,4 @@
-"""Regression: reloading a saved detector lands on the **fold-anchored** cut.
+"""Regression: reloading a saved detector starts on the line a fresh retrain draws.
 
 Issue #3257 proposed measuring a "load-then-continue" trajectory on the premise
 that a user who re-opens a saved detector starts the session on the *pooled
@@ -9,16 +9,18 @@ premise is wrong about the app: `train_detector_from_origins` is the
 load path is `POST /api/detectors/registry/load` ->
 `vtscore.detectors.labelset_training.train_from_labelset(..., snap=snap)` ->
 `train_and_threshold`, which is handed the active dataset's medias as a
-haystack and therefore fits the fold-anchored population estimator - the same
-threshold a freshly trained detector gets.
+haystack and therefore draws the same line a freshly trained detector gets:
+under the balance, the labels' line (#4452), with the fold-anchored cut as its
+fallback.
 
 This test pins that, because the claim is otherwise only visible by following
 three call sites: what a resumed session starts on is what decides whether a
 whole class of "the load-time cut steers everything after" experiments has
 anything to measure.  It asserts the provenance directly (a fitted
-`FoldAnchoredCut` is parked on the context and the shipped threshold *is* its
-cut) and, so the assertion cannot pass vacuously, that the pooled conformal cut
-over the same fold orderings is a different number.
+`FoldAnchoredCut` and the haystack's ranking are parked on the context, and the
+loaded threshold is what a re-cut at the balance gives) and, so the assertion
+cannot pass vacuously, that the pooled conformal cut over the same fold
+orderings is a different number.
 
 Labels follow `test_find_balance_recut.py`: 6 good / 6 bad keeps the
 calibration folds non-separable, leaving ids 13-20 as the haystack the

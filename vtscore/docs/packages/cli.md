@@ -458,6 +458,11 @@ event includes `event` and `ts`; each row lists the extra fields.
 |--------------------|-------------------------------------------------------------------|---------------------------------------|
 | `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
+| `dataset_start`    | `name`, `media_type`, `category`, `dataset_id` (or `null`), `index`, `count` | `_RunDataset.announce` in `cli.py` (one per dataset of a run) |
+| `dataset_saved`    | `dataset_id`, `name`, `num_items`, `pkl_path`; `already_saved: true` when the pickle was already registered | `_emit_dataset_saved` and the pickle source in `cli.py` |
+| `dataset_failed`   | `name`, `error`                                                   | the multi-dataset output runs in `cli.py` |
+| `dataset_deleted`  | `dataset_id`, `name`                                              | the `autofind_cli_delete_dataset` sweep in `cli.py` |
+| `detection_skipped`| `reason`, optional `dataset`                                      | `cli.py`, when no detector applies to a dataset |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
@@ -467,15 +472,19 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
 | `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
-| `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`      | `progress_callback`                   |
+| `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`; `dataset` while a multi-dataset import runs | `progress_callback`, `_relay_import_progress` |
+| `labels_imported`  | `detector`, `applied`, `skipped`, `created`                       | a pipeline file's `import_labels` (`cli_pipeline.py`) |
 | `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
 
 Progress ticks with no `message` and `total <= 0` are dropped, so
-consumers never see empty `{"status":"idle"}` records. The app's
-`--import-labels-into` flag also emits `labels_imported`
-(`detector`, `applied`, `skipped`, `created`), but from the app tier, not
-from these modules.
+consumers never see empty `{"status":"idle"}` records. The app tier
+(`vtsearch/cli_main.py`) emits three more through the same emitter:
+`labels_imported` (the same fields) for `--import-labels-into`,
+`labels_import_dry_run` (`detector`, `importer`, `filepath`, `fields`,
+`create_media_type`) for that flag under `--dry-run`, and
+`authenticated_user` (`user`) when `--user` and `--api-key` select who the
+run is for.
 
 ### Consuming the NDJSON stream
 

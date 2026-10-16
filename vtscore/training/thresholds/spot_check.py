@@ -1320,9 +1320,10 @@ def balance_state(
 ) -> BalanceState:
     """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
 
-    With *threshold* (the app's labels line, #4452) the count is how many
-    unvoted items of *ranking* score at or above it - the set the line keeps
-    there, which may be none - rather than the count rule's.
+    With *threshold* (the detector's line: the labels' line, #4452, a
+    centroid or typed-query head's line, or a trained head's fallback cut) the
+    count is how many unvoted items of *ranking* score at or above it - the set
+    the line keeps there, which may be none - rather than the count rule's.
 
     *shape* overrides the preset's check shape (:func:`check_shape`); the
     harness's full-walk arm passes ``trim`` so the walk's end is the count.

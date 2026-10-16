@@ -302,11 +302,13 @@ peak since #4413) measures that line, in Train only, and only Autopilot runs
 it: it is Autopilot's **Spot Check** step, phase `spot` in
 `AutopilotStateService`. The state's `spotCheck` says why one is running:
 `weak` when the labels separate weakly, `done` for the check before Done. The
-phase machine reaches `spot` the first time every quality light is green
-(`doneChecked` latches it for the run once that check closes, so Done
+phase machine reaches `spot` the first time Done is due: every quality light
+green, the labels line's level met (#4878), or the votes at the 200-vote cap
+(#4903) (`doneChecked` latches it for the run once that check closes, so Done
 follows), and a running check of either kind holds the phase at `spot`. A
-run whose first labeling-status reading is already all green (the Train view
-re-entered on a finished detector) latches `doneChecked` at that reading, so
+run whose first labeling-status reading is already all green or at the level
+(the Train view re-entered on a finished detector), or whose detector already
+holds 200 votes, latches `doneChecked` at that reading, so
 re-entry runs no check, even after a server restart has forgotten the last
 one. The
 Threshold control starts none (it has no check button), and Test runs none:

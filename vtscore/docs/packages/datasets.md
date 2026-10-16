@@ -249,7 +249,7 @@ media), `on_progress`, and hooks that short-circuit work the caller has
 already done (keys are relative paths or basenames; an ambiguous
 basename raises `ValueError`):
 
-- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them.
+- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them. Each vector is validated on adoption (float32, 1-D, finite), and one filed under a registered embedder's name must have the width that embedder declares, or the load raises `MismatchedVectorError`.
 - `content_md5s: dict[str, str]`: reuse a pre-computed MD5.
 - `custom_metadata_map: dict[str, dict[str, Any]]`: attach `custom_metadata`; nested `"md5"` and `"embedding"` keys take priority over both the above.
 

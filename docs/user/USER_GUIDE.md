@@ -142,9 +142,9 @@ the Threshold says so: **32 more kept, unchecked** (or however many it kept
 besides the items you voted on).
 
 **The spot check.** Autopilot runs it for you, as its **Spot Check.** step
-(see [The phases](#the-phases)): once every quality light is green, or the
-detector already expects a good result (see below), just before it says
-**Done!**. There is no button for it; only Autopilot starts a
+(see [The phases](#the-phases)): once every quality light is green, the
+detector already expects a good result (see below), or you have cast 200
+votes, just before it says **Done!**. There is no button for it; only Autopilot starts a
 check. VTSearch cuts the list you haven't voted on into bands from the top
 (the top 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random
 from a band, and shows them one at a time in the centre, where the item

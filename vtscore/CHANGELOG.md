@@ -10,6 +10,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A folder load width-checks every named pre-computed vector** (issue #4966). `load_dataset_from_folder` /
+  `load_dataset_from_folder_chunked` check a `content_vectors` entry filed under `content_embedder_name`, and
+  each column of a per-embedder `{embedder: vector}` entry, against the width that embedder declares
+  (`vtscore.embedding.binding.expected_dim_for_embedder`, no model load), as the `.npz` readers already did,
+  and raise `MismatchedVectorError` naming both widths. A vector with no embedder name, or one naming an
+  unregistered embedder or one that declares no width, is not width-checked there.
+
+- **`detector_balance_state` counts what a trained head's fallback line keeps** (issue #4966). A trained head
+  whose labels give no class model (no `labels_line`: too few votes, one class) is cut at the retrain's
+  fallback, and the state's `count` is now how many unvoted items of `line_ranking` that threshold keeps, as
+  it already was under the labels line and a quota head's line. It was the count rule's (the mixture's F-beta
+  argmax under the balance's cap), a set that line never keeps. Only a context with no head reads the count
+  rule. A headless CLI run's `detector_unchecked` event and `balance` entry carry the same count.
+
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
   `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns

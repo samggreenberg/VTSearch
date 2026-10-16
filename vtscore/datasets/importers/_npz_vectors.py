@@ -329,7 +329,7 @@ def _multi_vector_columns(data, p: Path) -> tuple[dict[str, np.ndarray], np.ndar
         if len(arr) != n:
             raise ValueError(f"NPZ '{key}' and '{filenames_key}' have mismatched lengths ({len(arr)} vs {n})")
         # Each column is validated against *its own* embedder's declared width.
-        # Columns legitimately differ from one another (siglip is 1152-dim while
+        # Columns legitimately differ from one another (siglip_l is 1152-dim while
         # dinov3_patch is 768-dim), so the only meaningful width check here is
         # per-column - which is exactly the check that catches a trio archive
         # whose columns were written under the wrong keys.

@@ -51,7 +51,7 @@ answer; ``coco_scored`` false means COCO was asked and did not annotate this
 image. The two are only distinguishable by testing for the *key*, which is why
 this checks membership rather than truthiness -- the deep sibling silently
 inherited #3667's cross-class rule with an empty world by making exactly this
-mistake one level down (`vg_scale._emit_medias`).
+mistake one level down (`_emit_medias` in the retired `vg_scale` loader).
 
 **The order is a seeded shuffle, and that is the pilot's doing.** The plan reads
 the first batch of the real queue as the pilot rather than annotating throwaway
