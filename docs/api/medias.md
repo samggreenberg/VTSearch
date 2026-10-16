@@ -410,7 +410,10 @@ ranking** on datasets past 20 k items. Page until `has_more` is `false` (or
 until `offset + results.length == total`) when you need the whole order.
 
 The full ranking is held server-side in a process-global LRU cache of the 8
-most recent sorts. Nothing is persisted: it holds only the lightweight
+most recent sorts, holding at most 2 000 000 rows across them
+(`SORT_CACHE_MAX_ROWS`). The newest sort always stays, so on a dataset of a
+million items or more an older sort's token can expire after one or two newer
+sorts. Nothing is persisted: it holds only the lightweight
 `{id, score}` / `{id, similarity}` rows, never embeddings or model weights.
 
 ### Sort page
