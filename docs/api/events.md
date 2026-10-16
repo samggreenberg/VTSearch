@@ -1,11 +1,10 @@
 # Progress events (SSE)
 
+[← Back to API index](../API.md)
+
 VTSearch streams progress for every long-running operation through a
 single [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
-endpoint. Replaces the per-tracker REST polling endpoints
-(`/api/dataset/progress`, `/api/sort/progress`, `/api/find/progress`,
-`/api/dataset/loading-tasks`, `/api/detectors/loading-tasks`,
-`/api/eval/voting-iterations`).
+endpoint; there are no per-operation progress-polling routes.
 
 ## Endpoint
 

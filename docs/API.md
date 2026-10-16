@@ -21,7 +21,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers and running them, settings importers/exporters |
 | [Settings](api/settings.md) | App settings, settings sources, labelset sources |
 | [Dashboard](api/dashboard.md) | Dashboard disk/RAM usage probes |
-| [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect, the test of the line, find stats/corrections/queues/evidence coverage |
+| [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect and background AutoFind results, the test of the line, find stats/corrections/queues/evidence coverage |
 | [File Browser](api/file-browser.md) | Server filesystem browsing |
 | [Progress events (SSE)](api/events.md) | `GET /api/events`: the single Server-Sent Events stream carrying progress for every long-running operation |
 
@@ -30,6 +30,27 @@ idempotency, async hand-offs, which errors mean what. For the exhaustive field
 list of any request or response, the generated spec is authoritative (see
 [Machine-readable schema](#machine-readable-schema)); where a page and the spec
 disagree on a field, trust the spec and fix the page.
+
+### Find a route by path
+
+Every blueprint under `vtsearch/routes/` registers full paths (none sets a
+`url_prefix`), so a route's page follows from its path:
+
+| Path | Page |
+|------|------|
+| `/api/auth/*` (including `/api/auth/huggingface/*`), `/api/version`, `/healthz`, `/readyz`, and the SPA and static paths (`/`, `/label`, `/dashboard`, `/favicon*.ico`, `/logo.svg`, `/{path}`) | [auth.md](api/auth.md) |
+| `/api/medias/*`, `/api/votes*`, `/api/labels/*`, `/api/sort*`, `/api/learned-sort*`, `/api/example-sort*`, `/api/label-file-sort`, `/api/textsort-suggestions`, `/api/server-media-files*`, `/api/seed-import*`, `/api/datasource-import*` | [medias.md](api/medias.md) |
+| `/api/balance`, `/api/precision-check*`, `/api/labeling-progress`, `/api/labeling-status`, `/api/indicator-score-history`, `/api/eval/*`, `/api/coverage-atlas/*` | [labeling.md](api/labeling.md) |
+| `/api/detectors*`, except `/api/detectors/{detector_name}/labelset-source*` | [detectors.md](api/detectors.md) |
+| `/api/dataset/*`, `/api/datasets/registry*`, `/api/media-types`, `/api/embed`, `/api/embedders`, `/api/clippers`, `/api/cleaners`, `/api/converters`, `/api/browse-media-files*`, `/api/projection/*` | [datasets.md](api/datasets.md) |
+| `/api/exporters*`, `/api/label-importers*`, `/api/pregen-processors*`, `/api/autorun-extractors*`, `/api/autorun-localizers*`, `/api/extract`, `/api/localize`, `/api/auto-extract`, `/api/auto-localize`, `/api/settings-importers*`, `/api/settings-exporters*` | [io.md](api/io.md) |
+| `/api/settings`, `/api/settings/defaults`, `/api/settings-sources*`, `/api/labelset-sources*`, `/api/detectors/{detector_name}/labelset-source*` | [settings.md](api/settings.md) |
+| `/api/dashboard/*` | [dashboard.md](api/dashboard.md) |
+| `/api/find`, `/api/find/*`, `/api/find-label`, `/api/auto-detect`, `/api/autofind/runs/*`, `/api/line-test*` | [find.md](api/find.md) |
+| `/api/browse` | [file-browser.md](api/file-browser.md) |
+| `/api/events` | [events.md](api/events.md) |
+| `/api/achievements*`, `/api/sessions/recent`, `/api/jobs/active` | [Other endpoints](#other-endpoints), below |
+| `/api/openapi.json`, `/api/docs` | [Machine-readable schema](#machine-readable-schema), below |
 
 ### Other endpoints
 
@@ -60,7 +81,8 @@ chosen **per request** by two HTTP headers:
 | `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
 | `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / model / labelset resolve to | Same interceptor |
 
-Key semantics (`app.py` `before_request`, `vtsearch/routes/_context.py`):
+Key semantics (the `before_request` hook in `vtsearch/hooks.py`, and
+`vtsearch/routes/_context.py`):
 
 - **Per-request, not global.** The headers stash the chosen context on
   `flask.g` for the lifetime of the request; they do **not** mutate any global
@@ -121,7 +143,7 @@ extras (e.g. `available`, `missing_fields`, `dataset_id`):
 |-------|------|
 | `errors` | Schema validation failed (**422**); maps location → field → messages, e.g. `{"json": {"volume": ["Not a valid number."]}}` or `{"query": {...}}` |
 | `detail` | 500s from the catch-all handler; the exception type and its first line, e.g. `"RuntimeError: embedder X not loaded"` |
-| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted) |
+| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required` (401), `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted), and on the routes that reach a converter output's source item, `source_not_loaded` (409: the source dataset is registered but not loaded; `dataset_id` names it) and `not_derived` / `no_source_dataset` / `source_not_found` (404) |
 
 A schema-validation failure therefore looks like:
 
@@ -146,6 +168,10 @@ Request (handler-level validation), 401 (auth, see
 registered dataset/detector), 404 Not Found, 409 Conflict, 422 (schema
 validation), 500, plus 501/502 from plugin-backed routes (plugin not
 implemented / upstream failure) and 503 from `GET /api/events` and `/readyz`.
+A few routes add their own: 204 from the favicon and logo routes when the file
+is missing, 304 from the `ETag`-validated audio and thumbnail routes, 410
+when a registered dataset has expired, and 415 when a video needs a transcoder
+the server lacks.
 
 ## Machine-readable schema
 
@@ -201,6 +227,8 @@ A few routes live on plain Flask blueprints and are not in the spec at all:
 - `/api/auth/huggingface/*` — the OAuth browser-redirect flow
   ([auth.md](api/auth.md#huggingface-oauth-sign-in-with-huggingface)).
 - `GET /api/openapi.json` and `GET /api/docs` themselves.
+- `GET /static/{filename}`, Flask's built-in static route over the same
+  `static/` directory the catch-all serves.
 
 ---
 
