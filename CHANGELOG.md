@@ -1009,6 +1009,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
+  rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
+  player showed the full padded frame, so an item previewed without its black bars and played with them.
+  The player now shows the same picture, with its controls along the cropped picture's bottom edge. This
+  needs a Chromium-based browser (Chrome, Edge); other browsers play the full frame, as before.
+
 - **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
   #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
   of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
