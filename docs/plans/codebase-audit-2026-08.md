@@ -31,19 +31,11 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- **Detector listing re-reads full detector JSON files from disk on every request for legacy entries** — `vtsearch/routes/detectors/registry.py` (medium impact)
-
-  GET /api/detectors/registry backfills two fields for entries that predate them, and does so on every single request: line 127-129 calls `_read_detector(_detector_path(name))` whenever `entry.get('embedder_type')` is falsy, and lines 133-135 read the same file a second time whenever 'examples' is missing. `_read_detector` parses the whole detector JSON — including a labelset that can hold thousands of label dicts — so a dashboard that polls the registry pays O(legacy_detectors × labelset_size) JSON parsing per poll, twice per entry. Neither computed value is written back via update_detector, so the cost never amortizes. Benefit: one-time lazy migration turns a recurring disk+parse cost into a single write.
-
-  *Direction:* Read the file once per entry, derive both embedder_type and examples from that single read, and persist them back with update_detector(did, embedder_type=..., examples=...) so subsequent listings hit only the registry entry.
+- [ ] #5001 — Detector registry listing re-parses detector JSON on every request for entries whose embedder type or examples were never stored (Sonnet)
 
 <!-- item-sep -->
 
-- **Readers-endpoint maps error to status by substring-matching the message** — `vtsearch/routes/detectors/registry.py` (low impact)
-
-  update_detector_readers (and its dataset twin at routes/datasets/registry.py) chooses the HTTP status with `status = 403 if "creator" in err else 404` — coupling status-code semantics to the wording of set_detector_readers' human-readable error string. Rewording the message (e.g. 'Only the owner can modify readers') would silently turn permission failures into 404s. The registry helper already distinguishes the two cases internally (registry.py); it just flattens them into prose.
-
-  *Direction:* Have set_detector_readers/set_readers return a typed error (enum or exception class) and map it explicitly to 403/404 in the routes.
+- [ ] #5000 — Readers endpoints pick 403 vs 404 by searching the error message for "creator" (Sonnet)
 
 <!-- item-sep -->
 
@@ -113,39 +105,25 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- **sync_from_labelset_source applies labels with an O(labels × medias) scan** — `vtscore/labels/sync.py` (low impact)
-
-  For every imported label entry, the apply loop does a linear scan `for mid, media in ds_medias.items(): if media.get("md5") == md5` — O(L × N) while holding `_sync_lock` (which blocks every concurrent debounced push). With a 100k-item dataset and a few thousand imported labels this is hundreds of millions of dict lookups on the sync path that runs at detector load. Concrete benefit: building a one-pass `{md5: mid}` index before the loop makes the apply O(L + N) and shrinks the window during which `_sync_lock` starves `_push_to_labelset_source`.
-
-  *Direction:* Before the loop: `md5_to_mid = {m.get("md5"): mid for mid, m in ds_medias.items()}` (first-wins to preserve current semantics), then `mid = md5_to_mid.get(md5)` per entry.
-
 <!-- item-sep -->
 
 ### Eval harness
 
 <!-- item-sep -->
 
-- **check-eval-app-sync gate does not pin several ported surfaces, including the two that actually drifted** — `scripts/check-eval-app-sync.py` (medium impact)
-
-  MIRRORS pins the phase machine, vote targets, three indicator rules, and four training defaults — but the harness ports more app logic than that, and the unpinned surfaces are exactly where drift was found: (1) `_select_phase_faithful` mirrors the phase->Sort/Select pairing (`restoreAutopilotSortSelect`), which is not pinned, so changing the app's pairing silently detaches every simulated pick (`autoSelectNext` itself is now pinned); (2) `_labelset_error_costs` / `AutopilotFlow.record_step` mirror `labeling_progress._eval_cached_models` / `_compute_step_stability` (the Smart/Stable input semantics) — unpinned (`_score_step` now is), and the Smart plumbing had in fact drifted once (fixed in #2923). One smaller mechanism gap remains: `_normalize_python`'s trailing-comma stripping erases the semantic difference between `(x,)` and `(x)`, so that one real logic change cannot trip a pin.
-
-  *Direction:* Add Mirror entries for the sort/select restore block and `py:vtscore.detectors.labeling_progress._eval_cached_models` / `_compute_step_stability`; keep the trailing comma when the next token is `)` and the previous token is not an argument (or only strip inside call/collection contexts with >1 element).
+- [ ] #5005 — check-eval-app-sync does not pin the Smart window and Stable-input plumbing the harness ports (Sonnet)
 
 <!-- item-sep -->
 
-- **eval_learned_sort thresholds on a haystack that includes the held-out test set** — `vtscore/eval/runner.py` (low impact)
-
-  `eval_learned_sort` calls `train_and_score(medias, ...)` over the FULL media dict, so the safe-threshold population estimator (fold-anchored GMM / blend) is fitted on a score distribution that includes the held-out test items, and the resulting threshold is then evaluated on those same items. `simulate_voting_iterations` explicitly refuses this (voting_iterations.py: "Restrict to the simulation set so the held-out test_ids never feed into the GMM ... otherwise the test scores leak into calibration and the reported metrics are biased upward"), so the two eval components apply inconsistent leakage policy: the runner's accuracy/precision/recall/F1 numbers are mildly transductive while the voting-iterations numbers are not, making them non-comparable. (Unsupervised leakage — no test labels are read — but the same kind voting_iterations guards against.)
-
-  *Direction:* Restrict the snapshot passed to `train_and_score` to the train split (train_good + train_bad + train-side unlabeled), then score the test items separately with the returned model.
+- [ ] #5006 — check-eval-app-sync normalizer makes (x,) and (x) hash the same (Sonnet)
 
 <!-- item-sep -->
 
-- **Bad-phase text-sort cutoff and rank geometry include held-out test items** — `vtscore/eval/al_strategies.py` (low impact)
+- [ ] #5003 — eval_learned_sort fits its threshold on the very items it then evaluates (Opus)
 
-  `build_seed_scores` scores EVERY media id in the dataset (seed_scores.py), and `_pick_bad_phase` uses that map directly as the ranking: `_sort_threshold(ranking)` fits the text-sort GMM cutoff over the full dataset's cosine distribution (sim + test), and `_hard_pick_by_index` measures rank distance through interleaved test items that can never be picked. The simulated user's universe is supposed to be D_sim (the app's counterpart is the loaded dataset, which for the simulation is the sim half). The example-sort fallback is inconsistent with it too: `_centroid_similarities(ctx, list(ctx.embeddings))` ranks over sim embeddings only, so the two seeding modes run over different universes. No label leakage (cosines are query-based), but the bad-phase cutoff position and the resulting Bad votes depend on the test half, which shifts trajectories relative to a run at a different sim_fraction and blurs the sim/test separation the harness otherwise maintains.
+<!-- item-sep -->
 
-  *Direction:* In `simulate_voting_iterations`, filter `seed_scores` to `sim_ids` before constructing the ALContext, so the text ranking, its GMM cutoff, and the rank distances all live in the simulated user's visible universe.
+- [ ] #5004 — Autopilot simulation's text-sort cut and rank geometry include the held-out test half (Opus)
 
 <!-- item-sep -->
 
@@ -241,11 +219,7 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- **Hardcoded default Flask secret_key with no startup guard for multi-user deployments** — `app.py` (low impact)
-
-  `app.secret_key` falls back to the literal `"vtsearch-dev-key-change-in-production"` when `VTSEARCH_SECRET_KEY` is unset (app.py), and nothing refuses to start (or warns loudly) when a non-DefaultLoginProvider is active with this public key. Signed session cookies (used by `TrivialLoginProvider` for `vtsearch_user`, and by the HF OAuth handshake for state/PKCE) are then forgeable by anyone who knows the shipped default. The practical blast radius today is limited because the only session-cookie-based provider, `TrivialLoginProvider`, is passwordless-by-design (an attacker can just POST /api/auth/login with any username), but the moment any real session-backed provider is added, or the HF state cookie is relied upon, a forgeable key becomes a live impersonation/CSRF-token-forgery vector. There is no defense-in-depth check tying 'multi-user provider selected' to 'a real secret key must be present'.
-
-  *Direction:* At startup, if the active login provider is not DefaultLoginProvider and `VTSEARCH_SECRET_KEY` is unset (secret_key == the default), refuse to boot (or generate a random per-process key and log a prominent warning that sessions won't survive restart). Never ship a usable default secret in a mode that trusts signed cookies.
+- [ ] #5002 — Flask secret_key defaults to a public constant and nothing warns when signed session cookies are in use (Sonnet)
 
 <!-- item-sep -->
 
@@ -253,19 +227,11 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- **Cross-dataset clip re-embedding tests assert nothing — the documented behavior can never fail** — `tests/detectors/test_clipper_workflow.py` (medium impact)
-
-  All four tests in TestCrossDatasetClipEmbedding (lines 482-559) call `_apply_clip_and_embed(...)` and assert nothing — comments say "Result may be None if no embedder is loaded, which is fine". Their docstrings claim they verify that clip params cause slicing/cropping/sentence-extraction before embedding, but a regression that ignores clip params entirely (or returns None always) passes all four. This is the load-bearing path of the repo's core invariant ("origins are canonical; the system rederives origin → file → embedding on demand") for clipped labels, so it is effectively untested. Notably the excuse is stale: the session-scoped `_stub_embedding_models` fixture (tests/conftest.py) patches every embedder's `embed_media` with a deterministic content-seeded fake, so a real assertion is easy — the clipped call should return a non-None unit vector that differs from the unclipped `_apply_clip_and_embed` result on the same file (the fake seeds off file/clip bytes).
-
-  *Direction:* Assert the return is a non-None float32 vector of the right dim, and that clipped vs. no-clip origins produce different vectors (and identical clip params produce identical vectors).
+- [ ] #5007 — Cross-dataset clip re-embedding tests call _apply_clip_and_embed and assert nothing (Sonnet)
 
 <!-- item-sep -->
 
-- **check-dockerfiles.py misses `python3` invocations** — `scripts/check-dockerfiles.py` (low impact)
-
-  The ordering gate matches only `\bpython\b`, so `python3 ...` (the actual interpreter name in Dockerfile.gpu, where `/usr/bin/python` is only a symlink created in the same layer) slips through. A future Dockerfile edit that runs `python3` before vtsearch/+vtscore/ are copied would pass the gate the gate exists to catch. Relatedly, .dockerignore excludes `tests/` but not `tests_lib/`, so the library-tier test tree (with fixtures) is baked into every image for no reason.
-
-  *Direction:* Broaden the regex to `python[0-9.]*`, with a carve-out for Dockerfile.gpu's `python3 -m venv`, which runs before the COPYs and needs no package; and add tests_lib/ to .dockerignore.
+- [ ] #5008 — check-dockerfiles.py does not match python3, and tests_lib/ ships in every image (Sonnet)
 
 <!-- item-sep -->
 
