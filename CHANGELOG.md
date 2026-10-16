@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
+  #4736 a session started from a typed description was meant to keep the description's text ranking behind
+  the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
+  it there, so the detector's ranking took the screen from the 8th vote as before. The payload now carries
+  it. Test, Find, AutoFind and export were unaffected: they apply the hold on the server.
+
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
   and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
