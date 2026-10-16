@@ -2614,7 +2614,16 @@ def _run_source(
     detection has run (:func:`_delete_after_detection`).  A source with
     ``outputs`` is several datasets from one importer run, each saved, scored
     and exported on its own (:func:`_run_multi_source`).
+
+    *settings_path* is applied first, before the save: the import reads the
+    server-tier settings too (the saved-datasets directory, the retention
+    stamp, the download and embedding gates), so a run whose settings switched
+    over only at the scoring step saved its dataset under the default file's.
     """
+    if settings_path:
+        from vtscore.config import CoreConfig  # noqa: PLC0415
+
+        CoreConfig.from_settings(settings_path=settings_path)
     if spec.outputs:
         _run_multi_source(
             spec,

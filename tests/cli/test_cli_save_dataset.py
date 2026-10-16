@@ -78,9 +78,9 @@ def _stub_resolve(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
 
 
-def _settings_file(tmp_path: Path, autofind: list[str], *, delete_after: bool = False) -> Path:
+def _settings_file(tmp_path: Path, autofind: list[str], *, delete_after: bool = False, **extra) -> Path:
     p = tmp_path / "settings.json"
-    data = {"autofind_detectors": list(autofind), "detectors_dir": str(get_detectors_dir())}
+    data = {"autofind_detectors": list(autofind), "detectors_dir": str(get_detectors_dir()), **extra}
     if delete_after:
         data["autofind_cli_delete_dataset"] = True
     p.write_text(json.dumps(data))
@@ -161,6 +161,21 @@ class TestSavingRun:
             autodetect_main(str(source), settings_path=str(_settings_file(tmp_path, [])), save_dataset=True)
 
         assert [e["created_by"] for e in list_datasets()] == ["alice"]
+
+    def test_the_save_reads_the_run_settings_file(self, client, tmp_path):
+        """The import itself runs under ``--settings``, not the default file (#4970).
+
+        Saving reads server-tier settings of its own - here the retention
+        stamp - and used to happen before the run switched to its settings
+        file, which it only did at the scoring step.
+        """
+        from vtscore.cli import autodetect_main
+
+        settings = _settings_file(tmp_path, [], dataset_max_age_days=3)
+        autodetect_main(str(_make_dataset_file(tmp_path, medias)), settings_path=str(settings), save_dataset=True)
+
+        (entry,) = list_datasets()
+        assert entry["expires_at"] == pytest.approx(entry["created_at"] + 3 * 86400)
 
     def test_no_autofind_detectors_saves_and_skips_detection(self, client, tmp_path, capsys):
         from vtscore.cli import autodetect_main
@@ -316,6 +331,25 @@ class TestPipelineFile:
 
         assert len(list_datasets()) == saved
         assert "yaml-saver" in json.loads(out_path.read_text())["results"]
+
+    def test_the_save_reads_the_pipeline_settings_file(self, client, tmp_path):
+        """The YAML ``settings:`` file governs the import too, as ``--settings`` does (#4970)."""
+        path = tmp_path / "pipeline.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": str(_make_dataset_file(tmp_path, medias)),
+                    "settings": str(_settings_file(tmp_path, [], dataset_max_age_days=3)),
+                }
+            )
+        )
+
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        run_pipeline_file(path)
+
+        (entry,) = list_datasets()
+        assert entry["expires_at"] == pytest.approx(entry["created_at"] + 3 * 86400)
 
 
 # ---------------------------------------------------------------------------
