@@ -132,6 +132,13 @@ same edit.
   Photo costs ~5 h per seed under the memory QOS, so it has 3. About 60% of a
   region seed is the full-label ceiling, so extra region seeds can run the
   clicks (`SOTA_PASS=trajectory`) with a ceiling for only some seeds.
+  - **The deadline sets the count, not the last review (owner, 2026-10-15, #4951):** "get as many seeds as we can,
+    not match whatever happened to add up last time", at max parallelization when the review is the only thing on
+    the GRID. `/expscratch/sgreenberg/sota-1016/drive.sh` does it in two lanes: cpu arrays (pack jobs past seed 34)
+    and up to 4 V100 packs. It claims seeds in order while each would end by the deadline, and claimed seeds run
+    out. 2026-10-16 reached 45 seeds.
+  - **Check `df /expscratch/$USER` first.** A Binary seed writes ~0.6 GB into each preset's dir, uncompressed. The
+    2026-10-16 run filled the 1 TB volume at 04:40 and lost seeds 45–49 (#4953).
 - **Shipped defaults** for everything else: the text opening (refused
   otherwise), the fused threshold, and no variant arms.
 - **Scale up in one step (owner, 2026-09-23):** settle the presentation on a
