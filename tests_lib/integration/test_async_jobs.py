@@ -580,7 +580,9 @@ class TestUnloadedContext:
         assert b.status == "running"
         c_release = threading.Event()
         c_release.set()
-        c = mgr.start(("sig-C",), _make_target(c_release, threading.Event(), ran), dataset_id="ds-A", detector_id="det-A")
+        c = mgr.start(
+            ("sig-C",), _make_target(c_release, threading.Event(), ran), dataset_id="ds-A", detector_id="det-A"
+        )
         assert c.status == "pending"
         gate.set()
 
