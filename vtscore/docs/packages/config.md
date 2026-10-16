@@ -60,7 +60,7 @@ cannot be mutated underneath it.
 
 ## The `CoreConfig` dataclass
 
-Defined in `vtscore/config/core_config.py`. The twelve fields below are **required** -
+Defined in `vtscore/config/core_config.py`. The eleven fields below are **required** -
 they have no defaults, so a consumer can never accidentally inherit stale
 state from a previous run. (The handful of newer optional fields listed
 after the table do have defaults, precisely so a library-only
@@ -72,7 +72,7 @@ after the table do have defaults, precisely so a library-only
 | `detectors_dir`                   | `Path`         | server      | Where detector JSON files are read from / written to.                                            |
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
-| `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
+| `autofind_detectors`               | `tuple[str, ...]` | per-user | The AutoFind list: detector names a `vtscore.cli` run trains + scores when no override is given. |
 | `dataset_max_age_days`            | `int \| None`  | server      | Age-off horizon stamped into saved datasets. `None` = never expire.                              |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float \| None` | per-user    | Explicit fraction of labels held out per calibration fold. `None` = per-embedder default (0.3 single-vector / 0.5 patch). |
@@ -87,7 +87,11 @@ whether a saving CLI run deletes the dataset it imported once its detectors
 have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
-`signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
+`signpost_vocab` (`dict[str, list[str]]`, `{}`), `default_labelset_source`
+(`dict[str, Any] | None`, `None` - the deployment-wide labelset source every
+detector syncs its labels to unless it has a binding of its own),
+`labelset_source_push_interval` (`float`, `60.0` seconds - the shortest gap
+between two pushes of one detector's labels to its source), `hide_ingest_eta`
 (`bool`, `False` - **deprecated and ignored** (#4667): ingest progress bars
 never publish an ETA now; see [concurrency.md](concurrency.md#progresstracker)),
 and `beta` (`float`,
@@ -188,7 +192,7 @@ when one is in scope). Tests rely on this: they override
 
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
+| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.torch_threads`). |
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB), for a host app to enforce. `0` = unlimited. |

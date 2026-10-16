@@ -146,6 +146,11 @@ class Pyramid:
     _member_index: dict[int, dict[tuple[int, int], dict[tuple[int, int], list[int]]]] = field(
         default_factory=dict, compare=False, repr=False
     )
+    # In-memory, process-scoped point orderings that depend only on the frozen
+    # coords, not on the level: ``"hilbert"`` -> :func:`_hilbert_order` permutation.
+    # Computed by the first level's membership re-bin and reused by every other
+    # level's. A mutable holder because the dataclass is frozen; never persisted.
+    _order_cache: dict[str, np.ndarray] = field(default_factory=dict, compare=False, repr=False)
 
     def level_radius(self, level: int) -> float:
         """Cell radius at *level* (``base_radius / 2**level``)."""
@@ -625,7 +630,9 @@ def _level_membership(
     Within each cell, members come out in :func:`_hilbert_order` (a 1-D Hilbert
     traversal of the frozen layout) rather than by id, so a dense bin's contents
     group by region — the popup shows similar items together and a subset keeps
-    that order when items are hidden.
+    that order when items are hidden.  That permutation is level-independent, so
+    it is memoized once per pyramid on ``pyr._order_cache`` and shared by every
+    level's re-bin.
     """
     cached = pyr._member_index.get(level)
     if cached is not None:
@@ -644,9 +651,13 @@ def _level_membership(
     tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
 
     # Visit points along the Hilbert curve so each cell's member list lands in a
-    # locality-preserving 1-D order (shared across this level's tiles; the whole
-    # index is memoized, so the curve is computed at most once per level).
-    perm = _hilbert_order(coords)
+    # locality-preserving 1-D order. The curve depends only on the frozen coords,
+    # so it is computed at most once per pyramid and shared across every level (a
+    # race that computes it twice just stores an identical array).
+    perm = pyr._order_cache.get("hilbert")
+    if perm is None:
+        perm = _hilbert_order(coords)
+        pyr._order_cache["hilbert"] = perm
     for txx, tyy, qq, rr, mid in zip(
         tx_all[perm].tolist(), ty_all[perm].tolist(), q[perm].tolist(), r[perm].tolist(), ids[perm].tolist()
     ):

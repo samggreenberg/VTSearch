@@ -50,14 +50,14 @@ whose `__init__.py` re-exports nothing.
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync | [packages/detectors.md](packages/detectors.md) |
 | `vtscore.eval` | Offline evaluation: text-sort, learned-sort, voting iterations | [packages/eval.md](packages/eval.md) |
 | `vtscore.converters` | Cross-format converters (spectrogram, OCR, ASR, keyframes) | [packages/converters.md](packages/converters.md) |
-| `vtscore.exporters` | Results exporters (JSON, CSV, webhook, email) | [packages/exporters.md](packages/exporters.md) |
+| `vtscore.exporters` | Results exporters (JSON, CSV, webhook, email, …) | [packages/exporters.md](packages/exporters.md) |
 | `vtscore.labels` | Label importers + bidirectional labelset sources | [packages/labels.md](packages/labels.md) |
 | `vtscore.plugins` | `PluginRegistry`, sentinel-based discovery, entry-points | [packages/plugins.md](packages/plugins.md) |
 | `vtscore.state` | `DatasetContext`, `DetectorContext`, vote / click ops | [packages/state.md](packages/state.md) |
 | `vtscore.coverage` | Coverage Atlas: hierarchical partition, evidence channels, typicality | [packages/coverage.md](packages/coverage.md) |
 | `vtscore.sync` | `SyncSource[L,S]` generic ABC | [packages/sync.md](packages/sync.md) |
 | `vtscore.concurrency` | Async jobs, memory budget, long-running progress | [packages/concurrency.md](packages/concurrency.md) |
-| `vtscore.security` | Path / URL validation, allowlist pickle loader | [packages/security.md](packages/security.md) |
+| `vtscore.security` | Path / URL validation, allowlist pickle loader, the `LoginProvider` ABC | [packages/security.md](packages/security.md) |
 | `vtscore.projection` | VTSBrowse: UMAP layout, hex-tile pyramid, region signposts | [packages/projection.md](packages/projection.md) |
 | `vtscore.timing` | Shipped per-step weights behind every progress bar | [packages/timing.md](packages/timing.md) |
 | `vtscore.utils` | Hit dicts, content hashes, score sanitisation, synthetic media | [packages/utils.md](packages/utils.md) |
@@ -84,11 +84,10 @@ library discovers it automatically. See:
 - [Labelset sources](extending/labelset-sources.md)
 - [Media sources](extending/media-sources.md)
 
-Datasource importers, seed importers and media cleaners have no authoring
-guide yet; their contracts are described in
-[packages/datasource-importers.md](packages/datasource-importers.md),
-[packages/seed-importers.md](packages/seed-importers.md) and
-[packages/media.md](packages/media.md).
+Datasource importers, seed importers and media cleaners have no
+library-tier authoring guide; see
+[extending/README.md § Per-family guides](extending/README.md#per-family-guides)
+for where their contracts are documented.
 
 ## Conventions
 
@@ -100,17 +99,21 @@ the docs make sense:
   inside `LabeledElement`s inside a detector's `LabelSet` JSON. On every load,
   the library re-derives `origin → file → embedding → head` from those
   origins. The single sanctioned exception is dataset pickle files, which
-  are by design a snapshot of media plus their embeddings.
+  are by design a snapshot of media plus their embeddings (and caches
+  derived purely from a pickle's own contents, written beside it; see
+  [Architecture](architecture.md#the-no-persisted-vectors-rule)).
 - **No hardcoded `data/` paths.** Every filesystem reference goes through
   `vtscore.config.DATA_DIR` (which honours `$VTSEARCH_DATA_DIR`) or is
   snapshotted into `CoreConfig.data_dir`. Library consumers can point the
   whole library at any directory by setting the env var or constructing a
   `CoreConfig` with a custom `data_dir`.
-- **No Flask, no `vtsearch.settings` imports.** Verified by
+- **No Flask, no `vtsearch` imports.** Verified twice: by
   `./run-tests.sh vtscore-clean`, which installs a meta-path import hook that
   refuses `flask` / `werkzeug` / `flask_smorest` before pytest collects
-  `tests_lib/`. Library code reads configuration from `CoreConfig` or
-  context fields; it never reaches across the boundary.
+  `tests_lib/`, and by `tests_lib/meta/test_library_layering.py`, which
+  fails on any `import vtsearch` under `vtscore/`. Library code reads
+  configuration from `CoreConfig` or context fields; it never reaches
+  across the boundary.
 - **Votes are `dict[int, None]`, not sets.** `votes[cid] = None` adds a
   vote; `del votes[cid]` removes one. The dict shape preserves insertion
   order and serialises consistently.
@@ -135,16 +138,17 @@ change to a plugin contract.
 Two rules keep this doc set from drifting away from the code, both
 enforced by `scripts/check-vtscore-docs.py` (a `./run-tests.sh` gate):
 
-- **Every top-level module and sub-package of `vtscore/` has a
-  `packages/` doc, and that doc's Contents table names every module in
-  it.** Add a module, and the gate fails until the table lists it. The
-  tables are the inventory; write them from the tree, not from memory.
+- **Every top-level module and sub-package of `vtscore/` maps to a
+  `packages/` doc that names it.** Add one, and the gate fails until a
+  doc covers it. The gate does not look inside a package, so a new
+  module in an existing package is yours to add to that doc's Contents
+  table: the tables are the inventory; write them from the tree, not
+  from memory.
 - **Never cite a line number.** A `path.py` plus a colon plus a number
-  is wrong by the next edit - in practice every such anchor in this doc
-  set had rotted, most by hundreds of lines (which is why the gate
-  rejects the pattern outright, including in this sentence). Reference
-  the module and the symbol instead
-  (``` `pool_box_from_media` in `vtscore/embedding/matrix.py` ```): it
+  is wrong by the next edit, so the gate rejects the pattern outright
+  (including in this sentence). Reference the module and the symbol
+  instead
+  (``` `pool_box_from_media` in `vtscore/detectors/training.py` ```): it
   is stable under any edit that doesn't move the symbol, and it is
   greppable, which a line number never was.
 

@@ -308,7 +308,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
     expect(prefetchSpy).toHaveBeenCalledTimes(2);
   });
 
-  describe('windowed "Load more"', () => {
+  describe('windowed "Load More"', () => {
     it('appends a trailing load-more grid row when hasMore is set', () => {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.9 },

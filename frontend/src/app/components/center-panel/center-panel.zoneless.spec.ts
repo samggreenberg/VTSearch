@@ -500,10 +500,10 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
-   * v2 patch-embedder plan, item 15: vote-API contract for region annotations.
+   * Vote-API contract for region annotations.
    * `region_box` must be present on a yes-vote when a box is drawn, absent on
    * a yes-vote without a box, and never present on any no-vote (no-votes are
-   * region-agnostic (see "Vote attribution → v2" in docs/plans/patch-embedder.md).
+   * region-agnostic (see docs/ARCHITECTURE.md → "Embedder binding and routing").
    */
   describe('vote-API contract for region_box', () => {
     const imageMedia: Media = { ...mockMedia, media_type: 'image', filename: 'pic.png' };
@@ -557,7 +557,7 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
-   * v2 patch-embedder plan, item 12: bad-vote-with-box requires two consecutive
+   * Bad-vote-with-box requires two consecutive
    * ← presses (no timer). Esc, mouse-on-box, or item navigation while armed
    * clears the armed state and keeps the box.
    */

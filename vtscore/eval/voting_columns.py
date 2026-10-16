@@ -427,7 +427,8 @@ PICK_COLUMNS: tuple[str, ...] = (
     #: Ground truth for the click: 1 if the item was a positive.
     "picked_label",
     #: Where the picked item sat in the seed sort - as a 0-based rank over the
-    #: whole sort and as a percentile (0 = top).  Together with ``picked_label``
+    #: whole sort of the voting half (#5004: the withheld half is not on the
+    #: user's screen) and as a percentile (0 = top).  Together with ``picked_label``
     #: this is the mining record: how deep the arm had to reach for each
     #: positive it found.
     "picked_seed_rank",

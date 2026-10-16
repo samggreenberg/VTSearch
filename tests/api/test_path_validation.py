@@ -335,37 +335,22 @@ class TestMultiUserFileRestriction:
 
             set_login_provider(original)
 
-    def test_settings_dir_rejects_path_outside_user_dir(self, client, tmp_path):
-        """Setting directory paths outside user data dir is rejected in multi-user mode."""
+    def test_settings_put_cannot_repoint_the_server_dirs(self, client, tmp_path):
+        """The storage dirs are every user's, so no user's PUT moves them
+        (#4965): not into their own subtree, and not outside it."""
         user_dir = tmp_path / "testuser"
         user_dir.mkdir()
+        before = client.get("/api/settings").get_json()
         original = self._setup_multi_user(client, user_dir)
         try:
             resp = client.put(
                 "/api/settings",
-                json={"saved_datasets_dir": "/tmp/evil"},
+                json={"saved_datasets_dir": str(user_dir / "mine"), "detectors_dir": "/tmp/evil"},
             )
-            assert resp.status_code == 400
-            # New error envelope: human-readable text lives under
-            # ``message`` (the legacy ``error`` key is gone).
-            assert "must be within" in resp.get_json()["message"]
-        finally:
-            from vtsearch.auth import set_login_provider
-
-            set_login_provider(original)
-
-    def test_settings_dir_accepts_path_inside_user_dir(self, client, tmp_path):
-        """Setting directory paths inside user data dir is accepted in multi-user mode."""
-        user_dir = tmp_path / "testuser"
-        user_dir.mkdir()
-        original = self._setup_multi_user(client, user_dir)
-        try:
-            target_dir = user_dir / "my_datasets"
-            resp = client.put(
-                "/api/settings",
-                json={"saved_datasets_dir": str(target_dir)},
-            )
-            assert resp.status_code == 200
+            assert resp.status_code == 200, resp.get_json()
+            data = resp.get_json()
+            assert data["saved_datasets_dir"] == before["saved_datasets_dir"]
+            assert data["detectors_dir"] == before["detectors_dir"]
         finally:
             from vtsearch.auth import set_login_provider
 
@@ -441,20 +426,6 @@ class TestRelativePathCannotStrayFromTheApprovedAnchor:
                 str((user_dir / "a.pkl").resolve()),
                 str((user_dir / "b.pkl").resolve()),
             ]
-        finally:
-            set_login_provider(original)
-
-    def test_settings_dir_persists_the_approved_path(self, client, tmp_path):
-        from vtsearch.auth import set_login_provider
-
-        user_dir = tmp_path / "bob"
-        user_dir.mkdir()
-        original = self._use_multi_user(user_dir)
-        try:
-            resp = client.put("/api/settings", json={"saved_datasets_dir": "my_datasets"})
-            assert resp.status_code == 200, resp.get_json()
-            resp = client.get("/api/settings")
-            assert resp.get_json()["saved_datasets_dir"] == str((user_dir / "my_datasets").resolve())
         finally:
             set_login_provider(original)
 

@@ -35,8 +35,8 @@ def active_dataset_embedder_name(det_ctx=None) -> str:
     dataset switch and no re-embed fires), else the dataset score precedence (so
     a genuine mismatch schedules a re-embed against the new dataset).  This
     agrees with the model-invalidation check in ``dataset_sync``.  See
-    :func:`keying_embedder_for_snap` and patch-embedder.md → "Per-detector
-    primary embedder".
+    :func:`keying_embedder_for_snap` and ``docs/ARCHITECTURE.md`` → "Per-detector
+    embedder type".
     """
     from vtscore.embedding.binding import keying_embedder_for_snap
     from vtscore.state import snapshot_medias

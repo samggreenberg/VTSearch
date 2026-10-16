@@ -1,10 +1,5 @@
-.importer-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-// The selectable option cards use the shared `.picker-card` primitive
+// The `.importer-picker` list wrapper and the selectable option cards
+// (`.picker-card`) are shared primitives in `frontend/src/scss/_components.scss`.
 // (`frontend/src/scss/_components.scss`).
 
 .importer-form {
@@ -16,10 +11,3 @@
 // `.back-btn`, `.form-group`, `.info-text`, `.error-text` come from
 // `_components.scss`. The parent `.importer-form` provides `gap:
 // var(--space-lg)`, which spaces the back button from the form below.
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}

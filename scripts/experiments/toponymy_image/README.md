@@ -10,7 +10,8 @@ where a fixed tag vocabulary is either too coarse or full of distractors)?
 
 Runs on the HLTCOE grid against the `vtscore` library tier (no Flask app).
 Companion to `scripts/experiments/toponymy_audio/` (same stage layout,
-JSON/npy handoff). See the experiment report for findings.
+JSON/npy handoff). Findings:
+[`docs/experiments/2026-07-12-toponymy-image-signposts/REPORT.md`](../../../docs/experiments/2026-07-12-toponymy-image-signposts/REPORT.md).
 
 ## Pipeline
 
@@ -32,11 +33,11 @@ re-runnable; stages only communicate through those files.
 # one-time, inside a GPU allocation (node-local scratch):
 sbatch --job-name=topo-image --gres=gpu:a100:1 --mem=64G --cpus-per-task=12 \
        --time=12:00:00 --wrap "sleep 43200"          # park an allocation
-srun --jobid=<JOBID> --overlap bash setup_node.sh    # venv on /scratch/$USER
+srun --jobid=<JOBID> --overlap bash setup_node.sh    # venv on /scratch/jobs/$USER
 
 # each experiment step:
 srun --jobid=<JOBID> --overlap bash -c \
-  'PYTHONPATH=/exp/sgreenberg/projects/VTSearch /scratch/jobs/$USER/topo-image/venv/bin/python prepare_dataset.py caltech101'
+  'PYTHONPATH=/exp/$USER/projects/VTSearch /scratch/jobs/$USER/topo-image/venv/bin/python prepare_dataset.py caltech101'
 ```
 
 Environment knobs (see `common.py`): `VTS_REPO` (VTSearch checkout),

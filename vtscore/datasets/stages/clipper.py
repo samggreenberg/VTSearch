@@ -141,9 +141,10 @@ def _apply_clipper(
     if not steps:
         return
 
-    # Reference (thin) parents carry no bytes, so audio/image clippers - which
-    # read ``media_bytes`` to compute boundaries and slice - would early-return
-    # the media unchanged.  Transiently hydrate those parents from their source
+    # Reference (thin) parents carry no payload, so audio/image/text clippers and
+    # cleaners - which read ``media_bytes`` / ``media_string`` to compute
+    # boundaries, slice or clean - would return the media unchanged while the
+    # trail records them as run.  Transiently hydrate those parents from their source
     # files so clipping (and the per-clip MD5/embed/thumbnail fixup below) runs
     # exactly as it does in full mode.  Each hydrated parent is tagged with a
     # ``_lazy_source`` marker that rides into its clips; those clips are
@@ -167,45 +168,44 @@ def _apply_clipper(
 
 
 def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
-    """Materialize bytes on reference (thin) parents so clippers can run.
+    """Materialize payloads on reference (thin) parents so clippers and cleaners can run.
 
     A *reference* media carries ``media_path`` but no ``media_bytes`` /
     ``media_string`` (it was imported with ``reference_files`` / ``thin``).
-    Audio and image clippers need the actual bytes to compute clip boundaries
-    and slice, so we load the source via the media type's ``load_media_data``
-    (which also fills ``duration`` / ``width`` / ``height`` / ``thumbnail``,
-    skipped at thin-import time) and tag the parent with a ``_lazy_source``
-    marker.  The marker rides along into every derived clip via the clipper's
-    ``dict(media)`` copy, so :func:`_relazify_reference_clips` can later strip
-    those clips back to references.
+    Clippers and cleaners need the actual payload to compute clip boundaries,
+    slice, or clean (without it they no-op while the trail still records them
+    as run), so we load the source via
+    :func:`~vtscore.media.lazy_clip.load_reference_source` (which also fills
+    ``duration`` / ``width`` / ``height`` / ``thumbnail``, skipped at
+    thin-import time) and tag the parent with a ``_lazy_source`` marker.  The
+    marker rides along into every derived clip via the clipper's
+    ``dict(media)`` copy, so :func:`_relazify_reference_clips_stage` can later
+    strip those clips back to references.
 
-    Lazy clips only apply to pure same-type clipper chains; a chain containing
-    a converter changes media type, so the clip's bytes are no longer a slice
-    of the original source file.  Such chains are left fully materialized
-    (see "Reference (no-copy) imports and lazy clips" in ``docs/ARCHITECTURE.md``).
+    Lazy clips only apply to pure same-type chains; a chain containing a
+    converter changes media type, so the clip's bytes are no longer a slice of
+    the original source file.  Such chains are left fully materialized (see
+    "Reference (no-copy) imports and lazy clips" in ``docs/ARCHITECTURE.md``).
 
     Returns ``True`` if at least one parent was hydrated.
     """
-    from vtscore.media.lazy_clip import LAZY_CLIP_TYPES  # noqa: PLC0415
+    from vtscore.media.lazy_clip import CHAIN_REPLAY_TYPES, load_reference_source  # noqa: PLC0415
 
     if any(step.get("kind") == "converter" for step in steps):
         return False
-
-    import vtscore.media as media_registry  # noqa: PLC0415
 
     any_hydrated = False
     for media in clips_dict.values():
         if media.get("media_bytes") is not None or media.get("media_string") is not None:
             continue
         media_type = media.get("media_type")
-        if media_type not in LAZY_CLIP_TYPES:
+        if media_type not in CHAIN_REPLAY_TYPES:
             continue
         path = media.get("media_path")
         if not path or not Path(path).exists():
             continue
         try:
-            mt = media_registry.get(media_type)
-            media.update(mt.load_media_data(Path(path)))
+            media.update(load_reference_source(media_type, Path(path)))
         except Exception:
             import logging as _logging  # noqa: PLC0415
 
@@ -225,7 +225,8 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
     source file path:
 
     * **clips** descended from a hydrated reference parent (see
-      :func:`_hydrate_reference_parents`) - audio slices, image crops.
+      :func:`_hydrate_reference_parents`) - audio slices, image crops, text
+      units, and any of them a cleaner rewrote.
     * **converter output** emitted in reference mode by
       :func:`~vtscore.converters.runner.run_converters_on_folder` - rendered
       PDF pages, extracted video frames.
@@ -243,25 +244,90 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
     source file (the parent recording, the source PDF), not the slice/page, so
     embedding it lazily would embed the wrong content.
 
-    **Cleaned items are never re-lazified.**  A cleaner rewrites the payload
-    (re-encoded bytes, trimmed text) rather than slicing it, and
-    :mod:`vtscore.media.lazy_clip` has no recipe that reproduces that from the
-    source file, so dropping the bytes would silently serve and re-embed the
-    *uncleaned* original.  Those items keep their payload materialized; a thin
-    import therefore loses its byte-savings for exactly the items some cleaner
-    actually changed.
+    **Cleaned items are re-lazified only after a dry run.**  A cleaner rewrites
+    the payload (re-encoded bytes, trimmed text) rather than slicing it, so the
+    item's recipe is its whole chain trail, replayed from the source
+    (:mod:`vtscore.media.lazy_clip`).  Its stored payload and ``original_*``
+    snapshot are dropped only when that replay reproduces both of them here,
+    byte for byte; otherwise - a replay that is not deterministic, a cleaned
+    converter output, a trail recorded before ``original_hash`` existed - the
+    item keeps both payloads, as every cleaned item used to.
+
+    **Text clips stay materialized.**  A text unit some clipper cut out of its
+    source has no slice recipe, and its ``media_path`` would serve the whole
+    document; text is small, so it keeps its ``media_string``.  A whole-file
+    text unit (no clipper in its trail) goes back to its ``media_path`` when
+    reading that file serves the same text (:func:`_source_serves_same`).
     """
     from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+    from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
 
     for clip in ctx.medias.values():
         source = clip.pop("_lazy_source", None)
         if source is None:
             continue
         if has_original_payload(clip):
+            if not _replay_reproduces(clip, source):
+                continue
+            clip.pop("original_media_bytes", None)
+            clip.pop("original_media_string", None)
+        elif clip.get("media_type") == "text" and clip_recipe(clip) is None and not _source_serves_same(clip, source):
             continue
         clip["media_path"] = source
         clip["media_bytes"] = None
         clip["media_string"] = None
+
+
+def _payload_of(media: dict, key_prefix: str = "") -> bytes | None:
+    """Return a media's materialized payload (or its ``original_`` snapshot) as bytes."""
+    text = media.get(f"{key_prefix}media_string")
+    if media.get("media_type") == "text":
+        return text.encode("utf-8") if isinstance(text, str) else None
+    blob = media.get(f"{key_prefix}media_bytes")
+    return bytes(blob) if isinstance(blob, (bytes, bytearray)) else None
+
+
+def _replay_reproduces(clip: dict, source: str) -> bool:
+    """True iff *clip*'s chain recipe, replayed from *source*, rebuilds both payloads.
+
+    The dry run behind re-lazifying a cleaned item: the lazy view it would
+    become must serve exactly the cleaned payload the dataset embedded and
+    hashed, and exactly the Original snapshot it would drop.
+    """
+    from vtscore.media.lazy_clip import lazy_clip_bytes, lazy_original_bytes, recipe_is_exclusive  # noqa: PLC0415
+
+    cleaned, original = _payload_of(clip), _payload_of(clip, "original_")
+    if cleaned is None or original is None:
+        return False
+    view = {k: v for k, v in clip.items() if not k.startswith("original_media_")}
+    view.update(media_path=source, media_bytes=None, media_string=None)
+    if not recipe_is_exclusive(view):
+        return False
+    return lazy_clip_bytes(view) == cleaned and lazy_original_bytes(view) == original
+
+
+def _source_serves_same(clip: dict, source: str) -> bool:
+    """True iff reading *source* whole serves exactly *clip*'s materialized text.
+
+    Only a unit no step cut out of its source qualifies, and even then the
+    whole-file read must agree with what the import decoded (it reads in text
+    mode, so a CRLF file comes back with plain newlines): a unit whose served
+    text would differ from the text it was embedded and hashed from keeps it.
+    """
+    import vtscore.media as media_registry  # noqa: PLC0415
+    from vtscore.datasets.clipper_chain import parse_trail  # noqa: PLC0415
+
+    origin = clip.get("origin")
+    params = origin.get("params", {}) if isinstance(origin, dict) else {}
+    trail = parse_trail(params.get("clipper_chain"))
+    if trail is None or any(entry["kind"] != "cleaner" for entry in trail):
+        return False
+    view = dict(clip, media_path=source, media_bytes=None, media_string=None)
+    try:
+        served = media_registry.get(clip.get("media_type", ""))._resolve_media_string(view)
+    except Exception:
+        return False
+    return served == clip.get("media_string")
 
 
 def _thumb_for(clip: dict, media_type: str) -> bytes | None:
