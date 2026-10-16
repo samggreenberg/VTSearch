@@ -1927,6 +1927,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
+  params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,
+  `VideoBlankTrimCleaner` and `VideoLetterboxCropCleaner` did not override it, so their `cleaner` steps
+  recorded `params: {}` and `replay_chain_on_file` ran them at their defaults. Each now adds its current
+  parameter values to `to_dict()`, as the parameterised clippers do, so `all_cleaners_dict()` carries
+  them too. A third-party cleaner with `parameters` needs the same override
+  (`vtscore/docs/extending/clippers.md`).
+
 - **`ratio_test_matches(..., cache=True)` caches nothing on a CPU** (issue #4941). The #4469 cache
   checks each entry by a weak reference to its numpy array, but on a CPU the stored tensor is a view
   that holds that array, so the reference never expired and the cache pinned up to
