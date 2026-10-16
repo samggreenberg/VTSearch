@@ -371,7 +371,7 @@ The canonical back-button markup:
 | `.picker-card__title` | `--font-lg`, `--weight-semibold`. The one canonical title size - don't restyle it. |
 | `.picker-card__desc`  | `--font-sm`, `--text-secondary`. |
 
-**Only the card is shared; the container isn't (yet).** `.importer-picker` / `.exporter-picker` name the list wrapper, but the shared rule's responsive grid is currently overridden by every consumer, each of which declares its own `display: flex; flex-direction: column` locally (component-scoped rules win via Angular's encapsulation specificity bump). So set the container layout you actually want in your component SCSS rather than assuming the global one applies. Reconciling the two is tracked in `docs/plans/codebase-audit-2026-08.md`.
+**The list wrapper is shared too.** `.importer-picker` / `.exporter-picker` (`_components.scss`) stack the cards in a flex column at `gap: var(--space-md)`, so a new picker modal gets the same layout as the settings and label pickers just by applying the class. Don't redeclare `display` or `flex-direction` on it in component SCSS: component-scoped rules beat the global one (Angular's encapsulation specificity bump), so a local copy silently forks the layout. Local spacing and sizing tweaks are fine (`vt-source-picker` sets `gap: 0` because it wraps tab bars rather than cards; the label importer caps its width). A picker that genuinely wants a grid should opt in through a modifier class on the shared rule.
 
 The form half of a picker modal uses `.importer-form` (flex column, `gap: var(--space-lg)`) wrapping `.form-group` fields (§2.3), with `.back-btn` at the top of the inner view (§2.4 → Back vs Cancel).
 
