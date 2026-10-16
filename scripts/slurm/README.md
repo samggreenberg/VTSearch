@@ -8,7 +8,7 @@ the tunnel make the day-to-day loop a two-command affair:
 |--------|---------|--------------|
 | [`vtsearch-slurm.sh`](vtsearch-slurm.sh) | the **cluster** (a login node) | Allocates a GPU compute node with `srun`, activates the venv, and runs `app.py` on it. Prints the node it landed on. Holds the allocation until you quit. |
 | [`vtsearch-tunnel.sh`](vtsearch-tunnel.sh) | your **local machine** | Finds your running VTSearch job, SSH-forwards your local port to that compute node (auto-discovering the node + per-user port), and drops you into the project dir. `VTS_BIND=<addr>` serves the port to another device; `--no-shell` holds the tunnel open without a login shell. |
-| [`pick_gpu.py`](pick_gpu.py) | the **cluster** | Picks the GPU type with the most free capacity on the partition (via `scontrol`); the launcher calls it, and `VTS_GPU` overrides it. `--explain` prints the per-type free/total table. |
+| [`pick_gpu.py`](pick_gpu.py) | the **cluster** | Picks the GPU type to request (via `scontrol`): the fastest type in `VTS_GPU_TYPES` with a free GPU now, else the type with the most free, else the largest pool, else `VTS_GPU_FALLBACK`. The launcher calls it, and `VTS_GPU` overrides it. `--explain` prints the per-type free/total table. |
 | [`job_records.py`](job_records.py) | the **cluster** | Refuses an array that would take the cluster past 50% of Slurm's `MaxJobCount`, or you past 25%. Every array task is a job record, pending ones included. Called by `scripts/experiments/calibration/launch_cells.sh` before it submits, and by preflight's `--array-tasks`. |
 | [`vtsearch-tunnel.service`](vtsearch-tunnel.service) | your **local machine** | systemd *user* unit that keeps the tunnel up with no terminal attached, for an always-on box that holds the VPN on other devices' behalf. |
 
@@ -79,6 +79,9 @@ log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
 The job runs on a fresh `VTSEARCH_DATA_DIR` under `$TMPDIR` and removes it at
 the end, so the data dir your shell exports is never touched. On the HLTCOE
 GRID, `~/.bashrc` names the live app's data there (#4706). The `=== data` line
-names both dirs.
+names both dirs. When `gh` is on `PATH`, the job also posts its verdict as an
+informational `suite-grid` commit status on the tested SHA (see
+[`docs/branch-protection.md`](../../docs/branch-protection.md#suite-grid-is-informational-not-required));
+`SUITE_POST_STATUS=0` turns that off.
 `tests_lib/meta/test_suite_sbatch.py` runs the real script against a throwaway
 origin to pin the guard's behaviour.

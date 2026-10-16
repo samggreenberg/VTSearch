@@ -22,6 +22,8 @@ Per K x size x beta, for each arm against the plain one:
 
 ``--plain`` and each arm's analysis dir are ``sota_face_analyze.sh`` outputs
 (``k<K>-b<tag>-<size>/{cells,curves}.csv``); the baseline dirs hold ``example_baseline_k<K>.csv``.
+``--plain-tag`` names the control's own arm when it is not the plain crop (#4788 pairs its
+``side`` arm against #4777's ``roll``: ``--plain-tag roll``).
 ``--watch`` names subject-id prefixes (the review's 12 failures) to list run by run. Writes
 ``compare.csv`` (aggregates) and ``failures.csv`` (runs that failed in either arm, by subject id:
 owner-only, never committed).
@@ -92,6 +94,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--plain", required=True, type=Path)
     ap.add_argument("--plain-baseline", required=True, type=Path)
+    ap.add_argument("--plain-tag", default="", help="the control's arm tag (fhibe_faces_<tag>_*), empty for plain")
     ap.add_argument("--arm", action="append", required=True, help="tag=<analysis dir>,<baseline dir>")
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--fail", type=float, default=0.1)
@@ -108,7 +111,8 @@ def main() -> int:
     for k in KS:
         for size in SIZES:
             for beta in BETAS:
-                plain = session_set(args.plain, args.plain_baseline, k, size, beta, "fhibe_faces")
+                faces = f"fhibe_faces_{args.plain_tag}" if args.plain_tag else "fhibe_faces"
+                plain = session_set(args.plain, args.plain_baseline, k, size, beta, faces)
                 for tag, (a, b) in arms.items():
                     arm = session_set(a, b, k, size, beta, f"fhibe_faces_{tag}")
                     rows.append(

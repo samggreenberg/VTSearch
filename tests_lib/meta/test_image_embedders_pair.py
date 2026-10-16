@@ -4,7 +4,7 @@
 build the same six-embedder image; the only things that legitimately differ are
 the base image (plus the apt layer the CUDA base needs), which PyTorch wheel
 index pip resolves against, and the NVIDIA runtime env. Everything else -- the
-import canary, the six weight-baking RUN blocks, the settings seed, the non-root
+import canary, the six weight-baking RUN blocks, the data directory, the non-root
 user -- is a verbatim copy, because Docker has no include directive.
 
 That copy had already drifted once: the import canary added in PR #1282 (the

@@ -243,6 +243,25 @@ class TestDatasetResult:
         assert d["learned_sort"]["mean_f1"] == 0.75
         assert "elapsed_seconds" in d["learned_sort"]["per_category"][0]
 
+    def test_to_dict_learned_records_the_line(self):
+        dr = DatasetResult(dataset_id="test", media_type="image")
+        dr.learned_sort = [
+            LearnedSortMetrics(
+                accuracy=0.9,
+                precision=0.8,
+                recall=0.7,
+                f1=0.75,
+                num_train=10,
+                num_test=10,
+                threshold=0.123456,
+                beta=1.0,
+            ),
+            LearnedSortMetrics(accuracy=0.9, precision=0.8, recall=0.7, f1=0.75, num_train=10, num_test=10),
+        ]
+        cut, unrecorded = dr.to_dict()["learned_sort"]["per_category"]
+        assert (cut["threshold"], cut["beta"]) == (0.1235, 1.0)
+        assert (unrecorded["threshold"], unrecorded["beta"]) == (None, None)
+
 
 # =====================================================================
 # Config
@@ -511,6 +530,118 @@ class TestEvalLearnedSort:
         results = eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, start_time=start)
         assert len(results) == 1
         assert results[0].elapsed_seconds > 0.0
+
+
+class TestEvalLearnedSortBalance:
+    """``--mode learned`` cuts where the app does: the labels line at the default balance (#4971)."""
+
+    def _overlapping_clips(self, n_a=20, n_b=60, sep=0.6, dim=16):
+        """Two categories that overlap enough for the balance to move the line.
+
+        On cleanly separated clusters every cut lands in the same gap, so the
+        Inclusion 0 cut and the labels line would agree and a test comparing
+        them could not tell one from the other.
+        """
+        rng = np.random.RandomState(42)
+        medias = {}
+        for media_id in range(1, n_a + n_b + 1):
+            category, mean = ("cat_a", sep) if media_id <= n_a else ("cat_b", -sep)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": rng.normal(mean, 1.0, dim).astype(np.float32)},
+                "category": category,
+                "media_type": "image",
+            }
+        return medias
+
+    def _run_capturing_votes(self, medias, **kwargs):
+        """Run ``eval_learned_sort`` on the real trainer, recording the votes it trained on."""
+        from vtscore.detectors import training
+
+        real = training.train_and_score
+        calls: list[dict] = []
+
+        def _spy(clips, good, bad, **kw):
+            calls.append({"good": dict(good), "bad": dict(bad), **kw})
+            return real(clips, good, bad, **kw)
+
+        with patch("vtscore.detectors.training.train_and_score", _spy):
+            results = eval_learned_sort(medias, [EvalQuery("category a", "cat_a")], seed=42, **kwargs)
+        assert len(results) == 1 and len(calls) == 1
+        return results[0], calls[0]
+
+    def test_default_threshold_is_the_labels_line_at_the_default_beta(self):
+        from vtscore.config import DEFAULT_BETA
+        from vtscore.detectors.training import train_and_score
+
+        medias = self._overlapping_clips()
+        lm, call = self._run_capturing_votes(medias)
+
+        _, labels_line, _ = train_and_score(medias, call["good"], call["bad"], beta=DEFAULT_BETA)
+        _, inclusion_cut, _ = train_and_score(medias, call["good"], call["bad"])
+        # The data has to tell the two cuts apart, or this test proves nothing.
+        assert inclusion_cut != pytest.approx(labels_line)
+        assert lm.threshold == pytest.approx(labels_line)
+        assert lm.beta == DEFAULT_BETA
+
+    def test_off_is_the_inclusion_cut(self):
+        from vtscore.detectors.training import train_and_score
+
+        medias = self._overlapping_clips()
+        lm, call = self._run_capturing_votes(medias, beta="off")
+
+        _, inclusion_cut, _ = train_and_score(medias, call["good"], call["bad"])
+        assert call["beta"] is None
+        assert lm.threshold == pytest.approx(inclusion_cut)
+        assert lm.beta is None
+
+    def test_a_pinned_beta_reaches_the_trainer(self):
+        captured: list[float | None] = []
+
+        def _fake_train_and_score(medias, good, bad, **kwargs):
+            captured.append(kwargs.get("beta"))
+            return (
+                [{"id": cid, "score": 1.0 if medias[cid]["category"] == "cat_a" else 0.0} for cid in medias],
+                0.5,
+                None,
+            )
+
+        with patch("vtscore.detectors.training.train_and_score", _fake_train_and_score):
+            results = eval_learned_sort(self._overlapping_clips(), [EvalQuery("a", "cat_a")], seed=1, beta=4.0)
+        assert captured == [4.0]
+        assert results[0].beta == 4.0
+        assert results[0].threshold == 0.5
+
+    def test_a_malformed_beta_fails_before_training(self):
+        called = []
+        with patch("vtscore.detectors.training.train_and_score", lambda *a, **k: called.append(1)):
+            with pytest.raises(ValueError):
+                eval_learned_sort(self._overlapping_clips(), [EvalQuery("a", "cat_a")], beta=10.0)
+        assert called == []
+
+    def test_run_eval_validates_beta_before_loading(self):
+        with patch("vtscore.datasets.loader.load_demo_dataset") as load:
+            with pytest.raises(ValueError):
+                run_eval(dataset_ids=["esc50_s"], mode="learned", beta="sideways")
+        load.assert_not_called()
+
+    def test_run_eval_forwards_beta(self):
+        medias = self._overlapping_clips()
+        seen: list = []
+
+        def _load(_demo_id, into, **_kwargs):
+            into.update(medias)
+
+        def _fake_learned(*_args, **kwargs):
+            seen.append(kwargs.get("beta"))
+            return []
+
+        with (
+            patch("vtscore.datasets.loader.load_demo_dataset", _load),
+            patch("vtscore.eval.runner.eval_learned_sort", _fake_learned),
+        ):
+            run_eval(dataset_ids=["esc50_s"], mode="learned", beta="off")
+        assert seen == ["off"]
 
 
 # =====================================================================

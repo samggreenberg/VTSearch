@@ -304,12 +304,12 @@ calls (the importer relies on this cache across reloads).
 ### `generate_audio_dataset`
 
 `vtscore/utils/synthetic/audio.py`. Cycles through six "ideas"
-producing 16-bit mono PCM WAV files at 48 kHz:
+producing 16-bit mono PCM WAV files at 48 kHz, each 1–2.5 s long:
 
 | Idea    | What it sounds like                                       |
 |---------|-----------------------------------------------------------|
 | `tone`  | Single sine, random 180–1200 Hz, AR envelope.             |
-| `chord` | 3-note chord (major / minor / dim / sus4) over 1–2 s.     |
+| `chord` | 3-note chord (major / minor / dim / sus4).                |
 | `drum`  | Kick / snare / hihat pattern at a random BPM (80–160).    |
 | `rain`  | Low-passed noise with occasional droplet clicks.          |
 | `wind`  | AM-modulated brown-ish noise.                             |
@@ -370,8 +370,8 @@ encoded as 2-second 12 fps mp4 at 224x224:
 - `marquee` - scrolling text rendered as coloured per-character
   rectangles (no font file dependency).
 
-Encodes via `imageio_ffmpeg` (the bundled static ffmpeg already
-required by the video media type). Output filenames:
+Draws frames with Pillow and encodes via `imageio_ffmpeg` (the bundled
+static ffmpeg already required by the video media type). Output filenames:
 `<idea>_<index>.mp4`.
 
 ### `ProgressCallback` shape

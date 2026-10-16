@@ -4449,6 +4449,43 @@
         ],
         "type": "object"
       },
+      "FindTrainingDomainResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "domain_shift": {
+            "$ref": "#/components/schemas/DatasetDomainShiftResponse",
+            "nullable": true
+          },
+          "labels_in_active": {
+            "type": "integer"
+          },
+          "labels_in_reference": {
+            "type": "integer"
+          },
+          "labels_total": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reference_dataset_id": {
+            "type": "string"
+          },
+          "reference_dataset_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain_shift",
+          "labels_in_active",
+          "labels_in_reference",
+          "labels_total",
+          "reason",
+          "reference_dataset_id",
+          "reference_dataset_name"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -7227,9 +7264,6 @@
             "nullable": true,
             "type": "number"
           },
-          "detectors_dir": {
-            "type": "string"
-          },
           "enable_achievements": {
             "type": "boolean"
           },
@@ -7262,9 +7296,6 @@
           "panel_pct_right": {},
           "popup_metadata_shown": {},
           "popup_preview_size": {},
-          "saved_datasets_dir": {
-            "type": "string"
-          },
           "show_animations": {
             "enum": [
               "show",
@@ -13593,6 +13624,31 @@
         ]
       }
     },
+    "/api/find/training-domain": {
+      "get": {
+        "description": "The same report as ``GET /api/datasets/registry/<id>/domain-shift``, with\nthe reference worked out rather than picked: the loaded dataset, among those\nthe caller can read, that holds the most of the detector's Good / Bad\nexamples (matched by origin or MD5).  The active dataset wins a tie, so a\ndetector used on the dataset it was trained on reads as nothing to compare.\n\nIt needs no scored Find run, so the SPA calls it whenever a detector meets a\ndataset, to warn before the user relies on the detector there (#4961).\n``domain_shift`` is null (with a ``reason``) rather than a 4xx whenever the\ncheck cannot run, including every refusal of the domain-shift route.\nPure read; no new state.",
+        "operationId": "find_training_domain",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindTrainingDomainResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Training-domain overlap of the active dataset against the dataset the active detector was trained on.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
     "/api/indicator-score-history": {
       "get": {
         "description": "Reads only the per-step cache advanced by the ``/api/labeling-status``\nbackground worker; **no models are retrained and the cache is never\nadvanced here**, so the response is always fast regardless of dataset size\nor label-history length.\n\nWhen the cache does not yet cover the whole ``label_history`` the response\ncarries ``complete: false`` and an empty ``history``.  Clients should then\nfall back to ``POST /api/eval/train-and-score``, which computes the same\nseries on a background thread with live progress and cancellation.\n\nThis route used to call the ``calculate_*_over_time`` helpers directly.\nThose advance the cache via ``_ensure_cache`` - retraining one MLP per\nuncached label step plus a forward pass over the unlabeled pool, and on a\ncold cache a full hierarchical-k-means coverage-atlas build - all inline on\nthe request thread under ``_progress_lock``.  Since ``/api/labeling-status``\ndeliberately defers exactly that work to a background worker (issue #2397),\nthe cache is behind for most of a labeling session, and this endpoint\nabsorbed the entire deferred build: tens of seconds on a mid-size dataset,\ngrowing with both media count and vote count.",
@@ -14709,7 +14765,7 @@
     },
     "/api/medias/{media_id}/audio": {
       "get": {
-        "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
+        "description": "Returns the bytes on success (HTTP 200), typed by their container (an MP3\nimport is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON\nenvelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
         "operationId": "media_audio",
         "parameters": [
           {
@@ -14738,7 +14794,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Stream the WAV audio bytes for a single media item.",
+        "summary": "Stream the audio bytes for a single media item.",
         "tags": [
           "medias"
         ]
@@ -15139,7 +15195,7 @@
         }
       ],
       "post": {
-        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (``docs/ARCHITECTURE.md``).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "operationId": "vote_media",
         "requestBody": {
           "content": {
@@ -15855,7 +15911,7 @@
         ]
       },
       "put": {
-        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400 and\nleave every key in the body unchanged.",
+        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / an unknown media type, embedder\nor exporter) raise 400 and leave every key in the body unchanged.\nServer-tier keys are not in the schema, so they are dropped like any\nunknown key: no user can set one through this route (or through an\nimport or a sync; see :func:`vtsearch.settings.plan_user_write`).",
         "operationId": "update_settings",
         "requestBody": {
           "content": {
@@ -15879,7 +15935,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Setter-level validation failure (range, one-of, path traversal)."
+            "description": "Setter-level validation failure (range, one-of, unknown media type / embedder / exporter)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

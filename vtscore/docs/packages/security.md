@@ -25,8 +25,10 @@ from the submodule (`vtscore.security.path_validation`,
 | `vtscore/security/archive.py` | Hardened single-member tar extraction (`safe_tar_extract`) |
 | `vtscore/security/hf_auth.py` | In-memory HuggingFace credential store + `GatedResourceError` |
 | `vtscore/security/login.py` | `LoginProvider`: how an identity is established, and which subtree it is confined to |
+| `vtscore/security/readers.py` | `ReadersUpdate`: how a change to a dataset's or detector's `readers` list ended |
 
 - [Login providers](#login-providers)
+- [Readers updates](#readers-updates)
 - [Path validation](#path-validation)
   - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
   - [Example media](#example_media_dir)
@@ -90,6 +92,26 @@ Validate any username you did not construct yourself with
 becomes a path component, and `..` segments in a confinement root are
 *collapsed* by `Path.resolve()` rather than rejected - which silently
 widens the sandbox for every server-file importer and exporter.
+
+## Readers updates
+
+A dataset or detector is visible to its creator, to each user in its
+`readers` list, and to everyone when the list holds `"*"`; only the
+creator may change the list. `vtscore.datasets.registry.update_readers`
+and `vtscore.detectors.registry.update_detector_readers` make that change
+and return a `ReadersUpdate` from `vtscore/security/readers.py`:
+
+| Member | Meaning |
+|--------|---------|
+| `UPDATED` | The list was replaced |
+| `NOT_FOUND` | No entry has that id |
+| `NOT_CREATOR` | The entry exists, but the requesting user did not create it |
+
+Branch on the member, as the app's readers routes do to pick 403 or 404.
+`ReadersUpdate.message(kind)` is the prose for a person (`"Only the
+dataset creator can modify readers"`, `"Detector not found"`), and is
+what the older `(ok, err)` forms, `set_readers` and
+`set_detector_readers`, return as `err`. Do not parse it.
 
 ## Path validation
 
@@ -198,7 +220,7 @@ value (`.`, `..`, `...`) to `_`:
 from vtscore.security.path_validation import sanitize_template_value
 
 sanitize_template_value("safe_name")         # "safe_name"
-sanitize_template_value("../../etc/passwd")  # "______etc_passwd"
+sanitize_template_value("../../etc/passwd")  # ".._.._etc_passwd"
 sanitize_template_value("")                  # "_"
 sanitize_template_value("..")                # "_"
 ```
@@ -211,8 +233,10 @@ Defence-in-depth - the template engine should still call
 `Path.rglob()` does **not** descend into symlinked directories - media
 files inside symlinked sub-folders are silently skipped during dataset
 import. `rglob_follow_symlinks(root, pattern)` uses
-`os.walk(followlinks=True)` to traverse symlinked directory trees;
-`glob_top_level(root, pattern)` is the non-recursive variant (direct
+`os.walk(followlinks=True)` to traverse symlinked directory trees,
+pruning any directory already visited (by `(st_dev, st_ino)`) so a
+symlink cycle terminates; `glob_top_level(root, pattern)` is the
+non-recursive variant (direct
 children only, file symlinks followed). Neither applies containment
 itself - if you need it after a glob, pass each result through
 `validate_server_filepath`.
@@ -229,6 +253,11 @@ params.
 ```python
 def confine_origin_params(origin: Any) -> Any: ...
 ```
+
+It raises `ValueError` when a param escapes the user's directory (a
+relative value with a `.`, `..` or `~` component always does), recurses
+into a `dupe_set` origin's `members`, never mutates its input, and in
+single-user mode returns the origin unchanged.
 
 Two design choices are worth knowing before you call it:
 
@@ -424,7 +453,7 @@ disk, and a restart signs the user out.
 | Name | Description |
 |------|-------------|
 | `HFCredential` | Frozen dataclass: `access_token`, `username`, `expires_at`, `scopes`, plus `is_expired()` |
-| `set_credential(token, *, username="", expires_at=None, scopes="")` / `clear_credential()` | Store / drop the active credential (lock-guarded) |
+| `set_credential(access_token, *, username="", expires_at=None, scopes="")` / `clear_credential()` | Store / drop the active credential (lock-guarded); an empty token raises `ValueError` |
 | `get_token()` / `is_authenticated()` / `get_status()` | Read the token, a boolean, or a JSON-serialisable snapshot for the UI |
 | `auth_header_for_url(url)` | `{"Authorization": "Bearer …"}` **iff** *url* targets the Hub, else `{}` |
 | `GatedResourceError(message, *, url="", status=None)` | Raised when a download fails because the resource is gated; carries `url` and `status` |
@@ -475,9 +504,11 @@ Anything else - `os.system`, `subprocess.Popen`, `builtins.eval`,
 ### `RestrictedUnpickler` and `safe_pickle_load`
 
 ```python
+import zipfile
+
 from vtscore.security.pickle import safe_pickle_load
 
-with open("dataset.pkl", "rb") as f:
+with zipfile.ZipFile("dataset.pkl") as zf, zf.open("medias.pkl") as f:
     data = safe_pickle_load(f)
 # Same as pickle.load(f) but rejects non-allowlisted classes.
 ```
@@ -503,23 +534,29 @@ A specialised unpickler for a cheap dataset preview. The same allowlist
 applies, but payload opcodes are stubbed so the loader extracts just the
 structural shape without materialising embeddings or media: floats
 (`BINFLOAT` / `FLOAT`) become `None`; byte blobs (`BINBYTES`,
-`BINBYTES8`, `SHORT_BINBYTES`, `BYTEARRAY8`) become `b""`; strings
+`BINBYTES8`, `SHORT_BINBYTES`) become `b""` and `BYTEARRAY8` an empty
+`bytearray()`; strings
 longer than 4096 bytes (`BINUNICODE` / `BINUNICODE8`) are skipped in
 bounded chunks and become `""`; `APPEND` / `APPENDS` drop their values;
 and numpy reconstruction callables return a stub.
 
-The outer dict structure is materialised (so you can index into
-`data["medias"][0]["media_type"]`), but embedding lists are empty and
-large payloads are blanked. For a multi-GB dataset upload this turns a
+The outer dict structure is materialised (so you can count
+`data["medias"]`, a dict keyed by media id, and read a media's
+`"media_type"`), but embedding lists are empty and large payloads are
+blanked. For a multi-GB dataset upload this turns a
 30-second `pickle.load` into a sub-second peek.
 
 ```python
+import zipfile
+
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
-with open(uploaded_pkl, "rb") as f:
+# A dataset .pkl is a ZIP container; the pickle is its medias.pkl entry.
+with zipfile.ZipFile(uploaded_pkl) as zf, zf.open("medias.pkl") as f:
     summary = peek_pickle_dataset_summary(f)
-n_medias = len(summary["medias"])
-media_type = summary["medias"][0]["media_type"] if n_medias else None
+medias = summary["medias"]
+n_medias = len(medias)
+media_type = next(iter(medias.values()))["media_type"] if medias else None
 ```
 
 The peek result is **only** safe for inspecting structure. Code that

@@ -38,8 +38,10 @@ importing `vtscore`; they are read at import time.
 
 ## 1. Set up `CoreConfig`
 
-Library-only consumers construct `CoreConfig` directly. The app installs a
-builder that reads from `vtsearch.settings`; you don't need one.
+Library-only consumers construct `CoreConfig` directly and register a
+builder that returns it, because library code reads its configuration through
+`CoreConfig.from_settings()` (the detector store finds `detectors_dir` that
+way). The app's own builder reads from `vtsearch.settings`; you don't need it.
 
 ```python
 from pathlib import Path
@@ -77,7 +79,8 @@ that bite:
   dataclass with defaults only for its optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
   `autofind_cli_delete_dataset`, `projection_n_neighbors`,
-  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`, `beta`,
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
+  `default_labelset_source`, `labelset_source_push_interval`, `beta`,
   `hide_ingest_eta` and `inclusion` (both deprecated)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
@@ -192,8 +195,10 @@ for m in medias.values():
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# LINEAR_SVM_HEAD is the production head: a single Linear(D, 1) fitted to the
-# maximum-margin boundary. Omitting hidden_dim auto-sizes an MLP - see docs/ML.md.
+# LINEAR_SVM_HEAD is a single Linear(D, 1) fitted to the maximum-margin
+# boundary; the app's production fits pass LINEAR_SVM_PRIOR_HEAD, the same fit
+# started from the Goods' centroid. Omitting hidden_dim auto-sizes an MLP - see
+# docs/ML.md.
 model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,

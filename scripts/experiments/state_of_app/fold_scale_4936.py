@@ -46,7 +46,7 @@ MAPS = ("none", "q", "qt", "z", "vs", "ho", "oracle", "oracle_pos", "oracle_neg"
 WHOLE_MAPS = MAPS[:7]  # the oracle's halves differ from it only in F-beta: on its own class each is the oracle
 TOP_SHARE = 0.01  # the negatives the line cuts among: the top 1% of the withheld half by the fold model's score
 ORACLE_NEG_SHARE = 0.02  # the oracle's negative map is fitted on the top 2% of the withheld half's negatives
-EMBEDDER_STYLE = "siglip/whole_image"  # Binary Photo's snapshot keys
+PATHS = {"siglip/whole_image": "binary", "siglip+dinov3_patch/max_patch": "region"}  # snapshot key prefix -> path
 OTHER_BETAS = (0.25, 4.0)  # the other presets, read on the same heads
 
 
@@ -250,7 +250,7 @@ def find_fbeta(s: Snapshot, orderings, labels: dict[int, bool]) -> tuple[float, 
     )
 
 
-def measure(snap: dict) -> dict:
+def measure(snap: dict, patch_space: bool = False) -> dict:
     """One row: the true map, every candidate's error, Good component and same-head F-beta, for one snapshot."""
     from vtscore.training.thresholds.labels_line import (
         HEAD_COUNT_GOODS,
@@ -271,7 +271,7 @@ def measure(snap: dict) -> dict:
         "n_pos_remainder": int(((s.sim_vote < 0) & (s.sim_labels == 1)).sum()),
         "excluding": bool(snap["fold_sim_excluding"]),
         # Under the typed query's hold (#4736) Find shows the query's own set, not this head's line.
-        "query_hold": bool(query_holds(int((s.sim_vote >= 0).sum()), 0, patch_space=False)),
+        "query_hold": bool(query_holds(int((s.sim_vote >= 0).sum()), 0, patch_space=patch_space)),
         "mu_true": float(s.final[s.pos].mean()) if s.pos.any() else math.nan,
         "sd_true": float(s.final[s.pos].std(ddof=1)) if s.pos.sum() > 1 else math.nan,
     }
@@ -422,14 +422,22 @@ def _cell_rows(args) -> list[dict]:
         snaps = load_snapshots(npz)
     except Exception as exc:  # a truncated file: report, do not stop the pool
         return [{**ident, "error": f"{type(exc).__name__}: {exc}"}]
-    snaps = {k: v for k, v in snaps.items() if k.startswith(EMBEDDER_STYLE)}
+    base = _base_rows(npz)
+    for prefix, path in PATHS.items():
+        mine = {k: v for k, v in snaps.items() if k.startswith(prefix + "/")}
+        rows.extend(_path_rows(mine, ident, path, base))
+    return rows
+
+
+def _path_rows(snaps: dict[str, dict], ident: dict, path: str, base: pd.DataFrame) -> list[dict]:
+    """One row per distinct snapshot step of one path's snapshots in a cell."""
+    rows = []
     listed = sorted(int(k.rsplit("/t", 1)[1]) for k in snaps)
     by_step: dict[int, dict] = {}
     for snap in snaps.values():
         by_step.setdefault(int(snap["t"]), snap)
-    base = _base_rows(npz)
     for t, snap in sorted(by_step.items()):
-        row = {**ident, "click": click_of(t, listed), **measure(snap)}
+        row = {**ident, "path": path, "click": click_of(t, listed), **measure(snap, patch_space=path == "region")}
         # The run's own row at this step: its Find F-beta is the replay's ``none``, its shadow's the replay's ``q``.
         if t in base.index:
             row["chk_row_fbeta"] = abs(float(base.at[t, "fbeta"]) - row.get("none_fbeta", math.nan))
@@ -680,6 +688,8 @@ def figures(df: pd.DataFrame, folded: pd.DataFrame, figdir: Path) -> None:
     x = np.array(clicks, dtype=float)
 
     def band(ax, col, label, color, frame=folded, ls="-"):
+        if col not in frame or frame[col].isna().all():  # a map the path cannot draw (the vote shifts on Region)
+            return
         m, se = _curve(frame, col, clicks)
         ax.plot(x, m, ls, color=color, label=label, marker="o", ms=3)
         ax.fill_between(x, m - se, m + se, color=color, alpha=0.15, lw=0)

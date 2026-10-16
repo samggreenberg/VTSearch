@@ -10,10 +10,10 @@ in-memory state automatically aligned.
 The package is intentionally minimal - it owns only the contract.
 Concrete subclasses live wherever the data domain does:
 
-- [`vtscore.labels.sources.LabelsetSource`](../../labels/sources/base.py) -
+- [`vtscore.labels.sources.base.LabelsetSource`](../../labels/sources/base.py) -
   round-trips detector labels (library tier, documented in
   [`labels`](labels.md)).
-- `vtsearch.settings_io.sources.SettingsSource` - round-trips app
+- `vtsearch.settings_io.sources.base.SettingsSource` - round-trips app
   settings (app tier; not part of `vtscore`). It lives outside the
   library because per-user settings persistence is an app concern, but
   it inherits the same `SyncSource` shape.
@@ -70,8 +70,9 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
 `load` / `save` / `peek_version` are **framework-owned**. Each runs
 `vtscore.plugins.normalize.normalize_field_values` over a *copy* of
 `field_values` (the caller's dict is never mutated) before dispatching,
-so every subclass body receives values that are whitespace-stripped,
-required-checked, `template_vars`-substituted, and - for `url` and
+so every subclass body receives values that are filled from the field's
+`default` when left blank, whitespace-stripped, required-checked,
+`template_vars`-substituted, and - for `url` and
 `server_path` / `folder` field types - security-validated, with path
 fields replaced by their confined, canonicalised form.
 

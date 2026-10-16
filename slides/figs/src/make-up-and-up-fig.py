@@ -34,9 +34,10 @@ At beta 1/4, a build, each page adding a line:
 Then the beta 1 and beta 4 panels whole, one page each. Every session line carries its own click-0 dot: b1 and b2
 start at the text query's old line (the mixture midpoint), today's app at its own.
 
-The oracle is the State of the App review of 2026-10-08's (`ORACLE_SUMMARY`): its text sort's `oracle_fbeta`, on
-the same bench at every class and size, 24 seeds a preset. The sort is the typed query's embedding against the
-withheld half, which no app change moves, so the review's 24 seeds stand in for these sessions' 5.
+The oracle is the State of the App review of 2026-10-16's (`ORACLE_SUMMARY`): its text sort's `oracle_fbeta`, on
+the same bench at every class and size, 45 seeds a preset. The sort is the typed query's embedding against the
+withheld half, which no app change moves, so the review's 45 seeds stand in for these sessions' 5 (the 2026-10-08
+review's 24 gave the same three values).
 """
 
 from __future__ import annotations
@@ -64,7 +65,7 @@ BUILDUP_CSV = EXPERIMENTS / "2026-10-08-fbeta-buildup-4668" / "buildup_curve.csv
 #: Today's app on the same sessions (#4835): per preset, every vote and the end after the check.
 TODAY_CSV = EXPERIMENTS / "2026-10-13-up-and-up-4835" / "today_curve.csv"
 #: The text sort's best cut, from the State of the App review's per-beta table (the `app line` rows at `text`).
-ORACLE_SUMMARY = EXPERIMENTS / "2026-10-08-state-of-the-app-binary-photo" / "perbeta_summary.md"
+ORACLE_SUMMARY = EXPERIMENTS / "2026-10-16-state-of-the-app-binary-photo" / "perbeta_summary.md"
 #: What the notes say the oracle reaches, per preset: `main` fails if the review's table says otherwise.
 ORACLE_EXPECT = {"b025": 0.557, "b1": 0.449, "b4": 0.564}
 #: The presets, as both CSVs name them, and how the axis writes each one's beta.

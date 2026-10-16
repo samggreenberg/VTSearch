@@ -234,6 +234,13 @@ class VideoBlankTrimCleaner(MediaCleaner):
             step=float(params.get("step", self._step)),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["blank_ratio"] = self._blank_ratio
+        d["max_trim"] = self._max_trim
+        d["step"] = self._step
+        return d
+
     def _scan_in(
         self,
         path: Path,
@@ -470,6 +477,14 @@ class VideoLetterboxCropCleaner(MediaCleaner):
             max_edge_trim=float(params.get("max_edge_trim", self._max_edge_trim)),
             min_edge_trim=float(params.get("min_edge_trim", self._min_edge_trim)),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["samples"] = self._samples
+        d["edge_tol"] = self._edge_tol
+        d["max_edge_trim"] = self._max_edge_trim
+        d["min_edge_trim"] = self._min_edge_trim
+        return d
 
     def _sample_times(self, t0: float, t1: float, info: decode.VideoInfo) -> list[float]:
         """Return the timestamps to analyse, spread across ``[t0, t1]``."""

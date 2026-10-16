@@ -376,7 +376,7 @@ _MATCH_CHUNK_ELEMENTS_CPU = 2_000_000
 #: for compact features), keyed by the array and checked by a weak reference so a freed
 #: array's id never returns another page's descriptors. A retrain verifies each new template
 #: against the same ~2,000 shortlisted pages; converting and uploading them again for every
-#: template was ~80% of a Good click's retrain on a V100 node.
+#: template was ~80% of a Good click's retrain on a V100 node. A CPU caches nothing (#4941).
 _DEVICE_DESCRIPTORS: "OrderedDict[int, tuple[weakref.ref[np.ndarray], torch.Tensor]]" = OrderedDict()
 _DEVICE_DESCRIPTOR_BYTES = [0]
 #: The cache's budget on the device; least recently used pages go first.
@@ -393,10 +393,14 @@ def _stored_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tenso
     """*desc* on *dev* in its stored dtype; with *cache*, it stays on the device between calls.
 
     The caller widens it into its float32 batch on the device; uint8 values are exact.
+
+    A CPU caches nothing (#4941). There is no upload to save, and the tensor is a view that
+    holds *desc* alive, so the entry's weak reference could never expire: the cache would
+    pin up to :data:`DEVICE_DESCRIPTOR_LIMIT_BYTES` of arrays whose features are gone.
     """
     import torch  # noqa: PLC0415
 
-    if not cache:
+    if not cache or torch.device(dev).type == "cpu":
         return torch.from_numpy(np.ascontiguousarray(desc)).to(dev)
     key = id(desc)
     hit = _DEVICE_DESCRIPTORS.get(key)
@@ -464,8 +468,8 @@ def ratio_test_matches(
 
     Candidates may be stored descriptors in any numeric dtype (uint8 for compact
     features); they are widened to float32. With *cache*, each candidate array is
-    kept on the device between calls (:func:`_stored_descriptors`), so pass only
-    arrays that live as long as their features, never temporaries.
+    kept on a GPU between calls (:func:`_stored_descriptors`; a CPU keeps none), so
+    pass only arrays that live as long as their features, never temporaries.
     """
     import torch  # noqa: PLC0415
 

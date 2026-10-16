@@ -282,8 +282,8 @@ class TestRoutedEmbedder:
 
 
 class TestScoreMarkerEmbedder:
-    """The v3 model-keying marker - the embedder component of the
-    ``(detector, dataset, embedder)`` MLP key (patch-embedder.md Phase 2b.5).
+    """The model-keying marker - the embedder a detector's head is stamped with
+    (``docs/ARCHITECTURE.md`` → "Per-detector embedder type").
 
     The marker must equal the **score** embedder (structural ▸ patch ▸ text)
     the MLP is trained/scored against, falling back to the primary *name* for a

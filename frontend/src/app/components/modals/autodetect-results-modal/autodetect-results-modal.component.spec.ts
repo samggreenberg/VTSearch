@@ -300,7 +300,7 @@ describe('AutoDetectResultsModalComponent', () => {
   describe('Export', () => {
     it('renders an Export button for the chosen exporter', async () => {
       await flushInit();
-      const btn = Array.from(fixture.nativeElement.querySelectorAll('.export-actions button')).find(
+      const btn = Array.from(fixture.nativeElement.querySelectorAll('.form-actions button')).find(
         (b) => (b as HTMLElement).textContent?.trim() === 'Export',
       ) as HTMLButtonElement | undefined;
       expect(btn).toBeTruthy();

@@ -520,7 +520,7 @@ class DatasetContext:
         # Region signposts for the subset layout (mirror of ``_region_labels``).
         "_subset_region_labels",
         # Role-typed embedder binding (v3 "three-slot" trio; see
-        # docs/plans/patch-embedder.md).  A dataset binds up to one
+        # docs/ARCHITECTURE.md).  A dataset binds up to one
         # text-capable embedder, up to one patch-capable embedder, and up to
         # one structural (geometric-verification) embedder.  By default the
         # binding is *derived* on demand from the dataset's medias (the
@@ -856,7 +856,7 @@ class DatasetContext:
     def routed_embedder(self, role: str) -> str | None:
         """Resolve which bound embedder serves *role* (the v3 routing table).
 
-        Roles (see "Routing rules" in ``docs/plans/patch-embedder.md``):
+        Roles (see "Routing" in ``docs/ARCHITECTURE.md`` → "Embedder binding and routing"):
 
         * ``"text"`` - text queries (``POST /api/sort``): the text slot, or
           ``None`` (the caller 400s with ``supports_text=False``).
@@ -929,7 +929,7 @@ class DetectorContext:
         # re-stamped).  The detector scores in whatever concrete embedder of
         # this type the active dataset binds.  Empty for a legacy detector,
         # where routing falls back to the dataset score precedence.  See
-        # ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
+        # ``docs/ARCHITECTURE.md`` → "Per-detector embedder type".
         "embedder_type",
         # Vote state
         "good_votes",

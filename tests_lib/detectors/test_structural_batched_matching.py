@@ -206,7 +206,11 @@ class TestRatioTestMatches:
 
 
 class TestDeviceDescriptorCache:
-    """#4469: stored candidate descriptors stay on the device across templates, with the same matches."""
+    """#4469: stored candidate descriptors stay on the device across templates, with the same matches.
+
+    A CPU caches nothing (#4941), so the cache's own bookkeeping runs on torch's ``meta``
+    device: a device that is not the CPU, whose tensors hold a shape and no data.
+    """
 
     @pytest.fixture(autouse=True)
     def _fresh(self):
@@ -221,7 +225,7 @@ class TestDeviceDescriptorCache:
         cands = [_descs(n, seed=10 + n).astype(np.uint8) for n in (30, 55, 2, 80)]
         plain = ratio_test_matches(template, [c.astype(np.float32) for c in cands], ratio=_LOWE)
         cached = ratio_test_matches(template, cands, ratio=_LOWE, cache=True)
-        again = ratio_test_matches(template, cands, ratio=_LOWE, cache=True)  # served from the cache
+        again = ratio_test_matches(template, cands, ratio=_LOWE, cache=True)  # served from the cache on a GPU
         assert [_as_set(p) for p in cached] == [_as_set(p) for p in plain] == [_as_set(p) for p in again]
 
     def test_a_reused_id_never_returns_another_arrays_descriptors(self) -> None:
@@ -232,14 +236,15 @@ class TestDeviceDescriptorCache:
         from vtscore.media import structural
 
         fresh = np.full((3, 4), 7, dtype=np.uint8)
-        dead = np.zeros((3, 4), dtype=np.uint8)
-        stale = torch.zeros((3, 4), dtype=torch.uint8)
+        dead = np.zeros((5, 4), dtype=np.uint8)
+        stale = torch.zeros((5, 4), dtype=torch.uint8, device="meta")
         # A cache entry left by a freed array whose id the new array now has.
         structural._DEVICE_DESCRIPTORS[id(fresh)] = (weakref.ref(dead), stale)
         structural._DEVICE_DESCRIPTOR_BYTES[0] = stale.nbytes
-        out = structural._stored_descriptors(fresh, "cpu", cache=True)
-        assert out.dtype == torch.uint8
-        assert torch.equal(out, torch.full((3, 4), 7, dtype=torch.uint8))
+        out = structural._stored_descriptors(fresh, "meta", cache=True)
+        assert out is not stale and out.shape == (3, 4) and out.dtype == torch.uint8
+        assert structural._DEVICE_DESCRIPTORS[id(fresh)][0]() is fresh
+        assert structural._DEVICE_DESCRIPTOR_BYTES[0] == fresh.nbytes
 
     def test_the_least_recently_used_pages_go_past_the_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from vtscore.media import structural
@@ -247,10 +252,28 @@ class TestDeviceDescriptorCache:
         monkeypatch.setattr(structural, "DEVICE_DESCRIPTOR_LIMIT_BYTES", 2 * 100 * 128)
         pages = [np.zeros((100, 128), dtype=np.uint8) for _ in range(3)]
         for p in pages:
-            structural._stored_descriptors(p, "cpu", cache=True)
+            structural._stored_descriptors(p, "meta", cache=True)
         kept = [k for k in structural._DEVICE_DESCRIPTORS]
         assert kept == [id(pages[1]), id(pages[2])]
         assert structural._DEVICE_DESCRIPTOR_BYTES[0] == 2 * 100 * 128
+
+    def test_a_cpu_caches_nothing_and_keeps_no_dropped_array_alive(self) -> None:
+        """#4941: a cached CPU view held its array, so a CPU server pinned up to 4 GB of dropped pages."""
+        import gc
+        import weakref
+
+        from vtscore.media import structural
+
+        template = _descs(40, seed=1)
+        cands = [_descs(n, seed=10 + n).astype(np.uint8) for n in (30, 55, 80)]
+        plain = ratio_test_matches(template, cands, ratio=_LOWE, device="cpu")
+        cached = ratio_test_matches(template, cands, ratio=_LOWE, device="cpu", cache=True)
+        assert [_as_set(p) for p in cached] == [_as_set(p) for p in plain]
+        assert not structural._DEVICE_DESCRIPTORS and structural._DEVICE_DESCRIPTOR_BYTES[0] == 0
+        refs = [weakref.ref(c) for c in cands]
+        del cands
+        gc.collect()
+        assert all(r() is None for r in refs)
 
     def test_verify_many_on_compact_features_matches_float_features(self) -> None:
         matcher = SiftMatcher()

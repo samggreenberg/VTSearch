@@ -10,6 +10,12 @@ This module replaces the module-level dicts that previously lived in
 ``vtsearch/state/core.py`` and the CRUD that lived in
 ``vtsearch/state/processors.py``.  Behaviour is unchanged; the storage
 is still process-global and thread-safe.
+
+**No in-repo caller, kept on purpose (#3452).**  Nothing in this repo calls
+this registry's routes (``vtsearch/routes/processors/``) or the frontend's
+``ProcessorsApiService``, but an out-of-tree client or processor plugin may,
+and in-repo evidence cannot see who calls a REST API.  The surface stays until
+#3452 finds out; do not delete it as dead code before then.
 """
 
 from __future__ import annotations
