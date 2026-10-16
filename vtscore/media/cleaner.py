@@ -23,9 +23,13 @@ Subclassing :class:`MediaClipper` reuses the whole descriptor stack
 (``name`` / ``media_type`` / ``display_name`` / ``description`` /
 ``parameters`` / ``creation_questions`` / ``with_params`` / ``to_dict``) and
 lets a cleaner ride the existing chain machinery as an ``n_out == 1`` step,
-so cross-dataset label replay comes for free.  Cleaners live in their own
-registry (``register_cleaner`` / ``get_cleaner`` / ``cleaners_for_type``) so
-they never appear in a clipper chooser.
+so cross-dataset label replay needs no cleaner-specific code.  It does need
+the clipper's ``to_dict()`` rule: the chain records a step's params from the
+keys ``to_dict()`` adds beyond the descriptor, so a cleaner with
+``parameters`` must override it to emit their current values, or a replay
+runs the cleaner at its defaults instead of the user's.  Cleaners live in
+their own registry (``register_cleaner`` / ``get_cleaner`` /
+``cleaners_for_type``) so they never appear in a clipper chooser.
 
 See ``docs/plans/media-cleaners.md`` for the design and the roster of
 cleaners still to be written.

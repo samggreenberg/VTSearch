@@ -223,6 +223,13 @@ class ImageEdgeTrimCleaner(MediaCleaner):
             min_edge_trim=float(params.get("min_edge_trim", self._min_edge_trim)),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["edge_tol"] = self._edge_tol
+        d["max_edge_trim"] = self._max_edge_trim
+        d["min_edge_trim"] = self._min_edge_trim
+        return d
+
     def clean(self, media: dict[str, Any]) -> dict[str, Any]:
         """Return *media* cropped to its content box, or unchanged.
 

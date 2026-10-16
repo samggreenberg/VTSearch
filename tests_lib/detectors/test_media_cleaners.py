@@ -6,6 +6,7 @@ Covers:
 - The cleaner registry is separate from the clipper registry.
 - ``cleaners`` field decoding and its always-last placement in the chain.
 - Chain validation / apply / replay for ``kind: "cleaner"`` steps.
+- A re-parameterised cleaner's values are recorded and replayed, not dropped.
 - The dual payload: ``original_*`` is stamped only on a real change, only
   once across several cleaners, and survives the pickle round-trip.
 - A cleaned unit is flagged for MD5 / embedding / thumbnail recomputation.
@@ -656,6 +657,88 @@ class TestCleanerReplay:
         result = clipper_chain.replay_chain_on_file(drifted, trail)
         assert result is not None
         assert result[1] == b"HELLO WORLD, EDITED"
+
+
+#: Every shipped cleaner that takes parameters, with a value for each one that
+#: differs from its default.  At the defaults the round trip below would pass
+#: even if the params were dropped, so only off-default values prove anything.
+_NON_DEFAULT_CLEANER_PARAMS: dict[str, dict[str, Any]] = {
+    "audio_silence_trim": {"top_db": 25.0, "pad": 0.2},
+    "image_edge_trim": {"edge_tol": 24.0, "max_edge_trim": 0.3, "min_edge_trim": 0.05},
+    "video_blank_trim": {"blank_ratio": 0.95, "max_trim": 0.1, "step": 0.5},
+    "video_letterbox_crop": {"samples": 3, "edge_tol": 24.0, "max_edge_trim": 0.3, "min_edge_trim": 0.05},
+}
+
+
+class TestCleanerParamsRoundTrip:
+    """A cleaner the user re-parameterised replays at *their* values (#4963).
+
+    The chain records a step's params from ``to_dict()``, so a cleaner whose
+    ``to_dict()`` emitted none recorded ``{}`` and every replay ran it at its
+    defaults.
+    """
+
+    def test_every_declared_parameter_is_recorded(self):
+        """The contract behind the bug, checked across both registries."""
+        from vtscore.datasets.clipper_chain import _resolved_clipper_params
+        from vtscore.media import all_cleaners, all_clippers
+
+        unrecorded: dict[str, list[str]] = {}
+        for plugin in [*all_clippers(), *all_cleaners()]:
+            declared = {p["key"] for p in plugin.parameters}
+            missing = declared - set(_resolved_clipper_params(plugin))
+            if missing:
+                unrecorded[plugin.name] = sorted(missing)
+        assert unrecorded == {}
+
+    def test_the_table_covers_every_parameterised_cleaner(self):
+        from vtscore.media import all_cleaners
+
+        assert {c.name for c in all_cleaners() if c.parameters} == set(_NON_DEFAULT_CLEANER_PARAMS)
+
+    @pytest.mark.parametrize("name", sorted(_NON_DEFAULT_CLEANER_PARAMS))
+    def test_user_params_survive_record_and_replay(self, name, tmp_path, monkeypatch):
+        from vtscore.datasets import clipper_chain
+        from vtscore.media import get_cleaner
+
+        cleaner = get_cleaner(name)
+        chosen = _NON_DEFAULT_CLEANER_PARAMS[name]
+        assert all(getattr(cleaner, k) != v for k, v in chosen.items()), "pick off-default values"
+
+        # Note what each run of the gate was configured with, read from its
+        # own properties rather than from ``to_dict()``, and leave the payload
+        # alone so no decodable media is needed.
+        ran_with: list[dict[str, Any]] = []
+
+        def spy_clean(self, media):
+            ran_with.append({k: getattr(self, k) for k in chosen})
+            return media
+
+        monkeypatch.setattr(type(cleaner), "clean", spy_clean)
+        monkeypatch.setattr(
+            "vtscore.detectors.resolver.embed_file",
+            lambda path, media_type, embedder_name="": np.ones(4, dtype=np.float32),
+        )
+
+        src = tmp_path / "source.bin"
+        src.write_bytes(b"payload")
+        clips = {
+            1: {
+                "id": 1,
+                "media_type": cleaner.media_type,
+                "filename": src.name,
+                "media_bytes": b"payload",
+                "origin": {"importer": "server_folder", "params": {}},
+                "origin_name": src.name,
+            }
+        }
+        clipper_chain.apply_chain_to_clips(clips, [{"kind": "cleaner", "name": name, "params": chosen}])
+        trail = clipper_chain.parse_trail(clips[1]["origin"]["params"]["clipper_chain"])
+        assert trail is not None
+        assert trail[0]["params"] == chosen
+
+        assert clipper_chain.replay_chain_on_file(src, trail) is not None
+        assert ran_with == [chosen, chosen]  # the import, then the replay
 
 
 # ---------------------------------------------------------------------------

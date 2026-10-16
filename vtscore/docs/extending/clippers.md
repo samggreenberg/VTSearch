@@ -168,7 +168,11 @@ registered instance through the clipper chooser, which calls
 
 The same module scan reads a sibling `CLEANERS` list into the separate
 cleaner registry (`MediaCleaner` subclasses `MediaClipper` but never
-appears in a clipper chooser).
+appears in a clipper chooser). A cleaner follows this page's parameter
+rules too: one with `parameters` needs `with_params()` and a `to_dict()`
+that adds their current values, because the chain records a step's
+params from `to_dict()`. Without it a replay runs the cleaner at its
+defaults.
 
 ## Parameters and re-parameterisation
 

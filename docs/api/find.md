@@ -577,6 +577,43 @@ own. `unsupported` is the headline verdict (z > 3 **and** `frac_unsupported ≥
 2·alpha`). `available: false` (with zeroed fields) — never a 4xx — when there
 is no scored Find run or no resolvable labelset.
 
+### Training-domain overlap
+
+```
+GET /api/find/training-domain
+```
+
+The [domain-shift report](datasets.md#domain-shift-report) of the active
+dataset against the dataset the active detector was **trained on**, with that
+reference worked out rather than picked: the loaded dataset, among those the
+caller can read, holding the most of the detector's Good / Bad examples
+(matched by origin or MD5, never by file name alone). The active dataset wins a
+tie, so a detector used on the dataset it was trained on has nothing to
+compare. It needs no scored Find run: the SPA calls it whenever a
+(dataset, detector) pair becomes active, and raises a warning when the verdict
+is *likely domain shift*. Pure read.
+
+→
+```json
+{
+  "reference_dataset_id": "…", "reference_dataset_name": "photos",
+  "labels_total": 52, "labels_in_reference": 40, "labels_in_active": 0,
+  "domain_shift": {
+    "reference_dataset_id": "…", "n_items": 4000, "alpha": 0.05,
+    "frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 24.1,
+    "median_pvalue": 0.18, "shifted": true
+  },
+  "reason": ""
+}
+```
+
+`domain_shift` is `null`, and `reason` says why, rather than a 4xx whenever
+there is nothing to compare: no active detector or dataset, a detector with no
+labelled examples, none of them in a loaded dataset, the examples coming from
+the active dataset itself, or any refusal of the domain-shift report (no atlas,
+embedder mismatch, a patch embedder). The counts are filled in as far as the
+check got, so a caller can say what the reference rests on.
+
 ### Fold corrections into the detector
 
 ```

@@ -9,7 +9,7 @@ Two evaluation modes:
 2. **Learned sort**: For each category, randomly split its medias into
    train/test.  Simulate votes (target = good, rest = bad) on the
    train set, run ``train_and_score``, and measure classification
-   quality on the held-out test set.
+   quality on the held-out test set at the line the app draws.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from vtscore.eval.metrics import (
     compute_binary_classification_metrics,
     compute_metrics,
 )
+from vtscore.training.thresholds import resolve_line_knobs
 
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -143,6 +144,7 @@ def eval_learned_sort(
     calibration_fraction: float | None = None,
     start_time: float | None = None,
     region_voting: bool = False,
+    beta: float | str | None = None,
 ) -> list[LearnedSortMetrics]:
     """Run learned-sort evaluation via simulated voting.
 
@@ -151,9 +153,10 @@ def eval_learned_sort(
       2. Randomly split both pools into train and test by ``train_fraction``.
       3. Build ``good_votes`` from train positives, ``bad_votes`` from train
          negatives.
-      4. Call ``train_and_score`` on the full media set.
-      5. Measure accuracy/precision/recall/F1 on the test set using the
-         cross-calibrated threshold.
+      4. Call ``train_and_score`` on the full media set at the balance *beta*.
+      5. Measure accuracy/precision/recall/F1 on the test set at the threshold
+         ``train_and_score`` returns: under a balance, the labels line the app
+         draws (#4452).
 
     Args:
         medias: Loaded media dict.
@@ -175,6 +178,13 @@ def eval_learned_sort(
             the whole image.  Requires a patch dataset with stored ``regions``
             and ``patch_grid``; on any other dataset the boxes are absent and
             this is a no-op.
+        beta: The balance the line is drawn at (#4413), resolved by
+            :func:`~vtscore.training.thresholds.resolve_line_knobs`.  ``None``
+            (the default) is the app's own default balance, ``DEFAULT_BETA``,
+            so the metrics describe the line a live detector draws (#4971).  A
+            number pins a balance in ``[0.25, 4]``; ``"off"``
+            (:data:`~vtscore.training.thresholds.NO_BALANCE`) is the
+            Inclusion arm, the Inclusion 0 cut every run measured before #4971.
 
     Returns:
         List of :class:`LearnedSortMetrics`, one per query.
@@ -182,6 +192,7 @@ def eval_learned_sort(
     from vtscore.detectors.training import train_and_score
     from vtscore.eval.labels import region_box_for_category
 
+    line_beta = resolve_line_knobs(beta)
     rng = np.random.RandomState(seed)
     results: list[LearnedSortMetrics] = []
 
@@ -233,6 +244,7 @@ def eval_learned_sort(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             vote_region_boxes=vote_region_boxes,
+            beta=line_beta,
         )
 
         # Evaluate on test set
@@ -254,6 +266,8 @@ def eval_learned_sort(
                 num_test=len(test_ids),
                 target_category=query.target_category,
                 elapsed_seconds=elapsed,
+                threshold=float(threshold),
+                beta=line_beta,
             )
         )
 
@@ -271,6 +285,7 @@ def run_eval(
     calibration_fraction: float | None = None,
     embedder_name: str = "",
     region_voting: bool = False,
+    beta: float | str | None = None,
 ) -> list[DatasetResult]:
     """Run evaluation on one or more eval datasets.
 
@@ -301,6 +316,9 @@ def run_eval(
         region_voting: When ``True``, learned-sort Good votes are region-pooled
             from each media's ground-truth box (see :func:`eval_learned_sort`).
             Only affects patch datasets with stored ``regions`` (Visual Genome).
+        beta: The balance learned-sort draws its line at (see
+            :func:`eval_learned_sort`): ``None`` (the default) is the app's,
+            a number pins one, ``"off"`` is the Inclusion 0 cut.
 
     Returns:
         List of :class:`DatasetResult`, one per evaluated dataset.
@@ -308,6 +326,7 @@ def run_eval(
     from vtscore.datasets.config import DEMO_DATASETS
     from vtscore.datasets.loader import load_demo_dataset
 
+    resolve_line_knobs(beta)  # a malformed balance fails before any dataset loads
     if dataset_ids is None:
         dataset_ids = list(EVAL_DATASETS.keys())
 
@@ -387,6 +406,7 @@ def run_eval(
                 calibration_fraction=calibration_fraction,
                 start_time=start_time,
                 region_voting=region_voting,
+                beta=beta,
             )
             ds_result.learned_sort = learned_results
 
