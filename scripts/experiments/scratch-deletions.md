@@ -5,8 +5,9 @@ This file records what was deleted, when, why it was safe, and how to rebuild
 it, so a later session does not go looking for an input that is gone. Add a
 dated section per cleanup, newest first.
 
-Before deleting a directory, the checks (`GRID-PLAYBOOK.md`, and the
-2026-09-18 lesson that a tool's *default argument* counts as reading a path):
+Before deleting a directory, run these checks (the second is
+[`lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md`](lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md):
+a tool's *default argument* counts as reading a path):
 
 1. the study's issue is closed or `solved`, and its report is merged;
 2. `git grep` over `scripts/` and `vtscore/` finds no tool whose default reads the
