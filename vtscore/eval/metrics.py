@@ -35,6 +35,10 @@ class LearnedSortMetrics:
     num_test: int
     target_category: str = ""
     elapsed_seconds: float = 0.0
+    # The cut the test set was measured at, and the balance that drew it
+    # (``None``: no balance, the Inclusion 0 cut).
+    threshold: float | None = None
+    beta: float | None = None
 
 
 @dataclass
@@ -96,6 +100,8 @@ class DatasetResult:
                         "f1": round(f.f1, 4),
                         "num_train": f.num_train,
                         "num_test": f.num_test,
+                        "threshold": None if f.threshold is None else round(f.threshold, 4),
+                        "beta": f.beta,
                         "elapsed_seconds": round(f.elapsed_seconds, 3),
                     }
                     for f in self.learned_sort

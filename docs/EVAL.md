@@ -60,6 +60,7 @@ python -m vtscore.eval [OPTIONS]
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
 | `--embedder NAME` | Build each demo dataset with this embedder | empty = the media type's default embedder |
 | `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
+| `--beta B` | Balance (F-beta's beta) learned-sort draws its line at, in `[0.25, 4]`, or `off` for the Inclusion 0 cut | the app's default balance (`DEFAULT_BETA`, 1) |
 | `--list` | List available eval datasets and exit | - |
 
 ### Examples
@@ -70,6 +71,10 @@ python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output
 
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
+
+# Learned sort at the Inclusion 0 cut, the line every learned-sort run measured
+# before #4971, instead of the app's labels line
+python -m vtscore.eval --mode learned --beta off --plot-dir eval_output
 
 # Learned sort with more calibration folds (the "safe thresholds" toggle is gone;
 # the trainer's fold-anchored path is now unconditional)
@@ -127,7 +132,7 @@ Text sort evaluation measures how well embedding-based search ranks clips. For e
 
 ### Learned sort metrics
 
-Learned sort evaluation simulates voting, trains a binary classifier, then measures on a held-out test set:
+Learned sort evaluation simulates voting, trains a binary classifier, then measures on a held-out test set. It cuts at the line the app draws, the labels line under the default balance, and records that `threshold` and its `beta` with each category's metrics:
 
 - **Accuracy:** Fraction of correct predictions.
 - **Precision:** Of items predicted positive, fraction that is actually positive.
