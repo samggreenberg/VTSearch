@@ -218,6 +218,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   study's default arm changes; `head="linear_svm"` is the arm before. Priced in #4776 and #4785:
   Find's mean F-beta over votes 1-50 +0.037 to +0.073 on FHIBE face crops, +0.004 to +0.007 on COCO
   Better's Binary opening; on its Region path AP +0.005 and F-beta -0.002 +- 0.002.
+- **`python -m vtscore.eval --mode learned` measures the app's line** (issue #4971).
+  `eval_learned_sort` and `run_eval` take `beta` (default `None`, resolved by `resolve_line_knobs` to
+  `DEFAULT_BETA`) and pass it to `train_and_score`, so precision, recall and F1 are measured at the
+  labels line the app draws under its default balance (#4452). They were measured at the Inclusion 0
+  cut, which no user sees; `beta="off"` (the CLI's new `--beta off`) is that arm. A number pins a
+  balance in `[0.25, 4]`. `LearnedSortMetrics` gains `threshold` and `beta`, the cut each category was
+  measured at and the balance that drew it, and `DatasetResult.to_dict` writes both.
 
 ### Added
 

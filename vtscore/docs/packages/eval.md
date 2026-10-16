@@ -144,6 +144,8 @@ class LearnedSortMetrics:
     num_test: int
     target_category: str = ""
     elapsed_seconds: float = 0.0
+    threshold: float | None = None   # the cut the test set was measured at
+    beta: float | None = None        # the balance that drew it; None = the Inclusion 0 cut
 ```
 
 ### `DatasetResult`
@@ -210,17 +212,22 @@ Returns a list of `QueryMetrics`. Pass `enrich=True` to use wrapper-
 averaged text embeddings; pass `start_time` (a `time.monotonic()`
 baseline) to populate `elapsed_seconds` on each result.
 
-### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, calibrate_count=2, calibration_fraction=None, start_time=None, region_voting=False)`
+### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, calibrate_count=2, calibration_fraction=None, start_time=None, region_voting=False, beta=None)`
 
 `vtscore/eval/runner.py`. For each query/category: split target-
 category vs. other medias, take `train_fraction` of each as training
 data, build the synthetic `good_votes` / `bad_votes` dicts, call
-`train_and_score` from [`vtscore.detectors`](detectors.md), and
-measure accuracy / precision / recall / F1 on the held-out test set
-using the cross-calibrated threshold. Returns a list of
+`train_and_score` from [`vtscore.detectors`](detectors.md) at the
+balance `beta`, and measure accuracy / precision / recall / F1 on the
+held-out test set at the threshold it returns. Returns a list of
 `LearnedSortMetrics`. Honours `calibrate_count` and
 `calibration_fraction` exactly the way the production training path
 does, and takes its threshold from the same shipped estimator.
+
+`beta` is resolved by `vtscore.training.thresholds.resolve_line_knobs`.
+`None` (the default) is the app's default balance, `DEFAULT_BETA`, so
+the threshold is the labels line a live detector draws. A number in
+`[0.25, 4]` pins a balance, and `"off"` is the Inclusion 0 cut (#4971).
 
 ```python
 from vtscore.eval.runner import eval_text_sort, eval_learned_sort
@@ -262,6 +269,7 @@ Args:
 | `calibration_fraction`    | Cross-cal calibrate split (`None` = the app's per-space default: 0.3 single-vector / 0.5 patch) |
 | `embedder_name`           | Embedder to evaluate (`""` = the dataset's own)               |
 | `region_voting`           | Train on region (patch) votes, as the app does on patch datasets (default False) |
+| `beta`                    | Learned-sort balance (`None` = the app's default, `"off"` = the Inclusion 0 cut) |
 
 ### `format_results_json(results)`
 
@@ -442,6 +450,7 @@ Notable flags:
 | `--calibration-fraction F` | Cross-cal calibration split                                |
 | `--embedder NAME`        | Evaluate with this embedder                                  |
 | `--region-voting`        | Train on region votes                                        |
+| `--beta B`               | Learned-sort balance in `[0.25, 4]`, or `off` (default: the app's) |
 | `--output FILE`          | Write JSON results to `FILE`                                 |
 | `--plot-dir DIR`         | Generate visualisation PNGs in `DIR`                         |
 | `--no-plot`              | Disable plots even when `--plot-dir` is set                  |
@@ -526,7 +535,7 @@ from liblinear, scored and thresholded exactly as production does.
   voting-iterations functions take pre-loaded medias dicts as input.
   Only `run_eval`, `run_voting_iterations_eval_from_pickles` and the
   CLIs load data themselves.
-- **No Flask, no settings.** Every threshold knob (`inclusion`,
+- **No Flask, no settings.** Every threshold knob (`inclusion`, `beta`,
   `calibrate_count`, `calibration_fraction`, `sim_fraction`) is a
   function argument, not a global lookup.
 
