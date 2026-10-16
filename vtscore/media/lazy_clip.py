@@ -28,18 +28,33 @@ Two recipe families participate:
   ``converter_n_out`` / ``converter_content_hash``) via the shared
   :func:`~vtscore.datasets.clipper_chain._select_chain_output` selector.
 
+* **cleaned units** - some :class:`~vtscore.media.cleaner.MediaCleaner`
+  rewrote the payload (a silence trim, an edge trim, a whitespace pass), which
+  no slice of the source reproduces.  The recipe is the unit's whole chain
+  trail (``origin.params['clipper_chain']``): the source is loaded the way the
+  import hydrated it (:func:`load_reference_source`), every recorded step is
+  re-run via :func:`~vtscore.datasets.clipper_chain.replay_chain_on_media`,
+  and the result is served only if its content hash still equals the one the
+  trail recorded.  The unit's "Original" is the same trail cut before its
+  first cleaner, checked against the trail's ``original_hash``.  These
+  recipes are *exclusive* (:func:`recipe_is_exclusive`): when a replay no
+  longer matches - the source file was edited, or a library upgrade changed a
+  re-encode - the unit serves **no** bytes, never the source file in their
+  place, and a warning names the file.
+
 Resolved bytes are held in process-scoped LRU caches.  Per the
 no-persisted-bytes rule, these caches are purely in-memory: nothing here writes
 a materialized clip back to disk or into a pickle.  Clip slices use a
 count-bounded cache (payloads are small and uniform - one tile / crop);
-converter output uses a *byte-bounded* cache (a rendered page or video frame is
-1-8 MB and varies by an order of magnitude, so a count bound that is safe for
-clips would be unsafe here).
+converter output and cleaned units use a *byte-bounded* cache (a rendered page,
+a video frame or a whole trimmed recording is 1-8 MB and varies by an order of
+magnitude, so a count bound that is safe for clips would be unsafe here).
 """
 
 from __future__ import annotations
 
 import io
+import json
 import logging
 import threading
 from collections import OrderedDict
@@ -50,12 +65,29 @@ from vtscore.media.clip_recipe import parse_clip_box, parse_converter_recipe
 
 log = logging.getLogger(__name__)
 
-__all__ = ["LAZY_CLIP_TYPES", "clip_recipe", "lazy_clip_bytes"]
+__all__ = [
+    "CHAIN_REPLAY_TYPES",
+    "LAZY_CLIP_TYPES",
+    "clip_recipe",
+    "embed_view",
+    "has_lazy_original",
+    "lazy_clip_bytes",
+    "lazy_original_bytes",
+    "load_reference_source",
+    "recipe_is_exclusive",
+]
 
 #: Media types whose clippers re-slice bytes and therefore support lazy clips.
 #: The converter branch is keyed by ``converter`` in ``origin.params`` instead,
 #: so it is *not* gated on this list (a converter can target any media type).
 LAZY_CLIP_TYPES = ("audio", "image")
+
+#: Media types a reference (thin) parent is hydrated for, so that its clipper
+#: and cleaner steps see a payload, and whose cleaned units can be replayed
+#: from their trail.  Video is absent on purpose: its units share the parent's
+#: bytes, and its cleaners only narrow ``clip_start`` / ``clip_end`` /
+#: ``clip_box``, so a thin video import never needed bytes to begin with.
+CHAIN_REPLAY_TYPES = ("audio", "image", "text")
 
 # Process-scoped LRU of resolved clip bytes, keyed by (source, recipe).  Bounded
 # by entry count; clip payloads are small (one tile / crop) so a few hundred
@@ -77,30 +109,33 @@ class _ByteBoundedLRU:
 
     def __init__(self, max_bytes: int) -> None:
         self._max = max_bytes
-        self._d: "OrderedDict[tuple, bytes]" = OrderedDict()
+        self._d: "OrderedDict[tuple, tuple[Any, int]]" = OrderedDict()
         self._total = 0
         self._lock = threading.Lock()
 
-    def get(self, key: tuple) -> bytes | None:
+    def get(self, key: tuple) -> Any:
         with self._lock:
             hit = self._d.get(key)
-            if hit is not None:
-                self._d.move_to_end(key)
-            return hit
+            if hit is None:
+                return None
+            self._d.move_to_end(key)
+            return hit[0]
 
-    def put(self, key: tuple, value: bytes) -> None:
+    def put(self, key: tuple, value: Any, nbytes: int | None = None) -> None:
+        """Insert *value*, charging *nbytes* against the ceiling (``len(value)`` by default)."""
+        size = len(value) if nbytes is None else nbytes
         with self._lock:
             if key in self._d:
-                self._total -= len(self._d[key])
-            self._d[key] = value
+                self._total -= self._d[key][1]
+            self._d[key] = (value, size)
             self._d.move_to_end(key)
-            self._total += len(value)
+            self._total += size
             # Evict oldest until under the ceiling, but never evict the entry we
             # just inserted (a single output larger than the ceiling is kept so
             # the immediate fetch still hits; it is dropped on the next insert).
             while self._total > self._max and len(self._d) > 1:
-                _, evicted = self._d.popitem(last=False)
-                self._total -= len(evicted)
+                _, (_evicted, evicted_size) = self._d.popitem(last=False)
+                self._total -= evicted_size
 
 
 #: Byte ceiling for the converter-output cache (~256 MB).  Large enough to keep
@@ -108,6 +143,19 @@ class _ByteBoundedLRU:
 #: without an unbounded memory risk.
 _CONV_CACHE_MAX_BYTES = 256 * 1024 * 1024
 _conv_cache = _ByteBoundedLRU(_CONV_CACHE_MAX_BYTES)
+
+#: Byte ceiling for the chain-replay memo (~128 MB).  It holds one clipper
+#: step's *whole* output list per source (every tile of a recording), so that
+#: the N cleaned siblings of one tiled source re-tile it once, not N times;
+#: without it the dry run that gates re-lazification would be quadratic in the
+#: tile count.
+_REPLAY_MEMO_MAX_BYTES = 128 * 1024 * 1024
+_replay_memo = _ByteBoundedLRU(_REPLAY_MEMO_MAX_BYTES)
+
+# Replays already reported as no longer matching, so a grid of broken items
+# logs each once rather than on every request.  Cleared when it grows large.
+_warned: set[tuple] = set()
+_WARNED_MAX = 1024
 
 
 def _converter_recipe(params: dict[str, Any]) -> tuple | None:
@@ -138,6 +186,8 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
 
     * ``("converter", name, params_items, out_index, n_out, content_hash)`` -
       a converter output re-rendered from the source file.
+    * ``("chain", media_type, trail_json)`` - a cleaned unit, replayed from
+      its whole chain trail (see :func:`_chain_trail`).
     * ``("audio", clip_start, clip_end)`` - seconds, both floats.
     * ``("image", (x1, y1, x2, y2))`` - integer pixel box.
 
@@ -147,6 +197,9 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
     The converter branch is checked first and is keyed by the ``converter``
     param, not the target media type: a ``document2image`` output has
     ``media_type == "image"`` but is a converter output, not an image *clip*.
+    The chain branch comes next: a cleaned audio tile also carries the tile's
+    ``clip_start`` / ``clip_end``, but slicing them out of the source would
+    yield the *uncleaned* tile.
 
     **Archive members never lazy-slice.** A ``local_archive_member`` media may
     carry ``clip_start`` / ``clip_end`` (a windowed import), but its window is
@@ -169,6 +222,10 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
 
     media_type = media.get("media_type")
 
+    trail = _chain_trail(params, media_type)
+    if trail is not None:
+        return ("chain", media_type, _trail_key(trail))
+
     if media_type == "audio":
         cs = params.get("clip_start")
         ce = params.get("clip_end")
@@ -186,6 +243,286 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
         return ("image", box)
 
     return None
+
+
+def _chain_trail(params: dict[str, Any], media_type: Any) -> list[dict[str, Any]] | None:
+    """Return the chain trail a cleaned unit replays from, or ``None``.
+
+    Only a unit some cleaner actually changed needs one - an uncleaned clip is
+    served by its slice recipe or the whole source - and only a payload-carrying
+    type (:data:`CHAIN_REPLAY_TYPES`) can have its payload changed.  The final
+    entry must carry a ``content_hash``, since a replay that cannot be checked
+    is never served.
+    """
+    from vtscore.datasets.clipper_chain import _trail_cleaned, parse_trail  # noqa: PLC0415
+
+    if media_type not in CHAIN_REPLAY_TYPES:
+        return None
+    trail = parse_trail(params.get("clipper_chain"))
+    if not trail or not _trail_cleaned(trail) or not trail[-1].get("content_hash"):
+        return None
+    return trail
+
+
+def _trail_key(trail: list[dict[str, Any]]) -> str:
+    """Return a canonical, hashable encoding of *trail* for cache keys."""
+    return json.dumps(trail, sort_keys=True, separators=(",", ":"))
+
+
+def _payload_bytes(media: dict[str, Any] | None, media_type: str) -> bytes | None:
+    """Return *media*'s embeddable payload as bytes (text UTF-8 encoded), or ``None``."""
+    if media is None:
+        return None
+    if media_type == "text":
+        text = media.get("media_string")
+        return text.encode("utf-8") if isinstance(text, str) else None
+    blob = media.get("media_bytes")
+    return bytes(blob) if isinstance(blob, (bytes, bytearray)) else None
+
+
+def _payload_size(media: dict[str, Any]) -> int:
+    """Approximate the bytes a media dict holds, for the byte-bounded memo."""
+    return sum(len(v) for v in media.values() if isinstance(v, (bytes, bytearray, str)))
+
+
+def load_reference_source(media_type: str, path: Path) -> dict[str, Any]:
+    """Return the fields a reference parent at *path* is hydrated with.
+
+    The one loader shared by the import (which hydrates a thin parent so its
+    chain can run, see ``_hydrate_reference_parents`` in
+    :mod:`vtscore.datasets.stages.clipper`) and the chain recipe here (which
+    replays that chain later).  Sharing it is what lets a replay reproduce the
+    import byte for byte: the same ``load_media_data`` call on the same bytes,
+    including text's decode and strip.  Callers must have confined *path*.
+    """
+    import vtscore.media as media_registry  # noqa: PLC0415
+
+    return media_registry.get(media_type).load_media_data(path, media_bytes=path.read_bytes())
+
+
+def _source_signature(media: dict[str, Any]) -> tuple[Path, tuple] | None:
+    """Return a lazy unit's confined source path and its ``(path, mtime, size)`` key.
+
+    The stat fields make an edited source a cache miss, so an edit is noticed
+    on the next request rather than whenever the old bytes happen to be evicted.
+    """
+    from vtscore.security.path_validation import resolve_media_file_path  # noqa: PLC0415
+
+    media_path = media.get("media_path")
+    if not media_path:
+        return None
+    path = resolve_media_file_path(media_path)
+    if path is None:
+        return None
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return path, (str(path), st.st_mtime_ns, st.st_size)
+
+
+def _replay_from_source(
+    path: Path,
+    source_key: tuple,
+    media_type: str,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Replay *steps* on the reference source at *path*; memoise shared step outputs.
+
+    A clipper's output list is the same for every sibling of one source, so it
+    is memoised under the source plus everything recorded before it.  When the
+    first step's outputs are already memoised the source is not even loaded.
+    """
+    from vtscore.datasets.clipper_chain import (  # noqa: PLC0415
+        _run_recorded_step,
+        _select_chain_output,
+        replay_chain_on_media,
+    )
+
+    def step_key(index: int) -> tuple:
+        entry = steps[index]
+        own = _trail_key([{"kind": entry["kind"], "name": entry["name"], "params": entry.get("params") or {}}])
+        return ("step", source_key, media_type, _trail_key(steps[:index]), own)
+
+    def run_step(index: int, entry: dict[str, Any], media: dict[str, Any]) -> list[dict[str, Any]] | None:
+        key = step_key(index)
+        outputs = _replay_memo.get(key)
+        if outputs is None:
+            outputs = _run_recorded_step(index, entry, media)
+            if outputs is None:
+                return None
+            _replay_memo.put(key, outputs, nbytes=sum(_payload_size(o) for o in outputs))
+        return outputs
+
+    if steps and steps[0]["kind"] != "cleaner":
+        memoised = _replay_memo.get(step_key(0))
+        if memoised is not None:
+            picked = _select_chain_output(memoised, steps[0])
+            if picked is None:
+                return None
+            return replay_chain_on_media(picked, steps[1:], run_step=lambda i, e, m: run_step(i + 1, e, m))
+
+    source = {"media_type": media_type, "filename": path.name, "media_path": str(path)}
+    source.update(load_reference_source(media_type, path))
+    return replay_chain_on_media(source, steps, run_step=run_step)
+
+
+def _checked_replay(
+    media: dict[str, Any],
+    media_type: str,
+    steps: list[dict[str, Any]],
+    expected_hash: str | None,
+    what: str,
+) -> bytes | None:
+    """Replay *steps* for *media* and return the payload iff it hashes to *expected_hash*.
+
+    Results are cached (keyed by the source's stat signature, so an edited
+    source misses).  A replay that runs but no longer matches is reported once
+    and yields ``None``: the caller serves nothing rather than other bytes.
+    """
+    from vtscore.datasets.clipper_chain import _content_hash  # noqa: PLC0415
+
+    if not expected_hash:
+        return None
+    sig = _source_signature(media)
+    if sig is None:
+        return None
+    path, source_key = sig
+    cache_key = ("chain", source_key, media_type, _trail_key(steps), expected_hash)
+    hit = _conv_cache.get(cache_key)
+    if hit is not None:
+        return hit
+    try:
+        final = _replay_from_source(path, source_key, media_type, steps)
+    except Exception:
+        log.warning("lazy_clip: replaying the %s of %s failed", what, path, exc_info=True)
+        return None
+    payload = _payload_bytes(final, media_type)
+    if final is None or payload is None or _content_hash(final) != expected_hash:
+        if cache_key not in _warned:
+            if len(_warned) >= _WARNED_MAX:
+                _warned.clear()
+            _warned.add(cache_key)
+            log.warning(
+                "lazy_clip: replaying %s no longer reproduces the %s recorded at import "
+                "(the file was edited, or a library upgrade changed the output); serving nothing",
+                path,
+                what,
+            )
+        return None
+    _conv_cache.put(cache_key, payload)
+    return payload
+
+
+def _original_steps(media: dict[str, Any]) -> tuple[str, list[dict[str, Any]], str] | None:
+    """Return ``(media_type, pre-clean steps, original hash)`` for a lazy Original, or ``None``."""
+    from vtscore.datasets.clipper_chain import original_hash, pre_clean_steps  # noqa: PLC0415
+
+    recipe = clip_recipe(media)
+    if recipe is None or recipe[0] != "chain":
+        return None
+    _, media_type, trail_json = recipe
+    trail = json.loads(trail_json)
+    expected = original_hash(trail)
+    if expected is None:
+        return None
+    return media_type, pre_clean_steps(trail), expected
+
+
+def has_lazy_original(media: dict[str, Any]) -> bool:
+    """True iff *media* is a lazy cleaned unit whose Original can be replayed.
+
+    A unit holding its payload inline answers through its stored snapshot
+    instead (see :func:`~vtscore.datasets.clipper_chain.has_original_payload`).
+    """
+    if media.get("media_bytes") is not None or media.get("media_string") is not None:
+        return False
+    if not media.get("media_path"):
+        return False
+    return _original_steps(media) is not None
+
+
+def lazy_original_bytes(media: dict[str, Any]) -> bytes | None:
+    """Return a lazy cleaned unit's *Original* payload, or ``None``.
+
+    The Original is the trail replayed up to (not including) its first
+    cleaner - for a sub-clip, the pre-clean clip rather than its source file -
+    and is served only if it still hashes to the trail's ``original_hash``.
+    Text comes back UTF-8 encoded.
+    """
+    found = _original_steps(media)
+    if found is None:
+        return None
+    media_type, steps, expected = found
+    return _checked_replay(media, media_type, steps, expected, "Original")
+
+
+def recipe_is_exclusive(media: dict[str, Any]) -> bool:
+    """True iff *media*'s recipe is the only legitimate source of its payload.
+
+    A cleaned unit's ``media_path`` names the *uncleaned* source, so when its
+    replay fails the resolvers must stop there rather than fall through to
+    reading that file: no bytes, never other bytes.
+    """
+    recipe = clip_recipe(media)
+    return recipe is not None and recipe[0] == "chain"
+
+
+class _LazyPayloadView(dict):
+    """A copy of a lazy media whose payload is resolved from its recipe on read.
+
+    Handed to embedders in place of the media itself (see :func:`embed_view`).
+    The copy drops ``media_path`` / ``media_url``, which name the *source*,
+    so an embedder can only see the unit's own payload or nothing.  The
+    payload is resolved on each read rather than stored, so a bulk pass over a
+    large reference dataset never holds every unit's payload at once; the LRU
+    caches absorb repeat reads.  A plugin that copies the view with
+    ``dict(view)`` gets no payload and no path, so it embeds nothing rather
+    than the wrong file.
+    """
+
+    _PAYLOAD_KEYS = ("media_bytes", "media_string")
+
+    def __init__(self, media: dict[str, Any]) -> None:
+        super().__init__({k: v for k, v in media.items() if k not in ("media_path", "media_url")})
+        self._source = media
+
+    def _payload(self, key: str) -> Any:
+        is_text = self._source.get("media_type") == "text"
+        if (key == "media_string") != is_text:
+            return None
+        payload = lazy_clip_bytes(self._source)
+        if payload is None:
+            return None
+        return payload.decode("utf-8", errors="replace") if is_text else payload
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if key in self._PAYLOAD_KEYS:
+            value = self._payload(key)
+            return default if value is None else value
+        return super().get(key, default)
+
+    def __getitem__(self, key: Any) -> Any:
+        if key in self._PAYLOAD_KEYS:
+            return self._payload(key)
+        return super().__getitem__(key)
+
+
+def embed_view(media: dict[str, Any]) -> dict[str, Any]:
+    """Return what an embedder should be handed for *media*.
+
+    *media* itself, unless it is a lazy unit (no inline payload, a recipe in
+    its origin): then a view whose payload resolves from that recipe.  Every
+    embedder falls back to ``media_path`` when it finds no payload, and for a
+    lazy unit that names the whole source - the recording a tile was cut from,
+    the photo before its edge trim - so embedding the media directly would
+    embed the wrong content.
+    """
+    if media.get("media_bytes") is not None or media.get("media_string") is not None:
+        return media
+    if clip_recipe(media) is None:
+        return media
+    return _LazyPayloadView(media)
 
 
 def _apply_recipe(source_bytes: bytes, recipe: tuple, media: dict[str, Any]) -> bytes | None:
@@ -285,13 +622,20 @@ def lazy_clip_bytes(media: dict[str, Any]) -> bytes | None:
 
     ``None`` means "not a lazy clip" (no recipe) or "source unavailable" - in
     both cases the caller falls back to its existing resolution order
-    (``media_path`` whole-file read, then ``media_url``).  A media that already
-    carries inline ``media_bytes`` is never lazy, so callers should check that
-    first; this function does not.
+    (``media_path`` whole-file read, then ``media_url``) - except for a recipe
+    :func:`recipe_is_exclusive` reports, where ``None`` also means "the replay
+    no longer matches" and the caller must stop.  A media that already carries
+    inline ``media_bytes`` is never lazy, so callers should check that first;
+    this function does not.  A cleaned text unit's payload comes back UTF-8
+    encoded.
     """
     recipe = clip_recipe(media)
     if recipe is None:
         return None
+    if recipe[0] == "chain":
+        _, media_type, trail_json = recipe
+        trail = json.loads(trail_json)
+        return _checked_replay(media, media_type, trail, trail[-1].get("content_hash"), "cleaned payload")
 
     is_converter = recipe[0] == "converter"
     source_key = media.get("media_path") or media.get("media_url")
