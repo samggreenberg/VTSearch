@@ -3,7 +3,7 @@
 ``run-tests.sh`` prunes itself when a branch changes nothing but tracked
 markdown.  Almost nothing in this repo can see a ``.md`` file: pyright
 excludes markdown, pip-audit and the frontend lanes cannot read one, and of
-the ~1600 Python tests only a handful ever open a doc.  Paying ~3.5 minutes
+the ~16,700 Python tests only a handful ever open a doc.  Paying ~8 minutes
 to prove that a plan file's prose still lints is a bad trade, so a
 markdown-only run keeps every cheap gate in stage 1 (they are the ones that
 *do* read markdown -- check-docs, codespell, the doc-inventory and
