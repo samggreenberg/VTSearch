@@ -332,6 +332,30 @@ class TestPipeline:
         assert "Unknown --solo-media-type" in capsys.readouterr().err
         assert seen == {}
 
+    def test_pipeline_applies_env_admin_overrides(self, monkeypatch):
+        """The ``VTSEARCH_*`` overrides reach a headless run, as they do the server (#4970)."""
+        monkeypatch.setenv("VTSEARCH_DATASET_MAX_AGE_DAYS", "14")
+        seen = self._record_run(monkeypatch, probe=settings_mod.get_effective_dataset_max_age_days)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml"])
+        assert seen["probe"] == 14
+        assert admin_overrides.override_source("dataset_max_age_days") == "VTSEARCH_DATASET_MAX_AGE_DAYS"
+
+    def test_pipeline_flag_wins_over_env_admin_override(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_DATASET_MAX_AGE_DAYS", "14")
+        seen = self._record_run(monkeypatch, probe=settings_mod.get_effective_dataset_max_age_days)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--dataset-max-age-days", "3"])
+        assert seen["probe"] == 3
+
+    def test_pipeline_bad_env_admin_override_warns_on_stderr(self, monkeypatch, capsys):
+        """A typo in the environment is reported off stdout (the NDJSON stream) and the run goes on."""
+        monkeypatch.setenv("VTSEARCH_DATASET_MAX_AGE_DAYS", "fortnight")
+        seen = self._record_run(monkeypatch, probe=settings_mod.get_effective_dataset_max_age_days)
+        _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--progress-format", "json"])
+        captured = capsys.readouterr()
+        assert "VTSEARCH_DATASET_MAX_AGE_DAYS" in captured.err
+        assert "VTSEARCH_DATASET_MAX_AGE_DAYS" not in captured.out
+        assert seen == {"path": "flow.yaml", "probe": None}
+
     def test_pipeline_rejects_extra_flags(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
             _run_main(monkeypatch, ["--pipeline", "flow.yaml", "--totally-unknown", "1"])
@@ -352,6 +376,12 @@ class TestAutodetectWiring:
         args, _ = rec.calls["autodetect_main"]
         assert args[0] == "x.pkl"
         assert args[1] == "s.json"
+
+    def test_autodetect_applies_env_admin_overrides(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_DATASET_MAX_AGE_DAYS", "14")
+        _AutodetectRecorder(monkeypatch)
+        _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl"])
+        assert settings_mod.get_effective_dataset_max_age_days() == 14
 
     def test_no_label_import_keeps_autofind_list(self, monkeypatch):
         """Without --import-labels-into the settings' AutoFind list decides."""
@@ -1131,6 +1161,36 @@ class TestRunServer:
         # No --login: no provider activated; port comes from VTSEARCH_PORT.
         assert provs == []
         assert app.ran["port"] == 6001
+
+
+    def test_run_server_honours_settings_before_init(self, monkeypatch, tmp_path, capsys):
+        """``--settings`` points the server at that file before its startup reads it (#4970)."""
+        import argparse
+
+        self._patch_preflight(monkeypatch)
+        settings_file = tmp_path / "server-settings.json"
+        seen = {}
+
+        cli_main._run_server(
+            argparse.Namespace(login=None, port=5055, local=True, settings=str(settings_file)),
+            _FakeApp(),
+            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+        )
+        assert seen["path"] == settings_file
+        assert str(settings_file) in capsys.readouterr().out
+
+    def test_run_server_without_settings_keeps_the_default(self, monkeypatch):
+        import argparse
+
+        self._patch_preflight(monkeypatch)
+        before = settings_mod.SETTINGS_PATH
+        seen = {}
+        cli_main._run_server(
+            argparse.Namespace(login=None, port=5055, local=True, settings=None),
+            _FakeApp(),
+            lambda **kw: seen.update(path=settings_mod.SETTINGS_PATH),
+        )
+        assert seen["path"] == before
 
 
 class TestSoloEmbedderCrossType:

@@ -177,6 +177,21 @@ class TestSavingRun:
         (entry,) = list_datasets()
         assert entry["expires_at"] == pytest.approx(entry["created_at"] + 3 * 86400)
 
+    @pytest.mark.parametrize(("dry_run", "prepared"), [(False, 1), (True, 0)])
+    def test_a_run_prepares_the_runtime_as_the_server_does(self, client, tmp_path, monkeypatch, dry_run, prepared):
+        """``initialize_models`` runs before the import's worker thread, but not for a dry run (#4970)."""
+        import vtscore.embedding as embedding_mod
+        from vtscore.cli import autodetect_main
+
+        calls = []
+        monkeypatch.setattr(embedding_mod, "initialize_models", lambda *a, **kw: calls.append(list_datasets()))
+        source = _make_dataset_file(tmp_path, medias)
+        autodetect_main(str(source), settings_path=str(_settings_file(tmp_path, [])), save_dataset=True, dry_run=dry_run)
+
+        assert len(calls) == prepared
+        # Called before the save, so no load thread exists yet.
+        assert all(seen == [] for seen in calls)
+
     def test_no_autofind_detectors_saves_and_skips_detection(self, client, tmp_path, capsys):
         from vtscore.cli import autodetect_main
 
