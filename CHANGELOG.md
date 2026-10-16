@@ -1004,6 +1004,12 @@ not list every commit. Use `git log` for the full history.
   too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
   answer and clear only after three in a row, about 15 seconds.
 
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
   import did not record them. Whenever a label was rebuilt from its source file (training from a saved
