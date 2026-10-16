@@ -63,6 +63,17 @@ describe('SettingsImporterModalComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.picker-card').length).toBe(1);
   });
 
+  // #4990: the action row used to sit inside the form <div>, where vt-modal's
+  // `[modal-footer]` slot never sees it (projection only matches top-level
+  // content), so the buttons scrolled with the body instead of staying pinned.
+  it('projects the action buttons into the modal footer', async () => {
+    await openFirstImporter(mockImporters);
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.modal-footer .form-actions .btn--primary')?.textContent).toContain('Import');
+    expect(el.querySelector('.modal-body .form-actions')).toBeNull();
+  });
+
   it('does not auto-select the first option for a free-text combobox', async () => {
     await flushInit();
     const freeTextImporter = {

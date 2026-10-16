@@ -589,6 +589,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// The wrapper for a group of footer buttons (`<div class="form-actions"
+// modal-footer>`). Projection matches the element carrying `modal-footer`, so a
+// group needs one wrapper, and the footer's own flex row lays out that wrapper,
+// not the buttons inside it: this rule gives them the same spacing. No top
+// margin: `.modal-body` already spaces the footer, and a margin would push the
+// buttons off-centre from a `[modal-footer-start]` item beside them.
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+}
+
 // --- Drawer slide (side panels) ---
 //
 // The Find/Label left & right panels and the Browse selection panel mount and

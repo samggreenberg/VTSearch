@@ -16,10 +16,3 @@
 // `.back-btn`, `.form-group`, `.info-text`, `.error-text` come from
 // `_components.scss`. The parent `.exporter-form` provides `gap:
 // var(--space-lg)`, which spaces the back button from the form below.
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}
