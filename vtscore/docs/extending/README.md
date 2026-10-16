@@ -5,13 +5,17 @@
 list) share one machinery: a
 `PluginRegistry` per family scans its package directory at import time,
 registers every sub-package or flat module that exposes a sentinel
-attribute (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …), and then walks the
+attribute (`IMPORTER`, `EXPORTER`, `CONVERTER`, …), and then walks the
 matching `importlib.metadata` entry-point group so third-party
 distributions can drop plugins in without forking the repo. Each
 plugin subclasses one base ABC (`DatasetImporter`, `ResultsExporter`,
-`MediaEmbedder`, …) that inherits from `PluginBase`, declares its
+`MediaConverter`, …) that inherits from `PluginBase`, declares its
 user-facing inputs as a list of `PluginField`s, and implements one or
-two abstract methods.
+two abstract methods. Media sources register a factory rather than a
+`PluginBase` plugin, and the four media families (media types,
+embedders, clippers, cleaners) are the exception to all of this: plain
+registries filled by the `vtscore.media` sub-package scan, with plain-ABC
+bases and no entry-point group (see the table below).
 
 **This doc set is the library contract**, written for someone shipping a
 plugin as a separate distribution against the semver'd `vtscore` package.
@@ -61,16 +65,18 @@ Media types, embedders, clippers, and cleaners do not currently expose
 an entry-point group - they discover via the `vtscore.media`
 sub-package scan. To ship one out-of-tree, symlink the
 `embedder_<name>.py` (or media-type sub-package) into the appropriate
-directory under `vtscore/media/`; both symlinked files and symlinked
-directories are loaded via `importlib.util.spec_from_file_location`
+directory under `vtscore/media/`, or call the `register*()` functions in
+`vtscore.media` directly. A symlinked embedder file or directory is loaded
+via `importlib.util.spec_from_file_location`; a symlinked media-type
+directory is followed and imported like any other sub-package
 ([`vtscore/media/__init__.py`](../../media/__init__.py)).
 
 ### App tier (in `vtsearch`)
 
 These are documented in the repo-level [`EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md)
-(indexed from [`docs/EXTENDING.md`](../../../docs/EXTENDING.md));
-their library counterparts (`vtscore.labels.sources`) handle bidirectional
-sync at the model layer.
+(indexed from [`docs/EXTENDING.md`](../../../docs/EXTENDING.md)).
+Settings sources share their base, `vtscore.sync.SyncSource`, with the
+library-tier labelset sources.
 
 | Family | Entry-point group | Sentinel | Base class |
 |--------|-------------------|----------|------------|
@@ -90,11 +96,15 @@ sync at the model layer.
 - [Labelset sources](labelset-sources.md) - bidirectional label sync
 - [Media sources](media-sources.md) - resolve an origin back to a file
 
-Datasource importers, seed importers and media cleaners have no guide
-here yet; their contracts are documented with their packages -
+Datasource importers, seed importers and media cleaners have no
+library-tier guide. Their contracts are documented with their packages -
 [datasource-importers](../packages/datasource-importers.md),
 [seed-importers](../packages/seed-importers.md), and the cleaner section
-of [media](../packages/media.md).
+of [media](../packages/media.md) - and the authoring walkthroughs live in
+the repo-level guides:
+[`EXTENDING-plugins.md` § Adding a Datasource Importer](../../../docs/EXTENDING-plugins.md#adding-a-datasource-importer),
+[§ Adding a Seed Importer](../../../docs/EXTENDING-plugins.md#adding-a-seed-importer), and
+[`EXTENDING-media.md` § Adding a Media Cleaner](../../../docs/EXTENDING-media.md#adding-a-media-cleaner).
 
 ## Shared rules for every plugin
 
@@ -149,17 +159,20 @@ bug.
 off *declared field types*. A URL you build by joining a configured base
 with a path segment, or a filesystem path you join from a field plus a
 filename, is not a declared field value and still needs
-`vtscore.security.validate_url`
+`vtscore.security.url_validation.validate_url`
 ([`vtscore/security/url_validation.py`](../../security/url_validation.py))
 or `validate_server_filepath` with
 `base_dir=get_file_access_base_dir()`
 ([`vtscore/security/path_validation.py`](../../security/path_validation.py))
-before you use it.
+before you use it. Fetch a server-side URL through `fetch_validated_url`
+or `open_validated_stream` (same module) rather than a bare HTTP client:
+they re-check every redirect hop and the connected peer, which a single
+up-front `validate_url` cannot.
 
 ## Framework-side normalization
 
-`vtscore/plugins/normalize.py` owns everything that used to be
-plugin-author boilerplate. `normalize_field_values(plugin,
+`vtscore/plugins/normalize.py` owns the boilerplate plugin bodies would
+otherwise repeat. `normalize_field_values(plugin,
 field_values)` walks the plugin's declared `fields` and, for every
 non-`file` type:
 
@@ -177,10 +190,11 @@ Then, for every text-like type (`text`, `url`, `email`, `password`,
    i.e. it declares no default either. Your body never needs `.strip()`
    or a presence check.
 3. **Substitutes declared `template_vars`** (see below).
-4. **Runs the field-type security validator.** `url` → `validate_url`.
-   `server_path` / `folder` → `confine_server_filepath` anchored at the
-   per-user data dir, whose *approved* path is written back into
-   `field_values`. A value that arrived as a default goes through this
+4. **Runs the field-type security validator.** `url` → `validate_url`
+   (or the scheme-only `validate_browser_url` for a field declaring
+   `opened_in_browser`). `server_path` / `folder` →
+   `confine_server_filepath` anchored at the per-user data dir, whose
+   *approved* path is written back into `field_values`. A value that arrived as a default goes through this
    like any other, so a default cannot smuggle an unchecked destination
    past the guard.
 
@@ -214,7 +228,7 @@ a URL or a server path must validate it itself.
 
 Substitution is **opt-in per field**. A `PluginField` that does not
 declare `template_vars` passes `{detector_name}` through as a literal
-string — a silent no-op that reads as a plugin bug:
+string, a silent no-op that reads as a plugin bug:
 
 ```python
 PluginField(
@@ -238,6 +252,8 @@ request, so a typo fails fast instead of shipping a literal placeholder
 into a filename. Every resolved value passes through
 `sanitize_template_value`, so a detector named `../../etc/passwd`
 cannot escape the directory the admin-configured template implies.
+Declaring is also what makes the GUI show the resolved value; see
+[results-exporters.md § Template-variable interpolation](results-exporters.md#template-variable-interpolation).
 
 Resolving a template for something *other* than the active context —
 the detector-rename flow needs both the old and the new path — can't use
@@ -257,7 +273,7 @@ sentinel attribute holds. For example, a third-party dataset importer:
 my_importer = "my_pkg.my_module:IMPORTER"
 ```
 
-A third-party labelset exporter and labelset source from the same
+A third-party results exporter and labelset source from the same
 package:
 
 ```toml

@@ -196,8 +196,8 @@ def resolve_or_train_detector(
         # branch trains fresh against the detector's primary.  The keying
         # marker returns the detector's primary when the active dataset can
         # supply it (so a valid cached model survives), else the dataset score
-        # precedence (so a genuine mismatch invalidates).  See patch-embedder.md
-        # → "Per-detector primary embedder".
+        # precedence (so a genuine mismatch invalidates).  See docs/ARCHITECTURE.md
+        # → "Per-detector embedder type".
         snap_embedder = keying_embedder_for_snap(det_ctx, snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     from vtscore.detectors.query_head import detector_text_query, query_head_embedder, text_embedder_for_snap

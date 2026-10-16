@@ -288,7 +288,7 @@ export class MultiOutputConfigComponent {
         embedder: this.importDefaults.chooseEmbedderForType(options.embedders, mediaType, mediaTypes, this.guessedMediaEmbedder()),
         clipper: clipper.name,
         clipperParams,
-        cleaners: this.importDefaults.defaultCleanerSelection(options.cleaners),
+        cleaners: this.importDefaults.defaultCleanerSelection(options.cleaners, mediaType, mediaTypes),
         sourceSpecs,
       };
     });

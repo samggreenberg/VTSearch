@@ -617,8 +617,10 @@ prints `membership: SKIPPED`, and the bundle holds `audit/merge` alone (#3601).
 corpus.jsonl        one record per page: path, size, marks, provenance, tier
 classes.json        per class: instances, distinct_from, caveats, eligible distractors, audit state
 roster.json         the hand-picked classes an eval runs on
-separations.json    adjudicated "different mark" pairs, keyed on page ids
-queries/            one query crop per box-located roster class
+adjudications.json  adjudicated same/different pairs, keyed on (page_id, mark_index)
+added_marks.json, box_overrides.json, query_crops.json
+                    hand-added boxes, tightened boxes and extra query crops
+queries/            one query crop per box-located roster class, plus its extras
 shortlist.png/json  ranked candidates for choosing a roster
 cluster_report.json what clustering did, and how many separations it honoured
 audit/merge/       the slate: slate_*.png, pairs_*.png, index.json, merges.txt
@@ -639,8 +641,7 @@ Do not aggregate across provenances without saying so.
 pile's `embeddings/` dir, in the pile's format, via its pickle IO. It is
 deliberately *not* a `pile_config.DATASETS` entry: the pile builds the full
 dataset × embedder cross-product, so adding FullMarks and `sift_vlad` there would
-silently schedule `sift_vlad` cells for all six existing datasets, on a mount
-the playbook already calls chronically full.
+silently schedule `sift_vlad` cells for every existing dataset.
 
 ## Strict partition, cheap merge
 
@@ -661,20 +662,20 @@ an afternoon of merging is not undone the next time a number moves. A pair
 ruled both ways is refused rather than resolved by whichever is applied last.
 
 **Every pass writes there, not just `merge` and `confusable`.** This is the
-file `build_corpus.py` replays, and it is the *only* one: a rebuild re-clusters
-from the sources and writes `classes.json` from scratch. So a verdict recorded
-only in `classes.json` is applied exactly until the next build, which is a
-documented step of the pipeline — stage 2 rebuilds the corpus to stamp the
-roster — and not an accident someone might avoid. Until #3343 that was true of
-two passes:
+only file of same/different rulings `build_corpus.py` replays (the other stores
+it replays hold boxes and crops): a rebuild re-clusters from the sources and
+writes `classes.json` from scratch. So a verdict recorded only in
+`classes.json` is applied exactly until the next build, which is a documented
+step of the pipeline — stage 2 rebuilds the corpus to stamp the roster — and
+not an accident someone might avoid. Two passes therefore record more than a
+pair (#3343):
 
-- a **`split`** left its pieces in `classes.json` and nothing in the
-  adjudications, so the next build re-proposed the over-merge a person had just
-  taken apart. It is now recorded as the partition it is: a must-link star
-  inside each piece, one cannot-link between each pair of pieces.
-- a **`membership`** verdict set `membership_verified` and dropped the rejected
-  instances from the class, and a rebuild handed them straight back. A verified
-  class is now a must-link star and each rejection one cannot-link against it.
+- a **`split`** is recorded as the partition it is: a must-link star inside
+  each piece, one cannot-link between each pair of pieces, so the next build
+  does not re-propose the over-merge a person has just taken apart.
+- a **`membership`** verdict makes the verified class a must-link star and each
+  rejection one cannot-link against it, so a rebuild does not hand the rejected
+  instances back.
 
 The star is also what makes a single representative pair enough to separate two
 *classes*. Without it a cannot-link binds the two marks it names and no more —
@@ -765,9 +766,7 @@ A tier-`s` SPODS-only build fits on a laptop. Tiers `m` and `l` need the
 cluster — see **[`GRID-RUNBOOK.md`](GRID-RUNBOOK.md)** for sizing, staging, the
 resume story and what to check afterwards.
 
-`python build_corpus.py --probe` first, wherever you run. Every source fails
-differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
-extractor — and finding out which costs seconds now and a queue slot later.
-SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
-need a Kaggle token. The probe is metadata-only — it fetches no source bytes —
-so asking it repeatedly is free.
+`python build_corpus.py --probe` first, wherever you run: it fetches no source
+bytes and names which source is unreachable (SPODS needs one of `bsdtar` / `7z`
+/ `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token). Details in the
+runbook's [Preflight](GRID-RUNBOOK.md#preflight).

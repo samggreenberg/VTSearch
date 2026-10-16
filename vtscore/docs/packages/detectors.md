@@ -42,6 +42,9 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/training_domain.py`       | Which loaded dataset a detector's labels were cast on               |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 | `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
+| `vtscore/detectors/label_quota.py`           | The label quota: which detector a labelset's counts give            |
+| `vtscore/detectors/centroid_head.py`         | The Goods' centroid head served under the quota                     |
+| `vtscore/detectors/query_head.py`            | A typed-query detector's head, and its query as a trained head's prior |
 
 **Labels: resolving, syncing, restoring**
 
@@ -269,14 +272,13 @@ every detector route (further keyword arguments - `groups`,
 `score_rows`, `voted_ids`, `haystack`, `haystack_rows` - carry region
 bags and a scoring population that differs from *snap*):
 
-1. Cross-calibration threshold via
-   `calculate_cross_calibration_threshold` (respects `calibrate_count`
-   and `calibration_fraction` settings).
-2. Full-data model via `train_model`. Inclusion never reaches the model: the
-   head is the same at every inclusion, and only the cut in step 3 reads it.
-3. The fold-anchored population threshold whenever a media snapshot is
-   provided (the haystack the mixture is fitted on).  Without one, the
-   cross-calibration cut ships alone.
+1. K-fold calibration via `calibration_folds` (or `calibration_folds_cached`
+   with a `det_ctx`; respects the `calibrate_count` and `calibration_fraction`
+   settings), giving both the cross-calibration cut and the fold models.
+2. Full-data model via `train_model(hidden_dim=LINEAR_SVM_PRIOR_HEAD)`. The
+   operating point never reaches the model: only the cut in step 3 reads it.
+3. The line, whenever a media snapshot is provided (the haystack it is fitted
+   on; `_fused_threshold`). Without one, the cross-calibration cut ships alone.
 
 Returns `(model, threshold)`. The function reads the balance of `det_ctx`
 (`detector_beta(det_ctx)`, the detector's own, #4665; `line_knobs`, the
@@ -288,10 +290,12 @@ Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
 builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
-Under a balance the threshold keeps a set - the top *count* unvoted items of
-the haystack, the set the detector's last spot check ended on (where the
-check's shape lets it move the line) or the mixture's F-beta argmax under the
-balance's cap - and with no balance it is the Inclusion 0 cut.
+Every retrain also fits the **labels line** (#4452,
+[training.md](training.md#the-labels-line-fit_labels_line-labelsline)) and
+parks it as `det_ctx.labels_line`. Under a balance the threshold is that
+line's cut at the balance; with no balance, or no class model even in-sample
+(one class), it is the fold-anchored Inclusion 0 cut, and with no usable folds
+the schedule blend (`calculate_safe_threshold`).
 `calibrating_groups` is deprecated and ignored (#4362): it chose the votes
 that estimate could use as evidence. Leave it unset; passing it emits a
 `DeprecationWarning`.
@@ -309,7 +313,8 @@ is **deprecated** (#4269): leave it unset; `0` is accepted with a
 
 - `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
-- `threshold` - the operating point (cross-cal or safe-blended).
+- `threshold` - the operating point: the line `train_and_threshold` draws
+  (above), or a document dataset's structural line (`maybe_structural_rerank`).
 - `model` - the trained `nn.Sequential` (or `None` when training was
   not possible).
 
@@ -594,7 +599,11 @@ every media scored, in the snapshot's text slot (`text_embedder_for_snap`).
 default)` is the space a scorer builds rows in; `detector_text_query(det_data)`
 is the query a detector was made from (the Train view's re-sort prompt replaces
 it, #4801); `embed_detector_query` embeds it as the
-text sort does.
+text sort does. The same query is a trained head's second prior (#4859):
+`typed_query_prior_applies(embedder)` is true on a known single-vector space
+whose own text tower embeds into it, and `typed_query_prior_vector(text,
+embedder, media_type)` is the direction the training entry points fit within
+`vtscore.training.svm_prior.typed_query_prior` of.
 
 ---
 
@@ -722,21 +731,21 @@ indicators. It is unrelated to `vtscore.concurrency.progress`
 [`concurrency.md`](concurrency.md#two-kinds-of-progress).
 
 All cache state lives in `_ProgressCache` instances held in `_caches`, an
-LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
+LRU map keyed by `(dataset_id, detector_id)` and bounded at
+`_MAX_CACHED_PAIRS` (3). Each cache carries
 `steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
-`good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
-baseline), `coverage_atlas` (the per-step replay of coverage evidence),
-`status_snapshot` (the last full `/api/labeling-status` payload), and
+`good_ids` / `bad_ids` (running label sets), `prev_snapshot` and `prev_beta`
+(the last model-bearing step's scores over the unlabeled pool with its cut and
+ambiguity band, and the balance that cut was drawn at: the Stable baseline),
+`coverage_atlas` (the per-step replay of coverage evidence),
+`status_snapshot` (the last full `/api/labeling-status` payload),
 `live_models` (models injected by `train_and_score` during sorting, keyed by
-`(frozenset(good), frozenset(bad))`). The stability pool tensors sit beside
-them in `_monitored_pools`, keyed by `dataset_id` alone and shared by every
-cache over that dataset: the pool is a pure function of `clips_dict`, and its
-tensor is by far the largest thing the module holds, so sharing is what keeps
-several warm pairs from multiplying peak memory.
+`(frozenset(good), frozenset(bad))`; the module's only source of models) and
+`smart_memo` (the memoised Smart status).
 
-A single `threading.RLock` (`_progress_lock`) protects both maps and every
-field inside them. Keying by the pair is a correctness requirement: a
+A single `threading.RLock` (`_progress_lock`) protects the map and every
+field inside it. Keying by the pair is a correctness requirement: a
 shared slot would replay one detector's history onto another's labels.
 Every entry point resolves its cache through the active
 `(dataset_id, detector_id)` key (`_active_cache()` / `_ensure_cache`).

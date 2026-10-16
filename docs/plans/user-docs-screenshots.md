@@ -184,9 +184,10 @@ stub randomness the UI exposes (never rely on unseeded draws).
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
-  manifest `id` has both theme files on disk, every embed in the three docs has
-  a matching manifest entry, and every reshoot-queue id is a real manifest id
-  or slide group.
+  manifest `id` has both theme files on disk, every embed in the user-facing
+  docs (the guide, its how-to pages, README.md and demos.md) has a matching
+  manifest entry, and every reshoot-queue id is a real manifest id or slide
+  group.
 
 ## Refresh workflow (when the GUI changes)
 

@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import io
+import sys
 import wave
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
+
+# Fakes go into ``sys.modules`` via ``monkeypatch.setitem``, never
+# ``patch.dict(sys.modules, ...)``: ``convert`` resolves the device, which
+# imports torch, and ``patch.dict`` restores the whole table on exit. When the
+# test was the first to import torch, that evicts it, and the next
+# ``import torch`` re-initialises ``torch._C`` and crashes (see tests_lib/detectors/test_face.py).
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,7 +49,7 @@ def _make_png_bytes(width: int = 16, height: int = 16, color: tuple[int, int, in
 
 
 def _fake_paddleocr_module(fake_cls: type) -> object:
-    """Build a stand-in module object that exposes ``PaddleOCR`` for patch.dict."""
+    """Build a stand-in module object that exposes ``PaddleOCR``, to put in ``sys.modules``."""
     import types
 
     mod = types.ModuleType("paddleocr")
@@ -277,7 +284,7 @@ class TestImage2TextMediaConverter:
         c = Image2TextMediaConverter()
         assert c.convert({"filename": "x.png", "media_bytes": b""}) == []
 
-    def test_convert_no_paddleocr_returns_empty(self):
+    def test_convert_no_paddleocr_returns_empty(self, monkeypatch):
         """When PaddleOCR is not importable, convert returns []."""
         from vtscore.converters.image2text import Image2TextMediaConverter
 
@@ -286,10 +293,10 @@ class TestImage2TextMediaConverter:
         c = Image2TextMediaConverter()
 
         # Setting the module to None in sys.modules makes `import paddleocr` raise.
-        with patch.dict("sys.modules", {"paddleocr": None}):
-            assert c.convert(media) == []
+        monkeypatch.setitem(sys.modules, "paddleocr", None)
+        assert c.convert(media) == []
 
-    def test_convert_with_mocked_paddleocr(self):
+    def test_convert_with_mocked_paddleocr(self, monkeypatch):
         """Mock PaddleOCR to verify result-flattening and threshold filtering."""
         from vtscore.converters.image2text import Image2TextMediaConverter
 
@@ -310,8 +317,8 @@ class TestImage2TextMediaConverter:
                     ],
                 ]
 
-        with patch.dict("sys.modules", {"paddleocr": _fake_paddleocr_module(FakePaddleOCR)}):
-            results = c.convert(media, {"threshold": "0.5"})
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        results = c.convert(media, {"threshold": "0.5"})
 
         assert len(results) == 1
         r = results[0]
@@ -324,7 +331,7 @@ class TestImage2TextMediaConverter:
         assert r["character_count"] > 0
         assert r["duration"] == 0
 
-    def test_convert_with_mocked_paddleocr_no_hits(self):
+    def test_convert_with_mocked_paddleocr_no_hits(self, monkeypatch):
         """When OCR finds no text above threshold, returns []."""
         from vtscore.converters.image2text import Image2TextMediaConverter
 
@@ -339,10 +346,10 @@ class TestImage2TextMediaConverter:
             def ocr(self, _img, cls=True):
                 return [[]]
 
-        with patch.dict("sys.modules", {"paddleocr": _fake_paddleocr_module(FakePaddleOCR)}):
-            assert c.convert(media) == []
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        assert c.convert(media) == []
 
-    def test_convert_passes_language_to_paddleocr(self):
+    def test_convert_passes_language_to_paddleocr(self, monkeypatch):
         """The language param flows into the PaddleOCR constructor."""
         from vtscore.converters.image2text import Image2TextMediaConverter
 
@@ -359,12 +366,12 @@ class TestImage2TextMediaConverter:
             def ocr(self, _img, cls=True):
                 return [[]]
 
-        with patch.dict("sys.modules", {"paddleocr": _fake_paddleocr_module(FakePaddleOCR)}):
-            c.convert(media, {"language": "fr"})
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        c.convert(media, {"language": "fr"})
 
         assert captured.get("lang") == "fr"
 
-    def test_convert_from_path(self, tmp_path):
+    def test_convert_from_path(self, tmp_path, monkeypatch):
         from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
@@ -380,11 +387,151 @@ class TestImage2TextMediaConverter:
             def ocr(self, _img, cls=True):
                 return [[([[0, 0], [10, 0], [10, 5], [0, 5]], ("Path text", 0.9))]]
 
-        with patch.dict("sys.modules", {"paddleocr": _fake_paddleocr_module(FakePaddleOCR)}):
-            results = c.convert(media)
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        results = c.convert(media)
 
         assert len(results) == 1
         assert "Path text" in results[0]["media_string"]
+
+
+def _counting_paddleocr(text: str = "Hello") -> tuple[type, list[str]]:
+    """A fake ``PaddleOCR`` class that records the ``lang`` of every engine it builds."""
+    built: list[str] = []
+
+    class FakePaddleOCR:
+        def __init__(self, **kwargs):
+            built.append(kwargs["lang"])
+
+        def ocr(self, _img, cls=True):
+            return [[([[0, 0], [10, 0], [10, 5], [0, 5]], (text, 0.99))]]
+
+    return FakePaddleOCR, built
+
+
+class TestImage2TextEngineCache:
+    """The PaddleOCR engine is built once per (language, device), not once per image (#4979)."""
+
+    def test_builds_once_across_images(self, monkeypatch):
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        fake_cls, built = _counting_paddleocr()
+
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(fake_cls))
+        for i in range(4):
+            assert c.convert({"filename": f"{i}.png", "media_bytes": _make_png_bytes()})
+
+        assert built == ["en"]
+
+    def test_rebuilds_when_language_changes(self, monkeypatch):
+        """A new language replaces the cached engine; the slot holds one, so going back rebuilds."""
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        fake_cls, built = _counting_paddleocr()
+
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(fake_cls))
+        for language in ["en", "en", "fr", "fr", "en"]:
+            assert c.convert({"filename": "x.png", "media_bytes": _make_png_bytes()}, {"language": language})
+
+        assert built == ["en", "fr", "en"]
+
+    def test_rebuilds_when_device_changes(self, monkeypatch):
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        gpu_flags: list[bool] = []
+
+        class FakePaddleOCR:
+            def __init__(self, **kwargs):
+                gpu_flags.append(kwargs.get("use_gpu", False))
+
+            def ocr(self, _img, cls=True):
+                return [[([[0, 0], [10, 0], [10, 5], [0, 5]], ("Hi", 0.99))]]
+
+        media = {"filename": "x.png", "media_bytes": _make_png_bytes()}
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        for resolved in ["cpu", "cuda:0", "cuda:0", "cpu"]:
+            with patch("vtscore.config.resolve_device", return_value=resolved):
+                assert c.convert(media)
+
+        assert gpu_flags == [False, True, False]
+
+    def test_threshold_change_reuses_engine(self, monkeypatch):
+        """The threshold filters results after OCR, so it never rebuilds the engine."""
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        fake_cls, built = _counting_paddleocr()
+
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(fake_cls))
+        for threshold in ["0.5", "0.9", "0.1"]:
+            assert c.convert({"filename": "x.png", "media_bytes": _make_png_bytes()}, {"threshold": threshold})
+
+        assert built == ["en"]
+
+    def test_failed_build_is_retried_on_next_call(self, monkeypatch):
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        attempts: list[str] = []
+
+        class FlakyPaddleOCR:
+            def __init__(self, **kwargs):
+                attempts.append(kwargs["lang"])
+                if len(attempts) == 1:
+                    raise RuntimeError("model download interrupted")
+
+            def ocr(self, _img, cls=True):
+                return [[([[0, 0], [10, 0], [10, 5], [0, 5]], ("Second time lucky", 0.99))]]
+
+        media = {"filename": "x.png", "media_bytes": _make_png_bytes()}
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FlakyPaddleOCR))
+        assert c.convert(media) == []
+        results = c.convert(media)
+        assert c.convert(media) == results
+
+        assert results[0]["media_string"] == "Second time lucky"
+        assert attempts == ["en", "en"]
+
+    def test_a_new_paddleocr_class_gets_its_own_engine(self, monkeypatch):
+        """The class is part of the key, so the shared ``CONVERTER`` never serves one
+        test's fake engine to the next."""
+        from vtscore.converters.image2text import CONVERTER
+
+        media = {"filename": "x.png", "media_bytes": _make_png_bytes()}
+        first_cls, first_built = _counting_paddleocr("First")
+        second_cls, second_built = _counting_paddleocr("Second")
+
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(first_cls))
+        assert CONVERTER.convert(media)[0]["media_string"] == "First"
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(second_cls))
+        assert CONVERTER.convert(media)[0]["media_string"] == "Second"
+
+        assert first_built == ["en"]
+        assert second_built == ["en"]
+
+    def test_ocr_runs_under_the_engine_lock(self, monkeypatch):
+        """Concurrent loads share the singleton, and a PaddleOCR engine cannot run two
+        images at once, so ocr() must hold the lock, not only the build."""
+        from vtscore.converters.image2text import Image2TextMediaConverter
+
+        c = Image2TextMediaConverter()
+        held: list[bool] = []
+
+        class FakePaddleOCR:
+            def __init__(self, **kwargs):
+                pass
+
+            def ocr(self, _img, cls=True):
+                held.append(c._engine_slot.lock.locked())
+                return [[([[0, 0], [10, 0], [10, 5], [0, 5]], ("Hi", 0.99))]]
+
+        monkeypatch.setitem(sys.modules, "paddleocr", _fake_paddleocr_module(FakePaddleOCR))
+        assert c.convert({"filename": "x.png", "media_bytes": _make_png_bytes()})
+
+        assert held == [True]
+        assert not c._engine_slot.lock.locked()
 
 
 # ===========================================================================

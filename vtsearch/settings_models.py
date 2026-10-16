@@ -654,10 +654,11 @@ class UserSettings(BaseModel):
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
     # Per-media-type default settings for the Add Dataset advanced panel -
-    # the embedder, clipper (+ params), and source-spec converter rows the
-    # user wants applied automatically every time they import a dataset of
-    # that output mediaType. Set from the Settings > Data Imports tab and
-    # silently auto-filled into the importer form when an importer is
+    # the embedder, clipper (+ params), source-spec converter rows and
+    # cleanup gates the user wants applied automatically every time they
+    # import a dataset of that output mediaType. Set from the Settings > Data
+    # Imports tab (cleanup gates only via the post-import "Save as default"
+    # offer) and silently auto-filled into the importer form when an importer is
     # selected. Keys are canonical media-type ids; each value is a
     # free-form dict shaped like:
     #     {
@@ -666,6 +667,8 @@ class UserSettings(BaseModel):
     #       "clipper_params": {"<key>": <value>, ...},
     #       "source_specs": [{"source_type": "...", "converter": "..."|null,
     #                         "params": {...}}, ...],
+    #       "cleaners": {"<cleaner name>": {"enabled": true|false,
+    #                                       "params": {...}}, ...},
     #     }
     # Any missing sub-key falls back to the importer's existing default.
     import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)

@@ -11,7 +11,7 @@ A detector locks one embedder **type** at create time (its scoring vector-space
   migrating a legacy ``primary_embedder`` name;
 * find-label refuses a detector whose type the active dataset can't supply.
 
-See docs/plans/patch-embedder.md → "Per-detector embedder type".
+See docs/ARCHITECTURE.md → "Per-detector embedder type".
 """
 
 from __future__ import annotations

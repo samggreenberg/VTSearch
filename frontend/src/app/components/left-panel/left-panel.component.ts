@@ -171,7 +171,7 @@ export class LeftPanelComponent implements OnInit {
   readonly modelSelected = output<string>();
   readonly exampleSortStarted = output<unknown>();
   readonly mediaSelect = output<number>();
-  /** Bubbles the media-list "Load more" request up to the sort owner. */
+  /** Bubbles the media-list "Load More" request up to the sort owner. */
   readonly loadMore = output<void>();
   readonly mediaVote = output<{
     id: number;

@@ -6,16 +6,15 @@ and for fitting the coefficients that pace its progress bar.
 `LOAD_COST_MODEL` and `FINALIZE_SLOT_SHARES` in
 `vtscore/datasets/stages/_load_cost_model.py` are fitted constants shipped with
 the app, covering every demo-backed media type (image / audio / video / text /
-document) × loadable registered embedder × `{cpu, cuda, cuda+cuml}`. Cells that
+document) × loadable registered embedder × `{cpu, cuda+cuml}`, plus the `cuda`
+(cuML-off) variant for each media type's default embedders. Cells that
 cannot load in the measuring environment (`video/videomae`,
 `video/languagebind`, `audio/paraspeechclap`) and the `face` media type (no demo
 datasets) fall back to the static profile. Re-fit these when the load pipeline's
 cost shape changes or a new embedder lands.
 
-(A per-deployment override of these constants — `VTSEARCH_TIMING_PROFILE`, fitted
-by a `tune_timing_profile.py` that lived here — was retired with the import ETA
-in #4667. Imports publish no remaining-time estimate, so the constants only shape
-how the bar paces across phases.)
+There is no per-deployment override: imports publish no remaining-time estimate
+(#4667), so the constants only shape how the bar paces across phases.
 
 ## Re-fitting the checked-in defaults
 

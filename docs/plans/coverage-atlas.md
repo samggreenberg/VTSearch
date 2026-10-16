@@ -1,20 +1,20 @@
 # Coverage Atlas: domain-shift and evidence-aware verification for transferred detectors
 
-**Status:** design writeup + first slice shipped. This document is the output of a first-principles design discussion ("invent the perfect density structure, don't adapt the existing one"). It scopes the science; the sections below remain the spec for the unshipped parts.
+**Status:** design writeup; the first slices have shipped (Background below). This document is the output of a first-principles design discussion ("invent the perfect density structure, don't adapt the existing one"). It scopes the science; the sections below remain the spec for the unshipped parts.
 
-**Background — what already exists:** the Diversity Tree has been migrated to a `CoverageAtlas` (`vtscore/coverage/atlas.py`): the same hierarchical k-means partition, now over mean-centered renormalized embeddings (§4.1's cone fix), keeping per-node per-class evidence counts (`n_pos`/`n_neg`), mean-direction moments (`mu`, `rbar`), and 21-point leave-one-out typicality quantiles. Q1 typicality is live (path-averaged p-values, calibration gated on node size ≥ 20 and `rbar` ≥ 0.1 — the root is degenerate by construction after centering). The autopilot's diversity step samples mass-first (siblings stored largest-first) and picks the node's most typical element when unscored. The atlas serializes into the dataset pickle (`"coverage_atlas"` cache key), and an in-session domain-shift report exists at `GET /api/datasets/registry/<id>/domain-shift` (active dataset's items vs `<id>`'s atlas; refuses on embedder mismatch) — now surfaced in the Find Stats modal's **Training-domain overlap** section.
+**Background — what already exists:** the Diversity Tree has been migrated to a `CoverageAtlas` (`vtscore/coverage/atlas.py`): the same hierarchical k-means partition, now over mean-centered renormalized embeddings (§4.1's cone fix), keeping per-node per-class evidence counts (`n_pos`/`n_neg`), mean-direction moments (`mu`, `rbar`), and 21-point leave-one-out typicality quantiles. Q1 typicality is live (path-averaged p-values, calibration gated on node size ≥ 20 and `rbar` ≥ 0.1 — the root is degenerate by construction after centering). The autopilot's diversity step samples mass-first (siblings stored largest-first) and picks the node's most typical element when unscored. The atlas serializes into the dataset pickle (`"coverage_atlas"` cache key), and an in-session domain-shift report exists at `GET /api/datasets/registry/<id>/domain-shift` (active dataset's items vs `<id>`'s atlas; refuses on embedder mismatch) — surfaced in the Find view's result pane (`line-test-result`) as a **Training-domain overlap** section.
 
-The **v0 labelset-kNN evidence signals** (§6.1's `D` and `TS`) have also shipped — the *cross-user* decision-support signal that needs no reference dataset, since it reads only the detector's own labelset (re-embedded in memory at load). `vtscore/detectors/evidence_coverage.py` computes per-item conformal support p-values `D` (calibrated against the labelset's leave-one-out same-class distances) and trust-score ratios `TS`; `GET /api/find/evidence-coverage` summarises them over a scored Find run (fraction in an evidence vacuum for the predicted class, z-score, low-trust share) and the Find Stats modal renders an **Evidence coverage** chip beside Training-domain overlap. This is the piece of the design that fires in the true handoff where haystackA never resolves.
+The **v0 labelset-kNN evidence signals** (§6.1's `D` and `TS`) have also shipped — the *cross-user* decision-support signal that needs no reference dataset, since it reads only the detector's own labelset (re-embedded in memory at load). `vtscore/detectors/evidence_coverage.py` computes per-item conformal support p-values `D` (calibrated against the labelset's leave-one-out same-class distances) and trust-score ratios `TS`; `GET /api/find/evidence-coverage` summarises them over a scored Find run (fraction in an evidence vacuum for the predicted class, z-score, low-trust share) and the Find view's result pane renders an **Evidence coverage** chip beside Training-domain overlap. This is the piece of the design that fires in the true handoff where haystackA never resolves.
 
 Not yet built: the tree ensemble, the `n_viewed` channel, split-half calibration, everything in §5 (blob scan, global alarms), the rest of §6 (tiered work queue, active auditor / stratified estimation), and §7 (portable artifact).
 
-**Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/detectors/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
+**Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/detectors/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue). In Find every unverified item is flood-filled with the detector's own call, so an agreement count read off those piles is inflated by everything the human never looked at; the result pane instead reads the line's precision and recall off the Test's own picks, with ranges (#4527). The active-auditor portion of this design (§6) generalises that: stratified estimates with confidence intervals, by coverage quadrant, instead of adopted self-agreement.
 
 ---
 
 ## 1. Problem statement
 
-UserA trains a detector for concept X on haystackA (the Train interface: vote on a few items, an MLP learns to rank). UserA hands the detector to userB. UserB knows neither what haystackA looked like nor what userA's operational definition of X was. UserB runs the detector on haystackB (the Find interface) and wants to verify enough items to (a) catch the detector's mistakes on his data and (b) measure its accuracy, with bounded effort.
+UserA trains a detector for concept X on haystackA (the Train interface: vote on a few items, a linear head learns to rank). UserA hands the detector to userB. UserB knows neither what haystackA looked like nor what userA's operational definition of X was. UserB runs the detector on haystackB (the Find interface) and wants to verify enough items to (a) catch the detector's mistakes on his data and (b) measure its accuracy, with bounded effort.
 
 The question: **which items in haystackB are worth re-evaluating?** Obviously every predicted positive. But also anything the detector is *silently unqualified* to judge: items unlike anything in haystackA (the detector extrapolates), and items in regions userA never labeled (the detector interpolates without supervision). Today VTSearch gives userB no signal for either; the work queue is ordered purely by detector score.
 
@@ -61,7 +61,7 @@ Tracking both over one shared geometry yields a quadrant picture with genuinely 
 
 **Why decision support is the primary score, not generic OOD distance.** What userB actually fears is disagreement between userA's concept and the detector's output at x. That is unknowable directly, but for a smooth ranker it is bounded by a Lipschitz argument: if f has Lipschitz constant L on the (normalized) embedding sphere and is consistent with a labeled example x_i of class y, then |f(x) − f(x_i)| ≤ L·d(x, x_i) — the call at x can only be badly wrong if either x is far from all evidence of its predicted class, or the concept itself bends faster than L (a concept conflict, which only verification can reveal). Distance-to-evidence-of-the-predicted-class is the tight, decision-aware quantity; distance-to-all-of-haystackA is its loose upper bound. A predicted positive with no positive evidence within any reasonable radius is suspect *even in a dense region of A*. This is the same intuition as the **trust score** of Jiang et al. [11] (ratio of distance-to-nearest-other-class over distance-to-predicted-class), enriched with scale and density information.
 
-**Why not the model's own confidence.** The MLP's sigmoid margin is only meaningful *inside* supported regions. Neural networks are systematically overconfident away from training data — ReLU networks provably so in the far-field [10] — and a plain softmax baseline [9] is the weakest OOD detector in every comparison. The margin earns a slot as a *third* signal (boundary fragility, |s − τ| small), never as the novelty signal.
+**Why not the model's own confidence.** The head's sigmoid margin is only meaningful *inside* supported regions. Neural networks are systematically overconfident away from training data — ReLU networks provably so in the far-field [10] — and a plain softmax baseline [9] is the weakest OOD detector in every comparison. The margin earns a slot as a *third* signal (boundary fragility, |s − τ| small), never as the novelty signal.
 
 **Why not "just learn the density" with a neural density model.** Normalizing flows and friends famously assign *higher* likelihood to out-of-distribution data than to their training data [8]. Density for OOD purposes is better served by simple geometry over good embeddings — the consistent empirical finding of the OOD literature, where k-nearest-neighbor distance on normalized deep features [3] and (relative) Mahalanobis distance [1][2] beat learned densities.
 
@@ -175,13 +175,13 @@ When a single ranking is forced (one work queue), unify as **expected flip value
 
 ### 6.3 Estimation mode: honest accuracy numbers with budgets
 
-UserB's analysis goal is precision/recall/accuracy of the detector *on haystackB*, where truth = his verifications. The shipped Stats modal flood-fills unverified items with the detector's own call — the documented false-confidence caveat. The replacement:
+UserB's analysis goal is precision/recall/accuracy of the detector *on haystackB*, where truth = his verifications. Find's result pane already reads precision and recall off the Test's own picks rather than off the flood-filled piles (#4527). The design below extends that:
 
 - **Design**: stratified sampling, strata = quadrant tier × predicted label (≈ 8 strata; finer per-node post-stratification at report time). Per-stratum error rates with Beta posteriors; global metrics by post-stratified combination; intervals by Wilson per stratum and delta method (or a 5-line bootstrap) for composites.
 - **Allocation**: Neyman (n_h ∝ N_h·σ̂_h) with plug-in σ̂; or, anytime and adaptive, Thompson sampling over per-stratum Beta posteriors — which approximates Neyman while staying valid under continuous monitoring. This is the practical face of optimal active risk estimation [26][27].
 - **Recall is the hard one.** False negatives hide among the huge predicted-negative stratum. Uniform sampling there is hopeless; sample predicted negatives with proposal q(x) ∝ s(x)^β · (1 + γ·novelty(x)) mixed with an ε-uniform floor (bounded weights, full support), and reweight by Horvitz–Thompson. Score-proportional negative sampling is the classic web-scale evaluation trick [27]; the novelty boost is this design's addition (extrapolating regions have a higher FN prior).
 - **Adaptive-sampling bias.** If acquisition adapts item-by-item (as the bug-hunt mode does), naive averages are biased; apply the LURE-style weighting that removes it [28], or keep the estimation stream a separately-randomized 1-in-k interleave (the simpler engineering answer — recommended first).
-- **Zero-label priors, for context.** A family of methods predicts target-domain accuracy from unlabeled data alone — average thresholded confidence [38], difference of confidences [39], agreement-on-the-line [40], and disagreement-discrepancy bounds [41]. Worth surfacing as a *pre-verification prior* in the Stats modal, but they lean on calibration and accuracy-on-the-line phenomena that a small MLP under concept transfer cannot honestly claim; verification-based estimates remain the ground truth here.
+- **Zero-label priors, for context.** A family of methods predicts target-domain accuracy from unlabeled data alone — average thresholded confidence [38], difference of confidences [39], agreement-on-the-line [40], and disagreement-discrepancy bounds [41]. Worth surfacing as a *pre-verification prior* in Find's result pane, but they lean on calibration and accuracy-on-the-line phenomena that a small trained head under concept transfer cannot honestly claim; verification-based estimates remain the ground truth here.
 
 ### 6.4 Bug-hunt mode and the disagreement taxonomy
 
@@ -198,7 +198,7 @@ Every verified flip is classified by the quadrant it occurred in:
 
 - The left work queue gains tier headers (§6.2) in place of pure score order; tier 1 keeps the shipped marginal-first auto-advance within itself.
 - Blob review rides the existing VTSBrowse canvas: color hex tiles by median T(x) (or scan-LLR of the tile's items), one click sends a blob to the verify flow. The shipped browse-canvas Verified Good/Bad buttons (find-verification Phase 4) already do bulk verification of a canvas selection — blob review is that feature pointed at scan-reported regions instead of hand-drawn ones.
-- The Find view's result pane (the Stats modal until #4524) gains: a **domain-overlap chip** ("31% of this dataset is outside the training domain at the 95% level; 12% sits in evidence vacuums"), and coverage-corrected precision/recall **with intervals** from §6.3 alongside (or replacing) the flood-filled numbers.
+- The Find view's result pane, which already carries the **Training-domain overlap** and **Evidence coverage** chips, gains a combined domain-overlap readout ("31% of this dataset is outside the training domain at the 95% level; 12% sits in evidence vacuums") and coverage-corrected precision/recall **with intervals** from §6.3.
 - The detector's score histogram on its training haystack (a few dozen floats) joins the artifact so the score-drift alarm [23][24] can fire before any verification happens.
 
 ## 7. Thread 4 in detail: the portable artifact
@@ -288,19 +288,19 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 <!-- item-sep -->
 
-1. **v0 — zero infrastructure** *(shipped)*: labelset-kNN evidence signals (D, TS) + conformal calibration via leave-one-out labelset distances, at `GET /api/find/evidence-coverage` and the Find Stats **Evidence coverage** chip. Needs nothing persisted that isn't already in the detector JSON; works cross-user, by construction. Still open here: feeding `D`/`TS` into a per-item work-queue order (the tiered queue of §6.2), and the sharper kNN form for tiny labelsets noted in §6.1.
+1. **v0 — zero infrastructure, remaining parts**: the D/TS signals shipped (see Background). Still open: feeding `D`/`TS` into a per-item work-queue order (the tiered queue of §6.2), and the sharper kNN form for tiny labelsets noted in §6.1.
 
 <!-- item-sep -->
 
-2. **v1 — in-session atlas, remaining parts**: the structure itself shipped (see Background), and the domain-shift report is now surfaced in the Find view's result pane (the Stats modal until #4524) as a **Training-domain overlap** section (a reference-dataset picker + an atypical-share chip; shown when another loaded dataset shares the active embedder). Still owed from this phase: the tiered work queue, the §5 blob scan, and VTSBrowse coloring by typicality.
+2. **v1 — in-session atlas, remaining parts**: the structure and the domain-shift report shipped (see Background). Still owed: the tiered work queue, the §5 blob scan, and VTSBrowse coloring by typicality.
 
 <!-- item-sep -->
 
-3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3, Stats-modal domain chip.
+3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3, the result pane's domain chip read from the artifact.
 
 <!-- item-sep -->
 
-4. **v3 — active auditor**: flip model, stratified estimation replacing the flood-fill Stats numbers, disagreement taxonomy and the concept-conflict map.
+4. **v3 — active auditor**: flip model, stratified estimation by coverage quadrant (§6.3), disagreement taxonomy and the concept-conflict map.
 
 <!-- item-sep -->
 

@@ -9,7 +9,7 @@ import { TOASTY_FACES } from '../../utils/toasty-faces';
  * ``ToastService.toasts$`` through the ``async`` pipe and renders each one.
  * Toasts with a rich ``errorContext`` get the expandable Details + Copy debug
  * info actions (preserves the old global-error-banner UX); toasts carrying an
- * ``items`` list get the same Details toggle over that list, plus Copy list.
+ * ``items`` list get the same Details toggle over that list, plus Copy List.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
