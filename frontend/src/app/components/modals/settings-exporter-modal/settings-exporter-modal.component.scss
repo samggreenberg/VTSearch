@@ -1,10 +1,5 @@
-.exporter-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-// The selectable option cards use the shared `.picker-card` primitive
+// The `.exporter-picker` list wrapper and the selectable option cards
+// (`.picker-card`) are shared primitives in `frontend/src/scss/_components.scss`.
 // (`frontend/src/scss/_components.scss`).
 
 .exporter-form {
