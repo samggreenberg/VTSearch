@@ -1940,6 +1940,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
+  snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every
+  vote, media read and request state sync for the length of the fit (minutes at scale). It now
+  snapshots the medias and `media_revision` under the lock, fits without it, and re-takes it to install
+  the atlas and replay the active detector's votes. When the medias changed during the fit, the atlas
+  is discarded and the build retried once (*on_progress* counts from zero again); a second lost race
+  keeps the dataset's current atlas. `build_coverage_atlas_for_context` installs under the lock with the
+  same check, where it used to install a fit over since-changed medias. Signatures are unchanged.
+
 - **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
   params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,
   `VideoBlankTrimCleaner` and `VideoLetterboxCropCleaner` did not override it, so their `cleaner` steps
