@@ -649,7 +649,7 @@ Reconcile, then re-pin:
 python scripts/check-eval-app-sync.py --update
 ```
 
-Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.
+Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line, though not the comma that makes `(x,)` a tuple), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.
 
 A handful of mirrors name a harness anchor too coarse to digest — one function serving several mirrors and carrying arm knobs that no mirror is about (today only `_safe_threshold_for_step`). Those declare `no_harness_pin=<reason>` and keep the app-side pin alone; the reason prints with the mirror when it trips. A `ported` mirror may never opt out, since the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, the fix is to extract the reproduction into a helper small enough to pin — what `_resolve_production_defaults` is — not to digest a thousand lines.
 
