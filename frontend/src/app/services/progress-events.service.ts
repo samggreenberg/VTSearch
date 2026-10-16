@@ -95,9 +95,9 @@ export class ProgressEventsService implements OnDestroy {
   /**
    * Ids of dataset tasks that had already failed when the stream (re)connected:
    * the ones the connect's opening `loading-tasks` snapshot carried as failed.
-   * A failure stays on that channel until it is dismissed (#4973), so every
-   * page load replays the undismissed ones; their dashboard row reports them,
-   * and `ToastService` reads this to keep from re-announcing them each time.
+   * A failed import stays on that channel until it is dismissed (#4973), so
+   * every page load replays the undismissed ones; their dashboard row reports
+   * them, and `ToastService` reads this to keep from re-announcing them.
    */
   private readonly failedAtConnect = new Set<string>();
   /** Set by each connect's `server` frame, which precedes its opening snapshots. */

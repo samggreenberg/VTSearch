@@ -10,18 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
-- **The dataset task tracker keeps a failure until it is dismissed** (issue #4973). A failed import
+- **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
   produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
-  after it. `LoadingTasksTracker(keep_failures=True, max_kept_failures=20)` keeps a failed task (its
-  `error` set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it,
-  holding at most `max_kept_failures` and dropping the oldest first; `dismiss_task` refuses a task
-  that is still running. `create_task` takes `created_by=` (defaulting to the current user) and
-  `source=` (what the task reads), and a snapshot carries `created_by`, `source` and, once the task
-  has finished, `finished_at`. `visible_to(tasks, viewer)` drops other users' failures from a
-  snapshot on a `keep_failures` tracker, and `initial_snapshot(viewer)` /
-  `stream_progress_events(viewer=)` apply it per SSE connection. The `loading_tasks` singleton now
-  keeps failures: code that waited for a failed dataset task to age out must dismiss it.
-  `detector_loading_tasks` is unchanged. The rest is additive.
+  after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`
+  set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it; the
+  tracker holds at most `max_kept_failures` (new constructor argument, default 20), dropping the
+  oldest first, and `dismiss_task` refuses a task that is still running. Every import's task sets
+  `keep_failure`, so code that waited for a failed import's task to age out must dismiss it; other
+  tasks lapse as before. `create_task` also takes `created_by=` (defaulting to the current user)
+  and `source=` (what the task reads; imports set it from their origin), and a snapshot carries
+  `created_by`, `source`, `keep_failure` and, once the task has finished, `finished_at`.
+  `LoadingTasksTracker.visible_to(tasks, viewer)` drops other users' kept failures from a snapshot,
+  and `initial_snapshot(viewer)` / `stream_progress_events(viewer=)` apply it per SSE connection.
+  The rest is additive.
 
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new

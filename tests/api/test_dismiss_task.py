@@ -23,7 +23,9 @@ class _HeaderProvider(LoginProvider):
 
 
 def _fail(task_id: str, created_by: str = "alice") -> None:
-    tracker = loading_tasks.create_task(task_id, "Doomed import", created_by=created_by, source="server_folder:/x")
+    tracker = loading_tasks.create_task(
+        task_id, "Doomed import", created_by=created_by, source="server_folder:/x", keep_failure=True
+    )
     tracker.update("idle", "", 0, 0, error="Import produced no medias.")
     loading_tasks.mark_finished(task_id)
 

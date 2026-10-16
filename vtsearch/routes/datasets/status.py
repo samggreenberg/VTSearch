@@ -103,8 +103,9 @@ def dismiss_dataset_task(task_id: str):
 
     A failed import stays on the ``loading-tasks`` channel until this is called
     (#4973), so the user has something to read after the failure toast is gone.
-    Only the user who started the task can see a failure, so only they can
-    dismiss it; to anyone else it does not exist.
+    Only the user who started the import can see that failure, so only they can
+    dismiss it; to anyone else it does not exist.  Any other finished task can
+    be dismissed early too; it would have lapsed on its own.
     """
     visible = loading_tasks.visible_to(loading_tasks.list_tasks(), get_current_user())
     task = next((t for t in visible if t["task_id"] == task_id), None)

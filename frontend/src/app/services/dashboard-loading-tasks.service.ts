@@ -23,9 +23,10 @@ import { ProgressEventsService } from './progress-events.service';
  *  - Demux the raw SSE stream into "currently active" + "errored but
  *    not yet dismissed" rows, so the dashboard table can keep failed
  *    rows visible with the error text + Dismiss button. The backend keeps a
- *    failed dataset task on the stream until it is dismissed (#4973), so the
- *    failed rows are read off every snapshot, not only while polling: a page
- *    reload, or another load starting, must not lose them.
+ *    failed import on the stream until it is dismissed (#4973), so the failed
+ *    rows are read off every snapshot, not only while polling: a page reload,
+ *    or another load starting, must not lose them. (Other failures lapse
+ *    from the stream after 30 s, and their rows with them.)
  *  - Track `awaitedTaskIds` for tasks whose HTTP response landed
  *    before the SSE stream caught up, so we don't bail out of polling
  *    before they're observed.

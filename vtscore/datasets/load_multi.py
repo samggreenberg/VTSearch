@@ -61,6 +61,7 @@ from vtscore.datasets.load_pipeline import (
     _DatasetLoadSpec,
     _LoadGateController,
     _LoadIds,
+    _describe_source,
     _finish_dataset_load,
     _handle_load_failure,
     _parse_bool,
@@ -219,6 +220,7 @@ def _build_jobs(
             embedder=output.embedder,
             weights=load_step_weights(output.media_type, embedder=output.embedder),
             created_by=created_by,
+            source=_describe_source(origin),
         )
         task.tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
         ctx = DatasetContext(task.task_id)
@@ -427,7 +429,13 @@ def _finalize_each(jobs: list[_OutputJob]) -> None:
                     raise ValueError(f"Import produced no {job.label} media.")
                 _finish_dataset_load(job.ctx, job.tracker, job.pacer, job.spec, job.ids)
             except Exception as exc:
-                _handle_load_failure(exc, job.ids.context_id, job.tracker, registry_entry_id=job.ids.registry_entry_id)
+                _handle_load_failure(
+                    exc,
+                    job.ids.context_id,
+                    job.tracker,
+                    registry_entry_id=job.ids.registry_entry_id,
+                    task_id=job.task.task_id,
+                )
             finally:
                 job.done = True
 

@@ -315,7 +315,7 @@ caller's first `update()`.
 
 Methods: `create_task(task_id, ...)` (register and return tracker;
 `created_by=` defaults to the current user, `source=` names what the task
-reads), `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
+reads, `keep_failure=` keeps a failure until dismissed), `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
 `is_finished(task_id)`, `remove_task(task_id)`,
 `dismiss_task(task_id)` (removes a *finished* task; `False` if it is unknown
 or still running), `visible_to(tasks, viewer)` (filters a snapshot for one
@@ -332,17 +332,15 @@ after `mark_finished()`; tasks with errors are kept for 30 seconds so
 the polling frontend can display them. The prune runs lazily inside
 `list_tasks()`.
 
-`LoadingTasksTracker(keep_failures=True)` instead keeps a failed task (one
-whose `error` is set and is not `CANCELLED_ERROR`) until `dismiss_task()`
-removes it, holding at most `max_kept_failures` (default 20) and dropping the
-oldest first. A failed import produces no dataset, so its task row is the only
-place the failure stays visible. Such a failure belongs to the user who
-started the task: `visible_to(tasks, viewer)` drops other users' failures from
-a snapshot (running tasks, and failures owned by `"default"`, stay visible to
-everyone), and the SSE stream applies it per connection
-(`stream_progress_events(viewer=...)`). A tracker without `keep_failures` is
-never filtered. The dataset singleton `loading_tasks` keeps failures; the
-detector one does not.
+A task created with `keep_failure=True` instead keeps its failure (an `error`
+that is not `CANCELLED_ERROR`) until `dismiss_task()` removes it; the tracker
+holds at most `max_kept_failures` of them (constructor argument, default 20),
+dropping the oldest first. Every import sets it: a failed import produces no
+dataset, so its task row is the only place the failure stays visible. A kept
+failure belongs to the user who started the task: `visible_to(tasks, viewer)`
+drops other users' kept failures from a snapshot (everything else, and kept
+failures owned by `"default"`, stays visible to everyone), and the SSE stream
+applies it per connection (`stream_progress_events(viewer=...)`).
 
 ---
 
@@ -354,7 +352,7 @@ sort_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 eval_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 find_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
-loading_tasks          = LoadingTasksTracker(keep_failures=True)
+loading_tasks          = LoadingTasksTracker()
 detector_loading_tasks = LoadingTasksTracker()
 ```
 

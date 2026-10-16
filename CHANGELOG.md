@@ -24,7 +24,9 @@ not list every commit. Use `git log` for the full history.
   restart clears it). The row also says what the import was reading and when it failed, and a copy
   button puts the error, source, task id and times on the clipboard for a bug report. On a shared
   server only the user who started the import sees its failure. Reloading the page no longer
-  re-announces old failures in a toast: their rows already say so.
+  re-announces failures from before the reload in a toast: their rows already say so. Other
+  failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
+  there.
 
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,

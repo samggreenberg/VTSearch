@@ -290,8 +290,10 @@ def _start_import_task(
     themselves, and its estimate swung too wildly to be worth showing (#4667);
     the bar itself still fills.
 
-    *source* says what is being imported (the origin, as the user would name
-    it); it rides on the task so a failed import can show what it was reading.
+    A failed import keeps its row until the user dismisses it
+    (``keep_failure``): no dataset row is left to say it happened (#4973).
+    *source* says what was being imported (the origin, as the user would name
+    it), so that row can show what the import was reading.
 
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
@@ -312,6 +314,7 @@ def _start_import_task(
         publish_eta=False,
         created_by=request_user,
         source=source,
+        keep_failure=True,
     )
     return _ImportTask(
         task_id=task_id,
@@ -549,13 +552,17 @@ def _handle_load_failure(
     context_id: str,
     tracker,
     registry_entry_id: str | None = None,
+    task_id: str | None = None,
 ) -> None:
     """Unregister the context and write the failure into *tracker*.
 
     If *registry_entry_id* is set, the on-disk registry entry (and its
     backing pkl) is also removed; this prevents an orphaned dashboard
     row when a load fails after :func:`_register_and_migrate` has
-    already written the entry.
+    already written the entry.  The task named *task_id* then drops the
+    ``dataset_id`` it was given at registration: its failure is kept until
+    dismissed, and a later import that reuses the id (a demo's) must not
+    find that row attached to its own dataset.
     """
     from vtscore.state.core import unregister_context  # noqa: PLC0415
 
@@ -567,6 +574,8 @@ def _handle_load_failure(
             _reg_unregister(registry_entry_id)
         except Exception:
             traceback.print_exc()
+        if task_id:
+            loading_tasks.set_dataset_id(task_id, "")
     gc.collect()
     tracker.update("idle", "", 0, 0, error=error, step=None, total_steps=None)
 
@@ -901,7 +910,9 @@ def _run_origin_load_in_background(
                     # helper, shared with the multi-dataset import.
                     _finish_dataset_load(ctx, tracker, pacer, spec, ids)
                 except Exception as exc:
-                    _handle_load_failure(exc, ids.context_id, tracker, registry_entry_id=ids.registry_entry_id)
+                    _handle_load_failure(
+                        exc, ids.context_id, tracker, registry_entry_id=ids.registry_entry_id, task_id=task_id
+                    )
                 finally:
                     controller.release()
         finally:

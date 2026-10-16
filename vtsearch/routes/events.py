@@ -45,8 +45,8 @@ def progress_events() -> Response:
     Find/load contends would stop progress events reaching the client
     during exactly the operations the progress bar exists to report.
 
-    The stream is per user: a failed dataset task stays listed until the user
-    who started it dismisses it (``POST /api/dataset/dismiss/<task_id>``), and
+    The stream is per user: a failed import stays listed until the user who
+    started it dismisses it (``POST /api/dataset/dismiss/<task_id>``), and
     only that user sees it.
     """
     from vtsearch.auth import get_current_user

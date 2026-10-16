@@ -170,9 +170,9 @@ def _format_sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def _tasks_frame(name: str, tasks_tracker: LoadingTasksTracker, tasks: list[dict[str, Any]], viewer: str | None) -> str:
+def _tasks_frame(name: str, tasks: list[dict[str, Any]], viewer: str | None) -> str:
     """Format one task-channel snapshot, cut down to what *viewer* may see."""
-    return _format_sse(name, tasks_tracker.visible_to(tasks, viewer))
+    return _format_sse(name, LoadingTasksTracker.visible_to(tasks, viewer))
 
 
 def initial_snapshot(viewer: str | None = None) -> list[str]:
@@ -187,7 +187,7 @@ def initial_snapshot(viewer: str | None = None) -> list[str]:
     for name, tracker in _TRACKER_CHANNELS.items():
         frames.append(_format_sse(name, tracker.get()))
     for name, tasks_tracker in _TASK_CHANNELS.items():
-        frames.append(_tasks_frame(name, tasks_tracker, tasks_tracker.list_tasks(), viewer))
+        frames.append(_tasks_frame(name, tasks_tracker.list_tasks(), viewer))
     return frames
 
 
@@ -207,7 +207,8 @@ def stream_progress_events(  # noqa: C901
 
     *viewer* is the user the stream is for: task-channel frames are filtered
     to what they may see (another user's kept failure is not theirs to read
-    or dismiss).  ``None`` streams every task.
+    or dismiss; see :meth:`LoadingTasksTracker.visible_to`).  ``None`` streams
+    every task.
     """
     q: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=max_queue)
 
@@ -222,10 +223,10 @@ def stream_progress_events(  # noqa: C901
 
         return handler
 
-    def _make_tasks_handler(channel: str, tasks_tracker: LoadingTasksTracker) -> Callable[[list[dict[str, Any]]], None]:
+    def _make_tasks_handler(channel: str) -> Callable[[list[dict[str, Any]]], None]:
         def handler(snapshot: list[dict[str, Any]]) -> None:
             try:
-                q.put_nowait((channel, tasks_tracker.visible_to(snapshot, viewer)))
+                q.put_nowait((channel, LoadingTasksTracker.visible_to(snapshot, viewer)))
             except queue.Full:
                 pass
 
@@ -246,7 +247,7 @@ def stream_progress_events(  # noqa: C901
         tracker.subscribe(h)
         subscriptions.append((tracker, h))
     for name, tasks_tracker in _TASK_CHANNELS.items():
-        h = _make_tasks_handler(name, tasks_tracker)
+        h = _make_tasks_handler(name)
         tasks_tracker.subscribe(h)
         subscriptions.append((tasks_tracker, h))
     notifications.subscribe(_notification_handler)
@@ -292,7 +293,7 @@ def stream_progress_events(  # noqa: C901
                     for name, tracker in _TRACKER_CHANNELS.items():
                         yield _format_sse(name, tracker.get())
                     for name, tasks_tracker in _TASK_CHANNELS.items():
-                        yield _tasks_frame(name, tasks_tracker, tasks_tracker.list_tasks(), viewer)
+                        yield _tasks_frame(name, tasks_tracker.list_tasks(), viewer)
                     last_heartbeat = time.monotonic()
                 else:
                     # Socket probe only (see KEEPALIVE_SECONDS): a comment is

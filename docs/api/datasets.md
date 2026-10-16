@@ -225,11 +225,11 @@ Cancels a specific loading task, with the same response shape and the same
 POST /api/dataset/dismiss/{task_id}
 ```
 
-Removes a finished task from the `loading-tasks` channel. A failed dataset task
-(a failed import, most often) is not pruned on a timer: it stays on the channel
-until this is called, so the dashboard can keep showing it (#4973). A failure is
-visible only to the user who started the task, so for anyone else it does not
-exist. A cancelled task is not a failure and still lapses on its own.
+Removes a finished task from the `loading-tasks` channel. A failed import is
+not pruned on a timer: it stays on the channel until this is called, so the
+dashboard can keep showing it (#4973). That failure is visible only to the user
+who started the import, so for anyone else it does not exist. Other finished
+tasks (and a cancelled import) lapse on their own, but can be dismissed early.
 
 → `200 {"ok": true}`, `404 {"message": "Task not found", ...}` (unknown, or another
 user's failure), or `409 {"message": "Task is still running; cancel it instead", ...}`

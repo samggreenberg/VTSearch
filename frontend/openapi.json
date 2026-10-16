@@ -10242,7 +10242,7 @@
         }
       ],
       "post": {
-        "description": "A failed import stays on the ``loading-tasks`` channel until this is called\n(#4973), so the user has something to read after the failure toast is gone.\nOnly the user who started the task can see a failure, so only they can\ndismiss it; to anyone else it does not exist.",
+        "description": "A failed import stays on the ``loading-tasks`` channel until this is called\n(#4973), so the user has something to read after the failure toast is gone.\nOnly the user who started the import can see that failure, so only they can\ndismiss it; to anyone else it does not exist.  Any other finished task can\nbe dismissed early too; it would have lapsed on its own.",
         "operationId": "dismiss_dataset_task",
         "responses": {
           "200": {

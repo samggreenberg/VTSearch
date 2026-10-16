@@ -621,14 +621,20 @@ def ingest_eta_hidden() -> bool:
 #: keeps a cancel around as a failure.
 CANCELLED_ERROR = "Cancelled"
 
-#: How many failures a ``keep_failures`` tracker holds at once; the oldest go first.
+#: How many kept failures (see ``create_task(keep_failure=)``) a tracker holds at
+#: once; the oldest go first.
 DEFAULT_MAX_KEPT_FAILURES = 20
 
 
-def _is_failure(snapshot: dict[str, Any]) -> bool:
-    """True for a finished task that failed (a cancel is not a failure)."""
+def _is_kept_failure(snapshot: dict[str, Any]) -> bool:
+    """True for a finished ``keep_failure`` task that failed (a cancel is not a failure)."""
     error = snapshot.get("error")
-    return snapshot.get("status") == "idle" and bool(error) and error != CANCELLED_ERROR
+    return (
+        bool(snapshot.get("keep_failure"))
+        and snapshot.get("status") == "idle"
+        and bool(error)
+        and error != CANCELLED_ERROR
+    )
 
 
 class LoadingTasksTracker:
@@ -638,22 +644,21 @@ class LoadingTasksTracker:
     creation timestamp.  The dashboard polls :meth:`list_tasks` to show
     one progress row per loading dataset.
 
-    With *keep_failures*, a task that finishes with an error stays listed until
-    :meth:`dismiss_task` removes it, rather than aging out like a success.  A
-    failed import never produces a dataset, so the failure row is the only
-    thing left to tell the user it happened; letting it lapse after a few
-    seconds left them waiting on a dataset that was never coming (#4973).  At
-    most *max_kept_failures* are kept, oldest dropped first, so a tracker
-    nobody dismisses cannot grow without bound.  Such failures are private to
-    whoever started the task: see :meth:`visible_to`.
+    A task created with ``keep_failure=True`` that finishes with an error stays
+    listed until :meth:`dismiss_task` removes it, rather than aging out.  Imports
+    ask for this: a failed import never produces a dataset, so its row is the
+    only thing left to say it happened, and letting it lapse after a few
+    seconds left the user waiting on a dataset that was never coming (#4973).
+    At most *max_kept_failures* are kept, oldest dropped first, so failures
+    nobody dismisses cannot pile up without bound.  A kept failure is private
+    to whoever started the task: see :meth:`visible_to`.
     """
 
-    def __init__(self, *, keep_failures: bool = False, max_kept_failures: int = DEFAULT_MAX_KEPT_FAILURES) -> None:
+    def __init__(self, *, max_kept_failures: int = DEFAULT_MAX_KEPT_FAILURES) -> None:
         self._lock = threading.Lock()
         self._tasks: dict[str, dict[str, Any]] = {}
         self._subscribers: list[Callable[[list[dict[str, Any]]], None]] = []
         self._subscribers_lock = threading.Lock()
-        self.keep_failures = keep_failures
         self.max_kept_failures = max_kept_failures
 
     def subscribe(self, callback: Callable[[list[dict[str, Any]]], None]) -> None:
@@ -696,6 +701,7 @@ class LoadingTasksTracker:
         publish_eta: bool = True,
         created_by: str | None = None,
         source: str = "",
+        keep_failure: bool = False,
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
@@ -708,10 +714,13 @@ class LoadingTasksTracker:
         ``status="loading"``: the task is running from the moment it exists,
         until an ``update("idle", ...)`` ends it.
 
-        *created_by* names the user the work is for, defaulting to the current
-        user; :meth:`visible_to` uses it to keep a failure private. *source* is
-        a human-readable description of what the task reads (an import's
-        origin, say), shown beside a failure so the user can tell what broke.
+        *keep_failure* keeps the task listed if it fails, until
+        :meth:`dismiss_task` (see the class doc); use it for work whose failure
+        leaves nothing else behind to report it.  *created_by* names the user
+        the work is for, defaulting to the current user; :meth:`visible_to`
+        uses it to keep a kept failure private. *source* is a human-readable
+        description of what the task reads (an import's origin, say), shown
+        beside a failure so the user can tell what broke.
         """
         if created_by is None:
             from vtscore.state.current_user import get_current_user  # noqa: PLC0415
@@ -744,6 +753,7 @@ class LoadingTasksTracker:
                 "embedder": embedder,
                 "created_by": created_by,
                 "source": source,
+                "keep_failure": keep_failure,
             }
         self._notify()
         return tracker
@@ -865,23 +875,25 @@ class LoadingTasksTracker:
         self._notify()
         return True
 
-    def visible_to(self, tasks: list[dict[str, Any]], viewer: str | None) -> list[dict[str, Any]]:
+    @staticmethod
+    def visible_to(tasks: list[dict[str, Any]], viewer: str | None) -> list[dict[str, Any]]:
         """Filter a :meth:`list_tasks` snapshot down to what *viewer* should see.
 
-        On a ``keep_failures`` tracker a failure stays until its owner dismisses
-        it, so it is shown only to the user who started the task; anyone else
-        would be left looking at a row that was not theirs to read or clear.
-        Running tasks stay visible to everyone, as do failures with no real
-        owner (a task created outside any user's request carries the
-        ``"default"`` fallback).  *viewer* ``None`` means unfiltered, and a
-        tracker that does not keep failures is never filtered: its failures
-        lapse on their own.
+        A kept failure stays until its owner dismisses it, so it is shown only
+        to the user who started the task; anyone else would be left looking at
+        a row that was not theirs to read or clear.  Everything else stays
+        visible to everyone (running tasks, and failures that lapse on their
+        own), as do kept failures with no real owner: a task created outside any
+        user's request carries the ``"default"`` fallback.  *viewer* ``None``
+        means unfiltered.
         """
-        if viewer is None or not self.keep_failures:
+        if viewer is None:
             return tasks
         from vtscore.state.current_user import DEFAULT_USER  # noqa: PLC0415
 
-        return [t for t in tasks if not _is_failure(t) or t.get("created_by", DEFAULT_USER) in (viewer, DEFAULT_USER)]
+        return [
+            t for t in tasks if not _is_kept_failure(t) or t.get("created_by", DEFAULT_USER) in (viewer, DEFAULT_USER)
+        ]
 
     @staticmethod
     def _build_snapshot(task_id: str, entry: dict[str, Any]) -> dict[str, Any]:
@@ -890,13 +902,13 @@ class LoadingTasksTracker:
         Reads the task's :class:`ProgressTracker` and stamps on the
         ``task_id``, ``name``, ``created_at`` identity plus any optional
         fields (``dataset_id``, ``detector_id``, ``media_type``, ``embedder``,
-        ``created_by``, ``source``, ``finished_at``) that are set.
+        ``created_by``, ``source``, ``keep_failure``, ``finished_at``) that are set.
         """
         snapshot = entry["tracker"].get()
         snapshot["task_id"] = task_id
         snapshot["name"] = entry["name"]
         snapshot["created_at"] = entry["created_at"]
-        for key in ("dataset_id", "detector_id", "media_type", "embedder", "created_by", "source"):
+        for key in ("dataset_id", "detector_id", "media_type", "embedder", "created_by", "source", "keep_failure"):
             if entry.get(key):
                 snapshot[key] = entry[key]
         if entry.get("finished_at") is not None:
@@ -911,9 +923,9 @@ class LoadingTasksTracker:
 
         Finished tasks without errors are removed after 5 seconds.
         Finished tasks *with* errors are kept for 30 seconds so that
-        the polling frontend has time to display them — unless the tracker
-        has ``keep_failures``, which keeps a failure (though not a cancel)
-        until :meth:`dismiss_task`, up to ``max_kept_failures`` of them.
+        the polling frontend has time to display them — unless the task was
+        created with ``keep_failure``, which keeps a failure (though not a
+        cancel) until :meth:`dismiss_task`, up to ``max_kept_failures`` of them.
         """
         now = time.time()
         stale: list[str] = []
@@ -925,7 +937,7 @@ class LoadingTasksTracker:
             finished = entry.get("finished_at")
             if finished is not None:
                 snapshot = self._build_snapshot(task_id, entry)
-                if self.keep_failures and _is_failure(snapshot):
+                if _is_kept_failure(snapshot):
                     kept_failures.append((finished, task_id))
                     result.append(snapshot)
                     continue
@@ -986,9 +998,8 @@ class LoadingTasksTracker:
             self._tasks.clear()
 
 
-#: Application-wide loading tasks tracker (for datasets).  It keeps failures:
-#: a failed import has no dataset row to fall back on (#4973).
-loading_tasks = LoadingTasksTracker(keep_failures=True)
+#: Application-wide loading tasks tracker (for datasets).
+loading_tasks = LoadingTasksTracker()
 
 #: Application-wide loading tasks tracker (for detectors).
 detector_loading_tasks = LoadingTasksTracker()

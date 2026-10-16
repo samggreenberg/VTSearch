@@ -135,9 +135,9 @@ export class ToastService {
       const key = `sse:${kind}:${t.task_id}`;
       if (this.seenTaskKeys.has(key)) continue;
       this.seenTaskKeys.add(key);
-      // A dataset failure stays on the channel until dismissed (#4973), so a
+      // A failed import stays on the channel until dismissed (#4973), so a
       // page load replays every one still undismissed. Its dashboard row says
-      // so; a toast is for news, which one that predates this connection isn't.
+      // so; a toast is for news, which a failure that predates this connection isn't.
       if (kind === 'dataset' && this.progressEvents.failedBeforeConnect(t.task_id)) continue;
       // A background AutoFind reports on the dataset channel too, but it is not
       // a load: name what actually failed.
