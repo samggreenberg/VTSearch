@@ -39,6 +39,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/cost_trend.py`            | The Smart indicator's arithmetic (shared with the eval harness)     |
 | `vtscore/detectors/stability.py`             | The Stable indicator's arithmetic (shared with the eval harness)    |
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+| `vtscore/detectors/training_domain.py`       | Which loaded dataset a detector's labels were cast on               |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 | `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
 | `vtscore/detectors/label_quota.py`           | The label quota: which detector a labelset's counts give            |

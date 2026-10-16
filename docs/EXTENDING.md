@@ -238,13 +238,21 @@ pyproject.toml                       # [project.dependencies] + [project.optiona
 requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `-e .[dev,agpl]`
 requirements/gpu.txt                 # `-e .[dev,agpl]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/*-no-agpl.txt           # The same two files without the `agpl` extra (VTSEARCH_NO_AGPL=1)
-requirements/labbench.txt            # Standalone curated list for Dockerfile.labbench (image+SigLIP only)
+requirements/labbench.txt            # Standalone curated core for Dockerfile.labbench, every media type
+requirements/labbench-<type>.txt     # `-r labbench.txt` + one media type's deps (image, audio)
 requirements/image-embedders.txt     # Standalone curated list shared by Dockerfile.image-embedders[.gpu]
 ```
 
 The labbench / image-embedders requirements files are deliberately
 standalone (they pin a minimal subset for size-constrained Docker
 images) and do **not** flow through pyproject.
+
+To let `docker/Dockerfile.labbench` build another media type, add a
+`requirements/labbench-<type>.txt` (`-r labbench.txt` plus that type's
+dependencies) and an entry for the type in `HIDDEN_BY_TYPE` in
+`scripts/seed_labbench_settings.py`, naming any plugin the slim file leaves
+without its dependencies. `tests_lib/meta/test_dockerfile_labbench.py` checks
+that the two agree.
 
 ### For a new media type, importer, or exporter
 

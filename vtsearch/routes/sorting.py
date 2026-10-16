@@ -408,7 +408,7 @@ def _learned_sort_done_payload(job) -> dict:
     :func:`windowed_sort_response` in the job target, so the window metadata
     (``sort_token`` / ``total`` / ``above_threshold`` / ``has_more_below``)
     rides straight through to the client, as does the ``acq_threshold`` the
-    Autopilot picks sample around.
+    Autopilot picks sample around and the job's ``query_hold`` (#4736).
     """
     result = job.result or {}
     return {
@@ -422,6 +422,7 @@ def _learned_sort_done_payload(job) -> dict:
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
         "has_more_below": result.get("has_more_below", False),
+        "query_hold": result.get("query_hold", False),
     }
 
 

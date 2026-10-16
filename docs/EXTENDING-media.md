@@ -914,7 +914,12 @@ reordering, so every shipped cleaner should be order-insensitive in practice.
 `MediaCleaner` subclasses `MediaClipper`, so the whole descriptor stack
 (`name` / `media_type` / `display_name` / `description` / `parameters` /
 `creation_questions` / `with_params` / `to_dict`) is inherited unchanged, and a
-cleaner rides the existing clipper chain as an `n_out == 1` step. Cleaners live
+cleaner rides the existing clipper chain as an `n_out == 1` step. The clipper's
+`to_dict()` rule comes with it: the chain records a step's `params` from the
+keys `to_dict()` adds beyond the descriptor, so a cleaner with `parameters` must
+override `to_dict()` to add their current values, as every shipped one does.
+Without it the step records `params: {}` and a replay runs the cleaner at its
+defaults instead of the values the user chose. Cleaners live
 in their **own registry**, so they never appear in a clipper chooser:
 `GET /api/cleaners` lists them and the import form renders one checkbox per
 entry.

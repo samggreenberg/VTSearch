@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
+  #4736 a session started from a typed description was meant to keep the description's text ranking behind
+  the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
+  it there, so the detector's ranking took the screen from the 8th vote as before. The payload now carries
+  it. Test, Find, AutoFind and export were unaffected: they apply the hold on the server.
+
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
   and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
@@ -317,6 +323,30 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A warning before you use a detector on data unlike its training data** (issue #4961). The
+  Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
+  detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
+  looks atypical vs photos: likely domain shift") with a **Test it** button. It warns once per detector
+  and dataset, never blocks anything, and is silent when the check cannot run (training dataset not
+  loaded or without an atlas, another embedder, a patch embedder). VTSearch now works out which dataset a
+  detector was trained on from where its labelled examples live, so the test pane's **Compare against**
+  picker starts on that dataset instead of the first one in the list. `GET /api/find/training-domain`
+  serves both.
+
+- **An audio LabBench image** (issue #4958). `docker/Dockerfile.labbench` takes a `MEDIA_TYPE` build arg,
+  as `docker/Dockerfile.solo` does, so its slim build (only that type's dependencies, the media type and
+  the embedder locked, datasets aged off after 14 days, the demo importer hidden) is no longer images
+  only. `MEDIA_TYPE=audio` builds an audio image searched with CLAP General, whose weights are baked in so
+  it serves on first run with no network; `docker/compose/docker-compose.labbench-audio.yml` builds and
+  runs it. `image` stays the default, so existing build commands make the same SigLIP image as before.
+  Other media types fail the build with the list of supported ones. The requirements are split to
+  match: `requirements/labbench.txt` is now the core every LabBench image shares, and
+  `labbench-image.txt` / `labbench-audio.txt` add each type. The media-type lock is now the
+  `VTSEARCH_SOLO_MEDIA_TYPE` environment variable rather than a seeded setting, so it also holds when the
+  image is redeployed onto an existing volume. The image's embedder lock also works now: the LabBench
+  image seeded it into `data/default/user_settings.json`, which a single-user container never reads, so
+  the importer showed its embedder dropdown all along. It is now seeded where that user's settings live.
+  See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
 - **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
   `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
   its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
@@ -927,6 +957,13 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
+  Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
+  import did not record them. Whenever a label was rebuilt from its source file (training from a saved
+  label set, or bringing labels into another dataset), the gate ran at its default settings rather than
+  the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
+  are now recorded and reused, and an item's Derived Via line lists them.
 
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between

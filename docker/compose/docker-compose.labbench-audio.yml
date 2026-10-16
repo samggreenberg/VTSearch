@@ -1,0 +1,27 @@
+# LabBench CPU deployment for audio: audio search with CLAP General only.
+#
+# The LabBench image (docker/Dockerfile.labbench) built for the audio media
+# type: only audio's dependencies installed, the media type locked to audio
+# (VTSEARCH_SOLO_MEDIA_TYPE=audio), and the CLAP General weights baked in at
+# build time so the container is ready to serve on first run.
+#
+#   docker compose -f docker/compose/docker-compose.labbench-audio.yml up
+#   docker compose -f docker/compose/docker-compose.labbench-audio.yml up -d
+#   docker compose -f docker/compose/docker-compose.labbench-audio.yml down
+
+services:
+  vtsearch:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.labbench
+      args:
+        MEDIA_TYPE: audio
+    image: vtsearch:labbench-audio
+    ports:
+      - "5000:5000"
+    volumes:
+      - vtsearch-labbench-audio-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  vtsearch-labbench-audio-data:

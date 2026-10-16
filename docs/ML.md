@@ -591,6 +591,8 @@ X-Dataset-Id: <dataset_B_id>
 
 Reading this: 31% of dataset B sits in regions of embedding space where dataset A had essentially no mass (against the 5% that chance would produce), so the verdict is `shifted` — the detector will be *extrapolating* on a third of B, and its scores there are unfalsified guesswork. Verify by hand before trusting it. A same-domain report instead shows `frac_atypical` near `alpha`, a median p-value near 0.5, and `shifted: false`.
 
+The app asks this for you. [`GET /api/find/training-domain`](api/find.md#training-domain-overlap) takes A to be the loaded dataset holding most of the detector's labelled examples and returns the same report, and the SPA calls it the moment a detector meets a dataset, warning on a `shifted` verdict before anything is run.
+
 The endpoint refuses (HTTP 400) when the two datasets use different embedders — typicality across embedding spaces would be confident nonsense — or when the reference has no atlas yet (build it via the endpoint above).
 
 The same machinery is available in the library tier:

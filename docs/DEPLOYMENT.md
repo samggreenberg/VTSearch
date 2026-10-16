@@ -262,7 +262,7 @@ startup sequence runs at WSGI import time. See
 |---|---|---|---|
 | `docker/Dockerfile` | `docker-compose.yml` | `python:3.12-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
 | `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
-| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.12-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. A fresh data volume is seeded locked to images with the demo importer hidden, and the image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`, so every dataset expires two weeks after it is created. |
+| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml`, `docker-compose.labbench-audio.yml` | `python:3.12-slim` | The slim build for one media type, given as the `MEDIA_TYPE` build arg: `image` (the default, SigLIP) or `audio` (CLAP General). Installs only `requirements/labbench.txt` plus `requirements/labbench-<type>.txt`, locks the media type (`VTSEARCH_SOLO_MEDIA_TYPE`) and the embedder, and bakes that embedder's weights in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. A fresh data volume is seeded with the embedder lock and the hidden plugins (`scripts/seed_labbench_settings.py`), and the image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`, so every dataset expires two weeks after it is created. |
 | `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg (`VTSEARCH_SOLO_MEDIA_TYPE`), with that type's default embedder weights baked in under `/opt/vtsearch/models` (CLAP General for `audio`, X-CLIP for `video`; for the half types, SigLIP for `document`'s page images and FaceNet for `face` crops). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
 | `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
@@ -983,7 +983,9 @@ requirements/base.txt                ← --extra-index-url <cpu wheel index> + `
 requirements/gpu.txt                 ← `-e .[dev,agpl]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/base-no-agpl.txt        ← base.txt without the `agpl` extra (see below)
 requirements/gpu-no-agpl.txt         ← gpu.txt without the `agpl` extra (see below)
-requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
+requirements/labbench.txt            ← LabBench core deps, shared by every LabBench media type (standalone)
+requirements/labbench-<type>.txt     ← One LabBench media type: `-r labbench.txt` + that type's deps
+                                       (labbench-image.txt for SigLIP, labbench-audio.txt for CLAP General)
 requirements/image-embedders.txt     ← All-image-embedders image deps (standalone; shared by the CPU
                                        and GPU Dockerfiles, which each pass their own --extra-index-url)
 ```

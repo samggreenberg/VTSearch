@@ -788,6 +788,58 @@ class TestLearnedSortAsync:
         assert "job_id" in resp.get_json()["errors"]["query"]
 
 
+class TestLearnedSortQueryHold:
+    """The ``done`` payload carries the job's ``query_hold`` on every return path (#4962).
+
+    The job computed it from #4736 on, but the payload was built field by field
+    and never copied it, so the Train view never held a typed query's set on
+    screen.  The rule itself (the counts, the hold) is ``tests_lib``'s; this pins
+    that what the job computed is what the client receives.
+    """
+
+    def _space(self, monkeypatch, *, patch_space):
+        import vtscore.detectors.training as training
+
+        monkeypatch.setattr(training, "_patch_space_for", lambda _name: patch_space)
+
+    def test_a_single_vector_space_under_the_hold_returns_it_on_wait_cache_and_poll(self, client, monkeypatch):
+        from tests.conftest import _wait_for_job
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+
+        self._space(monkeypatch, patch_space=False)
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        assert first["query_hold"] is True
+
+        # The signature cache serves the same job back without training.
+        cached = client.post("/api/learned-sort", json={}).get_json()
+        assert cached["job_id"] == first["job_id"]
+        assert cached["query_hold"] is True
+
+        _wait_for_job(learned_sort_jobs)
+        polled = client.get(f"/api/learned-sort/result?job_id={first['job_id']}").get_json()
+        assert polled["status"] == "done"
+        assert polled["query_hold"] is True
+
+        learned_sort_jobs.reset_for_tests()
+
+    def test_a_patch_space_has_no_hold(self, client, monkeypatch):
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+
+        self._space(monkeypatch, patch_space=True)
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        data = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert data["status"] == "done"
+        assert data["query_hold"] is False
+
+        learned_sort_jobs.reset_for_tests()
+
+
 class TestEvalTrainAndScoreAsync:
     """The eval train-and-score endpoint mirrors the learned-sort pattern:
     return a job envelope, poll a result endpoint, short-circuit unchanged

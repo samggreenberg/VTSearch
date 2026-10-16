@@ -425,9 +425,10 @@ for metrics in metrics_list:
 from `vtscore.eval`). It simulates a voting session per query - train
 positives become Good votes, train negatives Bad votes - calls
 `train_and_score` on the full media set, and measures
-accuracy / precision / recall / F1 on the held-out half against the
-threshold that returns (no balance is passed, so the fold-anchored cut at
-Inclusion 0, fitted on the media set's scores). A query whose category has fewer than 2
+accuracy / precision / recall / F1 on the held-out half at the line the
+app draws: the labels line under its default balance. Pass `beta` to pin
+another balance, or `beta="off"` for the Inclusion 0 cut. Each result
+records the `threshold` it was measured at. A query whose category has fewer than 2
 positives or 2 negatives is skipped, so the returned list can be shorter
 than the query list. For ranking metrics (AP, P@10) use the text-sort side
 of the runner instead; see [packages/eval.md](../packages/eval.md) for the

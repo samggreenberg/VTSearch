@@ -230,8 +230,11 @@ helpers (`clip_with_bounds`, `validate_tiling_params`, `tile_starts`,
 Implement `clean(media) -> dict` (return the media unchanged when there is
 nothing to do; a cleaner never aborts a load); `clip` wraps it as a
 single-output chain step. `default_enabled` (default `False`) sets whether
-the import UI pre-checks it. Cleaners have their own registry so they never
-appear in a clipper chooser; registration order is run order.
+the import UI pre-checks it. A cleaner with `parameters` overrides
+`with_params` and `to_dict` as a parameterised clipper does: the chain records
+a step's params from `to_dict()`, so without it a replay runs the cleaner at
+its defaults. Cleaners have their own registry so they never appear in a
+clipper chooser; registration order is run order.
 
 ### `Processor` / `Detector` / `Localizer` / `Extractor`
 

@@ -4449,6 +4449,43 @@
         ],
         "type": "object"
       },
+      "FindTrainingDomainResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "domain_shift": {
+            "$ref": "#/components/schemas/DatasetDomainShiftResponse",
+            "nullable": true
+          },
+          "labels_in_active": {
+            "type": "integer"
+          },
+          "labels_in_reference": {
+            "type": "integer"
+          },
+          "labels_total": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reference_dataset_id": {
+            "type": "string"
+          },
+          "reference_dataset_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain_shift",
+          "labels_in_active",
+          "labels_in_reference",
+          "labels_total",
+          "reason",
+          "reference_dataset_id",
+          "reference_dataset_name"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -13588,6 +13625,31 @@
           }
         },
         "summary": "Detector-evaluation stats over the **adopted** Find label set.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/training-domain": {
+      "get": {
+        "description": "The same report as ``GET /api/datasets/registry/<id>/domain-shift``, with\nthe reference worked out rather than picked: the loaded dataset, among those\nthe caller can read, that holds the most of the detector's Good / Bad\nexamples (matched by origin or MD5).  The active dataset wins a tie, so a\ndetector used on the dataset it was trained on reads as nothing to compare.\n\nIt needs no scored Find run, so the SPA calls it whenever a detector meets a\ndataset, to warn before the user relies on the detector there (#4961).\n``domain_shift`` is null (with a ``reason``) rather than a 4xx whenever the\ncheck cannot run, including every refusal of the domain-shift route.\nPure read; no new state.",
+        "operationId": "find_training_domain",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindTrainingDomainResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Training-domain overlap of the active dataset against the dataset the active detector was trained on.",
         "tags": [
           "detector_scoring"
         ]
