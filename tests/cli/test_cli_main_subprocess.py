@@ -17,6 +17,7 @@ parsed.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,13 +30,14 @@ from vtsearch.state import medias
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _run_app(*args: str) -> subprocess.CompletedProcess:
+def _run_app(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(  # noqa: S603  # interpreter + test-controlled args
         [sys.executable, "app.py", *args],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
         timeout=120,
+        env={**os.environ, **env} if env else None,
     )
 
 
@@ -80,3 +82,31 @@ def test_app_pipeline_json_progress_is_ndjson_on_stdout(tmp_path):
     events = [json.loads(line) for line in result.stdout.splitlines()]
     assert [e["event"] for e in events] == ["error"]
     assert "Pipeline file not found" in events[0]["message"]
+
+
+@pytest.mark.slow
+def test_server_init_variable_does_not_start_a_server_under_a_cli_run(tmp_path):
+    """Every Docker image sets ``VTSEARCH_SERVER_INIT=1`` image-wide (#4970).
+
+    It is meant for gunicorn, which imports ``app.py``; a ``python app.py``
+    headless run in the same container must not get the server's startup with
+    it - the banners on stdout ahead of the NDJSON stream, the env-var admin
+    overrides, the model warm-up.  The data directory is a fresh one so that,
+    should this regress, the preload finds nothing to download.
+    """
+    result = _run_app(
+        "--pipeline",
+        str(tmp_path / "missing.yaml"),
+        "--progress-format",
+        "json",
+        env={
+            "VTSEARCH_SERVER_INIT": "1",
+            "VTSEARCH_DATA_DIR": str(tmp_path / "data"),
+            "VTSEARCH_DATASET_MAX_AGE_DAYS": "14",
+        },
+    )
+
+    assert result.returncode == 1, result.stderr
+    events = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [e["event"] for e in events] == ["error"]
+    assert "Running in" not in result.stdout + result.stderr

@@ -6,14 +6,19 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from vtscore.converters._model_slot import ModelSlot
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
 
 logger = logging.getLogger(__name__)
 
 
-def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | None:
-    """Decode image bytes and run PaddleOCR, returning the raw per-region results."""
+def _run_paddleocr(media_bytes: bytes, filename: str, language: str, engine_slot: ModelSlot) -> list | None:
+    """Decode image bytes and run PaddleOCR, returning the raw per-region results.
+
+    The engine comes from *engine_slot*, so it is built once per language and
+    device rather than once per image.
+    """
     try:
         import numpy as np  # noqa: PLC0415
 
@@ -36,28 +41,40 @@ def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | N
         logger.error("Failed to open image %s", filename, exc_info=True)
         return None
 
-    try:
-        model = _make_paddleocr(PaddleOCR, language)
-        return model.ocr(np.array(image), cls=True)
-    except Exception:
-        logger.error("PaddleOCR failed on %s", filename, exc_info=True)
-        return None
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    device = resolve_device()
+    pixels = np.array(image)
+    # Held through ocr() as well as the build: a shared engine cannot run two
+    # images at once (see ModelSlot).
+    with engine_slot.lock:
+        try:
+            engine = engine_slot.get(
+                (PaddleOCR, language, device),
+                lambda: _make_paddleocr(PaddleOCR, language, device),
+            )
+        except Exception:
+            logger.error("Failed to load PaddleOCR (%s)", language, exc_info=True)
+            return None
+        try:
+            return engine.ocr(pixels, cls=True)
+        except Exception:
+            logger.error("PaddleOCR failed on %s", filename, exc_info=True)
+            return None
 
 
-def _make_paddleocr(paddle_ocr_cls: Any, language: str) -> Any:
-    """Construct a PaddleOCR engine, requesting GPU when one is resolved.
+def _make_paddleocr(paddle_ocr_cls: Any, language: str, device: str) -> Any:
+    """Construct a PaddleOCR engine, requesting GPU when *device* is CUDA.
 
-    Routes through :func:`vtscore.config.resolve_device` so the engine honours
-    ``VTSEARCH_DEVICE`` and the CUDA smoke-test fallback.  ``use_gpu`` only
-    actually offloads when ``paddlepaddle-gpu`` is installed; with the CPU build
-    it is a harmless no-op.  The kwarg was removed in PaddleOCR 3.x, so an
+    *device* comes from :func:`vtscore.config.resolve_device`, so the engine
+    honours ``VTSEARCH_DEVICE`` and the CUDA smoke-test fallback.  ``use_gpu``
+    only actually offloads when ``paddlepaddle-gpu`` is installed; with the CPU
+    build it is a harmless no-op.  The kwarg was removed in PaddleOCR 3.x, so an
     unsupported-argument error falls back to the plain (CPU/default) constructor
     rather than breaking OCR entirely.
     """
-    from vtscore.config import resolve_device  # noqa: PLC0415
-
     kwargs = {"use_angle_cls": True, "lang": language, "show_log": False}
-    if resolve_device().startswith("cuda"):
+    if device.startswith("cuda"):
         try:
             return paddle_ocr_cls(**kwargs, use_gpu=True)
         except (TypeError, ValueError):
@@ -149,6 +166,11 @@ class Image2TextMediaConverter(MediaConverter):
         ),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        # One PaddleOCR engine, reused across every image in a conversion run.
+        self._engine_slot = ModelSlot()
+
     @property
     def source_type(self) -> str:
         return "image"
@@ -170,7 +192,7 @@ class Image2TextMediaConverter(MediaConverter):
         if not media_bytes:
             return []
 
-        results = _run_paddleocr(media_bytes, filename, language)
+        results = _run_paddleocr(media_bytes, filename, language, self._engine_slot)
         if results is None:
             return []
 

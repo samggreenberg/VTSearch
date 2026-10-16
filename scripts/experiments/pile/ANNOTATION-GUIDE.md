@@ -1,8 +1,8 @@
 # Annotation guide — the twelve shipped `vg_scale` classes (#3673)
 
 The reviewer's document for `clock`, `bird`, `boat`, `umbrella`, `kite`, `book`,
-`dog`, `backpack`, `knife`, `bicycle`, `bus` and `stop sign` — the classes
-`vg_scale` ships today.
+`dog`, `backpack`, `knife`, `bicycle`, `bus` and `stop sign` — the twelve
+`vg_scale` was first built with (`pile_config.SCALE_CLASSES_ORIGINAL`).
 
 **Where the rules actually live.** Each class's Good/Bad wording is
 `pile_config.SCALE_CLASS_RULES[cls].test`, and its short form is the `name` the
@@ -10,14 +10,15 @@ slate's dataset and detector carry, because that name is the only string a
 reviewer sees while voting. This file is the long form: the same rulings with
 the measurements that decided them, plus the boundaries that run *between*
 classes and belong to no single entry. If the two ever disagree, `pile_config`
-is the one the slate maker reads — fix this file.
+is the one the slate maker reads — fix this file. `backpack` has left *C* (#4119
+merged it into `bag or luggage`); its rule is kept, frozen, in
+`SCALE_CLASS_RULES_FROZEN` and is no longer voted under.
 
 The thirteen #3588 candidates have their own guide,
 [`docs/experiments/2026-09-03-vg-scale-classes/ANNOTATION_GUIDE.md`](../../../docs/experiments/2026-09-03-vg-scale-classes/ANNOTATION_GUIDE.md),
 which is also where the **protocol** lives — strata, boxing, the oversize rule,
 cannot-tell → Good, depiction, toy, part-of-the-whole. All of it applies here
-unchanged and is not repeated. The two guides merge when the class lists do
-(#3604).
+unchanged and is not repeated.
 
 ## Why this exists
 
@@ -162,15 +163,3 @@ The full wording is in `SCALE_CLASS_RULES`; these are the discriminations.
   each other at distance. Read the line: a kite has one, a bird does not.
 - **Boat against kite.** `parasail` folds into `kite`, and a parasail is towed
   by a boat. Both are present in that scene; box the one you are asked about.
-
-## What is still owed
-
-- **The positives have never been reviewed** — 360 pre-boxed COCO positives, 30
-  per class, which is the other half of the two-tier gap (#3674).
-- **`bicycle` is missing roughly half its positives** on the non-COCO half,
-  because it is built from the spelling `bicycle` while `bike` carries 638 of
-  COCO's 3,683 boxes (#3605).
-- **Four names measured well here and are not in any table**: `yacht`, `ferry`,
-  `rowboat` and `barge` for `boat`, at 88–100% precision on small samples. They
-  are candidates for `SCALE_VG_NAMES`, which is a build change and needs the
-  #3618 gate run at its own sample sizes, not this guide's word.

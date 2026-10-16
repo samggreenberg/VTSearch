@@ -92,13 +92,13 @@ client-side ranking.
   false "All items reviewed."
 - Feed the left-panel `unverifiedGoodCount` from the response's `above_threshold`
   (minus verified) rather than a full-order scan.
-- Under a window, moving the Inclusion cutoff changes which items are "above," so
-  `onInclusionChange` must refetch the window instead of recomputing
+- Under a window, moving the cutoff (the balance, `onBetaChange`) changes which
+  items are "above," so it must refetch the window instead of recomputing
   `above_threshold` over frozen client-side scores. Scores stay frozen
   server-side, so this is a new slice + count, not a re-sort.
 
 **Still open on the Train side too:** the Diversity "New" select mode
-(`label-view`'s `fetchDiversityNext`) POSTs the entire `{id: score}` map to
+(`SortRunnerService.fetchDiversityNext`) POSTs the entire `{id: score}` map to
 `/api/coverage-atlas/next`, so above `SORT_WINDOW_THRESHOLD` it now steers the
 atlas probe from the loaded window only. Send just the ids the server needs, or
 move the score lookup server-side.
@@ -175,12 +175,14 @@ false hit can't happen because `media_revision` bumps on every structural change
 
 <!-- item-sep -->
 
-### S10: MLP forward pass — O(N) inference on every retrain
+### S10: head scoring pass — O(N) inference on every retrain
 
 **File:** `vtscore/detectors/training.py` (`_score_all_media`, called on every retrain)
 
-Scoring all media requires an MLP forward pass for every item after every vote.
-Even a tiny MLP at N=1 M takes several hundred ms; at N=10 M, ~1 s per retrain.
+Scoring all media runs the head over every item after every vote (a matrix
+multiply for the shipped linear SVM), and the threshold fit repeats the pass once
+per calibration fold. At N=1 M a pass takes several hundred ms; at N=10 M, ~1 s
+per retrain.
 
 **Fix:** For very large datasets, **score only items near the threshold**
 (confidence-weighted sampling) and return approximate results. Alternatively,
@@ -215,14 +217,18 @@ merge the double-walk (populate then build_xy) into a single pass.
 **Files:** `vtscore/detectors/label_sync.py`, `vtscore/labels/sync.py`
 
 **Partly shipped:** the external-source push path *is* debounced and async —
-`labels/sync.py` has `_DEBOUNCE_DELAY = 0.2` and a timer-based `_PendingSync`.
+`labels/sync.py` paces each detector's pushes with a timer (`_DEBOUNCE_DELAY =
+0.2`, per-detector `_Slot`). The detector-JSON disk write is off the request too:
+`store.queue_detector_write` hands it to a writer thread that keeps only the newest
+pending text per file (the default `async` mode).
 
-**Still open:** `label_sync.sync_labels_to_loaded_detector` still does a full
-read-merge-write of the detector JSON per vote (under `label_sync_write_lock`).
-At 100 k labels the serialised labelset is ~50–100 MB; writing it on every vote
-stalls the handler for seconds.
+**Still open:** `label_sync.sync_labels_to_loaded_detector` still rebuilds the
+whole labelset and serialises it (`json.dumps` in `queue_detector_write`, on the
+caller's thread) per vote, inline in the request, under `label_sync_write_lock`.
+At 100 k labels the serialised labelset is ~50–100 MB, so each vote still pays
+for it.
 
-**Fix:** Debounce the detector-JSON write the same way the source push is
+**Fix:** Debounce the rebuild and serialisation the same way the source push is
 debounced (accumulate votes ~2 s, flush once). Long-term, an **append-only
 journal** (one `{id, label}` line per vote) makes the per-vote write O(1)
 regardless of labelset size; a compaction step on load reconstructs the full
