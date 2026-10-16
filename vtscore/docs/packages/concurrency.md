@@ -101,7 +101,7 @@ no job is bound, so shared library code can call it unconditionally).
 
 ### `JobManager`
 
-`JobManager(name, max_history=8, *, user_visible=True)`. One
+`JobManager(name, max_history=8, *, user_visible=True, binds_context=True)`. One
 background job runs at a time; one **pending slot** coalesces
 follow-up requests. A second `start()` while a job is in flight stashes
 the new `(signature, target)` in the pending slot. Further `start()`
@@ -127,6 +127,7 @@ def my_target(job):
         job.update_progress(i, 100, f"step {i}")
     job.result = {"hits": 42}
 
+# Both ids must name loaded contexts; see "Context binding" below.
 job = mgr.start(
     signature=("dataset_a", "detector_x"),
     target=my_target,
@@ -151,6 +152,20 @@ still promoted so a queued follow-up runs. The manager is
 thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
+Context binding: unless the manager was built with
+`binds_context=False`, the worker binds the contexts that `start()`'s
+`dataset_id` / `detector_id` name as its thread-local active ones, so the
+target reads that dataset's medias and that detector's votes through
+`get_active_context()` / `get_active_detector_context()`. If either id no
+longer resolves when the worker starts (the dataset or detector was unloaded
+while the job sat in the pending slot), the job ends `status = "error"` with
+`job.error` naming it (`"dataset <id> is no longer loaded"`), the target never
+runs, `cached_for()` never serves it, and the pending slot is still promoted.
+A manager whose targets name every context they touch, and so use the ids only
+as a tag, passes `binds_context=False`: its jobs bind nothing and require
+nothing. `archive_thumbnail_jobs` is one: its sweep warms every loaded
+dataset, so a kick whose own dataset was unloaded still runs for the rest.
+
 When a job spawns its daemon thread, the manager enters the Flask-free
 `vtscore.state.current_user.thread_user(job.user)` context manager
 before invoking the target so per-user settings resolution works from
@@ -168,7 +183,7 @@ eval_jobs              = JobManager("eval-train-score")
 labeling_status_jobs   = JobManager("labeling-status", user_visible=False)
 projection_jobs        = JobManager("projection")
 signpost_relabel_jobs  = JobManager("signpost-relabel", user_visible=False)
-archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False)
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False, binds_context=False)
 
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,

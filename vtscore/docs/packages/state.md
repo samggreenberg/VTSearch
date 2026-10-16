@@ -461,6 +461,14 @@ loading uses - the new dataset is not yet active, so the helper must
 operate on the passed-in `ctx` directly. A fresh context has no votes,
 so unlike `build_coverage_atlas` it replays nothing.
 
+Both builders run the k-means fit outside `_state_lock`. They snapshot
+the medias and `media_revision` under the lock, fit without it, and take
+it again only to install the atlas (and, for `build_coverage_atlas`, to
+replay the votes). If the dataset's medias changed during the fit, the
+atlas is discarded and the build retried once from a fresh snapshot; if
+they change during the retry too, the dataset keeps its current atlas.
+An explicit `media_dict` is installed without that check.
+
 `coverage_atlas_next_sample` accepts an optional `scores` dict
 (typically `DetectorContext.last_learned_scores`). When supplied, the
 picker looks at the node's median score: above the threshold it returns
@@ -554,7 +562,8 @@ from `vtscore.state.sort_results_cache` (not re-exported).
 | `SORT_WINDOW_HEAD` (500) / `SORT_WINDOW_TAIL` (200) | Above-threshold rows, and past-boundary context rows, in the initial window |
 | `initial_window_end(total, above_threshold)` | End index (exclusive) of that initial window |
 | `result_score(result)` / `count_above_threshold(results, threshold)` | Read a row's score under either key; count rows above a cut |
-| `SortResultsCache(max_entries=8)`, `.store(...)` / `.page(...)` | LRU of full lists: stash one and mint a token; page into a stored one |
+| `SORT_CACHE_MAX_ROWS` (2,000,000) | Cap on the rows the cache holds across all its rankings; the newest is kept even when it alone is longer |
+| `SortResultsCache(max_entries=8, max_rows=SORT_CACHE_MAX_ROWS)`, `.store(...)` / `.page(...)` | LRU of full lists, bounded by count and by total rows: stash one and mint a token; page into a stored one |
 | `.derived(token, key, build, *, dataset_id=None)` / `.forget_derived(token, key)` | A view built once over a stored list (`build(results)`) and kept with it, evicted with it; the app keeps Collapse to photos' grouping here (#4751) |
 
 Only the lightweight ranking rows (`{"id", "score"}` or

@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
 - **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
   #4736 a session started from a typed description was meant to keep the description's text ranking behind
   the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
@@ -957,6 +968,12 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
+  #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
+  of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
+  lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
+  server's reason. The rows that failed stay selected, so trying again is one click.
 
 - **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
   The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
