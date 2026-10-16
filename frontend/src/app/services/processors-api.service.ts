@@ -25,7 +25,11 @@ import { renameAutorunExtractorRoute } from '../generated/api-client/fn/processo
 import { renameAutorunLocalizerRoute } from '../generated/api-client/fn/processors-crud/rename-autorun-localizer-route';
 
 /** Autorun extractor / localizer CRUD plus the pregen-processors list /
- *  bulk-add endpoints. */
+ *  bulk-add endpoints.
+ *
+ *  No component calls this yet. It is kept on purpose until #3452 finds out
+ *  whether anything outside this repo uses the autorun surface; see
+ *  `vtsearch/autorun_processors.py`. */
 @Injectable({ providedIn: 'root' })
 export class ProcessorsApiService {
   private http = inject(HttpClient);

@@ -20,8 +20,9 @@ component conventions.
 6. [How to extract specific components](#how-to-extract-specific-components)
 7. [Plugin architecture details](#plugin-architecture-details)
 8. [State management](#state-management) (includes [Multi-dataset support](#multi-dataset-support))
-9. [Authentication and multi-user support](#authentication-and-multi-user-support)
-10. [Element-level origin tracking](#element-level-origin-tracking)
+9. [Embedder binding and routing](#embedder-binding-and-routing)
+10. [Authentication and multi-user support](#authentication-and-multi-user-support)
+11. [Element-level origin tracking](#element-level-origin-tracking)
 
 ---
 
@@ -1059,6 +1060,156 @@ frontend deliberately splits *intent* (what the user picked) from
 *active* (what the backend has loaded) so the headers never name a
 not-yet-loaded id; see
 [FRONTEND.md § The active dataset/detector context](FRONTEND.md#6-the-active-datasetdetector-context).
+
+---
+
+## Embedder binding and routing
+
+No one embedder is good at everything. SigLIP and CLIP answer text queries,
+DINOv3's patch grid gives region voting and sharper visual similarity, and
+SIFT/VLAD finds one exact instance. Rather than make the user choose, a dataset
+binds **up to one embedder per role**, and each operation routes to the embedder
+whose role it needs. A detector, in turn, locks the *kind* of embedder it learns
+in. Most datasets bind one embedder and never meet any of this: a
+single-embedder dataset behaves exactly as it did before the binding existed.
+
+The function-by-function reference is
+[`vtscore/docs/packages/embedding.md`](../vtscore/docs/packages/embedding.md#role-typed-embedder-binding);
+this section is the design.
+
+### Three role slots per dataset
+
+**Storage.** A media's vectors live in `media["embeddings"]`, a dict keyed by
+embedder name with one L2-normalised vector per bound embedder (the structural
+embedder's VLAD vector included). The patch embedder also writes
+`media["patch_grid"]`, its `(H, W, D)` grid, and the structural embedder writes
+`media["local_features"]`, its keypoints and descriptors. Those two stay
+single-valued because the binding allows at most one patch and one structural
+embedder. There is no singular `media["embedding"]`; a legacy pickle is re-keyed
+on load (see [`vtscore/docs/concepts.md`](../vtscore/docs/concepts.md#2-embedding)).
+
+**Binding.** `DatasetContext` holds three slots, as embedder *names* and never
+vectors: `text_embedder`, `patch_embedder` and `structural_embedder`. A slot
+accepts only an embedder advertising that role's capability (`supports_text`,
+`supports_patch_regions`, `supports_geometric_verification`; checked by
+`validate_binding`), and one embedder may fill more than one slot if it
+advertises more than one. By default the slots are derived from the medias
+(`derive_binding_from_names`), which is also how a dataset saved with a single
+`embedder` name role-types into them on load; `bind_embedders` sets an explicit
+triple. A single-vector embedder that advertises none of the three, such as
+`dinov2_single`, fills no slot: a dataset built on it binds nothing, and the
+score-routed operations read each media's primary vector instead. The embedder
+flags describe what an embedder *can* do; `dataset.supports_text` and its
+siblings mean that slot is bound.
+
+**Routing.** `DatasetContext.routed_embedder(role)` resolves each role:
+
+| Operation | Embedder | When the slot is empty |
+|---|---|---|
+| Text sort (`POST /api/sort`) | the text slot | 400; the UI hides text search |
+| Example sort, the coverage atlas | the **score** embedder: structural ▸ patch ▸ text | each media's primary vector (slot-less dataset) |
+| Detector head, train and score | the detector's type ([below](#per-detector-embedder-type)), else the score embedder | as above |
+| Region similarity, region voting, `region_box` | the patch slot | 400 |
+| Instance retrieval, geometric re-rank | the structural slot | 400 |
+| Gallery `best_region` overlay | whichever of the patch or structural embedder drove the score | no outline |
+
+Text sort never falls back to another slot, because patch and structural
+embedders have no text encoder.
+
+**Region votes and region scoring.** A head that learns in a patch space is
+max-pooled over each image's score-row stack (the image-level vector plus every
+raw patch of its `patch_grid`), and the winning row comes back as `best_region`
+([`api/medias.md`](api/medias.md)); one that learns in a structural space adds
+the two-stage geometric verification. A Good vote may carry `region_box`, the
+normalised `(x0, y0, x1, y1)` box the user Shift-drags, and trains on the raw
+patch nearest it. A Bad vote is always image-level: the vote route refuses a
+`region_box` on a `bad` or `none` target, and the head floods a Bad vote over the
+whole stack (a region-aware asymmetric loss). Shift-drag is offered when the
+dataset binds a patch **or** a structural embedder.
+
+**Ingest and I/O.**
+
+- The embed stage runs every bound embedder, each writing its own vector,
+  under the load pipeline's one embedding `ConcurrencyGate`; a multi-embedder
+  dataset simply takes proportionally longer.
+- An NPZ paths file may carry a `vectors_<embedder_name>` array per bound
+  embedder (`read_npz_multi_vectors` / `write_npz_multi_vectors`); an archive
+  with a single `vectors` array still imports through the single-vector reader.
+- Combine Datasets settles a per-type conflict between its sources, re-embedding
+  to one winner or dropping the type, through `resolutions`
+  ([`api/datasets.md`](api/datasets.md)); an unresolved conflict is refused.
+- Add Dataset ▸ Advanced offers the primary Embedder picker plus optional Region
+  and Instance embedder pickers, each shown only when the media type has an
+  embedder of that role. `--semantic-only` hides both ([`CLI.md`](CLI.md)).
+
+**Non-goals**, recorded so nobody re-derives them:
+
+- **More than one embedder of a role per dataset.** `media["embeddings"]` could
+  hold it, but the `str | None` slots deliberately cannot.
+- **Adding an embedder to a loaded dataset in place.** Changing or adding an
+  embedder is a re-import.
+- **Carrying a head across embedders.** A head trained in `siglip` is not reused
+  in `dinov3_patch`; it re-derives from the votes, which are embedder-agnostic
+  (`(media_id, label, region_box?)`).
+- **One head running both visual pipelines at once** (region max-pool *and*
+  geometric verification). A detector learns in one space.
+- **Embedding freshness checks.** Weights are pinned by Hugging Face revision,
+  and a re-import picks up newer ones.
+
+### Per-detector embedder type
+
+The score precedence is a property of the *dataset*, so on its own it would put
+every detector on a multi-embedder dataset in the same space. That defeats the
+point of binding more than one: a "find this exact logo" detector wants the
+structural space, a "sunset mood" detector a semantic one. So each detector locks
+an embedder **type** when it is created, and learns and scores in whichever
+concrete embedder of that type the dataset at hand binds. Text sort is
+unaffected; it always runs in the dataset's text slot.
+
+- **Three types partition the registry.** `embedder_type(name)` puts every
+  embedder in exactly one bucket, in the same precedence as score routing:
+  `structural` (`supports_geometric_verification`, e.g. `sift_vlad`),
+  `patch_semantic` (`supports_patch_regions`: the `*_patch` embedders and
+  `face`) and `semantic` (every global single-vector embedder, text-capable or
+  not). No embedder sets more than one of the flags.
+- **Persisted as a type, never a name.** The detector JSON carries
+  `embedder_type`, and `DetectorContext.embedder_type` is the immutable lock. A
+  legacy record's `primary_embedder` name is classified on read
+  (`detector_embedder_type_from_data`), without a rewrite.
+- **Resolved at create** (`resolve_detector_embedder_type`). An explicit type is
+  accepted whether or not the active dataset binds it: a detector may predate
+  every dataset, and one on a dataset without its type simply gates as
+  incompatible there. An empty request takes the dataset's type when it supplies
+  exactly one, is refused (400, naming the options) when it supplies several,
+  and stays empty with no dataset loaded, to be resolved by the score precedence
+  at first train. The New-detector modal's **Detector Embedder Type** picker sits
+  under Advanced, defaults to the dataset's first supplied type (else Semantic),
+  and warns inline when the active dataset cannot run the pick.
+- **The compatibility gate.** A detector runs on a dataset when their media types
+  match **and** the dataset binds an embedder of the detector's type
+  (`detector_dataset_compatible`). Find-label refuses an incompatible pair (409),
+  AutoFind skips it, and the frontend gates the same pairs from `embedder_types`
+  on the dataset registry entry and `embedder_type` on the detector
+  (`frontend/src/app/utils/context-compat.ts`).
+- **One resolver.** Every detector-scoped train and score goes through
+  `keying_embedder_for_snap(det_ctx, snap)`: the dataset's embedder of the
+  detector's type, else the score precedence. Moving a detector between two
+  datasets of the same type therefore re-derives its head in the new space
+  (SigLIP to CLIP, DINOv2 to DINOv3), with region boxes mapped onto the new
+  grid's nearest patch by `nearest_patch_to_box`.
+
+**Two markers, on purpose.** `DetectorContext.embedder_type` is the lock;
+`DetectorContext.embedder` is a separate, adaptive marker naming the concrete
+space the label cache and head are *currently* built in. Each train or score
+compares that marker with the resolver and re-derives on a mismatch. Keeping the
+two apart lets a detector pointed at a dataset without its type still re-embed
+its labels in that dataset's space, and keys invalidation on the space actually
+in memory rather than on the preference.
+
+**Non-goals.** A per-detector coverage atlas (the atlas is one tree per dataset,
+in the score space; revisit when a real multi-type dataset exists), changing a
+detector's type after creation (create a new detector; votes are
+re-importable), and one detector scoring in two spaces at once.
 
 ---
 
