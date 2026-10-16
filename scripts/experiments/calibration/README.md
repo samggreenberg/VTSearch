@@ -54,7 +54,7 @@ a report's committed-figure requirement points at.
 | `stopping.py`, `selftest_stopping.py` | **Stopping point and stopping cost** (#3560): where the app's own stopping rules fired on each trajectory, and what the detector cost there — the number a user actually leaves with, as against the "final cost" at a click budget nobody chose. Reads the `phase` column every run since 2026-07-31 already emits, so it enriches finished studies without a re-run. Handles the three things that make a naive average wrong: the rules **flap**, they **often never fire**, and the runs excluded by "average over the ones that stopped" are exactly the slow ones. Holds each stop against the run's own best, reads through a mid-session prompted check, and is what the State of the App analyzer's stopping block calls; `tests_lib/meta/test_calibration_stopping.py` runs the self-test in the suite. |
 | `preflight_knobs.py` | **Check 12 of the launch preflight** (`../preflight.sh`): every knob this run pins - the detector's and the session's (the opening, the preference, the spot check and its walk, acquisition) - against what the app ships, so a divergence passes only when declared with `--diverges <knob>`, and a value the harness would refuse fails outright (#4549). Imported under the run's own environment, from the worktree the jobs import. |
 | `harvest_headroom.py` | **Sizing a deep grid from its DEEPEST arm** (#3611): the positives-per-class that keep the most aggressive arm's harvest under a study's pre-registered compression bar at its planned horizon, read off a short pilot wave. Runs as check 16c of the launch preflight (`../preflight.sh --require-harvest-headroom`), and standalone (`--pilot <study>/bin`) to size the next pile. The per-arm harvest of a study that has already RUN is a different question, and a per-study script (`harvest_3547.py`) answers it. |
-| `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. `--default-metric` / `--hide-metrics` set the metric a page opens on and take retired ones off its menu, at build time or on a reskin. `--title` / `--subtitle` with `--reskin` rewrite a committed page's heading (#4654), and `--embedder-label` names an embedder by what it is rather than its key, at build time or on a reskin (#4655). |
+| `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. `--default-metric` / `--hide-metrics` set the metric a page opens on and take retired ones off its menu, at build time or on a reskin. `--title` / `--subtitle` with `--reskin` rewrite a committed page's heading (#4654), and `--embedder-label` names an embedder by what it is rather than its key, at build time or on a reskin (#4655). Each run's stopped point rides in the payload, so a page can show where the app said stop instead of the whole curve (#4939). `--category-map` shows categories as strata, and each recorded category is still a run of its own: its stop, its carried gaps, its clicks before a first detector, and a cell in the count (#4944). |
 | `make_bench_html.py` | A study's `report.html` reading copy, generated from its own `REPORT.md`. |
 | `bench_cells.py` | Pure-pandas reading and pairing of overview-benchmark cells, shared by the bench analyzers. |
 
@@ -606,9 +606,10 @@ their own without a re-run.
 | category | one, all (averaged), or each |
 | embedder | any **non-empty** subset — **one panel each, never averaged** |
 | arms | any **non-empty** subset |
-| seeds | averaged, or every seed its own line |
+| show | the whole curve (default), or only **where the app said stop** (#4939): each run one dot at the click Autopilot first reached Done, hollow at its last click when it never did; averaged, one marker a series at the Kaplan–Meier median stop and the mean value there, ±1 SD. Read off the rows' `phase`, so a page whose runs carry none offers the curve alone |
+| seeds | averaged, or every seed its own line (its own dot, where the app said stop) |
 | metric | cost, precision, recall, F1, the objective (F-beta at the run's balance; the page opens on it when the run drew its line at one, #4584), FPR, FNR, average precision, AUROC |
-| draw › best cut / cost-optimal cut | off (default), or the cheating-threshold line dotted beside the solid performance line: the **best cut** on a run that carries `oracle_fbeta*` (an F metric's best value over every cut, so never below the line; precision, recall and the rates at the cut the run's objective draws), the **cost-optimal cut** on an older run, which on a rare class sits below the line on precision and F (#4654). Click 0 carries the text sort's own |
+| draw › best cut / cost-optimal cut | off (default), or the cheating-threshold line dotted beside the solid performance line: the **best cut** on a run that carries `oracle_fbeta*` (an F metric's best value over every cut, so never below the line; precision, recall and the rates at the cut the run's objective draws), the **cost-optimal cut** on an older run, which on a rare class sits below the line on precision and F (#4654). Click 0 carries the text sort's own. A page that hides cost (`--hide-metrics cost`) has retired the cost objective and never offers the cost cut (#4939): built from runs before the best cut, it has no dotted line |
 | draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
 **Overlay is the shadow/comparison trade, made explicit.** Off, every varying
@@ -638,6 +639,19 @@ recall and F1 there are reconstructed from those rates and the split's class
 counts — the same confusion matrix in a different unit. `average_precision` and
 `auroc` integrate over every threshold, so re-cutting cannot move them; the box
 disables itself and says so rather than drawing one line twice.
+
+**Where the app said stop** (#4939) turns the pile of per-seed curves into a
+scatter: one dot a run, at the click the phase machine first read `done` (the
+app announces Done once there, as `stopping.stopping_points`' `t_stop` reads it)
+and its value at that click. A run never told to stop is a hollow dot at its
+last click, so the runs that never trained are on the chart as the empty set
+they returned. The series' marker is the Kaplan–Meier median stop, the runs
+never told censored at their last click, at the mean value over the runs that
+stopped; there is no marker where fewer than half stopped, since the median is
+then unknown. Each chart's heading leads with the share told to stop. The points
+are one click and one value a run, so the builder keeps them when it drops the
+per-seed lines (`--runs-budget-mb 0`, #4651); a page built before them has the
+control disabled and is rebuilt, not reskinned, to get them.
 
 Both chip controls are non-empty by construction — the last remaining chip is
 locked, with a tooltip, rather than snapping silently back — because an empty

@@ -191,20 +191,22 @@ where the balance peaked, or at either end of the list: on a long list of
 good matches that can be hundreds, on a short or sparse one as few as 8.
 **The check does not move the line**: it measures, and your picks become
 votes that the next retrain learns from like any other, but the line stays
-where your labels put it. The check's last screen says what it found -
-**Checked the top 48 you hadn't voted on: likely 55–80% right, about half of
-them found (checked 15).** and **The line keeps the top 30 you haven't voted
-on, where your labels put it: the check informs the line and does not move
-it. The ranges are what the picks say about the top 48 you hadn't voted on;
+where your labels put it. What it reports is about the items the line kept,
+as they stood when the check started: of those, it counts the picks that
+fell among them. The check's last screen says what it found - **Checked the
+36 kept you hadn't voted on: likely 55–80% right, about half of them found
+(checked 12).** and **The line keeps the top 30 you haven't voted on, where
+your labels put it: the check informs the line and does not move it. The
+ranges are what the picks say about the 36 it kept when the check started;
 the Goods you had already voted on count in neither.** - and the note under
 the Threshold then shows the same result:
 
-- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
-  of them found (checked 15) · 30 more kept** - the check measured the top
-  48 of the items you hadn't voted on, and the line keeps 30 more besides
-  your votes. The range is how much of the checked set is likely right; the
-  phrase after it is how much of the matches you hadn't voted on that set
-  likely found (**few of them**, **about a quarter**, **about half**,
+- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 12) · 30 more kept** - when the check started the
+  line kept 36 items you hadn't voted on; now, with the check's own picks
+  voted and the line re-drawn, it keeps 30 more besides your votes. The range
+  is how much of those 36 is likely right; the phrase after it is how much of
+  the matches you hadn't voted on they likely held (**few of them**, **about a quarter**, **about half**,
   **about three quarters** or **nearly all of them**). Hovering the note
   gives both as numbers. The note names no cause for a poor result: a dataset with very few
   matches and a detector that can't yet tell them apart look the same from
@@ -216,11 +218,13 @@ share right nor the share found. Late in a session, once you have voted on
 most of the matches near the top, the items left there hold few of them, so
 the check before **Done!** can read low after a session that went well.
 
-**The likely range** says how much of the set the check measured is probably
-right. It comes from your picks alone, never from the detector's own guess:
-each band's picks bound that band, and the bands are weighed by their size.
-With 5 picks a band it is wide; that width is the honest answer to "how
-close did we get?". The **found** phrase is the rougher of the two: it reads
+**The likely range** says how much of the items the line kept, when the
+check started, is probably right. It comes from your picks alone, never from
+the detector's own guess: the picks that fell in each band's part of that
+set bound that part, exactly for its size (in a band of 8, 4 right of 5
+means 4 to 7 of the 8 are), and the parts are weighed by their size. With 5
+picks a band it is still wide; that width is the honest answer to "how close
+did we get?". The **found** phrase is the rougher of the two: it reads
 the same picks against the detector's own estimate of how many matches the
 list holds, which is the one thing the picks cannot measure. The check
 decides where to stop on the picks' plain share, so the range says how sure
@@ -1077,12 +1081,12 @@ of two states:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
   on, besides your votes, and nothing has measured them yet.
-- **Checked the top 48 you hadn't voted on · likely 55–80% right, about half
-  of them found (checked 15) · 30 more kept** - a check walked the items you
-  hadn't voted on and ended where the balance peaked, on the top 48; the
-  note says how much of that set is likely right and how much of the matches
-  you hadn't voted on it likely found. The line keeps its own 30 more, where
-  your labels put it.
+- **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
+  of them found (checked 12) · 30 more kept** - a check walked the items you
+  hadn't voted on; the note says how much of the 36 the line kept when it
+  started is likely right, and how much of the matches you hadn't voted on
+  they likely held. The line keeps its own 30 more now, where your labels put
+  it.
 
 The range a check measured is a number. Autopilot's **Spot Check.** step
 runs a spot check of the list: 5 random picks from each band of it, which you

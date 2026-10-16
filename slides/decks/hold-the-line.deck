@@ -193,16 +193,18 @@ slides:
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
   # #4560) and the model's count corrected below it (#4523); then the app — the
   # autopilot's rounds and stop, the result pane, and how often its ranges hold.
-  # The bands and Clopper–Pearson it builds on are Spot Check's and Home on the
-  # Range's, which open the section. Every figure but the last runs the shipped
-  # `LineTest` on a planted pile (`make-test-figs.py`); the last is #4560's
-  # shipped summary.
+  # The bands and the per-band range it builds on are Spot Check's and Home on
+  # the Range's, which open the section. Every figure but the last runs the
+  # shipped `LineTest` on a planted pile (`make-test-figs.py`); the last is
+  # #4560's shipped summary.
   outline-hold-the-line +at7
   # First the check Autopilot runs on the pile you trained on (owner, #4835:
   # moved here from Inclination, since it measures the line rather than
   # drawing it): the question the line cannot answer before anyone checks
-  # (how many of what it keeps are right), Clopper–Pearson on its own, what
-  # a check says about the line without moving it (#4427, #4452, #4517).
+  # (how many of what it keeps are right), the exact range for a band of
+  # known size on its own (#4932: Clopper–Pearson only as the endless-list
+  # contrast), what a check says about the line without moving it (#4427,
+  # #4452, #4517).
   # Flight Plan in section V names it as step A (#4836, #4872).
   floor-ask
   clopper-pearson
@@ -329,7 +331,10 @@ slides:
   # F-beta at the three presets, none beat cross-calibration (#4582, at the
   # 0.44% pool). None draws today's line; the fused cut and rank transfer
   # survive only as the fallback for a session whose votes cannot support the
-  # labels' model, and the 70/30 split ships as a null (#4583).
+  # labels' model, and the 70/30 split ships as a null (#4583). Rank transfer
+  # was priced once more inside the labels line (#4910): carrying the folds'
+  # held-out scores onto the final model's scale by quantile loses F-beta at
+  # every preset, and with its tails kept it ties.
   anchored-em
   quantile-transfer
   split-fraction

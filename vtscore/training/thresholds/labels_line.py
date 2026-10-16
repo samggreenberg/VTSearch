@@ -105,10 +105,16 @@ WEAK_SEPARATION_D = 1.5
 #: The fewest votes before weak separation makes a spot check due (#4496): the
 #: first few labels separate noisily, and a check needs a line to walk.
 WEAK_CHECK_MIN_VOTES = 10
-#: Votes after a check ends before weak separation makes another due (#4496).
-#: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
-#: to +0.010, for 28-35% of a prompted session's clicks spent checking.
+#: Votes after a check ends before the check before Done runs (:func:`done_check_due`, #4496): a check that ended
+#: moments ago has already measured this line.  It was also the weak check's repeat until #4909.
 WEAK_CHECK_COOLDOWN = 25
+#: Votes after a check ends before weak separation makes another due; ``None``: never, so the weak check prompts at
+#: most once a session, and only before any other check has ended (#4909, the owner's choice of 2026-10-15).  #4496
+#: had chosen again after 25 votes, on an app where a check's picks were worth far more than Autopilot's.  At
+#: today's head prompting once matched or beat it: +0.0006 (beta 1) and +0.0013 (beta 4) in mean F-beta over clicks
+#: 0-200, level after the closing check, Done at the same click and F-beta, and 24-25 fewer of 200 clicks spent
+#: checking (``docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md``).
+WEAK_CHECK_REPEAT: int | None = None
 #: Media types whose sessions never get a prompted weak check (#4778, #4799).  A
 #: face search's opening finds the person's few photos before the check could
 #: start (a median of 4 Goods at vote 11), so a check's votes find nothing and
@@ -272,6 +278,109 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
     raw = math.sqrt(var)
     neg = np.sort(xn) if xn.size >= RANDOM_BADS_MIN else None
     return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg)
+
+
+#: How the calibration folds' held-out scores reach the class model (#4910).  ``"raw"`` pools
+#: them as each fold model scored them: the shipped line, which mixes the fold models' scales
+#: with the final model's, whose corpus scores the line is cut on.  ``"quantile"`` first carries
+#: each fold's scores onto the final model's scale by their quantile in that fold model's own
+#: haystack (:func:`~vtscore.training.thresholds.anchored.rank_transfer`, which saturates at the
+#: haystack's ends); ``"quantile_tails"`` does the same inside the haystack's range and, past
+#: either end, keeps the score's logit distance from that end.  Eval arms only: the app pools raw.
+FOLD_SCALES: tuple[str, ...] = ("raw", "quantile", "quantile_tails")
+
+
+def transfer_fold_orderings(
+    orderings: Sequence[tuple[Any, Any]],
+    fold_haystacks: Sequence[Any],
+    final_haystack: Any,
+    *,
+    tails: bool = False,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """The folds' held-out scores carried onto the final model's scale, fold by fold (#4910).
+
+    Fold *k*'s held-out score ``s`` becomes the final haystack's quantile at the
+    share of fold *k*'s haystack scoring strictly below ``s``: what
+    :func:`~vtscore.training.thresholds.anchored.rank_transfer` does to one cut,
+    done to every held-out score.  *fold_haystacks[k]* must be fold *k*'s model's
+    scores of the same population *final_haystack* holds the final model's
+    scores of (both with the voted media dropped, or both with them kept), so a
+    quantile means the same item in both.  Unscorable entries (outside
+    ``[0, 1]``, non-finite) are dropped from the haystacks and left as they are
+    in the orderings, which :func:`class_score_model` drops anyway.
+
+    The quantile saturates: a held-out Good above every item of its fold's
+    haystack lands on the final haystack's top score, however far above it
+    sat.  With *tails*, a score past either end of its fold's haystack keeps
+    its logit distance from that end instead, measured from the final
+    haystack's same end.
+
+    A fold with no haystack (fewer haystacks than orderings) or an empty one,
+    or an empty *final_haystack*, keeps its scores as they are.  Labels pass
+    through unchanged, in order.
+    """
+    tgt = np.sort(_finite_unit(final_haystack))
+    out: list[tuple[np.ndarray, np.ndarray]] = []
+    for k, (scores, labels) in enumerate(orderings):
+        s = np.asarray(scores, dtype=np.float64).ravel().copy()
+        y = np.asarray(labels, dtype=np.float64).ravel()
+        src = np.sort(_finite_unit(fold_haystacks[k])) if k < len(fold_haystacks) else np.empty(0)
+        ok = np.isfinite(s) & (s >= 0.0) & (s <= 1.0)
+        if src.size and tgt.size and ok.any():
+            v = s[ok]
+            q = np.searchsorted(src, v, side="left") / float(src.size)
+            mapped = np.asarray(np.quantile(tgt, np.clip(q, 0.0, 1.0)), dtype=np.float64)
+            if tails:
+                x = _logit(v)
+                for past, s_end, t_end in ((v > src[-1], src[-1], tgt[-1]), (v < src[0], src[0], tgt[0])):
+                    if past.any():
+                        shift = float(_logit([t_end])[0] - _logit([s_end])[0])
+                        mapped[past] = 1.0 / (1.0 + np.exp(-(x[past] + shift)))
+            s[ok] = mapped
+        out.append((s, y))
+    return out
+
+
+def fold_transfer_shift(orderings: Sequence[tuple[Any, Any]], transferred: Sequence[tuple[Any, Any]]) -> np.ndarray:
+    """``|logit(transferred) - logit(raw)|`` for every scorable held-out score, folds pooled (#4910's gate)."""
+    parts: list[np.ndarray] = [np.empty(0)]
+    for (raw, _), (moved, _) in zip(orderings, transferred, strict=True):
+        a = np.asarray(raw, dtype=np.float64).ravel()
+        b = np.asarray(moved, dtype=np.float64).ravel()
+        n = min(a.size, b.size)
+        a, b = a[:n], b[:n]
+        ok = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
+        parts.append(np.abs(_logit(b[ok]) - _logit(a[ok])))
+    return np.concatenate(parts)
+
+
+def fold_transfer_clipped(
+    orderings: Sequence[tuple[Any, Any]], fold_haystacks: Sequence[Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(side, good)`` per scorable held-out score, folds pooled (#4910's gate).
+
+    *side* is ``1`` above the score's fold's whole haystack, ``-1`` below it and
+    ``0`` inside: where :func:`transfer_fold_orderings` saturates without
+    *tails*.  A fold with no haystack reads ``0`` throughout, its scores not
+    moved.  *good* is whether the score is a Good's.
+    """
+    sides: list[np.ndarray] = [np.empty(0, dtype=np.int8)]
+    goods: list[np.ndarray] = [np.empty(0, dtype=bool)]
+    for k, (scores, labels) in enumerate(orderings):
+        a = np.asarray(scores, dtype=np.float64).ravel()
+        y = np.asarray(labels, dtype=np.float64).ravel()
+        n = min(a.size, y.size)
+        a, y = a[:n], y[:n]
+        ok = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
+        a, y = a[ok], y[ok]
+        src = _finite_unit(fold_haystacks[k]) if k < len(fold_haystacks) else np.empty(0)
+        side = np.zeros(a.size, dtype=np.int8)
+        if src.size:
+            side[a > src.max()] = 1
+            side[a < src.min()] = -1
+        sides.append(side)
+        goods.append(y >= 0.5)
+    return np.concatenate(sides), np.concatenate(goods)
 
 
 def corpus_sigma_floor(scores: Any) -> float:
@@ -674,7 +783,7 @@ def weak_check_due(
     *,
     threshold: float = WEAK_SEPARATION_D,
     min_votes: int = WEAK_CHECK_MIN_VOTES,
-    cooldown: int | None = WEAK_CHECK_COOLDOWN,
+    cooldown: int | None = WEAK_CHECK_REPEAT,
 ) -> bool:
     """Whether the labels separate weakly enough that a spot check is due (#4496, the owner's ruling of 2026-10-05).
 
@@ -682,7 +791,8 @@ def weak_check_due(
     *threshold*, at least *min_votes* votes have been cast, and either no
     check has ended yet or *cooldown* votes have been cast since the last one
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
-    before any).  ``cooldown=None`` makes a check due once at most.
+    before any).  ``cooldown=None``, the default (:data:`WEAK_CHECK_REPEAT`,
+    #4909), makes a check due once at most: never after any check has ended.
 
     The app's Autopilot runs the check when it is due; the eval harness's
     default arm (``spot_check="weak"``) runs it where this says, so both read
@@ -963,6 +1073,7 @@ __all__ = [
     "RANDOM_BADS_TOP_SHARE",
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
+    "WEAK_CHECK_REPEAT",
     "WEAK_SEPARATION_D",
     "WEAK_CHECK_OFF_MEDIA_TYPES",
     "done_check_due",
@@ -981,6 +1092,10 @@ __all__ = [
     "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
+    "FOLD_SCALES",
+    "fold_transfer_clipped",
+    "fold_transfer_shift",
+    "transfer_fold_orderings",
     "head_count_cut",
     "head_count_serves",
     "labels_line_threshold",

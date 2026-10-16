@@ -23,7 +23,7 @@ owner, 2026-10-07): the text query, 25, 50, 100 and 150 clicks and after the
 check (∞) on photos, and `DOC_PR_CLICKS` on documents.
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
-10 seeds, `docs/experiments/2026-10-05-state-of-the-app-binary-photo/`). Its
+45 seeds, `docs/experiments/2026-10-16-state-of-the-app-binary-photo/`). Its
 per-run data lives on the GRID, so the slide reads what the report commits:
 `precision_recall_path.csv`, the returned set's F-beta, precision, recall and
 size at 25, 50, 100 and 150 clicks and after the check, per radio.
@@ -62,9 +62,9 @@ SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
 EXPERIMENTS = REPO / "docs" / "experiments"
-PHOTO_REPORT = EXPERIMENTS / "2026-10-05-state-of-the-app-binary-photo"
+PHOTO_REPORT = EXPERIMENTS / "2026-10-16-state-of-the-app-binary-photo"
 #: The review's committed path through the session (#4519): per radio, the returned set at
-#: `PHOTO_CLICKS` and after the check, from `perp.py --kind balance` over 10 seeds.
+#: `PHOTO_CLICKS` and after the check, from `perp.py --kind balance` over 45 seeds.
 PHOTO_PATH = PHOTO_REPORT / "precision_recall_path.csv"
 #: The clicks the photo review reads the returned set at, before the check.
 PHOTO_CLICKS = (25, 50, 100, 150)
@@ -115,13 +115,13 @@ DOC_PR_CLICKS = (0, 10, 50)
 
 #: What the presenter notes quote, rounded as the notes say them.
 EXPECT = {
-    ("photos", 0.25, "after"): 0.62,
-    ("photos", 1.0, "after"): 0.51,
-    ("photos", 4.0, "after"): 0.59,
-    ("photos", 0.25, "kept"): 20,
-    ("photos", 1.0, "kept"): 43,
-    ("photos", 4.0, "kept"): 83,
-    ("photos", 0.25, "precision"): 0.71,
+    ("photos", 0.25, "after"): 0.65,
+    ("photos", 1.0, "after"): 0.54,
+    ("photos", 4.0, "after"): 0.61,
+    ("photos", 0.25, "kept"): 17,
+    ("photos", 1.0, "kept"): 42,
+    ("photos", 4.0, "kept"): 80,
+    ("photos", 0.25, "precision"): 0.76,
     ("photos", 4.0, "recall"): 0.66,
     ("documents", 0.25, "precision"): 0.98,
     ("documents", 1.0, "precision"): 0.93,
@@ -130,12 +130,12 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
-    ("photos", 0.25, "text"): 0.47,
+    ("photos", 0.25, "text"): 0.46,
     ("photos", 1.0, "text"): 0.36,
     ("photos", 4.0, "text"): 0.47,
-    ("photos", 0.25, "at50"): 0.50,
-    ("photos", 1.0, "at50"): 0.41,
-    ("photos", 4.0, "at50"): 0.48,
+    ("photos", 0.25, "at50"): 0.54,
+    ("photos", 1.0, "at50"): 0.44,
+    ("photos", 4.0, "at50"): 0.52,
     ("regions", 0.25, "at50"): 0.53,
     ("regions", 1.0, "at50"): 0.45,
     ("regions", 4.0, "at50"): 0.55,

@@ -17,10 +17,13 @@
 #                page, and it has to fit the repo's 4,000 KB cap to be committed.
 #                viewer.py says when it does not. 0 drops the per-seed lines and
 #                keeps the average over every seed: 24 seeds x 3 sets are over the
-#                cap even at the coarsest per-seed grid (#4651).
+#                cap even at the coarsest per-seed grid (#4651). Each run's stopped
+#                point stays either way, so the page can show where the app said
+#                stop as one dot a run (#4939).
 #
-# Run it on a compute node (srun -p cpu --mem=16G -c 2): it reads every cell of
-# three runs. Run analyze.sh on the -b1 run first, for its text baseline.
+# Run it on a compute node (srun -p cpu --mem=48G -c 2): it reads every cell of
+# three runs, and 24 seeds of them peak at 36 GB over 25 min (#4944). Run
+# analyze.sh on the -b1 run first, for its text baseline.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"

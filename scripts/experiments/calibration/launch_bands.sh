@@ -151,6 +151,8 @@ ENVX="$ENVX CALIB_WALK_GUARD=${CALIB_WALK_GUARD:-} CALIB_WALK_SHAPE=${CALIB_WALK
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES=${CALIB_SAVE_TEST_SCORES:-} CALIB_SIM_SIZE=${CALIB_SIM_SIZE:-}"
 # #4490: extra snapshot clicks (comma list) beside the last and final ones.
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES_AT=${CALIB_SAVE_TEST_SCORES_AT:-}"
+# #4936: those snapshots also carry every fold model's scores of the withheld half and the sim set; record only.
+ENVX="$ENVX CALIB_SAVE_FOLD_SCALES=${CALIB_SAVE_FOLD_SCALES:-}"
 # The Test arm (#4523): Test mode's autopilot on the withheld half after the last click; off unless a study asks.
 ENVX="$ENVX CALIB_LINE_TEST=${CALIB_LINE_TEST:-}"
 # When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.

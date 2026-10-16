@@ -1095,7 +1095,7 @@ WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
 #: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
 #: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
-#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once (the app's since #4909); unset, the app's
 #: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
 #: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
@@ -1118,6 +1118,13 @@ DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no"
 #: positive integer is kept as given, for preflight to refuse.
 _EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
 EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
+#: Issue #4910's fold scale (``CALIB_LABELS_SCALE``): the scale the labels line's class model reads the calibration
+#: folds' held-out scores on.  Unset (the default) is the app, each fold model's scores as it scored them;
+#: ``quantile`` / ``quantile_tails`` carry each fold's onto the final model's scale through its haystack first.
+#: ``CALIB_LABELS_SCALE_SHADOW`` fits the line on another scale beside it, drawing nothing (the rows' ``shadow_*`` /
+#: ``xfer_*`` columns).  Kept as given, for preflight to refuse a value outside ``FOLD_SCALES``.
+LABELS_SCALE = os.environ.get("CALIB_LABELS_SCALE", "").strip().lower() or None
+LABELS_SCALE_SHADOW = os.environ.get("CALIB_LABELS_SCALE_SHADOW", "").strip().lower() or None
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
@@ -1127,6 +1134,13 @@ SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() 
 SAVE_TEST_SCORES_AT = tuple(
     int(x) for x in os.environ.get("CALIB_SAVE_TEST_SCORES_AT", "").replace(" ", "").split(",") if x
 )
+#: #4936's instrument (``CALIB_SAVE_FOLD_SCALES=1``): the ``t<N>`` snapshots also carry every live calibration fold
+#: model's scores of the withheld half and of the sim set, the sim set's truth and votes, and the vote behind each
+#: held-out score, so the fold models' scale is read against the final model's on images no model has seen.
+#: Needs ``CALIB_SAVE_TEST_SCORES=1`` and ``CALIB_SAVE_TEST_SCORES_AT``; the session is unchanged.
+SAVE_FOLD_SCALES = os.environ.get("CALIB_SAVE_FOLD_SCALES", "").strip().lower() in ("1", "true", "yes")
+if SAVE_FOLD_SCALES and not (SAVE_TEST_SCORES and SAVE_TEST_SCORES_AT):
+    raise ValueError("CALIB_SAVE_FOLD_SCALES=1 needs CALIB_SAVE_TEST_SCORES=1 and CALIB_SAVE_TEST_SCORES_AT")
 #: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
 #: withheld half with every pick answered from the truth, at the app's default budgets, into
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.

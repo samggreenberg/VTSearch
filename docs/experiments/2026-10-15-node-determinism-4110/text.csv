@@ -1,0 +1,11 @@
+node,cpu,variant,warm_query_ms
+rack2n13,Silver 4114,aten2,390.4
+rack2n13,Silver 4114,base,383.8
+rack2n13,Silver 4114,pins,761.4
+rack2n13,Silver 4114,pins_aten2,754.3
+rack2n13,Silver 4114,pins_atendef,816.7
+rack7n11,EPYC 7713,aten2,217.9
+rack7n11,EPYC 7713,base,218.6
+rack7n11,EPYC 7713,pins,498.6
+rack7n11,EPYC 7713,pins_aten2,500.1
+rack7n11,EPYC 7713,pins_atendef,543.3

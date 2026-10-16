@@ -16,5 +16,5 @@
      What helps is twenty random picks as training votes. -->
 
 <!-- **c** — So when labels separate weakly, Autopilot runs Spot Check early,
-     after the opening and every 25 votes while it stays weak. Not on faces: a
-     person's few photos turn up before a check could start. -->
+     once, after the opening. Not on faces: a person's few photos turn up
+     before a check could start. -->

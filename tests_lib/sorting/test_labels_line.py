@@ -35,6 +35,7 @@ from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
@@ -469,15 +470,21 @@ class TestWeakCheckDue:
         assert not weak_check_due(None, 40, None), "no labels line yet"
         assert not weak_check_due(float("nan"), 40, None)
 
-    def test_it_comes_back_a_cooldown_after_the_last_check_ended(self):
-        ended = 30
-        assert not weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN - 1, ended)
-        assert weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN, ended)
-        assert not weak_check_due(3.0, ended + 100, ended), "not while separation is strong"
+    def test_by_default_it_is_due_once_never_after_a_check_has_ended(self):
+        """#4909: once a session; the check before Done ending first counts too."""
+        assert WEAK_CHECK_REPEAT is None
+        assert weak_check_due(1.0, 20, None)
+        assert not weak_check_due(1.0, 21, 20), "a check just ended"
+        assert not weak_check_due(1.0, 500, 20), "nor ever again"
 
-    def test_no_cooldown_makes_it_due_once(self):
-        assert weak_check_due(1.0, 20, None, cooldown=None)
-        assert not weak_check_due(1.0, 500, 20, cooldown=None)
+    def test_a_repeat_comes_back_that_many_votes_after_the_last_check_ended(self):
+        """The arm #4496 shipped and #4909 retired: again 25 votes after a check, while separation stays weak."""
+        ended = 30
+        assert not weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN - 1, ended, cooldown=WEAK_CHECK_COOLDOWN)
+        assert weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN, ended, cooldown=WEAK_CHECK_COOLDOWN)
+        assert not weak_check_due(3.0, ended + 100, ended, cooldown=WEAK_CHECK_COOLDOWN), (
+            "not while separation is strong"
+        )
 
 
 class TestDoneCheckDue:

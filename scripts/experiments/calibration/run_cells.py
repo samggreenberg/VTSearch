@@ -25,6 +25,11 @@ from pathlib import Path
 
 import common
 
+if __name__ == "__main__":
+    # Before numpy or torch loads: one set of numeric kernels on every node, so a
+    # cell is bit-identical wherever it runs (#4110).  Only as a script: a test that
+    # imports this module must not change its own process's kernels.
+    common.pin_cpu_kernels()
 common.setup_env()
 
 import numpy as np  # noqa: E402
@@ -351,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -365,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
+    # Which CPU, and which kernels: a cross-node pair is read by these (#4110).
+    common.log(f"kernels: {common.kernel_report()}")
 
     import pandas as pd
 
@@ -523,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
                 **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
                 **({"done_check": cfg.DONE_CHECK} if cfg.DONE_CHECK is not None else {}),
                 **({"early_check": cfg.EARLY_CHECK} if cfg.EARLY_CHECK is not None else {}),
+                **({"labels_scale": cfg.LABELS_SCALE} if cfg.LABELS_SCALE is not None else {}),
+                **({"labels_scale_shadow": cfg.LABELS_SCALE_SHADOW} if cfg.LABELS_SCALE_SHADOW is not None else {}),
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
@@ -533,6 +542,7 @@ def main(argv: list[str] | None = None) -> int:
                 precision_frame_steps=cfg.PFRAME_STEPS or None,
                 rank_frame_sink=rankframes_local,
                 test_score_sink=testscores_local,
+                fold_scale_steps=cfg.SAVE_TEST_SCORES_AT if cfg.SAVE_FOLD_SCALES else None,
                 line_test_sink=linetest_local,
                 sim_size=cfg.SIM_SIZE,
                 rank_frame_steps=cfg.RANK_FRAME_STEPS or None,

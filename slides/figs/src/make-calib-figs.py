@@ -82,6 +82,8 @@ from vtscore.training.thresholds.spot_check import (  # noqa: E402
     clopper_pearson_lower,
     clopper_pearson_upper,
     fbeta_score,
+    hypergeometric_lower,
+    hypergeometric_upper,
     likely_range,
     range_tail,
 )
@@ -6685,9 +6687,8 @@ WS_TIME_Y = 0.95
 #: The separation axis's range.
 WS_D_MAX = 4.0
 #: One weak session, in votes: where the opening ends (the median session's
-#: first learned step, #4496), and each check's (start, length). A check runs
-#: about twenty picks; the second starts the shipped cooldown after the first
-#: ends, because the labels still separate weakly then.
+#: first learned step, #4496), and the check's length. A check runs about
+#: twenty picks, once a session (#4909).
 WS_SESSION_VOTES = 150
 WS_OPENING_END = 45
 WS_CHECK_LEN = 20
@@ -6698,8 +6699,9 @@ def weak_spot_fig() -> None:
 
     The separation is d' = (Good mean − Bad mean) / spread of the class model
     the held-out votes imply, computed by the shipped `class_score_model`; the
-    bar, the first vote a check may come at and the cooldown between checks
-    are `WEAK_SEPARATION_D`, `WEAK_CHECK_MIN_VOTES` and `WEAK_CHECK_COOLDOWN`.
+    bar and the first vote a check may come at are `WEAK_SEPARATION_D` and
+    `WEAK_CHECK_MIN_VOTES`, and the check comes once a session
+    (`WEAK_CHECK_REPEAT`, #4909).
     The session row is a schematic of one weak session drawn on those
     constants, not a measured one.
     """
@@ -6779,8 +6781,8 @@ def _ws_axis_row(ax: plt.Axes) -> None:
 
 
 def _ws_session_row(ax: plt.Axes) -> None:
-    """Stage 3: one weak session's votes, with the checks Autopilot runs and the cooldown between them."""
-    from vtscore.training.thresholds.labels_line import WEAK_CHECK_COOLDOWN, WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
+    """Stage 3: one weak session's votes, with the check Autopilot runs once, after the opening."""
+    from vtscore.training.thresholds.labels_line import WEAK_CHECK_MIN_VOTES  # noqa: PLC0415
 
     x0, x1 = WS_PANELS[0][0], WS_PANELS[1][1]
 
@@ -6798,20 +6800,12 @@ def _ws_session_row(ax: plt.Axes) -> None:
                            edgecolor=INK, linewidth=1.2, zorder=2))  # fmt: skip
     ax.text((at(0) + at(WS_OPENING_END)) / 2, WS_TIME_Y + h / 2, "opening", ha="center", va="center", fontsize=16,
             color=INK, zorder=3)  # fmt: skip
-    first = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
-    second = first + WS_CHECK_LEN + WEAK_CHECK_COOLDOWN
-    for start in (first, second):
-        ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
-                               edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
-        ax.text((at(start) + at(start + WS_CHECK_LEN)) / 2, WS_TIME_Y + h / 2, "check", ha="center", va="center",
-                fontsize=16, color=INK, zorder=3)  # fmt: skip
-    # The cooldown, as a span from one check's end to the next one's start.
-    a, b = at(first + WS_CHECK_LEN), at(second)
-    y = WS_TIME_Y + h + 0.3
-    ax.annotate("", xy=(b, y), xytext=(a, y), arrowprops={"arrowstyle": "<|-|>", "color": INK, "linewidth": 1.4},
-                zorder=4)  # fmt: skip
-    ax.text((a + b) / 2, y + LABEL_GAP, f"{WEAK_CHECK_COOLDOWN} votes", ha="center", va="bottom", fontsize=16,
-            color=INK)  # fmt: skip
+    start = max(WS_OPENING_END, WEAK_CHECK_MIN_VOTES)
+    mid = (at(start) + at(start + WS_CHECK_LEN)) / 2
+    ax.add_patch(Rectangle((at(start), WS_TIME_Y), at(start + WS_CHECK_LEN) - at(start), h, facecolor="white",
+                           edgecolor=BLUE, linewidth=2.2, zorder=2))  # fmt: skip
+    ax.text(mid, WS_TIME_Y + h / 2, "check", ha="center", va="center", fontsize=16, color=INK, zorder=3)
+    ax.text(mid, WS_TIME_Y + h + LABEL_GAP, "once a session", ha="center", va="bottom", fontsize=16, color=INK)
 
 
 def _ws_stage(stage: int) -> plt.Figure:
@@ -7162,37 +7156,49 @@ def floor_check_fig() -> None:
     save(final, OUT, "calib-floor-check.webp", column=FULL_BLEED, box=box)
 
 
-# ── Clopper–Pearson, on its own (#4517) ──────────────────────────────────────
+# ── The range for a band of known size, on its own (#4517, #4932) ────────────
 
-#: How many build stages the Clopper–Pearson figure reveals in: five picks and
-#: what they say; the lowest share that could still give four right; the
-#: highest that could still give only four; the range between; and the same
-#: share from fifty picks.
+#: How many build stages the range figure reveals in: five picks from a band of
+#: 8 and what they read; the three nobody has seen, and the range they leave;
+#: the count below which the same picks from a band of 32 would be a fluke; the
+#: range that leaves; and the same picks read as if from an endless list.
 CP_STAGES = 5
 #: The picks the slide reads, as (right, drawn): the top band of Spot Check's
-#: first audit, four of five; and ten times as many at the same share.
-CP_SMALL = (4, 5)
-CP_LARGE = (40, 50)
-#: Each tail's share: a two-sided 95% range, the check's own alpha split in two.
-CP_TAIL = CHECK_ALPHA / 2
+#: first audit, four of five.
+CP_PICKS = (4, 5)
+#: The two band sizes the picks are read against: the check's top band, and
+#: one big enough that chance, not the picks alone, sets the low end.
+CP_BAND, CP_WIDE_BAND = 8, 32
+#: Which of the band's cells were picked, and the one pick that was wrong.
+#: Spread out, as a uniform draw lands; the rest nobody has seen.
+CP_PICKED = (0, 2, 3, 5, 7)
+CP_WRONG = 5
+#: Each tail's share: the check's alpha, unsplit (#4483), as `SpotCheck.tail`.
+CP_TAIL = CHECK_ALPHA
 #: The share axis: left edge, width and height, in `FBETA_CANVAS` units.
 CP_AXIS_X0, CP_AXIS_W, CP_AXIS_Y = 4.0, 15.1, 4.7
-#: The picks row, and the two lines of each end's flag, in canvas units.
-CP_PICKS_Y = 8.3
+#: The band's cells (left edge, width, bottom, height) and the two lines of
+#: each end's flag, in canvas units.
+CP_CELL_X0, CP_CELL_W, CP_CELL_Y, CP_CELL_H = 4.0, 0.85, 7.55, 0.6
 CP_FLAG_Y = (6.55, 5.95)
+#: The rows of the three ranges under the axis: a band of 8, of 32, endless.
+CP_RANGE_Y = (3.35, 2.25, 1.15)
 
 
 def clopper_fig() -> None:
-    """Clopper–Pearson in general, before Spot Check uses it (#4517).
+    """The likely range for a band of known size, before Spot Check uses it (#4517, #4932).
 
-    A random sample's count, turned into a range on the share it was drawn
-    from: the lowest share that would still give a count this high at least
-    `CP_TAIL` of the time, and the highest that would still give one this low.
-    Each end carries a flag saying exactly that, in words and as "1 time in
-    40", because the tails themselves are too thin to draw: a bar of 2.5% is a
-    sliver at any size a slide can show. The bounds are the app's
-    (`clopper_pearson_lower` / `_upper`, the functions the spot check's ranges
-    are built from).
+    A band's random picks, turned into a range on how many of the band are
+    right. The picks alone pin most of it in a small band: four seen right and
+    one seen wrong leave three unseen in a band of 8, so it holds 4 to 7 right.
+    In a bigger band chance has to set the low end, and the flag says where:
+    the count below which these picks would come up less than `CP_TAIL` of the
+    time, in words and as "1 time in 20", because the tail itself is too thin
+    to draw. The last range reads the same picks as if from an endless list:
+    Clopper–Pearson, the textbook range, which the check used before #4483.
+    Every bound is the app's (`hypergeometric_lower` / `_upper`, the functions
+    `likely_range` draws a band's range from, and `clopper_pearson_lower` /
+    `_upper`).
     """
     final = _cp_stage(CP_STAGES)
     box = tight_box(final)
@@ -7205,22 +7211,22 @@ def _cp_x(share: float) -> float:
     return CP_AXIS_X0 + share * CP_AXIS_W
 
 
-def _cp_bounds(right: int, drawn: int) -> tuple[float, float]:
-    return clopper_pearson_lower(right, drawn, CP_TAIL), clopper_pearson_upper(right, drawn, CP_TAIL)
+def _cp_band_bounds(size: int) -> tuple[int, int]:
+    """The fewest and most right items a band of *size* can hold, for `CP_PICKS`, each tail at `CP_TAIL`."""
+    right, drawn = CP_PICKS
+    return hypergeometric_lower(right, drawn, size, CP_TAIL), hypergeometric_upper(right, drawn, size, CP_TAIL)
 
 
 def _cp_pct(share: float) -> str:
     """A share as the slide says it: whole percent, or one decimal near the ends."""
     value = share * 100
-    return f"{value:.1f}%" if value > 99 or value < 1 else f"{value:.0f}%"
+    return f"{value:.1f}%" if value > 99 or value < 1 else f"{math.floor(value + 0.5):d}%"
 
 
-def _cp_flag(ax: plt.Axes, share: float, lines: tuple[str, str], ha: str) -> None:
-    """One end of the range: its tick on the axis, and what makes it the end.
+def _cp_flag(ax: plt.Axes, share: float, lines: tuple[str, str]) -> None:
+    """One end of a range: its tick on the axis, and what makes it the end.
 
-    The flag's own first line names the share, so the tick carries no number.
-    *ha* is the flag's alignment; a right-aligned flag ends at the axis's own
-    right end, so a flag near 100% stays inside the canvas.
+    The flag's own first line names the end, so the tick carries no number.
     """
     x = _cp_x(share)
     ax.plot([x] * 2, [CP_AXIS_Y - 0.18, CP_AXIS_Y + 0.18], color=INK, linewidth=2.2, zorder=4)
@@ -7232,62 +7238,75 @@ def _cp_flag(ax: plt.Axes, share: float, lines: tuple[str, str], ha: str) -> Non
         linestyle=(0, (2, 3)),
         zorder=2,
     )
-    anchor = {"right": CP_AXIS_X0 + CP_AXIS_W, "center": x}[ha]
     for y, words in zip(CP_FLAG_Y, lines, strict=True):
-        ax.text(anchor, y, words, ha=ha, va="center", fontsize=17, color=INK)
+        ax.text(x, y, words, ha="center", va="center", fontsize=17, color=INK)
 
 
-def _cp_range(ax: plt.Axes, y: float, lo: float, hi: float, words: str, ends: bool = False) -> None:
-    """A range under the axis, named on its left; *ends* prints its two shares under its ends."""
+def _cp_range(ax: plt.Axes, y: float, lo: float, hi: float, words: str) -> None:
+    """A range under the axis, named on its left, with its two shares under its ends."""
     x0, x1 = _cp_x(lo), _cp_x(hi)
     ax.plot([x0, x1], [y, y], color=INK, linewidth=5.0, solid_capstyle="butt", zorder=4)
     for x in (x0, x1):
         ax.plot([x, x], [y - 0.16, y + 0.16], color=INK, linewidth=2.2, zorder=4)
     ax.text(x0 - 0.25, y, words, ha="right", va="center", fontsize=17, color=INK)
-    if ends:
-        for x, share in ((x0, lo), (x1, hi)):
-            ax.text(x, y - 0.3, _cp_pct(share), ha="center", va="top", fontsize=16, color=INK)
+    for x, share in ((x0, lo), (x1, hi)):
+        ax.text(x, y - 0.3, _cp_pct(share), ha="center", va="top", fontsize=16, color=INK)
 
 
 def _cp_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the Clopper–Pearson figure."""
+    """Draw the first *stage* steps (1-based, cumulative) of the range figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, FBETA_CANVAS[0])
     ax.set_ylim(0, FBETA_CANVAS[1])
     ax.set_axis_off()
 
-    right, drawn = CP_SMALL
-    lo, hi = _cp_bounds(right, drawn)
-    odds = f"1 time in {round(1 / CP_TAIL)}"
+    right, drawn = CP_PICKS
+    assert len(CP_PICKED) == drawn and CP_WRONG in CP_PICKED and drawn - right == 1, CP_PICKED
+    # The notes' two claims: in a band of 8 the picks alone set both ends (the
+    # three unseen all wrong, or all right), and in a band of 32 chance sets
+    # the low end while the one wrong pick still sets the high one.
+    lo, hi = _cp_band_bounds(CP_BAND)
+    assert (lo, hi) == (right, CP_BAND - (drawn - right)), (lo, hi)
+    wide_lo, wide_hi = _cp_band_bounds(CP_WIDE_BAND)
+    assert wide_lo > right and wide_hi == CP_WIDE_BAND - (drawn - right), (wide_lo, wide_hi)
 
-    # ── stage 1: five picks at random, and the share they read ────────────────
-    for i in range(drawn):
+    # ── stage 1: a band of 8, five picks at random, and the share they read ───
+    mark_y = CP_CELL_Y + CP_CELL_H + 0.1
+    for index in range(CP_BAND):
+        x0 = CP_CELL_X0 + index * CP_CELL_W
+        picked = index in CP_PICKED
+        _acq_cell(ax, x0, CP_CELL_Y, CP_CELL_W, CP_CELL_H, "unlabeled", lw=3.2 if picked else 1.2)
+        if picked or stage >= 2:
+            good = index != CP_WRONG
+            ax.text(
+                x0 + CP_CELL_W / 2,
+                mark_y,
+                ("✓" if good else "✗") if picked else "?",
+                ha="center",
+                va="bottom",
+                fontsize=26,
+                color=(GREEN if good else RED) if picked else SOFT,
+                fontweight="bold" if picked else "normal",
+            )
+    words_x = CP_CELL_X0 + CP_BAND * CP_CELL_W + 0.5
+    for row, words in enumerate((f"{right} of {drawn} picks right,", f"drawn at random from a band of {CP_BAND}")):
         ax.text(
-            6.8 + i * 0.85,
-            CP_PICKS_Y,
-            "✓" if i < right else "✗",
-            ha="center",
+            words_x,
+            CP_CELL_Y + CP_CELL_H / 2 + 0.3 - row * 0.7,
+            words,
+            ha="left",
             va="center",
-            fontsize=30,
-            color=GREEN if i < right else RED,
+            fontsize=20,
+            color=INK,
         )
-    ax.text(
-        6.8 + drawn * 0.85,
-        CP_PICKS_Y,
-        f"{right} of {drawn} picks right, drawn at random",
-        ha="left",
-        va="center",
-        fontsize=20,
-        color=INK,
-    )
     _range_line(ax, CP_AXIS_X0, CP_AXIS_X0 + CP_AXIS_W, CP_AXIS_Y, z=3)
     for share, words in ((0.0, "0%"), (1.0, "100%")):
         ax.text(_cp_x(share), CP_AXIS_Y - 0.3, words, ha="center", va="top", fontsize=15, color=SOFT)
     ax.text(
         _cp_x(0.5),
         CP_AXIS_Y - 0.3,
-        "How much of the whole set is right",
+        "How much of the band is right",
         ha="center",
         va="top",
         fontsize=16,
@@ -7297,19 +7316,24 @@ def _cp_stage(stage: int) -> plt.Figure:
     ax.plot([_cp_x(point)], [CP_AXIS_Y], marker="o", markersize=10, color=INK, zorder=5)
     ax.text(_cp_x(point), CP_AXIS_Y + 0.25, _cp_pct(point), ha="center", va="bottom", fontsize=16, color=INK)
 
-    # ── stages 2-3: the share at each end that makes this count a fluke ───────
+    # ── stage 2: three unseen, so the band holds 4 to 7 right ─────────────────
     if stage >= 2:
-        _cp_flag(ax, lo, (f"If only {_cp_pct(lo)} were right,", f"{right} or more of {drawn}: {odds}"), "center")
+        _cp_range(ax, CP_RANGE_Y[0], lo / CP_BAND, hi / CP_BAND, f"a band of {CP_BAND}")
+    # ── stage 3: in a band of 32, the count below which these picks are a fluke
     if stage >= 3:
-        _cp_flag(ax, hi, (f"If {_cp_pct(hi)} were right,", f"{right} or fewer of {drawn}: {odds}"), "right")
-
-    # ── stage 4: everything between, the range ────────────────────────────────
+        odds = f"under 1 time in {round(1 / CP_TAIL)}"
+        _cp_flag(
+            ax,
+            wide_lo / CP_WIDE_BAND,
+            (f"Fewer than {wide_lo} of {CP_WIDE_BAND} right:", f"{right} or more of {drawn}, {odds}"),
+        )
+    # ── stage 4: the range that leaves ────────────────────────────────────────
     if stage >= 4:
-        _cp_range(ax, CP_AXIS_Y - 1.35, lo, hi, f"{right} of {drawn}")
-    # ── stage 5: the same share from ten times the picks ──────────────────────
+        _cp_range(ax, CP_RANGE_Y[1], wide_lo / CP_WIDE_BAND, wide_hi / CP_WIDE_BAND, f"a band of {CP_WIDE_BAND}")
+    # ── stage 5: the same picks read as if from an endless list ───────────────
     if stage >= CP_STAGES:
-        big_lo, big_hi = _cp_bounds(*CP_LARGE)
-        _cp_range(ax, CP_AXIS_Y - 2.1, big_lo, big_hi, f"{CP_LARGE[0]} of {CP_LARGE[1]}", ends=True)
+        endless = clopper_pearson_lower(right, drawn, CP_TAIL), clopper_pearson_upper(right, drawn, CP_TAIL)
+        _cp_range(ax, CP_RANGE_Y[2], *endless, "an endless list")
     return fig
 
 
@@ -7518,13 +7542,16 @@ def _floor_found_words(mid: float) -> str:
 def _floor_check_reading() -> str:
     """What the Threshold control says once the check has run, for the votes the figure draws.
 
-    The app's own ranges (`SpotCheck.range` and `recall_range`): each kept
-    band's Clopper–Pearson interval at the walk's split tail, `likely_range` at
-    `range_tail`, weighted by the band's size — over the kept set for precision
-    and over the walk's count of positives for recall. Worded as the control's
-    state line (`balanceSummary`), and rounded the way it rounds: it names the
-    set the check measured, the items nobody had voted on, and counts the kept
-    ones beside the votes (#4914).
+    The app's own ranges (`SpotCheck.range_over` and `recall_range_over`) over
+    the set the line kept when the check started (#4483), which here is the
+    walk's own: each kept band bounded exactly for its size, `likely_range` at
+    `range_tail` (each tail at the check's alpha, unsplit), weighted by the
+    band's size — over the kept set for precision and over the walk's count of
+    positives for recall. Worded as the control's state line (`balanceSummary`),
+    and rounded the way it rounds: it names the set its ranges describe, the
+    kept items nobody had voted on, and counts the ones the line keeps now
+    beside the votes (#4914). The line stays where it was, so those are the
+    kept set less the check's picks in it, which are votes now.
     """
     k = FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][1]
     assert k == FLOOR_K, k
@@ -7542,8 +7569,8 @@ def _floor_check_reading() -> str:
     found = _floor_found_words((min(1.0, lo / n_pos) + min(1.0, hi / n_pos)) / 2)
     percent = "–".join(f"{math.floor(100 * x / k + 0.5):d}" for x in (lo, hi))
     return (
-        f"Checked the top {k} you hadn't voted on · likely {percent}% right, "
-        f"{found} (checked {labelled}) · {FLOOR_K} more kept"
+        f"Checked the {k} kept you hadn't voted on · likely {percent}% right, "
+        f"{found} (checked {labelled}) · {FLOOR_K - labelled} more kept"
     )
 
 

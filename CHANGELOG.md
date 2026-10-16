@@ -17,6 +17,33 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
+  check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
+  and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
+  right of 5 in a band of 8 means 4 to 7 of them are right, which read "34–99%" and now reads "50–88%". The
+  range is now exact for each band's size, with no split, and it describes the items the line kept when the
+  check started instead of the set the check's walk ended on, so the note reads "Checked the 36 kept you
+  hadn't voted on · likely 55–80% right, about half of them found (checked 12) · 30 more kept". Priced on
+  3,568 real checks and simulated checks at clicks 25–100, it held the truth in at least 98.9% of them at
+  every preset, at 0.55–0.76 of the old width (`docs/experiments/2026-10-15-check-range-4483/REPORT.md`).
+
+- **A Good on a document collection is up to twice as fast without a GPU** (issue #4515). After a
+  Good, the server matches the new mark's SIFT points against every point on each shortlisted page,
+  1,000 pages without a GPU, and keeps the pairs whose nearest point is clearly nearer than the
+  next. It now ranks the two nearest points without working out every distance in full, and on a
+  CPU it works through a page at a time so the numbers stay in the processor's cache. On 8 cores of
+  an AMD EPYC 7713 a Good takes ~4.5 s at 5,000 pages (was 9.2 s) and ~5.7 s at 50,000 (was
+  9.7 s). On a V100 it takes ~1.25 s at 5,000 pages (was 1.6 s) and ~1.5 s at 50,000 (was
+  1.75 s). Rankings are unchanged.
+
+- **Autopilot checks for overlapping labels once a session** (issue #4909). When your Good and Bad answers
+  score close together, Autopilot still opens the spot check once it has started learning, but it no longer
+  asks again 25 votes later while they still overlap, and it does not ask after any other check has run. The
+  repeat had cost a quarter of a session's clicks: 50 to 57 of 200 went to checks, against 25 to 33 now.
+  Priced on today's app, asking once did as well or better over 200 clicks (mean F-beta +0.0006 at beta 1,
+  +0.0013 at beta 4), was level after the closing check, and reached Done at the same click with the same
+  result (`docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`). The check before Done is unchanged.
+
 - **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
   you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
   voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
@@ -900,6 +927,23 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
+  To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between
+  retrains (issue #4469). Without a GPU there was nothing to copy, but the cache still kept each page's
+  descriptors alive after the page's features were dropped. A long session, or a switch to another
+  collection, could leave up to 4 GB of memory held. Without a GPU nothing is cached now, at no cost in
+  speed. With one, the cache is emptied whenever the collection's pages change, on an Apple GPU as well
+  as on CUDA.
+
+- **The server no longer crashes on newer AMD CPUs with numpy 2.5.2 or later** (issue #4938). The server
+  pins OpenBLAS to its Haswell kernels on every x86 machine (issue #4481). The OpenBLAS bundled with numpy
+  2.5.2 and later re-tunes that pin on an AMD Zen 4 or Zen 5 CPU (EPYC 9004/9005, Ryzen 7000/9000). A
+  double-precision matrix product, or any SVD, then overruns the kernel's stack, so the server crashed the
+  first time it fitted a document collection's Stage-1 projection. Single-precision products also came out
+  slightly different from every other CPU's. The server now sets `OPENBLAS_L2_SIZE=2048` with the Haswell
+  pin, which keeps OpenBLAS's Haswell blocking on those CPUs. On any other CPU, or with an older numpy, it
+  changes nothing (`docs/experiments/2026-10-15-openblas-zen4-4938/REPORT.md`).
 
 - **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
   calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the

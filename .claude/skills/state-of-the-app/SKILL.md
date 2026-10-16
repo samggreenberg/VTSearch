@@ -132,6 +132,13 @@ same edit.
   Photo costs ~5 h per seed under the memory QOS, so it has 3. About 60% of a
   region seed is the full-label ceiling, so extra region seeds can run the
   clicks (`SOTA_PASS=trajectory`) with a ceiling for only some seeds.
+  - **The deadline sets the count, not the last review (owner, 2026-10-15, #4951):** "get as many seeds as we can,
+    not match whatever happened to add up last time", at max parallelization when the review is the only thing on
+    the GRID. `/expscratch/sgreenberg/sota-1016/drive.sh` does it in two lanes: cpu arrays (pack jobs past seed 34)
+    and up to 4 V100 packs. It claims seeds in order while each would end by the deadline, and claimed seeds run
+    out. 2026-10-16 reached 45 seeds.
+  - **Check `df /expscratch/$USER` first.** A Binary seed writes ~0.6 GB into each preset's dir, uncompressed. The
+    2026-10-16 run filled the 1 TB volume at 04:40 and lost seeds 45–49 (#4953).
 - **Shipped defaults** for everything else: the text opening (refused
   otherwise), the fused threshold, and no variant arms.
 - **Scale up in one step (owner, 2026-09-23):** settle the presentation on a
@@ -261,11 +268,25 @@ same edit.
   the rates read the cut the session's own F-beta would have drawn; click 0
   carries the text sort's. The harness records it from #4654 on
   (`oracle_fbeta*`, `fbeta_oracle_*`; `text_baseline.py`'s
-  `text_oracle_{precision,recall,fpr}_b*`). A page built from earlier runs
-  can only draw the cost cut those runs carried, which on a rare class cuts
-  deep (recall about 0.85, precision about 0.1) and sat under F1 on the
-  2026-10-05 page; the page labels it "cost-optimal cut" and says why. A
-  reskin cannot add the best cut: the next review's run draws it.
+  `text_oracle_{precision,recall,fpr}_b*`). Runs from before that carried only
+  the cost cut, and the cost cut is old news (owner, 2026-10-15, #4939): a
+  page that hides cost, as every SotA page does, neither draws it nor names
+  it. A page built from those runs therefore has no dotted line at all, and
+  a reskin cannot add the best cut: the next review's run draws it.
+- **The viewer shows where the app said stop (owner, 2026-10-15, #4939).**
+  Beside the whole curve, the page offers each run as one dot, at the click
+  Autopilot first reached Done and its value there. A pile of per-seed
+  curves becomes a scatter plot.
+  - A run never told to stop is a hollow dot at its last click. The series'
+    marker is the Kaplan-Meier median stop at the mean value there, ±1 SD,
+    and there is none where fewer than half the runs stopped.
+  - It reads the rows' `phase`, as `stopping.stopping_points` reads `t_stop`,
+    so it agrees with the report's stopping section.
+  - The points are one click a run, so a page built with
+    `SOTA_RUNS_BUDGET_MB=0` keeps them.
+  - A page built before #4939 cannot get them from a reskin (the payload
+    holds no phase). It shows the control disabled until the page is rebuilt
+    from its results with `viewer_betas.sh`.
 - **The end-of-run spot check is not a click; a prompted one is (#4496).**
   The default arm (`spot_check="weak"`, the app's since 2026-10-05; `"end"` on faces) checks the
   line once the voting steps are spent, so every run ends with
@@ -384,7 +405,9 @@ follows:
   owner: the report does not distribute the dataset). The viewer shows aggregates only: one page
   holds every session set, the starting photos folded into the dataset name
   (`viewer.py --beta-run BETA=DIR::DATASET`), and people shown as strata
-  (`viewer.py --category-map`, from `fhibe/person_strata.py`).
+  (`viewer.py --category-map`, from `fhibe/person_strata.py`). A stratum pools its people, but
+  each person is still a run (#4944). Until then a page read a stratum's dozen people at seed 0 as
+  one run: their spot-check gaps went uncarried, and its stops were the earliest of them.
 - **Strata replace classes and bands:** FHIBE's subject annotations (age, pronoun, natural skin
   colour, ancestry) and the census's face-size band. Report across them; the data is still the
   bench, not the subject.
@@ -555,7 +578,7 @@ things keep a report on its link:
   preset. A review with one session set commits
   `analyze.sh`'s `analysis-<path>/viewer.html`, which holds that path's panels
   only and names the path in its subtitle (#4654). It opens on F1 (#4635) and does not
-  offer cost (#4576); a page built before that gets both from
+  offer cost (#4576), nor the cost cut as its dotted line (#4939); a page built before that gets all three from
   `viewer.py --reskin <page> --default-metric '' --hide-metrics cost`.
   Its averaged line carries a run's last scored value through a spot check's
   rounds (#4624): a run inside a prompted check is scored once per round of

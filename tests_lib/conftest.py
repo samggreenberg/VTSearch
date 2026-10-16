@@ -65,6 +65,7 @@ from tests_shared.embedding_stubs import (  # noqa: E402
     make_stub_embedding_models_fixture,
 )
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit  # noqa: E402
+from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer  # noqa: E402
 from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
@@ -287,3 +288,15 @@ def pytest_unconfigure(config):
 def pytest_sessionfinish(session, exitstatus):
     """Stash the exit status so pytest_unconfigure can use it."""
     session.config._vtsearch_lib_exitstatus = exitstatus
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_make_scheduler(config, log):
+    """Loadgroup that survives a dead worker (#4925; see ``tests_shared``)."""
+    return make_crash_safe_scheduler(config, log)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_timeout_set_timer(item, settings):
+    """In an xdist worker, the per-test timeout reports on stderr (#4925; see ``tests_shared``)."""
+    return set_worker_timeout_timer(item, settings)

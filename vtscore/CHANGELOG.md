@@ -10,6 +10,35 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
+  #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
+  `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns
+  `alpha` whatever the bands (#4272's union split is dropped). `SpotCheck.start_balance(kept=)` records how
+  many unvoted items the line kept as the check starts (`SpotCheck.kept`); `range_over(top)` /
+  `recall_range_over(top)` bound any top set from the picks that fell in it (`parts_over`), `range_count` is
+  the set a finished check's ranges describe, and `is_stale` watches that set. `BalanceState` gains
+  `kept_at_check`, and its `precision` / `recall` describe that set; the eval harness passes the line's count
+  and logs it as `check_kept`. `range()` / `recall_range()` still describe the walk's own set. Priced at
+  `docs/experiments/2026-10-15-check-range-4483/REPORT.md`.
+
+- **`ratio_test_matches` ranks on `|b|^2 - 2ab`, in cache-sized blocks on a CPU** (issue #4515).
+  SIFT descriptors are integers in `[0, 255]`, so every partial sum of the expanded squared distance
+  is an integer below `2**24` and float32 holds it exactly. The two nearest neighbours are found on
+  `|b|^2 - 2ab` (one `baddbmm` with `+inf` on padded rows, then `min`, `scatter_` and `amin`), and
+  `|a|^2` and the square root are added for those two alone, so the pairs are the old `cdist` +
+  `topk` path's, pair for pair. On a CPU a block is `_MATCH_CHUNK_ELEMENTS_CPU` (2M) elements, about
+  a page against a template; the GPU budget stays `_MATCH_CHUNK_ELEMENTS` (32M).
+  `_stored_descriptors` replaces `_device_descriptors`: candidates are widened from their stored
+  dtype straight into the batch. A 1,000-page shortlist takes 2.95 s on 8 EPYC 7713 cores (was
+  6.55 s) and 0.24 s on a V100 (was 0.37 s).
+
+- **The weak-separation check prompts once** (issue #4909). New
+  `vtscore.training.thresholds.WEAK_CHECK_REPEAT` (`None`) is `weak_check_due`'s default `cooldown`, so a
+  check is due only while none has ended (it was `WEAK_CHECK_COOLDOWN`, 25: again 25 votes after the last
+  check). `WEAK_CHECK_COOLDOWN` stays 25 and now governs only `done_check_due`. The harness follows:
+  `simulate_voting_iterations(weak_repeat=)` defaults to 0 (once), and 25 is the arm before. Priced at
+  `docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`.
+
 - **A click cap backs every stop rule** (issue #4903). `vtscore.eval.autopilot_flow.STOP_CAP` (200) mirrors the
   app's `STOP_CAP_VOTES`: `stop_lights(..., at_cap=)` says stop under every rule, `AutopilotFlow(stop_cap=)` and
   `simulate_voting_iterations(stop_cap=)` default to it (`None` is no cap), and `capped_in_opening(phase,
@@ -201,6 +230,26 @@ instead, since every commit on `dev` is effectively a new app release.)
   `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
   face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
   MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
+
+- **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
+  `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
+  ordinary step at or past each, the `test_score_sink` entry also carries each live fold model's scores of the
+  withheld half (`fold_test_scores`, aligned with the snapshot's `ids`) and of the whole sim set
+  (`fold_sim_scores`, beside the final model's `sim_scores`, the items' `sim_labels` and `sim_vote`), whether the
+  step's haystacks dropped the voted items (`fold_sim_excluding`), and the vote behind each held-out score
+  (`fold_ids`). Every remainder-fitted map's haystacks replay from these, so the fold models' scale can be read
+  against the final model's on images no model has seen. Record only; the session is unchanged.
+
+- **The eval harness can carry the folds' held-out scores onto the final model's scale before the labels line**
+  (issue #4910). `simulate_voting_iterations` takes `labels_scale` (`None`, the default and the app: each fold
+  model's scores as it scored them; `"quantile"`: fold *k*'s scores carried onto the final model's scale by their
+  quantile in fold *k*'s haystack, as the fold-anchored cut carries its cut; `"quantile_tails"`: the same, keeping a
+  score's logit distance past either end of the haystack) and `labels_scale_shadow`, which fits the line on another
+  scale beside it on the same head and draws nothing. The calibration frame's base row gains `shadow_*` (the
+  shadow's Train cut, its Find line's threshold, set size and F-beta on the withheld half, and its d') and `xfer_*`
+  (how far the transfer moved the held-out logits and the class model, and the share of held-out Goods above their
+  fold's haystack). `vtscore.training.thresholds` gains `FOLD_SCALES`, `transfer_fold_orderings`,
+  `fold_transfer_shift` and `fold_transfer_clipped`. An experiment arm; the app is unchanged.
 
 - **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
   `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
@@ -1877,6 +1926,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **`ratio_test_matches(..., cache=True)` caches nothing on a CPU** (issue #4941). The #4469 cache
+  checks each entry by a weak reference to its numpy array, but on a CPU the stored tensor is a view
+  that holds that array, so the reference never expired and the cache pinned up to
+  `DEVICE_DESCRIPTOR_LIMIT_BYTES` (4 GiB) of dropped descriptor arrays. A CPU has no upload to save,
+  so `_stored_descriptors` returns the plain view there; the values are the same. A rebuilt
+  `structural_stage1` tile matrix now calls `release_device_descriptors()` on every device, where only
+  the CUDA scorer did, so an MPS session drops the old page set's descriptors too.
 
 - **Stable no longer counts a balance change as flips** (issue #4745).
   `vtscore.detectors.labeling_progress.inject_live_model` takes `beta=`, the

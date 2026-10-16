@@ -1109,8 +1109,9 @@ class DetectorContext:
         # switch, a fresh Find pass.
         "line_test",  # LineTest | None
         # How many votes the detector held when its last spot check ended,
-        # finished or cancelled: the weak-separation rule's cooldown counts
-        # from it (``weak_check_due``, #4496).  Goes with the check.
+        # finished or cancelled: the weak-separation check never prompts once
+        # it is set (``weak_check_due``, #4909), and the check before Done's
+        # cooldown counts from it (``done_check_due``).  Goes with the check.
         "check_ended_votes",  # int | None
         # The line the labels imply (``LabelsLine``, #4452): the class model
         # the last retrain's calibration folds fitted from the labels, and the
@@ -1843,7 +1844,7 @@ def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any
 
     ``separation`` is the labels line's d' (``None`` before a retrain has drawn
     one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
-    it, counted from the vote total when the last check ended, and
+    it, never once a check has ended (prompted once, #4909), and
     ``done_check_due`` is :func:`done_check_due` from the same count: whether
     the check Autopilot runs once its lights go green should run, or skip
     because one ended moments ago.  Neither is due in Find, which runs no

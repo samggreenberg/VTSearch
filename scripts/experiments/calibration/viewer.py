@@ -44,6 +44,15 @@ What the page lets a reader pick:
   keeps them, and ``--reskin`` takes the same two flags to set them on a page
   that is already built.  Hiding is not dropping: the numbers stay in the
   payload, so a hidden metric comes back with a reskin rather than a rebuild;
+* **show** — the whole curve (the default), or only **where the app said
+  stop** (#4939): each run becomes one dot, at the click Autopilot first
+  reached Done and its value there, so a pile of per-seed curves becomes a
+  scatter plot.  A run the app never told to stop is a hollow dot at its last
+  click.  Averaged, each series is one marker instead: the Kaplan–Meier median
+  stop (the runs never told to stop censored at their last click, as
+  :func:`stopping.km_median` reads it) at the mean value there, ±1 SD.  The
+  stop is read off the rows' ``phase`` (:func:`stop_points`); a page whose runs
+  carry none offers the curve alone and says why;
 * **overlay** — off (the default), every varying dimension is its own chart
   carrying one bold line and the ±1 SD shadow of the population under it; on,
   they all land on one chart in distinct hues and the shadows come off.  The
@@ -58,7 +67,11 @@ What the page lets a reader pick:
   value over every cut, so never below the line; the other cut metrics at the
   cut the run's objective draws), and on an older run the **cost-optimal cut**,
   which the page names as such because on a rare class it cuts deep and sits
-  below the line on precision and F.  Click 0 carries the text sort's own.
+  below the line on precision and F.  Click 0 carries the text sort's own.  A
+  page that hides cost (``--hide-metrics cost``, as every State of the App page
+  does) has retired the cost objective, so it never draws the cost cut either
+  (#4939): on such a page whose runs predate the best cut there is no dotted
+  line, and no word of the cost cut's.
 
 Four reference quantities, and each is drawn as what it is
 ------------------------------------------------------------
@@ -175,9 +188,16 @@ is derivable from the other at an acceptable size:
     shown in the page**, and if even the coarsest grid busts the budget the
     per-seed mode is disabled with the reason on screen — never silently
     dropped, and never quietly subsampled down to a tidier-looking set of runs.
+``stops``
+    Per run: where the app said stop and every metric there (:func:`stop_points`,
+    #4939).  One point a run rather than a series, so it is small enough to
+    keep on a page that drops the per-seed lines (#4651): ``ints`` holds the
+    ``(group, arm, seed, click, fired)`` rows, ``values`` the ``(run, metric)``
+    values at that click, at :data:`RUNS_SCALE`.
 
-Both are quantised to int16, NaN-masked, delta-coded along the click axis and
-gzipped; the page inflates them with ``DecompressionStream``.
+All are quantised to int16, NaN-masked, delta-coded along the last axis (the
+click axis, for a series) and gzipped; the page inflates them with
+``DecompressionStream``.
 
 Usage
 -----
@@ -580,6 +600,15 @@ class _Shape:
 #: name away from splitting in the wrong place.
 GSEP = "\u001f"
 
+#: The category a run was recorded under, kept beside its stratum by
+#: :func:`apply_category_map` (#4944).  A stratum pools many runs at one seed,
+#: so this is what still tells them apart in the steps that work run by run.
+RUN_CATEGORY = "__run_category"
+
+#: What identifies one run in the frame :func:`build_viewer` works on; a key
+#: the frame lacks is ignored, so off a category map this is group, arm, seed.
+RUN_KEYS: tuple[str, ...] = ("__group", "arm", "seed", RUN_CATEGORY)
+
 
 def _gkey(dataset: str, embedder: str, category: str) -> str:
     return GSEP.join((str(dataset), str(embedder or ""), str(category)))
@@ -750,6 +779,67 @@ def _runs_arrays(
                         continue
                     blocks[_slot(gi, ai, si)][mi, z] = val
     return (np.stack(blocks) if blocks else np.zeros((0, nM, nT))), index
+
+
+#: The rows of the stopped points' integer block, in order (#4939).
+STOP_COLUMNS: tuple[str, ...] = ("group", "arm", "seed", "t", "fired")
+
+
+def stop_points(main: pd.DataFrame, shape: _Shape) -> tuple[np.ndarray, np.ndarray] | None:
+    """``(ints, values)``: each run's stopped point (#4939), or ``None`` when no row carries a ``phase``.
+
+    A run's stop is the first click the phase machine read ``done``
+    (:data:`~vtscore.eval.autopilot_flow.STOPPING_PHASE`): the app announces
+    *All quality indicators are green* there, once, and a user may stop
+    (``stopping.stopping_points``' ``t_stop``, the first fire, not the
+    sustained one).  A run the app never told to stop is kept, at its last
+    click with ``fired`` 0, so a run that never trained, which *main* holds as
+    the empty set at every click (:func:`curves.score_empty_sets`), is on the
+    chart as the loss it was rather than missing from it.
+
+    *main* is the frame the page is built from, gaps carried and empty sets
+    scored, so the value at a stop is the one the whole curve has at that
+    click.  ``ints`` is ``(len(STOP_COLUMNS), runs)``: the run's indices into
+    *shape*, the click, and ``fired``.  ``values`` is ``(runs, metrics)``,
+    in *shape*'s metric order.  Runs are sorted by group, arm and seed, which
+    keeps the delta-coded index small.  On a page that pools categories into
+    strata, a run is one recorded category (:data:`RUN_KEYS`), so a stratum
+    holds a dot per person rather than its earliest stop (#4944).
+    """
+    from vtscore.eval.autopilot_flow import STOPPING_PHASE  # noqa: PLC0415
+
+    if "phase" not in main.columns or not main["phase"].notna().any():
+        return None
+    keys = [k for k in RUN_KEYS if k in main.columns]
+    df = main.assign(__t=pd.to_numeric(main["t"], errors="coerce")).dropna(subset=["__t"])
+    df = df[df["__t"] >= 1].sort_values([*keys, "__t"], kind="stable")
+    done = df["phase"].fillna("").astype(str).str.strip() == STOPPING_PHASE
+    first = df[done].groupby(keys, sort=False, dropna=False).head(1)
+    last = df.groupby(keys, sort=False, dropna=False).tail(1)
+    fired_at = pd.MultiIndex.from_frame(first[keys])
+    never = last[~pd.MultiIndex.from_frame(last[keys]).isin(fired_at)]
+    runs = pd.concat([first.assign(__fired=1), never.assign(__fired=0)], ignore_index=True)
+
+    gi = [shape.gi.get(tuple(str(gk).split(GSEP))) for gk in runs["__group"]]
+    ai = [shape.ai.get(a) for a in runs["arm"]]
+    si = [shape.si.get(int(s)) if pd.notna(s) else None for s in runs["seed"]]
+    keep = np.array([g is not None and a is not None and s is not None for g, a, s in zip(gi, ai, si, strict=True)])
+    if not keep.any():
+        return np.zeros((len(STOP_COLUMNS), 0)), np.zeros((0, len(shape.metrics)))
+    ints = np.array(
+        [
+            [g for g, k in zip(gi, keep, strict=True) if k],
+            [a for a, k in zip(ai, keep, strict=True) if k],
+            [s for s, k in zip(si, keep, strict=True) if k],
+            runs.loc[keep, "__t"].to_numpy(dtype=float),
+            runs.loc[keep, "__fired"].to_numpy(dtype=float),
+        ],
+        dtype=float,
+    )
+    cols = [spec["key"] for spec in shape.metrics]
+    values = runs.loc[keep, cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    order = np.lexsort((ints[2], ints[1], ints[0]))
+    return ints[:, order], values[order]
 
 
 def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.DataFrame:
@@ -939,10 +1029,16 @@ def apply_category_map(df: pd.DataFrame | None, mapping: Mapping[str, str] | Non
 
     For a bench whose categories name people (FHIBE, #4762): the page then offers strata, and its
     per-category moments pool exactly over the people in each, as "all categories" pools them.
+
+    The category itself is kept in :data:`RUN_CATEGORY`, because a run is a person, not a stratum:
+    a stratum holds a dozen people at seed 0, and the steps that work run by run (carrying a run's
+    gaps, scoring the clicks before its first detector, counting its cells, finding where the app
+    said stop) would otherwise read the dozen as one run (#4944).
     """
     if df is None or mapping is None or df.empty or "category" not in df.columns:
         return df
-    return df.assign(category=df["category"].astype(str).map(mapping).fillna("other"))
+    cat = df["category"].astype(str)
+    return df.assign(**{RUN_CATEGORY: cat}, category=cat.map(mapping).fillna("other"))
 
 
 def _skyline_arrays(skyline: pd.DataFrame | None, shape: _Shape) -> tuple[np.ndarray, np.ndarray, str]:
@@ -1167,12 +1263,14 @@ def build_viewer(  # noqa: C901
     main["__group"] = _group_key(main)
     kind = oracle_kind(main)
     oracle_keys = add_oracle_columns(main)
+    # Run by run, and on a page of strata a run is one recorded category (RUN_KEYS, #4944).
+    cell_keys = (*curves.KEYS, RUN_CATEGORY)
     if fill_gaps:
-        main = curves.fill_gaps(main, ("__group", "arm", "seed"))
+        main = curves.fill_gaps(main, RUN_KEYS)
     if (denominator is None or denominator.empty) and baseline is not None and not baseline.empty:
-        denominator = curves.attempted_cells(main, baseline)
+        denominator = curves.attempted_cells(main, baseline, keys=cell_keys, within=(RUN_CATEGORY,))
     if score_empty_sets:
-        main = curves.score_empty_sets(main, denominator, baseline)
+        main = curves.score_empty_sets(main, denominator, baseline, keys=cell_keys)
         main["__group"] = _group_key(main)
         added = main[curves.NO_DETECTOR] == 1
         for k in oracle_keys:
@@ -1197,8 +1295,10 @@ def build_viewer(  # noqa: C901
     if "embedder" not in den.columns:
         den["embedder"] = ""
     den["__group"] = _group_key(den)
+    # A cell is a run: a seed, or on a page of strata a seed of one recorded category (#4944).
+    cell_cols = [c for c in ("seed", RUN_CATEGORY) if c in den.columns]
     cells = {
-        (str(arm), str(gk)): int(d.loc[:, ["seed"]].drop_duplicates().shape[0])
+        (str(arm), str(gk)): int(d.loc[:, cell_cols].drop_duplicates().shape[0])
         for (arm, gk), d in den.groupby(["arm", "__group"])
     }
 
@@ -1276,13 +1376,33 @@ def build_viewer(  # noqa: C901
     else:
         runs_note = "No per-seed rows were found, so per-seed lines are unavailable."
 
+    # Where the app said stop, one point a run (#4939).  Kept whatever the
+    # per-seed budget: it is a click and a value per metric, not a series.
+    stops = None
+    found = stop_points(main, shape)
+    if found is None:
+        stops_note = "These runs carry no Autopilot phase, so where the app said stop is unknown."
+    elif not found[0].shape[1]:
+        stops_note = "No run on this page has a stop to show."
+    else:
+        ints, at_stop = found
+        stops = {
+            "cols": list(STOP_COLUMNS),
+            "ints": _encode(ints, scale=1),
+            "values": _encode(at_stop, scale=RUNS_SCALE),
+        }
+        sizes["stops"] = _payload_bytes(stops["ints"]) + _payload_bytes(stops["values"])
+        n_fired = int(ints[STOP_COLUMNS.index("fired")].sum())
+        stops_note = f"The app said stop in {n_fired:,} of {ints.shape[1]:,} runs."
+
     payload = {
         # 2 adds `agg.omean` / `agg.on` (the oracle companion) and `skyline`.
         # Nothing branches on it - the page treats both as optional, which is
         # what lets `--reskin` push a template improvement onto a schema-1 page
         # built before either existed.  It is here so a reader can tell which
-        # reports still predate them.
-        "schema": 2,
+        # reports still predate them.  3 adds `stops` (#4939), optional the
+        # same way.
+        "schema": 3,
         "title": title,
         "subtitle": subtitle,
         "anchor": {"has": has_anchor, "label": anchor_label},
@@ -1306,6 +1426,11 @@ def build_viewer(  # noqa: C901
         "agg": agg,
         "runs": runs,
         "runs_note": runs_note,
+        # Each run's stopped point (#4939); `null` with the reason when the
+        # runs carry no phase.  Absent on a page built before it, which the
+        # page treats as "rebuild to get it".
+        "stops": stops,
+        "stops_note": stops_note,
         "n_cells": int(sum(cells.values())),
         "oracle_metrics": [k for k in oracle_keys if k not in RANKING_METRICS],
         # Which cut the dotted line is (#4654): the objective's best cut, or the

@@ -26,8 +26,8 @@ from vtscore.training.thresholds import (
     BALANCE_UNCHECKED,
     DEFAULT_BETA,
     NO_BALANCE,
-    WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     balance_schedule,
 )
@@ -261,8 +261,13 @@ class TestTheBalanceArm:
         # Advisory at beta 1 (#4427): the audited set is the walk's end; the count is the unchecked rule's,
         # which on this tiny corpus can be every unvoted item left - possibly none.
         assert last["check_audited"] >= 1 and last["floor_count"] >= 0
-        assert 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
-        assert last["check_labelled"] >= 5 and all(p["phase"] != "check" or p["t"] > 15 for p in picks)
+        # The ranges describe the set the line kept when the check started (#4483), which may be none.
+        assert last["check_kept"] >= 0
+        if last["check_kept"] > 0:
+            assert 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0 and last["check_labelled"] >= 0
+        assert sum(p["phase"] == "check" for p in picks) >= 5 and all(
+            p["phase"] != "check" or p["t"] > 15 for p in picks
+        )
 
     def test_a_recall_leaning_balance_keeps_at_least_as_much(self):
         lo, _ = self._run(beta=0.5)
@@ -441,7 +446,8 @@ class TestTheWeakSeparationPrompt:
         assert production_spot_check({}) == "weak"
         assert params["weak_separation"].default == WEAK_SEPARATION_D
         assert params["weak_min_t"].default == WEAK_CHECK_MIN_VOTES
-        assert params["weak_repeat"].default == WEAK_CHECK_COOLDOWN
+        assert WEAK_CHECK_REPEAT is None, "the app prompts once (#4909)"
+        assert params["weak_repeat"].default == 0, "the harness's once"
         assert params["weak_phase"].default == "learned", "the app trains no detector on Autopilot's opening"
 
     def test_by_default_face_crops_never_prompt_and_other_media_do(self):

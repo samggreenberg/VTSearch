@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 import time
@@ -79,6 +80,108 @@ def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
     import hashlib  # noqa: PLC0415
 
     return hashlib.sha256(f"{salt}:{page_id}".encode()).digest()[0] % 2 == 1
+
+
+# --------------------------------------------------------------------------
+# #4934 arms: verify each candidate page on only some of its keypoints
+# --------------------------------------------------------------------------
+
+#: ``SiftMatcher.verify_many`` as the app ships it. Every run starts from it, so runs made one
+#: after another in a process (``sota_documents_arms.py``) never stack their cuts.
+_SHIPPED_VERIFY_MANY: list[Any] = []
+#: Candidates verified on a cut, and candidates verified, since the cut was installed.
+CUT_HITS = [0, 0]
+
+
+_STRENGTH: dict[Path, dict[str, np.ndarray]] = {}
+
+
+def strength_orders(path: Path, ids: Sequence[str]) -> dict[str, np.ndarray]:
+    """``strength_order.py``'s rows of each page, strongest SIFT response first (read once a process)."""
+    if path not in _STRENGTH:
+        z = np.load(path, allow_pickle=False)
+        order = z["order"]
+        starts = np.append(z["starts"], len(order))
+        _STRENGTH[path] = {str(p): order[starts[i] : starts[i + 1]] for i, p in enumerate(z["page_ids"])}
+    ranks = _STRENGTH[path]
+    missing = [p for p in ids if p not in ranks]
+    if missing:
+        raise SystemExit(f"{path} has no strength order for {len(missing)} pages, e.g. {missing[0]}")
+    return ranks
+
+
+def kept_rows(n: int, keep: int, frac: float) -> int:
+    """How many of a page's *n* keypoints a cut keeps: *keep* of them, or the fraction *frac*."""
+    want = keep if keep else max(2, math.ceil(frac * n))
+    return min(n, want)
+
+
+def install_keypoint_cut(
+    feats: dict, ids: Sequence[str], *, keep: int, frac: float, kp_order: str, strength: Optional[Path]
+) -> int:
+    """Verify every candidate page on some of its keypoints: the strongest, the largest, or its first rows.
+
+    *keep* keeps that many keypoints a page; *frac* (with ``keep=0``) keeps that fraction of each
+    page's. Only the candidate side is cut: a Good's template keeps every keypoint in its box. A
+    cut keeps the stored order of the rows it keeps, so a page it does not shorten is verified
+    exactly as before. A page is cut the first time it is verified and the cut is kept for the
+    run, so the verification and device caches see stable arrays. Returns the number of pages
+    the cut would shorten.
+    """
+    import vtscore.media.structural as structural  # noqa: PLC0415
+    from vtscore.media.structural import StructuralFeatures  # noqa: PLC0415
+
+    restore_verify_many()
+    if kp_order == "strength" and strength is None:
+        raise SystemExit("--kp-order strength needs --strength")
+    ranks = strength_orders(strength, ids) if kp_order == "strength" and strength is not None else None
+    page_of = {id(feats[p]): p for p in ids}
+    if ranks is not None:
+        wrong = [p for p in ids if len(ranks[p]) != feats[p].count]
+        if wrong:
+            raise SystemExit(
+                f"strength order of {wrong[0]} has {len(ranks[wrong[0]])} rows, its features {feats[wrong[0]].count}"
+            )
+    cut: dict[int, Any] = {}
+
+    def cut_of(f: Any) -> Any:
+        hit = cut.get(id(f))
+        if hit is None:
+            p = page_of.get(id(f))
+            k = kept_rows(f.count, keep, frac)
+            if p is None or k >= f.count:  # not a page of the tier (a crop), or not shortened
+                hit = f
+            else:
+                if ranks is not None:
+                    rows: Any = np.sort(ranks[p][:k])
+                elif kp_order == "scale":  # the largest SIFT scales: structure bigger than a text stroke
+                    rows = np.sort(np.argsort(-np.asarray(f.keypoints[:, 2], dtype=np.float32), kind="stable")[:k])
+                else:
+                    rows = slice(0, k)
+                hit = StructuralFeatures(keypoints=f.keypoints[rows], descriptors=f.descriptors[rows])
+            cut[id(f)] = hit
+        return hit
+
+    full = structural.SiftMatcher.verify_many
+    CUT_HITS[:] = [0, 0]
+
+    def verify_many(self: Any, template: Any, candidates: Sequence[Any]) -> Any:
+        swapped = [cut_of(c) for c in candidates]
+        CUT_HITS[0] += sum(s is not c for s, c in zip(swapped, candidates))
+        CUT_HITS[1] += len(candidates)
+        return full(self, template, swapped)
+
+    structural.SiftMatcher.verify_many = verify_many
+    return sum(kept_rows(feats[p].count, keep, frac) < feats[p].count for p in ids)
+
+
+def restore_verify_many() -> None:
+    """Put back the shipped ``SiftMatcher.verify_many`` (a no-op before any cut)."""
+    import vtscore.media.structural as structural  # noqa: PLC0415
+
+    if not _SHIPPED_VERIFY_MANY:
+        _SHIPPED_VERIFY_MANY.append(structural.SiftMatcher.verify_many)
+    structural.SiftMatcher.verify_many = _SHIPPED_VERIFY_MANY[0]
 
 
 # --------------------------------------------------------------------------
@@ -525,8 +628,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="#4488: write stop_log.jsonl - per click the line and the unlabelled pages above it",
     )
+    ap.add_argument(
+        "--keep-kp", type=int, default=0, help="#4934 arms: verify each candidate page on this many of its keypoints"
+    )
+    ap.add_argument(
+        "--keep-kp-frac", type=float, default=0.0, help="#4934 arms: ... or on this fraction of each page's keypoints"
+    )
+    ap.add_argument(
+        "--kp-order",
+        choices=("strength", "scale", "rows"),
+        default="strength",
+        help="#4934: which keypoints a cut keeps: the strongest SIFT responses (--strength), the largest scales, "
+        "or the first stored rows",
+    )
+    ap.add_argument("--strength", type=Path, help="#4934: strength_order.py's per-page response order for the tier")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    if args.keep_kp and args.keep_kp_frac:
+        ap.error("--keep-kp and --keep-kp-frac are two arms; pass one")
     if args.shard_stage1:
         import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
 
@@ -571,6 +690,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         f"{n_tiles / len(ids):.1f} tiles/page, {sum(t.vectors.nbytes for t in tiles.values()) / 2**30:.2f} GiB of tiles",
         flush=True,
     )
+    restore_verify_many()
+    if args.keep_kp or args.keep_kp_frac:
+        n_cut = install_keypoint_cut(
+            feats, ids, keep=args.keep_kp, frac=args.keep_kp_frac, kp_order=args.kp_order, strength=args.strength
+        )
+        what = f"{args.keep_kp}" if args.keep_kp else f"{args.keep_kp_frac:g} of each page's"
+        print(f"#4934 cut: {n_cut} of {len(ids)} pages verified on {what} keypoints ({args.kp_order})", flush=True)
+    import torch  # noqa: PLC0415
+
     (args.out / "run.json").write_text(
         json.dumps(
             {
@@ -585,6 +713,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "beta": args.beta,
                 "thin": args.thin,
                 "seed_crop": args.seed_crop,
+                "keep_kp": args.keep_kp,
+                "keep_kp_frac": args.keep_kp_frac,
+                "kp_order": args.kp_order if (args.keep_kp or args.keep_kp_frac) else None,
+                "cuda": torch.cuda.is_available(),
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },
@@ -760,7 +892,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         last = steps[-1]
         print(
             f"  {cid}: {len(pool_ids)} pages, {int(positive.sum())} positives; click 0 AP {steps[-1 - last['v']]['ap']:.2f}, "
-            f"final (v{last['v']}) AP {last['ap']:.2f}, found {last['found']}; {time.time() - t_class:.0f}s",
+            f"final (v{last['v']}) AP {last['ap']:.2f}, found {last['found']}; {time.time() - t_class:.0f}s"
+            + (f"; verified on a cut {CUT_HITS[0]}/{CUT_HITS[1]}" if args.keep_kp or args.keep_kp_frac else ""),
             flush=True,
         )
         for name, rows in (("steps.csv", steps), ("clicks.csv", clicks), ("positives_final.csv", misses)):

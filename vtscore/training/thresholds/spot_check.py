@@ -27,10 +27,13 @@ model-chosen votes carry (#4256, #4257).
   first deeper step does not, shallower while it does not fall; the peak is
   the set it keeps (#4411's ``fb-walk``).  How the check treats the line
   follows the preset (:func:`check_shape`, #4427).
-* **How close.**  A checked set carries a **likely range** for its precision
-  and its recall: each audited band's Clopper-Pearson interval, exact where
-  the band was censused, with each tail at ``alpha / bands`` (the union bound
-  over the bands in the set), weighted by band size (:meth:`SpotCheck.range`).
+* **How close.**  A check carries a **likely range** for the precision and
+  the recall of the set the line kept when it started (#4483, the owner's
+  ruling of 2026-10-15; the walk's own set where no count was recorded): each
+  band's part of that set is bounded exactly for its known size from the picks
+  that fell in it (hypergeometric, each tail at ``alpha``; exact where the part
+  was censused, 0-100% where no pick reached it), weighted by size
+  (:meth:`SpotCheck.range_over`).
 
 The line always keeps a set.  The states a balance reports
 (:data:`BALANCE_STATES`): ``unchecked`` and ``checked``.  A finished result
@@ -60,8 +63,8 @@ import numpy as np
 
 from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR
 
-#: The level the likely range is drawn at: each audited band's tail is
-#: ``alpha / bands`` over the bands in the set (#4257's alpha).
+#: The level the likely range is drawn at: each band's tail (#4257's alpha).
+#: #4272 split it over the bands in the set; #4483 dropped the split.
 CHECK_ALPHA = 0.05
 
 #: The balance's cap at beta <= 1: the top 32 (#4257's ``a:top32``, the #4267
@@ -289,15 +292,18 @@ def rounds_for(candidate: int, base: int = BAND_BASE) -> int:
 
 
 def range_tail(rounds: int, alpha: float = CHECK_ALPHA) -> float:
-    """Each tail of a band's interval when *rounds* bands make up the set: ``alpha / rounds``.
+    """Each tail of a band's bound when *rounds* bands make up the set: ``alpha``, whatever the bands (#4483).
 
-    The union bound: with every band's interval at this tail, the set's range
-    holds at ``1 - alpha``.  A plain 90% range covers too rarely after an early
-    pass (the same labels decide the walk and draw the range): at 10% and
-    0.44%, a check confirmed at its first verdict showed a range above the
-    truth 11% of the time, against 4.0% with this tail (#4272).
+    #4272 split *alpha* over the bands (the union bound) because, under the
+    precision floor, the same labels decided a pass and drew its range: a plain
+    90% range sat above the truth 11% of the time after a first pass.  The
+    check has been advisory since #4452, and with exact band bounds and no
+    split the range held the truth in at least 98.9% of 3,568 real checks and
+    of simulated checks at clicks 25-100, every preset, for 0.01-0.08 less
+    width (``docs/experiments/2026-10-15-check-range-4483/REPORT.md``).
     """
-    return alpha / max(1, rounds)
+    del rounds
+    return alpha
 
 
 # ---------------------------------------------------------------- the bound
@@ -321,6 +327,37 @@ def clopper_pearson_upper(right: int, labelled: int, level: float) -> float:
     return float(beta.ppf(1.0 - level, right + 1, labelled - right))
 
 
+def hypergeometric_lower(right: int, labelled: int, size: int, level: float) -> int:
+    """The fewest right items a set of *size* can hold, at confidence ``1 - level``, when *right* of *labelled* uniform picks were.
+
+    The least K under which drawing *right* or more right ones has
+    probability above *level* (the exact one-sided bound for sampling without
+    replacement from a set of known size).  It is never below *right*.
+    """
+    if labelled <= 0 or right <= 0:
+        return 0
+    from scipy.stats import hypergeom  # noqa: PLC0415
+
+    k = np.arange(right, size - (labelled - right) + 1)
+    return int(k[np.argmax(hypergeom.sf(right - 1, size, k, labelled) > level)])
+
+
+def hypergeometric_upper(right: int, labelled: int, size: int, level: float) -> int:
+    """The most right items a set of *size* can hold, at confidence ``1 - level``, when *right* of *labelled* uniform picks were.
+
+    The greatest K under which drawing *right* or fewer right ones has
+    probability above *level*.  It is never above ``size - (labelled - right)``.
+    """
+    if labelled <= 0:
+        return size
+    if right >= labelled:
+        return size
+    from scipy.stats import hypergeom  # noqa: PLC0415
+
+    k = np.arange(right, size - (labelled - right) + 1)
+    return int(k[np.flatnonzero(hypergeom.cdf(right, size, k, labelled) > level)[-1]])
+
+
 @dataclass(frozen=True)
 class LikelyRange:
     """How much of a set is likely right, from the check's labels inside it.
@@ -341,15 +378,22 @@ class LikelyRange:
 def likely_range(right: int, labelled: int, candidate: int, tail: float) -> LikelyRange:
     """The range shown for a set of *candidate* items whose *labelled* uniform labels hold *right*.
 
-    Exact (``right / candidate``) for a census; a Clopper-Pearson interval with
-    each tail at *tail* otherwise.  The reference's ``likely_range``.
+    Exact (``right / candidate``) for a census; otherwise the exact bound for a
+    set of known size (:func:`hypergeometric_lower` / :func:`hypergeometric_upper`,
+    each tail at *tail*), 0-100% with no labels.  #4483 replaced the
+    Clopper-Pearson interval, which bounds an endless list: a band of 8 with 4
+    of 5 right holds 4 to 7 right items, which it read as 34-99% and this reads
+    as 50-88%.  The reference is ``hg_bounds`` in
+    ``scripts/experiments/state_of_app/check_range_4483.py``.
     """
     if candidate > 0 and labelled >= candidate:
         exact = right / candidate
         return LikelyRange(exact, exact, labelled, right)
-    lo = clopper_pearson_lower(right, labelled, tail)
-    hi = clopper_pearson_upper(right, labelled, tail)
-    return LikelyRange(lo, hi, labelled, right)
+    if candidate <= 0 or labelled <= 0:
+        return LikelyRange(0.0, 1.0, max(0, labelled), max(0, right))
+    lo = hypergeometric_lower(right, labelled, candidate, tail)
+    hi = hypergeometric_upper(right, labelled, candidate, tail)
+    return LikelyRange(lo / candidate, hi / candidate, labelled, right)
 
 
 # ---------------------------------------------------------------- the ranking
@@ -503,8 +547,14 @@ class SpotCheck:
     band: int | None = None
     status: str = CHECK_RUNNING
     #: The top-*k* unvoted set as it stood when the check finished (its own
-    #: votes already cast), for :meth:`is_stale`.  ``None`` while running.
+    #: votes already cast), for :meth:`is_stale`; *k* is :attr:`range_count`.
+    #: ``None`` while running.
     fingerprint: tuple[int, ...] | None = None
+    #: How many unvoted items the line kept when the check started: the set
+    #: its ranges describe (#4483), the top of :attr:`ranking_ids`.  ``None``
+    #: where no count was recorded (a forced ``trim`` arm, whose line is the
+    #: walk's end): the ranges describe the walk's set.
+    kept: int | None = None
     _generator: Any = field(default=None, repr=False, compare=False)
     _rank: dict[int, int] = field(default_factory=dict, repr=False, compare=False)
     _audited: set[int] = field(default_factory=set, repr=False, compare=False)
@@ -524,6 +574,7 @@ class SpotCheck:
         fine: bool = False,
         guard: float | None = None,
         shallow_only: bool | None = None,
+        kept: int | None = None,
     ) -> "SpotCheck":
         """A running walk over *ranking_ids* (the unvoted ranking, rank order) at *beta*, with its first band drawn (#4413).
 
@@ -546,6 +597,10 @@ class SpotCheck:
         fall, so it costs the start's picks alone and can only cut the line;
         ``None``, the app's, follows :func:`check_shape`: shallower-only under
         the ``trim`` shape, the full walk under ``advisory``).
+
+        *kept* is how many of *ranking_ids* the line keeps as the check
+        starts (the top of the ranking): the set the finished check's ranges
+        describe (#4483).  ``None`` leaves them on the walk's own set.
         """
         ids = tuple(int(i) for i in ranking_ids)
         if not ids:
@@ -561,6 +616,8 @@ class SpotCheck:
             raise ValueError(f"guard must be >= 0, got {guard!r}")
         if picks is not None and picks < 1:
             raise ValueError(f"picks must be >= 1, got {picks!r}")
+        if kept is not None and kept < 0:
+            raise ValueError(f"kept must be >= 0, got {kept!r}")
         start_count = schedule.candidate if start_count is None else start_count
         edges = band_edges_fine(len(ids), min(start_count, len(ids))) if fine else band_edges(len(ids))
         start = bands_for(min(start_count, len(ids)), edges)
@@ -577,6 +634,7 @@ class SpotCheck:
             shallow_only=check_shape(beta) == CHECK_TRIM if shallow_only is None else bool(shallow_only),
             bands=start,
             k=int(edges[start]),
+            kept=None if kept is None else min(int(kept), len(ids)),
             _generator=_rng(seed),
             _rank={cid: i for i, cid in enumerate(ids)},
         )
@@ -609,8 +667,13 @@ class SpotCheck:
 
     @property
     def tail(self) -> float:
-        """Each band's tail in the current set's range: ``alpha`` split over its bands."""
+        """Each band's tail in a range: ``alpha`` (#4483; #4272 split it over the set's bands)."""
         return range_tail(self.bands, self.alpha)
+
+    @property
+    def range_count(self) -> int:
+        """The size of the set a finished check's ranges describe: :attr:`kept`, or the walk's set without one."""
+        return self.k if self.kept is None else self.kept
 
     def band_ids(self, b: int) -> tuple[int, ...]:
         """The ids in band *b*, in rank order."""
@@ -676,40 +739,69 @@ class SpotCheck:
             return None
         return fbeta_score(tp, float(self.edges[bands]), self.n_pos, self.beta)
 
+    def parts_over(self, top: int) -> list[tuple[int, int, int]]:
+        """``(size, labelled, right)`` for each band's part of the top *top* ranks, from every pick the walk drew.
+
+        A band wholly inside the set is one part; the band the set's edge cuts
+        counts only its ranks above the edge and the picks that fell there,
+        which are uniform over that part; a band the walk never drew from is
+        a part with no picks.
+        """
+        top = max(0, min(int(top), len(self.ranking_ids)))
+        out: list[tuple[int, int, int]] = []
+        for b in range(self.n_bands):
+            lo, hi = self.edges[b], min(self.edges[b + 1], top)
+            if lo >= top:
+                break
+            labelled = right = 0
+            for cid, ok in self.labels.items():
+                r = self._rank.get(cid)
+                if r is not None and lo <= r < hi:
+                    labelled += 1
+                    right += int(ok)
+            out.append((hi - lo, labelled, right))
+        return out
+
+    def _bounds_over(self, top: int) -> tuple[float, float, int, int, int]:
+        """The summed bounds on the right items in the top *top*: ``(lo, hi, size, labelled, right)``."""
+        lo = hi = 0.0
+        size_all = labelled_all = right_all = 0
+        for size, labelled, right in self.parts_over(top):
+            part = likely_range(right, labelled, size, self.tail)
+            lo += size * part.lo
+            hi += size * part.hi
+            size_all += size
+            labelled_all += labelled
+            right_all += right
+        return lo, hi, size_all, labelled_all, right_all
+
+    def range_over(self, top: int) -> LikelyRange | None:
+        """The likely range of the top *top*'s precision: its parts' bounds, weighted by size; ``None`` for an empty set.
+
+        Each part is bounded exactly for its size (:func:`likely_range` at
+        :attr:`tail`): 0-100% where no pick reached it.  The set's range is the
+        parts' size-weighted sum, which holds wherever every part's does.
+        """
+        lo, hi, size, labelled, right = self._bounds_over(top)
+        if size <= 0:
+            return None
+        return LikelyRange(lo / size, hi / size, labelled, right)
+
+    def recall_range_over(self, top: int) -> LikelyRange | None:
+        """The likely range of the top *top*'s recall: its right items' bounds over the walk's count of positives."""
+        lo, hi, size, labelled, right = self._bounds_over(top)
+        if size <= 0:
+            return None
+        return LikelyRange(min(1.0, lo / self.n_pos), min(1.0, hi / self.n_pos), labelled, right)
+
     def recall_range(self) -> LikelyRange | None:
         """The likely range for the current set's recall: the positives' range over the walk's count."""
-        if self.k <= 0:
-            return None
-        lo = hi = 0.0
-        labelled_all = right_all = 0
-        for b in range(self.bands):
-            size, labelled, right = self.band_counts(b)
-            part = likely_range(right, labelled, size, self.tail)
-            lo += size * part.lo
-            hi += size * part.hi
-            labelled_all += labelled
-            right_all += right
-        return LikelyRange(min(1.0, lo / self.n_pos), min(1.0, hi / self.n_pos), labelled_all, right_all)
+        return self.recall_range_over(self.k) if self.k > 0 else None
 
     def range(self) -> LikelyRange:
-        """The likely range of the current set's precision: its bands' intervals, weighted by band size.
-
-        Each band's interval is Clopper-Pearson at :attr:`tail` (exact where
-        the band was censused); the set's range is their size-weighted mean,
-        which holds at ``1 - alpha`` by the union bound over the bands.
-        """
-        if self.k <= 0:
-            return LikelyRange(0.0, 1.0, 0, 0)
-        lo = hi = 0.0
-        labelled_all = right_all = 0
-        for b in range(self.bands):
-            size, labelled, right = self.band_counts(b)
-            part = likely_range(right, labelled, size, self.tail)
-            lo += size * part.lo
-            hi += size * part.hi
-            labelled_all += labelled
-            right_all += right
-        return LikelyRange(lo / self.k, hi / self.k, labelled_all, right_all)
+        """The likely range of the current set's precision (the walk's set under test; :meth:`range_over`)."""
+        rng = self.range_over(self.k) if self.k > 0 else None
+        return rng if rng is not None else LikelyRange(0.0, 1.0, 0, 0)
 
     # ---- the rounds
 
@@ -882,10 +974,10 @@ class SpotCheck:
     # ---- after the check
 
     def is_stale(self, ranking: LineRanking, also_voted: Iterable[int] = ()) -> bool:
-        """Whether the ranking under the result has moved since the check finished."""
+        """Whether the ranking under the result has moved since the check finished: its top :attr:`range_count` changed."""
         if self.fingerprint is None:
             return False
-        return ranking.fingerprint(self.k, also_voted) != self.fingerprint
+        return ranking.fingerprint(self.range_count, also_voted) != self.fingerprint
 
     def as_dict(self) -> dict[str, Any]:
         """The check as a client sees it: the band being audited, the set under test, the labels so far and the range."""
@@ -1113,7 +1205,9 @@ class BalanceState:
     ``threshold`` (:func:`vtscore.state.core.detector_balance_state`):
     ``status`` is ``unchecked``, ``checked``, or ``gate`` on a structural
     detector's line (:func:`gate_balance_state`); ``precision``
-    and ``recall`` are the audited set's likely ranges; ``fbeta`` its estimate.
+    and ``recall`` are the likely ranges of the set the line kept when the
+    check started (``kept_at_check``, #4483), or of the audited set where the
+    check recorded no count; ``fbeta`` is the walk's estimate for its own set.
     Under the ``advisory`` shape (#4427) the audited set is the walk's end and
     the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
     """
@@ -1139,6 +1233,10 @@ class BalanceState:
     #: one not trained on this corpus yet - or with every item in it voted.
     #: A check cannot start on such a line, so a client offers none.
     checkable: bool = True
+    #: How many unvoted items the line kept when the last check started: the
+    #: set ``precision`` and ``recall`` describe (#4483).  ``None`` while
+    #: unchecked, and where the ranges describe the audited set instead.
+    kept_at_check: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1152,6 +1250,7 @@ class BalanceState:
             "shape": self.shape,
             "audited": self.audited,
             "checkable": self.checkable,
+            "kept_at_check": self.kept_at_check,
         }
 
 
@@ -1238,18 +1337,22 @@ def balance_state(
             float(beta), BALANCE_UNCHECKED, count, None, None, None, False, schedule, shape, None, checkable
         )
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
+    # The ranges describe the set the line kept when the check started (#4483),
+    # or the walk's own set where the check recorded no count.
+    top = applicable.range_count
     return BalanceState(
         float(beta),
         BALANCE_CHECKED,
         count,
-        applicable.range(),
-        applicable.recall_range(),
+        applicable.range_over(top),
+        applicable.recall_range_over(top),
         applicable.fbeta_estimate(),
         stale,
         schedule,
         shape,
         applicable.k,
         checkable,
+        applicable.kept,
     )
 
 
@@ -1312,6 +1415,8 @@ __all__ = [
     "check_shape",
     "clopper_pearson_lower",
     "clopper_pearson_upper",
+    "hypergeometric_lower",
+    "hypergeometric_upper",
     "likely_range",
     "line_under",
     "mixture_positives",

@@ -76,6 +76,7 @@ def probe(C: Any) -> list[str]:
         simulate_voting_iterations,
     )
     from vtscore.training import thresholds as T
+    from vtscore.training.thresholds import FOLD_SCALES
 
     rows: list[tuple[str, str, str]] = []
     refused: list[tuple[str, str, str]] = []
@@ -289,6 +290,17 @@ def probe(C: Any) -> list[str]:
             rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
         else:
             refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
+    # #4910's fold scale: an arm the app does not take; the shadow draws nothing, but it adds row columns.
+    for name, var, value in (
+        ("labels_scale", "CALIB_LABELS_SCALE", C.LABELS_SCALE),
+        ("labels_scale_shadow", "CALIB_LABELS_SCALE_SHADOW", C.LABELS_SCALE_SHADOW),
+    ):
+        if value is None:
+            continue
+        if value not in FOLD_SCALES:
+            refuse(name, var, "must be one of %s" % ", ".join(FOLD_SCALES))
+        elif name == "labels_scale" and value != "raw":
+            rows.append((name, value, "<unset> = raw, each fold model's held-out scores as it scored them (the app)"))
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.
@@ -413,7 +425,8 @@ def probe(C: Any) -> list[str]:
     for knob, var, value, param, shipped in (
         ("weak_d", "CALIB_WEAK_D", C.WEAK_D, "weak_separation", T.WEAK_SEPARATION_D),
         ("weak_min_t", "CALIB_WEAK_MIN_T", C.WEAK_MIN_T, "weak_min_t", T.WEAK_CHECK_MIN_VOTES),
-        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_COOLDOWN),
+        # The app's None (once, #4909) is the harness's 0.
+        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_REPEAT or 0),
     ):
         resolved(knob, var, value if value is not None else harness_default(param), shipped)
     # The app has no detector to read separation from during its opening, so it
