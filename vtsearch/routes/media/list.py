@@ -26,6 +26,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import MediaResponse
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
@@ -741,10 +742,11 @@ def media_source_batch(body: dict):
 @medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 def media_audio(query: dict, media_id: int):
-    """Stream the WAV audio bytes for a single media item.
+    """Stream the audio bytes for a single media item.
 
-    Returns an ``audio/wav`` file response on success (HTTP 200), or a 404
-    JSON envelope if the media does not exist or its bytes are unavailable.
+    Returns the bytes on success (HTTP 200), typed by their container (an MP3
+    import is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON
+    envelope if the media does not exist or its bytes are unavailable.
 
     Accepts ``?variant=original`` to stream the pre-clean payload of an item a
     cleaner rewrote at load time (see :func:`_variant_media`).
@@ -773,11 +775,12 @@ def media_audio(query: dict, media_id: int):
         resp.set_etag(etag)
         resp.headers["Cache-Control"] = "private, max-age=86400"
         return resp
+    mimetype, sniffed_ext = sniff_audio_format(media_bytes)
     resp = make_response(
         send_file(
             io.BytesIO(media_bytes),
-            mimetype="audio/wav",
-            download_name=f"media_{media_id}.wav",
+            mimetype=mimetype,
+            download_name=f"media_{media_id}{sniffed_ext}",
         )
     )
     resp.set_etag(etag)

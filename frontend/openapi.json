@@ -14771,7 +14771,7 @@
     },
     "/api/medias/{media_id}/audio": {
       "get": {
-        "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
+        "description": "Returns the bytes on success (HTTP 200), typed by their container (an MP3\nimport is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON\nenvelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
         "operationId": "media_audio",
         "parameters": [
           {
@@ -14800,7 +14800,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Stream the WAV audio bytes for a single media item.",
+        "summary": "Stream the audio bytes for a single media item.",
         "tags": [
           "medias"
         ]

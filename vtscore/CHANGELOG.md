@@ -33,6 +33,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   than running unbound. Register the contexts first, omit the ids, or build the manager with
   `binds_context=False`.
 
+- **`AudioMediaType.media_response` types the payload by its container** (issue #4981). It returned
+  `audio/wav` and a `media_<id>.wav` download name whatever the bytes, though an MP3 / FLAC / OGG / M4A
+  import keeps its file verbatim. New `vtscore.media.audio.sniff.sniff_audio_format(data)` returns
+  `(mimetype, extension)` from the leading bytes (`RIFF`, `fLaC`, `OggS`, `ftyp` at offset 4, `ID3` or an
+  MPEG frame sync, an ADTS frame sync), defaulting to `("audio/wav", ".wav")`; `media_response` uses it,
+  keeping the `media_<id>` stem. Additive for callers; a WAV payload is served exactly as before.
+
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
   `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns

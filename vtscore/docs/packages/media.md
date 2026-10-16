@@ -42,7 +42,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, speech extractor, synthetic audio generator |
 | `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
