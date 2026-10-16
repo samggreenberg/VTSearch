@@ -1,8 +1,9 @@
 # The fold models already score positives on the final model's scale; the labels line's Good error is selection (issue #4936)
 
-**Status (2026-10-15): measured on Binary Photo at beta 1, in 702 sessions of today's app. No correction recovers
-the positives' map better than today's raw pooling, so by the issue's rule no A/B follows. Region Photo was not
-run.**
+**Status (2026-10-16): measured on Binary Photo at beta 1, in 702 sessions of today's app. No correction recovers
+the positives' map better than today's raw pooling, so by the issue's rule no A/B follows. Region Photo (seed 0,
+139 sessions, below) is the other way round: there the fold models score positives 0.16 to 0.24 logit too low,
+which cancels the selection error, so correcting the scale alone loses F-beta.**
 
 **Scored side by side on the withheld half, which no model has seen, a calibration fold model and the final model
 put the same positives at the same logit.** The final model's logit minus the fold model's is −0.01 to +0.02
@@ -245,10 +246,68 @@ Good mean furthest below the truth.*
   identity, the quantile map clamps every positive to −0.47, and the Good mean lands 1.5 logit low.
 - The same panels at vote 50 are in `figures/examples_vote50.png`.
 
+## Region Photo: the fold models score positives too low, and that hides the selection error
+
+The same measurement on Region Photo (DINOv3 patches, max-pooled, opened on SigLIP's text sort), seed 0, 144
+cells at beta 1, from the same frozen tree. 13 cells ran 2026-10-15 19:41–20:02; the run then stopped for the
+State of the App run (#4951), and the other 131 ran 2026-10-16 07:03–09:35. 139 sessions trained a head; 5
+small-band sessions found no Good. Region has no typed-query hold, and the replay matches the run at every step
+(Find's F-beta and the quantile shadow to 5e-7). The grouped calibration path does not name its held-out votes, so
+the two vote shifts are blank here. Tables in `tables/region/`, figures in `figures/region/`.
+
+![The true map on Region Photo](figures/region/true_map.png)
+
+![The Good component on Region Photo, and today's error split](figures/region/good_component.png)
+
+| vote | positives: final − fold | slope | rank corr. | top 1% negatives | Good mean − truth, today | of which selection | of which scale |
+|---|---|---|---|---|---|---|---|
+| 10 | +0.24 (± 0.01) | 1.14 | 0.83 | +0.06 (± 0.01) | −0.12 (± 0.03) | +0.12 (± 0.02) | −0.24 (± 0.01) |
+| 25 | +0.16 (± 0.01) | 1.15 | 0.90 | +0.03 (± 0.01) | +0.04 (± 0.03) | +0.20 (± 0.02) | −0.16 (± 0.01) |
+| 50 | +0.17 (± 0.01) | 1.12 | 0.91 | +0.03 (± 0.01) | +0.02 (± 0.02) | +0.19 (± 0.01) | −0.17 (± 0.01) |
+| 100 | +0.16 (± 0.01) | 1.09 | 0.92 | −0.00 (± 0.01) | +0.00 (± 0.02) | +0.16 (± 0.01) | −0.16 (± 0.01) |
+| 150 | +0.18 (± 0.01) | 1.08 | 0.91 | −0.00 (± 0.01) | −0.06 (± 0.02) | +0.13 (± 0.01) | −0.18 (± 0.01) |
+
+- **On patch scores the final model puts the positives higher than a fold model does**: +0.16 to +0.24 logit in
+  the mean, in nearly every session (the 10th percentile is +0.07 to +0.09, and only 12% to 28% of snapshots fall
+  within ±0.1). The negatives barely move (−0.05 to −0.08; the top 1% −0.00 to +0.06). So here the fold models'
+  scale is wrong for the positives, the opposite of Binary. That is the direction #4910's Region reading pointed:
+  its remainder map raised the Good component early.
+- **The two errors cancel.** Selection lifts the Good component by +0.12 to +0.20, and the fold models' low scale
+  pulls it down by −0.16 to −0.24. On average today's Good component lands within 0.06 of the withheld positives'
+  mean from vote 25 on. That holds only on average. On large bands the scale wins and the Good component sits 0.08
+  to 0.22 below the truth. On small bands selection wins and it sits 0.11 to 0.19 above. Medium is near zero
+  (`tables/region/by_band.csv`).
+- **Correcting the scale alone exposes the selection error, and it costs F-beta on the same heads:**
+
+| vote | quantile | tails kept | robust z | oracle | oracle, Goods only | oracle, Bads only |
+|---|---|---|---|---|---|---|
+| map's bias on the withheld positives, vote 150 (today −0.18) | −0.42 | −0.22 | −0.02 | +0.00 | +0.00 | −0.18 |
+| Find's F-beta gain, vote 25 | −0.015 (± 0.010) | −0.025 (± 0.011) | −0.043 (± 0.012) | −0.017 (± 0.011) | −0.002 (± 0.008) | −0.004 (± 0.004) |
+| Find's F-beta gain, vote 50 | −0.040 (± 0.010) | −0.050 (± 0.010) | −0.078 (± 0.014) | −0.049 (± 0.010) | −0.035 (± 0.008) | −0.004 (± 0.004) |
+| Find's F-beta gain, vote 100 | −0.008 (± 0.007) | +0.012 (± 0.005) | −0.068 (± 0.011) | −0.029 (± 0.007) | −0.028 (± 0.006) | +0.003 (± 0.003) |
+| Find's F-beta gain, vote 150 | −0.179 (± 0.018) | −0.009 (± 0.006) | −0.050 (± 0.008) | −0.036 (± 0.007) | −0.035 (± 0.006) | −0.007 (± 0.003) |
+
+  Today's line scores 0.57 / 0.61 / 0.61 / 0.65 at votes 25 / 50 / 100 / 150. The oracle and the robust z recover
+  the positives' map (the robust z from vote 75 on, within ±0.02). Both then leave the Good component 0.13 to 0.24
+  above the truth, and both lose: the oracle 0.017 to 0.049, the robust z 0.043 to 0.078. The other presets read
+  the same on these heads. At beta 1/4 the oracle loses 0.017 to 0.053 and the robust z 0.050 to 0.104; at beta 4
+  they lose 0.011 to 0.041 and 0.021 to 0.043 (`tables/region/same_head_fbeta_b025.csv`, `_b4.csv`).
+- **Examples** (`figures/region/examples_vote100.png`). `tie@large` seed 0 at vote 100: the final model scores
+  its positives 0.43 above fold 0, and the Good component sits 0.42 below the truth. `parking meter@small` seed 0:
+  the final model scores its positives where fold 0 does (+0.01), and selection leaves the Good component 0.40
+  above the truth.
+
+**On Region, #4910's "two mistakes that cancel" is literal.** A scale correction pays only alongside a selection
+correction, and neither pays alone. So no A/B follows here either. The issue's rule would A/B a correction that
+recovers the positives' map, and on Region the robust z does. But on the same heads it loses at every preset
+(0.02 to 0.10), and the oracle, which recovers the map exactly, loses too. #4910 found the same-head reading equal
+to the closed loop to the third decimal, so a closed-loop A/B would price a loss already measured. The fix that
+could pay is a joint one, and it belongs with #4937.
+
 ## What this leaves
 
-- **No A/B.** The issue's rule was an A/B only of a correction that recovers the positives' map. Today's raw
-  pooling already does, to 0.02 logit. The deployable candidates either carry the negatives' map onto the
+- **No A/B, on either path.** The issue's rule was an A/B only of a correction that recovers the positives' map.
+  On Binary, today's raw pooling already does, to 0.02 logit. The deployable candidates either carry the negatives' map onto the
   positives (both quantile maps, the robust z) or read in-sample scores (the held-out votes' shift). The training
   votes' shift is right, but it is a no-op: ±0.003 at beta 1.
 - **The negatives' scale is a real gap that nothing measured here pays to close.** The held-out Bads sit about
@@ -258,9 +317,9 @@ Good mean furthest below the truth.*
   has to find because the held-out Goods are the session's easy positives. It is largest on small bands.
   #4937 can read the same instrument. Setting the Good mean to the truth on the same heads gains +0.020
   (± 0.006) at vote 50 and loses from vote 100 on, so a fix there is more than moving the mean.
-- **Region Photo** (#4910 found the quantile map raising the Good component early on patch scores) was not run;
-  the owner put Binary first. The instrument runs there too, except that the grouped path does not name its
-  held-out votes, so the two vote shifts stay blank.
+- **On Region the scale and selection errors cancel** (above). Any correction there has to move both, which makes
+  Region the harder case for #4937: a selection fix alone would push the Good component 0.16 to 0.24 below the
+  truth.
 - The "No Mean Feat" slide's appendix note on the transfer (`slides/fragments/quantile-transfer.md`) still reads as
   #4910 left it; this study says why the transfer fails, and a line there can cite it when the deck is next touched.
 
@@ -272,7 +331,8 @@ Good mean furthest below the truth.*
 | harness | `simulate_voting_iterations(fold_scale_steps=)`, `_fold_scale_arrays`, `_keep_fold_sim`; `run_cells.py` `CALIB_SAVE_FOLD_SCALES` |
 | launcher | `scripts/experiments/state_of_app/fold_scale_4936.sh` (`dirs`, `cpack`, `gpack`) |
 | analysis | `scripts/experiments/state_of_app/fold_scale_4936.py` (`measure`, `report`, `examples`); its tables in `tables/`, its figures in `figures/` |
-| results | `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-binary-b1` (snapshots about 2.6 MB a cell); per-snapshot table `/expscratch/sgreenberg/fold-scale-4936/final/snapshots.csv.gz` |
+| results | Binary `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-binary-b1` (snapshots about 2.6 MB a cell), per-snapshot table `/expscratch/sgreenberg/fold-scale-4936/final/snapshots.csv.gz`; Region `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-region-b1`, table `/expscratch/sgreenberg/fold-scale-4936/region-final/snapshots.csv.gz` |
+| Region's schedule | 13 cells 2026-10-15 19:41–20:02, then held for the State of the App run; the other 131 released 2026-10-16 07:03 by a job that waited for no `sota*` job for 15 minutes after 07:00. 4 V100 packs (24 cells each, the GPU hidden) and 9 cpu packs (4 cells, 2 threads each). The first 9 cpu packs, submitted by mistake without a hold at 20:04 on 10-15, ran under a minute before they were cancelled and wrote nothing |
 | tests | `tests_lib/detectors/test_fold_scales.py`: the session unchanged, the arrays on exactly the snapshots `run_cells.py` keeps, each held-out score equal to its fold model's score of that vote in the sim pass, and the quantile transfer on the replayed haystacks equal to the run's own |
 
 ## Reproduce
@@ -287,6 +347,8 @@ R=/expscratch/$USER/state-of-the-app/2026-10-15-fscale4936-binary-b1/results
 python scripts/experiments/state_of_app/fold_scale_4936.py measure --results $R --out <dir> --procs 32
 python scripts/experiments/state_of_app/fold_scale_4936.py report --out <dir> \
   --docs docs/experiments/2026-10-15-fold-scale-4936/tables --figs docs/experiments/2026-10-15-fold-scale-4936/figures
+# Region: gpack/cpack region 1 (CALIB_PACK_PAR=24 CALIB_PACK_MEM=480G on V100; CALIB_CPUS=2 CALIB_PACK_PAR=4
+# CALIB_PACK_MEM=80G on cpu), then measure/report the region-b1 results into tables/region and figures/region
 python scripts/experiments/state_of_app/fold_scale_4936.py examples --results $R --out <dir> --click 100 \
   --figs docs/experiments/2026-10-15-fold-scale-4936/figures
 ```

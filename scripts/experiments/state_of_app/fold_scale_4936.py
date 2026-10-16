@@ -688,6 +688,8 @@ def figures(df: pd.DataFrame, folded: pd.DataFrame, figdir: Path) -> None:
     x = np.array(clicks, dtype=float)
 
     def band(ax, col, label, color, frame=folded, ls="-"):
+        if col not in frame or frame[col].isna().all():  # a map the path cannot draw (the vote shifts on Region)
+            return
         m, se = _curve(frame, col, clicks)
         ax.plot(x, m, ls, color=color, label=label, marker="o", ms=3)
         ax.fill_between(x, m - se, m + se, color=color, alpha=0.15, lw=0)
