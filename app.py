@@ -485,7 +485,15 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 # imported rather than executed, so the ``__main__`` block below never
 # runs. The Dockerfile sets ``VTSEARCH_SERVER_INIT=1`` to trigger the
 # same startup sequence at import time.
-if os.environ.get("VTSEARCH_SERVER_INIT") == "1":
+#
+# Only on import, never under ``python app.py``: the Dockerfiles set the
+# variable image-wide, so it is also there for a ``python app.py --autodetect``
+# run in a container, where the ``__main__`` block below already decides
+# whether to start a server. Honouring it there gave the headless run the
+# server's whole startup -- its banners on stdout ahead of the
+# ``--progress-format json`` stream, the env-var admin overrides, the
+# embedder preload -- and ran it twice for a ``python app.py`` server.
+if os.environ.get("VTSEARCH_SERVER_INIT") == "1" and __name__ != "__main__":
     initialize_server()
 
 

@@ -23,7 +23,7 @@ Two consequences shape anything that revisits this:
 
 The styles themselves live in `vtscore/eval/patch_styles.py` (`whole_image`,
 `max_patch`, `max_patch_hac`), and `style=None` resolves to the app's own geometry
-rather than being a third thing — a patch dataset on the MLP trainer gets
+rather than being a third thing — a patch dataset on the app's trainer (`APP_TRAINER`) gets
 `max_patch`, whose methods delegate to `pool_box_from_media` / `bad_negative_vecs`
 / `media_score_rows`. The runner is `scripts/experiments/max_patch/`.
 

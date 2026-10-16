@@ -248,6 +248,8 @@ export class ImportDefaultsSettingsComponent {
     if (d.clipper) return true;
     if (d.clipper_params && Object.keys(d.clipper_params).length > 0) return true;
     if (d.source_specs && d.source_specs.length > 0) return true;
+    // Cleanup choices have no editor here, but only Reset can clear them.
+    if (d.cleaners && Object.keys(d.cleaners).length > 0) return true;
     return false;
   }
 

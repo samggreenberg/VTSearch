@@ -22,11 +22,10 @@ set: **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset
 **Export** button at the top of **Verified Bad** does the same for the
 pictures that did not match, and the three buttons next to the **Threshold**
 on the left act on only the matches you haven't checked yet. What they send
-is whatever the line keeps at that moment: the unchecked starting set, or
-the set a spot check ended on. An AutoFind of the same detector has nobody to
-check it, so it sends the unchecked starting set and says so, with a
-`balance` entry beside the threshold in the formats that write out the full
-results.
+is whatever the line keeps at that moment. An AutoFind of the same detector
+draws its line the same way, from the detector's answers; it has nobody to
+check it, so it says the line is unchecked, with a `balance` entry beside the
+threshold in the formats that write out the full results.
 
 ## Step 1: Choose what to send
 

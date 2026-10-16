@@ -4,7 +4,8 @@ Dev-only experiment harness for **Part 1** of `docs/plans/vtsbrowse-empirical-tu
 choose the VTSBrowse Stage-1 projection defaults (`n_neighbors`, `min_dist`, and
 the `compact` boolean) **per embedder**, by a parameter sweep scored with a
 ceiling-normalized taxonomy-separability metric, plus label-free structure
-guards and multi-seed stability. Runs on the GRID GPU cluster.
+guards and multi-seed stability. Runs on the GRID GPU cluster. Report:
+[`docs/experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md`](../../../docs/experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md).
 
 Not shipped: this directory is outside the package, outside `deptry`'s prod
 surface, and must not affect `./run-tests.sh`.
@@ -83,5 +84,5 @@ cache does not fit on the 50 GB `/exp/$USER` volume; results write to
 | `sweep.py` | the grid × seeds × compact sweep → CSV rows |
 | `summarize.py` | recommendations, compaction verdict, N-analysis → `summary.json` |
 | `plots.py`, `visualize.py` | report figures + layout scatter grids |
-| `build_report.py` | assemble the self-contained HTML report (figures inlined) → the study's `docs/experiments/<study>/report.html` |
+| `build_report.py` | assemble the self-contained HTML report (figures inlined) → `UMAP_REPORT_OUT` (default `./report.html`); the committed copy is the study's `report.html` |
 | `run_all.sbatch` | the end-to-end GRID job |

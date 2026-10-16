@@ -194,28 +194,29 @@ COCO, images repaired and withheld on the non-COCO half, and the **band ledger**
 a fold merges boxes, so it can push an image the class already banded past the
 scatter guard and out of every band (248 across *C*; `clock` nets −16).
 
-**That is the right outcome, and the build now says so.** #3637 scored the three
+**That is the right outcome, and the build said so.** #3637 scored the three
 readings of it against COCO's exhaustive boxes: on the images they disagree
 about, the class really is scattered 88% of the time, and no cell is anywhere
-near needing the images back. `canonicalise` reports the count on the same line
-as the boxes folded, `SCALE_FOLD_MODE` selects the arm, and `band_fold.py`
-re-measures it. Full study:
+near needing the images back. `canonicalise` reported the count on the same line
+as the boxes folded, `SCALE_FOLD_MODE` selected the arm, and `band_fold.py`
+re-measured it. Full study:
 [`docs/experiments/2026-09-05-band-fold-3637/`](../../../docs/experiments/2026-09-05-band-fold-3637/REPORT.md).
 
 `SCALE_VG_NAMES_AUDITED` records which classes have actually had this measured,
 because "no spelling is listed" and "no spelling exists" are the same empty
-table. All twelve as of #3618, listed one by one rather than derived from
-`SCALE_CLASSES` so that a newly added class is not marked audited by arithmetic.
-A build names the classes that have not been, since a rebuild is the moment the
-fix is cheap. Full study:
+table. All twenty-five: the first twelve at #3618 and the #3588 thirteen at their
+promotion, listed one by one rather than derived from `SCALE_CLASSES` so that a
+newly added class is not marked audited by arithmetic. The `vg_scale` build named
+the classes that had not been, since a rebuild is the moment the fix is cheap.
+Full study:
 [`docs/experiments/2026-09-04-vg-name-coverage/`](../../../docs/experiments/2026-09-04-vg-name-coverage/REPORT.md).
 
 **A class's review rule is part of its definition, so it lives in the config
 too.** A reviewer votes on bare images — the slates name files by image id
 alone — which makes the dataset name the entire brief. For a class whose plain
 English name does not settle the question, `pile_config.SCALE_CLASS_RULES`
-carries both halves of the rule, and `review_name(cls, pass)` is what every
-slate maker builds its `detector` column from:
+carries both halves of the rule, and `review_name(cls, suffix)` (the suffix
+names the pass) is what every slate maker builds its `detector` column from:
 
 | field | meaning |
 |---|---|
@@ -292,8 +293,10 @@ Embedders got re-run because the cache had no home of its own.
 
 ## The grid
 
-Eight datasets x five embedders, complete — 40 of 40 cells built as of
-2026-08-28.
+The configured grid is `pile_config.DATASETS` x `pile_config.EMBEDDERS`, each
+dataset paired with every embedder of its media type (`pile_config.cells()`);
+`build_pile.py --list` shows which cells are on disk. `on_request` datasets are
+built only when named with `--datasets`.
 
 | embedder | dim | note |
 |---|---:|---|
@@ -302,6 +305,8 @@ Eight datasets x five embedders, complete — 40 of 40 cells built as of
 | `dinov3_patch` | 768 | the only patch-capable one, so the only region-voting column |
 | `clip` | 512 | a different pretraining *family*, at base capacity |
 | `clip_l` | 768 | the same family at large capacity |
+| `embeddinggemma2` | 768 | EmbeddingGemma 2, evaluation only (#4837) |
+| `face` | 512 | FaceNet; embeds only `face`-media datasets (`fhibe_faces_*`, #4699) |
 
 Differing dims mean galleries are **not** interchangeable across columns.
 
@@ -311,14 +316,26 @@ either alone. That is what the CLIP columns are for: `clip`/`clip_l` change the
 pretraining family at two capacities, which is the axis #3292 needed and could
 not get from the SigLIP pair. The middle SigLIP columns (`siglip_l`, `siglip2`)
 are still deliberately absent — a study learns little from interpolating
-between endpoints — and `build_pile.py --embedders siglip2` rebuilds one if a
-result ever needs that split.
+between endpoints. Adding one means an `EMBEDDERS` entry first: `build_pile.py`
+refuses an embedder that table does not name.
 
 | dataset | medias | boxed | note |
 |---|---:|:--:|---|
 | `visual_genome_m` | 4193 | yes | demo dataset; ground-truth regions |
 | `caltech101_m` | 838 | no | demo dataset; whole-image labels only |
 | `coco_val` | 4952 | yes | assembled from the staged val2017 zip |
+| `coco_better` | — | yes | `vg_scale`'s question asked of COCO 2017 alone, no VG: the classes *C* (`SCALE_CLASSES`) in three bands (#3983) |
+| `coco_better_full`, `coco_better_full_s0`…`_s7` | — | yes | `on_request`; every COCO 2017 image with no designation draw; single-vector columns whole, the `dinov3_patch` column in the eight shards |
+| `fhibe_{1024,640}`, `fhibe_faces[_roll,_sim]_{1024,640}` | — | photos yes, faces no | `on_request`; Sony's consented face benchmark at two stored sizes, and its FaceNet crops (#4699) |
+| `o365_better` | — | yes | `on_request`; see [below](#a-second-source-o365_better-4815) |
+| `apptitude` | — | no | `on_request`; see [below](#born-digital-apptitude-4356) |
+
+The rows below are **retired** cells: still on disk and readable, but no longer
+in `DATASETS`, so nothing builds or rebuilds them ([retired with Visual
+Genome](#retired-with-visual-genome-4038)).
+
+| dataset | medias | boxed | note |
+|---|---:|:--:|---|
 | `vg_box_small` | 12000 | yes | box-banded VG: union box **below one patch** |
 | `vg_box_medium` | 12000 | yes | box-banded VG: patch → HAC leaf |
 | `vg_box_large` | 12000 | yes | box-banded VG: leaf → the whole frame ([\*](#large-runs-to-the-whole-frame-2026-09-24)) |
@@ -407,9 +424,9 @@ That mis-specification has cost three studies (#2877, #2897, #2905), so
 capability is stated per *cell* (`pile_config.region_capable`) rather than per
 dataset, and `--verify` asserts the geometry is physically present instead of
 trusting the arm table. Only `dinov3_patch` is patch-capable, so the pile's
-region-voting cells are `visual_genome_m x dinov3_patch` and
-`coco_val x dinov3_patch` — deliberately two, so a region result can be
-separated from the environment it was measured in.
+region-voting cells are the `dinov3_patch` column of its boxed datasets —
+`visual_genome_m`, `coco_val` and `coco_better` in the default sweep — more than
+one, so a region result can be separated from the environment it was measured in.
 
 COCO is built from the staged images rather than the #2790 vector cache, which
 stores HAC region vectors but not the raw patch grid and so can never carry a
@@ -528,11 +545,11 @@ different problem and is counted separately.
 
 ## Size is an axis on both sides of the split (#4044)
 
-A cell is `class@band`, and until now that band was the training set **and** the
-test set: train on small cars, test on small cars. Two changes make size a
+A cell is `class@band`, and by default that band is the training set **and** the
+test set: train on small buses, test on small buses. Two options make size a
 query on each side independently.
 
-**Testing across bands.** `coco_better_export.py --cell car@small --test-bands all`
+**Testing across bands.** `coco_better_export.py --cell bus@small --test-bands all`
 lists the class's other bands beside the cell, and the harness knob
 `CALIB_TEST_BANDS=all` scores them, adding `fnr_small` / `fnr_medium` /
 `fnr_large` (with `recall_*` and `n_test_pos_*`) to every row. Three arms per
@@ -546,7 +563,7 @@ the class, so it has no size *for the class*, and an arm has exactly one
 false-positive rate — the row's own `fpr`. Only the miss rate decomposes,
 because only a positive has a size. (What *is* available, and is a different
 axis, is banding a negative by the largest object it does hold. COCO boxes
-everything, so that is one query away — but it answers "does a small-car
+everything, so that is one query away — but it answers "does a small-bus
 detector fire on small things", which is not the same question and must not be
 labelled as though it were.)
 
@@ -561,7 +578,7 @@ not by testing the off-diagonal on the whole band.
 the shares the corpus actually has (`--mix-census` prints them per class);
 `--train-mix small=1,medium=2,large=1` sets them by hand. In the harness the same
 thing is `vtscore.eval.scale_bands.project_mix`, which **retags** the drawn
-positives into one synthetic `car@mix` cell so every downstream consumer — the
+positives into one synthetic `bus@mix` cell so every downstream consumer — the
 pool filter, the prevalence accounting, the vote order, the region boxes — sees
 an ordinary cell.
 
@@ -796,34 +813,14 @@ count.
 
 **`--verify` does not tell you the pile is rebuildable; `--rebuildable` does.**
 The two paths share no code, so a cell can load perfectly while the code that
-would produce it again is broken. That is not hypothetical: `scan_vg_boxes.py`
-([retired](#retired-with-visual-genome-4038)) grew a
-`{"meta": …, "categories": …}` envelope on 2026-08-17, the scan file on
-scratch stayed pre-envelope, and every `vg_box_*` rebuild died with
-`KeyError: 'categories'` for eleven days behind a pile that verified clean
-(#3297). `--rebuildable` runs each dataset's *selection* step — really choosing
-`vg_box_*`'s categories, confirming everything else's sources are present and
-readable — and embeds nothing, so it costs seconds. Run it after changing
-anything a build reads, and before trusting scratch to be purgeable.
-
-The reader accepts **both** scan shapes, which was deliberate: re-running
-`scan_vg_boxes.py` would have produced a current-format file, but with per-image
-compact filtering (`10239c24e`) and per-band supply (`fb4f4ec03`) that qualify
-categories differently — silently redefining three datasets whose numbers are
-published in #3129 and #3156. The envelope was the only incompatibility; the
-selector reads `voted_area`, `n_images` and `union_inflation` and nothing else,
-all three present in the 2026-08-12 file.
-
-**Where a band is already built, `--rebuildable` also asks whether a rebuild
-would produce *that*.** "Selection runs" and "selection picks the same thing"
-come apart in the direction that hurts: both candidate repairs for #3297 made
-the selector run again, and only one kept choosing the categories the published
-sets hold — the other would have redefined three datasets with the right media
-count, the right vectors and nothing visible to say so. So the canary compares
-today's selection against the vocabulary the smallest built cell carries and
-reports `REBUILD-BROKEN` on any difference. Verified against the live pile on
-2026-08-28: all three bands reproduce exactly, 40/40 categories, agreeing
-across all three cells present at the time (#3299).
+would produce it again is broken: a scan-format change once broke every
+`vg_box_*` rebuild for eleven days behind a pile that verified clean (#3297).
+`--rebuildable` runs each `DATASETS` entry's selection step through the
+`check()` of the same loader module whose `load()` builds it, confirming its
+sources are present and readable, reports `REBUILD-BROKEN` for any that are
+not, and embeds nothing, so it costs seconds. Run it after changing anything a
+build reads, and before trusting scratch to be purgeable. Retired datasets are
+not in `DATASETS`, so it does not cover them.
 
 ## What a rebuilt cell reproduces (#3683)
 
@@ -872,6 +869,9 @@ bash launch_pile.sh              # canary + weights (CPU), then one GPU job per 
 bash launch_pile.sh coco_val     # just one dataset
 ```
 
+With no arguments it launches `visual_genome_m`, `caltech101_m` and `coco_val`;
+name any other dataset, `coco_better` included, explicitly.
+
 `--rebuildable` runs in front of every launch. That is the answer to "what runs
 the canary periodically": every build already touches the pile, the check costs
 a fraction of a second, and a purge is the worst possible moment to learn the
@@ -888,18 +888,12 @@ weights the jobs cannot see.
 The GPU **type** is not pinned. `launch_pile.sh` calls
 [`pick_gpu.py`](../../slurm/pick_gpu.py) after the prefetch returns (availability
 measured before a blocking queue wait is stale) and requests the fastest type
-with enough free GPUs for the jobs it is about to submit. This used to be a
-hardcoded `v100`, which is why every cell built before 2026-08-17 was embedded on
-the slowest GPU on the cluster — 2.3× slower for `siglip2_l` than the L40S nodes
-sitting idle beside it. Set `VTS_GPU` to pin a type anyway; see
-[`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested).
-
-Until 2026-08-28 that query was answering from a field this cluster does not
-emit, so it read every GPU as free and always returned the first candidate —
-a hardcoded `a100` wearing a query, which sent the #3299 build into a 24-hour
-queue with 109 V100s idle. It now reads `AllocTRES` where `GresUsed` is absent
-and refuses to count a node whose usage it cannot read; see
-[the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md).
+with enough free GPUs for the jobs it is about to submit. Set `VTS_GPU` to pin a
+type anyway, or `VTS_GPU_NODE` to pin the node a rebuild must reproduce; see
+[`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested). Cells
+built before 2026-08-17 were embedded on a hardcoded `v100` (see
+[the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md) for
+how the picker itself once misread the cluster).
 
 ## Considering a new class for `vg_scale` (#3588)
 
@@ -918,8 +912,8 @@ audit.** #3588 reviewed thirteen classes at 300 images each and cleared all
 thirteen; none of that says which VG spellings the class is *built* from, which
 is the next section's question and a separate measurement. `bicycle` shipped for
 the whole of #3156 built from one spelling with every structural check passing,
-which is why `SCALE_VG_NAMES_AUDITED` exists and why the suite refuses a class in
-*C* that is missing from it. Promotion is therefore four edits, not one:
+which is why `SCALE_VG_NAMES_AUDITED` exists and why the suite refused a class in
+*C* that was missing from it. Promotion was therefore four edits, not one:
 
 1. the class into `SCALE_CLASSES`;
 2. its measured spellings into `SCALE_VG_NAMES` / `SCALE_VG_AMBIGUOUS`, out of the
@@ -1139,8 +1133,8 @@ That rule then travels in `pile_config.SCALE_CLASS_RULES`, whose value is the
 **dataset and detector name** — the only string the app shows while voting. A
 rule in a manifest is a rule the reviewer never reads.
 
-**All twenty-five classes now carry one, and the long form for the shipped
-twelve is [`ANNOTATION-GUIDE.md`](ANNOTATION-GUIDE.md)** (#3673). Read it before
+**Every class in *C* carries one, and the long form for the original twelve is
+[`ANNOTATION-GUIDE.md`](ANNOTATION-GUIDE.md)** (#3673). Read it before
 issuing any slate of those classes: #3666 measured that six of the nine pool
 errors found in the negative pass were boundary calls on rules that did not
 exist, and at a ~1% rate one ruling moves a class further than 3,000 extra

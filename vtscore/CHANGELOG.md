@@ -8,7 +8,22 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+## [Unreleased]
+
 ### Changed
+
+- **A `JobManager` job whose dataset or detector is no longer loaded fails instead of running** (issue
+  #4976). The worker used to skip binding a context its `dataset_id` / `detector_id` no longer resolved to
+  and run the target anyway, so a job parked while its dataset was unloaded computed over the empty
+  fallback context, ended `done` and was cached for its signature. It now ends `status = "error"` with
+  `job.error` naming the missing context (`"dataset <id> is no longer loaded"`), never runs the target,
+  and still promotes the pending slot. New keyword `JobManager(..., binds_context=True)`: a manager whose
+  targets name every context they touch, using the ids only as a tag, passes `False` to bind nothing and
+  require nothing. `archive_thumbnail_jobs` does, since its sweep warms every loaded dataset.
+
+  **For library consumers:** a job started under ids that name no registered context now errors rather
+  than running unbound. Register the contexts first, omit the ids, or build the manager with
+  `binds_context=False`.
 
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
@@ -1950,6 +1965,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   already was. The typed query's Test keeps the full map: it reads the withheld half's cosines. No label
   leaked (the cosines are the query's), but which Bads a default-arm session voted could depend on the
   size and make-up of its withheld half, so vote orders from earlier runs can differ.
+
+- **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
+  snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every
+  vote, media read and request state sync for the length of the fit (minutes at scale). It now
+  snapshots the medias and `media_revision` under the lock, fits without it, and re-takes it to install
+  the atlas and replay the active detector's votes. When the medias changed during the fit, the atlas
+  is discarded and the build retried once (*on_progress* counts from zero again); a second lost race
+  keeps the dataset's current atlas. `build_coverage_atlas_for_context` installs under the lock with the
+  same check, where it used to install a fit over since-changed medias. Signatures are unchanged.
 
 - **A re-parameterised cleaner replays at its own values** (issue #4963). The chain records a step's
   params from `to_dict()`, and `AudioSilenceTrimCleaner`, `ImageEdgeTrimCleaner`,

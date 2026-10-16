@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 import { ImportDefaultsService } from './import-defaults.service';
 import { SettingsStateService } from '../../../../../services/settings-state.service';
 import { ToastService } from '../../../../../services/toast.service';
-import { MediaTypeInfo } from '../../../../../models/api.models';
+import { CleanerInfo, MediaTypeInfo } from '../../../../../models/api.models';
 
 describe('ImportDefaultsService', () => {
   let settings: ReturnType<typeof signal<Record<string, unknown> | null>>;
@@ -102,13 +102,114 @@ describe('ImportDefaultsService', () => {
 
     // Default embedder + default clipper + no extra specs -> empty snapshot.
     expect(
-      service.snapshotImportConfig('image', 'clip', 'image_default', {}, [], embedders, clippers),
+      service.snapshotImportConfig('image', 'clip', 'image_default', {}, [], embedders, clippers, [], []),
     ).toEqual({});
 
     // Non-default embedder is kept.
     expect(
-      service.snapshotImportConfig('image', 'siglip', 'image_default', {}, [], embedders, clippers),
+      service.snapshotImportConfig('image', 'siglip', 'image_default', {}, [], embedders, clippers, [], []),
     ).toEqual({ embedder: 'siglip' });
+  });
+
+  describe('cleanup selection', () => {
+    // exif_orient is on by default; trim_borders is off by default and takes a param.
+    const cleaners: CleanerInfo[] = [
+      { name: 'exif_orient', media_type: 'image', default_enabled: true } as CleanerInfo,
+      {
+        name: 'trim_borders',
+        media_type: 'image',
+        default_enabled: false,
+        parameters: [{ key: 'tolerance', default: 10 }],
+      } as CleanerInfo,
+    ];
+    const embedders = [{ name: 'clip', is_default: true } as any];
+    const clippers = [{ name: 'image_default' } as any];
+    const snapshot = (selected: { name: string; params: Record<string, number | string> }[]) =>
+      service.snapshotImportConfig('image', 'clip', 'image_default', {}, [], embedders, clippers, selected, cleaners);
+
+    it('snapshotImportConfig carries no cleaners entry for the registry-default selection', () => {
+      expect(snapshot([{ name: 'exif_orient', params: {} }])).toEqual({});
+    });
+
+    it('snapshotImportConfig records a default-enabled gate switched off, and every other listed cleaner', () => {
+      expect(snapshot([])).toEqual({
+        cleaners: { exif_orient: { enabled: false }, trim_borders: { enabled: false } },
+      });
+    });
+
+    it('snapshotImportConfig records a non-default gate ticked with its params', () => {
+      expect(
+        snapshot([
+          { name: 'exif_orient', params: {} },
+          { name: 'trim_borders', params: { tolerance: 25 } },
+        ]),
+      ).toEqual({
+        cleaners: { exif_orient: { enabled: true }, trim_borders: { enabled: true, params: { tolerance: 25 } } },
+      });
+    });
+
+    it('defaultCleanerSelection seeds from default_enabled when nothing is saved', () => {
+      expect(service.defaultCleanerSelection(cleaners, 'images', mediaTypes)).toEqual([
+        { name: 'exif_orient', params: {} },
+      ]);
+    });
+
+    it('defaultCleanerSelection applies the saved choice per cleaner', () => {
+      settings.set({
+        import_defaults_by_media_type: {
+          image: {
+            cleaners: {
+              exif_orient: { enabled: false },
+              trim_borders: { enabled: true, params: { tolerance: 25, retired_knob: 3 } },
+              uninstalled_gate: { enabled: true },
+            },
+          },
+        },
+      });
+      const withNewcomer: CleanerInfo[] = [
+        ...cleaners,
+        { name: 'deskew', media_type: 'image', default_enabled: true } as CleanerInfo,
+      ];
+      // exif_orient stays off; trim_borders keeps its declared param only;
+      // the unregistered gate is skipped; deskew, registered since the save,
+      // follows its default_enabled.
+      expect(service.defaultCleanerSelection(withNewcomer, 'images', mediaTypes)).toEqual([
+        { name: 'trim_borders', params: { tolerance: 25 } },
+        { name: 'deskew', params: {} },
+      ]);
+    });
+
+    it('maybeOfferSaveImportDefaults offers to save a cleanup-only change, naming cleanup', () => {
+      service.maybeOfferSaveImportDefaults('image', snapshot([]), mediaTypes);
+      expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
+      expect(toastSuccessSpy.mock.calls[0][0].detail).toContain('cleanup');
+    });
+
+    it('maybeOfferSaveImportDefaults stays silent when the saved cleanup choice matches', () => {
+      settings.set({
+        import_defaults_by_media_type: {
+          image: { cleaners: { exif_orient: { enabled: false }, trim_borders: { enabled: false } } },
+        },
+      });
+      service.maybeOfferSaveImportDefaults('image', snapshot([]), mediaTypes);
+      expect(toastSuccessSpy).not.toHaveBeenCalled();
+    });
+
+    it('maybeOfferSaveImportDefaults offers again when only a cleaner param differs from the saved one', () => {
+      settings.set({
+        import_defaults_by_media_type: {
+          image: {
+            cleaners: { exif_orient: { enabled: true }, trim_borders: { enabled: true, params: { tolerance: 25 } } },
+          },
+        },
+      });
+      const cfg = snapshot([
+        { name: 'exif_orient', params: {} },
+        { name: 'trim_borders', params: { tolerance: 40 } },
+      ]);
+      service.maybeOfferSaveImportDefaults('image', cfg, mediaTypes);
+      expect(toastSuccessSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('maybeOfferSaveImportDefaults skips a config with no meaningful overrides', () => {

@@ -32,10 +32,13 @@ simulation via `simulate_voting_iterations(style=...)`.
 > numbers are in `docs/experiments/2026-07-29-max-patch/REPORT.md`, and `analyze.py` still
 > labels `max_hac` rows found in archived result CSVs.
 
-**Startup sort**: each cell's exemplar is a cropped positive (ground-truth box,
-pre-embedded at prepare time); its full-image embedding is scored against the
-dataset *in each style's own geometry* (whole-image cosine / max over patches /
-max over tree nodes) and the Autopilot seed phase votes down that ranking.
+**Startup sort**: the app's text sort. `run_cells.py` scores the category's
+query text (from `vtscore.eval.config.EVAL_DATASETS`) against every media's
+whole-image vector, one ranking shared by all of a cell's styles, and the
+Autopilot seed phase votes down it. A cell with no query, or an
+embedder with no text encoder (both DINO patch embedders), seeds from random
+known-good examples instead; each row's `seed_mode` says which. Prepare still
+writes the exemplar crops below, but no cell reads them.
 
 ## What each stage does
 
@@ -116,8 +119,8 @@ object rather than a union over scattered instances.
   the style keeps the matrix fp16 and scores in chunks, but budget ~64G per
   task to be safe.
 - **Pairing**: within a `(dataset, category, seed)` cell all of an embedder's
-  styles share the same load, the same sim/test split, and the same exemplar.
-  Across embedders the split and exemplar image are also identical (both are
-  derived from seeds/ids, not vectors), so arm comparisons are paired
-  everywhere.
-- Results live under `/expscratch/$USER/max-patch/results`.
+  styles share the same load, the same sim/test split, and the same opening.
+  Across embedders the split is also identical (it is derived from seeds/ids,
+  not vectors); the opening is not, since only `siglip` has a text sort.
+- Results live under `$MAXPATCH_RESULTS` (default
+  `/expscratch/$USER/max-patch/results`).
