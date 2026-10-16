@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`SortResultsCache` holds a ranking as columns, and holds four times the rows** (issue #5012). A
+  stored ranking was a list of row dicts, about 250 bytes a row (336 with `best_region`). It is now an
+  int64 id column, a float64 score column and, on a region sort, an index into a table of the distinct
+  boxes: 16 bytes a row, or 20. `SORT_CACHE_MAX_ROWS` rises from 2,000,000 to 8,000,000, so all eight
+  of the most recent sorts of a 1M-item dataset stay pageable (two did) in about 160 MB at most (#4978's
+  cap allowed about 0.6 GB). `page()` builds fresh dicts for the window it returns, and `derived()`
+  hands `build` the whole ranking as a fresh `list[dict]`. Both are equal to the rows stored, keys in the
+  order `id`, score key, `best_region`, but they are no longer the stored objects. A row with another key
+  or value type is kept whole and comes back as stored. `store()` copies the rows, so a caller may now
+  change its list after handing it off. Scores stay float64, so `redraw()` counts rows at the line
+  exactly as `count_above_threshold` does. Signatures unchanged.
+
 - **Library code reads one setting at a time: `vtscore.config.get_setting`** (issue #4997). `CoreConfig`
   was meant to be built once per request and passed down; instead 28 call sites built one with
   `CoreConfig.from_settings()` to read a field or two, each a snapshot of every setting. They now call the
