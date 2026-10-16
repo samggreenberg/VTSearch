@@ -718,8 +718,13 @@ class TestVideoUnitEmbed:
         from vtscore.media.cleaner import MediaCleaner
 
         class _Reencode(MediaCleaner):
-            name = "video_test_reencode"
-            media_type = "video"
+            @property
+            def name(self) -> str:
+                return "video_test_reencode"
+
+            @property
+            def media_type(self) -> str:
+                return "video"
 
             def clean(self, media):
                 return {**media, "media_bytes": b"re-encoded"}
