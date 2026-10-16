@@ -317,6 +317,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **An audio LabBench image** (issue #4958). `docker/Dockerfile.labbench` takes a `MEDIA_TYPE` build arg,
+  as `docker/Dockerfile.solo` does, so its slim build (only that type's dependencies, the media type and
+  the embedder locked, datasets aged off after 14 days, the demo importer hidden) is no longer images
+  only. `MEDIA_TYPE=audio` builds an audio image searched with CLAP General, whose weights are baked in so
+  it serves on first run with no network; `docker/compose/docker-compose.labbench-audio.yml` builds and
+  runs it. `image` stays the default, so existing build commands make the same SigLIP image as before.
+  Other media types fail the build with the list of supported ones. The requirements are split to
+  match: `requirements/labbench.txt` is now the core every LabBench image shares, and
+  `labbench-image.txt` / `labbench-audio.txt` add each type. The media-type lock is now the
+  `VTSEARCH_SOLO_MEDIA_TYPE` environment variable rather than a seeded setting, so it also holds when the
+  image is redeployed onto an existing volume. The image's embedder lock also works now: the LabBench
+  image seeded it into `data/default/user_settings.json`, which a single-user container never reads, so
+  the importer showed its embedder dropdown all along. It is now seeded where that user's settings live.
+  See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
 - **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
   `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
   its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to

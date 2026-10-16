@@ -908,7 +908,7 @@ none is set).
 Because the Docker images launch under gunicorn (which never parses
 `argv`), the same override is also available as the
 `VTSEARCH_DATASET_MAX_AGE_DAYS` environment variable, honored at server
-init; an explicit `--dataset-max-age-days` flag wins over it. The
+init; an explicit `--dataset-max-age-days` flag wins over it. Every
 LabBench image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`.
 
 **Support email** (`--support-email ADDRESS`): set the recipient for the

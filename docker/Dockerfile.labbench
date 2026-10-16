@@ -73,7 +73,7 @@ WORKDIR /app
 # requirements/labbench.txt is what every LabBench image needs whatever its
 # media type: the framework, the numeric and model stack, Browse. It is
 # installed before MEDIA_TYPE is declared, so an image and an audio build
-# share this layer and the two below.
+# share this layer and the one below.
 COPY requirements/labbench.txt requirements/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
@@ -99,17 +99,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 RUN pip install --no-cache-dir apricot-select && \
     pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 
-# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
-# Docker builds never run scripts/install.sh, so this step mirrors its
-# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
-# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
-# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
-# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
-# wheel; FaceNet's checkpoint downloads into the models cache on first use.
-# Only an image build reaches the face path (it needs torchvision, which
-# labbench-image.txt adds); in an audio build the package is inert.
-RUN pip install --no-cache-dir --no-deps facenet-pytorch
-
 # ---------- the media type's dependencies ----------
 # MEDIA_TYPE is declared here, after the shared layers above. The check names
 # the supported types before pip would fail on a missing requirements file.
@@ -124,6 +113,19 @@ RUN if [ ! -f "requirements/labbench-${MEDIA_TYPE}.txt" ]; then \
     pip install --no-cache-dir \
         --prefer-binary \
         -r "requirements/labbench-${MEDIA_TYPE}.txt"
+
+# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
+# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
+# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
+# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
+# wheel; FaceNet's checkpoint downloads into the models cache on first use.
+# Only an image build reaches the face path (it needs torchvision, which
+# labbench-image.txt adds); in an audio build the package is inert. It comes
+# after the type's install because pip reports a --no-deps package's unmet
+# pins as a dependency-conflict ERROR on every later install.
+RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 # ---------- the app itself ----------
 # `--no-deps`: the requirements files above are this image's whole
@@ -165,7 +167,7 @@ COPY --from=frontend /static/ /app/static/
 ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
-# Seed the data volume (data/settings.json and data/default/user_settings.json)
+# Seed the data volume (data/settings.json and data/user_settings.json)
 # so a LabBench container launches streamlined. Docker copies these files into
 # a fresh named volume on first creation, so a new deployment comes
 # ready-to-serve without any first-run setup. What is seeded, and why, is in

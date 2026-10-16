@@ -21,8 +21,8 @@ Two files, for the media type the image was built for:
     shared volume does not accumulate stale datasets. The Dockerfile pins the
     same value in ``VTSEARCH_DATASET_MAX_AGE_DAYS``, which overrides this file.
 
-``default/user_settings.json`` (the ``default`` user, which the
-``DefaultLoginProvider`` resolves to)
+``user_settings.json`` (the single user of a container's
+``DefaultLoginProvider``, whose data directory is the data directory itself)
     ``solo_embedder_per_media_type`` maps the media type to the embedder the
     image bakes, so the dataset importer hides its embedder dropdown and uses
     it silently; the slim requirements only cover that embedder. Users can
@@ -60,6 +60,11 @@ HIDDEN_BY_TYPE: dict[str, dict[str, list[str]]] = {
     "audio": {},
 }
 
+#: The per-user settings file's name (``vtsearch.settings.USER_SETTINGS_FILENAME``,
+#: which an app-tier test checks this against; the script stays import-clean
+#: of the app so the library-tier tests can run it).
+USER_SETTINGS_FILENAME = "user_settings.json"
+
 #: The age-off every LabBench dataset gets. Keep equal to the Dockerfile's
 #: ``VTSEARCH_DATASET_MAX_AGE_DAYS`` (a meta test checks they agree).
 DATASET_MAX_AGE_DAYS = 14
@@ -82,7 +87,7 @@ def server_settings(media_type: str) -> dict[str, Any]:
 
 
 def user_settings(media_type: str, embedder: str | None) -> dict[str, Any]:
-    """The seeded ``default/user_settings.json``: *media_type* locked to *embedder*."""
+    """The seeded ``user_settings.json``: *media_type* locked to *embedder*."""
     return {"solo_embedder_per_media_type": {media_type: embedder} if embedder else {}}
 
 
@@ -96,6 +101,21 @@ def baked_embedder(media_type: str) -> str | None:
 
         wanted = predict_embedders_to_preload(extra_media_types=[media_type])
     return wanted[0] if wanted else None
+
+
+def user_settings_path(data_dir: Path) -> Path:
+    """Where the container's one user reads its settings under *data_dir*.
+
+    Asked of the login provider rather than spelled here: the
+    ``DefaultLoginProvider`` keeps its user's files in the data directory
+    itself, not in ``data/default/`` (where this seed once went, and was never
+    read).
+    """
+    from vtscore.security.login import DefaultLoginProvider
+
+    provider = DefaultLoginProvider()
+    username = provider.get_user(None)
+    return provider.get_user_data_dir(username, data_dir) / USER_SETTINGS_FILENAME
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -116,7 +136,7 @@ def main(argv: list[str]) -> int:
     server = server_settings(media_type)
     user = user_settings(media_type, embedder)
     _write_json(data_dir / "settings.json", server)
-    _write_json(data_dir / "default" / "user_settings.json", user)
+    _write_json(user_settings_path(data_dir), user)
     print(f"[seed] media_type={media_type} settings={server} user_settings={user}", flush=True)
     return 0
 
