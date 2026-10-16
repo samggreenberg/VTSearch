@@ -958,6 +958,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
+
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
   import did not record them. Whenever a label was rebuilt from its source file (training from a saved
