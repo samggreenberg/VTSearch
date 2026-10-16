@@ -415,13 +415,19 @@ class TestOneDetectionPerImage:
             embed_missing(medias, emb.name)
 
     @staticmethod
-    def _two_pass_reference(medias: dict[int, dict], emb_cls):
-        """The vectors and compact features the separate embed and back-fill passes produce."""
+    def _two_pass_reference(inputs: list[dict], emb_cls) -> tuple[list, list[StructuralFeatures]]:
+        """The vectors and compact features the separate embed and back-fill passes produce for *inputs*."""
         emb = emb_cls()
-        inputs = [{"media_path": m["media_path"]} for m in medias.values()]
         vectors = [emb.embed_media(m) for m in inputs]
-        features = [f.compact() for f in emb.local_features_forward_bulk(inputs)]
+        features: list[StructuralFeatures] = []
+        for feats in emb.local_features_forward_bulk(inputs):
+            assert feats is not None
+            features.append(feats.compact())
         return vectors, features
+
+    @staticmethod
+    def _copies(medias: dict[int, dict]) -> list[dict]:
+        return [{"media_path": m["media_path"]} for m in medias.values()]
 
     def test_the_embed_stage_detects_each_image_once(self, tmp_path, monkeypatch):
         from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
@@ -439,7 +445,7 @@ class TestOneDetectionPerImage:
         from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
 
         medias = self._medias(tmp_path)
-        ref_vectors, ref_features = self._two_pass_reference(medias, ImageSiftVladEmbedder)
+        ref_vectors, ref_features = self._two_pass_reference(self._copies(medias), ImageSiftVladEmbedder)
         self._embed_stage(medias, ImageSiftVladEmbedder())
 
         for m, vec, feats in zip(medias.values(), ref_vectors, ref_features):
@@ -455,7 +461,7 @@ class TestOneDetectionPerImage:
         from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
 
         medias = self._medias(tmp_path, n=2)
-        _, ref_features = self._two_pass_reference(medias, ImageSiftVladEmbedder)
+        _, ref_features = self._two_pass_reference(self._copies(medias), ImageSiftVladEmbedder)
         reloaded = np.ones(DEFAULT_VLAD_CENTROIDS * SIFT_DESCRIPTOR_DIM, dtype=np.float32)
         medias[1]["embeddings"] = {"sift_vlad": reloaded}
         medias[1]["embedder"] = "sift_vlad"
@@ -467,6 +473,38 @@ class TestOneDetectionPerImage:
         assert len(calls) == 2
         np.testing.assert_array_equal(medias[1]["embeddings"]["sift_vlad"], reloaded)
         for m, feats in zip(medias.values(), ref_features):
+            np.testing.assert_array_equal(m["local_features"].keypoints, feats.keypoints)
+            np.testing.assert_array_equal(m["local_features"].descriptors, feats.descriptors)
+
+    def test_a_lazy_clip_is_detected_once_too(self, tmp_path, monkeypatch):
+        """A reference clip is embedded through a copy (``embed_view``); its features still reach the media."""
+        from PIL import Image
+
+        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.lazy_clip import embed_view
+
+        source = tmp_path / "source.png"
+        Image.fromarray(_textured_image(seed=20, size=300), mode="L").save(source)
+        boxes = ("0,0,200,200", "100,100,300,300")
+        medias = {
+            i + 1: {
+                "media_type": "image",
+                "embeddings": {},
+                "media_path": str(source),
+                "origin": {"importer": "server_folder", "params": {"clip_box": box}},
+            }
+            for i, box in enumerate(boxes)
+        }
+        views = [embed_view(m) for m in medias.values()]
+        assert all(v is not m for v, m in zip(views, medias.values()))
+        ref_vectors, ref_features = self._two_pass_reference(views, ImageSiftVladEmbedder)
+
+        calls = self._count_detections(monkeypatch)
+        self._embed_stage(medias, ImageSiftVladEmbedder())
+
+        assert len(calls) == len(boxes)
+        for m, vec, feats in zip(medias.values(), ref_vectors, ref_features):
+            np.testing.assert_array_equal(m["embeddings"]["sift_vlad"], vec)
             np.testing.assert_array_equal(m["local_features"].keypoints, feats.keypoints)
             np.testing.assert_array_equal(m["local_features"].descriptors, feats.descriptors)
 
@@ -484,7 +522,7 @@ class TestOneDetectionPerImage:
         st._load_cached.cache_clear()
 
         medias = self._medias(tmp_path)
-        ref_vectors, ref_features = self._two_pass_reference(medias, ImageSiftVladDocEmbedder)
+        ref_vectors, ref_features = self._two_pass_reference(self._copies(medias), ImageSiftVladDocEmbedder)
         projection = st.load_tile_projection()
         calls = self._count_detections(monkeypatch)
         self._embed_stage(medias, ImageSiftVladDocEmbedder())

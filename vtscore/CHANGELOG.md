@@ -15,10 +15,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 - **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
   `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
   them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature
-  back-fill skips those media instead of decoding and detecting them again. The back-fill still derives
-  features for media that arrive embedded without them (a pickle reload). Vectors, features and
-  `sift_vlad_doc`'s tile vectors are bit-identical to the two-pass output; the embed stage is ~2.5x faster
-  on CPU.
+  back-fill skips those media instead of decoding and detecting them again. A lazy unit is embedded
+  through a copy (`embed_view`), so the embed pass copies any side channel the embedder stored on that
+  copy back onto the media. The back-fill still derives features for media that arrive embedded without
+  them (a pickle reload). Vectors, features and `sift_vlad_doc`'s tile vectors are bit-identical to the
+  two-pass output; the embed stage is ~2.5x faster on CPU.
 
   **For library consumers:** calling `embed_media_bulk` on a structural embedder now also writes
   `local_features` onto each media dict it embeds.

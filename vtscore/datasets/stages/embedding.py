@@ -301,6 +301,27 @@ def _needs_side_channel(m: dict[str, Any], embedder_name: str, key: str) -> bool
     return media_embedding(m, embedder_name) is not None and m.get(key) is None
 
 
+#: The per-media side channels :func:`_side_channel_passes` back-fills.
+_SIDE_CHANNEL_KEYS = ("patch_grid", "local_features", "tile_vectors")
+
+
+def _keep_view_side_channels(view: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy onto *media* any side channel its embedder stored on *view*, a lazy unit's :func:`embed_view`.
+
+    An embedder may store a side channel on the dict it is handed while it
+    embeds (the shipped structural embedders store ``local_features``, #4996).
+    For a lazy unit that dict is a copy, so without this the back-fill would
+    derive the channel a second time.  The view's payload is the unit's own, so
+    what the embedder stored is what the back-fill would have derived.
+    """
+    if view is media:
+        return
+    for key in _SIDE_CHANNEL_KEYS:
+        value = view.get(key)
+        if value is not None and value is not media.get(key):
+            media[key] = value
+
+
 def _run_embed_pass(
     emb,
     medias: dict[int, dict[str, Any]],
@@ -368,7 +389,7 @@ def _run_embed_pass(
         return
     n_failed = 0
     declined = f"{who} returned no vector (the item may be unreadable, empty, or in a format it cannot decode)"
-    for (mid, _), vec in zip(missing, vectors):
+    for (mid, _), view, vec in zip(missing, inputs, vectors):
         if vec is None:
             n_failed += 1
             _record_failures(failures, (mid,), declined)
@@ -377,6 +398,7 @@ def _run_embed_pass(
         if media is None:
             continue
         set_media_embedding(media, embedder_id, vec)
+        _keep_view_side_channels(view, media)
     if n_failed:
         # Items the embedder could not embed stay at ``None`` and are dropped
         # by the finalize stage; that drop is announced there, but this is the
