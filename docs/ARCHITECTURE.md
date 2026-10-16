@@ -675,6 +675,7 @@ than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
+What `achievement_state` holds is in [achievements.md](achievements.md#state).
 The AutoFind keys other than `autofind_on_import` read through to the server
 file for the built-in `default` user (CLI / single-user); see
 `_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings.py`.

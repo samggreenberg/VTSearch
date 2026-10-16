@@ -54,7 +54,9 @@ Every blueprint under `vtsearch/routes/` registers full paths (none sets a
 
 ### Other endpoints
 
-Small families with no page of their own. Field lists are in the spec.
+Small families with no page of their own. Field lists are in the spec. How
+the achievement counters, tiers and the two watermarks behind these routes
+work is in [achievements.md](achievements.md).
 
 | Method | Path | Purpose |
 |--------|------|---------|

@@ -28,8 +28,10 @@ regeneration command on mismatch.
 Region ids
 ----------
 Fixed ids: ``embedders``, ``embedder-files``, ``embedder-dims``,
-``media-types``, ``plugin-families``, ``lessons-index`` (the last one indexes
-``scripts/experiments/lessons/`` off the filesystem rather than a registry).
+``media-types``, ``plugin-families``, ``achievements`` (the achievement
+catalog, ``vtsearch.achievements_catalog``), ``lessons-index`` (the last one
+indexes ``scripts/experiments/lessons/`` off the filesystem rather than a
+registry).
 Parameterised ids:
 ``plugins:<family>`` (roster of one plugin family, e.g.
 ``plugins:converters``) and ``demos:<type_id>`` (demo-dataset table of one
@@ -245,6 +247,14 @@ def build_demos(type_id: str) -> str:
     return _table(["Demo", "Description", "Download"], rows)
 
 
+def build_achievements() -> str:
+    """The achievement catalog: what each entry counts, and the threshold that reaches each tier."""
+    from vtsearch.achievements_catalog import ACHIEVEMENTS, TIER_NAMES
+
+    rows = [[f"**{a['name']}**", a["description"], *(f"{n:,}" for n in a["tiers"])] for a in ACHIEVEMENTS]
+    return _table(["Achievement", "What it counts", *TIER_NAMES], rows)
+
+
 LESSONS_DIR = REPO_ROOT / "scripts" / "experiments" / "lessons"
 LESSON_TITLE_RE = re.compile(r"^# (?P<date>\d{4}-\d{2}-\d{2})\s*—\s*(?P<title>.+)$")
 
@@ -292,6 +302,7 @@ def build_region(region_id: str) -> str:
         "embedder-dims": build_embedder_dims,
         "media-types": build_media_types,
         "plugin-families": build_plugin_families,
+        "achievements": build_achievements,
         "lessons-index": build_lessons_index,
     }
     if region_id in fixed:

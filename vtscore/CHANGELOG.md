@@ -227,6 +227,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   cut, which no user sees; `beta="off"` (the CLI's new `--beta off`) is that arm. A number pins a
   balance in `[0.25, 4]`. `LearnedSortMetrics` gains `threshold` and `beta`, the cut each category was
   measured at and the balance that drew it, and `DatasetResult.to_dict` writes both.
+- **`SortResultsCache` bounds the rows it holds, not only its entries** (issue #4978). `store()`
+  evicted only beyond `max_entries` (8), so re-sorting a 1M-item dataset a few times kept about 2 GB
+  of ranking rows. It now also evicts least-recently-used rankings until those left hold at most
+  `max_rows` rows between them; the newest ranking always stays, even alone over the cap, so a fresh
+  sort can be paged. `SortResultsCache.__init__` takes `max_rows: int = SORT_CACHE_MAX_ROWS`, the new
+  module constant (2,000,000). Additive.
 
 ### Added
 
