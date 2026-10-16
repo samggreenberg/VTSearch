@@ -25,8 +25,10 @@ from the submodule (`vtscore.security.path_validation`,
 | `vtscore/security/archive.py` | Hardened single-member tar extraction (`safe_tar_extract`) |
 | `vtscore/security/hf_auth.py` | In-memory HuggingFace credential store + `GatedResourceError` |
 | `vtscore/security/login.py` | `LoginProvider`: how an identity is established, and which subtree it is confined to |
+| `vtscore/security/readers.py` | `ReadersUpdate`: how a change to a dataset's or detector's `readers` list ended |
 
 - [Login providers](#login-providers)
+- [Readers updates](#readers-updates)
 - [Path validation](#path-validation)
   - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
   - [Example media](#example_media_dir)
@@ -90,6 +92,26 @@ Validate any username you did not construct yourself with
 becomes a path component, and `..` segments in a confinement root are
 *collapsed* by `Path.resolve()` rather than rejected - which silently
 widens the sandbox for every server-file importer and exporter.
+
+## Readers updates
+
+A dataset or detector is visible to its creator, to each user in its
+`readers` list, and to everyone when the list holds `"*"`; only the
+creator may change the list. `vtscore.datasets.registry.update_readers`
+and `vtscore.detectors.registry.update_detector_readers` make that change
+and return a `ReadersUpdate` from `vtscore/security/readers.py`:
+
+| Member | Meaning |
+|--------|---------|
+| `UPDATED` | The list was replaced |
+| `NOT_FOUND` | No entry has that id |
+| `NOT_CREATOR` | The entry exists, but the requesting user did not create it |
+
+Branch on the member, as the app's readers routes do to pick 403 or 404.
+`ReadersUpdate.message(kind)` is the prose for a person (`"Only the
+dataset creator can modify readers"`, `"Detector not found"`), and is
+what the older `(ok, err)` forms, `set_readers` and
+`set_detector_readers`, return as `err`. Do not parse it.
 
 ## Path validation
 

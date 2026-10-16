@@ -1113,13 +1113,15 @@ def update_detector_readers(body: dict, detector_id: str):
     Body: ``{"readers": ["alice", "bob"]}``. Use ``["*"]`` to make the
     detector visible to all users. Mirrors the dataset readers endpoint.
     """
-    from vtscore.detectors.registry import set_detector_readers
+    from vtscore.detectors.registry import update_detector_readers as _reg_update_readers
+    from vtscore.security.readers import ReadersUpdate
 
     readers = body["readers"]
-    ok, err = set_detector_readers(detector_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(detector_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("detector"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("detector"))
     return {"ok": True, "readers": readers}
 
 

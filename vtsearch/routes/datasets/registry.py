@@ -47,10 +47,11 @@ from vtscore.datasets.registry import (
     get_loaded_ids as _reg_loaded_ids,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
-    set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
+    update_readers as _reg_update_readers,
 )
+from vtscore.security.readers import ReadersUpdate
 from vtsearch.schemas.datasets import (
     DatasetAutofindRequestSchema,
     DatasetDomainShiftResponseSchema,
@@ -668,10 +669,11 @@ def update_dataset_readers(body: dict, dataset_id: str):
     from vtsearch.auth import get_current_user
 
     readers = body["readers"]
-    ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(dataset_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("dataset"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("dataset"))
     return {"ok": True, "readers": readers}
 
 

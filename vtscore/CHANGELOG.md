@@ -228,6 +228,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
+  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
+  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
+  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
+  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
+  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
+  message. Additive.
+
 - **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
   looks for each face MTCNN finds again in the photo turned a quarter each way
   (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most

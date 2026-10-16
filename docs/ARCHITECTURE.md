@@ -405,7 +405,7 @@ VTSearch/
 │   │   └── uploads.py              Browser-upload staging shared by the local_* importers
 │   ├── security/                   Path/URL/archive/pickle/origin safety + the LoginProvider ABC
 │   │                               (path_validation, url_validation, archive, pickle,
-│   │                               origin_validation, hf_auth, login)
+│   │                               origin_validation, hf_auth, login, readers)
 │   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
 │   └── utils/                      Shared helpers: hits.py (build_media_hit), hashing.py,
 │                                   scores.py, optional_deps.py, import_metadata.py, synthetic/
