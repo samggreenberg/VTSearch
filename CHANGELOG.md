@@ -948,6 +948,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
+  Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
+  import did not record them. Whenever a label was rebuilt from its source file (training from a saved
+  label set, or bringing labels into another dataset), the gate ran at its default settings rather than
+  the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
+  are now recorded and reused, and an item's Derived Via line lists them.
+
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between
   retrains (issue #4469). Without a GPU there was nothing to copy, but the cache still kept each page's

@@ -114,6 +114,12 @@ class AudioSilenceTrimCleaner(MediaCleaner):
             pad=float(params.get("pad", self._pad)),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["top_db"] = self._top_db
+        d["pad"] = self._pad
+        return d
+
     def clean(self, media: dict[str, Any]) -> dict[str, Any]:
         """Return *media* with its head/tail silence removed, or unchanged.
 
