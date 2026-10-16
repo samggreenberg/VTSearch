@@ -43,6 +43,8 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/al_benchmark.py`          | Hermetic harness around the voting-iterations eval       |
 | `vtscore/eval/autopilot_flow.py`        | The app's Autopilot phase machine, **ported** from TypeScript |
 | `vtscore/eval/seed_scores.py`           | Text-sort seed scores that start the simulation          |
+| `vtscore/eval/example_opening.py`       | The example opening (#4699): a session that starts from *K* photos instead of a typed query |
+| `vtscore/eval/line_test_arm.py`         | The Test arm (#4523): Test mode's autopilot on the withheld half, read against the truth; `row_from_snapshot` replays a saved snapshot |
 
 **Experiment arms** - each answers one study; none is the default arm.
 
@@ -57,7 +59,8 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/label_curve_main.py`      | CLI for the label-curve sweep                            |
 | `vtscore/eval/timing_benchmark.py`      | GPU microbenchmark: MLP (torch) vs SVM (cuML)            |
 | `vtscore/eval/trainers.py`              | Deprecated alias for `sweep_trainers`                     |
-| `vtscore/eval/arms_anchored.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
+| `vtscore/eval/arms_anchored.py`, `arms_cut_total.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_line_counts.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
+| `vtscore/eval/arms_query_prior.py`, `arms_set_overlap.py`, `arms_split_rounding.py` | Per-study arms beside the threshold: the typed-query prior's scale (#4384), where the typed query's set and the head's disagree (#4816), the calibration split before #4864 |
 | `vtscore/eval/arms_handover.py` | #4776's hand-over shadow: past the label quota, the Goods' centroid's Test as tagged rows (`handover:centroid`) and `HandoverJudge`, the evidence a centroid-to-head hand-over rule may read (held-out Goods' ranks in the unvoted pool under each detector) |
 | `vtscore/eval/fit_quality.py`           | Goodness-of-fit diagnostics for the score-mixture fits    |
 | `vtscore/eval/live_threshold_rules.py`  | Retired app threshold rules, kept as live arms            |
@@ -217,10 +220,11 @@ category vs. other medias, take `train_fraction` of each as training
 data, build the synthetic `good_votes` / `bad_votes` dicts, call
 `train_and_score` from [`vtscore.detectors`](detectors.md), and
 measure accuracy / precision / recall / F1 on the held-out test set
-using the cross-calibrated threshold. Returns a list of
+at the threshold `train_and_score` returns. Returns a list of
 `LearnedSortMetrics`. Honours `calibrate_count` and
 `calibration_fraction` exactly the way the production training path
-does, and takes its threshold from the same shipped estimator.
+does; it passes no balance, so its threshold is the fold-anchored
+Inclusion 0 cut rather than the labels line the app draws at a balance.
 
 ```python
 from vtscore.eval.runner import eval_text_sort, eval_learned_sort
@@ -275,11 +279,11 @@ through `json.dumps(indent=2)`.
 
 `vtscore/eval/voting_iterations.py` simulates an interactive labelling
 session - votes are cast one at a time in the order the app's
-**Autopilot** would present them, and at each step (once both
-polarities have at least one vote) a fresh head is trained, a threshold
-is computed, the held-out test set is scored, and the inclusion-weighted
-cost is recorded. This is how the team answers "how does cost drop as
-the user labels?" without spinning up a UI session.
+**Autopilot** would present them, and at each step the detector a Test
+would give at that click (the label quota's centroid or typed query, else a
+freshly trained head) draws its line, the held-out test set is scored, and
+the objective (`fbeta` under a balance, with `cost` beside it) is recorded.
+This is how the team answers "how does cost drop as the user labels?" without spinning up a UI session.
 
 The vote-order strategy is `autopilot` (see
 `vtscore/eval/al_strategies.py`): the eval reproduces the real user flow
@@ -308,13 +312,17 @@ by `sim_fraction`, then iterates:
 1. Pick the next vote with the autopilot selector (seed → Good → Bad →
    Hard → New) and apply it; mirror it onto the coverage atlas that
    drives the New phase.
-2. When both polarities have at least one vote, train the head
-   (`train_model`; the default arm passes `LINEAR_SVM_HEAD`, matching the app)
-   and pick a threshold
-   (`calculate_cross_calibration_threshold`, with optional
-   `calculate_safe_threshold` blend).
-3. Score `D_test`, compute FPR / FNR, weight by inclusion, record the
-   cost.
+2. Wherever there is a Good and a Bad, train the head (`train_model`; the
+   default arm's `head=None` resolves to `PRODUCTION_HEAD`,
+   `linear_svm_prior`, matching the app) and draw the app's line
+   (`fit_labels_line` at the run's balance; the fold-anchored cut, else the
+   blend, where there is no class model or no balance). That head drives the
+   picks, as the Train view's learned sort does.
+3. Score `D_test` with the detector a Test gives at that click
+   (`detector_tier`: under the label quota the Goods' centroid, or on a
+   typed-query run the typed query's own set; past it the trained head, its
+   line re-fitted on `D_test` as Find's is), compute the objective and the
+   operating point, and record the row.
 
 Pass `seed_scores={media_id: similarity}` (each item's cosine to the
 typed query) to route the seed through text sort; omit it for the
@@ -333,9 +341,9 @@ Returns a list of row dicts:
 ```
 
 `n_good`/`n_bad` are the good/bad vote counts the row's model was trained
-on (they sum to `t`). Autopilot seeds goods before bads, so the first
-scored step carries the initial goods plus a single bad; carry these
-counts through so analysis can weight rows by sample size.
+on (they sum to `t`). The first row comes at the first Good (the Goods'
+centroid, #4643), or at the first vote of a typed-query run (#4758); carry
+these counts through so analysis can weight rows by sample size.
 
 Honours the same threshold knobs as the runner. The population
 estimator is fitted over the simulation set only (not the test set) so
@@ -347,8 +355,10 @@ test scores can't leak into calibration.  `safe_thresholds` defaults to
 
 Sweep `simulate_voting_iterations` over `(seed × dataset × category)`
 (and any `strategies` / `trainers` / `prevalence_arms` / `styles` lists) and
-return a `pandas.DataFrame` with columns `seed, dataset, category,
-strategy, t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds`. When
+return a `pandas.DataFrame` in the `VOTING_COLUMNS` schema
+(`vtscore/eval/voting_columns.py`): the identifying prefix `seed, dataset,
+category, strategy, ..., t, n_good, n_bad`, then the metrics (`cost`, `fpr`,
+`fnr`, `fbeta`, `average_precision`, ...) and timings. When
 `categories` is `None` or a dataset is missing from the dict, every
 unique category in that dataset is used. Pass
 `seed_scores={dataset: {category: {media_id: similarity}}}` to route the
@@ -490,13 +500,15 @@ The voting simulation's `head` knob is the one that picks a *model*, and it
 applies to the `app` trainer alone, because only that arm fits one of VTSearch's
 heads:
 
-| `head` | What the app pipeline fits |
-|---|---|
-| `linear_svm` | `Linear(d, 1)` fitted by liblinear. **The shipped detector head**; `head=None` resolves here. |
-| `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced. |
-| `mlp` | An auto-sized hidden layer, BCE — the legacy head. |
+`vtscore/eval/step_model.py::HEADS` lists them: `linear_svm_prior` (**the
+shipped detector head**, the SVM started from the Goods' centroid;
+`PRODUCTION_HEAD`, where `head=None` resolves), `linear_svm` (the plain SVM
+before it), `linear` (balanced BCE, the logistic head), `linear_logreg`
+(logistic regression fitted to convergence) and `mlp` (the legacy head).
+[`docs/EVAL.md`](../../../docs/EVAL.md#trainer-vs-head-which-knob-picks-what)
+describes each.
 
-So `trainer="app", head="linear_svm"` is the shipped detector; `trainer="app",
+So `trainer="app", head=None` is the shipped detector; `trainer="app",
 head="mlp"` is the app's pipeline around a legacy head; and `trainer="svm_rbf"`
 is a standalone estimator that has no head at all (its rows carry an empty
 `head` column). Passing `head=` with any `svm_*` or `gp_*` trainer is an error.
