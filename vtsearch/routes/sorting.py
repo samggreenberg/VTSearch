@@ -1,6 +1,6 @@
 """Blueprint for sorting and voting routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
@@ -444,9 +444,9 @@ def _validate_learned_sort_inputs(labelset, good, bad) -> None:
 def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
-    Training is GIL-bound and ran inline used to stall every other request
+    Training is GIL-bound, so run inline it would stall every other request
     served by the small ``gthread`` pool (votes polls, thumbnails, and even
-    media bytes).  The endpoint now hands the work off to a background daemon
+    media bytes).  The endpoint hands the work off to a background daemon
     thread and returns immediately with a ``job_id``; clients poll
     :func:`learned_sort_result` until ``status == "done"``.
 

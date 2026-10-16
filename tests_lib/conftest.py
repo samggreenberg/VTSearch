@@ -12,7 +12,7 @@ library-only ``CoreConfig`` builder.  The app-tier fixtures (``client``,
 ``isolated_settings``, ``_set_login_provider``, autorun-processor reset) are
 deliberately absent.
 
-Phase 7 of ``../vtscore/docs/architecture.md``.
+Seam 7 ("Test suite") of ``../vtscore/docs/architecture.md``.
 """
 
 from __future__ import annotations

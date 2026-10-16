@@ -53,7 +53,7 @@ def bin_shape_for_media_type(media_type: str | None) -> str:
 
     The shape is a fixed property of the media type, not a user choice: media
     whose items have a *browsable thumbnail* (``MediaType.has_thumbnail`` —
-    image / video / document, and audio via its waveform PNG) tile as
+    image / video / document / face, and audio via its waveform PNG) tile as
     **squares** so the thumbnails pack edge-to-edge with no wasted gaps (and
     the quadtree lattice keeps representatives perfectly zoom-persistent).
     Everything else (text) falls back to the **hex** density map.

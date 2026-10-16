@@ -1,7 +1,7 @@
 """Dataset load endpoints: demo, file, browser-folder upload, source
 reload, plus export and clear.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Routes with a single marshmallow-able body (``load-demo``, ``load-source``,
@@ -155,8 +155,8 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
 def _parse_form_outputs(form) -> list[OutputSpec]:
     """Parse the multipart ``outputs`` field (a JSON array string) of a multi-dataset upload.
 
-    Absent or empty means a single-dataset upload, the pre-#4703 shape.  A
-    malformed list aborts 400 with the validator's message.
+    Absent or empty means a single-dataset upload.  A malformed list aborts
+    400 with the validator's message.
     """
     try:
         return parse_output_specs(form.get("outputs"))

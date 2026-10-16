@@ -309,10 +309,10 @@ by `sim_fraction`, then iterates:
    Hard → New) and apply it; mirror it onto the coverage atlas that
    drives the New phase.
 2. When both polarities have at least one vote, train the head
-   (`train_model`; the default arm passes `LINEAR_SVM_HEAD`, matching the app)
-   and pick a threshold
-   (`calculate_cross_calibration_threshold`, with optional
-   `calculate_safe_threshold` blend).
+   (`train_model`; the default arm passes `LINEAR_SVM_PRIOR_HEAD`, matching the app)
+   and draw the line as the app does: the labels' line at the balance, the
+   fold-anchored cut with no balance or no class model, and the
+   `calculate_safe_threshold` blend where no calibration folds form.
 3. Score `D_test`, compute FPR / FNR, weight by inclusion, record the
    cost.
 
@@ -492,11 +492,13 @@ heads:
 
 | `head` | What the app pipeline fits |
 |---|---|
-| `linear_svm` | `Linear(d, 1)` fitted by liblinear. **The shipped detector head**; `head=None` resolves here. |
+| `linear_svm_prior` | `Linear(d, 1)` fitted by liblinear with the Goods' centroid a cheap direction, so a head on a few labels starts at the centroid (#4776). **The shipped detector head**; `head=None` resolves here. |
+| `linear_svm` | The same `Linear(d, 1)` fitted by liblinear as the plain SVM, without the centroid start. |
+| `linear_logreg` | The same `Linear(d, 1)` fitted by converged, balanced logistic regression (scikit-learn, #4114). |
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced. |
 | `mlp` | An auto-sized hidden layer, BCE — the legacy head. |
 
-So `trainer="app", head="linear_svm"` is the shipped detector; `trainer="app",
+So `trainer="app", head="linear_svm_prior"` is the shipped detector; `trainer="app",
 head="mlp"` is the app's pipeline around a legacy head; and `trainer="svm_rbf"`
 is a standalone estimator that has no head at all (its rows carry an empty
 `head` column). Passing `head=` with any `svm_*` or `gp_*` trainer is an error.

@@ -10,10 +10,10 @@ per-fold anchored fits on honest held-out anchors, rank-transferred back), and
 the same frame: ``xcal_only`` (pure cross-cal) and ``pooled_mid`` (the shipped
 safe-blend).
 
-Computes the pre-registered deliverables of
-``docs/plans/population-anchored-calibration.md``:
+Computes the study's hypothesis tests (H1-H4, as its report states them:
+``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``):
 
-* Per-window (the plan's {20,50,100,200,300}-vote checkpoints) mean cost /
+* Per-window (the study's {20,50,100,200,300}-vote checkpoints) mean cost /
   regret / FPR / FNR per arm, and **paired** contrasts vs ``xcal_only`` (H1)
   and vs ``pooled_mid`` (H2) on identical (arm, category, seed, t) steps.
 * Step-to-step threshold delta per arm (H3 - stability comes along free).

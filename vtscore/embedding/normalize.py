@@ -51,13 +51,14 @@ def l2_normalize(vec: object) -> np.ndarray:
 
     The function is idempotent **bit for bit**: a vector already unit-norm
     (within :data:`_UNIT_NORM_TOLERANCE`) comes back with the very bytes it
-    went in with, so applying it at several chokepoints is harmless.  Dividing
-    a unit vector by its own norm again moved the last bit of about a third of
-    a dataset's vectors (#4892): the pickle loader re-normalizes what ingest
-    stored, so a reloaded dataset held other bytes than the process that
-    imported it, and the calibration folds' split, seeded from those bytes
-    (:func:`vtscore.training.thresholds.conformal._split_dither_rng`), drew
-    another split, and with it another labels line.
+    went in with, so applying it at several chokepoints is harmless.  It has
+    to be: the pickle loader re-normalizes what ingest stored, and dividing a
+    unit vector by its own norm again moves the last bit of about a third of a
+    dataset's vectors (#4892).  A reloaded dataset would then hold other bytes
+    than the process that imported it, and anything seeded from those bytes -
+    such as the ``dither`` split-rounding arm's RNG
+    (:func:`vtscore.eval.arms_split_rounding._split_dither_rng`) - would draw
+    another calibration split, and with it another labels line.
     """
     arr = np.asarray(vec, dtype=np.float32)
     wide = arr.astype(np.float64)

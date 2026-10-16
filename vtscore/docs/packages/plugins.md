@@ -203,7 +203,7 @@ field-validation glue that's identical across families.
 | `description` | `str` | No* | One-sentence subtitle |
 | `icon` | `str` | No* | Emoji / icon glyph |
 | `fields` | `list[PluginField]` | Yes | Ordered list of user-facing inputs (may be empty) |
-| `ui_mode` | `str` | No | `"form"` (default), `"file_upload"`, `"custom"`, or `"none"` |
+| `ui_mode` | `str` | No | Listing filter: `"form"` (default); shipped importers also use `"file_upload"` and `"custom"` |
 | `hidden_from_picker` | `bool` | No | When `True`, omitted from generic family pickers; useful for scaffolds and special-cased plugins |
 
 \* Auto-derived when not declared anywhere in the MRO: `name` is the class
@@ -214,12 +214,12 @@ the first docstring line; `icon` is the first letter of `display_name`
 (rendered as a boxed letter). Explicit declarations always win. A family
 base opts out of derivation with `_is_plugin_family_base = True`.
 
-`ui_mode="form"` tells the frontend to render the generic form built
-from `fields`. `"file_upload"` skips the form and uses the native file
-picker (e.g. the local-folder importer). `"custom"` declares that the
-frontend has a dedicated UI block. `"none"` means the plugin has no
-user-facing UI at all - the GUI exporter uses this because the
-frontend handles its result-display directly.
+`ui_mode` is a listing filter: `GET /api/dataset/importers` lists only
+importers whose `ui_mode` is `"form"` (the default; the generic form built
+from `fields` drives them). Shipped importers with a bespoke import path
+set `"custom"` (demo, local folder / files, combine datasets) or
+`"file_upload"` (pickle) to stay out of that list. `to_dict()` serialises
+the value, but no frontend code reads it.
 
 ### Inherited methods
 

@@ -296,23 +296,26 @@ Architecture (`vtscore/training/mlp.py`):
 
 ```
 input  (D,)
-  → Linear(D, 1)        # hidden_dim=LINEAR_SVM_HEAD (-1): no hidden layer
+  → Linear(D, 1)        # hidden_dim=LINEAR_SVM_PRIOR_HEAD (-3): no hidden layer
   → (no activation; the output is the SVM's decision function)
 ```
 
-Two other heads share the same entry point but not the same fit: `LINEAR_HEAD`
-(`0`) builds the identical `Linear(D, 1)` and fits it with balanced
-BCE-with-logits, making it logistic regression, and any `hidden_dim > 0` builds
-the older MLP (`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
-`_auto_hidden_dim`). Both survive only for the eval harness's head-sweep arms
-and unit tests - production always passes `LINEAR_SVM_HEAD`. See
+Other heads share the same entry point but not the same fit: `LINEAR_SVM_HEAD`
+(`-1`) is the plain SVM, without the production head's start from the Goods'
+centroid; `LINEAR_HEAD` (`0`) builds the identical `Linear(D, 1)` and fits it
+with balanced BCE-with-logits, making it logistic regression; and any
+`hidden_dim > 0` builds the older MLP (`Linear(D, H) → ReLU → Dropout(p) →
+Linear(H, 1)`, width from `_auto_hidden_dim`). They serve only the eval
+harness's head-sweep arms and unit tests - production always passes
+`LINEAR_SVM_PRIOR_HEAD`. See
 [`docs/ML.md`](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
 for why the head is a linear SVM.
 
 Training (`vtscore.training.train_model`):
 
 - The production head is fitted by liblinear (`LinearSVC`, squared hinge + L2,
-  `class_weight="balanced"`), deterministic given the caller-supplied seed
+  `class_weight="balanced"`, with the Goods' centroid a cheap direction),
+  deterministic given the caller-supplied seed
   (default 42). Inclusion does *not* enter training - it is the unit cuts are
   measured in, applied later at threshold time.
 - The BCE heads instead run a class-weighted BCE-with-logits loop with

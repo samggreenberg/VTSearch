@@ -15,11 +15,11 @@ expected modality.  Wrong-modality requests (e.g. an audio file sent to
 an image embedder) are caught by a fast extension pre-check before any
 model weights are loaded.
 
-This blueprint lives on the ``flask_smorest`` ``Api`` for registration
-consistency, but the dual-mode dispatcher does not lend itself to a
-single marshmallow schema, so the route is left undecorated and is
-intentionally absent from ``/api/openapi.json`` (see "Routes absent from
-the spec" in ``docs/API.md``).
+The dual-mode dispatcher does not lend itself to a single marshmallow
+schema, so the route declares none.  It still appears in
+``/api/openapi.json`` (every route on a ``flask_smorest`` blueprint does),
+untyped: path, summary and error responses only (see "Routes with no typed
+schema" in ``docs/API.md``).
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ embed_bp = Blueprint(
     __name__,
     description=(
         "On-demand embedding of a media file (multipart) or text snippet "
-        "(JSON). The dispatch route is dual-mode and not described in the "
-        "spec; see the module docstring."
+        "(JSON). The dispatch route is dual-mode, so the spec carries no "
+        "request or response schema for it; see the module docstring."
     ),
 )
 logger = logging.getLogger(__name__)

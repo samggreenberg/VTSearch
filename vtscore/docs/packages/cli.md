@@ -282,8 +282,8 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    `input_spec.clipper` doesn't match the dataset is *re-clipped* at
    scoring time (a `detector_reclip` event), not skipped. Nobody can
    vote in a headless run, so a detector's line is never spot-checked:
-   it keeps the balance's unchecked set (the mixture's F-beta argmax
-   under the balance's cap) and is announced with a
+   it keeps, unchecked, every unvoted item at or above the line the
+   labels drew (#4452) and is announced with a
    `detector_unchecked` event; every result it produces carries the
    same state under `balance`. Under the label quota (3 Goods and 4
    Bads, or a Good and 16 Bads) there is no trained head: a detector

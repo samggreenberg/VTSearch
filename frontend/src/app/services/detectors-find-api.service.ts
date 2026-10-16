@@ -49,8 +49,9 @@ export class DetectorsFindApiService {
     return endFindSessionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Detector-evaluation stats over the adopted Find label set (2x2 confusion,
-   *  Kept rate, and the precision-vs-returned curve). Pure read. */
+  /** Detector-evaluation stats over the adopted Find label set: the 2x2
+   *  confusion of the user's checks against the detector's calls, and their
+   *  agreement over all items. Pure read. */
   getFindStats(): Observable<FindStatsResponse> {
     return findStats(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }

@@ -16,7 +16,7 @@ PUT    /api/detectors/registry/<id>/rename            Rename a registered detect
 PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's AutoFind flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``, except for ``POST /from-labelset/<importer>``, which
 takes plugin-dependent fields and declares no schema (see
 "Routes with no typed schema" in ``docs/API.md``).

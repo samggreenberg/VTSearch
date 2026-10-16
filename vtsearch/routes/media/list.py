@@ -1,6 +1,6 @@
 """Blueprint for media-related routes.
 
-Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 ``/api/openapi.json`` spec.
 
 The binary-streaming routes (``audio``, ``video``, ``image``, ``media``)
@@ -231,8 +231,11 @@ def _variant_media(media: dict) -> dict:
     too, so ETag-emitting routes hash the bytes they actually serve rather than
     labelling the original with the cleaned item's hash.
 
-    An unknown variant, or ``original`` on a media with no snapshot, falls back
-    to the canonical payload: a stale bookmark should show the item, not 404.
+    ``original`` on a media with no snapshot falls back to the canonical
+    payload: a stale bookmark should show the item, not 404.  An unknown
+    variant never gets here - every route that calls this validates its query
+    with :class:`~vtsearch.schemas.media.MediaVariantQuerySchema`, which
+    rejects it with a 422.
     """
     if request.args.get("variant") != "original":
         return media

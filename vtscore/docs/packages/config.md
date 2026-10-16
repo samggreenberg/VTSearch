@@ -72,7 +72,7 @@ after the table do have defaults, precisely so a library-only
 | `detectors_dir`                   | `Path`         | server      | Where detector JSON files are read from / written to.                                            |
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
-| `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
+| `autofind_detectors`               | `tuple[str, ...]` | per-user | Detector names to train + score automatically on every freshly-loaded dataset.                   |
 | `dataset_max_age_days`            | `int \| None`  | server      | Age-off horizon stamped into saved datasets. `None` = never expire.                              |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float \| None` | per-user    | Explicit fraction of labels held out per calibration fold. `None` = per-embedder default (0.3 single-vector / 0.5 patch). |
@@ -201,7 +201,7 @@ when one is in scope). Tests rely on this: they override
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear SVM head.                                            |
 | `MLP_LABEL_SMOOTHING`    | `0.05`  | -                             | Label-smoothing epsilon for MLP targets (keeps calibration scores distinct for the conformal threshold).          |
-| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the production linear SVM head (`fit_linear_svm_head`). Lower regularises harder on few votes. |
+| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the linear SVM heads: the production head (`fit_linear_svm_prior_head`) and the plain SVM arm (`fit_linear_svm_head`). Lower regularises harder on few votes. |
 | `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |

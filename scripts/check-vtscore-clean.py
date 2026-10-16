@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 """Run ``tests_lib/`` with Flask import blocked.
 
-The ``vtscore`` library (Phase 8 of ``../vtscore/docs/architecture.md``)
-must be importable without Flask installed.  Until the physical
-``git mv`` to ``vtscore/`` lands, the library code still lives at
-``vtsearch.<subpackage>`` paths, so we can't simulate "Flask uninstalled"
-by creating a Flask-less virtualenv - Flask is a dependency of the
-top-level ``vtsearch`` package.
+The ``vtscore`` library must be importable without Flask installed
+(seam 1, "Flask", in ``../vtscore/docs/architecture.md``).  The library
+ships inside the ``vtsearch`` distribution, which depends on Flask, so we
+can't simulate "Flask uninstalled" by creating a Flask-less virtualenv.
 
 Instead we install a meta-path import hook that *blocks* ``flask`` (and
 any other Flask-shaped module) before pytest collection starts.  If any

@@ -1,6 +1,6 @@
 """CRUD routes for autorun extractors, localizers, and pregen processors.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

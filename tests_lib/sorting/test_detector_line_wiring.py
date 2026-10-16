@@ -384,6 +384,27 @@ class TestARetrain:
         assert detector_balance_state(ctx, 1.0)["count"] == kept
         assert ranking.mixture == [], "the count line's mixture is never fitted under the labels' line"
 
+    def test_with_no_class_model_the_state_counts_what_the_fallback_cut_keeps(self):
+        """One Good and no labels to stand in: no labels line, so the line is the retrain's fallback, and the state counts it."""
+        from vtscore.detectors.training import train_and_threshold
+
+        clips = self._clips()
+        good, bad = [500], [506, 507, 508]
+        ctx = DetectorContext("det-retrain-fallback", media_type="audio")
+        ctx.beta, ctx.beta_seeded = 1.0, True
+        ctx.good_votes.update(dict.fromkeys(good))
+        ctx.bad_votes.update(dict.fromkeys(bad))
+        X = [clips[cid]["embeddings"]["test"] for cid in [*good, *bad]]
+        y = [1.0] * len(good) + [0.0] * len(bad)
+        model, threshold = train_and_threshold(
+            X, y, snap=clips, embedder_name="test", det_ctx=ctx, voted_ids={*good, *bad}
+        )
+        ctx.model, ctx.threshold = model, threshold  # what the caller of a retrain stores, as the app does
+        assert ctx.labels_line is None and ctx.line_ranking is not None
+        ranking = ctx.line_ranking
+        kept = sum(1 for cid in ranking.unvoted_ids(set()) if ranking.score_of(int(cid)) >= threshold)
+        assert detector_balance_state(ctx, 1.0)["count"] == kept
+
     def test_a_finished_walk_never_moves_the_labels_line(self):
         """Every preset's check is advisory since #4452: a retrain after a walk still cuts at the labels' line."""
         ctx, _t = self._train(beta=2.0)

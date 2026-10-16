@@ -657,9 +657,9 @@ class BrowseMediaFilesResponseSchema(Schema):
         dump_default="",
         metadata={
             "description": (
-                "Suggested initial relative sub-path for this source, for example "
-                "the server user's home directory when ``source=server_fs``. Empty "
-                "for sources where the root is already the right starting point."
+                "Suggested initial relative sub-path for this source. Empty for "
+                "every source, since each one's root is already the right "
+                "starting point."
             )
         },
     )
@@ -683,14 +683,15 @@ class DetectMediaTypeQuerySchema(Schema):
     """Query for ``GET /api/dataset/detect-media-type``.
 
     The ``limit`` field is capped to ``[1, 500]`` by the handler; the
-    schema only narrows the type. Invalid integer strings fall back to
-    the default rather than rejecting the request, preserving the
-    pre-migration permissiveness for this hint endpoint.
+    schema only narrows the type, so a ``limit`` that is not an integer is
+    rejected with a 422.
     """
 
     source = fields.String(
         load_default="folder",
-        metadata={"description": "One of ``demo:<name>`` or ``folder`` (matches ``/api/browse-media-files``)."},
+        metadata={
+            "description": "One of ``demo:<name>``, ``folder``, or ``server_fs`` (matches ``/api/browse-media-files``)."
+        },
     )
     path = fields.String(load_default="")
     recursive = fields.Boolean(load_default=True)

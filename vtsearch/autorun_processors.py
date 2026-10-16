@@ -6,10 +6,8 @@ is a user-facing policy concern, not a library concern.  The library
 ``Processor`` / ``Extractor`` / ``Localizer`` ABCs and the code that
 applies them; the app owns the registry of "which ones are active".
 
-This module replaces the module-level dicts that previously lived in
-``vtsearch/state/core.py`` and the CRUD that lived in
-``vtsearch/state/processors.py``.  Behaviour is unchanged; the storage
-is still process-global and thread-safe.
+This module holds that registry and its CRUD.  The storage is
+process-global and thread-safe.
 """
 
 from __future__ import annotations
@@ -24,8 +22,8 @@ from typing import Any
 # can call back in safely.
 _lock = threading.RLock()
 
-# Module-level singletons with the same shape and semantics as the old
-# ``vtscore.state.core.autorun_extractors`` / ``autorun_localizers`` dicts.
+# Module-level singletons, one entry per active autorun processor:
+# ``name -> {name, extractor_type | localizer_type, media_type, config, created_at}``.
 autorun_extractors: dict[str, dict[str, Any]] = {}
 autorun_localizers: dict[str, dict[str, Any]] = {}
 

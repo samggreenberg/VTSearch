@@ -4,7 +4,7 @@ Implements the active-dataset scoring endpoints (find-label and auto-detect)
 on top of the detector concept.  Detectors are loaded into ``DetectorContext``
 instances on demand; weights live exclusively in RAM.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

@@ -59,32 +59,22 @@ def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) 
 
 
 # ---------------------------------------------------------------------------
-# CoreConfig: runtime config bundle the (future) ``vtscore`` library consumes
+# CoreConfig: runtime config bundle the ``vtscore`` library consumes
 # ---------------------------------------------------------------------------
 #
-# Today every library-candidate package reaches into ``vtsearch.settings``
-# directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
-# ``calibrate_count``, etc.  That couples the library to the app's settings
-# layer and makes it impossible to vendor the library as ``vtscore`` (see
-# ``docs/architecture.md``, Phase 2).
-#
-# ``CoreConfig`` is the seam: a frozen value object that bundles every knob
-# library code reads.  Follow-up PRs convert each call site to accept (or
-# look up) a ``CoreConfig`` instead of importing ``vtsearch.settings``.
-# Until those land this class is unused at runtime; the scaffold just
-# defines the type so the conversions can happen one file at a time.
-#
-# The app side will build a fresh ``CoreConfig`` at each request boundary
-# via :meth:`CoreConfig.from_settings`; library callers can construct one
-# directly with whatever values they want.
+# ``CoreConfig`` is the Settings seam (see "The seven seams" and "The
+# CoreConfig bridge" in ``vtscore/docs/architecture.md``): a frozen value
+# object that bundles every knob library code reads, so no library package
+# imports ``vtsearch.settings`` for tunables like ``saved_datasets_dir``,
+# ``detectors_dir`` or ``calibrate_count``.  Library call sites look one up
+# with :meth:`CoreConfig.from_settings` at the point they need a knob.
 #
 # The implementation of :meth:`from_settings` is installed by the app via
 # :func:`register_core_config_builder`; see ``vtsearch/shim`` for the
 # concrete builder that snapshots ``vtsearch.settings``.  This keeps the
 # library import-clean: ``vtscore.config`` itself never imports
-# ``vtsearch.settings`` (Phase 8 of ``docs/architecture.md``).
-# Library-only consumers without an app skip ``from_settings()`` entirely
-# and construct ``CoreConfig`` directly.
+# ``vtsearch.settings``.  Library-only consumers without an app skip
+# ``from_settings()`` entirely and construct ``CoreConfig`` directly.
 
 
 _core_config_builder: Callable[[str | Path | None], CoreConfig] | None = None
@@ -116,6 +106,8 @@ class CoreConfig:
     detectors_dir: Path
     max_concurrent_dataset_downloads: int
     max_concurrent_dataset_embeddings: int
+    # Per-user (the current user's AutoFind detector names), despite sitting
+    # in the server-tier block: moving it would reorder the positional fields.
     autofind_detectors: tuple[str, ...]
 
     dataset_max_age_days: int | None
@@ -131,11 +123,12 @@ class CoreConfig:
     enrich_descriptions: bool
     autopilot_goal_diversity: int
 
-    # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
-    # route every hardcoded ``data/`` path through this field.
+    # Filesystem root for caches, embeddings, model downloads.  The app
+    # snapshots :data:`vtscore.config.DATA_DIR` into it (the Filesystem seam
+    # in ``vtscore/docs/architecture.md``).
     data_dir: Path
 
-    # AutoFind results exporter (server-tier). When an autodetect run has no
+    # AutoFind results exporter (per-user). When an autodetect run has no
     # explicit ``--exporter``, the CLI falls back to this exporter +
     # field-value map. ``""`` means "no configured exporter" (CLI defaults to
     # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions

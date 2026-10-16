@@ -11,7 +11,7 @@ Inclusion budget under grouped calibration. Design: `docs/plans/calibration-expe
 
 <!-- BEGIN INDEX -->
 
-**This directory is flat on purpose.** ~120 scripts, ~20 concluded studies, one
+**This directory is flat on purpose.** Every concluded study's scripts share one
 namespace. #3409 proposed `git mv`-ing each concluded study into a subdirectory;
 that was declined, because the cost is real and the benefit is not. These are
 archival cluster scripts: the launcher `cd`s here and every file reaches its
@@ -44,7 +44,7 @@ a report's committed-figure requirement points at.
 |---|---|
 | `common.py`, `experiment_config.py` | Env/`sys.path` setup (call `setup_env()` before importing anything under `vtscore`) and the pre-registered grid. |
 | `_cells_paths.py` | Which files in a `cells/` directory are a cell's **main** frame (`main_frame_files`, `side_frame_files`, `SIDE_FRAME_SUFFIXES`). Import-free on purpose — no pandas — so the csv-and-stdlib figure scripts share the rule with the pandas analyzers instead of each re-typing it. |
-| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). `load_arm` sets a floor-era run's spot-check rows (`phase == "check"`, past `max_steps`) apart unless called with `keep_check=True` (#4364). Re-exports `_cells_paths`' discovery functions. |
+| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader most studies use (`analyze_spikes.py` re-exports the name). `load_arm` sets a run's end-of-run spot-check rows (`phase == "check"`, past `max_steps`) apart unless called with `keep_check=True` (#4364). Re-exports `_cells_paths`' discovery functions. |
 | `_rank_metrics.py` | A precision floor's line read off where the positives sit in a ranking (#4357): the top-*K* set each floor keeps, its precision, shortfall and recall, the best cut's recall at the floor, and AP. The one definition the click-0 text baseline and the State of the App analyzer both read with, over a cell's rank frames (`task_NNNN__rankframes.csv`, `CALIB_RANK_FRAME_STEPS`) or a text sort's scores. |
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
@@ -140,9 +140,9 @@ produced.
 
 | Dataset | Embedder | Style(s) | Calibration |
 |---|---|---|---|
-| `visual_genome_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+| `visual_genome_m` | `siglip`, `siglip2_l` | `whole_image` | row-wise |
 | `visual_genome_m` | `dinov3_patch` | `max_patch` | grouped (bag max-pool) |
-| `caltech101_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+| `caltech101_m` | `siglip`, `siglip2_l` | `whole_image` | row-wise |
 
 Two #2781 arms are **off by default** now that their questions are closed, and a
 study that wants either adds it back explicitly (and declares the divergence to
@@ -164,7 +164,7 @@ study that wants either adds it back explicitly (and declares the divergence to
 1. **`prepare_data.py`** — ensures a per-`(dataset, embedder)` pickle + exemplar
    crops for every arm. Reuses the Max-Patch pickles/crops where the pair
    coincides (VG×{siglip,dinov3_patch}, Caltech×siglip); only embeds the missing
-   `siglip_l` pairs.
+   `siglip2_l` pairs.
 2. **`run_cells.py`** — one SLURM-array task per `(dataset, embedder, category,
    seed)` cell; runs every style for the embedder, emitting the calibration
    metrics (`CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
@@ -235,7 +235,7 @@ the extreme of the regime several of these studies are about. `describe_load`
 formats them into one line so two reports mean the same thing by "N of M cells".
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
-embeddings pickles and demo data are read in place (the `siglip_l` pickles land
+embeddings pickles and demo data are read in place (the `siglip2_l` pickles land
 alongside them harmlessly), and writes all study output under
 `/expscratch/$USER/calibration`.
 

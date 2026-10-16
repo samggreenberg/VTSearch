@@ -198,10 +198,12 @@ VTSearch/
 │   │   └── video2image.py          Frame sampling
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
-│   │   ├── mlp.py                  build_model, train_model — the head selector (LINEAR_SVM_HEAD is
-│   │   │                           production; LINEAR_HEAD and the MLP survive as eval arms)
-│   │   ├── svm.py                  fit_linear_svm_head (the production head) + kernel sweep arms
-│   │   ├── thresholds/             Conformal / GMM / anchored / blend threshold helpers
+│   │   ├── mlp.py                  build_model, train_model — the head selector (LINEAR_SVM_PRIOR_HEAD is
+│   │   │                           production; LINEAR_SVM_HEAD, LINEAR_HEAD and the MLP are eval arms)
+│   │   ├── svm.py                  fit_linear_svm_head (the plain SVM eval arm) + kernel sweep arms
+│   │   ├── svm_prior.py            fit_linear_svm_prior_head — the production head (the SVM started
+│   │   │                           from the Goods' centroid)
+│   │   ├── thresholds/             Labels line / anchored / conformal / GMM / blend cuts, spot check, line test
 │   │   ├── blend_schedules.py      Vote-count → blend-weight schedules (production + arms)
 │   │   ├── query_sort.py           External-query sorts: example media, label files
 │   │   ├── region_similarity.py    Region-aware cosine similarity scoring
@@ -657,24 +659,26 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/svm.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/svm.py` / `vtscore/training/svm_prior.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a classifier on embeddings +
-binary labels.  `hidden_dim` picks the head: `LINEAR_SVM_HEAD` is the linear
-SVM production uses (fitted by `svm.fit_linear_svm_head`); `LINEAR_HEAD` (the
-logistic head) and a positive width (the MLP) survive as eval arms.  `conformal_threshold()` maps an
+binary labels.  `hidden_dim` picks the head: `LINEAR_SVM_PRIOR_HEAD` is the
+linear SVM production uses, started from the Goods' centroid (fitted by
+`svm_prior.fit_linear_svm_prior_head`); `LINEAR_SVM_HEAD` (the plain SVM,
+`svm.fit_linear_svm_head`), `LINEAR_HEAD` (the logistic head) and a positive
+width (the MLP) are eval arms.  `conformal_threshold()` maps an
 inclusion (the internal unit cuts are measured in) to a decision threshold via a split-conformal
 quantile rule over held-out calibration scores.  A separate
 `calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
 thresholds.
 
 ```python
-from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
+from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD, train_model
 from vtscore.training.thresholds import conformal_threshold
 
-model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=LINEAR_SVM_HEAD)
+model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=LINEAR_SVM_PRIOR_HEAD)
 threshold = conformal_threshold(scores, labels, inclusion_value=0)
 ```
 

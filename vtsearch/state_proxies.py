@@ -7,7 +7,7 @@ names - its functions resolve the active context explicitly - but the app
 keeps them as a convenience facade so existing code reads naturally.
 
 These proxies live on the app side of the ``vtscore`` / ``vtsearch`` split
-(see Phase 3 of ``../vtscore/docs/architecture.md``).  ``vtsearch.state``
+(the Global state seam in ``../vtscore/docs/architecture.md``).  ``vtsearch.state``
 re-exports them under their original names so ``from vtsearch.state import
 medias`` keeps working; the library tier ``vtscore.state`` never imports the
 proxy classes.

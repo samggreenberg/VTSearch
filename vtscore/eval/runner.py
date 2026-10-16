@@ -153,7 +153,9 @@ def eval_learned_sort(
          negatives.
       4. Call ``train_and_score`` on the full media set.
       5. Measure accuracy/precision/recall/F1 on the test set using the
-         cross-calibrated threshold.
+         threshold ``train_and_score`` returns with no balance: the
+         fold-anchored cut at Inclusion 0, or the schedule blend where no
+         calibration folds form.
 
     Args:
         medias: Loaded media dict.

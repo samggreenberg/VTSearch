@@ -1,8 +1,8 @@
 """Embed-missing stage: embed media items the importer left unembedded.
 
-Importers emit media dicts and optionally pre-populate ``embedding`` from
-``content_vectors`` / ``custom_metadata_map``; anything still at ``None``
-after the importer finishes is bulk-embedded here in a single
+Importers emit media dicts and optionally pre-populate their ``embeddings``
+dict from ``content_vectors`` / ``custom_metadata_map``; any media still
+without a vector after the importer finishes is bulk-embedded here in a single
 ``embed_media_bulk`` call, with patch-region tensors attached for embedders
 that report ``supports_patch_regions``.
 """
@@ -277,12 +277,11 @@ def _missing_for_embedder(
     When the caller named an embedder explicitly (the bound-set driver and the
     reload path both do), "missing" is keyed to that embedder's own per-media
     entry, so a second bound embedder embeds items the first already covered
-    (their singular vector belongs to the first model).
+    (their vector is keyed under the first model's name).
 
-    When no embedder was named (bare default-resolution call), keep the legacy
-    contract: only items with *no* vector at all are embedded, so a dataset
-    already populated by some other source isn't re-embedded under the resolved
-    default.
+    When no embedder was named (bare default-resolution call), only items with
+    *no* vector at all are embedded, so a dataset already populated by some
+    other source isn't re-embedded under the resolved default.
     """
     if embedder_name:
         return [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
@@ -294,8 +293,8 @@ def _needs_side_channel(m: dict[str, Any], embedder_name: str, key: str) -> bool
 
     The embedder must have produced a CLS/VLAD vector for the image (so we
     never re-derive a side channel for an image it never embedded), keyed off
-    its own per-embedder entry rather than the singular mirror: in a
-    multi-embedder dataset the mirror may belong to a *different* model.
+    its own per-embedder entry rather than the media's primary vector: in a
+    multi-embedder dataset the primary may belong to a *different* model.
     """
     return media_embedding(m, embedder_name) is not None and m.get(key) is None
 
@@ -495,14 +494,14 @@ def embed_missing(
     """Embed media items in *medias* that don't already have an embedding.
 
     Importers are not responsible for calling the embedder; they emit
-    media dicts and optionally pre-populate ``embedding`` from
-    ``content_vectors`` / ``custom_metadata_map``.  Items still at
-    ``None`` after the importer finishes go through this function, which
-    resolves a single embedder (the user's pick when given, otherwise the
-    default for the media type of the unembedded items) and bulk-embeds
-    them in one ``embed_media_bulk`` call.
+    media dicts and optionally pre-populate their ``embeddings`` dict from
+    ``content_vectors`` / ``custom_metadata_map``.  Items still without a
+    vector after the importer finishes (see :func:`_missing_for_embedder`)
+    go through this function, which resolves a single embedder (the user's
+    pick when given, otherwise the default for the media type of the
+    unembedded items) and bulk-embeds them in one ``embed_media_bulk`` call.
 
-    Items whose bulk-embed call returns ``None`` stay at ``None``; the
+    Items whose bulk-embed call returns ``None`` stay without a vector; the
     load pipeline drops them via :func:`_drop_none_embeddings_stage`.  Pass a
     *failures* dict to learn why: each such item's id is mapped to a
     one-sentence, user-facing reason naming the embedder and what went wrong
@@ -569,8 +568,8 @@ def embed_missing(
             fail_message=p.fail_message,
         )
 
-    # Re-key any legacy single-vector media into the dict-keyed representation
-    # and drop the singular media["embedding"] mirror (Phase 2c): afterward
+    # Re-key any legacy single-vector media (a singular media["embedding"])
+    # into the dict-keyed representation and drop the singular key, so
     # media["embeddings"] is the sole per-media vector store.
     for media in medias.values():
         ensure_embeddings_dict(media)
@@ -582,14 +581,10 @@ def _attach_patch_grid_to_media(media: dict, patch_out) -> None:
     That dtype (:data:`vtscore.embedding.matrix.PATCH_ROW_DTYPE`) is float16;
     #3159 measured what the cast costs the region path.
 
-    That is the *whole* patch side-channel now.  Ingest used to also build a
-    24-node HAC region tree per image here (``build_region_tree(patch_out,
-    k=12, alpha=0.5)``); #2886 dropped it after the Max-Patch study found raw
-    patches beat every tree variant at the operating point, so the payload gets
-    strictly **smaller** - the grid was already being stored alongside the tree
-    - and ingest sheds the tree's ``O(k^3)`` agglomerative merge.  The
-    per-patch saliency ``patch_out`` also carries is not stored: nothing
-    downstream reads it now that leaf pooling is gone.
+    That is the *whole* patch side-channel: ingest builds no HAC region tree
+    per image (#2886: the Max-Patch study found raw patches beat every tree
+    variant at the operating point).  The per-patch saliency ``patch_out`` also
+    carries is not stored: nothing downstream reads it.
     """
     from vtscore.embedding import matrix  # noqa: PLC0415
 

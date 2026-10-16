@@ -37,8 +37,8 @@
  *
  * One output of the `find` group is not a screenshot at all.
  * `figs/ui-find-grid.webp` is a contact sheet of book photographs with no app
- * around it, built by `results_grid.py` from a seeded sample of the production
- * pile's `book/` folder (`shootFindGrid` says why not the ranking itself) —
+ * around it, built by `results_grid.py` from twelve named frames of the
+ * production pile's `book/` folder (`shootFindGrid` says why not the ranking itself) —
  * because not viewing your results in the tool is a feature,
  * and the slide's payoff is the pictures rather than a screen with the
  * pictures stacked down one side of it (#3779). It is composed into the same
@@ -1043,7 +1043,7 @@ function assertTrainedHead(quota) {
  * subject and the whole of Part 3, not this page's.
  *
  * Deterministic, so the slide does not reshuffle on every re-shoot: the
- * selection is a seeded sample, in `results_grid.py`.
+ * selection is a fixed list of named frames, `SHEET` in `results_grid.py`.
  */
 async function shootFindGrid() {
   const png = execFileSync(

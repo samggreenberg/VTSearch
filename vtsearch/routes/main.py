@@ -1,12 +1,10 @@
 """Blueprint for main application routes.
 
-``/api/version`` is the only JSON API exposed here and is described via
-``flask_smorest`` decorators so it appears in ``/api/openapi.json``.
-The other routes serve static files / the Angular SPA shell and stay
-plain Flask routes (no schema, no spec presence); they share the same
-``flask_smorest.Blueprint`` object since that class is a regular Flask
-``Blueprint`` subclass and only decorated routes contribute to the
-spec.
+``/api/version`` is the only JSON API exposed here, and the only route
+with a response schema.  The other routes serve static files / the Angular
+SPA shell and carry no schema; because ``flask_smorest.Blueprint.route``
+documents every route it registers, they still appear in
+``/api/openapi.json``, described by their docstrings alone.
 """
 
 from __future__ import annotations

@@ -58,10 +58,10 @@ Label endpoints (``vtsearch/routes/detectors/labels.py``):
   not described in the spec.
 
 The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
-``POST /api/detectors/registry/from-labelset/<importer>`` routes stay on the
-legacy flask pattern: their request shape depends on the chosen label
-importer's plugin fields, which don't fit a static marshmallow schema (see
-"Routes absent from the spec" in ``docs/API.md``).
+``POST /api/detectors/registry/from-labelset/<importer>`` routes declare no
+request schema: their request shape depends on the chosen label importer's
+plugin fields, which don't fit a static marshmallow schema (see "Routes with
+no typed schema" in ``docs/API.md``).
 
 The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 """
@@ -334,7 +334,6 @@ class DetectorRegistryCreateRequestSchema(Schema):
     media_type = fields.String(required=True, validate=validate.Length(min=1))
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
-    trainable = fields.Boolean(load_default=False)
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural").  Empty lets the server pick (sole type a single-type

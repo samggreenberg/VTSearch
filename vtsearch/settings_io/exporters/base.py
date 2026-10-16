@@ -5,8 +5,9 @@ class attributes and :meth:`~SettingsExporter.export`, then expose a module-leve
 ``SETTINGS_EXPORTER`` instance from a package under this directory.  The
 registry will discover it automatically.
 
-The :meth:`export` method receives the current settings dict and user-supplied
-field values, and must return a dict with at minimum a ``"message"`` key.
+The :meth:`export` method receives the current user's per-user settings dict
+and user-supplied field values, and must return a dict with at minimum a
+``"message"`` key.
 """
 
 from __future__ import annotations
@@ -25,8 +26,9 @@ class SettingsExporter(PluginBase):
     and expose a module-level ``SETTINGS_EXPORTER = YourExporter()`` -- the
     registry picks it up automatically.
 
-    The :meth:`export` method receives the full settings dict and must return
-    a dict with at minimum a ``"message"`` key describing what happened.
+    The :meth:`export` method receives the current user's per-user settings
+    dict and must return a dict with at minimum a ``"message"`` key describing
+    what happened.
     """
 
     #: Abstract family base: no auto-derived metadata, and concrete
@@ -40,7 +42,9 @@ class SettingsExporter(PluginBase):
         """Perform the export and return a status dict.
 
         Args:
-            settings_data: The full settings dict from ``settings.get_all()``.
+            settings_data: The current user's per-user settings, from
+                ``settings.get_user_settings()`` (not the merged view, so
+                no shared server-tier keys).
             field_values: Mapping of field key to value string supplied by
                 the user.
 

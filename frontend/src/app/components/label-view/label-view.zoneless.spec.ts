@@ -864,7 +864,7 @@ describe('LabelViewComponent', () => {
     expect(autopilot.state.spotCheck).toBe('done');
     expect(el.querySelector('vt-spot-check-stage')).not.toBeNull();
     expect((el.querySelector('vt-center-panel') as HTMLElement).style.display).toBe('none');
-    expect(component.spotCheckIntro()).toContain('Every quality light is green');
+    expect(component.spotCheckIntro()).toContain('about to call the detector done');
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
       balance: wireBalance('unchecked'),
       check: {

@@ -273,9 +273,10 @@ bags and a scoring population that differs from *snap*):
    and `calibration_fraction` settings).
 2. Full-data model via `train_model`. Inclusion never reaches the model: the
    head is the same at every inclusion, and only the cut in step 3 reads it.
-3. The fold-anchored population threshold whenever a media snapshot is
-   provided (the haystack the mixture is fitted on).  Without one, the
-   cross-calibration cut ships alone.
+3. The line whenever a media snapshot is provided (the haystack it is
+   fitted on): the labels' line at the balance, with the fold-anchored cut
+   and the schedule blend as fallbacks.  Without one, the cross-calibration
+   cut ships alone.
 
 Returns `(model, threshold)`. The function reads the balance of `det_ctx`
 (`detector_beta(det_ctx)`, the detector's own, #4665; `line_knobs`, the
@@ -287,10 +288,12 @@ Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
 builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
-Under a balance the threshold keeps a set - the top *count* unvoted items of
-the haystack, the set the detector's last spot check ended on (where the
-check's shape lets it move the line) or the mixture's F-beta argmax under the
-balance's cap - and with no balance it is the Inclusion 0 cut.
+Under a balance the threshold is the labels' line (#4452): the class model
+the calibration folds' held-out votes imply, cut where the expected F-beta
+peaks at the prevalence it estimates on the haystack, and parked on
+`det_ctx.labels_line` so a balance change re-cuts it without a retrain. With no
+balance, or labels that support no class model, it is the fold-anchored cut at
+Inclusion 0.
 `calibrating_groups` is deprecated and ignored (#4362): it chose the votes
 that estimate could use as evidence. Leave it unset; passing it emits a
 `DeprecationWarning`.
@@ -308,7 +311,8 @@ is **deprecated** (#4269): leave it unset; `0` is accepted with a
 
 - `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
-- `threshold` - the operating point (cross-cal or safe-blended).
+- `threshold` - the line (the labels' line at *beta*; with no balance the
+  fold-anchored cut at Inclusion 0, or the schedule blend where no folds form).
 - `model` - the trained `nn.Sequential` (or `None` when training was
   not possible).
 

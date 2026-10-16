@@ -1,6 +1,6 @@
 """Flask routes for the Labelset Exporter API.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Endpoints

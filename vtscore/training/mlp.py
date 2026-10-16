@@ -33,8 +33,9 @@ if TYPE_CHECKING:
 #: instead - the older arm still, likewise, not reachable from the app.
 LINEAR_HEAD = 0
 
-#: ``hidden_dim`` sentinel selecting the **linear SVM head** - the
-#: **production detector head**.  Architecturally identical to
+#: ``hidden_dim`` sentinel selecting the **plain linear SVM head** - an eval
+#: arm (``head="linear_svm"``), and the objective the production head,
+#: :data:`LINEAR_SVM_PRIOR_HEAD`, starts from the Goods' centroid.  Architecturally identical to
 #: :data:`LINEAR_HEAD` (one ``Linear(input_dim, 1)``, so weight serialisation,
 #: :func:`build_model_from_weights`, and every scoring path are shared); what
 #: differs is the objective that fits it.  :func:`train_model` routes this
@@ -81,8 +82,8 @@ def _auto_hidden_dim(n_train: int) -> int:
     arrive.  The width is floored at ``MLP_HIDDEN_MIN`` (8): below ~8
     neurons the detector underfits and destabilizes on harder tasks.
 
-    Only the MLP head uses this; the production linear SVM head
-    (:data:`LINEAR_SVM_HEAD`) has no hidden layer.
+    Only the MLP head uses this; the linear heads (:data:`LINEAR_HEADS`, the
+    production :data:`LINEAR_SVM_PRIOR_HEAD` among them) have no hidden layer.
     """
     return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
@@ -93,14 +94,15 @@ def build_model(
     dropout: float = 0.0,
     generator: torch.Generator | None = None,
 ) -> nn.Sequential:
-    """Construct the MLP architecture (untrained).
+    """Construct the head's architecture (untrained): an MLP, or a single ``Linear``.
 
     The model outputs raw logits (no sigmoid).  Apply ``torch.sigmoid``
     to the output at inference time to obtain probabilities in [0, 1].
 
     Args:
         input_dim: Dimensionality of the input embeddings.
-        hidden_dim: Number of neurons in the hidden layer (default 64).
+        hidden_dim: Number of neurons in the hidden layer (default 64), or a
+            linear-head sentinel.
         dropout: Dropout probability applied after the hidden layer
             (default 0.0 - no dropout).  Active only during training.
         generator: Optional local RNG for weight initialisation.  When
@@ -111,12 +113,14 @@ def build_model(
     Returns:
         An ``nn.Sequential`` model.  With ``hidden_dim > 0`` (the MLP) the layers
         are ``Linear(input_dim, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)``.
-        With a linear-head sentinel (:data:`LINEAR_SVM_HEAD`, the production
-        head, or :data:`LINEAR_HEAD`) it is a single ``Linear(input_dim, 1)``
-        with no hidden layer; ``dropout`` is ignored there (a bare linear map
-        has nothing to regularise with dropout).  The two linear sentinels build
-        the *same* architecture - they differ only in how :func:`train_model`
-        fits it.
+        With a linear-head sentinel (any of :data:`LINEAR_HEADS`:
+        :data:`LINEAR_SVM_PRIOR_HEAD`, the production head,
+        :data:`LINEAR_SVM_HEAD`, :data:`LINEAR_LOGREG_HEAD` or
+        :data:`LINEAR_HEAD`) it is a single ``Linear(input_dim, 1)`` with no
+        hidden layer; ``dropout`` is ignored there (a bare linear map has
+        nothing to regularise with dropout).  The linear sentinels build the
+        *same* architecture - they differ only in how :func:`train_model` fits
+        it.
     """
     import torch.nn as nn  # noqa: PLC0415
 
@@ -167,10 +171,10 @@ def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
         hidden_dim = len(weights["0.bias"])
     else:
         # A linear head: a single ``Linear(input_dim, 1)``, so the only keys are
-        # ``0.weight`` / ``0.bias``.  Which of the two linear sentinels fitted
-        # those weights is not recoverable from - and irrelevant to - a
+        # ``0.weight`` / ``0.bias``.  Which linear sentinel fitted those
+        # weights is not recoverable from - and irrelevant to - a
         # reconstruction: the objective only shapes the numbers, and they are
-        # already in hand.  Either sentinel builds the same architecture.
+        # already in hand.  Every linear sentinel builds the same architecture.
         hidden_dim = LINEAR_HEAD
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=0.0)
@@ -297,12 +301,16 @@ def train_model(
 ) -> nn.Sequential:
     """Train the detector head named by *hidden_dim* and return it.
 
-    ``hidden_dim`` picks the head.  :data:`LINEAR_SVM_HEAD` - what every
-    production fit passes - short-circuits everything below and delegates to
-    :func:`vtscore.training.svm.fit_linear_svm_head`, which fits a
-    maximum-margin hyperplane with liblinear instead of running the BCE epoch
-    loop; it returns the same ``Linear(input_dim, 1)`` module, so callers see no
-    difference beyond the weights.  Everything from here down describes the
+    ``hidden_dim`` picks the head.  The solver-fitted linear heads short-circuit
+    everything below: :data:`LINEAR_SVM_PRIOR_HEAD` - what every production fit
+    passes - delegates to
+    :func:`vtscore.training.svm_prior.fit_linear_svm_prior_head`,
+    :data:`LINEAR_SVM_HEAD` to :func:`vtscore.training.svm.fit_linear_svm_head`
+    and :data:`LINEAR_LOGREG_HEAD` to
+    :func:`vtscore.training.logreg.fit_linear_logreg_head`.  Each fits its
+    hyperplane with a scikit-learn solver instead of running the BCE epoch
+    loop and returns the same ``Linear(input_dim, 1)`` module, so callers see
+    no difference beyond the weights.  Everything from here down describes the
     **torch** heads, :data:`LINEAR_HEAD` and the MLP.
 
     The hidden-layer width is chosen automatically based on the number of
@@ -339,11 +347,13 @@ def train_model(
             (1.0 for good, 0.0 for bad).
         input_dim: Dimensionality of the input embeddings.
         seed: Seed for the local RNG used for weight initialisation (default 42).
-        hidden_dim: Which head to fit.  :data:`LINEAR_SVM_HEAD` (production)
-            and :data:`LINEAR_HEAD` are the two ``Linear(input_dim, 1)``
-            heads - hinge-fitted and BCE-fitted respectively; a positive value
-            is an MLP hidden width.  ``None`` (default) auto-sizes an MLP via
-            :func:`_auto_hidden_dim`.
+        hidden_dim: Which head to fit.  Each of :data:`LINEAR_HEADS` is a
+            ``Linear(input_dim, 1)`` head: :data:`LINEAR_SVM_PRIOR_HEAD`
+            (production) and :data:`LINEAR_SVM_HEAD` hinge-fitted,
+            :data:`LINEAR_LOGREG_HEAD` and :data:`LINEAR_HEAD` logistic
+            (fitted to convergence by scikit-learn, and by the BCE loop
+            below); a positive value is an MLP hidden width.  ``None``
+            (default) auto-sizes an MLP via :func:`_auto_hidden_dim`.
         sample_weights: Optional per-row loss weights of shape ``(N,)`` or
             ``(N, 1)``.  When ``None`` (default) inverse-class-frequency
             weights are computed internally.  When provided they replace the

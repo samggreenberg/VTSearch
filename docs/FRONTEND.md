@@ -806,10 +806,11 @@ describe them:
 
 Adding a hand-written interface that duplicates a generated one is a
 regression: it can drift, and the compile-time guarantee is exactly what is
-lost.  `models/projection.models.ts` is the standing exception to clean up: it
-hand-writes the Browse payloads (`ProjectionMeta`, `ProjectionBuildResponse`,
-`ProjectionLabelsResponse`, …) although the spec now carries schemas of the
-same names.
+lost.  `models/projection.models.ts` follows the same rule for the Browse
+payloads: it re-exports the generated `ProjectionMeta`, `TileResponse`,
+`RegionLabel`, … and hand-writes only `ProjectionLayout` (a ready meta, whose
+layout fields the one shared schema leaves optional), `BinShape` and the
+canvas's `ViewTransform`.
 
 ### The interceptor chain
 

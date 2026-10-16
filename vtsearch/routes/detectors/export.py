@@ -14,7 +14,7 @@ scoring mode, flagged in the manifest/README.  See
 :func:`vtscore.detectors.portable_bundle.check_exportable` /
 :func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`.
 
-Migrated to ``flask_smorest`` so the route is described in
+Built on ``flask_smorest`` so the route is described in
 ``/api/openapi.json``.  The success body is a raw ``application/zip`` download,
 so (like the dataset-export route) it is left undescribed in the spec and only
 the error responses carry schemas.

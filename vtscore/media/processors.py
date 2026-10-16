@@ -30,8 +30,9 @@ class Processor(ABC):
 
     Subclasses *may* override:
 
-    * :meth:`load_model`: called once before first use to load heavy
-      resources (model weights, etc.).  Default is a no-op.
+    * :meth:`load_model`: load heavy resources (model weights, etc.).
+      Default is a no-op, and nothing in the framework calls it: a subclass
+      that overrides it calls it itself (see :meth:`load_model`).
     """
 
     # ------------------------------------------------------------------
@@ -55,9 +56,13 @@ class Processor(ABC):
     def load_model(self) -> None:
         """Load any heavyweight resources (model weights, etc.).
 
-        Called lazily before the first :meth:`process` call.  The default
-        implementation is a no-op; override in subclasses that need
-        one-time model loading.
+        A hook for the subclass's own use: nothing in the framework calls it.
+        A subclass that needs one-time model loading overrides it, keeps it
+        idempotent (return early when the model is already cached on the
+        instance), and calls it itself at the top of its typed method
+        (:meth:`Detector.detect`, :meth:`Localizer.localize`,
+        :meth:`Extractor.extract`), as the shipped processors do.  The
+        default implementation is a no-op.
         """
 
     # ------------------------------------------------------------------

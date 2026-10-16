@@ -163,7 +163,7 @@ actually have. Six labels is enough - the linear head is small.
 
 ```python
 from vtscore.training import train_model, calculate_cross_calibration_threshold
-from vtscore.training.mlp import LINEAR_SVM_HEAD
+from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD
 
 # Build (X, y) tensors.
 X_list = [media_embedding(m) for m, _ in labelled]
@@ -172,26 +172,28 @@ y_list = [1.0 if label == "good" else 0.0 for _, label in labelled]
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# Train. LINEAR_SVM_HEAD is what the app passes on every production fit.
-model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
+# Train. LINEAR_SVM_PRIOR_HEAD is what the app passes on every production fit.
+model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_PRIOR_HEAD)
 
 # Calibrate the decision threshold via 2-fold cross-validation, on the same
 # head - otherwise the threshold is measured on a differently-fitted model.
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
-    hidden_dim=LINEAR_SVM_HEAD,
+    hidden_dim=LINEAR_SVM_PRIOR_HEAD,
 )
 
 print(f"Trained detector; threshold = {threshold:.3f}")
 ```
 
 The production head is a single `Linear(512, 1)` - the
-`hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel in `vtscore/training/mlp.py` -
-fitted to the class-balanced maximum-margin boundary by liblinear. `LINEAR_HEAD`
-(`0`) fits the same architecture with balanced BCE-with-logits (logistic
-regression) and a positive `hidden_dim` builds the older MLP
+`hidden_dim=LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel in `vtscore/training/mlp.py` -
+fitted to the class-balanced maximum-margin boundary by liblinear, with the
+Goods' centroid a cheap direction so a head fitted to a few labels starts at the
+centroid. `LINEAR_SVM_HEAD` (`-1`) is the plain SVM without that start,
+`LINEAR_HEAD` (`0`) fits the same architecture with balanced BCE-with-logits
+(logistic regression), and a positive `hidden_dim` builds the older MLP
 (`Linear(512, H) → ReLU → Dropout → Linear(H, 1)`, `H` auto-sized by
-`_auto_hidden_dim`); both now survive only for the eval harness and tests. See
+`_auto_hidden_dim`); all three serve only the eval harness and tests. See
 [docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
 The default seed makes training deterministic.
 

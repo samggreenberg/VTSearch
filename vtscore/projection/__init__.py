@@ -11,7 +11,8 @@ The Flask-free core of the VTSBrowse browse canvas (see
   the projection as hexagons or squares — see ``BIN_SHAPES`` and the
   ``bin_shape`` argument.  The shape is chosen per media type, not by the user:
   :func:`bin_shape_for_media_type` returns squares for browsable-thumbnail
-  media (image/video/document) and hexes for the rest (audio/text).
+  media (image/video/document/face, and audio via its waveform PNG) and hexes
+  for the rest (text).
 
 Two more modules sit on top of those stages: :mod:`vtscore.projection.store`
 persists a layout beside its dataset (the carve-out from the "No Persisted

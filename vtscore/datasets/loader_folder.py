@@ -3,9 +3,9 @@
 Loads datasets from a directory tree of media files, with optional
 pre-computed embeddings/MD5s and custom metadata.  Loaders build the
 media dicts but do **not** call the embedder - items without a
-pre-computed embedding leave ``embedding=None`` for the framework
-embed stage (:func:`vtscore.datasets.stages.embedding.embed_missing`) to
-fill in.
+pre-computed embedding leave with an empty ``embeddings`` dict for the
+framework embed stage
+(:func:`vtscore.datasets.stages.embedding.embed_missing`) to fill in.
 
 Split out from :mod:`vtscore.datasets.loader` for navigability.
 """
@@ -456,8 +456,8 @@ def _build_per_file_media(
 ) -> dict[str, Any]:
     """Resolve any pre-computed embedding + md5 and build the per-file media dict.
 
-    Files without a pre-computed embedding are returned with
-    ``embedding=None``; the framework embed stage fills those in.
+    Files without a pre-computed embedding are returned with an empty
+    ``embeddings`` dict; the framework embed stage fills those in.
     """
     file_cm = _lookup_file_custom_metadata(rel_path, file_path.name, custom_metadata_map)
 
@@ -646,9 +646,9 @@ def load_dataset_from_folder(
 
     Scans ``folder_path`` for all files matching the extensions for
     ``media_type`` and populates ``medias`` with one media dict per
-    file.  Loaders do **not** call the embedder - items leave with
-    ``embedding=None`` unless a pre-computed vector is supplied through
-    ``content_vectors`` or ``custom_metadata_map``.  The framework
+    file.  Loaders do **not** call the embedder - items leave with an
+    empty ``embeddings`` dict unless a pre-computed vector is supplied
+    through ``content_vectors`` or ``custom_metadata_map``.  The framework
     embed stage (:func:`vtscore.datasets.stages.embedding.embed_missing`)
     fills the rest in after the importer returns.
 
@@ -795,7 +795,7 @@ def load_dataset_from_folder_chunked(
     medias in groups of at most *chunk_size*.  Each yielded dict is
     self-contained with IDs starting at 1.  Embedding is left to the
     framework embed stage; items without a pre-computed vector come out
-    with ``embedding=None``.
+    with an empty ``embeddings`` dict.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, if no matching

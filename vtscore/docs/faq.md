@@ -242,8 +242,8 @@ It moves the **decision threshold**, not the model. Inclusion never enters
 training: `train_model` is class-balanced regardless, so every item's score
 is identical at every inclusion, and only the cut moves. Range `[-10, +10]`.
 
-Under the shipped cut (`FoldAnchoredCut.threshold_at`, see the next answer),
-`k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
+Under the fold-anchored cut (`FoldAnchoredCut.threshold_at`, see the next
+answer), `k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
 times a false alarm (or a false alarm at `2**-k` times a miss, below zero).
 The `mid_tilt` rule starts from the fold-anchored midpoint cut at `k = 0`
 and shifts its quantile by however far the rate-optimal cut moves at those
@@ -280,18 +280,28 @@ unchanged.
 
 ### How is the decision threshold chosen?
 
-By fusing the labels with the haystack's own score distribution rather
-than picking between them. Per calibration fold, a 2-component mixture
+Under a balance (the app's case), from the labels alone (#4452): the
+calibration folds' held-out scores of the Goods and the Bads are modelled as
+two normals of one spread, and the line is the cut where the expected F-beta
+of the kept set peaks at the prevalence that model estimates on the corpus
+being decided (`vtscore/training/thresholds/labels_line.py:fit_labels_line`).
+While the folds hold out fewer than `HEAD_COUNT_GOODS` Goods, the line keeps
+instead what stands out in the head's own scores (`head_count_cut`).
+
+With no balance, or labels that support no class model, the line is the
+fold-anchored cut: it fuses the labels with the haystack's own score
+distribution rather than picking between them. Per calibration fold, a 2-component mixture
 is fitted to that fold model's scores over the whole collection with the
 fold's *held-out* votes clamped to their labeled component; each fold's
 midpoint cut is carried to the final model as a quantile, the folds are
 averaged in quantile space, and a cut at another inclusion shifts that
 quantile by the rate-optimal cut's own displacement from Inclusion 0. See
-`vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
-unconditional - there used to be a `safe_thresholds` toggle, but the
-fused estimator measured better at every label count, so the toggle was
-removed. `calculate_safe_threshold` remains the fallback for label sets
-too small to form calibration folds.
+`vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. Every
+retrain that scores a haystack fits it, whichever line it draws, so a re-cut
+needs no refit; the
+fused estimator measured better than the blend at every label count, and
+`calculate_safe_threshold` is only the fallback for label sets too small to
+form calibration folds.
 
 ## Detectors on disk
 

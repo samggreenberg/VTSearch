@@ -1,12 +1,10 @@
 """Per-media embedding vector access (dict-keyed).
 
-Phase 2 of the three-slot embedder work (``docs/plans/patch-embedder.md`` →
-"V3 — design") moved a media's embedding from a single ``media["embedding"]``
-ndarray to ``media["embeddings"]`` — a dict keyed by embedder name — so the
-vectors of multiple bound embedders can coexist on one media.  Phase 2c
-**dropped the singular mirror entirely**: ``media["embeddings"]`` is now the
-*only* per-media vector store, and there is no ``media["embedding"]`` on a
-live media.
+A media's vectors live in ``media["embeddings"]`` — a dict keyed by embedder
+name — so the vectors of multiple bound embedders can coexist on one media
+(the three-slot embedder design in ``docs/plans/patch-embedder.md`` → "V3
+design").  That dict is the *only* per-media vector store: there is no
+singular ``media["embedding"]`` on a live media.
 
 This module is the one place that resolves a vector for a media; every read
 site goes through :func:`media_embedding` and every write through
@@ -85,8 +83,8 @@ def init_embeddings(embedder_name: str | None, vec: Any) -> dict[str, Any]:
       ``custom_metadata_map`` / NPZ) with no embedder name is still stored, not
       dropped, under the sentinel key.
 
-    Construction-time counterpart of :func:`set_media_embedding`; use it in
-    media-dict literals in place of the old ``"embedding": vec`` field.
+    Construction-time counterpart of :func:`set_media_embedding`; use it for
+    the ``"embeddings"`` entry of a media-dict literal.
     """
     if vec is None:
         return {}

@@ -1,7 +1,7 @@
 """Read-only listing endpoints for media types, embedders, clippers, cleaners,
 converters, and dataset importers.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. The plugin
 ``to_dict()`` payloads are declared as ``fields.Dict()`` rather than
 nested schemas; see the module docstring in ``vtsearch/schemas/datasets.py``.

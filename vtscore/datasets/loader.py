@@ -14,12 +14,14 @@ The façade re-exports *loaders* only.  Metadata parsers live in
 :mod:`vtscore.datasets.metadata` and pickle-safety names in
 :mod:`vtscore.security.pickle`; import them from there.
 
-All public functions that perform I/O accept an optional ``on_progress``
+The loaders that report progress accept an optional ``on_progress``
 callback with the signature
 ``(status: str, message: str, current: int, total: int) -> None``.
-When omitted the functions fall back to the application-wide
-:func:`~vtscore.concurrency.progress.update_progress` reporter; pass an explicit callback
-to use these functions outside the Flask app.
+When it is omitted, the folder and demo loaders report into the calling
+thread's bound progress sink
+(:func:`~vtscore.concurrency.progress.resolve_progress_callback`; a no-op when
+the thread bound none), and :func:`load_dataset_from_pickle` reports nothing.
+Pass an explicit callback to route progress anywhere else.
 """
 
 from __future__ import annotations
@@ -159,8 +161,8 @@ def export_dataset_to_file(
 
     The container holds ``medias.pkl`` (the pickled media dict) and
     ``meta.json`` (embedder, clipper, timestamps, age-off).  Reloadable
-    with :func:`load_dataset_from_pickle` which auto-detects both this
-    format and legacy raw pickles.
+    with :func:`load_dataset_from_pickle`, which reads only this container
+    format (a raw, non-zip pickle raises :class:`zipfile.BadZipFile`).
 
     Args:
         medias: Mapping of media ID to media data dict.
@@ -207,7 +209,7 @@ def export_dataset_to_file(
             # Per-embedder vectors (v3 three-slot model) are the sole vector
             # store: a single-embedder dataset writes a one-entry dict that the
             # load side re-keys back; a text+patch dataset writes both.  There
-            # is no singular ``embedding`` key (Phase 2c dropped the mirror).
+            # is no singular ``embedding`` key.
             "embeddings": _embeddings_dict_for_pickle(media.get("embeddings")),
             "filename": media.get("filename", f"media_{cid}.wav"),
             "category": media.get("category", "unknown"),

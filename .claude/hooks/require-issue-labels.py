@@ -406,7 +406,7 @@ def _close_problems(args: dict) -> list[str]:
     The hook sees the call's arguments, never the issue's current state, so it
     cannot check whether an issue *has* the label when `labels` is omitted.
     What it can require is that a completing close states the label set
-    explicitly, which is the only form of the call that provably strips `dev`.
+    explicitly, which is the only form of the call that provably strips `solved`.
     """
     if str(args.get("state") or "").strip().lower() != "closed":
         return []

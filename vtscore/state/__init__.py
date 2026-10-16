@@ -195,7 +195,8 @@ def clear_all() -> None:
 # installed.  ``vtsearch/shim/register_app_persistence_hooks()`` wires
 # each key here to the matching ``vtsearch.settings.set_*`` function at
 # app startup.  Library-only callers (no app) see in-memory mutation
-# only.  See Phase 2 of ``../docs/architecture.md``.
+# only.  See Hook 3 (``register_setting_persister``) of
+# ``../docs/integration.md``.
 
 #: Settings the library knows how to hand back to a host for persistence.
 #: Only :func:`_persist_setting` calls below can ever fire a persister, so a key

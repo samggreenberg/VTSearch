@@ -11,6 +11,8 @@ Verifies that:
 
 from __future__ import annotations
 
+import pytest
+
 from vtsearch.auth import (
     get_login_provider,
     set_login_provider,
@@ -296,6 +298,23 @@ class TestOwnershipEnforcementOnRename:
             json={"name": "new_name"},
         )
         assert resp.status_code == 403
+
+
+class TestUnknownDatasetIsNotFound:
+    """An id the registry does not hold is a 404, not an ownership failure."""
+
+    @pytest.mark.parametrize(
+        ("method", "suffix", "body"),
+        [
+            ("delete", "", None),
+            ("put", "/rename", {"name": "new_name"}),
+            ("post", "/unload", None),
+        ],
+    )
+    def test_unknown_id_is_404(self, client, method, suffix, body):
+        resp = getattr(client, method)(f"/api/datasets/registry/nonexistent{suffix}", json=body)
+        assert resp.status_code == 404
+        assert resp.get_json()["message"] == "Dataset not found"
 
 
 # ---------------------------------------------------------------------------

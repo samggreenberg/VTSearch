@@ -51,6 +51,7 @@ SCAN_PATHS = [
     "tests/",
     "vtscore/",
     "tests_lib/",
+    "tests_shared/",
     "scripts/",
 ]
 

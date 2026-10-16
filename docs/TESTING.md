@@ -71,7 +71,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `converters` | app only | Media converters (document, video, image) |
 | `projection` | lib only | VTSBrowse UMAP projection + hex-tile pyramid |
 | `meta` | lib only | Repo/tooling meta-tests: packaging and requirements files, Dockerfiles, docs, the frontend's SCSS text, `scripts/`, `.claude/hooks/`, the `run-tests.sh` gates themselves, and the test harness in `tests_shared/`. Nothing here tests shipped `vtsearch`/`vtscore` behaviour — see the note below the table. |
-| `frontend` | n/a | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest. Also runs as part of the full `./run-tests.sh`. |
+| `frontend` | n/a | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest and closes with `RUN PASSED (frontend-only; …)`, naming the whole-repo gates it skipped beneath it: not a pre-push gate. Also runs as part of the full `./run-tests.sh`. |
 | `slides` | n/a | Slide-deck gate — see the note below the table. |
 | `docs` | n/a | Markdown-only gate — see the note below the table. Auto-engages on a bare run. |
 | `gpu` | lib only | CUDA-only tests (excluded by default) |

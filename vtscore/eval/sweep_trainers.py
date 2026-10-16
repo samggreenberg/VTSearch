@@ -268,8 +268,9 @@ def _train_svm_factory(kernel: str, **svm_kwargs: Any) -> TrainerFn:
 #
 # ``"mlp"`` here is a genuine MLP: ``vtscore.training.mlp.train_model`` with an
 # auto-sized hidden layer, which is the head VTSearch shipped *before* #2790.
-# It is emphatically **not** the head the app ships today (the linear SVM,
-# ``vtscore.training.mlp.LINEAR_SVM_HEAD``); nothing in this registry is, because
+# It is emphatically **not** the head the app ships today (the linear SVM
+# started from the Goods' centroid, ``vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD``);
+# nothing in this registry is, because
 # these arms are bare estimators rather than the app's pipeline.  Read a
 # label-curve row's ``trainer`` column with that in mind, and use the voting
 # simulation's ``trainer="app"`` arm when the question is about the shipped

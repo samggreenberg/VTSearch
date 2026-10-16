@@ -65,7 +65,7 @@ class MediaConverter(PluginBase, ABC):
     The returned media dicts contain the fields produced by the target
     media type's :meth:`~vtscore.media.base.MediaType.load_media_data`
     (e.g. ``media_bytes``, ``duration``, ``width``, ``height``) plus a
-    ``filename`` key.  They do **not** include ``id``, ``embedding``, or
+    ``filename`` key.  They do **not** include ``id``, ``embeddings``, or
     ``md5`` - the caller is responsible for assigning IDs, computing
     embeddings, and hashing.
     """
