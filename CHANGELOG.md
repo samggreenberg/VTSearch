@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
 - **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
   `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
   saved dataset follows that file's saved-datasets directory and retention; it used to follow

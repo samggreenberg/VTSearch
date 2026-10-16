@@ -18,7 +18,6 @@
   flex: 1 1 auto;
 }
 
-.importer-picker,
 .demo-picker,
 .server-folder-browser,
 .local-folder-uploader {
@@ -26,6 +25,8 @@
   flex-direction: column;
 }
 
+// `.importer-picker` is the shared flex-column list wrapper (`_components.scss`).
+// Here it holds the stacked tab bars rather than cards, so they sit flush.
 .importer-picker { gap: 0; margin-bottom: var(--space-lg); }
 
 // No tab rows to show (one category, one importer - see `chromeless` in
