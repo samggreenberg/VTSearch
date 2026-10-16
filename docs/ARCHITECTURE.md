@@ -235,6 +235,7 @@ VTSearch/
 │   │   ├── resolver.py             Origin → file + embedding resolution
 │   │   ├── converter_routing.py    Route a media through converters to reach the detector's type
 │   │   ├── evidence_coverage.py    Per-class evidence coverage over the atlas
+│   │   ├── training_domain.py      Which loaded dataset a detector's labels were cast on
 │   │   ├── portable_bundle.py      Portable-detector bundle build/read (the portable_detector
 │   │   │                           exporter's payload)
 │   │   ├── embedder_sync.py        Reconcile detector labels against the active embedder
@@ -432,6 +433,9 @@ VTSearch/
 │   ├── autofind.py                 Runs a user's AutoFind detectors on a dataset: /api/auto-detect's core,
 │   │                               the background run after an import / from Run AutoFind / the Find
 │   │                               button (ticked detectors), kept results
+│   ├── training_domain.py          The training-domain overlap check both routes share: the
+│   │                               domain-shift report and its refusals, and the reference
+│   │                               worked out from the active detector's labels
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
 │   ├── torch_threads.py            Native-math thread count for the server process

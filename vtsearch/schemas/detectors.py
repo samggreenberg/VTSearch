@@ -71,6 +71,7 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
+from vtsearch.schemas.datasets import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
@@ -1129,6 +1130,29 @@ class FindEvidenceCoverageResponseSchema(Schema):
     # Headline: the vacuum excess is both statistically clear and practically
     # large (z > 3 and frac_unsupported >= 2*alpha).
     unsupported = fields.Boolean(required=True)
+
+
+class FindTrainingDomainResponseSchema(Schema):
+    """Response for ``GET /api/find/training-domain``.
+
+    The training-domain overlap check for the active detector on the active
+    dataset, against the dataset it was trained on: the loaded dataset holding
+    the most of its Good / Bad examples.  ``domain_shift`` is null when there
+    is nothing to compare, and ``reason`` says why.
+    """
+
+    # The inferred training dataset; empty when no loaded dataset holds any of
+    # the detector's labelled examples.
+    reference_dataset_id = fields.String(required=True)
+    reference_dataset_name = fields.String(required=True)
+    # What the inference rests on: the detector's Good / Bad examples, and how
+    # many of them name a media in the reference and in the active dataset.
+    labels_total = fields.Integer(required=True)
+    labels_in_reference = fields.Integer(required=True)
+    labels_in_active = fields.Integer(required=True)
+    domain_shift = fields.Nested(DatasetDomainShiftResponseSchema, required=True, allow_none=True)
+    # Why ``domain_shift`` is null; empty when it is not.
+    reason = fields.String(required=True)
 
 
 class FindCorrectionsToDetectorResponseSchema(Schema):
