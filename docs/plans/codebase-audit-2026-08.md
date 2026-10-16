@@ -10,20 +10,20 @@ repo's own gates were green throughout (7 860 tests, ruff, format, frontend
 build), so everything below came from reading code, not from a broken build.
 
 **What is still owed** is the improvement proposals below. The audit's confirmed
-defects were filed as GitHub issues and have all shipped. The proposals were *not*
-filed as issues because they are design directions rather than discrete shippable
-defects — their bodies live here and nowhere else. Delete a proposal when it ships
-or is rejected.
+defects were filed as GitHub issues and have all shipped. The proposals that turned
+out to be discrete defects were promoted to issues in October 2026 (#4972) and stay
+here only as pointer lines; the rest are design directions, whose bodies live here
+and nowhere else. Delete a proposal when it ships or is rejected.
 
 ---
 
 ## Improvement proposals
 
-Design and architecture directions surfaced by the same review. These are
-deliberately **not** issues: each is a judgement call about direction rather than
-a defect with a right answer, and several are alternatives to one another. Promote
-one to an issue (and delete its item here) when it becomes concrete enough to
-ship on its own.
+Design and architecture directions surfaced by the same review. The bodies here
+are deliberately **not** issues: each is a judgement call about direction rather
+than a defect with a right answer, and several are alternatives to one another.
+Promote one to an issue (and replace its body with a pointer line) when it becomes
+concrete enough to ship on its own.
 
 ### Flask API layer
 
@@ -73,27 +73,15 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Promoted job whose dataset/detector was unloaded silently runs against the empty context and caches a bogus 'done' result** — `vtscore/concurrency/async_jobs.py` (medium impact)
-
-  JobManager._run resolves `ds_ctx = get_context(job.dataset_id)` / `get_detector_context(job.detector_id)` at spawn time and, when either returns None (dataset/detector unloaded while the job sat in the pending slot), simply skips binding the thread-local (lines 332-335). The target then resolves the global _empty_dataset_context/_empty_detector_context, computes over zero medias/votes, and completes with status "done" — which _run_inner caches in _last_done keyed by the job's signature, so a subsequent start() with the same signature (same dataset id!) can short-circuit to the empty result via cached_for(). The job's pollers see success with an empty/garbage payload instead of a clear failure.
-
-  *Direction:* In _run, when job.dataset_id is non-empty but get_context returns None (or likewise for detector_id), mark the job status="error" with a "dataset/detector no longer loaded" message, set done_event, promote pending, and return without invoking the target.
+- [ ] #4976 — A queued job whose dataset or detector was unloaded runs against the empty context and is marked done (Sonnet)
 
 <!-- item-sep -->
 
-- **build_coverage_atlas holds the global _state_lock across the entire hierarchical k-means fit** — `vtscore/state/coverage.py` (medium impact)
-
-  build_coverage_atlas() wraps the full CoverageAtlas(...) construction — hierarchical k-means over up to 50k vectors, which the module's own comment describes as costing minutes at scale — inside `with _state_lock:` (coverage.py). _state_lock serializes essentially every endpoint (votes, media reads, before_request state sync), so any caller of this exported public API (it is re-exported from both vtscore.state and vtsearch.state) freezes the whole app for the duration. Production routes currently dodge this by using build_coverage_atlas_for_context (lock-free), so today only tests call the locked variant — but the exported function is a loaded gun for the next plugin/route author, and the codebase already has the right pattern (get_embedding_matrix, cached_media_lookups: snapshot under lock, build unlocked, store under lock with a revision re-check).
-
-  *Direction:* Restructure build_coverage_atlas to snapshot the medias + media_revision under _state_lock, build the atlas unlocked, then re-acquire the lock, verify the revision (and active context identity) still match, and only then assign ctx.coverage_atlas + resync votes; or delete the locked variant and route all callers through build_coverage_atlas_for_context plus an explicit locked resync.
+- [ ] #4977 — build_coverage_atlas holds the global state lock across the whole k-means fit (Opus)
 
 <!-- item-sep -->
 
-- **SortResultsCache bounds entry count but not bytes: 8 cached rankings of a 1M-item dataset pin gigabytes** — `vtscore/state/sort_results_cache.py` (low impact)
-
-  The cache exists for 100k-1M item datasets (its own docstring), keeps up to max_entries=8 full result lists, and each list is a Python list of per-row dicts ({"id", "score"} or {"id", "similarity", "best_region"}) held by reference. At ~150-250 bytes per small dict, 8 rankings x 1M rows is roughly 1-2 GB of steady-state heap from a user simply re-sorting a large dataset a few times (each re-sort mints a new token, so distinct entries accumulate up to the cap even for the same dataset). The LRU bound protects against unbounded growth but not against exactly the large-N case the cache was built for.
-
-  *Direction:* Bound the cache by total rows (e.g. evict oldest until sum(len(results)) <= ~2M) in store(), and/or store rankings columnar (an int64 id array + float32 score array, materializing row dicts only in page()) which cuts memory ~20x and also makes the stored list immune to caller mutation.
+- [ ] #4978 — SortResultsCache bounds entry count but not size, so large re-sorts pin gigabytes (Sonnet)
 
 <!-- item-sep -->
 
@@ -109,27 +97,15 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Whisper and PaddleOCR converters reload their model for every single media item** — `vtscore/converters/audio2text.py` (medium impact)
-
-  `Audio2TextMediaConverter.convert` calls `whisper.load_model(model_size, ...)` inside convert(), i.e. once per audio file — the runner invokes convert per source file (vtscore/converters/runner.py), so transcribing a folder of 500 clips loads the ~145 MB (base) to ~3 GB (large) checkpoint from disk into RAM/VRAM 500 times, dominating wall-clock cost. `Image2TextMediaConverter` has the same shape: `_make_paddleocr` (vtscore/converters/image2text.py, 57-75) constructs a fresh PaddleOCR engine (det+rec+cls model loads) per image. The codebase already has the right pattern in the same package: `Image2FaceMediaConverter` caches its MTCNN detector on the instance across a conversion run (vtscore/converters/image2face.py, explicitly documented as 'reused across every image in a conversion run'). Caching keyed by the params that affect the model (model_size / language) would make both converters usable on realistic corpus sizes.
-
-  *Direction:* Cache the loaded model on the converter instance keyed by (model_size,) / (language,) — mirroring Image2FaceMediaConverter._make_detector — and reuse it across convert() calls.
+- [ ] #4979 — Whisper and PaddleOCR converters reload their model for every media item (Sonnet)
 
 <!-- item-sep -->
 
-- **Audio import decodes every file twice and ignores the bytes it was handed** — `vtscore/media/audio/media_type.py` (medium impact)
-
-  `AudioMediaType.load_media_data` accepts `media_bytes` precisely so callers that already read the file avoid a second read (per the base-class contract, vtscore/media/base.py), but then (a) fully decodes the audio from `file_path` anyway just to compute duration (`decode_audio(str(file_path), sr=None, mono=True)` — a complete PCM decode of, say, an hour-long podcast merely for its length), and (b) decodes the same payload a second time inside `generate_waveform_thumbnail(media_bytes)` (line 1053 → decode at line 169). So every imported audio file is decoded end-to-end twice per import, and the provided bytes are never used for the duration path. Duration is available near-free from the container header via `soundfile.SoundFile(...).frames / samplerate` (with an ffmpeg probe fallback for AAC/M4A), and even without that, decoding once and reusing the array for both duration and the waveform render halves import decode cost.
-
-  *Direction:* Decode once from `media_bytes` (already in hand) and derive both duration and the waveform thumbnail from that single `(samples, sr)`; or read duration from `sf.info`-style header metadata instead of a full decode.
+- [ ] #4980 — Audio import decodes every file twice and ignores the bytes it was given (Sonnet)
 
 <!-- item-sep -->
 
-- **Audio media_response always claims audio/wav and a .wav filename regardless of actual codec** — `vtscore/media/audio/media_type.py` (low impact)
-
-  `AudioMediaType.media_response` serves whatever `_resolve_media_bytes` returns — which for MP3/FLAC/OGG/M4A imports (all in `file_extensions`, line 328) is the original container bytes — but hard-codes `mimetype="audio/wav"` and `download_name=f"media_{id}.wav"`. Browsers usually sniff their way through playback, but a user downloading the clip gets an `.wav` file containing MP3/M4A bytes (which some players refuse by extension), and strict clients/proxies that trust Content-Type can mis-handle the stream. The bytes' real container is cheaply detectable from magic bytes (RIFF/ID3-or-0xFFEx/fLaC/OggS/ftyp).
-
-  *Direction:* Sniff the first bytes of the payload (RIFF→wav, fLaC→flac, OggS→ogg, ID3/0xFFEx→mp3, ....ftyp→mp4/m4a) and set mimetype + download extension accordingly, defaulting to audio/wav.
+- [ ] #4981 — Audio responses always claim audio/wav and a .wav filename whatever the codec (Sonnet)
 
 <!-- item-sep -->
 
@@ -179,11 +155,7 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Hilbert ordering recomputed per level in _level_membership despite being level-independent** — `vtscore/projection/pyramid.py` (low impact)
-
-  `_level_membership` calls `perm = _hilbert_order(coords)` inside the per-level cache-miss path. The Hilbert permutation depends only on the frozen coords — it is identical for every level — yet each level's first tile fetch pays a fresh O(N) quantize + 16-iteration bit-twiddle + O(N log N) stable argsort. On a large dataset with a deep pyramid (up to 14 levels), the browse canvas re-derives the exact same permutation up to 14 times as the user zooms through levels, each time on the request thread serving the first tile of that level.
-
-  *Direction:* Memoize the permutation once per Pyramid (e.g. a `_hilbert_perm` field alongside `_member_index`, or key the member-index cache computation to compute the perm once and reuse across levels).
+- [ ] #4982 — Pyramid recomputes the level-independent Hilbert permutation for every level (Sonnet)
 
 <!-- item-sep -->
 
@@ -207,11 +179,7 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Bulk delete fires N parallel requests each triggering its own registry refresh** — `frontend/src/app/components/dashboard/dashboard.component.ts` (low impact)
-
-  `deleteSelectedDatasets()` and `deleteSelectedDetectors()` loop over targets, issuing one DELETE per item and calling `this.datasetState.refresh()` in every `next` callback — deleting 20 datasets produces 20 registry refetches racing each other, and intermediate refreshes can repopulate the table mid-delete (rows flicker back before their own DELETE lands). Partial failures are also silent: individual errors are swallowed ("Global error interceptor surfaces the failure in the banner") with no summary of which items survived. Benefit: `forkJoin` over the delete observables with a single `refresh()` (and one toast noting any failures) removes the refetch storm and the flicker, and gives the user an accurate outcome for bulk operations.
-
-  *Direction:* Wrap the per-item deletes in `forkJoin([...ids.map(id => api.delete(id).pipe(catchError(err => of({id, err}))))])`, then do one selection prune + one `datasetState.refresh()` + one summary toast.
+- [ ] #4984 — Dashboard bulk delete refreshes the registry once per item and never reports which deletes failed (Sonnet)
 
 <!-- item-sep -->
 
@@ -219,11 +187,7 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **LabelsetStateService lacks the out-of-order read guard that VoteStateService has** — `frontend/src/app/services/labelset-state.service.ts` (medium impact)
-
-  The labelset piles are fed by two independent readers of GET labels-detail: the adaptive poll (startPolling) and the on-vote refresh() called from vote()'s POST continuation and from label-view.onMediaVoted() (label-view.component.ts line 1061). adaptivePoll never overlaps its own GETs, but a poll GET issued just before a vote commits can resolve AFTER the post-vote refresh(), reverting the just-moved element to its old pile until the next poll tick (~1.5s flicker, longer once the poll has backed off to its 10s heartbeat). This is exactly the staleness class VoteStateService closed with its votesSeq / lastAppliedVotesSeq issue-order guard (vote-state.service.ts lines 74-87 documents the identical bug for /api/votes); the labelset store predates that fix and never got it. The optimistic applyOptimisticState here also has no pending-entry reconciliation, so the stale overwrite is not corrected until the next full read.
-
-  *Direction:* Stamp every labels-detail read (poll and refresh) with a monotonic issue id and drop responses older than the newest applied, mirroring VoteStateService.applyVotesFresh; optionally keep per-element pending entries until the server response agrees, as vote-state does for votes and region boxes.
+- [ ] #4985 — LabelsetStateService can apply an older labels-detail read over a newer one (Sonnet)
 
 <!-- item-sep -->
 
@@ -237,11 +201,7 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **RunningJobsService clears all busy-pair spinners on any transient poll failure** — `frontend/src/app/services/running-jobs.service.ts` (low impact)
-
-  The catchError in the /api/jobs/active poll emits `{busy_pairs: []}` on any error or 10s timeout, which wipes the busyPairs map. A single dropped request or slow response while jobs are genuinely running makes every pulldown spinner vanish for one 5s poll interval and then reappear — flickering UI that misreports 'no jobs running' during exactly the load conditions (heavy training) when jobs ARE running and the backend is slow to answer. Since the map is advisory UI state, holding the last known value through a transient failure is strictly better than clearing it; genuinely finished jobs are corrected on the next successful poll anyway.
-
-  *Direction:* On error, re-emit the current busyPairsSubject.value (or emit nothing via EMPTY) instead of an empty payload, reserving the clear for stopPolling().
+- [ ] #4986 — RunningJobsService clears every busy-pair spinner when a single poll fails or times out (Sonnet)
 
 <!-- item-sep -->
 
@@ -249,39 +209,23 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Global `.importer-picker`/`.exporter-picker` grid rule is overridden by every single consumer** — `frontend/src/scss/_components.scss` (medium impact)
-
-  _components.scss defines `.importer-picker, .exporter-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-lg); }`, and its comment block (lines 632-635) says the settings/label pickers use this responsive grid. In reality all four consumers of these classes (settings-importer-modal.component.scss, settings-exporter-modal.component.scss, label-importer-modal.component.scss, dataset-importer-modal's source-picker.component.scss) redeclare the class locally as `display: flex; flex-direction: column` — and component-scoped rules win via Angular's encapsulation specificity bump — so the documented grid never renders anywhere. The next modal that applies the shared class trusting _components.scss (or style-guide §2.5) will get a grid layout that matches no existing picker. The shared rule's body has drifted into fiction.
-
-  *Direction:* Make the global rule match universal usage (flex column with the agreed gap), delete the four local redeclarations, and fix the misleading comment. Any picker that genuinely wants a grid can opt in with a modifier class.
+- [ ] #4987 — Global .importer-picker / .exporter-picker grid rule is overridden by every consumer (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **`.form-actions` rule duplicated verbatim in six component SCSS files** — `frontend/src/app/components/modals/settings-importer-modal/settings-importer-modal.component.scss` (medium impact)
-
-  The identical rule `display: flex; justify-content: flex-end; gap: var(--space-md); margin-top: var(--space-md)` is declared in settings-importer-modal:24, settings-exporter-modal:24, label-importer-modal:29, clipper-chooser:78, dataset-importer-modal:22, and (minus margin-top) combine-datasets-modal:192 — plus a seventh dead copy in export-modal:316. Style-guide §6 says to promote a pattern on its third copy; this one has seven. Worse, every one of these `.form-actions` divs sits in the `[modal-footer]` slot, where the global `.modal-footer` (_components.scss) already provides `display:flex; justify-content:flex-end; gap:var(--space-md)` — so the duplicated body is ~redundant with the slot it lives in, and any future tune of footer spacing will drift across seven files.
-
-  *Direction:* Either drop the `.form-actions` wrapper divs entirely (project the buttons directly into `[modal-footer]`, which already lays them out) or promote one `.form-actions` rule to _components.scss and delete all local copies.
+- [ ] #4990 — .form-actions is redeclared in six component stylesheets and the copies have already diverged (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Toast/list button labels break Title Case** — `frontend/src/app/components/toast-container/toast-container.component.html` (low impact)
-
-  In the toast template, the action buttons read "Dismiss all" (line 12), "Hide details"/"Details" (line 62), and "Copy debug info" (line 65); §4.1 puts button labels in the Title Case bucket ("Dismiss All", "Hide Details", "Copy Debug Info"). Same lapse in media-list.component.html ("Load more" → "Load More"). These are hand-review-only rules per the guide, which is exactly why an audit should catch them.
-
-  *Direction:* Title-Case the four button labels.
+- [ ] #4989 — Toast and Load more button labels are in sentence case, not Title Case (Haiku)
 
 <!-- item-sep -->
 
-- **Shared `_picker-shared.scss` itself violates the single-disabled-opacity rule** — `frontend/src/scss/_picker-shared.scss` (low impact)
-
-  `.demo-table tbody tr.disabled { opacity: 0.55 }` hand-picks a disabled opacity in a *shared* stylesheet, contradicting §1.9 ("There is only one disabled opacity" — `--opacity-disabled: 0.5` — for `.disabled` states, added precisely because a rendered audit found seven ad-hoc values, 0.55 among them). Since this file is one of the guide's four canonical references, an off-token value here gets copied as precedent.
-
-  *Direction:* Change to `opacity: var(--opacity-disabled);`.
+- [ ] #4988 — Raw disabled-state opacities bypass --opacity-disabled, including one in the shared picker stylesheet (Haiku)
 
 <!-- item-sep -->
 

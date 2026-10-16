@@ -194,9 +194,7 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass each
-  run SIFT once per image. Acceptable for v1; a combined single-detect pass is a
-  cheap later optimisation.
+- [ ] #4996 — Detect SIFT once per image when loading a structural dataset (Sonnet)
 
 <!-- item-sep -->
 
