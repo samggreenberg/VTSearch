@@ -58,6 +58,7 @@ import ast
 import hashlib
 import io
 import json
+import keyword
 import re
 import sys
 import textwrap
@@ -1029,11 +1030,17 @@ def _normalize_python(source: str) -> str:
 
     Magic trailing commas are dropped as well, so that `ruff format` wrapping a
     call across lines - which it will do for a change as innocent as a longer
-    variable name - doesn't read as a logic change.
+    variable name - doesn't read as a logic change.  The exception is a comma
+    that is the only one in a parenthesized expression or a subscript: there it
+    is what makes `(x,)` a tuple rather than `x`, and `x[0,]` a tuple index
+    rather than `x[0]`, so it is kept.
     """
     skip = (tokenize.COMMENT, tokenize.NL, tokenize.ENCODING, tokenize.ENDMARKER)
     out: list[str] = []
     prev_meaningful: int | None = None
+    prev_tok: tokenize.TokenInfo | None = None
+    # One entry per open bracket: (does a lone trailing comma matter, commas so far).
+    groups: list[tuple[bool, int]] = []
     text = textwrap.dedent(source) + "\n"
     tokens = _collapse_fstrings(
         list(tokenize.generate_tokens(io.StringIO(text).readline)),
@@ -1043,15 +1050,43 @@ def _normalize_python(source: str) -> str:
         if tok.type in skip:
             continue
         nxt = next((t for t in tokens[i + 1 :] if t.type not in skip), None)
+        prev, prev_tok = prev_tok, tok
         if tok.type == tokenize.STRING and prev_meaningful in (None, tokenize.NEWLINE, tokenize.INDENT):
             # A string that is an entire statement: a docstring.
             if nxt is not None and nxt.type == tokenize.NEWLINE:
                 continue
-        if tok.string == "," and nxt is not None and nxt.string in (")", "]", "}"):
-            continue
+        # After an expression, `(` is a call (or a `def` parameter list) and `[`
+        # a subscript; anywhere else they open a parenthesized expression and a list.
+        if tok.string == "(":
+            groups.append((not _ends_expression(prev), 0))
+        elif tok.string == "[":
+            groups.append((_ends_expression(prev), 0))
+        elif tok.string == "{":
+            groups.append((False, 0))
+        elif tok.string in (")", "]", "}") and groups:
+            groups.pop()
+        elif tok.string == "," and groups:
+            sensitive, commas = groups[-1]
+            if nxt is not None and nxt.string in (")", "]", "}") and not (sensitive and commas == 0):
+                continue
+            groups[-1] = (sensitive, commas + 1)
         out.append(tok.string.strip() if tok.type == tokenize.NEWLINE else tok.string)
         prev_meaningful = tok.type
     return "\n".join(s for s in out if s)
+
+
+def _ends_expression(tok: tokenize.TokenInfo | None) -> bool:
+    """Whether *tok* can end an expression, so a `(` after it calls and a `[` subscripts.
+
+    Keywords are excluded so `return (x,)` and `in [a,]` read as a tuple and a
+    list.  Soft keywords (`match`, `case`) are not: `case (x,):` digests as if
+    it were a call, which only loses sensitivity there, never adds any.
+    """
+    if tok is None:
+        return False
+    if tok.type == tokenize.NAME:
+        return not keyword.iskeyword(tok.string)
+    return tok.type in (tokenize.NUMBER, tokenize.STRING) or tok.string in (")", "]", "}")
 
 
 _TS_LINE_COMMENT = re.compile(r"//[^\n]*")
