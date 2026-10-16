@@ -510,9 +510,10 @@ whose source cannot be named is a group of its own), and raises
 `SourceNotLoadedError` naming a sibling that is registered but not loaded.
 Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
-`set_readers`) implement multi-user visibility rules; library-only
-consumers without users can ignore them and treat every dataset as
-visible.
+`update_readers`, and its `(ok, err)` form `set_readers`) implement
+multi-user visibility rules; library-only consumers without users can
+ignore them and treat every dataset as visible. `update_readers` returns
+a `ReadersUpdate` (see [security.md](security.md#readers-updates)).
 
 ---
 

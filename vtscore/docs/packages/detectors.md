@@ -143,7 +143,11 @@ CRUD: `list_detectors`, `get_detector`, `register_detector`,
 `find_by_name`. Loaded-set tracking:
 `add_loaded_detector_id` / `remove_loaded_detector_id` /
 `is_detector_loaded` / `get_loaded_detector_ids`. Mode flag:
-`is_find_mode` / `set_find_mode`. Test reset: `reset_for_tests`.
+`is_find_mode` / `set_find_mode`. Access control:
+`can_user_access_detector`, `is_detector_owner`,
+`list_detectors_for_user`, and `update_detector_readers` (returns a
+`ReadersUpdate`; see [security.md](security.md#readers-updates)) with its
+`(ok, err)` form `set_detector_readers`. Test reset: `reset_for_tests`.
 
 ### Find mode
 

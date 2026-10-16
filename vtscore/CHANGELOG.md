@@ -12,6 +12,36 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
+  `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
+  them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature
+  back-fill skips those media instead of decoding and detecting them again. A lazy unit is embedded
+  through a copy (`embed_view`), so the embed pass copies any side channel the embedder stored on that
+  copy back onto the media. The back-fill still derives features for media that arrive embedded without
+  them (a pickle reload). Vectors, features and `sift_vlad_doc`'s tile vectors are bit-identical to the
+  two-pass output; the embed stage is ~2.5x faster on CPU.
+
+  **For library consumers:** calling `embed_media_bulk` on a structural embedder now also writes
+  `local_features` onto each media dict it embeds.
+
+- **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
+  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
+  same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
+  through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
+  which keeps its behaviour), and the result is served only if it still hashes to the trail's last
+  `content_hash`. `lazy_original_bytes` replays the trail before its first cleaner and checks it against
+  the new `original_hash` trail key, which the gate that takes the `original_*` snapshot now records
+  (`original_hash(trail)` / `pre_clean_steps(trail)` read it). These recipes are exclusive
+  (`recipe_is_exclusive`): `MediaType._resolve_media_bytes` / `_resolve_media_string` return nothing when
+  the replay no longer matches, never the source file; `_resolve_media_string` now consults lazy recipes
+  at all. `has_original_payload` is also true for such a unit (`has_lazy_original`).
+  `_relazify_reference_clips_stage` drops a cleaned unit's payload and snapshot only after a dry run
+  rebuilds both byte for byte. The embed and side-channel back-fill passes hand embedders
+  `embed_view(media)`, which resolves a lazy unit's payload from its recipe instead of exposing its
+  `media_path`. `_ByteBoundedLRU.put` takes an optional `nbytes`. Additive for plugins: a cleaner that is
+  not deterministic only keeps its units materialized.
+
 - **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
   #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
   `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
@@ -263,6 +293,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
+  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
+  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
+  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
+  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
+  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
+  message. Additive.
 
 - **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
   looks for each face MTCNN finds again in the photo turned a quarter each way
@@ -1969,6 +2007,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **The simulated session sorts its voting half, not the whole dataset** (issue #5004).
+  `simulate_voting_iterations` handed the selector the caller's full `seed_scores` map (or the example
+  opening's sort of every media), so the Bad phase's text-sort cut was fitted over the withheld half's
+  cosines too, and over media the cell drops before the split (a scale-banded cell's wrong-band images,
+  a prevalence arm's thinned positives, a haystack arm's thinned negatives), and the rank-space pick
+  measured distances through items it could never pick; a startup
+  schedule's cuts and the pick log's `picked_seed_rank`, `picked_seed_percentile` and
+  `startup_cut_percentile` were read over the same list. They now read a copy restricted to the sim
+  half, which is what the app has loaded, and which `ALContext.embeddings` (so the centroid fallback)
+  already was. The typed query's Test keeps the full map: it reads the withheld half's cosines. No label
+  leaked (the cosines are the query's), but which Bads a default-arm session voted could depend on the
+  size and make-up of its withheld half, so vote orders from earlier runs can differ.
 
 - **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
   snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every

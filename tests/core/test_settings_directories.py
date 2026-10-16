@@ -1,12 +1,14 @@
 """Directory path settings tests.
 
-Covers saved_datasets_dir and detectors_dir settings
-and their corresponding API endpoints.
+Covers saved_datasets_dir and detectors_dir settings: their accessors, and
+that the API reports them but does not write them.
 """
 
 from __future__ import annotations
 
 import json
+
+import pytest
 
 from vtsearch import settings as settings_mod
 
@@ -57,29 +59,12 @@ class TestDirectorySettingsAPI:
         assert "saved_datasets_dir" in data
         assert "detectors_dir" in data
 
-    def test_update_saved_datasets_dir(self, client):
-        res = client.put("/api/settings", json={"saved_datasets_dir": "/tmp/new_ds"})
+    @pytest.mark.parametrize("key", ["saved_datasets_dir", "detectors_dir"])
+    def test_put_leaves_dir_unchanged(self, client, key):
+        """Server-tier storage paths are the operator's, set in the settings
+        file; PUT drops them like any key it does not accept (#4965)."""
+        before = client.get("/api/settings").get_json()[key]
+        res = client.put("/api/settings", json={key: "/tmp/elsewhere", "volume": 0.4})
         assert res.status_code == 200
-        assert res.get_json()["saved_datasets_dir"] == "/tmp/new_ds"
-
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["saved_datasets_dir"] == "/tmp/new_ds"
-
-    def test_update_detectors_dir(self, client):
-        res = client.put("/api/settings", json={"detectors_dir": "/tmp/new_tm"})
-        assert res.status_code == 200
-        assert res.get_json()["detectors_dir"] == "/tmp/new_tm"
-
-    def test_update_dir_empty_string_rejected(self, client):
-        res = client.put("/api/settings", json={"saved_datasets_dir": ""})
-        assert res.status_code == 400
-
-    def test_update_dir_whitespace_only_rejected(self, client):
-        res = client.put("/api/settings", json={"detectors_dir": "   "})
-        assert res.status_code == 400
-
-    def test_update_dir_non_string_rejected(self, client):
-        res = client.put("/api/settings", json={"detectors_dir": 123})
-        # ``detectors_dir`` is declared as a string in the SettingsUpdate
-        # schema → type validation in marshmallow → 422.
-        assert res.status_code == 422
+        assert res.get_json()[key] == before
+        assert res.get_json()["volume"] == 0.4

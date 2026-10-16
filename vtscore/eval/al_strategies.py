@@ -113,7 +113,10 @@ class ALContext:
             each item to the typed query).  When present the seed/bad phases
             follow the text ranking (top for goods, the cutoff for bads);
             ``None`` means the dataset has no text sort, so the flow seeds from
-            random known-good examples instead.
+            random known-good examples instead.  It ranks the collection the
+            user sorts, which the cut and the rank distances are read over:
+            the simulation passes its voting half only, never the withheld
+            half (#5004).
         phase: The app's Autopilot phase for this step, from
             :class:`vtscore.eval.autopilot_flow.AutopilotFlow`.  When set, the
             selector reproduces the app's per-phase Sort + Select pairing

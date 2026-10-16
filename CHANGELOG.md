@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
 - **Transcribing audio and reading text from images load their model once, not once per file** (issue
   #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
   they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
@@ -995,6 +1010,12 @@ not list every commit. Use `git log` for the full history.
   too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
   answer and clear only after three in a row, about 15 seconds.
 
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
 - **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
   original file, but the server labelled every one `audio/wav` and offered it for download as
   `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
@@ -1007,6 +1028,18 @@ not list every commit. Use `git log` for the full history.
   label set, or bringing labels into another dataset), the gate ran at its default settings rather than
   the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
   are now recorded and reused, and an item's Derived Via line lists them.
+
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
 
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between

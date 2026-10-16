@@ -126,7 +126,9 @@ in `origin.params` (see `vtscore/media/lazy_clip.py`) → an archive member →
 `media_path` on disk → `media_url` (fetched through the SSRF guard);
 `_resolve_media_string` skips the lazy-clip and archive-member steps. So
 implementations transparently handle in-memory, thin, derived and
-URL-backed items.
+URL-backed items. A cleaned unit's recipe (a replay of its chain trail) is
+exclusive: if the replay no longer reproduces the hash recorded at import, the
+resolvers return nothing rather than the source file.
 
 ### `MediaEmbedder` - media/text → vector
 

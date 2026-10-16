@@ -3772,6 +3772,15 @@ def simulate_voting_iterations(  # noqa: C901
     if seed_examples is not None:
         pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
         seed_scores = example_sort(clips_dict, pending_examples)
+    # The sort the session walks (#5004).  The app sorts the dataset it has
+    # loaded, which the run models with the voting half, so the selector's cut
+    # and rank distances, a schedule's cuts and the pick log's ranks are read
+    # over that half alone.  ``query_scores`` above keeps every media: the typed
+    # query's Test reads the withheld half's cosines from it.
+    sim_id_set = set(sim_ids)
+    sim_seed_scores: Optional[dict[int, float]] = (
+        None if seed_scores is None else {cid: v for cid, v in seed_scores.items() if cid in sim_id_set}
+    )
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -4059,15 +4068,17 @@ def simulate_voting_iterations(  # noqa: C901
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
     startup_cuts: list[float] = []
-    if startup_state is not None and seed_scores is not None:
-        sort_values = list(seed_scores.values())
+    if startup_state is not None and sim_seed_scores is not None:
+        sort_values = list(sim_seed_scores.values())
         startup_cuts = [round_cut(sort_values, rnd) for rnd in startup_state.rounds]
     # The seed sort as a ranking, for the pick log: where in the sort each click
     # landed is the mining record the study reads.
     seed_rank: dict[int, int] = {}
-    if pick_sink is not None and seed_scores is not None:
-        seed_rank = {cid: i for i, cid in enumerate(sorted(seed_scores, key=lambda c: seed_scores[c], reverse=True))}
-    seed_sorted_scores: list[float] = sorted(seed_scores.values(), reverse=True) if seed_scores else []
+    if pick_sink is not None and sim_seed_scores is not None:
+        seed_rank = {
+            cid: i for i, cid in enumerate(sorted(sim_seed_scores, key=lambda c: sim_seed_scores[c], reverse=True))
+        }
+    seed_sorted_scores: list[float] = sorted(sim_seed_scores.values(), reverse=True) if sim_seed_scores else []
     # Recent per-step models (each with the threshold it was calibrated at),
     # re-scored every step against the *current* labelset so the Smart
     # indicator's slope regresses over one shared eval set - exactly what the
@@ -4131,7 +4142,9 @@ def simulate_voting_iterations(  # noqa: C901
                 "picked_seed_percentile": (
                     round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
                 ),
-                "picked_seed_score": round6(seed_scores[cid]) if seed_scores and cid in seed_scores else float("nan"),
+                "picked_seed_score": (
+                    round6(sim_seed_scores[cid]) if sim_seed_scores and cid in sim_seed_scores else float("nan")
+                ),
                 "picked_detector_score": round6(pool_scores[cid]) if cid in pool_scores else float("nan"),
                 "acq_threshold": round6(acq_threshold),
                 "n_good": len(good_votes),
@@ -4485,7 +4498,7 @@ def simulate_voting_iterations(  # noqa: C901
                     atlas=atlas,
                     rng=rng,
                     pool_labels=pool_labels,
-                    seed_scores=seed_scores,
+                    seed_scores=sim_seed_scores,
                     phase=phase,
                     startup_cut=startup_cut,
                     uncertainty=pool_uncertainty,

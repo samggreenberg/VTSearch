@@ -2422,6 +2422,12 @@ applies the returned settings. The built-in `server_json_file` source
 does this with a local file path; your custom source can fetch from S3, a
 database, a remote API, etc.
 
+Only the user's own settings are applied, through the same checks as
+`PUT /api/settings`: a server-tier key (`detectors_dir`, `solo_media_type`,
+…) or an invalid value in what `load()` returns is skipped, so a source can
+never change the deployment for every user. `save()` is only ever handed the
+per-user tier, so a source that round-trips what it was given never meets one.
+
 If the source is unavailable (file missing, network error) the import is
 logged and skipped, and the local settings file is used as the fallback —
 see [Failure semantics](#failure-semantics).
