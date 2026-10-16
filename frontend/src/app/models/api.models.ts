@@ -165,6 +165,12 @@ export interface LoadingTask extends ProgressEvent {
   embedder?: string;
   /** Present on a background AutoFind's row (task ids starting `_autofind_`). */
   autofind?: AutoFindTaskInfo;
+  /** User the task runs for. A failure is only streamed to them (#4973). */
+  created_by?: string;
+  /** What the task reads, as a person would name it (an import's origin). */
+  source?: string;
+  /** Epoch seconds the task finished at; absent while it runs. */
+  finished_at?: number;
 }
 
 /** One row of a multi-media import specification.  See

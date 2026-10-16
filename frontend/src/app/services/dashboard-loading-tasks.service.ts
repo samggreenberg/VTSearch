@@ -1,6 +1,8 @@
+import { HttpContext } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { LoadingTask } from '../models/api.models';
 import { AchievementsService } from './achievements.service';
 import { DatasetStateService } from './dataset-state.service';
@@ -20,7 +22,10 @@ import { ProgressEventsService } from './progress-events.service';
  * Dashboard component:
  *  - Demux the raw SSE stream into "currently active" + "errored but
  *    not yet dismissed" rows, so the dashboard table can keep failed
- *    rows visible with the dashed loading bar + Dismiss button.
+ *    rows visible with the error text + Dismiss button. The backend keeps a
+ *    failed dataset task on the stream until it is dismissed (#4973), so the
+ *    failed rows are read off every snapshot, not only while polling: a page
+ *    reload, or another load starting, must not lose them.
  *  - Track `awaitedTaskIds` for tasks whose HTTP response landed
  *    before the SSE stream caught up, so we don't bail out of polling
  *    before they're observed.
@@ -41,8 +46,15 @@ export class DashboardLoadingTasksService {
   // `loadingTasks`/`orphanLoadingTasks`/`inlineTaskMap` repaint under zoneless
   // OnPush change detection: a `.set()` from the SSE-driven poller schedules CD
   // because the value is read (through getters) during template evaluation.
-  private readonly _loadingTasks = signal<LoadingTask[]>([]);
+  // Active dataset rows, written by the polling loop. Failed rows live apart
+  // (`_failedTasks`) because they outlast it: see the class doc.
+  private readonly _activeTasks = signal<LoadingTask[]>([]);
+  private readonly _failedTasks = signal<LoadingTask[]>([]);
   private readonly _detectorLoadingTasks = signal<LoadingTask[]>([]);
+
+  // Failed tasks the user dismissed, hidden until the backend's snapshot drops
+  // them too (the dismiss request is in flight until then).
+  private readonly dismissedTaskIds = new Set<string>();
 
   // Task ids the user has clicked Cancel on but whose backend hasn't finished
   // unwinding yet. Drives the per-row "Cancelling…" acknowledgement badge so
@@ -79,6 +91,7 @@ export class DashboardLoadingTasksService {
   private detectorPollCallbacks: Array<() => void> = [];
 
   constructor() {
+    this.progressEvents.loadingTasks$.subscribe((tasks) => this.syncFailedTasks(tasks));
     // SSE pushes the initial snapshot on connect, so the first event on
     // each channel tells us whether there's anything in flight; auto-
     // resume polling without the dashboard having to coordinate it.
@@ -107,7 +120,9 @@ export class DashboardLoadingTasksService {
     this.detectorPollCallbacks = [];
     this.datasetPollingActive = false;
     this.detectorPollingActive = false;
-    this._loadingTasks.set([]);
+    this._activeTasks.set([]);
+    this._failedTasks.set([]);
+    this.dismissedTaskIds.clear();
     this._detectorLoadingTasks.set([]);
     this._cancellingTaskIds.set(new Set());
     this.datasetState.setLoading(false);
@@ -146,8 +161,26 @@ export class DashboardLoadingTasksService {
     if (next.size !== current.size) this._cancellingTaskIds.set(next);
   }
 
+  /** Active dataset tasks, then failed ones not yet dismissed. */
   get loadingTasks(): LoadingTask[] {
-    return this._loadingTasks();
+    const failed = this._failedTasks();
+    if (failed.length === 0) return this._activeTasks();
+    // A task the loop last saw running may already be in the failed list.
+    const failedIds = new Set(failed.map((t) => t.task_id));
+    return [...this._activeTasks().filter((t) => !failedIds.has(t.task_id)), ...failed];
+  }
+
+  /** Keep the failed rows in step with a snapshot, minus the dismissed ones. */
+  private syncFailedTasks(tasks: LoadingTask[]): void {
+    const present = new Set(tasks.map((t) => t.task_id));
+    for (const id of this.dismissedTaskIds) {
+      if (!present.has(id)) this.dismissedTaskIds.delete(id);
+    }
+    this._failedTasks.set(
+      tasks.filter(
+        (t) => t.status === 'idle' && !!t.error && t.error !== 'Cancelled' && !this.dismissedTaskIds.has(t.task_id),
+      ),
+    );
   }
 
   get detectorLoadingTasks(): LoadingTask[] {
@@ -211,15 +244,14 @@ export class DashboardLoadingTasksService {
             this.awaitedTaskIds.delete(t.task_id);
           }
 
-          // Separate active from finished. Failed tasks are surfaced
-          // globally by SseErrorRouterService → ToastService; we just
-          // keep them in the inline list so the row still shows the
-          // dashed loading bar with the error text.
+          // Separate active from finished. Failed rows are tracked off
+          // every snapshot (`syncFailedTasks`); here they only decide which
+          // completion callbacks to suppress.
           const active = tasks.filter((t) => t.status !== 'idle');
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this._loadingTasks.set([...active, ...failed]);
+          this._activeTasks.set(active);
           this.pruneCancelling(new Set(active.map((t) => t.task_id)));
 
           // Detect tasks that just completed successfully so we can
@@ -329,8 +361,17 @@ export class DashboardLoadingTasksService {
     });
   }
 
+  /**
+   * Dismiss a failed dataset task. The row goes at once; the backend, which
+   * would otherwise keep re-sending it, is told to drop it. A refusal (the
+   * task is already gone, say after a restart) is not worth a toast: the row
+   * is hidden either way, which is all the user asked for.
+   */
   dismissLoadingTask(taskId: string): void {
-    this._loadingTasks.set(this.loadingTasks.filter((t) => t.task_id !== taskId));
+    this.dismissedTaskIds.add(taskId);
+    this._failedTasks.set(this._failedTasks().filter((t) => t.task_id !== taskId));
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    this.datasetsRegistryApi.dismissTask(taskId, context).subscribe({ error: () => undefined });
   }
 
   cancelDetectorLoadingTask(taskId: string): void {

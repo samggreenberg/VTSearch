@@ -26,6 +26,7 @@ from uuid import uuid4
 from vtscore.config import CoreConfig, DATA_DIR
 from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
+    CANCELLED_ERROR,
     CancelledError,
     clear_thread_progress,
     loading_tasks,
@@ -274,6 +275,7 @@ def _start_import_task(
     weights: list[float] | None = None,
     extra_fields: dict[str, Any] | None = None,
     created_by: str = "",
+    source: str = "",
 ) -> _ImportTask:
     """Register a background import on ``loading_tasks``.
 
@@ -288,6 +290,9 @@ def _start_import_task(
     themselves, and its estimate swung too wildly to be worth showing (#4667);
     the bar itself still fills.
 
+    *source* says what is being imported (the origin, as the user would name
+    it); it rides on the task so a failed import can show what it was reading.
+
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
     env-gated phase profiler in between: a profiler that missed the step-1
@@ -296,6 +301,7 @@ def _start_import_task(
     from vtscore.state.current_user import get_current_user  # noqa: PLC0415
 
     task_id = f"{prefix}{uuid4().hex[:8]}"
+    request_user = created_by or get_current_user()
     tracker = loading_tasks.create_task(
         task_id,
         display_name,
@@ -304,13 +310,29 @@ def _start_import_task(
         extra_fields=extra_fields,
         step_weights=weights,
         publish_eta=False,
+        created_by=request_user,
+        source=source,
     )
     return _ImportTask(
         task_id=task_id,
         tracker=tracker,
-        request_user=created_by or get_current_user(),
+        request_user=request_user,
         total_steps=total_steps,
     )
+
+
+def _describe_source(origin: dict | Callable[[], dict]) -> str:
+    """Name what an import reads, for its task's ``source``; ``""`` if that fails.
+
+    *origin* may be a callable building it, for the staging flow, which has no
+    origin of its own to hand.  Either way the description runs plugin code
+    (``build_origin`` / ``origin_display``), and a label for a failure row is
+    not worth failing the import over.
+    """
+    try:
+        return _origin_to_str(origin() if callable(origin) else origin)
+    except Exception:
+        return ""
 
 
 def _spawn_import_worker(task: _ImportTask, body: Callable[[], None]) -> str:
@@ -491,7 +513,7 @@ def _warmup_embedder_async(media_dict: dict) -> None:
 
 
 #: What a cancelled import's tracker carries as its ``error``; see :func:`_failure_message`.
-_CANCELLED_MESSAGE = "Cancelled"
+_CANCELLED_MESSAGE = CANCELLED_ERROR
 
 
 def _failure_message(exc: BaseException, fallback: str) -> str:
@@ -786,6 +808,7 @@ def _run_origin_load_in_background(
         embedder=embedder,
         weights=load_step_weights(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
         created_by=created_by,
+        source=_describe_source(origin),
     )
     task_id, tracker = task.task_id, task.tracker
     # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); a no-op
@@ -1267,6 +1290,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         embedder=staged_embedder,
         weights=step_weights(_STAGE_TASK, media_type=staged_media_type, embedder=staged_embedder),
         extra_fields={"staging_result": None},
+        source=_describe_source(lambda: importer.build_origin(field_values)),
     )
     tracker = task.tracker
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)

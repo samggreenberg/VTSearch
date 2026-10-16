@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
+  that failed showed a "Failed" row in the datasets table, but the row went the next time the page
+  reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.
+  It now stays until you click **Dismiss**, through reloads, other loads and other tabs (a server
+  restart clears it). The row also says what the import was reading and when it failed, and a copy
+  button puts the error, source, task id and times on the clipboard for a bug report. On a shared
+  server only the user who started the import sees its failure. Reloading the page no longer
+  re-announces old failures in a toast: their rows already say so.
+
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
   and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4

@@ -10229,6 +10229,48 @@
         ]
       }
     },
+    "/api/dataset/dismiss/{task_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "A failed import stays on the ``loading-tasks`` channel until this is called\n(#4973), so the user has something to read after the failure toast is gone.\nOnly the user who started the task can see a failure, so only they can\ndismiss it; to anyone else it does not exist.",
+        "operationId": "dismiss_dataset_task",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryOkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No task with the supplied id that the caller can see."
+          },
+          "409": {
+            "description": "The task is still running; cancel it instead."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Dismiss a finished dataset task, removing its row from the dashboard.",
+        "tags": [
+          "datasets_status"
+        ]
+      }
+    },
     "/api/dataset/export": {
       "get": {
         "description": "Success returns a binary ``application/octet-stream`` download; that\nbody is left undescribed in the spec (mirroring the audio / video /\nimage streaming routes in ``media/list.py``).",
@@ -16883,7 +16925,7 @@
       "name": "datasets_listings"
     },
     {
-      "description": "Dataset status (loaded / num medias / display name) and load-cancellation.",
+      "description": "Dataset status (loaded / num medias / display name), load-cancellation, and dismissing finished tasks.",
       "name": "datasets_status"
     },
     {

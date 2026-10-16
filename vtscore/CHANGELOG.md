@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The dataset task tracker keeps a failure until it is dismissed** (issue #4973). A failed import
+  produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
+  after it. `LoadingTasksTracker(keep_failures=True, max_kept_failures=20)` keeps a failed task (its
+  `error` set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it,
+  holding at most `max_kept_failures` and dropping the oldest first; `dismiss_task` refuses a task
+  that is still running. `create_task` takes `created_by=` (defaulting to the current user) and
+  `source=` (what the task reads), and a snapshot carries `created_by`, `source` and, once the task
+  has finished, `finished_at`. `visible_to(tasks, viewer)` drops other users' failures from a
+  snapshot on a `keep_failures` tracker, and `initial_snapshot(viewer)` /
+  `stream_progress_events(viewer=)` apply it per SSE connection. The `loading_tasks` singleton now
+  keeps failures: code that waited for a failed dataset task to age out must dismiss it.
+  `detector_loading_tasks` is unchanged. The rest is additive.
+
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
   `hypergeometric_lower` / `hypergeometric_upper`) instead of Clopper-Pearson, and `range_tail` returns

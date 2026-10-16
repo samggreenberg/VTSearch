@@ -41,6 +41,7 @@ import {
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
 import { JobProgressComponent } from '../job-progress/job-progress.component';
+import { FailedTaskComponent } from './failed-task/failed-task.component';
 import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
@@ -86,6 +87,7 @@ type DashboardHintId = Extract<
   standalone: true,
   imports: [
     JobProgressComponent,
+    FailedTaskComponent,
     DatasetCardComponent,
     DetectorCardComponent,
     CombineDatasetsModalComponent,

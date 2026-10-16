@@ -470,14 +470,15 @@ class TestErrorVisibility:
         finally:
             loading_tasks.remove_task("err_vis")
 
-    def test_errored_task_cleaned_after_30s(self):
-        """Errored tasks are eventually cleaned up after 30 seconds."""
+    def test_errored_task_kept_until_dismissed(self):
+        """A failed dataset task outlives the 30s window, until dismissed (#4973)."""
         pt = loading_tasks.create_task("err_old", "OldError")
         pt.update("idle", "", 0, 0, error="Old error")
         with loading_tasks._lock:
             loading_tasks._tasks["err_old"]["finished_at"] = time.time() - 35
-        tasks = loading_tasks.list_tasks()
-        assert len(tasks) == 0
+        assert [t["task_id"] for t in loading_tasks.list_tasks()] == ["err_old"]
+        assert loading_tasks.dismiss_task("err_old")
+        assert loading_tasks.list_tasks() == []
 
     def test_errored_task_listed_after_finish(self, client):
         """list_tasks() returns errored tasks until the stale window elapses."""

@@ -619,6 +619,12 @@ The dialog closes when you click **Import**, and progress is shown in a row
 at the top of the **Datasets** card, with a **Cancel** button, while it runs
 (see [Choose how a dataset is imported](howto/advanced-import.md)).
 
+If the import fails, that row stays, tinted red: it shows the error, what
+the import was reading (a folder path or URL) and when it failed, until you
+click **Dismiss**. The copy button beside **Dismiss** puts all of that on the
+clipboard, for a bug report. On a shared server, only you see your failed
+imports.
+
 If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.

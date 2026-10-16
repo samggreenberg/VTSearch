@@ -313,9 +313,13 @@ The tracker `create_task` returns already reports `status="loading"`
 terminal status readers wait for, and the task is published before the
 caller's first `update()`.
 
-Methods: `create_task(task_id, ...)` (register and return tracker),
-`get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
+Methods: `create_task(task_id, ...)` (register and return tracker;
+`created_by=` defaults to the current user, `source=` names what the task
+reads), `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
 `is_finished(task_id)`, `remove_task(task_id)`,
+`dismiss_task(task_id)` (removes a *finished* task; `False` if it is unknown
+or still running), `visible_to(tasks, viewer)` (filters a snapshot for one
+user; see below),
 `cancel_task(task_id)` / `cancel_all()`, `set_worker(task_id, thread)`
 / `worker_alive(task_id)` (lets a cancel tell a live worker from a
 phantom row), `active_task_ids()`, `set_dataset_id(task_id, ds_id)`
@@ -328,6 +332,18 @@ after `mark_finished()`; tasks with errors are kept for 30 seconds so
 the polling frontend can display them. The prune runs lazily inside
 `list_tasks()`.
 
+`LoadingTasksTracker(keep_failures=True)` instead keeps a failed task (one
+whose `error` is set and is not `CANCELLED_ERROR`) until `dismiss_task()`
+removes it, holding at most `max_kept_failures` (default 20) and dropping the
+oldest first. A failed import produces no dataset, so its task row is the only
+place the failure stays visible. Such a failure belongs to the user who
+started the task: `visible_to(tasks, viewer)` drops other users' failures from
+a snapshot (running tasks, and failures owned by `"default"`, stay visible to
+everyone), and the SSE stream applies it per connection
+(`stream_progress_events(viewer=...)`). A tracker without `keep_failures` is
+never filtered. The dataset singleton `loading_tasks` keeps failures; the
+detector one does not.
+
 ---
 
 ## Module-level singletons
@@ -338,7 +354,7 @@ sort_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 eval_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 find_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
-loading_tasks          = LoadingTasksTracker()
+loading_tasks          = LoadingTasksTracker(keep_failures=True)
 detector_loading_tasks = LoadingTasksTracker()
 ```
 
