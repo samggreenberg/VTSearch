@@ -9,7 +9,7 @@
           title="Dismiss all notifications"
           aria-label="Dismiss all notifications"
         >
-          Dismiss all ({{ toasts.length }})
+          Dismiss All ({{ toasts.length }})
         </button>
       </div>
     }
@@ -73,16 +73,16 @@
               [attr.aria-expanded]="expandedId === t.id"
               [title]="t.errorContext ? 'Show full error details' : 'Show all ' + t.items?.length + ' item(s)'"
             >
-              {{ expandedId === t.id ? 'Hide details' : 'Details' }}
+              {{ expandedId === t.id ? 'Hide Details' : 'Details' }}
             </button>
           }
           @if (t.errorContext) {
             <button type="button" class="toast__btn" (click)="copyDebugInfo(t)" title="Copy a debug bundle to your clipboard">
-              {{ copiedId() === t.id ? 'Copied!' : 'Copy debug info' }}
+              {{ copiedId() === t.id ? 'Copied!' : 'Copy Debug Info' }}
             </button>
           } @else if (t.items?.length) {
             <button type="button" class="toast__btn" (click)="copyItems(t)" title="Copy the list to your clipboard, one item per line">
-              {{ copiedId() === t.id ? 'Copied!' : 'Copy list' }}
+              {{ copiedId() === t.id ? 'Copied!' : 'Copy List' }}
             </button>
           }
           <button type="button" class="toast__close" (click)="dismiss(t)" aria-label="Dismiss" title="Dismiss">
