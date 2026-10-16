@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
 - **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
   check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
   and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4

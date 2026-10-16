@@ -186,7 +186,9 @@ class TestSavingRun:
         calls = []
         monkeypatch.setattr(embedding_mod, "initialize_models", lambda *a, **kw: calls.append(list_datasets()))
         source = _make_dataset_file(tmp_path, medias)
-        autodetect_main(str(source), settings_path=str(_settings_file(tmp_path, [])), save_dataset=True, dry_run=dry_run)
+        autodetect_main(
+            str(source), settings_path=str(_settings_file(tmp_path, [])), save_dataset=True, dry_run=dry_run
+        )
 
         assert len(calls) == prepared
         # Called before the save, so no load thread exists yet.

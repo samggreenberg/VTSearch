@@ -1162,7 +1162,6 @@ class TestRunServer:
         assert provs == []
         assert app.ran["port"] == 6001
 
-
     def test_run_server_honours_settings_before_init(self, monkeypatch, tmp_path, capsys):
         """``--settings`` points the server at that file before its startup reads it (#4970)."""
         import argparse

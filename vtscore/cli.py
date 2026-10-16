@@ -1228,8 +1228,8 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     for group in by_type.values():
         # Empty name = the framework's own resolution order (the embedder the
         # media already carry, else the media-type default).  The CLI has no
-        # embedder pick to forward; ``--solo-embedder`` narrows the registry
-        # that resolution reads rather than naming a pick here.
+        # embedder pick to forward.  ``--solo-embedder`` plays no part: it
+        # preselects the web importer's picker and nothing here reads it.
         embed_missing(group, "", on_progress=cli_progress.progress_callback)
 
     unembedded = [mid for mid in sorted(medias) if media_embedding(medias[mid]) is None]
