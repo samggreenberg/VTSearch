@@ -335,9 +335,29 @@ class TestContentVectorAdoption:
     """``content_vectors`` / ``custom_metadata_map`` are the plugin-importer channel."""
 
     def test_content_vector_is_widened_to_float32(self):
-        vec, name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": np.ones(4, dtype=np.float64)}, "siglip")
+        assert expected_dim_for_embedder("siglip") == 768
+        vec, name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": np.ones(768, dtype=np.float64)}, "siglip")
         assert vec.dtype == np.float32
         assert name == "siglip"
+
+    def test_named_content_vector_of_the_wrong_width_is_rejected(self):
+        """A vector filed under an embedder's name must have that embedder's width."""
+        with pytest.raises(MismatchedVectorError) as exc:
+            _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": np.ones(1152)}, "siglip")
+        msg = str(exc.value)
+        assert "a.jpg" in msg and "siglip" in msg
+        assert "1152" in msg and "768" in msg
+
+    def test_unregistered_content_embedder_name_skips_the_width_check(self):
+        vec, name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": np.ones(7)}, "not_a_real_embedder")
+        assert vec.shape == (7,)
+        assert name == "not_a_real_embedder"
+
+    def test_nameless_content_vector_skips_the_width_check(self):
+        """Nothing names a width yet; the embed stage checks it when it stamps a name."""
+        vec, name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": np.ones(7)}, "")
+        assert vec.shape == (7,)
+        assert name == ""
 
     def test_non_finite_content_vector_is_rejected(self):
         with pytest.raises(MismatchedVectorError, match="non-finite"):
@@ -349,16 +369,23 @@ class TestContentVectorAdoption:
 
     def test_per_embedder_dict_is_validated_column_by_column(self):
         """A trio import supplies a ready-made ``{embedder: vector}`` dict."""
-        value = {"siglip": np.ones(4, dtype=np.float64), "dinov3_patch": np.ones(8, dtype=np.float64)}
-        vec, _name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": value}, "siglip")
-        assert set(vec) == {"siglip", "dinov3_patch"}
-        assert vec["siglip"].shape == (4,) and vec["dinov3_patch"].shape == (8,)
+        value = {"siglip_l": np.ones(1152, dtype=np.float64), "dinov3_patch": np.ones(768, dtype=np.float64)}
+        vec, _name = _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": value}, "siglip_l")
+        assert set(vec) == {"siglip_l", "dinov3_patch"}
+        assert vec["siglip_l"].shape == (1152,) and vec["dinov3_patch"].shape == (768,)
         assert all(v.dtype == np.float32 for v in vec.values())
 
     def test_bad_column_in_a_per_embedder_dict_is_rejected(self):
-        value = {"siglip": np.ones(4), "dinov3_patch": np.array([np.nan, 1.0])}
+        value = {"siglip": np.ones(768), "dinov3_patch": np.array([np.nan, 1.0])}
         with pytest.raises(MismatchedVectorError, match="dinov3_patch"):
             _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": value}, "siglip")
+
+    def test_per_embedder_column_checked_against_its_own_embedder_width(self):
+        """Each column answers to the embedder its key names, not to the primary."""
+        value = {"siglip": np.ones(768), "dinov3_patch": np.ones(1152)}
+        with pytest.raises(MismatchedVectorError, match="dinov3_patch") as exc:
+            _resolve_file_embedding("a.jpg", "a.jpg", None, {"a.jpg": value}, "siglip")
+        assert "1152" in str(exc.value) and "768" in str(exc.value)
 
     def test_absent_vector_still_returns_none(self):
         assert _resolve_file_embedding("a.jpg", "a.jpg", None, {}, "") == (None, "")

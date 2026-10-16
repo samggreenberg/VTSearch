@@ -11,9 +11,8 @@ would collapse to one curve.
 
 So prepare serializes the *in-memory* medias dict (which carries all of the
 above, freshly built by the loader) directly, dropping only the two bulky
-raster fields the cell stage never reads (``media_bytes``, ``thumbnail_bytes``);
-exemplar crops are already pre-computed in prepare, and cell-time scoring works
-purely on vectors.  ``patch_grid`` (an fp16 ndarray) pickles losslessly.
+raster fields the cell stage never reads (``media_bytes``, ``thumbnail_bytes``):
+cell-time scoring works purely on vectors.  ``patch_grid`` (an fp16 ndarray) pickles losslessly.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 #: Fields dropped from the cell pickle — large rasters the voting simulation
-#: never touches (image decoding happens only at prepare time, for crops).
+#: never touches (image decoding happens only at prepare time, to embed).
 _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 
 

@@ -10,7 +10,7 @@ per-fold anchored fits on honest held-out anchors, rank-transferred back), and
 the same frame: ``xcal_only`` (pure cross-cal) and ``pooled_mid`` (the shipped
 safe-blend).
 
-Computes the study's hypothesis tests (H1-H4, as its report states them:
+Computes the study's hypothesis tests, H1-H4 below (their verdicts are in
 ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``):
 
 * Per-window (the study's {20,50,100,200,300}-vote checkpoints) mean cost /

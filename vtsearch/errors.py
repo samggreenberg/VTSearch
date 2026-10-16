@@ -16,19 +16,13 @@ error tuple -- carries **one** shape::
       ...                              # any extra kwargs passed to abort()
     }
 
-That was not always true.  A hand-rolled ``{"error", "detail", "request_id"}``
-envelope used to coexist with flask-smorest's ``{"code", "status", "message",
-"errors"}``, and a third flavour (a bare ``jsonify({"error": ...})``) carried no
-``request_id`` at all.  The Angular client had to read both spellings -- an
-``apiErrorMessage`` helper imported by seventeen components existed for no other
-reason -- while the ~350 ``abort()`` sites, the overwhelming majority of the
-API's errors, were the ones *without* a ``request_id``.
-:class:`VTSearchApi` folds our additions into flask-smorest's payload instead,
-so there is one envelope, documented once in the OpenAPI spec, and every API
-error is quotable in a bug report.
+:class:`VTSearchApi` folds our additions into flask-smorest's payload, so
+there is one envelope, documented once in the OpenAPI spec, and every API
+error -- the ``abort()`` sites included -- carries a ``request_id`` that is
+quotable in a bug report.
 
-The module also holds the ``@app.errorhandler`` functions that used to live
-inline in ``app.py``: JSON 404/405 for ``/api/`` paths, the dataset/detector
+The module also holds the ``@app.errorhandler`` functions: JSON 404/405 for
+``/api/`` paths, the dataset/detector
 not-loaded -> 409 mappings, the request-missing-context -> 400 mapping, and
 the catch-all uncaught-exception -> 500.
 
@@ -60,8 +54,7 @@ from vtscore.state.core import (
 #: flask-smorest's handler, and ``schema`` / ``exc`` are webargs internals it
 #: attaches on a validation failure (the live marshmallow ``Schema`` and the
 #: ``ValidationError``).  Everything else a route passes (``available=[...]``,
-#: ``dataset_id=...``) is surfaced verbatim as a top-level field -- what the
-#: hand-rolled envelope's ``**extra`` used to do.
+#: ``dataset_id=...``) is surfaced verbatim as a top-level field.
 _SMOREST_RESERVED = frozenset({"message", "errors", "messages", "headers", "schema", "exc"})
 
 
@@ -204,11 +197,10 @@ def _handle_404(exc):
     Flask resolves the most specific exception class first, so registering
     anything for ``NotFound`` takes every 404 away from flask-smorest's
     ``HTTPException`` handler -- including the ~85 ``abort(404, message=...)``
-    calls whose message rides on ``exc.data``.  This handler used to render
-    ``exc.name`` and nothing else, so every one of those messages ("Dataset
-    file missing for 'x'", "File not found: <name>", "Job not found") was
-    discarded before the client saw it.  It now decides only *whether* the
-    path is ours and hands the rendering back to smorest.
+    calls whose message rides on ``exc.data``.  So this handler decides only
+    *whether* the path is ours and hands the rendering back to smorest, which
+    keeps each of those messages ("Dataset file missing for 'x'", "File not
+    found: <name>", "Job not found") for the client.
     """
     from flask import request as _req
 
@@ -231,8 +223,8 @@ def _handle_dataset_not_loaded(exc):
 
     Raised by the Flask resolver when a route handler touches the
     dataset proxies and the header doesn't resolve to a loaded context.
-    Replaces the silent fallback to the empty context that returned 200
-    with stale data (logical-bug-audit H16). The frontend can
+    Without it the request would silently fall back to the empty context
+    and return 200 with stale data (logical-bug-audit H16). The frontend can
     distinguish 409 + ``error_code="dataset_not_loaded"`` from a generic
     500 and offer a load action.
 

@@ -235,9 +235,10 @@ def _fused_threshold(
 
     For the fold-anchored cut it scores the haystack (*rows*, the
     ``(media, score row)`` matrix :func:`scoring_rows_for_snap` built for the
-    snapshot) through each calibration fold model, so each fold's anchored mixture is fitted on that fold model's own score scale
-    with that fold's *held-out* votes as anchors, then carries the per-fold cuts
-    to the final model in quantile space
+    snapshot) through each calibration fold model, so each fold's anchored
+    mixture is fitted on that fold model's own score scale with that fold's
+    *held-out* votes as anchors, then carries the per-fold cuts to the final
+    model in quantile space
     (:func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`).  This is
     the estimator the 2026-08-05 deep-regime run picked over both pure
     cross-calibration and the schedule-blended GMM - see
@@ -775,9 +776,12 @@ def train_and_threshold(
             beta=beta,
         )
     elif det_ctx is not None:
-        # No haystack scored: no population estimator to re-cut on a balance
-        # change, and no ranking for a balance to keep a set of.
+        # No haystack scored: no population estimator or labels' line to
+        # re-cut on a balance change, and no ranking for a balance to keep a
+        # set of.  A line an earlier retrain parked belongs to a model this
+        # one replaced, so it goes too.
         det_ctx.anchored_cut_cache = None
+        det_ctx.labels_line = None
         det_ctx.line_ranking = None
         det_ctx.gate_passed = None
 

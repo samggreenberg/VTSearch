@@ -1089,24 +1089,6 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-#: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
-#: lands on an image where the class already has one of its own -- see that
-#: function's ``FOLD_MODES``.
-#:
-#: ``fold`` is the reading #3637 measured and kept, and the margin is not close:
-#: over the VG-COCO overlap, on the 225 images where the three modes disagree,
-#: COCO's exhaustive boxes say the class is **not** a single-band positive on 199
-#: of them, and folding names the right answer 88% of the time against 6.7% for
-#: keeping the class's own band. The structural reason is bigger than that
-#: number: the COCO half is already banded off COCO's own exhaustive box set, so
-#: ``anchor_to_coco`` un-bands 17% of the cleanly-banded images there on evidence
-#: of exactly the same kind. A mode that protected the un-anchored half from it
-#: would make the two halves of one dataset disagree about what a positive is.
-#:
-#: The alternatives are kept so the arm can be re-measured (``band_fold.py``),
-#: not because either is a candidate default.
-SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
-
 #: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO
@@ -3477,15 +3459,17 @@ def scale_cell(category: str, band: str) -> str:
 #: is why the size a cell was built at is now in its provenance sidecar
 #: (``embed_batch_size``): changing an entry below silently redefines every cell
 #: it is rebuilt into, and the sidecar is the only place that says so.
-#: Deliberately three, not five. ``siglip`` is the shipped default and
-#: ``siglip2_l`` the premium end; the middles (``siglip_l``, ``siglip2``) were
-#: dropped because a study learns little from interpolating between them, and
-#: the compute is better spent on more runs of the endpoints.
+#:
+#: The SigLIP family is deliberately two columns, not four. ``siglip`` is the
+#: shipped default and ``siglip2_l`` the premium end; the middles (``siglip_l``,
+#: ``siglip2``) are left out because a study learns little from interpolating
+#: between them, and the compute is better spent on more runs of the endpoints.
 #:
 #: The cost of that: ``siglip`` -> ``siglip2_l`` moves generation (1 -> 2) and
 #: capacity (base -> SO400M) at the same time, so a difference between them
-#: cannot be attributed to either alone. Rebuild a middle column if a result
-#: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
+#: cannot be attributed to either alone. If a result ever needs that split, add
+#: a middle column to this table and build it (``build_pile.py --embedders
+#: siglip2``); the builder refuses an embedder the table does not list.
 #: The two CLIP columns are **evaluation only** (#3292) and exist to test whether
 #: #3287's `calibration_fraction` optimum follows single-vector geometry or just
 #: the SigLIP lineage.  Both are run, not one, because a single CLIP arm cannot

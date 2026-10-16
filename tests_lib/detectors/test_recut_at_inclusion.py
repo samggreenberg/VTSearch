@@ -118,3 +118,24 @@ class TestARecutLeavesUnfittedCutsAlone:
 
         for k in (1, -3, 10):
             assert recut_detector_threshold(det_ctx, k) is None, k
+
+
+class TestARetrainWithNoHaystackDropsTheOldLine:
+    def test_a_line_from_an_earlier_retrain_is_not_recut_for_the_new_model(self):
+        """No haystack scored means no line for this model, so none of the last one's survives.
+
+        A balance change re-cuts ``labels_line`` first; one left over from a
+        retrain whose model this one replaced would be re-cut for the wrong head.
+        """
+        from vtscore.detectors.training import train_and_threshold
+
+        det_ctx, _results, _threshold = _trained(13, range(900, 960), n_good=6, n_bad=6, detector_id="det-recut-stale")
+        assert det_ctx.labels_line is not None, "the fixture must fit a labels' line on its first retrain"
+
+        rng = np.random.default_rng(14)
+        X = [rng.standard_normal(DIM).astype(np.float32) for _ in range(12)]
+        y = [1.0] * 6 + [0.0] * 6
+        train_and_threshold(X, y, snap=None, det_ctx=det_ctx)
+
+        assert det_ctx.labels_line is None
+        assert det_ctx.anchored_cut_cache is None and det_ctx.line_ranking is None

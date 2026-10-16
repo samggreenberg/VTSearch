@@ -1,7 +1,7 @@
 """Flask request-lifecycle hooks for the VTSearch app.
 
 Holds the ``before_request`` / ``after_request`` / ``teardown_request``
-handlers that used to live inline in ``app.py``: per-request id + user +
+handlers: per-request id + user +
 dataset/detector context resolution, server-side auth enforcement, the
 in-handler marker, and the API-response ``Cache-Control`` /
 ``X-Request-Id`` shaping.

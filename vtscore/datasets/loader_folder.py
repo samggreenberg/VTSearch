@@ -26,6 +26,7 @@ from vtscore.datasets.loader_common import (
     _get_md5_value,
     _pop_md5_key,
 )
+from vtscore.embedding.binding import expected_dim_for_embedder
 from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.embedding.precomputed import normalize_vector
 from vtscore.security.path_validation import (
@@ -312,15 +313,16 @@ def _resolve_file_embedding(
     come back with ``embedder_id == ""``.  Content-vectors hits use
     *content_embedder_name* so the embedder that produced the NPZ archive
     is recorded on the media; ``""`` is returned when the caller doesn't
-    know the embedder (the framework embed stage will stamp its own name
-    when embedding is ``None``).
+    know the embedder (the framework embed stage stamps the load's embedder
+    onto such a nameless vector, checking its width as it does).
 
     Whatever a hit yields is validated by
     :func:`~vtscore.embedding.precomputed.normalize_vector` before it is
-    returned.  ``content_vectors`` and ``custom_metadata_map`` are the
-    documented channels for a *third-party* importer plugin to ship vectors it
-    computed elsewhere (see
-    :meth:`~vtscore.datasets.importers.base.core.DatasetImporter.yield_precomputed`),
+    returned, including a width check for every vector that comes with an
+    embedder name (see :func:`_validated_precomputed`).  ``content_vectors``
+    and ``custom_metadata_map`` are the documented channels for a
+    *third-party* importer plugin to ship vectors it computed elsewhere (see
+    :meth:`~vtscore.datasets.importers.base.core.ImporterBase.yield_precomputed`),
     so unlike an internally-produced embedding nothing guarantees their shape,
     dtype or finiteness.  Validating here - once per file, at the only point
     those dicts become a media's stored vector - keeps a plugin's bad row from
@@ -332,24 +334,47 @@ def _resolve_file_embedding(
         return _validated_precomputed(cm_embedding, f"custom_metadata embedding for {rel_path!r}"), ""
     for key in (rel_path, file_name):
         if content_vectors and key in content_vectors:
-            vec = _validated_precomputed(content_vectors[key], f"pre-computed vector for {key!r}")
+            vec = _validated_precomputed(
+                content_vectors[key], f"pre-computed vector for {key!r}", content_embedder_name
+            )
             return vec, content_embedder_name
     return None, ""
 
 
-def _validated_precomputed(value: Any, label: str) -> Any:
+def _validated_precomputed(value: Any, label: str, embedder_name: str = "") -> Any:
     """Validate a pre-computed entry, which may be a vector *or* a per-embedder dict.
 
     A per-embedder ``vectors_<name>`` NPZ import supplies one vector per bound
     embedder as a ready-made ``{embedder_name: vector}`` dict (see
     :func:`~vtscore.embedding.media_vectors.init_embeddings`), so both shapes
     reach this point.  Each column is validated on its own: a trio archive's
-    columns are *meant* to differ in width (siglip is 1152-dim, dinov3_patch is
-    768-dim), so the only sound check is per-embedder, never across the dict.
+    columns are *meant* to differ in width (siglip_l is 1152-dim, dinov3_patch
+    is 768-dim), so the only sound check is per-embedder, never across the dict.
+
+    Every *named* vector is also checked against the width its embedder
+    declares (:func:`~vtscore.embedding.binding.expected_dim_for_embedder`,
+    descriptor metadata, so no model is loaded), as the ``.npz`` readers do: a
+    dict column against the embedder its key names, a single vector against
+    *embedder_name*.  A vector filed under one embedder's name in another's
+    width would otherwise be stored as that embedder's and fail only later, far
+    from here.  A nameless vector (no *embedder_name*), or one whose embedder is
+    unregistered or declares no width, has nothing to check against here; the
+    embed stage checks a nameless one when it stamps the load's embedder on it.
     """
     if isinstance(value, dict):
-        return {name: normalize_vector(vec, label=f"{label} [embedder {name!r}]") for name, vec in value.items()}
-    return normalize_vector(value, label=label)
+        return {name: _validated_named_vector(vec, f"{label} [embedder {name!r}]", name) for name, vec in value.items()}
+    return _validated_named_vector(value, label, embedder_name)
+
+
+def _validated_named_vector(vec: Any, label: str, embedder_name: str) -> Any:
+    """:func:`normalize_vector` *vec*, width-checked against *embedder_name* when it declares one."""
+    expected_dim = expected_dim_for_embedder(embedder_name)
+    return normalize_vector(
+        vec,
+        label=label,
+        expected_dim=expected_dim,
+        expected_source=f"the width declared by embedder {embedder_name!r}" if expected_dim is not None else "",
+    )
 
 
 def _resolve_file_md5(

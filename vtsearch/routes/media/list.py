@@ -1062,11 +1062,10 @@ def vote_media(body: dict, media_id: int):
 
     Behaviour is **idempotent**: sending the current state is a no-op
     that does not append to ``label_history``, does not credit
-    achievements, and returns the existing click-time.  This is the
-    fix for logical-bug-audit H1; two stale-view tabs that race the
-    same media no longer alternate ADD/REMOVE on the server, so the
-    achievement counter no longer inflates beyond the number of real
-    labeling decisions.
+    achievements, and returns the existing click-time, so two stale-view
+    tabs that race the same media cannot alternate ADD/REMOVE on the
+    server or inflate the achievement counter beyond the number of real
+    labeling decisions (logical-bug-audit H1).
 
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
@@ -1103,12 +1102,11 @@ def vote_media(body: dict, media_id: int):
     _old, new_state, click_time = set_vote(media_id, target, region_box=region_box, provenance=provenance)
 
     # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
-    # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
-    # uncaught 500 with no rollback, leaving the in-memory vote committed
-    # while the on-disk labelset stayed at its prior value (audit finding
-    # H30).  Now we explicitly surface the failure as a 500 with a clear
-    # message; the in-memory mutation is rare enough to be acceptable
-    # since the next vote re-merges and retries.  The write also schedules
+    # EBUSY/ENOSPC under ``_write_detector``) leaves the in-memory vote
+    # committed while the on-disk labelset stays at its prior value (audit
+    # finding H30), so it is surfaced as a 500 with a clear message; the
+    # in-memory mutation is rare enough to be acceptable since the next vote
+    # re-merges and retries.  The write also schedules
     # the push to the detector's labelset source, if it has one.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 

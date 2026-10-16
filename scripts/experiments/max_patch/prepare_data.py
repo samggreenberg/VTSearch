@@ -1,19 +1,17 @@
-"""Stage 0: load + embed each (dataset, embedder) pair once; cache pickles + exemplar crops.
+"""Stage 0: load + embed each (dataset, embedder) pair once; cache pickles, select categories.
 
 For every embedder in the grid, each dataset is loaded and embedded through
 ``load_demo_dataset`` (which also attaches the patch side-channels -
-``patch_grid`` - for patch-capable embedders), then the
-demo cache pickle is copied to a per-(dataset, embedder) name so the three
-embedders don't evict each other from the single demo cache slot.  Array tasks
-load these warm pickles directly.
+``patch_grid`` - for patch-capable embedders), then the in-memory medias are
+written to a per-(dataset, embedder) cell pickle (``_cells_io.dump_medias``), so
+the three embedders don't evict each other from the single demo cache slot and
+the patch fields the demo cache drops survive.  Array tasks load these warm
+pickles directly.
 
-Also pre-computes the **startup-sort exemplar crops**: for each selected
-category, up to ``EXEMPLAR_CANDIDATES`` positive images are chosen
-deterministically; each one's ground-truth region is cropped out of the image
-and embedded as a stand-alone image (the "cropped exemplar"), giving the vector
-the runner seeds every style's startup sort with.  Boxless datasets
-(caltech101) fall back to the whole-image vector - their photos are already
-roughly object crops.
+Also selects each pair's categories (:func:`experiment_config.select_categories`)
+and records them, with counts and timings, in ``prepare_info.json``, which the
+runner enumerates its cells from.  The runner opens on the typed query's text
+sort (or known-good examples), so nothing here crops or embeds an exemplar.
 
 DINOv3 weights are gated on Hugging Face: ``HF_TOKEN`` must be set to a token
 that has accepted the licence, or the dinov3 rows are skipped with a loud
@@ -28,88 +26,14 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
-import tempfile
-from pathlib import Path
 
 import common
 
 common.setup_env()
 
-import numpy as np  # noqa: E402
-
 import experiment_config as cfg  # noqa: E402
-
-
-def _crop_vector(media: dict, box, embedder) -> "object":
-    """Embed the pixel crop of *box* (normalised coords) as a stand-alone image.
-
-    Returns the whole-image embedding of the cropped exemplar - the vector the
-    user's "here's an example" startup sort would run on.  ``box=None`` (or a
-    degenerate crop) falls back to the media's stored whole-image vector.
-    """
-    from PIL import Image  # noqa: PLC0415
-
-    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    if box is None:
-        return media_embedding(media)
-    img = Image.open(io.BytesIO(media["media_bytes"])).convert("RGB")
-    w, h = img.size
-    x0, y0, x1, y1 = box
-    px0, py0 = int(min(x0, x1) * w), int(min(y0, y1) * h)
-    px1, py1 = int(max(x0, x1) * w), int(max(y0, y1) * h)
-    # Enforce a minimum 16-px crop side by symmetric expansion (clamped), so a
-    # tiny annotation still produces something the embedder can resize sanely.
-    if px1 - px0 < 16:
-        cx = (px0 + px1) // 2
-        px0, px1 = max(0, cx - 8), min(w, cx + 8)
-    if py1 - py0 < 16:
-        cy = (py0 + py1) // 2
-        py0, py1 = max(0, cy - 8), min(h, cy + 8)
-    if px1 <= px0 or py1 <= py0:
-        return media_embedding(media)
-    crop = img.crop((px0, py0, px1, py1))
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        crop.save(tmp, format="PNG")
-        tmp_path = Path(tmp.name)
-    try:
-        vec = embedder.embed_media(media_from_path(tmp_path))
-    finally:
-        tmp_path.unlink(missing_ok=True)
-    return vec if vec is not None else media_embedding(media)
-
-
-def _exemplar_crops(medias: dict, categories: list[str], embedder) -> tuple[dict, dict]:
-    """Return ``(vectors, candidates)`` for the startup-sort exemplars.
-
-    ``vectors`` maps ``"{category}::{media_id}"`` to the cropped exemplar's
-    embedding; ``candidates`` maps category to the ordered candidate id list
-    (seed *s* uses entry ``s % len``).  Candidates prefer positives that carry a
-    ground-truth box for the category; boxless datasets use whole images.
-    """
-    from vtscore.eval.labels import media_is_positive, region_box_for_category  # noqa: PLC0415
-
-    vectors: dict[str, object] = {}
-    candidates: dict[str, list[int]] = {}
-    for cat in categories:
-        pos = [cid for cid in sorted(medias) if media_is_positive(medias[cid], cat)]
-        boxed = [cid for cid in pos if region_box_for_category(medias[cid], cat) is not None]
-        pool = boxed or pos
-        if not pool:
-            continue
-        rng = np.random.RandomState(cfg.category_rng_seed(cat))
-        n = min(cfg.EXEMPLAR_CANDIDATES, len(pool))
-        chosen = [int(c) for c in rng.choice(np.array(pool, dtype=np.int64), size=n, replace=False)]
-        for cid in chosen:
-            box = region_box_for_category(medias[cid], cat)
-            vectors[f"{cat}::{cid}"] = np.asarray(_crop_vector(medias[cid], box, embedder), dtype=np.float32)
-        candidates[cat] = chosen
-        common.log(f"  exemplars[{cat}]: {n} candidates ({'boxed' if boxed else 'whole-image'})")
-    return vectors, candidates
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,12 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.datasets.loader_demo import load_demo_dataset
     from vtscore.embedding import initialize_models
     from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.media import get_embedder
 
     initialize_models()
 
-    crops_dir = common.RESULTS / "crops"
-    crops_dir.mkdir(parents=True, exist_ok=True)
+    common.RESULTS.mkdir(parents=True, exist_ok=True)
 
     info_path = common.RESULTS / "prepare_info.json"
     info: dict = {"datasets": {}, "failed": []}
@@ -140,7 +62,6 @@ def main(argv: list[str] | None = None) -> int:
             common.log(f"SKIPPING {emb_name}: HF_TOKEN is not set (DINOv3 weights are licence-gated on HF).")
             info["failed"].append(emb_name)
             continue
-        embedder = get_embedder(emb_name)
         for ds in args.datasets:
             common.log(f"\n=== {ds} x {emb_name} ===")
             timings: dict[str, float] = {}
@@ -203,11 +124,6 @@ def main(argv: list[str] | None = None) -> int:
                     f"(> {cfg.MAX_VOTED_AREA * 100:.0f}% cap) - its region vote is an image-level vote"
                 )
 
-            with common.timed(f"crops:{ds}:{emb_name}", timings):
-                vectors, candidates = _exemplar_crops(medias, selected, embedder)
-            np.savez_compressed(crops_dir / f"{cfg.crops_basename(ds, emb_name)}.npz", **vectors)
-            (crops_dir / f"{cfg.crops_basename(ds, emb_name)}.json").write_text(json.dumps(candidates, indent=2))
-
             info["datasets"].setdefault(ds, {})[emb_name] = {
                 "n_medias": len(medias),
                 "n_patch_grids": n_patch,
@@ -217,7 +133,6 @@ def main(argv: list[str] | None = None) -> int:
                 "category_selection": sel_report,
                 "load_seconds": timings.get(f"load:{ds}:{emb_name}"),
                 "embed_seconds_per_image": round(timings.get(f"load:{ds}:{emb_name}", 0.0) / max(len(medias), 1), 4),
-                "crops_seconds": timings.get(f"crops:{ds}:{emb_name}"),
                 "pickle": cfg.pickle_name(ds, emb_name),
             }
             info_path.write_text(json.dumps(info, indent=2))

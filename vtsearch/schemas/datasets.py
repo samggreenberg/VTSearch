@@ -22,8 +22,8 @@ plugin family can add keys of its own:
   :class:`~vtsearch.schemas.common.PluginExtrasSchema`, so the fixed fields
   get real types while the plugin extras still reach the client verbatim.
   The generated model picks up an index signature from
-  ``additionalProperties: true``, which is exactly the shape the frontend
-  used to hand-maintain.
+  ``additionalProperties: true``, so the frontend gets that shape without
+  hand-maintaining it.
 """
 
 from __future__ import annotations

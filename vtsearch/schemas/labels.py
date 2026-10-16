@@ -337,8 +337,8 @@ class IngestMissingResponseSchema(Schema):
     """Response for ``POST /api/label-importers/ingest-missing``.
 
     ``failed`` lists per-entry failures from the label-application
-    pass; see logical-bug-audit H31.  A single entry that raises during
-    ``apply_label`` no longer aborts the rest of the batch.
+    pass: a single entry that raises during ``apply_label`` is recorded
+    there and the rest of the batch still applies (logical-bug-audit H31).
     """
 
     ingested = fields.Integer(required=True)
