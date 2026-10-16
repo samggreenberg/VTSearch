@@ -47,6 +47,7 @@ Optional overrides:
 | `parameters` (property) | `[]` | List of `{key, label, type, default, min, max, step, description}` dicts describing user-configurable knobs |
 | `creation_questions` (property) | `parameters` | Questions shown when the user first picks this clipper (defaults to `parameters`) |
 | `with_params(params)` | returns `self` | Return a new clipper instance with overridden parameters |
+| `to_dict()` | descriptor keys only | JSON summary for `GET /api/clippers`. A parameterised clipper adds its current parameter values; see [below](#parameters-and-re-parameterisation) |
 | `resolve_for_durations(durations)` | returns `self` | **Reserved - never called.** Kept for compatibility; an override here is inert, so put the logic in `resolve_for_media` |
 | `resolve_for_media(media)` | returns `self` | Per-media hook called per item - used by auto-selecting clippers (e.g. tile when long, pass-through when short) |
 
@@ -197,13 +198,30 @@ with the updated value; never mutate `self`. The default implementation
 returns `self` unchanged, which is correct for parameter-less
 clippers.
 
-The resolved clipper's `name` **and** the param dict the user chose are
+The resolved clipper's `name` **and** its effective parameter values are
 both recorded in each clip's origin, as a
 `{"kind": "clipper", "name": ..., "params": {...}}` chain step. The name
 alone would not be enough, precisely because it doesn't encode the
 parameter values; storing the two together is what makes cross-dataset
 replay deterministic regardless of which parameterisation the user
 picked.
+
+The recorded `params` are read from the resolved clipper's `to_dict()`:
+every key beyond the base descriptor keys (`name`, `display_name`,
+`media_type`, `description`, `parameters`, …;
+`CLIPPER_BASE_KEYS` in `vtscore/datasets/clipper_chain.py`). So a
+parameterised clipper must override `to_dict()` to add its current
+values, as every shipped one does:
+
+```python
+def to_dict(self) -> dict[str, Any]:
+    d = super().to_dict()
+    d["duration"] = self._duration
+    return d
+```
+
+Without it the step records `params: {}`, and a replay re-runs the
+registered instance's defaults rather than the values the user chose.
 
 Note also `summary_template` - a one-line preview with `{key}`
 placeholders that the frontend fills from the current parameter values
@@ -262,6 +280,12 @@ class SoundOverlapClipper(MediaClipper):
 
     def with_params(self, params: dict[str, Any]) -> "SoundOverlapClipper":
         return SoundOverlapClipper(float(params.get("duration", self._duration)))
+
+    def to_dict(self) -> dict[str, Any]:
+        # The chain records these extra keys as the step's params.
+        d = super().to_dict()
+        d["duration"] = self._duration
+        return d
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         wav_bytes = media.get("media_bytes")

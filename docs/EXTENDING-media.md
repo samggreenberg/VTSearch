@@ -263,7 +263,7 @@ changes to `vtscore/media/__init__.py` are needed.
 
 > **Always merge the base `display_metadata`.** Override it to *prepend* your
 > type-specific fields, then fold in whatever the base produced that you did
-> not already set — the shipped types all end with
+> not already set — every shipped override ends with
 > `result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})`.
 > The base contributes the shared fields (Category, File Size, the `Clip *`
 > provenance) plus the **"AI Caption" / "AI Tags"** row, which surfaces the
@@ -653,20 +653,17 @@ loaded via `spec_from_file_location` so discovery still works.
 
 Whether a prompt ensemble helps is a property of the **embedder**, not of the
 media type, and the default (`[]`) is a real answer rather than an unfilled
-slot: issue #3127 measured enrichment on/off over 22 eval datasets and 560
-paired queries and found it a clear loss on `e5`, `bge`, `siglip` and `clap`
-(text enrichment lost on 45 of 45 categories), and a gain only on
-`clap_general` and `xclip`.  Issue #3341 therefore emptied the list on the four
-losers, so the *Enrich descriptions* setting is a no-op there instead of a
-small, silent cost.  Leave `description_wrappers` empty unless you have
-measured a gain on **your** checkpoint; a sibling model's templates are not
-evidence.
+slot: measured over the eval datasets (#3127), enrichment was a clear loss on
+`e5`, `bge`, `siglip` and `clap` and a gain only on `clap_general` and `xclip`,
+so those four ship an empty list and *Enrich descriptions* is a no-op on them.
+Leave `description_wrappers` empty unless you have measured a gain on **your**
+checkpoint; a sibling model's templates are not evidence.
 
 **Instance attributes:**
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports on the process-wide default and parks it `idle` when it returns. |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports through the process-wide default, which resolves to the calling thread's tracker and is a no-op on a thread that bound none. |
 
 ### Built-in embedders
 
@@ -689,7 +686,7 @@ def supports_text(self) -> bool:
 
 | Flag | Default | When to override |
 |---|---|---|
-| `supports_text: bool` | **True** | Return `False` for vision-only or patch-based encoders with no text tower (DINOv2/v3, EUPE, SIFT/VLAD, FaceNet, BEATs, AST, Whisper-encoder). The default is `True` because most shipped embedders are cross-modal (CLIP, SigLIP, CLAP, E5, BGE); leaving it unset on a vision-only encoder wrongly advertises `POST /api/sort` text queries. |
+| `supports_text: bool` | **True** | Return `False` for vision-only or patch-based encoders with no text tower (DINOv2/v3, EUPE, SIFT/VLAD, FaceNet, BEATs, AST, Whisper-encoder, VideoMAE). The default is `True` because most shipped embedders are cross-modal (CLIP, SigLIP, CLAP, E5, BGE); leaving it unset on a vision-only encoder wrongly advertises `POST /api/sort` text queries. |
 | `supports_patch_regions: bool` | False | Return `True` for image embedders that implement `_patch_forward_impl(media) -> PatchEmbedOutput` (the hook behind the public `patch_forward`, which takes the `_embed_lock` for you). Loaders that see this flag run the patch pass after the standard CLS pass and store a hierarchical region set plus the raw patch grid. |
 | `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]`, enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
@@ -736,7 +733,8 @@ app-tier wiring.
 registers under one stable name (`sound_tiling`, not
 `sound_tiling_2.0s`); the parameter values live in the `parameters`
 descriptors and travel with the clip's origin as a separate `params`
-dict. Two `SoundTilingClipper` instances with different durations would
+dict, which the chain reads from the keys your `to_dict()` override adds
+(see the example below). Two `SoundTilingClipper` instances with different durations would
 collide in the registry, so a media type ships one instance per clipper
 class and the user re-parameterises it through `with_params()`.
 
@@ -768,6 +766,12 @@ class SoundOverlapClipper(MediaClipper):
     def with_params(self, params: dict[str, Any]) -> "SoundOverlapClipper":
         """Return a NEW clipper; the registered instance is shared."""
         return SoundOverlapClipper(float(params.get("duration", self._duration)))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Add the current values: the chain records these keys as the step's params."""
+        d = super().to_dict()
+        d["duration"] = self._duration
+        return d
 
     @property
     def name(self) -> str:
@@ -865,7 +869,7 @@ overwrite the first.
 | `display_name`       | `str`                    | Human-readable name for UI tabs (default: `name` minus its type prefix, title-cased) |
 | `description`        | `str`                    | Short tooltip text shown on hover in the clipper chooser UI       |
 | `summary_template`   | `str`                    | One-line preview with `{key}` placeholders for parameter values (defaults to `description`) |
-| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + display_name + media_type) |
+| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name, display_name, media_type, plus description / summary_template / parameters / creation_questions when set). A parameterised clipper adds its current values: every extra key is recorded as the chain step's `params`, so without it a replay falls back to the defaults |
 | `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
 | `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
 | `with_params(p)`     | `(dict) -> MediaClipper` | Return a **new** clipper with overridden parameters; never mutate `self` |
@@ -1174,7 +1178,7 @@ class Audio2TextMediaConverter(MediaConverter):
           for text, "media_bytes" for images)
 
         Returns empty list if conversion fails.
-        Does NOT include "id", "embedding", or "md5"; the caller handles those.
+        Does NOT include "id", "embeddings", or "md5"; the caller handles those.
         """
         language = params["language"]
         # ... transcription logic ...
@@ -1364,7 +1368,10 @@ class S3MediaSource(MediaSource):
     def fetch_item(self, key: str) -> FetchedItem:
         """Download an item to a temp directory and return a FetchedItem."""
         import boto3
-        local = Path(tempfile.gettempdir()) / "vtsearch_s3" / key
+        root = (Path(tempfile.gettempdir()) / "vtsearch_s3").resolve()
+        local = (root / key).resolve()
+        if not local.is_relative_to(root):
+            return FetchedItem(path=None)  # keys come from labelsets; never write outside root
         local.parent.mkdir(parents=True, exist_ok=True)
         if not local.exists():
             boto3.client("s3").download_file(self._bucket, key, str(local))

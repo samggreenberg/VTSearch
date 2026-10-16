@@ -91,7 +91,7 @@ The contract:
 - Each returned dict must contain at minimum `"filename"` and the
   data fields expected by the target media type (e.g. `"media_bytes"`
   + `"duration"` for image/audio/video, `"media_string"` for text). It
-  does **not** include `"id"`, `"embedding"`, or `"md5"` - the runner
+  does **not** include `"id"`, `"embeddings"`, or `"md5"` - the runner
   and embed stage assign those.
 - The *source* media carries `media_bytes` in a full import but only
   `{filename, media_path}` in reference (*thin*) mode. Read binary
@@ -294,9 +294,11 @@ The origin `params` (all values stored as strings):
 - **Empty strings count as unset.** `normalize_params` drops `""` for
   any field that has a default or is optional, so a blank UI input
   falls back to the declared default.
-- **`name` defaults to `f"{source}2{target}"`.** Two converters with
-  the same source/target pair must override `name` on one of them, or
-  one shadows the other in the registry.
+- **`name` is `f"{source}2{target}"`; keep the pair unique.** Two
+  converters for the same source/target pair collide in the registry
+  (an entry-point one is skipped in favour of the built-in). Don't
+  override `name` to dodge that: the app's demo picker rebuilds a
+  converter's name from the type pair.
 - **`apply_converter_to_demo` mutates `medias` in place.** Snapshot
   first if you need the originals.
 
