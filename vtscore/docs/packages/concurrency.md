@@ -621,7 +621,7 @@ notify(
 
 | Name | Description |
 |------|-------------|
-| `notify(message, *, level="info", detail=None, source=None, items=None) -> Notification` | Publish and log one message. Never raises. `items` is shown behind the toast's **Details** toggle with a **Copy list** button; capped at `MAX_ITEMS` entries of `MAX_ITEM_CHARS` characters |
+| `notify(message, *, level="info", detail=None, source=None, items=None) -> Notification` | Publish and log one message. Never raises. `items` is shown behind the toast's **Details** toggle with a **Copy List** button; capped at `MAX_ITEMS` entries of `MAX_ITEM_CHARS` characters |
 | `Notification` | Frozen dataclass: `id`, `level`, `message`, `detail`, `source`, `timestamp`, `items`, `.to_dict()` |
 | `NotificationBroker` | `subscribe` / `unsubscribe` / `publish` / `subscriber_count` / `clear_subscribers` |
 | `notifications` | The process-wide broker singleton |

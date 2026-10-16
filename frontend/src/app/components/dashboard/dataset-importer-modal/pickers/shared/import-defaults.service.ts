@@ -260,7 +260,7 @@ export class ImportDefaultsService {
       message: `Save these as default for ${typeLabel} imports?`,
       detail: 'Your embedder, clipper, and converter picks will be auto-filled next time.',
       action: {
-        label: 'Save as default',
+        label: 'Save as Default',
         onClick: () => this.persistImportDefaults(typeId, cfg, mediaTypes),
       },
       dedupKey: `import-defaults-offer:${typeId}`,

@@ -687,7 +687,7 @@ import.
 
 The run shows on the new dataset's Dashboard row while it works, and its
 **Cancel** stops it. When it finishes, a notice tells you how many hits
-it found; its **View results** button opens the **Find Results**
+it found; its **View Results** button opens the **Find Results**
 dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
 and **Export**s the listed rows to any exporter. A detector with too few
@@ -703,7 +703,7 @@ To run AutoFind on a dataset you already have - to try a detector you
 just moved to AutoFind, say - pick **Run AutoFind** from the dataset's
 **⋯** menu. It loads the dataset if it isn't loaded, runs the same
 detectors, and says when it is done with the same notice an import's run
-gives, its **View results** button a click away. AutoFind is the
+gives, its **View Results** button a click away. AutoFind is the
 unattended path, the app's twin of the
 [command line's](howto/autofind-from-the-command-line.md) run, so it opens
 nothing on its own; to look through the hits as soon as they land, use
@@ -720,7 +720,7 @@ which takes exactly one dataset and one detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the Find Results dialog; any that finish while the
-dialog is open announce themselves with a **View results** notice
+dialog is open announce themselves with a **View Results** notice
 instead, so none of them is lost. The dialog's **Browse** button opens
 the listed items - the Good ones, or whichever side you switched to - in
 [Browse](#browse-exploring-a-dataset-spatially), laid out as a map of their own;
