@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.failed-task__text {
+  // Take the remaining width but never push the action buttons out of view:
+  // min-width:0 lets the flex item shrink below its content size.
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.error-msg {
+  // Clamping the height keeps a pathologically long error (e.g. a
+  // stack-traced HTTP body) from growing the row tall enough to bury the
+  // buttons. Overflow scrolls instead.
+  max-height: 4.5em;
+  overflow-y: auto;
+  font-size: var(--font-sm);
+  color: var(--error-text);
+  overflow-wrap: anywhere;
+}
+
+.failed-task__meta {
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.failed-task__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}

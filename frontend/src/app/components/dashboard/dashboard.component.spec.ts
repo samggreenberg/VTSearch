@@ -1319,6 +1319,15 @@ describe('DashboardComponent', () => {
       expect(component.dashboardHint).toBe('add-detector');
     });
 
+    it('keeps the dataset hint when the only import failed (#4973)', () => {
+      renderWith();
+      // The failed row stays until dismissed, but no dataset is coming from it.
+      vi.spyOn(component.loadingTasksSvc, 'orphanLoadingTasks', 'get').mockReturnValue([
+        { task_id: 't1', name: 'Pile', status: 'idle', error: 'Import produced no medias.' } as LoadingTask,
+      ]);
+      expect(component.dashboardHint).toBe('add-dataset');
+    });
+
     it('asks for a dataset to be picked when there are datasets but none is selected (#4680)', () => {
       const el = renderWith([
         { id: 'd1', name: 'A', media_type: 'image' },

@@ -12,6 +12,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
+  produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
+  after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`
+  set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it; the
+  tracker holds at most `max_kept_failures` (new constructor argument, default 20), dropping the
+  oldest first, and `dismiss_task` refuses a task that is still running. Every import's task sets
+  `keep_failure`, so code that waited for a failed import's task to age out must dismiss it; other
+  tasks lapse as before. `create_task` also takes `created_by=` (defaulting to the current user)
+  and `source=` (what the task reads; imports set it from their origin), and a snapshot carries
+  `created_by`, `source`, `keep_failure` and, once the task has finished, `finished_at`.
+  `LoadingTasksTracker.visible_to(tasks, viewer)` drops other users' kept failures from a snapshot,
+  and `initial_snapshot(viewer)` / `stream_progress_events(viewer=)` apply it per SSE connection.
+  The rest is additive.
+
 - **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
   `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
   them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature

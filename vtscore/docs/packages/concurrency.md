@@ -335,9 +335,13 @@ The tracker `create_task` returns already reports `status="loading"`
 terminal status readers wait for, and the task is published before the
 caller's first `update()`.
 
-Methods: `create_task(task_id, ...)` (register and return tracker),
-`get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
+Methods: `create_task(task_id, ...)` (register and return tracker;
+`created_by=` defaults to the current user, `source=` names what the task
+reads, `keep_failure=` keeps a failure until dismissed), `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
 `is_finished(task_id)`, `remove_task(task_id)`,
+`dismiss_task(task_id)` (removes a *finished* task; `False` if it is unknown
+or still running), `visible_to(tasks, viewer)` (filters a snapshot for one
+user; see below),
 `cancel_task(task_id)` / `cancel_all()`, `set_worker(task_id, thread)`
 / `worker_alive(task_id)` (lets a cancel tell a live worker from a
 phantom row), `active_task_ids()`, `set_dataset_id(task_id, ds_id)`
@@ -349,6 +353,16 @@ Stale-prune policy: finished tasks without errors are removed 5 seconds
 after `mark_finished()`; tasks with errors are kept for 30 seconds so
 the polling frontend can display them. The prune runs lazily inside
 `list_tasks()`.
+
+A task created with `keep_failure=True` instead keeps its failure (an `error`
+that is not `CANCELLED_ERROR`) until `dismiss_task()` removes it; the tracker
+holds at most `max_kept_failures` of them (constructor argument, default 20),
+dropping the oldest first. Every import sets it: a failed import produces no
+dataset, so its task row is the only place the failure stays visible. A kept
+failure belongs to the user who started the task: `visible_to(tasks, viewer)`
+drops other users' kept failures from a snapshot (everything else, and kept
+failures owned by `"default"`, stays visible to everyone), and the SSE stream
+applies it per connection (`stream_progress_events(viewer=...)`).
 
 ---
 

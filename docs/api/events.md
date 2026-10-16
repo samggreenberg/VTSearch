@@ -87,12 +87,25 @@ phase, so consumers should prefer it for the progress bar and fall back to
   "created_at": 1731000000.123,
   "dataset_id": "esc50",
   "media_type": "audio",
-  "embedder": "clap"
+  "embedder": "clap",
+  "created_by": "alice",
+  "source": "server_folder:/data/esc50",
+  "keep_failure": true
 }
 ```
 
-`dataset_id`, `detector_id`, `media_type`, `embedder` are only present
-when the task carries that information.
+`dataset_id`, `detector_id`, `media_type`, `embedder`, `created_by` (the user
+the task runs for), `source` (what it reads, as a person would name it; set on
+imports) and `keep_failure` (set on imports, see below) are only present when
+the task carries that information. `finished_at` (unix seconds) appears once
+the task has finished.
+
+A failed task lapses from the snapshot 30 seconds after it fails, except one
+with `keep_failure` (every import): that stays until
+[`POST /api/dataset/dismiss/{task_id}`](datasets.md) removes it, because a
+failed import leaves no dataset row behind to say it happened (#4973). Such a
+failure is sent only to the user who started it: the stream is per user, and
+another user's kept failure is left out of their snapshots.
 
 Some tasks add a terminal result payload, `null` until they finish:
 combine-datasets staging publishes `staging_result`, and a labelset-media
@@ -153,7 +166,8 @@ a real named event rather than an SSE comment (`: heartbeat`) precisely because
 comments are invisible to the browser's `EventSource` API. Each heartbeat tick
 also re-emits **every** channel's current snapshot. For `loading-tasks` and
 `detector-loading-tasks` that is what makes finished tasks vanish from the UI
-once they pass their stale-prune window, without a server-side timer. For the
+once they pass their stale-prune window (5 seconds for a success, 30 for a
+failure that is not kept), without a server-side timer. For the
 single-tracker channels (`sort`, `find`, `eval`) it is a self-heal:
 each client's queue is bounded and drops frames when the client stalls, so a
 channel's single terminal `idle`/`error` frame can be lost and would otherwise

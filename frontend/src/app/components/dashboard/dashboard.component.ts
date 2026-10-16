@@ -43,6 +43,7 @@ import {
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
 import { JobProgressComponent } from '../job-progress/job-progress.component';
+import { FailedTaskComponent } from './failed-task/failed-task.component';
 import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
@@ -89,6 +90,7 @@ type DashboardHintId = Extract<
   standalone: true,
   imports: [
     JobProgressComponent,
+    FailedTaskComponent,
     DatasetCardComponent,
     DetectorCardComponent,
     CombineDatasetsModalComponent,
@@ -1371,7 +1373,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.importerFlow().open || this.newDetectorFlow().open) return null;
     const pickedDatasets = this.resolvedSelectedDatasets;
     const pickedDetectors = this.resolvedSelectedModels;
-    const importing = this.loadingTasksSvc.orphanLoadingTasks.length > 0;
+    // A failed import's row stays until dismissed (#4973), but nothing is coming from it.
+    const importing = this.loadingTasksSvc.orphanLoadingTasks.some((t) => !t.error);
     if (this.datasets.length === 0 && !importing) return this.loading ? null : 'add-dataset';
     if (this.datasets.length > 0 && pickedDatasets.length === 0) return 'select-dataset';
     if (new Set(pickedDatasets.map((d) => d.media_type)).size > 1) return 'mixed-datasets';

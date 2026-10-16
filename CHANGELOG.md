@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
+  that failed showed a "Failed" row in the datasets table, but the row went the next time the page
+  reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.
+  It now stays until you click **Dismiss**, through reloads, other loads and other tabs (a server
+  restart clears it). The row also says what the import was reading and when it failed, and a copy
+  button puts the error, source, task id and times on the clipboard for a bug report. On a shared
+  server only the user who started the import sees its failure. Reloading the page no longer
+  re-announces failures from before the reload in a toast: their rows already say so. Other
+  failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
+  there.
+
 - **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
   and run through SIFT twice: once for its search vector, then again for the points the geometric
   check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the

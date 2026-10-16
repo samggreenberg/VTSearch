@@ -1,5 +1,8 @@
+import { HttpContext } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
+
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 import { DashboardLoadingTasksService } from './dashboard-loading-tasks.service';
 import { AchievementsService } from './achievements.service';
@@ -24,7 +27,7 @@ describe('DashboardLoadingTasksService', () => {
   let loadingTasks$: Subject<LoadingTask[]>;
   let detectorLoadingTasks$: Subject<LoadingTask[]>;
   let serverReset$: Subject<void>;
-  let datasetsRegistryApiStub: { cancelTask: ReturnType<typeof vi.fn> };
+  let datasetsRegistryApiStub: { cancelTask: ReturnType<typeof vi.fn>; dismissTask: ReturnType<typeof vi.fn> };
 
   function task(overrides: Partial<LoadingTask>): LoadingTask {
     return {
@@ -55,7 +58,7 @@ describe('DashboardLoadingTasksService', () => {
       setLoading: vi.fn(),
     };
     const achievementsStub = { refresh: vi.fn() };
-    datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)) };
+    datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)), dismissTask: vi.fn(() => of({ ok: true })) };
     const detectorsRegistryApiStub = { cancelDetectorLoadingTask: vi.fn(() => of(null)) };
 
     configureZoneless({
@@ -218,5 +221,70 @@ describe('DashboardLoadingTasksService', () => {
     loadingTasks$.next([task({ task_id: 'new-task', status: 'running' })]);
     loadingTasks$.next([task({ task_id: 'new-task' })]);
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  describe('failed rows (#4973)', () => {
+    const failedIds = () => service.loadingTasks.filter((t) => t.error).map((t) => t.task_id);
+
+    it('shows a failure from the very first snapshot, with no polling loop running', () => {
+      // A page reload: the connect snapshot carries an undismissed failure and
+      // nothing active, so the polling loop never starts. The row must still show.
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'Import produced no medias.' })]);
+      expect(failedIds()).toEqual(['imp-1']);
+    });
+
+    it('keeps the failure row while another load starts and finishes', () => {
+      service.startProgressPolling('imp-1');
+      loadingTasks$.next([task({ task_id: 'imp-1', status: 'running' })]);
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      expect(failedIds()).toEqual(['imp-1']);
+
+      // The backend keeps the failure in every later snapshot, so a new load
+      // rebuilding the active rows must not take it with it.
+      service.startProgressPolling('load-2');
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' }), task({ task_id: 'load-2', status: 'running' })]);
+      expect(service.loadingTasks.map((t) => t.task_id)).toEqual(['load-2', 'imp-1']);
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' }), task({ task_id: 'load-2' })]);
+      expect(failedIds()).toEqual(['imp-1']);
+    });
+
+    it('lists a task once while it turns from running to failed', () => {
+      service.startProgressPolling();
+      loadingTasks$.next([task({ task_id: 'imp-1', status: 'running' })]);
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      expect(service.loadingTasks.map((t) => t.task_id)).toEqual(['imp-1']);
+    });
+
+    it('never shows a cancel as a failure', () => {
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'Cancelled' })]);
+      expect(service.loadingTasks).toEqual([]);
+    });
+
+    it('hides a dismissed failure at once and asks the backend to drop it, without an error toast', () => {
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      service.dismissLoadingTask('imp-1');
+
+      expect(failedIds()).toEqual([]);
+      expect(datasetsRegistryApiStub.dismissTask).toHaveBeenCalledWith('imp-1', expect.anything());
+      const context = datasetsRegistryApiStub.dismissTask.mock.calls[0][1] as HttpContext;
+      expect(context.get(SKIP_ERROR_TOAST)).toBe(true);
+
+      // Until the backend's snapshot drops it, the row stays hidden.
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      expect(failedIds()).toEqual([]);
+    });
+
+    it('stays dismissed when the backend refuses (the task is already gone)', () => {
+      datasetsRegistryApiStub.dismissTask.mockReturnValueOnce(throwError(() => ({ status: 404 })));
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      service.dismissLoadingTask('imp-1');
+      expect(failedIds()).toEqual([]);
+    });
+
+    it('drops failure rows on backend restart', () => {
+      loadingTasks$.next([task({ task_id: 'imp-1', error: 'disk full' })]);
+      serverReset$.next();
+      expect(service.loadingTasks).toEqual([]);
+    });
   });
 });
