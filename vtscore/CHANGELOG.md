@@ -221,6 +221,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
+  looks for each face MTCNN finds again in the photo turned a quarter each way
+  (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most
+  confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
+  boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
+  `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
+  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
+  face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
+  MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
+
 - **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
   `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
   ordinary step at or past each, the `test_score_sink` entry also carries each live fold model's scores of the

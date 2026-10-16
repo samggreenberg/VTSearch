@@ -1,0 +1,5 @@
+size,arm,queries,people,mean_ap,person_mean_ap,fail_share,fails,d_mean_ap,d_se,fails_fixed,fails_made,start_queries,start_mean_ap,start_fails,start_d_mean_ap,start_d_se
+1024,faces_roll,4473,562,0.7378,0.7436,0.0492,220,0.0,0.0,0,0,562,0.7441,32,0.0,0.0
+1024,faces_side,4473,562,0.7423,0.7483,0.0458,205,0.0045,0.0014,21,6,562,0.7471,31,0.003,0.0029
+640,faces_roll,4413,562,0.7089,0.7121,0.0621,274,0.0,0.0,0,0,562,0.7126,35,0.0,0.0
+640,faces_side,4413,562,0.7112,0.7147,0.0612,270,0.0024,0.001,10,6,562,0.7162,33,0.0037,0.002
