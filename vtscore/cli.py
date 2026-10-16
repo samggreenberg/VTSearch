@@ -1222,9 +1222,12 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     """
     from collections import defaultdict  # noqa: PLC0415
 
-    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+    from vtscore.datasets.stages.embedding import _check_named_vector_widths, embed_missing  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
+    # What the importer filed under an embedder's name must have that
+    # embedder's width, as in the GUI's load pipeline.
+    _check_named_vector_widths(medias)
     by_type: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)
     for mid, media in medias.items():
         by_type[media.get("media_type") or ""][mid] = media

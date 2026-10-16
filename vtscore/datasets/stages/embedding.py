@@ -251,33 +251,44 @@ def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: 
         m["embedder"] = embedder_name
 
 
-def _check_stored_widths(medias: dict[int, dict[str, Any]], embedder_name: str) -> None:
-    """Refuse a vector stored under *embedder_name* whose width is not the one it declares.
+def _check_named_vector_widths(medias: dict[int, dict[str, Any]]) -> None:
+    """Refuse an imported vector whose width is not the one its embedder declares.
 
-    An importer can hand vectors in already keyed by name: ``content_vectors``
+    An importer can hand vectors in already filed by name: ``content_vectors``
     under ``content_embedder_name``, a per-embedder ``.npz``, or a plugin's own
     ``media["embeddings"] = {name: vec}`` from a per-record hook or a ``run()``
-    override.  The folder and ``.npz`` paths check theirs at the door; this is
-    the point every import's media pass before their vectors are used, so the
-    rest are checked here.  A vector that contradicts the name it is filed
-    under would otherwise surface as a broadcast error in the matrix builder -
-    or never, when the whole dataset shares the wrong width.  Shape only, one
-    attribute read per media: the width is descriptor metadata, so no model
-    loads, and an embedder that declares none is not checked.
+    override.  The folder and ``.npz`` readers check theirs; the ingest paths
+    call this on everything else, once, before anything is embedded: the load
+    pipeline's embed stage (:func:`_embed_missing_stage`), its staging import,
+    and the CLI's import embed pass.  A vector that contradicts the name it is
+    filed under would otherwise surface as a broadcast error in the matrix
+    builder - or never, when the whole dataset shares the wrong width.
+
+    Shape only, one attribute read per vector: the width is descriptor
+    metadata, so no model loads.  A nameless vector, a name no embedder is
+    registered under, and an embedder that declares no width are not checked.
+    Vectors the app embedded itself are not re-checked here; they come out of
+    the embedder at its own width.
     """
-    expected_dim = expected_dim_for_embedder(embedder_name)
-    if expected_dim is None:
-        return
+    expected: dict[str, int | None] = {}
     for mid, m in medias.items():
-        vec = media_embedding(m, embedder_name)
-        if vec is None:
+        embs = m.get(EMBEDDINGS_KEY)
+        if not isinstance(embs, dict):
             continue
-        require_dim(
-            vec,
-            expected_dim,
-            label=f"pre-computed vector for media {mid} ({m.get('origin_name') or m.get('filename') or '?'})",
-            expected_source=f"the width declared by embedder {embedder_name!r}",
-        )
+        for name, vec in embs.items():
+            if name == UNKNOWN_EMBEDDER_KEY or vec is None:
+                continue
+            if name not in expected:
+                expected[name] = expected_dim_for_embedder(name)
+            dim = expected[name]
+            if dim is None:
+                continue
+            require_dim(
+                vec,
+                dim,
+                label=f"pre-computed vector for media {mid} ({m.get('origin_name') or m.get('filename') or '?'})",
+                expected_source=f"the width declared by embedder {name!r}",
+            )
 
 
 def _ensure_model_loaded(emb, on_progress: Callable[[str, str, int, int], None]) -> None:
@@ -566,7 +577,6 @@ def embed_missing(
         return
 
     _stamp_load_embedder(medias, embedder_name, emb.name)
-    _check_stored_widths(medias, emb.name)
 
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
@@ -739,6 +749,7 @@ def _embed_missing_stage(
     Returns why each item that came out without a vector did so (see
     :data:`EmbedFailures`), for :func:`_drop_none_embeddings_stage` to show.
     """
+    _check_named_vector_widths(ctx.medias)
     names = _ordered_load_embedders(ctx.medias, requested_embedders)
     progress = EmbedLoopProgress(tracker, len(names))
     failures: EmbedFailures = {}

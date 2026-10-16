@@ -228,10 +228,11 @@ mutation as the result. **Folder and pickle loaders never call an
 embedder**: items without a pre-computed vector leave unembedded, and
 the framework embed stage
 (`vtscore/datasets/stages/embedding.py::embed_missing`) fills them in.
-Before it embeds anything, that stage checks every vector already filed
-under the embedder it runs against the width the embedder declares, so a
-plugin importer's own `{name: vector}` entries are held to the same rule
-as the folder and `.npz` paths (`MismatchedVectorError` on a mismatch).
+Before it embeds anything, an import (that stage, and the CLI's import
+embed pass) checks every vector filed under a registered embedder's name
+against the width that embedder declares, so a plugin importer's own
+`{name: vector}` entries are held to the same rule as the folder and
+`.npz` paths (`MismatchedVectorError` on a mismatch).
 
 ### Folder loader
 

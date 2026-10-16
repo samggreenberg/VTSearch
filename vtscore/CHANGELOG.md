@@ -17,12 +17,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   and raise `MismatchedVectorError` naming both widths. A vector with no embedder name, or one naming an
   unregistered embedder or one that declares no width, is not width-checked there.
 
-- **The embed stage width-checks every vector already filed under a bound embedder's name** (issue #4966).
-  `embed_missing` checks each media's vector under the embedder it is about to run against that embedder's
-  declared width before embedding anything, so a plugin importer's `media["embeddings"] = {name: vec}` from a
-  `fetch_record` / `fetch_source_media` hook or a `run()` override is held to the same rule as the folder and
-  `.npz` paths, and a mismatch raises `MismatchedVectorError` naming the media and both widths. Shape only; an
-  embedder that declares no width is not checked.
+- **An import width-checks every named vector the importer hands in** (issue #4966). Before anything is
+  embedded, the load pipeline's embed stage, its staging import and the CLI's import embed pass check each
+  vector filed under a registered embedder's name against that embedder's declared width, so a plugin
+  importer's `media["embeddings"] = {name: vec}` from a `fetch_record` / `fetch_source_media` hook or a `run()`
+  override is held to the same rule as the folder and `.npz` paths. A mismatch raises `MismatchedVectorError`
+  naming the media and both widths. Shape only; a nameless vector, an unregistered name and an embedder that
+  declares no width are not checked, and `embed_missing` itself does not re-check vectors the app made.
 
 - **`VideoXClipEmbedder.embedding_dim` is 512** (issue #4966). X-CLIP returns its 512-wide `projection_dim`
   for both videos and text; the declared 768 was the vision tower's hidden width, so a width check rejected

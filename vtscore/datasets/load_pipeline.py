@@ -49,7 +49,7 @@ from vtscore.datasets.stages._common import (
 )
 from vtscore.datasets.stages._load_profiler import start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
-from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
+from vtscore.datasets.stages.embedding import embed_missing, _check_named_vector_widths, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
     _build_coverage_atlas_stage,
     _collapse_duplicates_stage,
@@ -1289,6 +1289,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             # No-op when the swap already happened mid-run.
             controller.swap_to_embed()
             tracker.update("embedding", "Embedding…", 0, 0, step=2, total_steps=_TOTAL_STAGE_STEPS)
+            _check_named_vector_widths(temp_medias)
             embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=tracker.update)
             from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
