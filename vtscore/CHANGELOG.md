@@ -12,6 +12,37 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Library code reads one setting at a time: `vtscore.config.get_setting`** (issue #4997). `CoreConfig`
+  was meant to be built once per request and passed down; instead 28 call sites built one with
+  `CoreConfig.from_settings()` to read a field or two, each a snapshot of every setting. They now call the
+  new `get_setting(name)`, where `name` is a `CoreConfig` field, which answers from a host getter registered
+  with the new `register_setting_getter(name, fn)`, else that field of the `CoreConfig` a registered builder
+  returns, else the field's default; a required field with none of these raises `RuntimeError`, as
+  `from_settings()` did, and a name that is not a setting raises `ValueError`. The new
+  `register_settings_path_redirect(fn)` / `redirect_settings_path(path)` carry the CLI's `--settings`
+  redirect, which `from_settings(settings_path)` used to (with no redirect hook, a registered builder is still
+  handed the path). **`CoreConfig` keeps its name and its uses**: a library-only consumer still constructs
+  one and registers a builder returning it, unchanged, and `CoreConfig.from_settings()` still returns the
+  whole bundle - the builder's config when that is all there is, else one assembled from `get_setting`. An
+  out-of-tree plugin that read `CoreConfig.from_settings().<field>` keeps working; `get_setting("<field>")`
+  is the narrow read. The VTSearch app now registers a getter per setting instead of a builder.
+  `vtscore.host_seams.HostSeams` gains `setting_getters` and `settings_path_redirect`. **Behaviour change**:
+  a setting with a `CoreConfig` default now reads that default in a process that configured nothing, so
+  there `vtscore.state.core.user_beta` returns `DEFAULT_BETA` (it returned `None`), and
+  `vtscore.state.detector_beta` / `seed_detector_beta` seed `DEFAULT_BETA` (they raised `RuntimeError`).
+
+- **A head the label quota gives keeps the ranking its line is counted on** (issue #5048). The Goods'
+  centroid (#4643) and a typed query's head (#4758) used to install with `line_ranking = None`, so
+  `detector_balance_state` reported the balance's cap (32 at beta 1 or below, 128 above) as their
+  `count` wherever no Find pass had ranked them: the Train view's balance, and a headless CLI run's
+  `detector_unchecked` event, while the run exported what the head's line kept. Installing one now
+  scores it over the corpus its line was drawn on and parks that `LineRanking`, the labelled media
+  marked voted as a trained head's retrain marks them, so the count is what the line keeps.
+  `install_centroid_head` takes `ids=` (one per score its `score` returns; without them it keeps no
+  ranking, as before) and `install_query_head` takes `voted=` (the labelled media, in the scored
+  snapshot's ids). Both are additive. The Train view's learned-sort cache still misses while a quota
+  head is on the context, as it did when that head had no ranking.
+
 - **A converter output a clipper or cleaner changed replays converter first** (issue #5041). The new
   `vtscore.media.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
   the `clipper_chain` that ran on its output: the converter's step, then that chain (`None` when either cannot
@@ -2048,6 +2079,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **Label training and label ingest replay a converter output no clipper touched** (issue #5058).
+  `labelset_training._embed_one` replayed a label's unit only when its origin carried a `clipper` key, and
+  label ingest only for `clipper` / `clipper_chain`. So a `run_converters_on_folder` output with neither (an
+  import that converted and did not clip) embedded its source file whole: the PDF read as text, or decoded as
+  an image. A chain whose only step is a converter stamps no `clipper` key either, so training missed that too.
+  All three callers, `_embed_resolved_label` included, now ask one predicate (`resolver._needs_clip_replay`),
+  which accepts a clipper, chain or converter origin. A `region_box` on such a unit is on the converter's
+  output, not on the source, so training takes the replayed output's image-level vector with a warning, as it
+  does for a clipped unit. Label ingest also never reached a converter origin: `_media_type_from_origin`
+  found no media type on it, every ingest path declined, and the label was silently left out. It now takes
+  the converter's `target_type`, stores the replayed output's bytes and MD5, and skips an output it cannot
+  rebuild rather than storing the source file as the item. No plugin contract changes.
 
 - **A video label re-embeds its own window and crop** (issue #4994). `replay_chain_on_file` copied a
   video unit to a tempfile and embedded the path alone, so the frame sampler never saw the unit's

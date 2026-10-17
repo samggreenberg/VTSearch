@@ -364,15 +364,15 @@ def register_signpost_captioner(media_type: str, provider: SignpostTextProvider)
 def _captioner_enabled(media_type: str) -> bool:
     """Whether the user opted this media type into the generative captioner.
 
-    Reads the ``signpost_captioner`` map off the library-tier
-    :class:`~vtscore.config.CoreConfig` (the app populates it from the
-    ``browse_signpost_captioner`` setting).  Any failure — no builder
-    installed, missing field — reads as "off", so the safe tag default holds.
+    Reads the ``signpost_captioner`` setting with
+    :func:`~vtscore.config.get_setting` (the app answers it from the
+    ``browse_signpost_captioner`` setting).  Any failure reads as "off", so
+    the safe tag default holds.
     """
     try:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import get_setting  # noqa: PLC0415
 
-        return bool(CoreConfig.from_settings().signpost_captioner.get(media_type, False))
+        return bool(get_setting("signpost_captioner").get(media_type, False))
     except Exception:
         return False
 
@@ -380,16 +380,16 @@ def _captioner_enabled(media_type: str) -> bool:
 def _custom_vocab(media_type: str) -> tuple[str, ...]:
     """Operator's tag vocabulary for *media_type*, or ``()`` for the default.
 
-    Reads the ``signpost_vocab`` map off the library-tier
-    :class:`~vtscore.config.CoreConfig` (the app populates it from the
+    Reads the ``signpost_vocab`` setting with
+    :func:`~vtscore.config.get_setting` (the app answers it from the
     server-tier ``browse_signpost_vocab`` setting, so one vocabulary serves
-    every user of a deployment).  Any failure — no builder installed, missing
-    field — reads as "no override", so the shipped vocabulary holds.
+    every user of a deployment).  Any failure reads as "no override", so the
+    shipped vocabulary holds.
     """
     try:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import get_setting  # noqa: PLC0415
 
-        terms = CoreConfig.from_settings().signpost_vocab.get(media_type)
+        terms = get_setting("signpost_vocab").get(media_type)
         return tuple(terms) if terms else ()
     except Exception:
         return ()

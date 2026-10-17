@@ -287,9 +287,10 @@ bags and a scoring population that differs from *snap*):
 Returns `(model, threshold)`. The function reads the balance of `det_ctx`
 (`detector_beta(det_ctx)`, the detector's own, #4665; `line_knobs`, the
 active detector's, with no `det_ctx`), `get_calibrate_count`, and
-`get_calibration_fraction` from `vtscore.state`; those getters resolve
-through `CoreConfig`, so library consumers running outside an app must
-register a `register_core_config_builder` provider.
+`get_calibration_fraction` from `vtscore.state`; those getters read
+`vtscore.config.get_setting`, and `calibrate_count` is a required setting,
+so library consumers running outside an app must register a
+`register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer

@@ -95,12 +95,11 @@ def _auto_register_dataset(
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     import time as _time
 
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
     now = _time.time()
     try:
-        config = CoreConfig.from_settings()
-        max_age = config.dataset_max_age_days
+        max_age = get_setting("dataset_max_age_days")
     except RuntimeError:
         max_age = None
     expires_at = now + max_age * 86400 if max_age is not None else None
@@ -206,9 +205,9 @@ def _register_and_migrate(
 
     # Cache the freshly-built coverage atlas into the pickle so reloads skip
     # the expensive hierarchical k-means rebuild (it is re-derived only when
-    # absent or stale).  Embeddings/MLPs are still never persisted - this is
-    # cluster *topology* keyed by media id, re-resolved against the medias on
-    # load and discarded if they no longer match.
+    # absent or stale).  Embeddings and trained heads are still never
+    # persisted - this is cluster *topology* keyed by media id, re-resolved
+    # against the medias on load and discarded if they no longer match.
     extra_pickle_keys: dict | None = None
     if ctx.coverage_atlas is not None:
         extra_pickle_keys = {"coverage_atlas": ctx.coverage_atlas.to_serializable()}

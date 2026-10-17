@@ -7,9 +7,9 @@ retraining, a subsequent inclusion slide
 orderings computed for the *old* label set and model.
 
 The cache is honest at every label count now, safe thresholds on or off:
-``_train_and_score_xy`` computes the folds unconditionally (the shipped
-fold-anchored threshold anchors on the fold models, so there is nothing to skip
-at small counts), and the key is a fingerprint of the current labels - so a
+``_train_and_score_xy`` computes the folds unconditionally (the fold-anchored
+threshold anchors on the fold models, so there is nothing to skip at small
+counts), and the key is a fingerprint of the current labels - so a
 stale entry is always *replaced*, never read.
 """
 
@@ -117,9 +117,10 @@ class TestSmallLabelSetCrossCalibrates:
         assert folds.fallback is None and folds.orderings, (
             "below 6 labels the path must cross-calibrate, not hard-code 0.5"
         )
-        # Those folds feed the shipped fold-anchored cut, so the stored cutoff
-        # is the population estimator's - not the raw conformal aggregate, and
-        # emphatically not the 0.5 this path used to hard-code.
+        # Those folds feed the fold-anchored cut (the line with no balance), so
+        # the stored cutoff is the population estimator's - not the raw
+        # conformal aggregate, and emphatically not the 0.5 this path used to
+        # hard-code.
         assert det_ctx.anchored_cut_cache is not None
         assert threshold == det_ctx.anchored_cut_cache.threshold_at(0)
         assert threshold != threshold_from_fold_orderings(folds.orderings, 0)

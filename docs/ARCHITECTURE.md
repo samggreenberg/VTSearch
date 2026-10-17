@@ -187,7 +187,7 @@ VTSearch/
 │   ├── auth/               Flask-side login providers and the g.user resolver
 │   ├── state/, state_proxies.py  App-side state shim and the active-context proxies
 │   ├── shim/               Flask glue: context resolvers, persistence hooks, achievement
-│   │                       recorders, CoreConfig builder, app-only plugin families
+│   │                       recorders, setting getters, app-only plugin families
 │   ├── schemas/            Marshmallow schemas for API serialisation
 │   ├── settings_io/        Settings import / export / sync plugins
 │   └── routes/             Flask blueprints; all HTTP handling (_context.py holds the

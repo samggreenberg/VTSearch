@@ -138,10 +138,11 @@ rather than hard-coding `"data/foo"`. Models go under
 plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
-`werkzeug`, and `flask_smorest`. Read configuration through
-`CoreConfig` ([`vtscore/config/core_config.py`](../../config/core_config.py)); construct
-one directly when running outside an app context, or call
-`CoreConfig.from_settings()` when an app shim has been registered.
+`werkzeug`, and `flask_smorest`. Read configuration with
+`vtscore.config.get_setting(name)`, one `CoreConfig` field at a time
+([`vtscore/config/core_config.py`](../../config/core_config.py)); the app answers it
+from its settings, and a library-only process from the `CoreConfig` it
+registered.
 
 **Trust `field_values`; don't re-validate declared fields.** Every
 plugin family whose inputs arrive as `field_values` gets a framework

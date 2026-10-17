@@ -194,9 +194,10 @@ class TestContextErrorsAreNot500:
 class TestIndicatorScoreHistoryIsReadOnly:
     """GET /api/indicator-score-history must never advance the per-step cache.
 
-    Advancing it inline is what made the progress-plot modal hang: it retrains
-    an MLP per uncached label step on the request thread, which is precisely the
-    work ``/api/labeling-status`` defers to a background worker (issue #2397).
+    Advancing it inline is what made the progress-plot modal hang: it runs a
+    scoring pass per uncached label step on the request thread, which is
+    precisely the work ``/api/labeling-status`` defers to a background worker
+    (issue #2397).
     """
 
     def test_cold_cache_returns_incomplete_and_advances_nothing(self, client):

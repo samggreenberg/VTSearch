@@ -78,8 +78,8 @@ The signature defaults (`PROJECTION_N_NEIGHBORS = 15`,
 nothing about the dataset's embedder or the operator's settings.
 Production callers resolve the knobs with
 `vtscore/projection/params.py::resolve_projection_params(ctx)`, which
-applies, in order: an explicit `CoreConfig` override
-(`projection_n_neighbors` / `projection_min_dist`, counted only when it
+applies, in order: an explicit settings override
+(`get_setting("projection_n_neighbors")` / `get_setting("projection_min_dist")`, counted only when it
 differs from the global default), the per-embedder
 tuned default (`PROJECTION_DEFAULTS_BY_EMBEDDER`), then the global
 default. Every knob is stamped onto the returned `Projection`.

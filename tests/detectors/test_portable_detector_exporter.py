@@ -249,8 +249,8 @@ class TestExportCliDetectors:
     def test_skips_structural_detector(self, tmp_path):
         """A real (well-formed) structural detector is blocked, not silently mis-exported.
 
-        Structural detectors' stage-1 VLAD-space MLP is a normal 2-layer weight
-        dict indistinguishable in shape from any other detector's, so the
+        Structural detectors' stage-1 VLAD-space head is a normal weight dict,
+        indistinguishable in shape from any other detector's, so the
         weight-shape check alone can't catch it - the exporter must gate on
         ``embedder_type`` explicitly.
         """

@@ -182,7 +182,8 @@ def labeling_status_indicator():
     inline (cheap: cached-model forward passes over the small labeled set).
     When the cache is *behind* - the common case on the first poll after a new
     vote, or after a polarity flip truncated the cache - advancing it would
-    retrain one-or-more MLPs and score every unlabeled media, so we return the
+    score every media with each new step's head (the one that step's sort
+    trained; the cache trains none of its own), so we return the
     last-computed snapshot immediately with ``stale = true`` and defer the
     advancement to a background worker (issue #2397).
 
@@ -211,7 +212,7 @@ def labeling_status_indicator():
 
         # Cache is behind: serve the last snapshot now, advance the cache in
         # the background.  ``stale_labeling_status`` keeps the cheap fields
-        # (counts + Span) live and lags only the MLP-derived Smart / Stable
+        # (counts + Span) live and lags only the head-derived Smart / Stable
         # indicators, falling back to a "computing" placeholder when no
         # snapshot exists yet (rapid votes at session start, or the first poll
         # after a detector switch cleared the cache).
@@ -301,9 +302,9 @@ def _eval_done_payload(job) -> dict:
 def eval_train_and_score(body: dict):
     """Start (or short-circuit) an eval train-and-score computation.
 
-    The work walks the full ``label_history`` retraining a small MLP at
-    every step, which used to block every other request on the gthread
-    pool.  We now run it on a background daemon thread and return a
+    The work walks the full ``label_history``, scoring every media with
+    each step's head, which would block every other request on the gthread
+    pool, so it runs on a background daemon thread and returns a
     ``job_id``; clients poll ``/api/eval/train-and-score/result`` for the
     metric data; the ``eval`` SSE channel on ``/api/events`` carries
     live progress.

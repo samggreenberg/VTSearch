@@ -499,8 +499,8 @@ the same effect on OpenMP/MKL sets them itself.)
 ### How do I parallelise dataset loading?
 
 The pipeline already does - `vtscore.datasets.load_pipeline` runs
-embedding under a `ConcurrencyGate` capped by
-`CoreConfig.max_concurrent_dataset_embeddings`. Bumping that value lets
+embedding under a `ConcurrencyGate` capped by the
+`max_concurrent_dataset_embeddings` setting. Bumping that value lets
 multiple datasets embed in parallel.
 
 Within a single dataset, the folder loader builds the per-file media dicts

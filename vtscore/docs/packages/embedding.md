@@ -576,7 +576,7 @@ load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
   maximum, and falls back to 1 when RAM can't be read.
 
 These are *defaults* for the app's settings; the actual limits are read
-through `vtscore.config.CoreConfig` at acquire time.
+with `vtscore.config.get_setting` at acquire time.
 
 ---
 

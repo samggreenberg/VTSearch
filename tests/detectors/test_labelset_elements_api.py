@@ -474,7 +474,7 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
 class TestCrossDatasetMLPTraining:
     """When a detector is loaded against a different dataset, the saved
     labels' origins are resolved + re-embedded, the resulting vectors are
-    cached on the DetectorContext, and MLP training uses them.
+    cached on the DetectorContext, and head training uses them.
 
     Without this, only labels that happen to resolve into the active
     dataset would contribute; defeating the point of the labelset-driven
@@ -530,7 +530,7 @@ class TestCrossDatasetMLPTraining:
         assert len(det_ctx.label_embeddings) == 3, (
             f"Expected all 3 cross-dataset labels embedded, got {list(det_ctx.label_embeddings)}"
         )
-        assert det_ctx.model is not None, "Load must train an MLP from cross-dataset vectors"
+        assert det_ctx.model is not None, "Load must train a head from cross-dataset vectors"
 
         # Verify the cache is keyed by stable_element_id (so subsequent
         # lookups find the right vector).

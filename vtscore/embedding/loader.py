@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_torch_device():
-    """Return the preferred ``torch.device`` for MLP training / scoring.
+    """Return the preferred ``torch.device`` for detector-head training / scoring.
 
     Resolves :data:`vtscore.config.DEVICE` (``VTSEARCH_DEVICE``, default
     ``"auto"``) to a concrete device - ``cuda`` when available, ``mps`` on

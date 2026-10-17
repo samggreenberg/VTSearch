@@ -23,7 +23,7 @@ if TYPE_CHECKING:  # torch is imported lazily everywhere below, never at module 
 # explicit values like ``"cuda"``, ``"cuda:0"``, ``"cpu"``, or ``"mps"`` are
 # passed through unchanged.  Resolution is lazy; the env var stores the
 # user's intent, ``resolve_device()`` actually imports torch when called.
-# Embedders (via ``to_compute_device``/``resolve_device``) and MLP
+# Embedders (via ``to_compute_device``/``resolve_device``) and head
 # training/scoring both honour this, so a visible, usable GPU is used for
 # embedding and learned-sort automatically; CPU remains the safe fallback.
 DEVICE = os.environ.get("VTSEARCH_DEVICE", "auto").lower()
@@ -63,7 +63,7 @@ def _cuda_can_run(device: str = "cuda") -> bool:
     the installed torch wheel was compiled without a kernel image for that GPU's
     compute capability.  In that case every real op raises
     ``cudaErrorNoKernelImageForDevice`` (``torch.AcceleratorError``), which is
-    exactly what makes a "switched GPU" host 500 on every MLP train.
+    exactly what makes a "switched GPU" host 500 on every head fit.
 
     We force one tiny kernel launch + synchronize so the failure surfaces here,
     once, instead of deep inside training.  The result is cached per device so
