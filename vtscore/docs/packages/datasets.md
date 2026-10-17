@@ -233,6 +233,11 @@ mutation as the result. **Folder and pickle loaders never call an
 embedder**: items without a pre-computed vector leave unembedded, and
 the framework embed stage
 (`vtscore/datasets/stages/embedding.py::embed_missing`) fills them in.
+Before it embeds anything, an import (that stage, and the CLI's import
+embed pass) checks every vector filed under a registered embedder's name
+against the width that embedder declares, so a plugin importer's own
+`{name: vector}` entries are held to the same rule as the folder and
+`.npz` paths (`MismatchedVectorError` on a mismatch).
 
 ### Folder loader
 
@@ -254,7 +259,7 @@ media), `on_progress`, and hooks that short-circuit work the caller has
 already done (keys are relative paths or basenames; an ambiguous
 basename raises `ValueError`):
 
-- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them.
+- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them. Each vector is validated on adoption (float32, 1-D, finite), and one filed under a registered embedder's name must have the width that embedder declares, or the load raises `MismatchedVectorError`.
 - `content_md5s: dict[str, str]`: reuse a pre-computed MD5.
 - `custom_metadata_map: dict[str, dict[str, Any]]`: attach `custom_metadata`; nested `"md5"` and `"embedding"` keys take priority over both the above.
 

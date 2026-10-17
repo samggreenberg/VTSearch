@@ -1,14 +1,12 @@
 """Validators and base schemas shared across :mod:`vtsearch.schemas`.
 
-Two things live here, both of which were previously copy-pasted between
-sibling schema modules:
+Two things live here, each shared by several sibling schema modules:
 
 * :func:`list_of_strings` — the "reject non-``str`` list items at the schema
-  layer" validator, formerly duplicated byte-for-byte in ``datasets.py`` and
-  ``detectors.py``.
+  layer" validator, used by ``datasets.py`` and ``detectors.py``.
 * :class:`PluginExtrasSchema` — the ``unknown = INCLUDE`` + ``post_dump``
   re-merge pair that lets a plugin descriptor's undeclared keys reach the
-  client, formerly written out three times.
+  client.
 
 Deliberately *not* here: a shared base for ``unknown`` on its own.  That
 setting is a per-schema semantic decision rather than boilerplate — see the

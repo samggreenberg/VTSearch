@@ -39,10 +39,11 @@ def band_for(boxes: Sequence[Sequence[float]], W: int, H: int) -> str:
 
     Returns a key of :data:`pile_config.BOX_BANDS`, or :data:`SCATTERED` /
     :data:`OVERSIZE`. Split out of :func:`band_candidates` so that anything
-    asking "what band would these boxes imply?" -- the builder, and
-    ``audit_band_drift.py``, which re-bands the same images off a second
-    annotation source -- asks it of one implementation. A second copy of this
-    rule would answer a drift question with its own drift.
+    asking "what band would these boxes imply?" -- the builder, and the scripts
+    that band images outside a build (``coco_only_supply.py``,
+    ``coco_negative_pool.py``, ``granularity_queue.py``) -- asks it of one
+    implementation. A second copy of this rule would answer a drift question
+    with its own drift.
 
     *boxes* must be non-empty and in the pixel space of ``(W, H)``.
 

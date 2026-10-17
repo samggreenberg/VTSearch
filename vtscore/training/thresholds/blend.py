@@ -1,10 +1,13 @@
 """The retired safe-threshold blend, and the thin shim over the blend schedules.
 
 Combines a cross-calibration cut and a GMM cut under a mix-in schedule
-(:mod:`vtscore.training.blend_schedules`).  No longer the shipped safe
-threshold - :func:`~vtscore.training.thresholds.anchored.fold_anchored_gmm_threshold`
-is - but it survives as that path's fallback for label counts too small to form
-folds at all, and for the harness arms that still measure it.
+(:mod:`vtscore.training.blend_schedules`).  It is the last of the line's
+fallbacks: under a balance the line is the labels'
+(:mod:`~vtscore.training.thresholds.labels_line`, #4452), and without one, or
+without a class model, it is the fold-anchored cut
+(:func:`~vtscore.training.thresholds.anchored.fold_anchored_gmm_threshold`).
+This blend answers only for label counts too small to form folds at all, and
+for the harness arms that still measure it.
 """
 
 from __future__ import annotations
@@ -33,13 +36,14 @@ def calculate_safe_threshold(
     through :func:`~vtscore.training.blend_schedules.production_schedule_for`
     instead, because the two modes want different curves.
 
-    **No longer the shipped safe threshold.**  The 2026-08-05 population-
-    anchored run (docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md)
-    retired the schedule in favour of *fusing* the two estimators rather than
-    averaging them as rivals: :func:`fold_anchored_gmm_threshold` is the
-    production path now.  This blend survives as its fallback, for the label
-    counts too small to form calibration folds at all (where it degenerates to
-    the pure GMM cut anyway) and for the harness arms that still measure it.
+    **A fallback, not the line.**  Under a balance the line is the labels'
+    (#4452); without one, or without a class model, it is
+    :func:`fold_anchored_gmm_threshold`, which *fuses* the two estimators
+    rather than averaging them as rivals (the 2026-08-05 population-anchored
+    run, docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md).
+    This blend answers only for the label counts too small to form calibration
+    folds at all (where it degenerates to the pure GMM cut anyway) and for the
+    harness arms that still measure it.
 
     Args:
         xcal_threshold: The cross-calibrated threshold.

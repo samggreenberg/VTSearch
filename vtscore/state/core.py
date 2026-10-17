@@ -14,12 +14,11 @@ which one library helpers operate on.
 
 The app-side facade
 -------------------
-Module-level convenience names (``medias``, ``good_votes``, …) used to
-live here as proxy objects, but they belong to the app layer; the
-library never imports them.  They now live in
-:mod:`vtsearch.state_proxies` and are re-exported from
-:mod:`vtsearch.state` so existing app-tier imports continue to work.
-See Phase 3 of ``../docs/architecture.md``.
+The module-level convenience names (``medias``, ``good_votes``, …) are
+proxy objects that belong to the app layer; the library never imports
+them.  They live in :mod:`vtsearch.state_proxies` and are re-exported
+from :mod:`vtsearch.state`.  See seam 3 (*Global state*) of
+``../docs/architecture.md``.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ from typing import Any, overload
 
 # Reentrant lock protecting all mutable state.
 # RLock is used because some public functions call other public functions
-# (e.g. clear_all -> clear_medias + clear_votes).
+# (e.g. apply_label_with_click_time -> assign_click_time).
 _state_lock = threading.RLock()
 
 # Lock protecting *only* the two context-store dicts (``_contexts``,
@@ -1064,14 +1063,15 @@ class DetectorContext:
         # re-runs the cheap quantile rule (no fold refit); a label/embedder
         # change rotates *key* and falls through to a fresh calibration.
         "calibration_cache",  # tuple[Any, CalibrationFolds, tuple[tuple[int, ...], ...]] | None
-        # The fold-anchored population estimator behind the current threshold
-        # (``FoldAnchoredCut``), or None when the estimator degenerated.  A
-        # re-cut answers Inclusion: the shipped ``mid_tilt`` rule anchors the
+        # The fold-anchored population estimator the last retrain fitted
+        # (``FoldAnchoredCut``), or None when it degenerated or had no haystack.
+        # A re-cut answers an inclusion: the ``mid_tilt`` rule anchors the
         # measured midpoint cut at inclusion 0 and tilts monotonically away
-        # from it (issue #2865).  Written on every retrain that computes a safe
-        # threshold; read by ``recut_detector_threshold`` so every re-cut (a
-        # balance change, the acquisition cut) uses the *shipped*
-        # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
+        # from it (issue #2865).  Written on every retrain; read by
+        # ``recut_detector_threshold`` and ``detector_acquisition_threshold`` so
+        # every re-cut at an inclusion (the line with no class model or no
+        # balance, the acquisition offset, Smart's pricing) uses this estimator
+        # instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
         # Retired (#4362): always ``None``.  It held the #4220 precision
@@ -1673,38 +1673,39 @@ def recut_detector_threshold(
     (#4269).
 
     **Under a balance** (#4413) the line is :func:`_recut_balance`'s: the
-    labels' line (#4452) when the last retrain fitted one.  A context with no
-    trained head keeps a set (#4272): the top *count* unvoted items of the
-    ranking the last retrain scored (``ctx.line_ranking``), where *count* is
-    the set the detector's last spot check ended on where the check's shape
-    lets it move the line, or else the mixture's F-beta argmax under the
-    balance's cap (:func:`~vtscore.training.thresholds.balance_line`, shared
-    with training and the eval harness).  The unvoted remainder is read against the live
-    votes, so the line follows the ranking at the same count as votes come
-    in.  With no ranking to read (never trained against a haystack, or a
-    structural detector) the balance has no line and the fallbacks below
-    answer at the inclusion given.
+    labels' line (#4452) when the last retrain fitted one, or the Goods'
+    centroid's or a typed query's own line (#4732, #4758).  A trained head
+    with no class model (too few votes, one class) draws no count on the
+    corpus: the fallbacks below answer, as the retrain's did.  Only a context
+    with no head at all keeps a count (#4272): the top *count* unvoted items
+    of the ranking the last retrain scored (``ctx.line_ranking``), where
+    *count* is the mixture's F-beta argmax under the balance's cap
+    (:func:`~vtscore.training.thresholds.balance_line`, shared with the eval
+    harness; a finished walk's end replaces it only under the ``trim`` check
+    shape, which only the harness forces).  The unvoted remainder is read
+    against the live votes, so that line follows the ranking at the same
+    count as votes come in.  With no ranking to read (never trained against a
+    haystack, or a structural detector) the balance has no line and the
+    fallbacks below answer at the inclusion given.
 
-    With no balance, in order:
+    With no balance, or a balance that leaves the line to them, in order:
 
     * **The fold-anchored estimator** (``ctx.anchored_cut_cache``), when training
-      fitted one - the shipped cut, re-cut at *inclusion_value*.  Arithmetic on
-      fitted state, so the result is exactly what a retrain at this operating
-      point would have stored.
+      fitted one, re-cut at *inclusion_value*.  Arithmetic on fitted state, so
+      the result is exactly what a retrain at this operating point would have
+      stored.
     * **The conformal rule over the cached fold orderings**, when there is no
-      estimator (safe thresholds off, or a degenerate fit), at that inclusion:
-      the slide behaviour this path has always had.  Under safe thresholds that
-      drops the schedule blend a retrain would have mixed in, which needs state
-      the cache does not keep (the comprehensive-audit-2026-07 "skip blend on
-      slides" ruling).
+      estimator (a degenerate fit, or no haystack to fit one on), at that
+      inclusion.  That drops the schedule blend a retrain would have mixed in,
+      which needs state the cache does not keep (the comprehensive-audit-2026-07
+      "skip blend on slides" ruling).
     * **``None`` - leave the threshold alone** - in every other case: no cached
       folds, or folds that never split (``folds.fallback`` set: too few votes,
       or one class).  The stored threshold there came from an inclusion-blind
-      rule - the schedule blend, or the fallback itself - so there is nothing
-      the knob could move.  Returning the fallback instead, as the slide once
-      did, replaced a fitted blend cut with the bare 0.5 sentinel on the first
-      touch of the stepper, which could even admit *fewer* items on a step
-      toward lenient.
+      rule - the schedule blend, or the fallback itself - so no operating
+      point moves it.  Returning the fallback instead would replace a fitted
+      blend cut with the bare 0.5 sentinel, which can admit *fewer* items at
+      a more lenient operating point.
     """
     from vtscore.training.thresholds import reporting_line
 
@@ -1803,17 +1804,18 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
 
     Every place a detector's threshold leaves the process - a sort result, a
     Find pass, a balance change, a headless export - reports it beside the
-    threshold (#4247, #4272).  ``status`` is ``unchecked`` (the line is the
-    mixture's F-beta argmax under the cap) or ``checked`` (the last balance
-    walk's peak); ``count`` the set's size; ``precision`` and ``recall`` the
-    walk's likely ranges and ``fbeta`` its estimate, with ``stale`` once the
-    ranking under them moved; ``schedule`` is what a check at this balance
-    costs.  On a structural detector's line ``status`` is ``gate`` and
-    ``count`` is what the verification gate passes, unvoted (#4505).
-    ``None`` when no balance is set (a library caller's choice; the app
-    always sets one).
+    threshold (#4247, #4272).  ``status`` is ``unchecked`` (no spot check has
+    finished at this balance) or ``checked`` (one has; it audits the line and
+    never moves it, #4452); ``count`` is how many unvoted items of the ranking
+    scored last the line keeps (the balance's cap when no ranking is kept);
+    ``precision`` and ``recall`` are the check's likely ranges for the set the
+    line kept when it started (#4483) and ``fbeta`` its estimate, with
+    ``stale`` once the ranking under them moved; ``schedule`` is what a check
+    at this balance costs.  On a structural detector's line ``status`` is
+    ``gate`` and ``count`` is what the verification gate passes, unvoted
+    (#4505).  ``None`` when no balance is set (a library caller's choice; the
+    app always sets one).
     """
-    from vtscore.detectors.query_head import is_quota_head
     from vtscore.training.thresholds import balance_state, gate_balance_state
 
     if beta is None:
@@ -1823,11 +1825,13 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
         # The line is the verification gate's boundary: no ranking, no check.
         state = gate_balance_state(beta, ctx.gate_passed, voted).as_dict()
     else:
-        # Under the labelset's line (#4452) the count is what the threshold keeps
-        # of the ranking scored last - possibly none - not the count rule's.  So
-        # it is under the Goods' centroid (#4643) or a typed query's head (#4758),
-        # each with its own line: the count is what that line keeps.
-        drawn = ctx.labels_line is not None or is_quota_head(ctx.model)
+        # Wherever there is a head, the count is what its threshold keeps of the
+        # ranking scored last - possibly none - not the count rule's: under the
+        # labelset's line (#4452), the Goods' centroid's (#4643) or a typed
+        # query's head's (#4758), and under a trained head with no class model,
+        # whose line is the retrain's fallback cut (:func:`_recut_balance`).
+        # Only a context with no head draws its line by the count rule.
+        drawn = ctx.labels_line is not None or ctx.model is not None
         state = balance_state(
             beta,
             ctx.precision_check,
@@ -1877,28 +1881,32 @@ def detector_acquisition_threshold(
 ) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 
-    Under a balance (*beta*) it is the score where the labels line's corpus
-    posterior falls below :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION`
-    (0.5: the items the line's model thinks are even odds; #3546), read off
-    ``ctx.labels_line``.  With no labels line it falls through to the rules
-    below.
-
-    Under a balance (*beta*, #4413) it can be a rank instead of a re-cut: the
-    score at :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of
-    the depth of the mixture's F-beta argmax over the unvoted ranking
-    (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409).  That
-    factor is ``None`` since the #4427 revert (the rank cut harvested the
-    user's unvoted top and few fresh images cleared the threshold), so the
-    balance falls through to the offset below like everything else; a mixture
-    with no estimate does too.
-
     **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
-    Find calls a match; this is a second cut taken from the *same* fitted
-    estimator, :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
-    inclusion steps below it, because the picks read a threshold as a rank
-    position rather than a boundary and so want it further *up* the ranking.
-    Decoupling the two buys 4.5x the positives per 100 votes at lower cost - see
-    ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md`` (PR #2876).
+    Find calls a match; the picks read a threshold as a rank position rather
+    than a boundary, so they sample at a second cut.  The first rule that
+    answers, in order:
+
+    * **The Goods' centroid or a typed query's head** samples at its cosines'
+      midpoint, whatever line it shows (#4136, #4732).
+    * **Under a balance** (*beta*) it is the score where the labels line's
+      corpus posterior falls below
+      :data:`~vtscore.training.thresholds.ACQUISITION_TARGET_PRECISION` (0.5:
+      the items the line's model thinks are even odds; #3546), read off
+      ``ctx.labels_line``.  Failing that it can be a rank: the score at
+      :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of the
+      depth of the mixture's F-beta argmax over the unvoted ranking
+      (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409).
+      That factor is ``None`` (the #4427 revert: the rank cut harvested the
+      user's unvoted top and few fresh images cleared the threshold), so the
+      balance falls through to the offset below; a mixture with no estimate
+      does too.
+    * **The offset**, the fallback: a cut taken from the fold-anchored
+      estimator,
+      :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
+      inclusion steps below the reporting cut, so further *up* the ranking.
+      Decoupling the two measured 4.5x the positives per 100 votes at lower
+      cost - see ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``
+      (PR #2876).
 
     The offset is relative to **the inclusion the reporting cut sits at**.
     *inclusion_value* names it when the caller knows it in those units (the
@@ -1915,10 +1923,10 @@ def detector_acquisition_threshold(
     request.
 
     Falls back to ``ctx.threshold`` when there is no fold-anchored estimator to
-    re-cut (safe thresholds off, a degenerate fit that fell back to the schedule
-    blend, which has no inclusion-aware form, or a structural detector whose
-    threshold is not on the estimator's scale) - the two jobs coincide there,
-    exactly as they did everywhere before #2876.
+    re-cut (no haystack to fit one on, a degenerate fit that fell back to the
+    schedule blend, which has no inclusion-aware form, or a structural detector
+    whose threshold is not on the estimator's scale): the two jobs coincide
+    there.
     """
     from vtscore.detectors.query_head import is_quota_head  # noqa: PLC0415
 

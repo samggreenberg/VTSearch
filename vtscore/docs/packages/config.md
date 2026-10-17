@@ -237,7 +237,7 @@ when one is in scope). Tests rely on this: they override
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear SVM head.                                            |
 | `MLP_LABEL_SMOOTHING`    | `0.05`  | -                             | Label-smoothing epsilon for MLP targets (keeps calibration scores distinct for the conformal threshold).          |
-| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the production linear SVM head (`fit_linear_svm_head`). Lower regularises harder on few votes. |
+| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the linear SVM heads: the production head (`fit_linear_svm_prior_head`) and the plain SVM arm (`fit_linear_svm_head`). Lower regularises harder on few votes. |
 | `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |

@@ -917,8 +917,9 @@ class _FakeStagingImporter:
             mid = base + i
             clip = _make_audio_clip(mid)
             # ``media_embedding`` reads the ``embeddings`` dict, so a
-            # pre-embedded staging clip needs it to survive the drop-none filter.
-            clip["embeddings"] = {"clap": np.array([float(mid), 0.5], dtype=np.float32)}
+            # pre-embedded staging clip needs it to survive the drop-none filter;
+            # at CLAP's declared width, which a staged import is held to.
+            clip["embeddings"] = {"clap": np.full(512, float(mid), dtype=np.float32)}
             temp_medias[mid] = clip
 
 
@@ -964,15 +965,18 @@ class TestStagingPerTaskIsolation:
             ),
         ):
             task_a = _stage_importer_in_background(importer, {"name": "A", "_base_id": 100, "_count": 2})
+            # Held rather than looked up at the end: every progress update lists
+            # the tasks, which drops one 5 s after it finishes, and on a loaded
+            # machine staging B alone can outlast that.
+            tracker_a = loading_tasks.get_tracker(task_a)
             task_b = _stage_importer_in_background(importer, {"name": "B", "_base_id": 200, "_count": 3})
+            tracker_b = loading_tasks.get_tracker(task_b)
 
         assert task_a and task_b and task_a != task_b, "each staging must get its own task id"
+        assert tracker_a is not None and tracker_b is not None and tracker_a is not tracker_b
 
-        tasks = {t["task_id"]: t for t in loading_tasks.list_tasks()}
-        assert task_a in tasks and task_b in tasks
-
-        res_a = tasks[task_a]["staging_result"]
-        res_b = tasks[task_b]["staging_result"]
+        res_a = tracker_a.get()["staging_result"]
+        res_b = tracker_b.get()["staging_result"]
         assert res_a is not None and res_b is not None, "both stagings must publish a staging_result"
         assert res_a["path"] != res_b["path"], "results must not collide"
         assert res_a["count"] == 2 and res_b["count"] == 3

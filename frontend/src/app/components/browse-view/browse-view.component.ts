@@ -38,7 +38,7 @@ import {
   MAX_THUMBNAIL_BORDER,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
-import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
+import { readyLayout, type ProjectionMeta, type RegionLabel } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
@@ -100,6 +100,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private readonly content = viewChild<ElementRef<HTMLElement>>('content');
 
   readonly meta = signal<ProjectionMeta | null>(null);
+  /** The meta's built layout, which the canvas and minimap draw; null until one is ready. */
+  readonly layout = computed(() => readyLayout(this.meta()));
   // Written from raw/async callbacks (dataset-status subscribe, projection
   // build poller, settings effect), so a signal so those writes repaint the
   // canvas/minimap inputs and the info row under zoneless.
@@ -435,7 +437,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * to the canvas. Empty for datasets with no computed labels — the signpost
    * toggle button disables itself then.
    */
-  readonly labels = signal<RegionLabelPayload[]>([]);
+  readonly labels = signal<RegionLabel[]>([]);
 
   /**
    * Whether the canvas draws the region signposts — mirrored from the
@@ -1556,10 +1558,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.mediaType.set(meta.media_type);
       this.applyBrowsePrefsForMediaType();
     }
-    this.tileCache.setProjectionId(meta.projection_id);
+    this.tileCache.setProjectionId(meta.projection_id ?? '');
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
-    if (meta.point_count > 0) {
+    if ((meta.point_count ?? 0) > 0) {
       this.syncLabels(meta);
       this.enterReady();
       return;
@@ -1604,8 +1606,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.mediaType.set(meta.media_type);
       this.applyBrowsePrefsForMediaType();
     }
-    this.tileCache.setProjectionId(meta.projection_id);
-    if (meta.point_count > 0) {
+    this.tileCache.setProjectionId(meta.projection_id ?? '');
+    if ((meta.point_count ?? 0) > 0) {
       this.syncLabels(meta);
       this.enterReady();
       return 'stop';

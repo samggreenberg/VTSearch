@@ -4,8 +4,8 @@ Maintains a registry of named channels (each backed by a
 :class:`ProgressTracker` or :class:`LoadingTasksTracker`) and produces SSE
 event strings that ``/api/events`` streams to connected clients.
 
-Replaces the per-tracker REST polling endpoints (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel.
+Clients read every progress channel from this one push stream rather than
+polling a REST endpoint per tracker.
 
 The stream carries two kinds of channel. The tracker channels below are
 *state*: each has a current snapshot, sent on connect and re-sent on every

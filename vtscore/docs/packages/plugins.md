@@ -203,7 +203,7 @@ field-validation glue that's identical across families.
 | `description` | `str` | No* | One-sentence subtitle |
 | `icon` | `str` | No* | Emoji / icon glyph |
 | `fields` | `list[PluginField]` | Yes | Ordered list of user-facing inputs (may be empty) |
-| `ui_mode` | `str` | No | `"form"` (default), `"file_upload"`, `"custom"`, or `"none"` |
+| `ui_mode` | `str` | No | Listing filter: `"form"` (default); shipped importers also use `"file_upload"` and `"custom"` |
 | `hidden_from_picker` | `bool` | No | When `True`, omitted from generic family pickers; useful for scaffolds and special-cased plugins |
 
 \* Auto-derived when not declared anywhere in the MRO: `name` is the class

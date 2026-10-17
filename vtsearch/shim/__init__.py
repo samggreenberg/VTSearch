@@ -127,7 +127,7 @@ def register_app_persistence_hooks() -> None:
     """Wire library-side persistence hooks to the app's ``vtsearch.settings``.
 
     The library exposes a few "let the app persist this" hook points so it
-    doesn't import settings directly (see Phase 2 of
+    doesn't import settings directly (the Settings seam in
     ``../../vtscore/docs/architecture.md``).  This function installs the Flask
     app's settings as the backing store for each hook.
     """
@@ -235,7 +235,8 @@ def register_app_plugin_families() -> None:
     :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
     ``vtsearch.settings`` to disk).  Registering them here keeps
     ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
-    import - see ``../../vtscore/docs/architecture.md`` Phase 5.
+    import - see the Plugin discovery seam in
+    ``../../vtscore/docs/architecture.md``.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.

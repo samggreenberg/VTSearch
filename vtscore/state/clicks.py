@@ -1,8 +1,8 @@
 """Click-time tracking for vote ordering.
 
 Operates on the active :class:`DetectorContext` (resolved per call) so the
-library has no implicit dependency on the app-side proxy view.  See Phase 3
-of ``../docs/architecture.md``.
+library has no implicit dependency on the app-side proxy view.  See seam 3
+(*Global state*) of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations

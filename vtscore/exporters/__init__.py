@@ -18,7 +18,7 @@ from vtscore.plugins import make_plugin_registry
 get_exporter, list_exporters = make_plugin_registry(
     package=__name__,
     sentinel="EXPORTER",
-    label="labelset exporter",
+    label="results exporter",
     entry_point_group="vtscore.exporters",
 )
 

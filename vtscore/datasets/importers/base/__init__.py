@@ -38,7 +38,7 @@ The base is split across submodules:
 
 Example – a minimal SFTP importer skeleton::
 
-    # vtsearch/datasets/importers/sftp/__init__.py
+    # vtscore/datasets/importers/sftp/__init__.py
     from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
     from vtscore.media import all_folder_names
@@ -59,9 +59,9 @@ Example – a minimal SFTP importer skeleton::
             ),
         ]
 
-        def run(self, field_values: dict, medias: dict) -> None:
+        def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
             import paramiko
-            ...  # download files, then call load_dataset_from_folder(...)
+            ...  # download files, then call load_dataset_from_folder(..., thin=thin)
 
     IMPORTER = SftpImporter()
 

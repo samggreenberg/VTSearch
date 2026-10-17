@@ -143,7 +143,7 @@ export class BrowseSubsetPrepService {
   /** Apply one projection meta, and say whether the build is still running. */
   private handleMeta(meta: ProjectionMeta): PollStep {
     if (!this.preparing()) return 'stop';
-    if (meta.point_count > 0) {
+    if ((meta.point_count ?? 0) > 0) {
       this.finish();
       return 'stop';
     }

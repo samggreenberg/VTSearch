@@ -176,7 +176,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `siglip_l` | `image` | 1152 |
 | `e5` | `text` (default) | 768 |
 | `bge` | `text` | 768 |
-| `xclip` | `video` (default) | 768 |
+| `xclip` | `video` (default) | 512 |
 | `languagebind` | `video` | 768 |
 | `videomae` | `video` | 768 |
 

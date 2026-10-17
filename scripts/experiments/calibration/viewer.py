@@ -14,7 +14,8 @@ What the page lets a reader pick:
 * **target size** — on a study whose categories are ``<class>@<band>``: one
   size, all of them averaged, or each as its own line (#4635);
 * **category** — one within that dataset, or all averaged;
-* **embedder** — any non-empty subset, drawn as **one panel each**.  Embedders
+* **embedder** — any non-empty subset, drawn as **one panel each** in the split
+  view and one hue each in the overlay.  Embedders
   are never averaged with one another: two embedders are two different
   representations of the haystack, and their mean is a number describing no
   system anyone could run.  Faceting makes that structural rather than a rule

@@ -28,8 +28,11 @@ _NUM_FRAMES = 8
 class VideoXClipEmbedder(MediaEmbedder):
     """Embeds videos using the X-CLIP model (microsoft/xclip-base-patch32).
 
-    * Videos → 768-dimensional vectors via X-CLIP's video encoder (8 sampled frames).
-    * Text queries → 768-dimensional vectors via X-CLIP's text encoder.
+    * Videos → 512-dimensional vectors via X-CLIP's video encoder (8 sampled frames).
+    * Text queries → 512-dimensional vectors via X-CLIP's text encoder.
+
+    Both are X-CLIP's ``projection_dim`` (512 for this checkpoint); the vision
+    tower's 768-wide hidden state is projected down before either is returned.
     """
 
     def __init__(self) -> None:
@@ -61,7 +64,7 @@ class VideoXClipEmbedder(MediaEmbedder):
 
     @property
     def embedding_dim(self) -> int:
-        return 768
+        return 512
 
     @property
     def is_default(self) -> bool:

@@ -941,6 +941,26 @@ class TestProgressFormat:
         assert "Pipeline file not found" in event["message"]
         assert captured.err == ""
 
+    def test_any_failure_in_the_run_is_an_error_event(self, monkeypatch, tmp_path, capsys):
+        """Not just a bad file: whatever the run raises ends as an ``error`` event, never a traceback."""
+        import vtscore.cli as vtcli
+        from vtscore import cli_progress
+        from vtscore.cli_pipeline import run_pipeline_file
+
+        def _boom(spec, **kw):
+            raise RuntimeError("exporter went away")
+
+        monkeypatch.setattr(vtcli, "_run_source", _boom)
+        p = tmp_path / "p.yaml"
+        p.write_text("dataset: foo.pkl\n")
+        cli_progress.set_format("json")
+        with pytest.raises(SystemExit) as exc:
+            run_pipeline_file(p)
+        assert exc.value.code == 1
+        (event,) = self._events(capsys.readouterr().out)
+        assert event["event"] == "error"
+        assert event["message"] == "exporter went away"
+
     def test_text_error_stays_on_stderr(self, tmp_path, capsys):
         from vtscore.cli_pipeline import run_pipeline_file
 

@@ -33,7 +33,7 @@ def get_saved_datasets_dir() -> Path:
 
     Read with :func:`~vtscore.config.get_setting` rather than from
     ``vtsearch.settings`` directly so this module stays library-clean
-    (see Phase 2 of ``../docs/architecture.md``).
+    (see the Settings seam in ``../docs/architecture.md``).
     """
     from vtscore.config import get_setting  # noqa: PLC0415
 

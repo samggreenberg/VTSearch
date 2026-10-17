@@ -70,13 +70,12 @@ class StepModel:
     id_scores: Optional[dict[int, float]] = None
 
 
-#: Head choices for the app-pipeline trainer (:data:`APP_TRAINER`), all three
+#: Head choices for the app-pipeline trainer (:data:`APP_TRAINER`), all
 #: reached through the same ``hidden_dim`` sentinel production threads.  This is
 #: *which classifier head the shipped pipeline fits*, a different question from
 #: the ``trainer`` knob beside it, which selects the pipeline itself.  ``"linear_svm"`` is the
-#: head the live detector trains (:data:`~vtscore.training.mlp.LINEAR_SVM_HEAD`,
-#: a single ``Linear(d, 1)`` fitted to the maximum-margin boundary), so a
-#: ``"linear_svm"`` run measures the shipped detector.  ``"linear"`` is the same
+#: plain SVM (:data:`~vtscore.training.mlp.LINEAR_SVM_HEAD`, a single
+#: ``Linear(d, 1)`` fitted to the maximum-margin boundary).  ``"linear"`` is the same
 #: architecture fitted with balanced BCE — logistic regression, the head shipped
 #: between #2790/#2809 and the SVM switch — and ``"mlp"`` is the older harness
 #: candidate, a hidden layer auto-sized from the vote count
@@ -87,7 +86,8 @@ class StepModel:
 #: issue #4114), the in-loop test of #3197's finding that ``"linear"`` loses on
 #: its fit, not its loss.  ``"linear_svm_prior"`` is the SVM started from the
 #: Goods' centroid (:data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD`, issue
-#: #4776), the in-loop test of a head that does not dip at the label quota.
+#: #4776): the head the live detector trains (:data:`PRODUCTION_HEAD`), so a
+#: ``"linear_svm_prior"`` run measures the shipped detector.
 HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm", "linear_logreg", "linear_svm_prior")
 
 
@@ -136,7 +136,7 @@ PRODUCTION_HEAD: str = "linear_svm_prior"
 def resolve_hidden_dim(head: str, n_votes: int) -> int:
     """``hidden_dim`` sentinel for *head* at *n_votes* votes.
 
-    The two linear heads return their sentinels (they have no width to size);
+    The linear heads return their sentinels (they have no width to size);
     only ``"mlp"`` consults the vote count.
     """
     if head == "linear_svm":

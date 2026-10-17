@@ -101,5 +101,3 @@ separately.
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- [ ] #4966 — Code-side drift found by the 2026-10-16 docs audit (Haiku for the bulk; Sonnet for the code items)

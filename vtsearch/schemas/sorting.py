@@ -147,7 +147,8 @@ class BalanceStateSchema(Schema):
     # (``weak_check_due``, #4496).
     check_due = fields.Boolean()
     # Autopilot's check before Done should run: no check has ended in the last
-    # 25 votes (``done_check_due``).  Read once every quality light is green.
+    # 25 votes (``done_check_due``).  Read once Done is due: every quality
+    # light green, the labels line's level met, or the 200-vote cap.
     done_check_due = fields.Boolean()
 
 

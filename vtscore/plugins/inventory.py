@@ -6,15 +6,14 @@ tooling that wants a cross-family view of what's installed.
 
 The inventory covers both ``PluginRegistry``-backed families (importers,
 exporters, label sources, settings I/O, converters, media sources) and
-the embedder / clipper / media-type registries that live directly on
-:mod:`vtscore.media`.
+the media-type / embedder / clipper / cleaner registries that live
+directly on :mod:`vtscore.media`.
 
 Families are registered with :func:`register_plugin_family`.  Library
 families self-register at module import; app-only families
 (``settings_io/*``) are injected by the application layer via
-:mod:`vtsearch.shim` so this module stays free of cross-boundary imports
-ahead of the ``vtscore`` library split (see
-``../docs/architecture.md`` Phase 5).
+:mod:`vtsearch.shim` so this module stays free of app-tier imports (see
+the Plugin discovery seam in ``../docs/architecture.md``).
 """
 
 from __future__ import annotations

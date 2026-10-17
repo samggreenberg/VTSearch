@@ -345,3 +345,11 @@ disclaim_encoder  # noqa: F821 - vtscore.timing.recorder.TaskTimingRecorder no-o
 status_phases  # noqa: F821 - vtscore.timing.recorder.record_task kwarg, accepted and ignored
 auto_finish  # noqa: F821 - same
 only_phases  # noqa: F821 - same
+
+# ---------------------------------------------------------------------------
+# ``tests_shared/xdist_plumbing.py`` hooks that third-party test plugins call
+# by name: xdist's scheduler invokes ``remove_node`` when a worker dies, and
+# pytest-timeout's ``pytest_timeout_cancel_timer`` reads ``cancel_timeout``.
+# ---------------------------------------------------------------------------
+remove_node  # noqa: F821
+cancel_timeout  # noqa: F821

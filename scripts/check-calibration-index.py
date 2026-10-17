@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gate: every script in ``scripts/experiments/calibration/`` is in its README index.
 
-The directory is deliberately flat -- 120-odd files, ~20 concluded studies, one
+The directory is deliberately flat -- every concluded study's files in one
 namespace -- because these are archival cluster scripts whose paths are quoted
 by the reports they produced, and whose sibling imports (``import common``) work
 only because the launcher ``cd``s here.  Issue #3409 proposed splitting them into
@@ -10,8 +10,8 @@ stale doc references) in favour of the thing the subdirectories were actually
 wanted for: **knowing which files belong to which study.**
 
 That answer is the README's index, and an index nobody checks is an index that
-decays back into 120 unclassified files -- which is how the directory got here.
-So this makes the mapping total and un-rottable in both directions:
+decays back into a heap of unclassified files -- which is how the directory got
+here.  So this makes the mapping total and un-rottable in both directions:
 
 * every ``.py`` / ``.sh`` in the directory appears in the index exactly once, so
   a new study's files cannot land unclassified;

@@ -622,6 +622,29 @@ class TestFlagWiring:
         assert exc.value.code == 2
         assert "--outputs and --media-type both set" in capsys.readouterr().err
 
+    @pytest.mark.parametrize("spelling", [["--media-type", "audio"], ["--media-type=audio"]])
+    def test_conflicts_with_media_type_given_its_default_value(self, monkeypatch, capsys, spelling):
+        """``audio`` is server_folder's default, so only the flag being typed can tell it was set."""
+        calls = _record_entry_points(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(
+                monkeypatch,
+                ["--autodetect", "--importer", "server_folder", "--path", "/d", *spelling, "--outputs", _OUTPUTS_JSON],
+            )
+        assert exc.value.code == 2
+        assert "--outputs and --media-type both set" in capsys.readouterr().err
+        assert calls == {}
+
+    @pytest.mark.parametrize(("argv", "given"), [([], []), (["--media-type", "audio"], ["media_type"])])
+    def test_telling_a_typed_flag_from_its_default_puts_the_default_back(self, monkeypatch, argv, given):
+        from vtsearch import cli_main
+
+        parser = cli_main._build_parser()
+        parser.add_argument("--media-type", dest="media_type", default="audio")
+        monkeypatch.setattr("sys.argv", ["app.py", *argv])
+        assert cli_main._given_on_command_line(parser, ["media_type"]) == given
+        assert parser.parse_args([]).media_type == "audio"
+
     def test_bad_json_is_a_usage_error(self, monkeypatch, capsys):
         _record_entry_points(monkeypatch)
         with pytest.raises(SystemExit) as exc:

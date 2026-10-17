@@ -1,6 +1,6 @@
 """Authentication status and login/logout routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

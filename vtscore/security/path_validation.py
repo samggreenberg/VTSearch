@@ -198,12 +198,14 @@ def sanitize_template_value(value: str) -> str:
     sanitization, a value containing ``../`` would let the substitution
     escape the intended directory.
 
-    Returns a value with path separators and parent-directory tokens
-    replaced by ``_``.  Empty and any all-dots token (``.``, ``..``,
-    ``...``, …) collapse to ``_``: ``..`` addresses the parent directory
-    and ``.`` the current one, while longer dot runs are meaningless
-    path components that some shells / filesystems still treat specially,
-    so none of them belong in a single path segment.
+    Returns a value with path separators (``/``, ``\\``) and NUL replaced
+    by ``_``, so the value can only ever be one path segment.  A value that
+    is empty or *entirely* dots (``.``, ``..``, ``...``, …) collapses to
+    ``_``: ``..`` addresses the parent directory and ``.`` the current one,
+    while longer dot runs are meaningless path components that some shells /
+    filesystems still treat specially.  An embedded ``..`` is kept
+    (``a..b`` stays ``a..b``; ``../x`` becomes ``.._x``): with no separator
+    left, it cannot name a parent directory.
     """
     sanitized = value.replace("/", "_").replace("\\", "_").replace("\0", "_")
     if not sanitized or set(sanitized) == {"."}:

@@ -345,9 +345,8 @@ _EXCLUDE_FROM_SOURCE_EXPORT = {
 # Per-user caches keyed by username.
 _user_caches: dict[str, dict[str, Any]] = {}
 
-# Per-user sync bookkeeping.  Replaces the old ``_synced_users: set[str]``,
-# which couldn't distinguish "never synced" from "synced ages ago" or
-# "tried once and failed."
+# Per-user sync bookkeeping, which tells "never synced" from "synced ages
+# ago" from "tried once and failed."
 _sync_state: dict[str, _UserSyncState] = {}
 
 # Reentrant lock covering both tiers' caches, the syncing flag, and
@@ -737,9 +736,9 @@ def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
       before it became a per-media-type dict - or simply a hand-edit that
       is out of range. Dropping it makes the field read as unset, so the
       pydantic default applies (per the "break persisted data freely"
-      policy in ``CLAUDE.md``); keeping it used to leak the stale value
-      straight out of ``GET /api/settings``, which the frontend then echoed
-      back into a ``PUT`` that 422'd.
+      policy in ``CLAUDE.md``); keeping it would leak the stale value
+      straight out of ``GET /api/settings``, and the frontend would echo it
+      back into a ``PUT`` that 422s.
     * **Server-tier keys stranded in a per-user file**, left behind when a
       key moved tiers (``browse_signpost_vocab`` did). ``get_all`` layers
       the user cache over the server one, so a stale copy would shadow the
@@ -1026,10 +1025,9 @@ def validate_setting(key: str, value: Any) -> Any:
     :class:`ValueError` / :class:`TypeError` on bad input.
 
     ``PUT /api/settings`` uses this to validate a whole multi-key body up
-    front, so a bad key can no longer 400 the request *after* earlier keys
-    in the same body have already been committed. Keys with no dedicated
-    validator (the server-tier directory paths, which no API writes) pass
-    through unchanged.
+    front, so a bad key 400s the request *before* any key in the same body
+    is committed. Keys with no dedicated validator (the server-tier directory
+    paths, which no API writes) pass through unchanged.
     """
     validator = globals().get(f"validate_{key}")
     if validator is None:

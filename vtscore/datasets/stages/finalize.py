@@ -63,7 +63,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker, failures: EmbedFai
 
     ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
     re-embed call fails (no embedder, vector ``None``, exception) the
-    clip is left in ``ctx.medias`` with ``embedding=None``.  Letting
+    clip is left in ``ctx.medias`` with no vector.  Letting
     those through poisons every downstream consumer; the matrix builder
     in ``vtscore/embedding/matrix.py`` raises (M11 fix); sort/score
     aggregations get wrong-length lists.  Drop them here so the rest of
@@ -99,7 +99,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker, failures: EmbedFai
     from vtscore.concurrency.notifications import notify  # noqa: PLC0415
 
     logging.getLogger(__name__).warning(
-        "Dropped %d media item(s) with embedding=None (importer or re-embed step failed)",
+        "Dropped %d media item(s) with no embedding (importer or re-embed step failed)",
         len(none_ids),
     )
     # The tracker message below is overwritten by the next stage within

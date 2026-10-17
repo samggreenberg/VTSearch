@@ -272,9 +272,9 @@ class ApiKeyLoginProvider(LoginProvider):
 # ---------------------------------------------------------------------------
 # The mechanics (thread-local storage, the ``"default"`` fallback) live in
 # ``vtscore.state.current_user`` so library code can resolve a user without
-# importing Flask - see ``../../vtscore/docs/architecture.md`` Phase 2.  All
-# this module adds is the Flask half: read ``g.user`` when a request is in
-# flight.  Registering the resolver at *import* time (rather than from the
+# importing Flask - see the Flask seam in
+# ``../../vtscore/docs/architecture.md``.  All this module adds is the Flask
+# half: read ``g.user`` when a request is in flight.  Registering the resolver at *import* time (rather than from the
 # shim's startup wiring) means any process that has the app tier loaded at
 # all resolves request users correctly, including CLI and test paths that
 # never call ``register_flask_context_resolvers()``.

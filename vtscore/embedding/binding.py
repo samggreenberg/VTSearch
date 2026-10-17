@@ -115,10 +115,10 @@ def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
 
     Anything that is not a positive ``int`` collapses to ``None``.
     ``embedding_dim`` is part of the *plugin* surface, so a third-party embedder
-    may return whatever it likes, and a test double standing in for the registry
-    returns a mock.  The value's only use is a width comparison, so a
-    non-integer has to read as "unknown" rather than as a width that nothing can
-    ever match.
+    may return whatever it likes (or, duck-typed, lack the attribute), and a
+    test double standing in for the registry returns a mock.  The value's only
+    use is a width comparison, so a non-integer has to read as "unknown" rather
+    than as a width that nothing can ever match.
     """
     name = (embedder_name or "").strip()
     if not name:
@@ -127,7 +127,7 @@ def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
     from vtscore.media import get_embedder  # noqa: PLC0415 - avoid import cycle
 
     try:
-        dim = get_embedder(name).embedding_dim
+        dim = getattr(get_embedder(name), "embedding_dim", None)
     except KeyError:
         return None
     # ``bool`` is an int subclass; True would otherwise read as a width of 1.

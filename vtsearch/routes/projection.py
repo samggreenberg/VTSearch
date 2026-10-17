@@ -12,8 +12,8 @@ headers.
 
 The pyramid tiles the projection as hexagons or squares, but the shape is a
 fixed property of the dataset's **media type** — squares for browsable-thumbnail
-media (image/video/document), hexes for the rest (audio/text) — not a per-request
-choice.  Every endpoint derives the shape from the active dataset
+media (image, video, document, face, and audio by its waveform), hexes for the
+rest (text) — not a per-request choice.  Every endpoint derives the shape from the active dataset
 (:func:`vtscore.projection.service.shape_for`); the client never sends it.  The
 meta response reports the resolved ``bin_shape`` so the canvas knows which
 lattice to draw.
@@ -28,14 +28,17 @@ from __future__ import annotations
 
 import logging
 
-from flask import after_this_request, request
+from flask import after_this_request
 from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.projection import (
+    ProjectionBuildRequestSchema,
     ProjectionBuildResponseSchema,
     ProjectionLabelsResponseSchema,
     ProjectionMetaSchema,
+    ProjectionSubsetQuerySchema,
     SubsetRemoveRequestSchema,
+    TileQuerySchema,
     TileResponseSchema,
 )
 
@@ -48,36 +51,18 @@ projection_bp = Blueprint(
 )
 
 
-def _is_subset(value: str | None) -> bool:
-    """Whether a request targets the ephemeral subset projection."""
-    return str(value).lower() in ("1", "true", "yes")
-
-
-def _requested_ids(raw) -> list[int]:
-    """Validate a request body's ``ids`` into a list of media ids.
-
-    A malformed body is a 400 — the client sent the wrong shape.  An *empty*
-    selection is not: the request is well-formed and there is simply nothing
-    to project, which the service reports as a 409 like every other
-    nothing-to-project case.
-    """
-    if not isinstance(raw, list):
-        abort(400, message="`ids` must be a list of media ids.")
-    try:
-        requested = [int(c) for c in raw]
-    except (TypeError, ValueError):
-        abort(400, message="`ids` must be a list of integer media ids.")
-    return requested
-
-
 @projection_bp.route("/api/projection/build", methods=["POST"])
+@projection_bp.arguments(ProjectionBuildRequestSchema, required=False)
 @projection_bp.response(200, ProjectionBuildResponseSchema)
 @projection_bp.alt_response(409, description="Dataset is empty or has no embeddings.")
-def build_projection():
+def build_projection(body: dict):
     """Kick off (or short-circuit) a build of the dataset's projection.
 
     Body: ``{"ids": [...]?, "force": bool?}``.  The bin shape is not a request
-    parameter — it is derived from the dataset's media type.
+    parameter — it is derived from the dataset's media type.  A malformed
+    ``ids`` is a 422; an *empty* one is well-formed with nothing to project,
+    which the service reports as a 409 like every other nothing-to-project
+    case.
 
     Returns immediately.  If the pyramid is already cached or persisted, returns
     ``"ready"``.  Only the first build of a dataset, where no layout exists yet,
@@ -97,12 +82,8 @@ def build_projection():
     from vtscore.state.core import get_active_context
 
     ctx = get_active_context()
-    body = request.get_json(silent=True) or {}
-    raw_ids = body.get("ids")
-    ids = None if raw_ids is None else _requested_ids(raw_ids)
-
     try:
-        return service.build_layout(ctx, ids=ids, force=bool(body.get("force")))
+        return service.build_layout(ctx, ids=body.get("ids"), force=bool(body.get("force")))
     except ValueError as exc:
         # The service's own "nothing to project" signals and the
         # embedding-matrix builder's ValueErrors mean the same thing to a
@@ -141,8 +122,9 @@ def remove_from_subset(body: dict):
 
 
 @projection_bp.route("/api/projection/meta", methods=["GET"])
+@projection_bp.arguments(ProjectionSubsetQuerySchema, location="query")
 @projection_bp.response(200, ProjectionMetaSchema)
-def projection_meta():
+def projection_meta(query: dict):
     """Return projection/pyramid metadata and build status for the dataset.
 
     The bin shape is derived from the dataset's media type, not a query
@@ -154,16 +136,13 @@ def projection_meta():
     from vtscore.state.core import get_active_context
 
     ctx = get_active_context()
-    return service.layout_meta(
-        ctx,
-        service.shape_for(ctx),
-        subset=_is_subset(request.args.get("subset")),
-    )
+    return service.layout_meta(ctx, service.shape_for(ctx), subset=query["subset"])
 
 
 @projection_bp.route("/api/projection/labels", methods=["GET"])
+@projection_bp.arguments(ProjectionSubsetQuerySchema, location="query")
 @projection_bp.response(200, ProjectionLabelsResponseSchema)
-def projection_labels():
+def projection_labels(query: dict):
     """Return the region signpost labels for the active projection.
 
     The "street signs" the browse canvas letters over the map (see
@@ -182,20 +161,17 @@ def projection_labels():
     from vtscore.state.core import get_active_context
 
     ctx = get_active_context()
-    return service.labels_payload(
-        ctx,
-        service.shape_for(ctx),
-        subset=_is_subset(request.args.get("subset")),
-    )
+    return service.labels_payload(ctx, service.shape_for(ctx), subset=query["subset"])
 
 
 @projection_bp.route(
     "/api/projection/tiles/<int:level>/<int(signed=True):tx>/<int(signed=True):ty>",
     methods=["GET"],
 )
+@projection_bp.arguments(TileQuerySchema, location="query")
 @projection_bp.response(200, TileResponseSchema)
 @projection_bp.alt_response(404, description="Tile not found or projection not ready.")
-def get_tile(level: int, tx: int, ty: int):
+def get_tile(query: dict, level: int, tx: int, ty: int):
     """Return the cells for one tile of the dataset's pyramid at ``(level, tx, ty)``.
 
     The bin shape is derived from the dataset's media type.  Because the
@@ -212,7 +188,7 @@ def get_tile(level: int, tx: int, ty: int):
         level,
         tx,
         ty,
-        subset=_is_subset(request.args.get("subset")),
+        subset=query["subset"],
     )
     if payload is None:
         abort(404, message="Projection not built yet — call POST /api/projection/build first.")

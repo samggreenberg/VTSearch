@@ -10,8 +10,8 @@ keep its promise (``docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`
 1. **Fold-rank evidence.**  Each calibration fold's *held-out* vote scores are
    honest (that fold's model never trained on them) but live on that fold
    model's scale.  Each is mapped to its percentile in its own fold's haystack,
-   which puts every fold on one coordinate - the same rank transfer the shipped
-   fused cut uses.
+   which puts every fold on one coordinate - the same rank transfer the
+   fold-anchored cut uses.
 2. **A posterior in that coordinate.**  ``P(positive | percentile)`` is fitted
    on those votes (logistic by default).  The votes are a biased sample:
    **every vote a model chose was chosen on a score**, so the fitted curve comes
@@ -669,9 +669,9 @@ def reporting_line(
     (:func:`vtscore.detectors.training._fused_threshold`), its no-refit re-cut
     (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
     harness's default arm, so the three cannot drift apart.  All three pass
-    ``min_precision=None``: under a balance they draw the set the balance
-    keeps (:func:`~vtscore.training.thresholds.balance_line`), and come here
-    only when there is no balance or no ranking to keep a set of.  The two floor
+    ``min_precision=None``: under a balance they draw the labels' line
+    (:func:`~vtscore.training.thresholds.fit_labels_line`, #4452), and come
+    here only when there is no balance or the labels support no class model.  The two floor
     branches below are the #4220 estimator's own line, kept as library API.
 
     * *min_precision* ``None``: no floor, and the line is

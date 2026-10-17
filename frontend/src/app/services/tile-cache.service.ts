@@ -2,10 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
 import { tap, shareReplay, catchError } from 'rxjs/operators';
 import { ProjectionApiService } from './projection-api.service';
-import type { TilePayload } from '../models/projection.models';
+import type { TileResponse } from '../models/projection.models';
 
 interface CacheEntry {
-  tile: TilePayload;
+  tile: TileResponse;
   lastAccess: number;
 }
 
@@ -14,7 +14,7 @@ export class TileCacheService {
   private projectionApi = inject(ProjectionApiService);
 
   private cache = new Map<string, CacheEntry>();
-  private inflight = new Map<string, Observable<TilePayload>>();
+  private inflight = new Map<string, Observable<TileResponse>>();
   // Deeper datasets carve more pyramid levels, so a small flat LRU thrashes:
   // panning back over seen ground misses and the hex grid blanks. Hold more.
   private readonly MAX_ENTRIES = 2048;
@@ -34,7 +34,7 @@ export class TileCacheService {
   // have distinct projection ids, so the cache invalidates on switch.
   private subset = false;
 
-  readonly tileLoaded$ = new Subject<TilePayload>();
+  readonly tileLoaded$ = new Subject<TileResponse>();
 
   setProjectionId(id: string): void {
     if (id !== this.projectionId) {
@@ -59,7 +59,7 @@ export class TileCacheService {
     this.subset = subset;
   }
 
-  getTile(level: number, tx: number, ty: number): Observable<TilePayload> | null {
+  getTile(level: number, tx: number, ty: number): Observable<TileResponse> | null {
     const key = this.key(level, tx, ty);
 
     const cached = this.cache.get(key);
@@ -87,7 +87,7 @@ export class TileCacheService {
       }),
       catchError(() => {
         this.inflight.delete(key);
-        const empty: TilePayload = { level, tx, ty, cells: [] };
+        const empty: TileResponse = { level, tx, ty, cells: [] };
         return of(empty);
       }),
       shareReplay(1),
@@ -96,7 +96,7 @@ export class TileCacheService {
     return req$;
   }
 
-  getCached(level: number, tx: number, ty: number): TilePayload | null {
+  getCached(level: number, tx: number, ty: number): TileResponse | null {
     const entry = this.cache.get(this.key(level, tx, ty));
     if (entry) {
       entry.lastAccess = Date.now();
@@ -139,7 +139,7 @@ export class TileCacheService {
     return `${this.projectionId}:${this.contentVersion}`;
   }
 
-  private put(key: string, tile: TilePayload): void {
+  private put(key: string, tile: TileResponse): void {
     if (this.cache.size >= this.MAX_ENTRIES) {
       this.evict();
     }

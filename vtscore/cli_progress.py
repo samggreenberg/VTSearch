@@ -7,13 +7,46 @@ are emitted to stdout as **NDJSON** - one JSON object per line, each shaped
 ``{"event": <name>, "ts": <iso8601-z>, ...}`` - so scripts and CI runners
 can consume progress without scraping prose or tqdm glyphs.
 
-Event names emitted today:
+The events, from :mod:`vtscore.cli`, :mod:`vtscore.cli_pipeline` and the
+app's ``vtsearch/cli_main.py``:
 
 - ``chunk_start``    - a new chunk is about to be scored
   fields: ``chunk_num`` (int), ``chunk_size`` (int)
 - ``chunks_done``    - chunked scoring finished
   fields: ``total_medias`` (int), ``chunks`` (int)
-- ``labels_imported`` - one-shot ``--import-labels-into`` finished
+- ``medias_unembedded`` - media still carry no embedding after the load's
+  embed pass, and score only through a converter route
+  fields: ``unembedded`` (int), ``unembedded_ids`` (list[int] - the first 100)
+- ``medias_skipped`` - media with no usable embedding in a detector's space
+  were left out of its scoring
+  fields: ``skipped`` (int), ``skipped_ids`` (list[int] - the first 100),
+  ``embedder`` (str)
+- ``detector_skipped`` - a detector's ``media_type`` has no direct or
+  converter route from the dataset's types, so it does not run
+  fields: ``detector`` (str), ``detector_media_type`` (str),
+  ``dataset_media_type`` (str)
+- ``detector_reclip`` - the dataset is re-clipped to a detector's
+  ``input_spec`` clipper at scoring time
+  fields: ``detector`` (str), ``detector_input_spec`` (dict),
+  ``dataset_input_spec`` (dict)
+- ``detector_centroid`` / ``detector_query`` - a detector's labels give no
+  trained head, so it scores as the Goods' centroid or as its typed query's
+  own set
+  fields: ``detector`` (str), ``query`` (str - ``detector_query`` only), and
+  the label quota's ``tier``, ``n_good``, ``n_bad``, ``goods_owed``,
+  ``bads_owed``, ``good_quota``, ``bad_quota``, ``dry_bad_quota``,
+  ``hold_labels``, ``hold_owed`` (all int but ``tier``, a str)
+- ``detector_unchecked`` - a detector's line is exported unchecked, since a
+  headless run cannot spot-check it
+  fields: ``detector`` (str), ``beta`` (float), ``status`` (str),
+  ``count`` (int - the size of the set the line keeps)
+- ``labels_import_dry_run`` - ``--dry-run`` with ``--import-labels-into``:
+  the label import that would run
+  fields: ``detector`` (str), ``importer`` (str), ``filepath`` (str?),
+  ``fields`` (dict), ``create_media_type`` (str? - set when
+  ``--create-detector`` would make the detector)
+- ``labels_imported`` - one-shot ``--import-labels-into`` (or a pipeline
+  file's ``import_labels``) finished
   fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int),
   ``created`` (bool - ``--create-detector`` made the detector)
 - ``export_complete`` - exporter finished its run
@@ -25,6 +58,9 @@ Event names emitted today:
   ``total`` (int?), ``pct`` (float? - only when total > 0), ``dataset``
   (str? - the dataset's name, when a multi-dataset run imports several at
   once)
+- ``import_progress`` - ``text`` mode only, one line per phase of a saving
+  import (``json`` mode sends each tick as a ``progress`` event instead)
+  fields: none
 - ``dataset_saved``  - a saving run registered (or found) its dataset on the
   dashboard; once per dataset of a multi-dataset run
   fields: ``dataset_id`` (str), ``name`` (str), ``num_items`` (int),
@@ -46,11 +82,20 @@ Event names emitted today:
 - ``dataset_failed`` - one dataset of a multi-dataset run could not be
   imported; the others still run, and the run exits non-zero at the end
   fields: ``name`` (str), ``error`` (str)
+- ``dry_run_plan`` - ``--dry-run`` in ``json`` mode: what the run would do
+  (``text`` mode prints the plan as prose instead)
+  fields: ``source`` (dict), ``settings_path`` (str?),
+  ``autofind_detectors`` (list[dict] - one summary per detector the run
+  would train), ``detectors_source`` (str - ``"autofind"`` or
+  ``"override"``), ``exporter`` (str?), ``exporter_field_values`` (dict)
+- ``authenticated_user`` - ``--user`` with ``--api-key`` authenticated; the
+  run executes as that user
+  fields: ``user`` (str)
 - ``notification``   - a non-fatal message a plugin wanted the user to see
   (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
   toasts). The run continues either way, including at ``level="error"``.
   fields: ``level`` (str), ``message`` (str), ``detail`` (str?),
-  ``source`` (str?)
+  ``source`` (str?), ``items`` (list[str]?)
 - ``error``          - fatal error; the process will exit non-zero
   fields: ``message`` (str)
 

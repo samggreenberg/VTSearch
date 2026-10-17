@@ -216,7 +216,7 @@ def draw_with_side_inset(
     one drew it in the panel too; the reviewer asked for the earlier, unobstructed view back.
 
     *also* carries the class's further annotations in this image. The band comes from the
-    UNION of them all (``vg_scale.band_for``), so the union is what is drawn in red -- it is
+    UNION of them all (``scale_core.band_for``), so the union is what is drawn in red -- it is
     the box the reviewer is being asked about -- and each annotation is drawn thin, in amber,
     underneath it. Drawing every annotation in red instead made a 21-box VG bench unreadable
     and hid the band's own box.

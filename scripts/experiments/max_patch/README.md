@@ -37,14 +37,13 @@ query text (from `vtscore.eval.config.EVAL_DATASETS`) against every media's
 whole-image vector, one ranking shared by all of a cell's styles, and the
 Autopilot seed phase votes down it. A cell with no query, or an
 embedder with no text encoder (both DINO patch embedders), seeds from random
-known-good examples instead; each row's `seed_mode` says which. Prepare still
-writes the exemplar crops below, but no cell reads them.
+known-good examples instead; each row's `seed_mode` says which.
 
 ## What each stage does
 
 | Stage | Script | Output |
 |---|---|---|
-| 0 · prepare | `prepare_data.py` | Per-(dataset, embedder) pickles under `$VTSEARCH_DATA_DIR/embeddings/<ds>__<emb>.pkl` (with `patch_grid` for the DINOs), exemplar-crop vectors under `results/crops/`, and `prepare_info.json` (counts, selected categories, embed timings). |
+| 0 · prepare | `prepare_data.py` | Per-(dataset, embedder) pickles under `$VTSEARCH_DATA_DIR/embeddings/<ds>__<emb>.pkl` (with `patch_grid` for the DINOs) and `prepare_info.json` (counts, selected categories, embed timings). |
 | 1 · cells | `run_cells.py` | `results/cells/task_<i>.csv` — one SLURM-array task per `(dataset, embedder, category, seed)`, all styles inside. Per-step cost/FPR/FNR/AUROC/AP + train/score timings. |
 | 2 · report | `summarize.py` | `results/REPORT.md` + `results/figures/` (deterministic from the CSVs). |
 
@@ -53,11 +52,11 @@ writes the exemplar crops below, but no cell reads them.
 ```bash
 export HF_TOKEN=hf_...   # required for the gated DINOv3 weights
 
-# One-shot dependency chain. Pass the array size: queue_all.sh's default of 240
-# predates the scale-band grid below and is too small for it (cells past the
-# array's end never run). Size it from `run_cells.py --print-cells` once
-# prepare_info.json exists, or over-provision (surplus indices exit as no-ops):
-bash queue_all.sh <N_CELLS>
+# One-shot dependency chain. The array is sized before prepare picks the
+# categories, so it defaults to the grid's upper bound
+# (experiment_config.max_array_cells; surplus indices exit as no-ops). Pass the
+# exact count from `run_cells.py --print-cells` once prepare_info.json exists:
+bash queue_all.sh [N_CELLS]
 
 # Or by hand, sized exactly:
 sbatch ... --wrap "source ../../../gridenv.sh && cd $PWD && python prepare_data.py"
@@ -109,7 +108,6 @@ object rather than a union over scattered instances.
 | `MAXPATCH_N_CATEGORIES` | `6` | Categories for **boxless** datasets (spanning common→rare) |
 | `MAXPATCH_N_SEEDS` | `4` | Seeds (paired across arms) |
 | `MAXPATCH_MAX_STEPS` | `150` | Vote budget per trajectory |
-| `MAXPATCH_EXEMPLAR_CANDIDATES` | `8` | Cropped exemplars pre-embedded per category |
 
 ## Notes / gotchas
 
@@ -121,6 +119,7 @@ object rather than a union over scattered instances.
 - **Pairing**: within a `(dataset, category, seed)` cell all of an embedder's
   styles share the same load, the same sim/test split, and the same opening.
   Across embedders the split is also identical (it is derived from seeds/ids,
-  not vectors); the opening is not, since only `siglip` has a text sort.
+  not vectors); the opening is not, since only `siglip` has a text sort, so
+  cross-embedder comparisons are paired on the split, not on the opening.
 - Results live under `$MAXPATCH_RESULTS` (default
   `/expscratch/$USER/max-patch/results`).

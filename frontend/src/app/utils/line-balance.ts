@@ -107,7 +107,8 @@ export interface LineBalance {
   checkDue: boolean;
   /**
    * Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25
-   * votes. Read once every quality light is green; false skips the step.
+   * votes. Read once Autopilot reaches the step (every quality light green, Done's level met, or
+   * the click cap); false skips it.
    */
   doneCheckDue: boolean;
 }

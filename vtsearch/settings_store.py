@@ -255,9 +255,8 @@ class UserSyncState:
       stat the source file on every ``get_volume()``.
     - ``last_sync_succeeded``: ``False`` means the user has never been
       successfully synced this process lifetime (or the last attempt
-      failed).  A transient source failure no longer permanently locks
-      the user out of sync - the slow-path retries (rate-limited) until
-      it succeeds.
+      failed).  A transient source failure does not lock the user out
+      of sync: the slow path retries (rate-limited) until it succeeds.
     - ``dirty_keys``: keys the user has set locally since the last
       successful :func:`_sync_to_source`.  An auto re-sync (from a
       version-bump on the source) skips these keys so a freshly clicked
@@ -557,8 +556,8 @@ class UserSettingsStore:
 
         1. We've never attempted one this process lifetime, OR
         2. The last attempt failed and the rate-limit window has elapsed
-           (so a transient source outage no longer permanently locks
-           the user out of sync - old ``_synced_users`` did exactly that), OR
+           (so a transient source outage never permanently locks the user
+           out of sync), OR
         3. A previous attempt succeeded but the source's
            :meth:`SettingsSource.peek_version` token has changed since
            (source file rewritten by another process, hand-edited, etc.).

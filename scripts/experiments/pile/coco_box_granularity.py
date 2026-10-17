@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does COCO box a PILE as one object? Ask a finer annotation of the same images.
 
-The scatter guard (:func:`pilebuild.loaders.vg_scale.band_for`) catches instances
+The scatter guard (:func:`pilebuild.scale_core.band_for`) catches instances
 that are *spread out*: the union outgrows the largest box, so the image is
 dropped. It cannot catch the opposite failure, and that failure is the harder
 one. **A stack is compact.** Five books on a shelf boxed as one lump have a union

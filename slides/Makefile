@@ -6,7 +6,7 @@
 #   make unnumbered           every deck -> _out/*.unnumbered.pdf (no page numbers)
 #   make editable             every deck -> _out/*.editable.pptx (real shapes; needs LibreOffice)
 #   make pngs                 every deck -> _out/*-pngs*.zip (one image per page)
-#   make html FMT=html        every deck -> _out/*.html
+#   make FMT=html             every deck -> _out/*.html
 #   make watch DECK=hold-the-line   live preview in a browser
 #   make check                preflight every manifest, build nothing
 #   make list                 decks, slide counts, unused fragments

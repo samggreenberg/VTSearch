@@ -32,13 +32,18 @@ class SettingsSource(SyncSource[dict[str, Any], dict[str, Any]]):
     """Abstract base class for settings sources.
 
     Subclass this, set the class-level attributes, implement
-    :meth:`load` and :meth:`save`, and expose a module-level
+    :meth:`_do_load` and :meth:`_do_save` (and optionally
+    :meth:`_do_peek_version`), and expose a module-level
     ``SETTINGS_SOURCE = YourSource()`` - the registry picks it up
-    automatically.
+    automatically.  The public :meth:`load` / :meth:`save` /
+    :meth:`peek_version` normalize ``field_values`` and then delegate to
+    those hooks; do not override the public methods.
 
-    ``load(field_values)`` returns a dict of settings key-value pairs
-    to apply.  ``save(settings_data, field_values)`` persists the full
-    settings dict.
+    ``_do_load(field_values)`` returns a dict of settings key-value pairs
+    to apply.  ``_do_save(settings_data, field_values)`` persists the full
+    settings dict.  ``_do_peek_version(field_values)`` returns a cheap
+    freshness token, or ``None`` (the default) when the source can't
+    cheaply check.
     """
 
     #: Abstract family base: no auto-derived metadata, and concrete

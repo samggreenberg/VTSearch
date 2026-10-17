@@ -307,9 +307,12 @@ def run_converters_on_folder(
     1. Look up the converter's source media type to get file extensions.
     2. Scan *folder_path* recursively for files matching those extensions.
     3. For each source file, run the converter to produce output media dicts.
-    4. Embed each output with the target media type's embedder.
-    5. Assign sequential IDs continuing from the current max in *medias*.
-    6. Set origin to ``{"importer": "converter", "params": {...}}``.
+    4. Assign sequential IDs continuing from the current max in *medias*.
+    5. Set origin to ``{"importer": "converter", "params": {...}}``.
+
+    Outputs leave without a vector; the framework embed stage
+    (:func:`vtscore.datasets.stages.embedding.embed_missing`) embeds them
+    with the target media type's embedder after the importer returns.
 
     Args:
         folder_path: Root directory to scan.

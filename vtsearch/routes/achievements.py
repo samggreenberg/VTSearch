@@ -20,7 +20,7 @@ GET  /api/achievements/docs/<doc_id>/raw
     Stream the raw markdown of a Readme Reader doc, so the frontend can link
     to it directly without requiring internet access to GitHub.
 
-Migrated to ``flask_smorest`` so the JSON routes are described in
+Built on ``flask_smorest`` so the JSON routes are described in
 ``/api/openapi.json``. The raw-markdown route stays undecorated (it
 serves ``text/plain``, not JSON); it's still attached to the same
 ``Blueprint``, so it appears in the spec with no response schema.

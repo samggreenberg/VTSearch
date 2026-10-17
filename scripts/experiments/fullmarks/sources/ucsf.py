@@ -264,8 +264,8 @@ def doc_to_page(
 def _fetch_workers() -> int:
     """Concurrent PDF fetches.  Small on purpose.
 
-    README and GRID-RUNBOOK both warn that widening this is rude to a shared
-    public archive.  That warning was written as a caution rather than from a
+    GRID-RUNBOOK warns that widening this is rude to a shared public
+    archive.  That warning was written as a caution rather than from a
     measurement, and the measurement now exists: ~120,000 requests at ~3/s drew
     zero 429/503/509, and the 4,003 failures in the 2026-08-31 build were
     per-document **403s** -- PDFs indexed but not public, permanent and

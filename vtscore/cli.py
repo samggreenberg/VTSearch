@@ -262,13 +262,15 @@ def _load_and_train_detectors(
 
     For every name in *detector_names* the on-disk JSON is read, the
     labelset's origins are resolved via their importer's ``resolve_file()``,
-    the files are embedded with the dataset's embedder, and an MLP is trained
-    from the resulting vectors.  Detectors whose ``media_type`` doesn't match
-    the dataset are skipped with a warning.  Detectors that declare an
-    ``input_spec`` (a clipper the detector was trained on) are also skipped
-    when the loaded dataset wasn't clipped to match - the resulting
-    embeddings would be from a different granularity and the scores would
-    be meaningless.
+    the files are embedded with the dataset's embedder, and the head the
+    labels give is built from the resulting vectors: a trained head, or, under
+    the label quota (or a typed query's hold, #4736), the Goods' centroid or
+    the typed query's head.  Detectors whose ``media_type`` has no direct or
+    one-hop converter route from the dataset's types are skipped with a
+    ``detector_skipped`` event.  Detectors that declare an ``input_spec`` (a
+    clipper the detector was trained on) the loaded dataset wasn't clipped to
+    match have the dataset re-clipped to that granularity at scoring time,
+    announced with a ``detector_reclip`` event.
 
     When *routed* is given, each detector's threshold is calibrated on the
     snapshot **scoring will read** - the converted, re-clipped, re-embedded one
@@ -488,12 +490,13 @@ def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
     """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
     Read at the balance the training read: the detector's own
-    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot spot-check its line (#4272), so it exports
-    the balance's unchecked set - the cap or the mixture's F-beta argmax,
-    whichever is smaller (#4389) - and the ``detector_unchecked`` event is
-    the run's record that the set it exports was never checked.  ``None``
-    with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
-    the Inclusion 0 cut, and there is no set to report.
+    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot
+    spot-check its line (#4272), so it exports what the line keeps unchecked -
+    every unvoted item at or above the threshold the labels drew (#4452), the
+    state's ``count`` - and the ``detector_unchecked`` event is the run's
+    record that the set it exports was never checked.  ``None`` with no
+    balance (a library caller's ``CoreConfig(beta=None)``): the line is the
+    Inclusion 0 cut, and there is no set to report.
     """
     from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
@@ -633,7 +636,7 @@ def _emit_skipped_medias(skipped: list[int], embedder_name: str = "") -> None:
     one bad file doesn't abort a long run (issue #3179).  Silent skipping would
     be worse than the crash it replaces, though: the exported hit count would
     just be quietly short.  So every skip is announced on the CLI's own event
-    stream, where ``--format json`` consumers can see it too.
+    stream, where ``--progress-format json`` consumers can see it too.
     """
     if not skipped:
         return
@@ -1219,9 +1222,12 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     """
     from collections import defaultdict  # noqa: PLC0415
 
-    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+    from vtscore.datasets.stages.embedding import _check_named_vector_widths, embed_missing  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
+    # What the importer filed under an embedder's name must have that
+    # embedder's width, as in the GUI's load pipeline.
+    _check_named_vector_widths(medias)
     by_type: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)
     for mid, media in medias.items():
         by_type[media.get("media_type") or ""][mid] = media
@@ -1289,12 +1295,14 @@ def _load_importer_chunked(
 def _check_multi_output(importer: Any) -> None:
     """Refuse an ``outputs`` list for an importer that makes one dataset per run.
 
-    The same two conditions the Add Dataset form's *Multi-Dataset* box checks
+    The rule the Add Dataset form's *Multi-Dataset* box reads
     (``supports_multi_output`` in the importer's listing): the importer has not
     opted out, and it declares a ``media_type`` field for the outputs to
     multiply.
     """
-    if not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields):
+    from vtscore.datasets.importers.base.core import _supports_multi_output  # noqa: PLC0415
+
+    if not _supports_multi_output(importer):
         raise ValueError(
             f"Importer {importer.name!r} produces one dataset per run; it does not accept an outputs list."
         )

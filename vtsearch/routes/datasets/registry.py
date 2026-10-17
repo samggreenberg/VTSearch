@@ -1,6 +1,6 @@
 """Blueprint for dataset-registry routes (the on-disk dataset catalog).
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``name`` on rename,
@@ -577,6 +577,7 @@ def run_dataset_autofind(body: dict, dataset_id: str):
 @datasets_registry_bp.response(200, DatasetRegistryOkResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
 @datasets_registry_bp.alt_response(403, description="Only the dataset creator can unload it.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def unload_registered_dataset(dataset_id: str):
     """Unload a specific dataset from memory.
 
@@ -585,6 +586,8 @@ def unload_registered_dataset(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
 
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
     if not _reg_is_owner(dataset_id, get_current_user()):
         abort(403, message="Only the dataset creator can unload it")
     if not _reg_is_loaded(dataset_id):
@@ -628,6 +631,8 @@ def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
     from vtsearch.auth import get_current_user
 
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
     if not _reg_is_owner(dataset_id, get_current_user()):
         abort(403, message="Only the dataset creator can delete it")
 
@@ -644,18 +649,22 @@ def delete_registered_dataset(dataset_id: str):
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
 @datasets_registry_bp.arguments(DatasetRegistryRenameRequestSchema)
 @datasets_registry_bp.response(200, DatasetRegistryRenameResponseSchema)
+@datasets_registry_bp.alt_response(400, description="Empty name after stripping.")
 @datasets_registry_bp.alt_response(403, description="Only the dataset creator can rename it.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def rename_registered_dataset(body: dict, dataset_id: str):
     """Rename a registered dataset."""
     from vtsearch.auth import get_current_user
 
-    if not _reg_is_owner(dataset_id, get_current_user()):
-        abort(403, message="Only the dataset creator can rename it")
-
     new_name = body["name"].strip()
     if not new_name:
         abort(400, message="name is required")
+
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        abort(403, message="Only the dataset creator can rename it")
+
     ok = _reg_rename(dataset_id, new_name)
     if not ok:
         abort(404, message="Dataset not found")
