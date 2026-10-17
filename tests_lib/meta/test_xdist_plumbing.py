@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -187,7 +188,9 @@ def test_a_replacement_still_collecting_is_not_handed_work(tmp_path):
     from tests_shared.xdist_plumbing import CrashSafeLoadGroupScheduling
 
     collection = [f"test_{i}.py::test" for i in range(8)]
-    sched = CrashSafeLoadGroupScheduling.__new__(CrashSafeLoadGroupScheduling)
+    # Built without __init__ (which reads the run's --tx specs) and fed stand-in
+    # nodes, so typed loosely.
+    sched: Any = CrashSafeLoadGroupScheduling.__new__(CrashSafeLoadGroupScheduling)
     sched.log = lambda *args: None
     sched.numnodes = 2
     sched.collection = collection
