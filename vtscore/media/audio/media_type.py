@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 from vtscore.media.audio._demo_sources import build_demo_datasets, load_demo_source
+from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import (
     MediaResponse,
     MediaType,
@@ -454,11 +455,12 @@ class AudioMediaType(MediaType):
         )
 
     def media_response(self, media: dict) -> MediaResponse:
-        data = self._resolve_media_bytes(media)
-        if data is None:
-            return MediaResponse(data=b"", mimetype="audio/wav", download_name=f"media_{media['id']}.wav")
-        return MediaResponse(
-            data=data,
-            mimetype="audio/wav",
-            download_name=f"media_{media['id']}.wav",
-        )
+        """Serve the media's bytes, typed by their container rather than assumed WAV.
+
+        An import keeps its file verbatim, so an MP3 or FLAC media is served as
+        MP3 or FLAC bytes; only clip slices are WAV.  The mimetype and download
+        extension both come from :func:`~vtscore.media.audio.sniff.sniff_audio_format`.
+        """
+        data = self._resolve_media_bytes(media) or b""
+        mimetype, ext = sniff_audio_format(data)
+        return MediaResponse(data=data, mimetype=mimetype, download_name=f"media_{media['id']}{ext}")

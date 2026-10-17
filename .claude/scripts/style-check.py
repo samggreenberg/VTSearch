@@ -404,6 +404,7 @@ SHARED_CLASSES = [
     "modal-header",
     "modal-body",
     "modal-footer",
+    "form-actions",
     "modal-close",
     "modal-backdrop",
     "back-btn",

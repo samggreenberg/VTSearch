@@ -970,17 +970,11 @@ class TestSettingsUpdateAtomicity:
         assert data["theme"] == "dark"
         assert data["show_metadata"] is True
 
-    def test_directory_traversal_400_leaves_earlier_keys_untouched(self, client, tmp_path, monkeypatch):
-        import vtscore.security.path_validation as paths_mod
+    def test_unknown_exporter_400_leaves_earlier_keys_untouched(self, client):
         from vtsearch import settings as settings_mod
 
         client.put("/api/settings", json={"volume": 0.25})
-        base = tmp_path / "base"
-        base.mkdir()
-        monkeypatch.setattr(paths_mod, "get_file_access_base_dir", lambda: base)
-        res = client.put(
-            "/api/settings",
-            json={"volume": 0.9, "detectors_dir": str(tmp_path / "outside")},
-        )
+        res = client.put("/api/settings", json={"volume": 0.9, "autofind_exporter": "no_such_exporter"})
         assert res.status_code == 400
+        assert "Unknown exporter" in res.get_json()["message"]
         assert settings_mod.get_volume() == 0.25

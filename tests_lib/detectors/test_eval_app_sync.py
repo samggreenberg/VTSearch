@@ -116,6 +116,40 @@ def f(a, b):
         base = "x = (1, 2)\n"
         assert gate._normalize_python(base.replace("(1, 2)", "(1, 2, 3)")) != gate._normalize_python(base)
 
+    @pytest.mark.parametrize(
+        ("with_comma", "without"),
+        [
+            ("return (x,)\n", "return (x)\n"),
+            ("y = (x,)\n", "y = (x)\n"),
+            ("y = x[0,]\n", "y = x[0]\n"),
+            ("y = f(a)[0,]\n", "y = f(a)[0]\n"),
+            ("if a in (b,):\n    pass\n", "if a in (b):\n    pass\n"),
+            ("y = f((a,))\n", "y = f((a))\n"),
+        ],
+    )
+    def test_a_one_element_tuple_comma_trips(self, with_comma, without):
+        """`(x,)` is a tuple and `(x)` is `x`; `x[0,]` indexes by `(0,)` (#5006)."""
+        assert gate._normalize_python(with_comma) != gate._normalize_python(without)
+
+    @pytest.mark.parametrize(
+        ("with_comma", "without"),
+        [
+            ("def f(\n    a,\n    b,\n):\n    pass\n", "def f(a, b):\n    pass\n"),
+            ("def f(\n    a,\n):\n    pass\n", "def f(a):\n    pass\n"),
+            ("y = f(a,)\n", "y = f(a)\n"),
+            ("y = [1, 2,]\n", "y = [1, 2]\n"),
+            ("y = [x,]\n", "y = [x]\n"),
+            ("y = {1,}\n", "y = {1}\n"),
+            ("y = {1: 2,}\n", "y = {1: 2}\n"),
+            ("y = (1, 2,)\n", "y = (1, 2)\n"),
+            ("y = x[a, b,]\n", "y = x[a, b]\n"),
+            ("class C(B,):\n    pass\n", "class C(B):\n    pass\n"),
+        ],
+    )
+    def test_a_neutral_trailing_comma_does_not_trip(self, with_comma, without):
+        """Calls, `def`s, collection literals and groups of two or more ignore it."""
+        assert gate._normalize_python(with_comma) == gate._normalize_python(without)
+
     def test_a_returned_string_is_not_mistaken_for_a_docstring(self):
         """Only a string in *statement* position is a docstring."""
         changed = self.BASE.replace('return "red"', 'return "green"')

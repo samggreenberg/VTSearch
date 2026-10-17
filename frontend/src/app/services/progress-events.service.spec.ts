@@ -232,6 +232,37 @@ describe('ProgressEventsService liveness wiring', () => {
     expect(seen).toEqual([]);
     expect(state.completed).toBe(false);
   });
+
+  it('marks failures already in a connect snapshot as predating the connection (#4973)', () => {
+    const es = connectedSource();
+    const svc = TestBed.inject(ProgressEventsService);
+    const failed = (task_id: string, error = 'boom') => ({ task_id, status: 'idle', error });
+
+    // Every connect opens with a server frame, then the channel snapshots.
+    es.emit('server', { boot_id: 'boot-1' });
+    es.emit('loading-tasks', [failed('_loading_old'), failed('_loading_stopped', 'Cancelled'), { task_id: 'run', status: 'loading' }]);
+    // Later frames carry news: a failure first seen here happened while we watched.
+    es.emit('loading-tasks', [failed('_loading_old'), failed('_loading_new')]);
+
+    expect(svc.failedBeforeConnect('_loading_old')).toBe(true);
+    expect(svc.failedBeforeConnect('_loading_new')).toBe(false);
+    expect(svc.failedBeforeConnect('run')).toBe(false);
+
+    // A browser-level reconnect re-sends the server frame, and its snapshot counts too.
+    es.emit('server', { boot_id: 'boot-1' });
+    es.emit('loading-tasks', [failed('_loading_new')]);
+    expect(svc.failedBeforeConnect('_loading_new')).toBe(true);
+  });
+
+  it('forgets connect-time failures when the backend restarts', () => {
+    const es = connectedSource();
+    const svc = TestBed.inject(ProgressEventsService);
+    es.emit('server', { boot_id: 'boot-1' });
+    es.emit('loading-tasks', [{ task_id: '_loading_old', status: 'idle', error: 'boom' }]);
+
+    es.emit('server', { boot_id: 'boot-2' });
+    expect(svc.failedBeforeConnect('_loading_old')).toBe(false);
+  });
 });
 
 /**

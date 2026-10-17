@@ -18,6 +18,21 @@ from vtscore.concurrency.progress import (
 )
 
 
+def _wait_finished(*task_ids: str, timeout: float = 10) -> None:
+    """Wait until every task's worker has fully unwound, gates released.
+
+    ``has_active_tasks()`` is not enough before asserting on a gate: a load that
+    fails (the stub loads here produce no medias) parks its tracker idle when
+    the failure is recorded, before the ``finally`` that releases its gate, so it
+    can read False while the gate is still held.  ``is_finished`` turns True only
+    once ``mark_finished`` has run, after that release.
+    """
+    deadline = time.time() + timeout
+    while not all(loading_tasks.is_finished(t) for t in task_ids) and time.time() < deadline:
+        time.sleep(0.05)
+    assert all(loading_tasks.is_finished(t) for t in task_ids), f"tasks never finished: {task_ids}"
+
+
 # ---------------------------------------------------------------------------
 # LoadingTasksTracker unit tests
 # ---------------------------------------------------------------------------
@@ -702,9 +717,7 @@ class TestLoadingGates:
             assert "second_start" in load_order
 
             # Clean up: wait for tasks to finish.
-            deadline = time.time() + 10
-            while loading_tasks.has_active_tasks() and time.time() < deadline:
-                time.sleep(0.1)
+            _wait_finished(task1, task2)
             loading_tasks.remove_task(task1)
             loading_tasks.remove_task(task2)
             # Sanity: gates fully released after both tasks finish.
@@ -762,9 +775,7 @@ class TestLoadingGates:
 
             # Clean up.
             first_proceed.set()
-            deadline = time.time() + 10
-            while loading_tasks.has_active_tasks() and time.time() < deadline:
-                time.sleep(0.1)
+            _wait_finished(task1, task2)
             loading_tasks.remove_task(task1)
             loading_tasks.remove_task(task2)
             assert _download_gate.active == 0
@@ -881,9 +892,7 @@ class TestLoadingGates:
         # Let both finish.
         first_proceed.set()
         second_proceed.set()
-        deadline = time.time() + 10
-        while loading_tasks.has_active_tasks() and time.time() < deadline:
-            time.sleep(0.1)
+        _wait_finished(task1, task2)
         loading_tasks.remove_task(task1)
         loading_tasks.remove_task(task2)
         assert _download_gate.active == 0
@@ -1049,9 +1058,7 @@ class TestLoadingGates:
                 load_proceed.set()
                 assert stage_started.wait(timeout=10), "staging never ran after the load released the gate"
 
-                deadline = time.time() + 10
-                while loading_tasks.has_active_tasks() and time.time() < deadline:
-                    time.sleep(0.05)
+                _wait_finished(load_id, stage_id)
 
             loading_tasks.remove_task(load_id)
             loading_tasks.remove_task(stage_id)
@@ -1114,9 +1121,7 @@ class TestLoadingGates:
             assert _download_gate.active == 1
 
             load_proceed.set()
-            deadline = time.time() + 10
-            while loading_tasks.has_active_tasks() and time.time() < deadline:
-                time.sleep(0.05)
+            _wait_finished(load_id)
             loading_tasks.remove_task(load_id)
             loading_tasks.remove_task(stage_id)
             assert _download_gate.active == 0

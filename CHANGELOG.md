@@ -17,6 +17,39 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
+  that failed showed a "Failed" row in the datasets table, but the row went the next time the page
+  reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.
+  It now stays until you click **Dismiss**, through reloads, other loads and other tabs (a server
+  restart clears it). The row also says what the import was reading and when it failed, and a copy
+  button puts the error, source, task id and times on the clipboard for a bug report. On a shared
+  server only the user who started the import sees its failure. Reloading the page no longer
+  re-announces failures from before the reload in a toast: their rows already say so. Other
+  failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
+  there.
+
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
 - **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
   `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
   saved dataset follows that file's saved-datasets directory and retention; it used to follow
@@ -333,6 +366,13 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
 
 - **A warning before you use a detector on data unlike its training data** (issue #4961). The
   Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
@@ -969,11 +1009,35 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
+  rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
+  player showed the full padded frame, so an item previewed without its black bars and played with them.
+  The player now shows the same picture, with its controls along the cropped picture's bottom edge. This
+  needs a Chromium-based browser (Chrome, Edge); other browsers play the full frame, as before.
+
 - **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
   #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
   of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
   lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
   server's reason. The rows that failed stay selected, so trying again is one click.
+
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
+
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
+- **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
+  original file, but the server labelled every one `audio/wav` and offered it for download as
+  `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
+  `.wav` and a strict client could refuse it. The type and file extension now come from the file itself;
+  clips cut from a sound are WAV and still say so.
 
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
@@ -981,6 +1045,18 @@ not list every commit. Use `git log` for the full history.
   label set, or bringing labels into another dataset), the gate ran at its default settings rather than
   the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
   are now recorded and reused, and an item's Derived Via line lists them.
+
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
 
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between

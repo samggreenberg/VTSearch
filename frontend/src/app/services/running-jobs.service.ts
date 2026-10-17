@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, OnDestroy, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
-import { catchError, distinctUntilChanged, exhaustMap, map, takeUntil, timeout } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject, of, timer } from 'rxjs';
+import { catchError, distinctUntilChanged, exhaustMap, map, takeUntil, tap, timeout } from 'rxjs/operators';
 
 /**
  * One entry returned by ``GET /api/jobs/active``.
@@ -45,9 +45,17 @@ export class RunningJobsService implements OnDestroy {
 
   private readonly intervalMs = 5000;
   // Bound a single poll so a hung backend request cannot stall the
-  // pipeline forever; on timeout we emit empty (clear spinners) and the
-  // next tick retries.
+  // pipeline forever; a timeout counts as a failed poll and the next
+  // tick retries.
   private readonly requestTimeoutMs = 10000;
+  // A failed poll (error or timeout) holds the last known map: a backend
+  // too busy to answer in time is exactly when jobs are running, so one
+  // dropped request must not blank every spinner. Only this many
+  // failures in a row (about 15 s at the 5 s interval, longer when each
+  // one times out) clear the map, so an unreachable backend cannot pin
+  // spinners forever. Any successful poll resets the count.
+  private readonly maxConsecutiveFailures = 3;
+  private consecutiveFailures = 0;
   private readonly busyPairsSubject = new BehaviorSubject<Map<string, string[]>>(new Map());
   private readonly stopPolling$ = new Subject<void>();
   private readonly destroyRef = inject(DestroyRef);
@@ -109,11 +117,16 @@ export class RunningJobsService implements OnDestroy {
         exhaustMap(() =>
           this.http.get<ActiveJobsResponse>('/api/jobs/active').pipe(
             timeout(this.requestTimeoutMs),
+            tap(() => (this.consecutiveFailures = 0)),
             catchError(() => {
-              // A transient failure (or the timeout above) should not
-              // tear the polling pipeline down; the next tick retries.
-              // Emit an empty payload so the UI clears stale spinners.
-              return [{ busy_pairs: [] } as ActiveJobsResponse];
+              // A failure (or the timeout above) must not tear the
+              // polling pipeline down; the next tick retries. Emit
+              // nothing, keeping the last known map, until enough
+              // failures in a row say the backend is really gone.
+              this.consecutiveFailures += 1;
+              return this.consecutiveFailures >= this.maxConsecutiveFailures
+                ? of<ActiveJobsResponse>({ busy_pairs: [] })
+                : EMPTY;
             }),
           ),
         ),

@@ -8,8 +8,8 @@ honoured, not baked in, for exactly the same reason: re-encoding a cropped copy
 of the file per unit would duplicate the payload and desync the time window
 that still indexes the parent's timeline.
 
-Three readers therefore have to agree about the box, so the parsing and the
-crop live here once:
+Three server-side readers therefore have to agree about the box, so the
+parsing and the crop live here once:
 
 * :func:`~vtscore.media.video._frame_sampling.sample_video_frames` - what the
   embedder actually sees.
@@ -19,6 +19,10 @@ crop live here once:
   that writes the box in the first place, and
   :class:`~vtscore.media.video.cleaner.VideoBlankTrimCleaner`, which measures
   blankness inside it.
+
+A fourth reader cannot import this module: the SPA's video player crops its
+picture to the box in the browser, and ``frontend/src/app/utils/clip-box.ts``
+mirrors :func:`clamp_clip_box` for it.  Change the clamp rule in both places.
 """
 
 from __future__ import annotations

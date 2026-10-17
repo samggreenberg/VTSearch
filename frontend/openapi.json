@@ -7264,9 +7264,6 @@
             "nullable": true,
             "type": "number"
           },
-          "detectors_dir": {
-            "type": "string"
-          },
           "enable_achievements": {
             "type": "boolean"
           },
@@ -7299,9 +7296,6 @@
           "panel_pct_right": {},
           "popup_metadata_shown": {},
           "popup_preview_size": {},
-          "saved_datasets_dir": {
-            "type": "string"
-          },
           "show_animations": {
             "enum": [
               "show",
@@ -10263,6 +10257,48 @@
         "summary": "Sample a folder and report which media type dominates by extension.",
         "tags": [
           "datasets_ui"
+        ]
+      }
+    },
+    "/api/dataset/dismiss/{task_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "A failed import stays on the ``loading-tasks`` channel until this is called\n(#4973), so the user has something to read after the failure toast is gone.\nOnly the user who started the import can see that failure, so only they can\ndismiss it; to anyone else it does not exist.  Any other finished task can\nbe dismissed early too; it would have lapsed on its own.",
+        "operationId": "dismiss_dataset_task",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryOkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No task with the supplied id that the caller can see."
+          },
+          "409": {
+            "description": "The task is still running; cancel it instead."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Dismiss a finished dataset task, removing its row from the dashboard.",
+        "tags": [
+          "datasets_status"
         ]
       }
     },
@@ -14771,7 +14807,7 @@
     },
     "/api/medias/{media_id}/audio": {
       "get": {
-        "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
+        "description": "Returns the bytes on success (HTTP 200), typed by their container (an MP3\nimport is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON\nenvelope if the media does not exist or its bytes are unavailable.\n\nAccepts ``?variant=original`` to stream the pre-clean payload of an item a\ncleaner rewrote at load time (see :func:`_variant_media`).",
         "operationId": "media_audio",
         "parameters": [
           {
@@ -14800,7 +14836,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Stream the WAV audio bytes for a single media item.",
+        "summary": "Stream the audio bytes for a single media item.",
         "tags": [
           "medias"
         ]
@@ -15917,7 +15953,7 @@
         ]
       },
       "put": {
-        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400 and\nleave every key in the body unchanged.",
+        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / an unknown media type, embedder\nor exporter) raise 400 and leave every key in the body unchanged.\nServer-tier keys are not in the schema, so they are dropped like any\nunknown key: no user can set one through this route (or through an\nimport or a sync; see :func:`vtsearch.settings.plan_user_write`).",
         "operationId": "update_settings",
         "requestBody": {
           "content": {
@@ -15941,7 +15977,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Setter-level validation failure (range, one-of, path traversal)."
+            "description": "Setter-level validation failure (range, one-of, unknown media type / embedder / exporter)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -16945,7 +16981,7 @@
       "name": "datasets_listings"
     },
     {
-      "description": "Dataset status (loaded / num medias / display name) and load-cancellation.",
+      "description": "Dataset status (loaded / num medias / display name), load-cancellation, and dismissing finished tasks.",
       "name": "datasets_status"
     },
     {

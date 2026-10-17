@@ -35,7 +35,7 @@ export type ToastLevel = 'error' | 'warning' | 'success' | 'info';
 
 /**
  * Optional action button rendered next to the toast's dismiss. Used by
- * non-error toasts to offer a one-click follow-up ("Save as default",
+ * non-error toasts to offer a one-click follow-up ("Save as Default",
  * "Undo", etc). Clicking the button auto-dismisses the toast.
  */
 export interface ToastAction {
@@ -52,11 +52,11 @@ export interface Toast {
   detail?: string;
   /**
    * The specific things the toast is about (skipped files, dropped items), one
-   * per entry. Enables the Details / Copy list actions, so a long list is one
+   * per entry. Enables the Details / Copy List actions, so a long list is one
    * click away instead of swamping the toast.
    */
   items?: string[];
-  /** Optional rich HTTP error context; enables the Details / Copy debug info actions. */
+  /** Optional rich HTTP error context; enables the Details / Copy Debug Info actions. */
   errorContext?: ErrorContext;
   /** Optional follow-up action button (see :class:`ToastAction`). */
   action?: ToastAction;
@@ -95,7 +95,7 @@ const SUCCESS_AUTO_DISMISS_MS = 5000;
  * through this service:
  *
  *  - HTTP failures (via ``errorInterceptor``): emitted with full
- *    ``ErrorContext`` for the Details / Copy debug info actions.
+ *    ``ErrorContext`` for the Details / Copy Debug Info actions.
  *  - SSE LoadingTask failures (via ``SseErrorRouterService``): emitted
  *    deduped per task_id.
  *  - Backend notifications (the ``notification`` SSE channel): one-off
@@ -115,8 +115,10 @@ export class ToastService {
   private readonly seenTaskKeys = new Set<string>();
   private readonly autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
+  private readonly progressEvents = inject(ProgressEventsService);
+
   constructor() {
-    const progressEvents = inject(ProgressEventsService);
+    const progressEvents = this.progressEvents;
 
     progressEvents.loadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'dataset'));
     progressEvents.detectorLoadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'detector'));
@@ -133,6 +135,10 @@ export class ToastService {
       const key = `sse:${kind}:${t.task_id}`;
       if (this.seenTaskKeys.has(key)) continue;
       this.seenTaskKeys.add(key);
+      // A failed import stays on the channel until dismissed (#4973), so a
+      // page load replays every one still undismissed. Its dashboard row says
+      // so; a toast is for news, which a failure that predates this connection isn't.
+      if (kind === 'dataset' && this.progressEvents.failedBeforeConnect(t.task_id)) continue;
       // A background AutoFind reports on the dataset channel too, but it is not
       // a load: name what actually failed.
       const message = t.autofind ? 'AutoFind failed' : kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed';

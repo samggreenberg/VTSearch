@@ -20,8 +20,8 @@ v22 breaking change is a no-op here (see the audit below).
 ## The upgrade (required work)
 
 - **TypeScript 5.9.3 → 6.0 is the hard gate.** v22 drops support for TS ≤ 5.9.
-  Bump `frontend/tsconfig.json` (`typescript: ~5.9.3` → `~6.0`) and expect a
-  handful of TS-6.0 strictness/deprecation fixes across the ~90-component app
+  Bump `frontend/package.json` (`typescript: ~5.9.3` → `~6.0`) and expect a
+  handful of TS-6.0 strictness/deprecation fixes across the ~105-component app
   and the generated OpenAPI client types.
 - **Node:** v22's floor is Node 22 (drops Node 20). The container is already on
   Node 22.x, so no image change is needed — but re-verify at bump time.

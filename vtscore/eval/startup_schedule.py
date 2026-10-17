@@ -217,7 +217,8 @@ def round_cut(scores: Sequence[float], rnd: StartupRound) -> float:
 
     *scores* is the **whole** sort, labelled rows included: the app fits its
     cosine-sort GMM over every score on screen and does not refit as votes
-    accumulate, so a schedule's cuts are constants of the run.
+    accumulate, so a schedule's cuts are constants of the run.  On screen is the
+    collection being voted, so the simulation passes its voting half (#5004).
 
     ``top`` returns ``+inf``, which is not a sentinel but the literal statement
     of the rule: with the cut above every score, the first rank at-or-below it

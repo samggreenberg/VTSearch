@@ -17,6 +17,7 @@ import type { DatasetStatusResponse } from '../generated/api-client/models/datas
 import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
 import { cancelDatasetLoadTask } from '../generated/api-client/fn/datasets-status/cancel-dataset-load-task';
 import { datasetStatus } from '../generated/api-client/fn/datasets-status/dataset-status';
+import { dismissDatasetTask } from '../generated/api-client/fn/datasets-status/dismiss-dataset-task';
 import { datasetDomainShift } from '../generated/api-client/fn/datasets-registry/dataset-domain-shift';
 import { deleteRegisteredDataset } from '../generated/api-client/fn/datasets-registry/delete-registered-dataset';
 import { getDatasetDuplicates } from '../generated/api-client/fn/datasets-registry/get-dataset-duplicates';
@@ -46,6 +47,13 @@ export class DatasetsRegistryApiService {
 
   cancelTask(taskId: string): Observable<CancelDatasetLoadResponse> {
     return cancelDatasetLoadTask(this.http, this.config.rootUrl, { task_id: taskId }).pipe(
+      map((r) => r.body),
+    );
+  }
+
+  /** Remove a finished task's row; a failed import's row stays until this. */
+  dismissTask(taskId: string, context?: HttpContext): Observable<DatasetRegistryOkResponse> {
+    return dismissDatasetTask(this.http, this.config.rootUrl, { task_id: taskId }, context).pipe(
       map((r) => r.body),
     );
   }

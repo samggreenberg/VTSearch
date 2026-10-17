@@ -4,15 +4,26 @@
 bench (`scripts/experiments/calibration/theory_kappa_bench.py`) with
 preliminary results**
 
+**Rescoped (owner, 2026-10-10).** Since #4452 a trained head's line is the
+labels line, which never reads κ. κ now shapes only the fused cut, which on the
+app's balanced path draws the line, and steers Autopilot's acquisition, only when
+no labels line can be drawn at all (see
+[`population-anchored-calibration.md`](population-anchored-calibration.md)), so
+the practical payoff below, a run-time gate, applies only there. The **theory**
+items stand on their own and cost no GPU. The real-data items wait on that plan's
+gate item: if the fallback barely decides anything on the shipped path, they are
+dropped. Any real-data measurement is priced on F-beta at the balance, not cost
+at Inclusion.
+
 ## Background — the observation that has no explanation yet
 
 PR #2864's anchor-mass sweep established two things empirically and explained
 neither:
 
 - **Fusion pays on region voting and does not on binary voting.** Against the
-  blend that ships, `fold_anchored κ=0.3 mid` is −0.026 on region voting and
-  −0.0004 (n.s.) on binary; the shipped `κ=1 rate` is *+0.0063 worse* than
-  `cap50` on binary.
+  schedule blend, `fold_anchored κ=0.3 mid` is −0.026 on region voting and
+  −0.0004 (n.s.) on binary; the `κ=1 rate` that #2861 had shipped is *+0.0063
+  worse* than `cap50` on binary.
 - **The cut rule flips with κ, and κ\* differs by mode.** `mid` peaks near
   κ=0.3 and `rate` near κ=1, the curves crossing at κ≈1–2.
 
@@ -160,7 +171,8 @@ bench checkpoints per configuration, so a rerun resumes.
 
 <!-- item-sep -->
 
-- **Curvature as the shipped gate, if it survives.** The practical payoff of
+- **Curvature as the fallback's gate, if it survives (waits on run 2 and on
+  population-anchored-calibration's gate item).** The practical payoff of
   the mechanism is a gate that is *measurable at run time*. `L''(τ*)` is not
   observable, but the fitted mixture is: the two components' separation and
   the density at the cut are both available from `GmmFit1D` at zero extra
@@ -180,7 +192,8 @@ bench checkpoints per configuration, so a rerun resumes.
   the `repool_variants` machinery in `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
   A real-data κ\* that falls with `m` on the *same* images is the causal claim;
   #2864's cross-dataset comparison cannot make it. This is the expensive one
-  (GPU prepare + a full cell array) and should wait on run 2.
+  (GPU prepare + a full cell array). It waits on run 2, and runs only if the
+  fallback gate says the fused cut still decides enough of the shipped path.
 
 <!-- item-sep -->
 

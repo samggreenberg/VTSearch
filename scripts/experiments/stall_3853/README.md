@@ -33,7 +33,8 @@ On a stall the log carries, at the default WARNING level:
   everything.
 - `slow phase: learned_sort …`, `slow phase: train_and_score …`,
   `slow phase: label_sync …`, `slow phase: labeling_status_advance …`,
-  `slow phase: rehydrate …` — which part of the suspect paths grew.
+  `slow phase: rehydrate …`, `slow phase: detector_write …` — which part of
+  the suspect paths grew.
 - `lock wait: <lock> waited Nms` — a vote, the sort thread or the status
   poll queued behind another holder of `_state_lock`, `_progress_lock` or
   `label_sync_write_lock`.
@@ -104,15 +105,16 @@ API and let the driver register the detector the way the SPA does:
 retrain), which is what the offline run below measures.
 
 **Read the app log even when there is no `stall:` line.** The watchdog only
-fires when the *interpreter* cannot run. A vote held by its own `fsync` to a
-slow filesystem, or a request holding `_state_lock` across a `stat()` of the
-detector file, never trips it; those show up only as `slow phase:
-label_sync … write=NNNms`, `lock wait: _state_lock/…` and the requests
-queued behind them, which `analyze_app_log.py` now lists after the stall
-windows. The 2026-09-15 run on the GRID (issue thread) found exactly that
-shape in the reviewer's own trace: every slow vote but one was slow *alone*,
-and the one that froze everything did so through the lock every request
-takes in `get_context()`.
+fires when the *interpreter* cannot run. A slow `fsync` of the detector file,
+or a request holding `_state_lock` across a `stat()` of it, never trips it;
+those show up only as `slow phase: detector_write … write=NNNms` (the write's
+own thread, unless `VTSEARCH_DETECTOR_WRITE_MODE=sync` puts it back on the
+vote), `lock wait: _state_lock/…` and the requests queued behind them, which
+`analyze_app_log.py` lists after the stall windows. The 2026-09-15 run on the
+GRID (issue thread) found exactly that shape in the reviewer's own trace: every
+slow vote but one was slow *alone*, and the one that froze everything did so
+through `_state_lock`, which `get_context()` then took on every request (it now
+takes only `_context_registry_lock`).
 
 ## Offline (this kit's own reproduction)
 
