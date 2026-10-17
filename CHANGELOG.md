@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server that trusts session cookies no longer signs them with the key printed in the source**
+  (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
+  anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
+  OAuth state. When `--login trivial` or `HF_OAUTH_CLIENT_ID` is in force and the variable is unset,
+  startup now uses a random key for that process and logs a warning: sessions end at a restart, and
+  a deployment with more than one gunicorn worker must set the variable. Single-user mode without
+  HuggingFace sign-in is unchanged.
+
 - **A "reference files in place" import of PDFs shows the right part of each converted item, and stores
   less** (issue #5041). When an import converted files (a PDF's text, a PDF's pages as images) and then cut
   them with a clipper, a reference import showed every sentence as the PDF's whole text and every tile as
