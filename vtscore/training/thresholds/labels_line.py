@@ -181,15 +181,26 @@ def _finite_unit(scores: Any) -> np.ndarray:
     return a[np.isfinite(a) & (a >= 0.0) & (a <= 1.0)]
 
 
+#: The normal density's constant, computed as scipy's ``_norm_pdf_C`` is.
+_SQRT_2PI = np.sqrt(2 * np.pi)
+
+
 def _norm_pdf(x: np.ndarray, mu: float, sigma: float) -> np.ndarray:
-    """The normal density at *x*, typed: scipy's ``norm.pdf`` is not.
+    """The normal density at *x*: ``scipy.stats.norm.pdf(x, mu, sigma)`` bit for bit, without its per-call cost (#5072).
 
-    The EM loops below iterate on its result, and pyright re-infers an
-    unannotated call's type around a loop until it settles (#5070).
+    scipy's own arithmetic in scipy's order - standardise, ``exp(-z**2 / 2) /
+    sqrt(2 pi)``, then divide by *sigma* - so every value is the same float.
+    scipy's argument handling around it was ~44% of a simulated session in the
+    EM loops below, and the one case it decides is a spread that is not
+    positive, which gets scipy's NaN here too (every caller floors its spread
+    above 0).  Non-finite *x* agree without it: ``±inf`` gives 0, NaN gives NaN.
+    Typed, unlike scipy's: pyright re-infers an unannotated call's type around
+    a loop until it settles (#5070).
     """
-    from scipy.stats import norm  # noqa: PLC0415
-
-    return norm.pdf(x, mu, sigma)
+    if not sigma > 0:
+        return np.full(np.shape(x), np.nan)
+    z = (x - mu) / sigma
+    return np.exp(-(z**2) / 2.0) / _SQRT_2PI / sigma
 
 
 @dataclass(frozen=True)
