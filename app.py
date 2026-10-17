@@ -88,25 +88,25 @@ from vtscore.embedding import initialize_models, preload_predicted_embedders  # 
 # the per-request dataset/detector context from ``flask.g`` without
 # ``vtscore.state.core`` itself having to import Flask.  Also wire the
 # library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings`` and install the app-side builder for
-# ``CoreConfig.from_settings()``.  See ``vtscore/docs/architecture.md`` for
+# type) to ``vtsearch.settings`` and install the getters that answer
+# ``vtscore.config.get_setting()``.  See ``vtscore/docs/architecture.md`` for
 # the seam.
 #
 # This block runs BEFORE blueprint modules are imported so that any
-# module-level code in a route that calls ``CoreConfig.from_settings()``
-# (or any other shim-backed hook) finds the builder already installed.
+# module-level code in a route that reads a setting through ``get_setting()``
+# (or any other shim-backed hook) finds the getters already installed.
 # See logical-bug-audit M24.
 from vtsearch.shim import (  # noqa: E402
     register_app_achievement_recorders,
-    register_app_config_builder,
     register_app_persistence_hooks,
     register_app_plugin_families,
+    register_app_setting_getters,
     register_flask_context_resolvers,
 )
 
 register_flask_context_resolvers()
 register_app_persistence_hooks()
-register_app_config_builder()
+register_app_setting_getters()
 register_app_plugin_families()
 register_app_achievement_recorders()
 

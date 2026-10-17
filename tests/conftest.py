@@ -192,13 +192,13 @@ def reset_state():
     _set_login_provider(_DefaultLoginProvider())
 
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
-    # behaviour, which wipes the module-level ``_core_config_builder``
-    # installed at app startup.  Re-register defensively so any later test
-    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_beta()``)
-    # still has a backing implementation.
-    from vtsearch.shim import register_app_config_builder
+    # behaviour, which wipes the module-level ``_setting_getters`` installed
+    # at app startup.  Re-register defensively so any later test that reads
+    # a setting through ``get_setting()`` (e.g. via ``get_beta()``) still has
+    # the app's getters behind it.
+    from vtsearch.shim import register_app_setting_getters
 
-    register_app_config_builder()
+    register_app_setting_getters()
 
 
 class _MergedSettingsPath:

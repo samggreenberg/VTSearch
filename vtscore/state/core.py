@@ -2016,15 +2016,13 @@ def recompute_detector_thresholds(beta: float | None) -> None:
 def user_beta() -> float | None:
     """The user's balance: what a detector that has not read its own yet will be seeded with.
 
-    ``None`` - no balance - when no settings builder is registered (a
-    library-only process that never configured one), rather than raising.
+    The ``beta`` setting: ``None`` - no balance - only when it is set so
+    (``CoreConfig(beta=None)``), and :data:`~vtscore.config.DEFAULT_BETA` in a
+    library-only process that never configured one.
     """
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
-    try:
-        beta = CoreConfig.from_settings().beta
-    except RuntimeError:
-        return None
+    beta = get_setting("beta")
     return None if beta is None else float(beta)
 
 

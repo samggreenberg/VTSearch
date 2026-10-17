@@ -95,12 +95,11 @@ def _auto_register_dataset(
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     import time as _time
 
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
     now = _time.time()
     try:
-        config = CoreConfig.from_settings()
-        max_age = config.dataset_max_age_days
+        max_age = get_setting("dataset_max_age_days")
     except RuntimeError:
         max_age = None
     expires_at = now + max_age * 86400 if max_age is not None else None
