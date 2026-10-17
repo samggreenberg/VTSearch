@@ -134,8 +134,9 @@ class TestForgedCookies:
         return client
 
     def _status(self, client, cookie: str) -> dict:
-        name = app_module.app.config["SESSION_COOKIE_NAME"]
-        return client.get("/api/auth/status", headers={"Cookie": f"{name}={cookie}"}).get_json()
+        # Through the cookie jar: the test client replaces an explicit Cookie header with the jar's.
+        client.set_cookie(app_module.app.config["SESSION_COOKIE_NAME"], cookie)
+        return client.get("/api/auth/status").get_json()
 
     def test_default_key_lets_a_forged_cookie_name_any_user(self, trivial_client):
         """The control: without the check, a cookie minted from the source is believed."""
