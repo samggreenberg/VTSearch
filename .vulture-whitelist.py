@@ -91,12 +91,6 @@ DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in i
 option_string  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Flask reads ``app.secret_key`` via attribute access for session signing.
-# Setting it is the side-effecting "use".
-# ---------------------------------------------------------------------------
-secret_key  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
 # their ``update_<tracker>_progress`` partners. The corresponding
 # trackers (``sort_progress``, ``find_progress``) are imported and read
