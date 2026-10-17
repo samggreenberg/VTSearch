@@ -50,10 +50,10 @@ add **only UCSF pages**, so a class's same-source hard negatives are the same
 pages in every tier.
 
 **But since v4.0 a larger tier adds positives too, not only distractors.** The
-four UCSF roster classes put **10 instances in `s`, 256 more in `m` and 55 more
-in `l`**. For those four classes the positive set grows with the tier, so their
-tier-`s` and tier-`l` numbers are not measured over the same ground truth and
-must not be compared as though they were. The other 32 classes are unaffected:
+four UCSF roster classes put **10 instances in `s`, 270 more in `m` and 55 more
+in `l`**, the 335 of the source table. For those four classes the positive set
+grows with the tier, so their tier-`s` and tier-`l` numbers are not measured
+over the same ground truth and must not be compared as though they were. The other 32 classes are unaffected:
 every one of their instances is on an anchor page, and every anchor page is in
 `s`.
 
@@ -151,7 +151,9 @@ version; a new page set, tier cut or roster bumps the major.
 **v4.0 is a major bump, and by that rule it had to be.** The roster went from 23
 classes to 27, which is the clause that decides it; the page set moved as well,
 from 200,000 records to 199,855, when 137 UCSF pages that had been ingested more
-than once were collapsed to one record each (#4054).
+than once were collapsed to one record each (#4054). The two counts agree: 130
+of those pages had two records, 6 had three and 1 had four, so 145 records went
+(checked against the pre-v4.0 `corpus.jsonl` backup, #5047).
 
 - **A number measured on v3 or v3.1 is not a v4.0 number.** That covers every
   study up to and including #3904, #3911, #3912, #3914 and #3928.
@@ -333,7 +335,7 @@ those copies is scored down for it, and SIFT is not.
 | Absolute AP under the `eligible` pool | **not supported as a headline** | The source shortcut: `source_prior` scores AP 1.00 there (#3904). |
 | Anything on the `naive` pool for a Tobacco800 class | **not supported** | UCSF Tobacco pages carry roster letterheads unlabelled; `naive` scores a correct retrieval as a false positive. |
 | Are **stamps** harder than **logos**? Is SPODS easier than Tobacco800? | **not supported** | Kind is confounded with source. Every Tobacco800 class is a logo; 12 of 14 stamp classes are SPODS. The source also sets the imaging: SPODS is clean colour, Tobacco800 is binarised 1990s scans. A kind or source contrast measures all of that at once. |
-| Does a method find **real rubber-stamp impressions**? | **weakly supported: 2 classes, 26 instances** | StaVer is the only source of real hand-stamped impressions on the roster. The SPODS stamp classes vary across copies (median pixel correlation with a reference copy 0.15–0.52: rotation, ink and scale), but SPODS documents were made for the dataset, and nothing here records how their stamps were applied. |
+| Does a method find **real rubber-stamp impressions**? | **weakly supported: 2 classes, 28 instances** | StaVer is the only source of real hand-stamped impressions on the roster. A ranking scores 26 of the 28, because each class's query page is held out of its own pool. The SPODS stamp classes vary across copies (median pixel correlation with a reference copy 0.15–0.52: rotation, ink and scale), but SPODS documents were made for the dataset, and nothing here records how their stamps were applied. |
 | Invariance claims on the **SPODS logos** | **not supported** | The five SPODS logo classes are **pixel copies of one artwork**: 8 members each correlate **0.96–0.99** with a reference copy at 128 × 128 greyscale, and box area has a coefficient of variation of only 0.06–0.20. Within-class variation is print/scan noise, so finding them is close to template matching and says little about appearance change. |
 | **Per-class** AP or recall | **supported with n beside it** | Classes run from 5 to 399 instances (median 31). One miss moves recall by 1/5 on `tobacco800/logo_drm00d00_1` and by 1/399 on `ajj10e00`. |
 | Is class X **harder** than class Y? | **read with the known-gaps list** | Label residuals differ by class (below). `spods/stamp_00931_1` (OUTWARD-) had the weakest SIFT evidence of any class, so its completeness is least certain. |
