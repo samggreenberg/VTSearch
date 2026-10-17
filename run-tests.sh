@@ -964,11 +964,29 @@ _lane_frontend_build() {
 # pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
 # pull.
 _pyright_threads=1
-if [[ -r /proc/meminfo ]] \
-    && awk '/^MemAvailable:/ {exit !($2 >= 12 * 1048576)}' /proc/meminfo; then
-    _pyright_threads=2
+_pyright_heap_mb=""
+if [[ -r /proc/meminfo ]]; then
+    _mem_avail_mb=$(awk '/^MemAvailable:/ {printf "%d", $2/1024}' /proc/meminfo)
+    if [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge $(( 12 * 1024 )) ]]; then
+        _pyright_threads=2
+    fi
+    # pyright's cache manager (getUsedHeapRatio in its bundle) divides the heap
+    # used by ALL its worker processes together by ONE process's V8 heap limit
+    # -- node's default is about half of physical memory -- and empties its
+    # type cache whenever that ratio nears 1, after which it re-derives every
+    # type it threw away. Two workers at ~3.5-4.8G each sit on that edge on a
+    # 16G box, so give each process a limit sized to what the box can spare:
+    # three quarters of what is available. V8 only grows a heap as far as it
+    # needs, so this raises a ceiling, not the usage. Read off pyright's source
+    # rather than measured as a speedup; a box under 6G keeps node's default.
+    if [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge 6144 ]]; then
+        _pyright_heap_mb=$(( _mem_avail_mb * 3 / 4 ))
+    fi
 fi
 _lane_pyright() {
+    if [[ -n "$_pyright_heap_mb" ]]; then
+        export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=$_pyright_heap_mb"
+    fi
     PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 python scripts/pyright-incremental.py --threads "$_pyright_threads"
 }
 
