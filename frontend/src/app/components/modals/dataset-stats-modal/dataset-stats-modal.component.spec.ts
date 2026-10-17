@@ -187,8 +187,16 @@ describe('DatasetStatsModalComponent', () => {
     const atlas = (built: boolean, building = false) => ({ built, building, auto_build_threshold: 50000 });
     const statsUrl = '/api/datasets/registry/ds1/stats';
     const buildUrl = '/api/datasets/registry/ds1/coverage-atlas';
-    const atlasTask = (status: string): LoadingTask =>
-      ({ task_id: '_atlas_ds1', dataset_id: 'ds1', status, message: '', current: 0, total: 0, name: 'ds', created_at: 0 }) as LoadingTask;
+    const atlasTask = (status: string): LoadingTask => ({
+      task_id: '_atlas_ds1',
+      dataset_id: 'ds1',
+      status,
+      message: '',
+      current: 0,
+      total: 0,
+      name: 'ds',
+      created_at: 0,
+    });
 
     async function open(stats: object): Promise<void> {
       await fixture.whenStable();
