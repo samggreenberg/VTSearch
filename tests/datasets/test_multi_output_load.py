@@ -20,6 +20,7 @@ import pytest
 from vtscore.concurrency.progress import loading_tasks
 from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
 from vtscore.datasets.importers.base import ImporterBase, OutputSpec, PluginField
+from vtscore.embedding.binding import expected_dim_for_embedder
 
 
 def _sync_thread_factory():
@@ -53,7 +54,7 @@ def _media(media_id: int, media_type: str, embedder: str) -> dict:
         "file_size": 100,
         "md5": f"{media_type}-{media_id}",
         "embedder": embedder,
-        "embeddings": {embedder: np.full(512, media_id, dtype=np.float32)},
+        "embeddings": {embedder: np.full(expected_dim_for_embedder(embedder) or 512, media_id, dtype=np.float32)},
         "filename": f"{media_type}_{media_id}.bin",
         "category": "unknown",
         "origin": None,

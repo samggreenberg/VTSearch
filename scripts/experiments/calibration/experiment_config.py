@@ -8,7 +8,7 @@ registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`)
 which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
-  ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
+  ``siglip`` / ``siglip2_l`` × ``whole_image`` (row-wise conformal), and
   ``dinov3_patch`` × ``max_patch`` (grouped bag calibration).  The raw-patch
   tree geometry ``max_patch_pca_hac`` and its ``topk`` / ``pnorm`` re-pools were
   #2781 arms and are off by default now that both questions are closed; see
@@ -19,9 +19,9 @@ which opens on one space's text sort and learns in another's:
   max-pool at scoring time; the single-vector embedders have neither, so
   :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
   whole-image scoring for them, and they blend under the **binary** schedule.
-  This docstring previously called the whole set "region voting", which is how
-  #2877 came to report a binary-voting environment as a region-voting one.
-* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
+  Calling the whole set "region voting" is how #2877 came to report a
+  binary-voting environment as a region-voting one.
+* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip2_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
 
 Category selection (scale-band on the boxed VG set, prevalence-spread on the

@@ -27,8 +27,8 @@ written to disk.  Every entry point here takes the same shape for both, and
 the ``subset`` flag picks which set of context slots it reads and writes.
 
 **The bin shape is not a choice.**  It is a fixed property of the dataset's
-media type — squares for browsable-thumbnail media (image/video/document),
-hexes for the rest — resolved by :func:`shape_for`.  Callers never pass one in
+media type — squares for browsable-thumbnail media (image, video, document,
+face, and audio by its waveform), hexes for the rest (text) — resolved by :func:`shape_for`.  Callers never pass one in
 from a request.
 """
 
@@ -92,8 +92,8 @@ def media_type_for(ctx: DatasetContext) -> str:
 def shape_for(ctx: DatasetContext) -> str:
     """The bin shape this dataset is tiled with, fixed by its media type.
 
-    Squares for browsable-thumbnail media (image/video/document), hexes for the
-    rest (audio/text).  Not a user choice — see
+    Squares for browsable-thumbnail media (image, video, document, face, and
+    audio by its waveform), hexes for the rest (text).  Not a user choice — see
     :func:`vtscore.projection.bin_shape_for_media_type`.
     """
     from vtscore.projection import bin_shape_for_media_type  # noqa: PLC0415

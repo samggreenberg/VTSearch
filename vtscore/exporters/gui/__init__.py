@@ -1,4 +1,4 @@
-"""Display labelset exporter – shows results in the browser (GUI) or prints to console (CLI).
+"""Display results exporter – shows results in the browser (GUI) or prints to console (CLI).
 
 No additional pip packages are required; in GUI mode this exporter is handled
 entirely by the frontend JavaScript, and in CLI mode it prints to stdout.

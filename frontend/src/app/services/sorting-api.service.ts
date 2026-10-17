@@ -330,14 +330,6 @@ export class SortingApiService {
     );
   }
 
-  /** ``/api/labeling-progress`` reads global state (votes, label history) and
-   *  takes no request body; the spec's ``ApiLabelingProgressPost$Params``
-   *  reflects that.  Production callers were removed; the method is kept for
-   *  parity with the legacy surface. */
-  getLabelingProgress(): Observable<unknown> {
-    return this.http.post('/api/labeling-progress', {});
-  }
-
   /** The left panel polls this every 2 s for the whole labeling session, and
    *  `adaptivePoll` already absorbs a failed tick (it skips that tick and keeps
    *  polling), so the caller handles the failure itself. Pass

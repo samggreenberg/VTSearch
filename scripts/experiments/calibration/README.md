@@ -11,7 +11,7 @@ Inclusion budget under grouped calibration. Design: `docs/plans/calibration-expe
 
 <!-- BEGIN INDEX -->
 
-**This directory is flat on purpose.** ~220 scripts, ~65 studies, one
+**This directory is flat on purpose.** Every concluded study's scripts share one
 namespace. #3409 proposed `git mv`-ing each concluded study into a subdirectory;
 that was declined, because the cost is real and the benefit is not. These are
 archival cluster scripts: the launcher `cd`s here and every file reaches its

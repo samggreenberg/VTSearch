@@ -137,8 +137,8 @@ const SQUARE_GEOMETRY: BinGeometry = {
   neighborOffsets: () => SQUARE_NEIGHBORS,
 };
 
-/** The geometry for a bin shape; defaults to hex for an unset/unknown shape. */
-export function binGeometry(shape: BinShape | undefined): BinGeometry {
+/** The geometry for a bin shape (a meta's `bin_shape`); defaults to hex for an unset/unknown shape. */
+export function binGeometry(shape: string | null | undefined): BinGeometry {
   return shape === 'square' ? SQUARE_GEOMETRY : HEX_GEOMETRY;
 }
 

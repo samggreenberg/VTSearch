@@ -2,18 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { Observable, Subject, of } from 'rxjs';
 import { TileCacheService } from './tile-cache.service';
 import { ProjectionApiService } from './projection-api.service';
-import type { TilePayload } from '../models/projection.models';
+import type { TileResponse } from '../models/projection.models';
 
 describe('TileCacheService', () => {
   let service: TileCacheService;
   let getTile: ReturnType<typeof vi.fn>;
 
-  function payload(level: number, tx: number, ty: number): TilePayload {
+  function payload(level: number, tx: number, ty: number): TileResponse {
     return { level, tx, ty, cells: [] };
   }
 
   beforeEach(() => {
-    getTile = vi.fn((level: number, tx: number, ty: number): Observable<TilePayload> =>
+    getTile = vi.fn((level: number, tx: number, ty: number): Observable<TileResponse> =>
       of(payload(level, tx, ty)),
     );
     TestBed.configureTestingModule({
@@ -29,12 +29,12 @@ describe('TileCacheService', () => {
   it('fetches a tile once, then serves it from cache without re-hitting the API', () => {
     service.setProjectionId('p1');
 
-    let first: TilePayload | undefined;
+    let first: TileResponse | undefined;
     service.getTile(2, 1, 1)?.subscribe((t) => (first = t));
     expect(first).toEqual(payload(2, 1, 1));
     expect(getTile).toHaveBeenCalledTimes(1);
 
-    let second: TilePayload | undefined;
+    let second: TileResponse | undefined;
     service.getTile(2, 1, 1)?.subscribe((t) => (second = t));
     expect(second).toEqual(payload(2, 1, 1));
     // Still one call: the second read hit the cache.
@@ -50,7 +50,7 @@ describe('TileCacheService', () => {
   });
 
   it('dedupes concurrent in-flight requests for the same tile', () => {
-    const pending = new Subject<TilePayload>();
+    const pending = new Subject<TileResponse>();
     getTile.mockReturnValueOnce(pending.asObservable());
     service.setProjectionId('p1');
 
@@ -61,10 +61,10 @@ describe('TileCacheService', () => {
   });
 
   it('recovers from a tile fetch error by emitting an empty tile', () => {
-    getTile.mockReturnValueOnce(new Observable<TilePayload>((o) => o.error(new Error('404'))));
+    getTile.mockReturnValueOnce(new Observable<TileResponse>((o) => o.error(new Error('404'))));
     service.setProjectionId('p1');
 
-    let got: TilePayload | undefined;
+    let got: TileResponse | undefined;
     service.getTile(3, 7, 8)?.subscribe((t) => (got = t));
     expect(got).toEqual({ level: 3, tx: 7, ty: 8, cells: [] });
   });
@@ -99,14 +99,14 @@ describe('TileCacheService', () => {
   });
 
   it('drops a tile that arrives after the projection switched', () => {
-    const pending = new Subject<TilePayload>();
+    const pending = new Subject<TileResponse>();
     getTile.mockReturnValueOnce(pending.asObservable());
     service.setProjectionId('p1');
     // Fire-and-forget subscriber, exactly like the canvas/minimap draw paths.
     service.getTile(2, 1, 3)?.subscribe();
 
     service.setProjectionId('p2');
-    const loaded: TilePayload[] = [];
+    const loaded: TileResponse[] = [];
     service.tileLoaded$.subscribe((t) => loaded.push(t));
     // p1's response finally lands, after the switch cleared the cache.
     pending.next({
@@ -120,13 +120,13 @@ describe('TileCacheService', () => {
     expect(service.getCached(2, 1, 3)).toBeNull();
     expect(loaded).toEqual([]);
     // The tile is still fetchable for p2 (the stale put did not block it).
-    let fresh: TilePayload | undefined;
+    let fresh: TileResponse | undefined;
     service.getTile(2, 1, 3)?.subscribe((t) => (fresh = t));
     expect(fresh).toEqual(payload(2, 1, 3));
   });
 
   it('drops a tile that arrives after clear()', () => {
-    const pending = new Subject<TilePayload>();
+    const pending = new Subject<TileResponse>();
     getTile.mockReturnValueOnce(pending.asObservable());
     service.setProjectionId('p1');
     service.getTile(1, 0, 0)?.subscribe();
@@ -171,7 +171,7 @@ describe('TileCacheService', () => {
   });
 
   it('emits loaded tiles on tileLoaded$', () => {
-    const loaded: TilePayload[] = [];
+    const loaded: TileResponse[] = [];
     service.tileLoaded$.subscribe((t) => loaded.push(t));
     service.setProjectionId('p1');
     service.getTile(2, 3, 4)?.subscribe();

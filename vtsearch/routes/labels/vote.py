@@ -1,6 +1,6 @@
 """Blueprint for label management routes (export, import, fill-from-sort).
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

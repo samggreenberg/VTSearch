@@ -4,7 +4,7 @@ Reuse-aware: where the Max-Patch runner already embedded a ``(dataset, embedder)
 pair, ``setup_reuse.sh`` symlinks its pickle (and, for boxed datasets, its
 exemplar crops) into this experiment's datadir, and this stage just **loads the
 cached pickle** to (re)derive the selected categories — no model, no re-embed.
-For a pair with no cached pickle (``siglip_l`` here), it loads + embeds the demo
+For a pair with no cached pickle (``siglip2_l`` here), it loads + embeds the demo
 dataset through ``load_demo_dataset`` + ``embed_missing`` and writes the pickle.
 
 Exemplar crops: boxed datasets (Visual Genome) crop each category's
@@ -15,7 +15,7 @@ in the pickle (no model, no bytes).
 Usage::
 
     python prepare_data.py                         # every (dataset, embedder) in the grid
-    python prepare_data.py --embedders siglip_l    # just the pair(s) that need embedding
+    python prepare_data.py --embedders siglip2_l   # just the pair(s) that need embedding
 """
 
 from __future__ import annotations

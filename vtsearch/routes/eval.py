@@ -1,6 +1,6 @@
 """Blueprint for evaluation and labeling progress routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``. Schema-level
 failures (missing ``metric`` / ``job_id``, invalid metric value) surface
 as 422 with the standard ``errors`` envelope; handler-level rejects
@@ -253,15 +253,15 @@ def indicator_score_history(query: dict):
     fall back to ``POST /api/eval/train-and-score``, which computes the same
     series on a background thread with live progress and cancellation.
 
-    This route used to call the ``calculate_*_over_time`` helpers directly.
-    Those advance the cache via ``_ensure_cache`` - retraining one MLP per
-    uncached label step plus a forward pass over the unlabeled pool, and on a
-    cold cache a full hierarchical-k-means coverage-atlas build - all inline on
-    the request thread under ``_progress_lock``.  Since ``/api/labeling-status``
-    deliberately defers exactly that work to a background worker (issue #2397),
-    the cache is behind for most of a labeling session, and this endpoint
-    absorbed the entire deferred build: tens of seconds on a mid-size dataset,
-    growing with both media count and vote count.
+    It does not call the ``calculate_*_over_time`` helpers, because those
+    advance the cache via ``_ensure_cache`` - retraining a model per uncached
+    label step plus a forward pass over the unlabeled pool, and on a cold cache
+    a full hierarchical-k-means coverage-atlas build - all inline on the request
+    thread under ``_progress_lock``.  ``/api/labeling-status`` defers exactly
+    that work to a background worker (#2397), so the cache is behind for most
+    of a labeling session, and advancing it here would put the whole deferred
+    build on this request: tens of seconds on a mid-size dataset, growing with
+    both media count and vote count.
     """
     metric = query["metric"]
 

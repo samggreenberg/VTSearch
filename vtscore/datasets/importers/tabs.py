@@ -17,6 +17,12 @@ from typing import Any
 #: Built-in picker tabs.  ``order`` is ascending (smaller comes first).  The
 #: ``icon`` field references a type understood by ``vt-icon`` (see
 #: ``frontend/src/app/components/icon/icon.component.ts``).
+#:
+#: ``"local"`` (the category of ``local_folder`` / ``local_files``) is
+#: deliberately undeclared: both importers are ``hidden_from_picker``, and the
+#: Add Dataset modal renders every declared tab even when it is empty, so
+#: declaring it would bring back an empty Local tab.  A visible plugin that
+#: uses ``"local"`` gets the frontend's title-cased fallback label.
 _PICKER_TABS: list[dict[str, Any]] = [
     {"id": "services", "label": "Services", "icon": "lightning", "order": 10},
     {"id": "server", "label": "Files", "icon": "folder", "order": 20},

@@ -199,9 +199,14 @@ class MediaEmbedder(ABC):
     * :attr:`name`: unique human-readable identifier (also used as the
       registry key).
     * :attr:`media_type_id`: which media type this embedder works with.
-    * :meth:`load_models`: load (and cache) the embedding model.
-    * :meth:`embed_media`: embed a media file from disk.
-    * :meth:`embed_text`: embed a text query in the same vector space.
+    * :meth:`_load_models_impl`: load (and cache) the embedding model.
+    * :meth:`_embed_media_impl`: embed a single media item.
+
+    and may override :meth:`_embed_text_impl` to embed a text query in the
+    same vector space (the default returns ``None``: no text sorting).  The
+    public :meth:`load_models` / :meth:`embed_media` / :meth:`embed_text`
+    wrap these hooks with locking, error reporting and L2 normalisation, so
+    subclasses override the ``_*_impl`` methods, never the wrappers.
     """
 
     _model_load_lock: threading.Lock

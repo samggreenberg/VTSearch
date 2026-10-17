@@ -107,6 +107,8 @@ class CoreConfig:
     detectors_dir: Path
     max_concurrent_dataset_downloads: int
     max_concurrent_dataset_embeddings: int
+    # Per-user (the current user's AutoFind detector names), despite sitting
+    # in the server-tier block: moving it would reorder the positional fields.
     autofind_detectors: tuple[str, ...]
 
     dataset_max_age_days: int | None
@@ -122,11 +124,12 @@ class CoreConfig:
     enrich_descriptions: bool
     autopilot_goal_diversity: int
 
-    # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
-    # route every hardcoded ``data/`` path through this field.
+    # Filesystem root for caches, embeddings, model downloads.  The app
+    # snapshots :data:`vtscore.config.DATA_DIR` into it (the Filesystem seam
+    # in ``vtscore/docs/architecture.md``).
     data_dir: Path
 
-    # AutoFind results exporter (server-tier). When an autodetect run has no
+    # AutoFind results exporter (per-user). When an autodetect run has no
     # explicit ``--exporter``, the CLI falls back to this exporter +
     # field-value map. ``""`` means "no configured exporter" (CLI defaults to
     # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions

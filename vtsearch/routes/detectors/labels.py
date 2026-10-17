@@ -25,13 +25,13 @@ GET  /api/detectors/<name>/labels/<element_id>/thumbnail
 POST /api/detectors/<name>/labels/<element_id>/vote
     Set a saved labelset element's label to an absolute target.
 
-Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
-vote). ``import-labels`` keeps its plain-Flask route on the same smorest
-blueprint; its body shape depends on the importer plugin and isn't
-described in the OpenAPI spec, but runtime validation goes through
+The JSON-shaped routes (save, labels-detail, vote) carry ``flask_smorest``
+schemas. ``import-labels`` is on the same smorest blueprint, so it is in the
+OpenAPI spec, but its body shape depends on the importer plugin and is not
+described there; runtime validation goes through
 :func:`validate_plugin_args` so the per-plugin field types are enforced
-and schema-level failures surface as 422.  See "Routes absent from the
-spec" in ``docs/API.md``.  The
+and schema-level failures surface as 422.  See "Routes with no typed
+schema" in ``docs/API.md``.  The
 ``preview`` and ``thumbnail`` routes serve binary bodies (or a tiny
 content-only JSON for text media); they declare their non-default JSON
 error responses via ``alt_response`` but no success schema, so OpenAPI

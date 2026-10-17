@@ -8,7 +8,7 @@ active :class:`DatasetContext` for the coverage atlas side-effects).  They
 resolve the context themselves via :func:`get_active_detector_context` /
 :func:`get_active_context` - no module-level proxy names are imported, so
 the library has no implicit dependency on the app-side proxy view.  See
-Phase 3 of ``../docs/architecture.md``.
+seam 3 (*Global state*) of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations
@@ -143,9 +143,10 @@ def get_find_initial_labels() -> dict[int, str]:
 def set_find_scores(scores: dict[int, float]) -> None:
     """Store the frozen per-item detector scores from a find-label run.
 
-    These are the single-pass scores the line (the precision floor, or
-    Inclusion) moves over without re-scoring, and the basis for the Stats
-    precision curve.  In-memory only.
+    These are the single-pass scores the line moves over without re-scoring
+    (a balance change re-splits the unverified items over them), and what the
+    Find work queue, the boundary walk, the line test and ``/api/find/stats``
+    rank.  In-memory only.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -162,18 +163,19 @@ def get_find_scores() -> dict[int, float]:
 def rethreshold_unverified_find_items() -> None:
     """Re-split *unverified* Find items good/bad at the current cutoff.
 
-    The precision floor is a pure cutoff knob: moving it moves
+    The balance is a pure cutoff knob: changing it moves
     :attr:`DetectorContext.threshold` over the frozen ``find_scores`` with no
     re-scoring.  Every scored item the human has not verified is re-assigned
     good/bad purely by whether its frozen score clears the (already updated)
     threshold; verified items keep their human vote wherever their score
     lands, and ``find_initial_labels`` (the eval baseline at the default
     cutoff) is left untouched.  Existing click-times are preserved so the
-    right-scroll ordering doesn't churn on a floor change.
+    right-scroll ordering doesn't churn on a balance change.
 
     No-op outside Find mode or before a scoring pass has frozen ``find_scores``
-    (e.g. Train-mode floor changes).  Must run *after*
-    :func:`recompute_detector_thresholds` has updated the threshold.
+    (e.g. Train-mode balance changes).  Must run *after* the threshold is
+    updated (:func:`~vtscore.state.core.recompute_detector_thresholds`, or a
+    re-cut once a spot check ends).
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -226,8 +228,8 @@ def find_queue_ids(label_filter: str) -> list[int]:
       The right-panel actions.
 
     Derived from the frozen ``find_scores`` + current ``threshold`` +
-    ``verified_ids``, so it tracks Inclusion slides exactly like the frontend
-    derivation it replaces.  Returns ``[]`` outside Find mode, before a scoring
+    ``verified_ids``, so it follows a balance change with no re-score.
+    Returns ``[]`` outside Find mode, before a scoring
     pass has frozen ``find_scores``, or for an unknown *label_filter*.
     """
     with _state_lock:

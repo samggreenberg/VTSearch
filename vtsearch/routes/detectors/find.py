@@ -8,7 +8,7 @@ from its on-disk labelset - through
 entry point the load and learned-sort paths use, so one labelset means one
 detector no matter which of the two paths produced the verdicts (issue #3525).
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

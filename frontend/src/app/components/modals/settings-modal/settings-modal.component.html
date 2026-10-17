@@ -266,8 +266,8 @@
             <input id="setting-autopilot-reds" type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-autopilot-resort" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort:</label>
-            <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
+            <label class="form-label" for="setting-autopilot-resort" title="How many votes autopilot's good-examples phase collects before it asks whether to update the sort example (each Keep waits 1.5× as long before asking again)"># Start to re-sort:</label>
+            <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes in the good-examples phase before autopilot offers to update the sort example" />
           </div>
           <div class="form-group">
             <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity:</label>

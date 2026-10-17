@@ -27,7 +27,7 @@ PUT  /api/detectors/<name>/examples
 POST /api/detectors/combine
     Combine the labelsets of two or more detectors into a new detector.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 

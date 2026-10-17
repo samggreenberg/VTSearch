@@ -3,10 +3,10 @@
 Per-operation progress is streamed via the unified ``/api/events`` SSE
 endpoint; see ``vtsearch/routes/events.py``.
 
-Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. Schema-level
-validation is unused (all bodies are empty); handler-level rejects
-(unknown task id) surface as 404 with the standard ``message`` envelope.
+The routes are on a ``flask_smorest`` blueprint, so they appear in
+``/api/openapi.json``. Schema-level validation is unused (all bodies are
+empty); handler-level rejects (unknown task id) surface as 404 with the
+standard ``message`` envelope.
 """
 
 from flask_smorest import Blueprint, abort
@@ -65,7 +65,7 @@ def dataset_status():
 def cancel_dataset_load():
     """Cancel dataset load/import operations.
 
-    Cancels every active loading task, then waits briefly for one of them to
+    Cancels every active loading task, then waits briefly for each of them to
     act on the flag.  Cancellation is cooperative, so a flag set with no worker
     left to observe it stops nothing.  A cancel that reached nothing answers
     ``409``, and any stale progress it found is cleared on the way out.

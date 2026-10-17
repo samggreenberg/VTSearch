@@ -1,10 +1,12 @@
 """Build marshmallow schemas from :class:`PluginField` declarations.
 
-The five plugin-field HTTP routes
+The plugin-field HTTP routes
 (``/api/dataset/import/<importer>``, ``/api/dataset/stage-import/<importer>``,
 ``/api/label-importers/import/<importer>``,
 ``/api/detectors/<name>/import-labels/<importer>``,
-``/api/detectors/registry/from-labelset/<importer>``) accept a request
+``/api/detectors/registry/from-labelset/<importer>``,
+``/api/datasource-import/<importer>``, ``/api/seed-import/<importer>``,
+``/api/settings-importers/import/<importer>``) accept a request
 body whose shape depends on the named plugin's :attr:`PluginBase.fields`
 declaration. Static marshmallow schemas can't express that shape because
 each plugin has its own field list - so we build a schema *per plugin*
@@ -18,7 +20,7 @@ field_type   marshmallow field
 ============ =====================================================
 text         :class:`fields.String`
 url          :class:`fields.String`
-email        :class:`fields.Email`
+email        :class:`fields.String` (no RFC check; see ``_build_text``)
 password     :class:`fields.String`
 folder       :class:`fields.String`
 server_path  :class:`fields.String`
@@ -29,15 +31,16 @@ number       :class:`fields.Integer` (integer-looking)
              schema-load time, not silently coerced)
 select       :class:`fields.String` + :class:`validate.OneOf`
              (static options); plain :class:`fields.String` for
-             dynamic-options fields
-checkbox     :class:`fields.Boolean` (with string-coercion loader)
+             dynamic-options and ``allow_free_text`` fields
+checkbox     :class:`fields.Function` (``true`` / ``false`` string
+             coercion via ``_coerce_checkbox``; never required)
 file         skipped - file fields are populated from
              ``request.files`` outside the schema
 ============ =====================================================
 
 Required text-like fields are marshmallow-required *and* validated as
-non-empty after stripping whitespace (matching the pre-migration
-hand-rolled validator that rejected ``"   "`` as well as ``""``).
+non-empty after stripping whitespace, so ``"   "`` is rejected as well as
+``""``.
 """
 
 from __future__ import annotations
@@ -56,16 +59,15 @@ _NON_EMPTY = validate.Length(min=1)
 def _non_empty_after_strip(value: object) -> None:
     """Reject empty / whitespace-only strings.
 
-    Marshmallow's :class:`validate.Length` checks the raw value length,
-    but the pre-migration behaviour was to reject ``"   "`` as well as
-    ``""``. We mirror that by stripping before measuring.
+    Marshmallow's :class:`validate.Length` checks the raw value length;
+    stripping before measuring rejects ``"   "`` as well as ``""``.
     """
     if isinstance(value, str) and not value.strip():
         raise ValidationError("Field may not be empty.")
 
 
 def _coerce_checkbox(value: object) -> bool:
-    """Accept ``true`` / ``false`` strings (legacy form-encoded source) and bools."""
+    """Accept ``true`` / ``false`` strings (form-encoded submissions) and bools."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):

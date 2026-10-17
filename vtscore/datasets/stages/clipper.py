@@ -590,7 +590,7 @@ def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
     if clip.get("media_string") is not None and media_type == "text":
         # A blank / whitespace-only clip has no embeddable content. Treat it
         # as "no content" so the caller skips embedding it: the clip keeps
-        # ``embedding=None`` and is removed by ``_drop_none_embeddings_stage``
+        # no vector and is removed by ``_drop_none_embeddings_stage``
         # rather than reaching the embedding-matrix builder (M21). This also
         # guards against an embedder that returns a non-None garbage vector
         # for empty input, which the None-drop net would otherwise miss.

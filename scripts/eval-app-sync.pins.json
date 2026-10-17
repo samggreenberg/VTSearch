@@ -116,7 +116,7 @@
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "33d2a307330e428d5fdd90e22dce24d4bb998a1533dd341a08ca578118c0375f",
+    "app": "beb40bacc3292e374f32bb483e15d845d4454c25fff42613cc349de28181f520",
     "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
   },
   "training.typed_query_prior": {

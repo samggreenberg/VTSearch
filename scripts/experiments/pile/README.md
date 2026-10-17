@@ -197,9 +197,9 @@ scatter guard and out of every band (248 across *C*; `clock` nets −16).
 **That is the right outcome, and the build said so.** #3637 scored the three
 readings of it against COCO's exhaustive boxes: on the images they disagree
 about, the class really is scattered 88% of the time, and no cell is anywhere
-near needing the images back. `canonicalise` reported the count on the same line
-as the boxes folded, `SCALE_FOLD_MODE` selected the arm, and `band_fold.py`
-re-measured it. Full study:
+near needing the images back. `canonicalise` reported the count on the same
+line as the boxes folded, and `band_fold.py` measured the three readings. Full
+study:
 [`docs/experiments/2026-09-05-band-fold-3637/`](../../../docs/experiments/2026-09-05-band-fold-3637/REPORT.md).
 
 `SCALE_VG_NAMES_AUDITED` records which classes have actually had this measured,

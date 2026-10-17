@@ -1,13 +1,15 @@
-"""Media type, embedder, and clipper registries.
+"""Media type, embedder, clipper, and cleaner registries.
 
-Built-in media types, embedders, and clippers are **auto-discovered** at
-import time by scanning sub-packages of ``vtscore.media``:
+Built-in media types, embedders, clippers, and cleaners are
+**auto-discovered** at import time by scanning sub-packages of
+``vtscore.media``:
 
 - Each media-type sub-package (``audio/``, ``image/``, ...) exposes a
-  ``MEDIA_TYPE`` sentinel in its ``__init__.py`` (plus a ``CLIPPERS`` list).
+  ``MEDIA_TYPE`` sentinel in its ``__init__.py`` (plus optional
+  ``CLIPPERS`` and ``CLEANERS`` lists).
 - Each embedder lives under the media-type package as either a flat
-  module (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) or a
-  sub-package (e.g. ``vtsearch/media/image/embedder_fancy/__init__.py``)
+  module (e.g. ``vtscore/media/audio/embedder_clap_music.py``) or a
+  sub-package (e.g. ``vtscore/media/image/embedder_fancy/__init__.py``)
   and exposes a module-level ``EMBEDDER`` sentinel - one embedder per
   module or sub-package.  Any ``embedder*.py`` file or ``embedder*/``
   directory with an ``__init__.py`` found inside a media-type package
@@ -22,9 +24,11 @@ VTSearch tree can be wired in without editing any package ``__init__.py``.
 
 Third-party or project-specific types can still be registered manually::
 
-    from vtscore.media import register, register_embedder
+    from vtscore.media import register, register_cleaner, register_clipper, register_embedder
     register(MyCustomMediaType())
     register_embedder(MyCustomEmbedder())
+    register_clipper(MyCustomClipper())
+    register_cleaner(MyCustomCleaner())
 """
 
 from __future__ import annotations
@@ -59,9 +63,10 @@ _registry: dict[str, "MediaType"] = {}
 
 
 def normalize_type_id(type_id: str) -> str:
-    """Validate that *type_id* is a known canonical type name.
+    """Return *type_id* unchanged.
 
-    Returns *type_id* unchanged (legacy aliases have been removed).
+    A pass-through: there are no alias spellings to fold, and it does not
+    validate (:func:`get` raises :class:`KeyError` for an unknown id).
     """
     return type_id
 
@@ -312,7 +317,7 @@ def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
     """Return the appropriate embedder for the given medias, or ``None``.
 
     Looks up the ``"embedder"`` name stored on the first media entry; falls
-    back to the default embedder for the detected ``"type"``.
+    back to the default embedder for its ``"media_type"``.
 
     Lives here (rather than in the routes layer that first grew it) so the
     dataset-load pipeline can resolve an embedder without importing
@@ -335,7 +340,7 @@ def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
 
 
 # ------------------------------------------------------------------
-# Auto-discover media types, embedders, and clippers
+# Auto-discover media types, embedders, clippers, and cleaners
 # ------------------------------------------------------------------
 
 

@@ -1,7 +1,10 @@
 """Population anchoring: fusing the votes into the haystack's mixture, per fold.
 
-The shipped threshold path.  Where :mod:`vtscore.training.thresholds.gmm`
-fits one mixture to one score list, this layer runs that fit *per calibration
+The line with no balance, and the fallback under one where the labels support
+no class model (under a balance the line is the labels',
+:mod:`vtscore.training.thresholds.labels_line`, #4452).  Where
+:mod:`vtscore.training.thresholds.gmm` fits one mixture to one score list,
+this layer runs that fit *per calibration
 fold* with the fold's votes anchored into it, transfers each fold's cut into a
 common quantile space (:func:`rank_transfer`), and combines them into a single
 re-cuttable estimator (:class:`FoldAnchoredCut`,
@@ -673,8 +676,9 @@ def fold_anchored_gmm_threshold(
 ) -> tuple[float, str]:
     """The fold-anchored ("cross-LabeledGMM") mixture threshold (#2852 comment).
 
-    **This is the shipped threshold path**: the 2026-08-06 anchor-mass sweep
-    measured it at the defaults above as the best rule this harness has seen,
+    **This is the line with no balance**, and under a balance the fallback
+    where the labels support no class model for the labels' line (#4452):
+    the 2026-08-06 anchor-mass sweep measured it at the defaults above as the best rule this harness has seen,
     and the best single global setting available - pooled over six environments
     it cuts −0.0437 paired regret vs pure cross-calibration in the deep regime,
     it beats the previously shipped ``κ=1, rate`` head to head in 6 of 6

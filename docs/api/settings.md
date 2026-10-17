@@ -207,8 +207,10 @@ when the deployment has no default.
 ### Get detector's labelset source
 
 ```
-GET /api/detectors/{detector_id}/labelset-source
+GET /api/detectors/{detector_ref}/labelset-source
 ```
+
+`detector_ref` is the detector's id or its name, on all three routes below.
 
 → `{"source_name", "display_name", "field_values", "inherited", "fixed_keys", "missing_fields"}`,
 or `null` when the detector syncs nowhere. `field_values` holds only the
@@ -220,7 +222,7 @@ the caller cannot access the detector, 404 if it does not exist.
 ### Set or clear detector's labelset source
 
 ```
-PUT /api/detectors/{detector_id}/labelset-source
+PUT /api/detectors/{detector_ref}/labelset-source
 ```
 
 **Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "labels/{detector_name}.json"}}`
@@ -244,7 +246,7 @@ detector, 404 if the detector or `source_name` is unknown.
 ### Force sync from labelset source
 
 ```
-POST /api/detectors/{detector_id}/labelset-source/sync
+POST /api/detectors/{detector_ref}/labelset-source/sync
 ```
 
 Pulls the source's labels into the detector: labels it lacks are added and,

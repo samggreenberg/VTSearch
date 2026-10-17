@@ -625,16 +625,17 @@ def _safe_threshold_for_step(
     labels_scale_shadow: "str | None" = None,
     keep_fold_sim: bool = False,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
-    """The harness's **shipped** safe threshold - the same rule the app applies.
+    """The harness's line for a step - the same rule the app applies.
 
     Scores the simulation set (the harness's haystack) with the final model and
-    with each calibration fold model, then cuts via
+    with each calibration fold model, then draws the line as
+    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
-    production defaults (the ``FOLD_ANCHOR_*`` constants).  This is the
-    estimator :func:`vtscore.detectors.training._safe_threshold` ships, called
-    with the same arguments, so the harness's baseline arm cannot drift from
-    the app's behaviour - the paired ``*_variant`` rows are where deliberate
-    deviations live.
+    production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
+    arguments, so the harness's baseline arm cannot drift from the app's
+    behaviour - the paired ``*_variant`` rows are where deliberate deviations
+    live.
 
     Falls back to the schedule blend
     (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) exactly
@@ -680,16 +681,18 @@ def _safe_threshold_for_step(
     inside this function, so the default arm is production by construction.
 
     **The line is drawn where the app draws it.**  *beta* is the resolved
-    balance (``None`` for the Inclusion arm).  Under a balance the line keeps
-    a set (#4272, #4413): the top *count* unvoted items of the sim set this
-    final model scored, where *count* is the set *check* - the run's spot
-    check - ended on where the check's shape lets it move the line, or else
-    the mixture's F-beta argmax under the balance's cap;
-    :func:`~vtscore.training.thresholds.balance_line` is the app's own rule,
-    called, not copied, and its ranking rides out in
-    ``details["line_ranking"]`` for the check to draw its bands from, with the
-    balance's state in ``details["line_state"]`` for the row.  With no
-    balance the line is the fold-anchored cut at *inclusion* through the shared
+    balance (``None`` for the Inclusion arm).  Under a balance the line is the
+    labels' line (#4452, :func:`_preference_line_for_step`): the class model
+    the step's fold orderings imply, cut at the prevalence it estimates on the
+    sim set this final model scored -
+    :func:`~vtscore.training.thresholds.fit_labels_line`, the app's own rule,
+    called, not copied.  A forced *line_shape* (the ``walk_shape`` arms) draws
+    the count line instead (#4413): the set *check* - the run's spot check -
+    ended on, or the mixture's F-beta argmax under the balance's cap.  The
+    ranking rides out in ``details["line_ranking"]`` for the check to draw its
+    bands from, with the balance's state in ``details["line_state"]`` for the
+    row.  With no balance, or no class model, the line is the fold-anchored
+    cut at *inclusion* through the shared
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
