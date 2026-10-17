@@ -337,6 +337,12 @@ def apply_completeness(
                 continue
             idx = cand.get("mark_index")
             if i in accepted:
+                if idx is None:
+                    # Re-applied, a verdict proposes the box this pass already
+                    # added, and appending it again put a second copy of one
+                    # mark on the page (#5052).  Take the mark that is there.
+                    box = tuple(int(v) for v in cand["box"])
+                    idx = next((j for j, m in enumerate(page.marks) if tuple(m.box) == box), None)
                 if idx is not None and idx < len(page.marks):
                     old = page.marks[idx]
                     if old.class_id and old.class_id != class_id and old.class_id in classes:
@@ -345,8 +351,13 @@ def apply_completeness(
                             "that is a merge, not a missing member -- use the merge slate"
                         )
                         continue
-                    page.marks[idx] = Mark(old.kind, old.box, class_id, old.provenance)
-                    reassigned += 1
+                    if old.class_id != class_id or page.page_id not in meta["page_ids"]:
+                        # One entry per instance, as build_corpus writes them: a
+                        # page that carries the mark twice is listed twice (#5052).
+                        meta["page_ids"].append(page.page_id)
+                    if old.class_id != class_id:
+                        page.marks[idx] = Mark(old.kind, old.box, class_id, old.provenance)
+                        reassigned += 1
                 else:
                     box = tuple(cand["box"])
                     kind = meta.get("kind", "logo")
@@ -362,9 +373,8 @@ def apply_completeness(
                             "note": f"completeness: {class_id}, {cand.get('inliers')} SIFT inliers, reviewer {reviewer}",
                         }
                     )
-                    added += 1
-                if page.page_id not in meta["page_ids"]:
                     meta["page_ids"].append(page.page_id)
+                    added += 1
                 merges.append(
                     {
                         "left_page_id": anchor[0],
