@@ -170,7 +170,7 @@ class TestStatsCoverageAtlasStatus:
 
         started = threading.Event()
 
-        def _endless_build(ctx, on_progress=None):
+        def _endless_build(ctx, on_progress):
             started.set()
             while True:  # exits ONLY via CancelledError, which on_progress raises once cancelled
                 on_progress(0, 0)
