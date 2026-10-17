@@ -181,6 +181,17 @@ def _finite_unit(scores: Any) -> np.ndarray:
     return a[np.isfinite(a) & (a >= 0.0) & (a <= 1.0)]
 
 
+def _norm_pdf(x: np.ndarray, mu: float, sigma: float) -> np.ndarray:
+    """The normal density at *x*, typed: scipy's ``norm.pdf`` is not.
+
+    The EM loops below iterate on its result, and pyright re-infers an
+    unannotated call's type around a loop until it settles (#5070).
+    """
+    from scipy.stats import norm  # noqa: PLC0415
+
+    return norm.pdf(x, mu, sigma)
+
+
 @dataclass(frozen=True)
 class ClassScoreModel:
     """The head's held-out scores of the Goods and the Bads: two normals of one spread on the logit scale."""
@@ -524,8 +535,6 @@ def fit_corpus(
     cells).  Fitting the bulk on the corpus keeps a corpus with no positives
     at a share near zero.
     """
-    from scipy.stats import norm  # noqa: PLC0415
-
     x = _logit(_finite_unit(unvoted_scores))
     if x.size == 0:
         return float(n_good), CorpusNegatives(model.mu_neg, model.sigma)
@@ -534,8 +543,8 @@ def fit_corpus(
     pi = 0.01
     r = np.zeros_like(x)
     for _ in range(iterations):
-        f1 = pi * norm.pdf(x, model.mu_pos, model.sigma)
-        f0 = (1.0 - pi) * norm.pdf(x, mu0, s0)
+        f1 = pi * _norm_pdf(x, model.mu_pos, model.sigma)
+        f0 = (1.0 - pi) * _norm_pdf(x, mu0, s0)
         with np.errstate(invalid="ignore", divide="ignore"):
             r = np.nan_to_num(f1 / (f1 + f0), nan=0.0)
         new_pi = min(max(float(r.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
@@ -565,8 +574,6 @@ def corpus_posteriors(
     alone, the top of a ranking read as all positive and beta barely moved
     the cut.  In the order of *unvoted_scores*.
     """
-    from scipy.stats import norm  # noqa: PLC0415
-
     x = _logit(_finite_unit(unvoted_scores))
     if x.size == 0:
         return np.zeros(0)
@@ -575,9 +582,9 @@ def corpus_posteriors(
     w1, wb = 0.01, 0.05
     r1 = np.zeros_like(x)
     for _ in range(iterations):
-        a1 = w1 * norm.pdf(x, model.mu_pos, model.sigma)
-        ab = wb * norm.pdf(x, model.mu_neg, model.sigma)
-        a0 = max(1.0 - w1 - wb, 1e-9) * norm.pdf(x, mu0, s0)
+        a1 = w1 * _norm_pdf(x, model.mu_pos, model.sigma)
+        ab = wb * _norm_pdf(x, model.mu_neg, model.sigma)
+        a0 = max(1.0 - w1 - wb, 1e-9) * _norm_pdf(x, mu0, s0)
         tot = a1 + ab + a0
         with np.errstate(invalid="ignore", divide="ignore"):
             r1 = np.nan_to_num(a1 / tot, nan=0.0)
