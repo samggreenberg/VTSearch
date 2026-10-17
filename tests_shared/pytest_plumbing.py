@@ -68,10 +68,16 @@ def print_summary_and_exit(config, exitstatus: int) -> None:
             if xfailed:
                 parts.append(f"{xfailed} xfailed")
             print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
-        elif total == 0 and cache["reused"]:
-            # Nothing ran because every selected test was recorded as passing on
-            # this identical tree -- a pass, not an empty run.
-            print(f"ALL {cache['reused']} TESTS ALREADY PASSED ON THIS TREE (nothing re-run)", flush=True)
+        elif passed == 0 and cache["reused"]:
+            # Nothing passed *this* run because every test that could pass was
+            # recorded as passing on this identical tree -- a pass, not an empty
+            # run. Skips and xfails are never recorded, so they still ran.
+            still_ran = [f"{n} {what}" for n, what in ((skipped, "skipped"), (xfailed, "xfailed")) if n]
+            tail = f"; {', '.join(still_ran)}" if still_ran else ""
+            print(
+                f"ALL {cache['reused']} TESTS ALREADY PASSED ON THIS TREE (nothing re-run{tail})",
+                flush=True,
+            )
         else:
             extra = f"{skipped} skipped"
             if xfailed:
