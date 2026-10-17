@@ -341,38 +341,43 @@ read. Two more sets of sessions ran the same app (`7b3a3d1e3`) at other prevalen
 - **The whole cell at 0.1%** (`SOTA_CELL_PREVALENCE=0.001`). Positives are thinned in both halves before the split:
   about 23 a cell, 7–18 of them in the withheld half.
 
-5 seeds each so far: 720 sessions a preset, against this review's 6,480. Each page holds one preset with the three
-prevalences side by side: [β 1/4](viewer_prevalence_b025.html), [β 1](viewer_prevalence_b1.html) and
+59 seeds each (8,496 sessions a preset), from 2026-10-16 10:22 to 2026-10-17 06:13. Each page holds one preset with
+the three prevalences side by side: [β 1/4](viewer_prevalence_b025.html), [β 1](viewer_prevalence_b1.html) and
 [β 4](viewer_prevalence_b4.html). All nine sets on one page would be over the repo's 4,000 KB cap, and a page that
-must split splits by preset (owner, 2026-10-08). The table reads this review's seeds 0–4 too, so all three rows
-cover the same seeds.
+must split splits by preset (owner, 2026-10-08). The table reads seeds 0–44 of all three, this review's 45, so every
+row covers the same seeds.
 
-| prevalence | preset | typed query | 50 clicks | **after the check** | precision / recall after | returned, median | AP: text → 150 (full labels) | told to stop |
-|---|---:|---:|---:|---:|---|---:|---|---:|
-| 0.44% (default) | 1/4 | 0.46 | 0.54 | **0.65** | 0.75 / 0.36 | 17 | 0.42 → 0.56 (0.56) | 90% |
-| 0.44% (default) | 1 | 0.36 | 0.45 | **0.54** | 0.60 / 0.52 | 44 | 0.42 → 0.56 (0.56) | 90% |
-| 0.44% (default) | 4 | 0.47 | 0.52 | **0.61** | 0.42 / 0.66 | 81 | 0.42 → 0.56 (0.56) | 89% |
-| pool at 1% | 1/4 | 0.48 | 0.57 | **0.66** | 0.73 / 0.41 | 24 | 0.42 → 0.57 (0.56) | 96% |
-| pool at 1% | 1 | 0.37 | 0.47 | **0.55** | 0.56 / 0.58 | 51 | 0.42 → 0.57 (0.56) | 96% |
-| pool at 1% | 4 | 0.47 | 0.55 | **0.65** | 0.38 / 0.72 | 114 | 0.42 → 0.57 (0.56) | 96% |
-| 0.1% whole cell | 1/4 | 0.28 | 0.38 | **0.46** | 0.48 / 0.36 | 9 | 0.33 → 0.43 (0.43) | 63% |
-| 0.1% whole cell | 1 | 0.21 | 0.30 | **0.37** | 0.35 / 0.46 | 16 | 0.33 → 0.43 (0.43) | 63% |
-| 0.1% whole cell | 4 | 0.31 | 0.40 | **0.45** | 0.21 / 0.56 | 50 | 0.33 → 0.43 (0.43) | 63% |
+| prevalence | preset | typed query | 50 clicks | **after the check** | precision / recall after | returned, median | AP: text → 150 (full labels) | told to stop | never shown |
+|---|---:|---:|---:|---:|---|---:|---|---:|---:|
+| 0.44% (default) | 1/4 | 0.46 | 0.54 | **0.65** | 0.76 / 0.36 | 17 | 0.42 → 0.56 (0.56) | 90% | 4% |
+| 0.44% (default) | 1 | 0.36 | 0.44 | **0.54** | 0.61 / 0.52 | 42 | 0.42 → 0.56 (0.56) | 90% | 4% |
+| 0.44% (default) | 4 | 0.47 | 0.52 | **0.61** | 0.42 / 0.66 | 80 | 0.42 → 0.56 (0.56) | 90% | 4% |
+| pool at 1% | 1/4 | 0.47 | 0.56 | **0.66** | 0.73 / 0.41 | 23 | 0.42 → 0.57 (0.56) | 96% | 1% |
+| pool at 1% | 1 | 0.37 | 0.47 | **0.55** | 0.56 / 0.58 | 51 | 0.42 → 0.57 (0.56) | 96% | 1% |
+| pool at 1% | 4 | 0.47 | 0.55 | **0.64** | 0.38 / 0.72 | 111 | 0.42 → 0.57 (0.56) | 96% | 1% |
+| 0.1% whole cell | 1/4 | 0.29 | 0.39 | **0.45** | 0.48 / 0.36 | 8 | 0.33 → 0.43 (0.43) | 63% | 13% |
+| 0.1% whole cell | 1 | 0.21 | 0.30 | **0.37** | 0.35 / 0.46 | 16 | 0.33 → 0.43 (0.43) | 63% | 13% |
+| 0.1% whole cell | 4 | 0.30 | 0.41 | **0.45** | 0.21 / 0.56 | 52 | 0.33 → 0.42 (0.43) | 62% | 13% |
 
-- **A richer pool helps a little.** Paired cell by cell with this review's seeds, the pool at 1% lifts F-beta after
-  the check by +0.009 ± 0.006, +0.009 ± 0.003 and +0.033 ± 0.005 (SE over the 49 class means), and at 50 clicks by
-  +0.03 at every preset. It returns more images (24, 51 and 114 against 17, 44 and 81) at higher recall and
-  slightly lower precision. Done fires in 96% of sessions.
-- **At 0.1% the returned set is small and less precise.** After the check, F-beta reads 0.46, 0.37 and 0.45, from a
-  median of 9, 16 and 50 images at precision 0.48, 0.35 and 0.21.
+- **A richer pool helps a little, most at the recall end.** Paired cell by cell with this review's 45 seeds, the
+  pool at 1% lifts F-beta after the check by +0.007 ± 0.004, +0.005 ± 0.003 and +0.030 ± 0.004 (SE over the 49 class
+  means). At 50 clicks it lifts it by about +0.025 at every preset.
+- **With the pool at 1%, the line keeps more.** The returned set grows by a mean of +5, +20 and +65 images, at
+  higher recall and lower precision.
+- **With the pool at 1%, the opening ends sooner.** Only 1% of sessions never show a detector, against 4%, and
+  Done fires in 96% of sessions.
+- **At 0.1% the returned set is small and less precise.** After the check, F-beta reads 0.45, 0.37 and 0.45, from
+  a median of 8, 16 and 52 images at precision 0.48, 0.35 and 0.21.
 - **150 clicks still reach the full-label ranking at 0.1%:** AP goes 0.33 → 0.43, its ceiling. AP falls with
   prevalence (a random ranking scores the prevalence), so its level does not compare across the three rows.
-- **At 0.1% the app is told to stop less often, and stays in the opening more.** Done fires in 63% of sessions, and
-  96 of 720 (13%) never show a detector, against 4% at 0.44%.
-- **The 0.1% click 0 is the sessions' own test half.** Through vote 29 a session's detector is the typed query
-  (#4758), so its AP at click 1 is the text sort's AP. The 0.1% text baseline gives the same AP on 719 of 720 cells
-  and the same positive counts on all 720; the last cell is within 3e-6. The same check finds 12 of 720 cells
-  within 0.0002 on this review's own run as well: the harness and the baseline break a few ties differently.
+- **At 0.1% the app is told to stop less often, and stays in the opening more.** Done fires in 62–63% of sessions,
+  and 13% never show a detector.
+- **Each set's click 0 is its sessions' own test half.** Through vote 29 a session's detector is the typed query
+  (#4758), so its AP at click 1 is the text sort's AP.
+  - Over all 8,496 cells of each set, the positive counts match everywhere.
+  - The APs match to 1e-6 except on 17 cells at 0.1% and 99 with the pool at 1%, each within 0.0002.
+  - This review's own run shows the same: 12 of its first 720 cells. The harness and the baseline break a few ties
+    differently.
 
 ## What to A/B next
 
@@ -397,9 +402,9 @@ cover the same seeds.
 - `figures/`: the objective, the returned set and its path, per preset; AP and Goods over clicks; every cell.
 - `why/`: the confuser sheets and `why.csv`.
 - `images.md` and `images/`: the 12 flagged images each side that moved AP most per click at beta 1 (`thumbs.py`).
-- `viewer_prevalence_b025|b1|b4.html`: the [prevalence pages](#at-other-prevalences-4959) (`viewer_prevalence.sh`,
-  then reskinned to open on each dataset). Their runs are `2026-10-16-h0.01-b*` and `-p0.001-b*`, with drivers in
-  `/expscratch/sgreenberg/sota-4959/`.
+- `viewer_prevalence_b025|b1|b4.html`: the [prevalence pages](#at-other-prevalences-4959), from
+  `viewer_prevalence.sh`. Their runs are `2026-10-16-h0.01-b*` and `-p0.001-b*`. The drivers, the analysis script
+  (`final-prev.sh`) and the click-1 check (`apcheck.py`) are in `/expscratch/sgreenberg/sota-4959/`.
 - **Runs and full analyses:** `/expscratch/sgreenberg/state-of-the-app/2026-10-16-b025|b1|b4/analysis-binary/`.
   `perp.py` and `by_click.py` over them are in `2026-10-16-perp/`, and the viewer's build in `2026-10-16-betas/`.
 - **Scripts** are in `/expscratch/sgreenberg/sota-1016/`:
