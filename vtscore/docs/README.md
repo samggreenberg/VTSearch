@@ -112,8 +112,8 @@ the docs make sense:
   refuses `flask` / `werkzeug` / `flask_smorest` before pytest collects
   `tests_lib/`, and by `tests_lib/meta/test_library_layering.py`, which
   fails on any `import vtsearch` under `vtscore/`. Library code reads
-  configuration from `CoreConfig` or context fields; it never reaches
-  across the boundary.
+  configuration with `vtscore.config.get_setting` or from context fields;
+  it never reaches across the boundary.
 - **Votes are `dict[int, None]`, not sets.** `votes[cid] = None` adds a
   vote; `del votes[cid]` removes one. The dict shape preserves insertion
   order and serialises consistently.

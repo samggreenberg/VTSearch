@@ -1952,20 +1952,20 @@ def _run_pipeline(
     source and the exporter has run, ``False`` for a dry run and for a saving
     run that skipped detection.
     """
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting, redirect_settings_path
 
-    # Build the runtime config once (routing the optional settings_path
-    # redirect through the same call) so this function - and the helpers
-    # below - never import ``vtsearch.settings`` directly.
-    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
-    autofind_detectors = list(config.autofind_detectors)
+    # Settings are read through ``get_setting`` so this function - and the
+    # helpers below - never import ``vtsearch.settings`` directly.
+    if settings_path:
+        redirect_settings_path(settings_path)
+    autofind_detectors = list(get_setting("autofind_detectors"))
     detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
-    exporter_name, exporter_field_values = _resolve_exporter(config, exporter_name, exporter_field_values)
+    exporter_name, exporter_field_values = _resolve_exporter(exporter_name, exporter_field_values)
     if dataset is not None and not dry_run:
         exporter_field_values = _exporter_fields_for_dataset(exporter_name or "gui", exporter_field_values, dataset)
 
     if dry_run:
-        if source_description and source_description.get("save_dataset") and config.autofind_cli_delete_dataset:
+        if source_description and source_description.get("save_dataset") and get_setting("autofind_cli_delete_dataset"):
             source_description = {**source_description, "delete_after_detection": True}
         _run_dry_run(
             source_description,
@@ -2017,17 +2017,22 @@ def _run_pipeline(
 
 
 def _resolve_exporter(
-    config: Any, exporter_name: str | None, exporter_field_values: dict[str, Any] | None
+    exporter_name: str | None, exporter_field_values: dict[str, Any] | None
 ) -> tuple[str | None, dict[str, Any] | None]:
     """Fall back to the settings' AutoFind results exporter when no ``--exporter`` was given.
 
     Its per-exporter field values come along too.  An explicit ``--exporter``
     always wins; if neither is set the downstream default (``gui``) applies.
     """
-    if exporter_name is None and config.autofind_exporter:
-        exporter_name = config.autofind_exporter
+    from vtscore.config import get_setting  # noqa: PLC0415
+
+    if exporter_name is not None:
+        return exporter_name, exporter_field_values
+    configured = get_setting("autofind_exporter")
+    if configured:
+        exporter_name = configured
         if exporter_field_values is None:
-            exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
+            exporter_field_values = dict(get_setting("autofind_exporter_field_values").get(configured, {}))
     return exporter_name, exporter_field_values
 
 
@@ -2364,11 +2369,12 @@ def _delete_after_detection(entry: dict[str, Any], settings_path: str | None) ->
     the import was the point) or failed (so it can be searched again from the
     dashboard).
     """
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting, redirect_settings_path  # noqa: PLC0415
     from vtscore.datasets.registry import unregister_dataset  # noqa: PLC0415
 
-    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
-    if not config.autofind_cli_delete_dataset or not unregister_dataset(entry["id"]):
+    if settings_path:
+        redirect_settings_path(settings_path)
+    if not get_setting("autofind_cli_delete_dataset") or not unregister_dataset(entry["id"]):
         return
     cli_progress.emit(
         "dataset_deleted",
@@ -2628,9 +2634,9 @@ def _run_source(
     imports transformers (#3715).  A dry run loads nothing and skips it.
     """
     if settings_path:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import redirect_settings_path  # noqa: PLC0415
 
-        CoreConfig.from_settings(settings_path=settings_path)
+        redirect_settings_path(settings_path)
     if not dry_run:
         from vtscore.embedding import initialize_models  # noqa: PLC0415
 

@@ -105,9 +105,9 @@ def embed_detector_query(text: str, media_type: str, embedder: str) -> "np.ndarr
     from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
 
     try:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import get_setting  # noqa: PLC0415
 
-        enrich = bool(CoreConfig.from_settings().enrich_descriptions)
+        enrich = bool(get_setting("enrich_descriptions"))
     except Exception:  # noqa: BLE001 - no settings provider (a library caller): the shipped default
         enrich = False
     return embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder)

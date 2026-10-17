@@ -12,6 +12,25 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Library code reads one setting at a time: `vtscore.config.get_setting`** (issue #4997). `CoreConfig`
+  was meant to be built once per request and passed down; instead 28 call sites built one with
+  `CoreConfig.from_settings()` to read a field or two, each a snapshot of every setting. They now call the
+  new `get_setting(name)`, where `name` is a `CoreConfig` field, which answers from a host getter registered
+  with the new `register_setting_getter(name, fn)`, else that field of the `CoreConfig` a registered builder
+  returns, else the field's default; a required field with none of these raises `RuntimeError`, as
+  `from_settings()` did, and a name that is not a setting raises `ValueError`. The new
+  `register_settings_path_redirect(fn)` / `redirect_settings_path(path)` carry the CLI's `--settings`
+  redirect, which `from_settings(settings_path)` used to (with no redirect hook, a registered builder is still
+  handed the path). **`CoreConfig` keeps its name and its uses**: a library-only consumer still constructs
+  one and registers a builder returning it, unchanged, and `CoreConfig.from_settings()` still returns the
+  whole bundle - the builder's config when that is all there is, else one assembled from `get_setting`. An
+  out-of-tree plugin that read `CoreConfig.from_settings().<field>` keeps working; `get_setting("<field>")`
+  is the narrow read. The VTSearch app now registers a getter per setting instead of a builder.
+  `vtscore.host_seams.HostSeams` gains `setting_getters` and `settings_path_redirect`. **Behaviour change**:
+  a setting with a `CoreConfig` default now reads that default in a process that configured nothing, so
+  there `vtscore.state.core.user_beta` returns `DEFAULT_BETA` (it returned `None`), and
+  `vtscore.state.detector_beta` / `seed_detector_beta` seed `DEFAULT_BETA` (they raised `RuntimeError`).
+
 - **A head the label quota gives keeps the ranking its line is counted on** (issue #5048). The Goods'
   centroid (#4643) and a typed query's head (#4758) used to install with `line_ranking = None`, so
   `detector_balance_state` reported the balance's cap (32 at beta 1 or below, 128 above) as their

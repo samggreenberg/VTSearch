@@ -16,7 +16,7 @@ push runs, so it is always the newest state.  Pushes are paced per detector:
 
 * never two at once for one detector - a change landing while a push is in
   flight rides the next one;
-* at least ``CoreConfig.labelset_source_push_interval`` seconds between the
+* at least the ``labelset_source_push_interval`` setting's seconds between the
   starts of two pushes (the app's ``labelset_source_push_interval_seconds``),
   so a slow target or a burst of votes costs one write per window;
 * never sooner than ``_DEBOUNCE_DELAY`` after the change that scheduled it,
@@ -163,11 +163,11 @@ def _digest(labelset: LabelSet) -> str:
 
 def _push_interval() -> float:
     """The configured gap between pushes of one detector, in seconds."""
-    from vtscore.config import DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL, CoreConfig  # noqa: PLC0415
+    from vtscore.config import DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL, get_setting  # noqa: PLC0415
 
     try:
-        return max(0.0, float(CoreConfig.from_settings().labelset_source_push_interval))
-    except Exception:  # noqa: BLE001 - no app builder (library-only) or unreadable settings
+        return max(0.0, float(get_setting("labelset_source_push_interval")))
+    except Exception:  # noqa: BLE001 - unreadable settings
         return DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL
 
 

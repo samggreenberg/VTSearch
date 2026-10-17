@@ -447,19 +447,13 @@ class TestColdFindTrainsUnderTheUsersSettings:
         used the user's line.  One labelset should mean one detector either way.
         No Inclusion reaches it: that is no longer a user preference (#4269).
         """
-        import dataclasses
-
-        import vtscore.config as config_mod
+        from vtscore.config import register_setting_getter
         import vtscore.detectors.labelset_training as labelset_mod
 
-        real_from_settings = config_mod.CoreConfig.from_settings
-
-        def _from_settings(cls, settings_path=None):
-            return dataclasses.replace(
-                real_from_settings(settings_path), beta=2.0, calibrate_count=3, calibration_fraction=0.4
-            )
-
-        monkeypatch.setattr(config_mod.CoreConfig, "from_settings", classmethod(_from_settings))
+        # The per-test reset puts the app's own getters back afterwards.
+        register_setting_getter("beta", lambda: 2.0)
+        register_setting_getter("calibrate_count", lambda: 3)
+        register_setting_getter("calibration_fraction", lambda: 0.4)
         seen: list[dict] = []
         real_train = labelset_mod.labelset_train_and_score
 

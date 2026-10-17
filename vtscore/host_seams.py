@@ -36,6 +36,8 @@ Seam                                    Declared in
 ``detector_context_resolver``           :mod:`vtscore.state.core`
 ``request_user_resolver``               :mod:`vtscore.state.current_user`
 ``core_config_builder``                 :mod:`vtscore.config.core_config`
+``setting_getters`` (keyed)             :mod:`vtscore.config.core_config`
+``settings_path_redirect``              :mod:`vtscore.config.core_config`
 ``last_embedder_persistence_hook``      :mod:`vtscore.datasets.load_pipeline`
 ``setting_persisters`` (keyed)          :mod:`vtscore.state`
 ``achievement_recorders`` (keyed)       :mod:`vtscore.achievements_hooks`
@@ -49,7 +51,7 @@ with the app as one registrant among several.  Snapshotting it here would
 be harmless; *restoring* it would be a live hazard, since a restore
 running before the built-ins finish registering would drop them.
 
-There is no ``install(**seams)`` counterpart on purpose.  The eight
+There is no ``install(**seams)`` counterpart on purpose.  The ten
 ``register_*`` functions are public, documented ``vtscore`` surface that
 out-of-tree code may call, so they stay the way a host installs a seam;
 an alternative spelling of the same thing would be one more name to keep
@@ -67,7 +69,7 @@ from typing import Any
 class HostSeams:
     """An immutable snapshot of every installed host seam.
 
-    The two keyed seams are copied into plain ``dict``s at capture time, so
+    The three keyed seams are copied into plain ``dict``s at capture time, so
     a later mutation of the live registry cannot reach back into a snapshot
     already taken.
     """
@@ -77,6 +79,8 @@ class HostSeams:
     detector_context_resolver: Callable[[], Any]
     request_user_resolver: Callable[[], str | None]
     core_config_builder: Callable[..., Any] | None
+    setting_getters: dict[str, Callable[[], Any]]
+    settings_path_redirect: Callable[..., None] | None
     last_embedder_persistence_hook: Callable[[str, str], None] | None
     setting_persisters: dict[str, Callable[[Any], None]]
     achievement_recorders: dict[str, Callable[..., Any]]
@@ -102,6 +106,8 @@ def capture_host_seams() -> HostSeams:
         detector_context_resolver=state_core._detector_context_resolver,
         request_user_resolver=current_user._request_user_resolver,
         core_config_builder=core_config._core_config_builder,
+        setting_getters=dict(core_config._setting_getters),
+        settings_path_redirect=core_config._settings_path_redirect,
         last_embedder_persistence_hook=load_pipeline._last_embedder_persistence_hook,
         setting_persisters=dict(state._setting_persisters),
         achievement_recorders=dict(achievements_hooks._recorders),
@@ -112,8 +118,8 @@ def restore_host_seams(seams: HostSeams) -> None:
     """Put every host seam back to the state *seams* recorded.
 
     The keyed registries are restored in place (cleared and refilled) rather
-    than rebound, because :mod:`vtscore.state` and
-    :mod:`vtscore.achievements_hooks` read their module globals directly and
+    than rebound, because :mod:`vtscore.config.core_config`, :mod:`vtscore.state`
+    and :mod:`vtscore.achievements_hooks` read their module globals directly and
     a test may hold a reference to the live dict.
     """
     import vtscore.achievements_hooks as achievements_hooks  # noqa: PLC0415
@@ -128,8 +134,11 @@ def restore_host_seams(seams: HostSeams) -> None:
     state_core._detector_context_resolver = seams.detector_context_resolver
     current_user._request_user_resolver = seams.request_user_resolver
     core_config._core_config_builder = seams.core_config_builder
+    core_config._settings_path_redirect = seams.settings_path_redirect
     load_pipeline._last_embedder_persistence_hook = seams.last_embedder_persistence_hook
 
+    core_config._setting_getters.clear()
+    core_config._setting_getters.update(seams.setting_getters)
     state._setting_persisters.clear()
     state._setting_persisters.update(seams.setting_persisters)
     achievements_hooks._recorders.clear()
