@@ -44,6 +44,12 @@ _stale_baseline() {
   local header c
   header=$(head -1 "$BASELINE")
   for c in text_f1_p50 $_BETA_COLS; do [[ ",$header," == *",$c,"* ]] || return 0; done
+  # A baseline built for fewer seeds than the run now holds (a run widened after a first read, #4959) leaves the
+  # later seeds' click 0 blank, and every session scored at its typed query with it.
+  local have
+  have=$(python -c "import pandas as pd, sys; print(pd.read_csv(sys.argv[1], usecols=['seed'])['seed'].nunique())" \
+    "$BASELINE" 2>/dev/null || echo 0)
+  (( have < CALIB_N_SEEDS )) && { echo "text baseline covers $have of $CALIB_N_SEEDS seeds; rebuilding"; return 0; }
   return 1
 }
 if _stale_baseline; then
