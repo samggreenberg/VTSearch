@@ -354,9 +354,10 @@ def _app_train_and_calibrate(
     ``vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD``), so the reported thresholds
     and costs are the shipped detector's.  ``head="linear_svm"`` (the plain
     SVM), ``head="linear"`` (the logistic head the SVM replaced) and
-    ``head="mlp"`` (the small-MLP candidate #2781 measured) are named arms.  Everything *around* the head mirrors the
-    production ``_train_and_score_xy`` / ``train_and_threshold`` pipeline
-    whichever is chosen:
+    ``head="mlp"`` (the small-MLP candidate #2781 measured) are named arms.
+    Everything *around* the head mirrors the production
+    ``_train_and_score_xy`` / ``train_and_threshold`` pipeline whichever is
+    chosen:
 
     Good votes region-pool their ground-truth box when *region_voting* is on
     (and the media supports it); Bad votes always train on the whole-image
