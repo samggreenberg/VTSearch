@@ -28,6 +28,13 @@ import pytest
 
 import vtscore.config as config
 from tests_shared.embedding_stubs import fake_embed_audio as _fake_embed_audio, make_stub_embedding_models_fixture
+from tests_shared.pass_cache import (
+    configure_pass_cache,
+    deselect_cached_passes,
+    finish_pass_cache,
+    note_worker_reused,
+    record_pass_report,
+)
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit
 from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer
 from tests_shared.state_reset import (
@@ -49,9 +56,15 @@ from tests_shared.state_reset import (
 # the Angular bundle fixture and the autorun-processor reset.
 
 
+def pytest_configure(config):
+    """Derive the pass-cache tree key (controller) or read it (xdist worker); see ``tests_shared``."""
+    configure_pass_cache(config)
+
+
 def pytest_collection_modifyitems(items, config):
-    """Auto-assign group markers based on the test file's parent directory."""
+    """Auto-assign group markers based on the test file's parent directory, then drop recorded passes."""
     add_group_markers(items, root_dir_name="tests")
+    deselect_cached_passes(config, items)
 
 
 def pytest_collection_finish(session):
@@ -488,15 +501,32 @@ def pytest_unconfigure(config):
     print_summary_and_exit(config, getattr(config, "_vtsearch_exitstatus", 0))
 
 
+def pytest_runtest_logreport(report):
+    """Record a passing phase for the pass cache (controller only; see ``tests_shared``)."""
+    record_pass_report(report)
+
+
 def pytest_sessionfinish(session, exitstatus):
-    """Stash the exit status so pytest_unconfigure can use it."""
-    session.config._vtsearch_exitstatus = exitstatus
+    """Write the pass cache, then stash the exit status so pytest_unconfigure can use it.
+
+    ``session.exitstatus`` rather than the hook's argument: the pass cache turns
+    a "no tests collected" exit into 0 when every selected test was already
+    recorded, and pytest reads the attribute back after this hook.
+    """
+    finish_pass_cache(session)
+    session.config._vtsearch_exitstatus = session.exitstatus
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_xdist_make_scheduler(config, log):
     """Loadgroup that survives a dead worker (#4925; see ``tests_shared``)."""
     return make_crash_safe_scheduler(config, log)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    """Take a finished xdist worker's pass-cache count (see ``tests_shared``)."""
+    note_worker_reused(node)
 
 
 @pytest.hookimpl(optionalhook=True)

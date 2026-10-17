@@ -41,69 +41,105 @@
 #
 # Nothing tests in CI, so a *full* `./run-tests.sh` is the only real gate and
 # runs every check. The run is staged, because the stages are independent of
-# each other and the box has more than one core:
+# each other and the box has more than one core. Measured on a warm 4-vCPU
+# box with 17k tests (2026-10): the serial chain this replaced took 791s, of
+# which 37s were the cheap gates one after another, 27s the frontend build,
+# 239s pyright, and 488s pytest with the heavy lanes started beside it (411s
+# with the box to itself).
 #
-#   1. Cheap gates, serial, fail-fast (~8s total). Linters, doc invariants,
-#      snapshot drift. These are quick enough that stopping at the first
-#      failure costs nothing and saves you reading past it.
-#   2. The frontend production build, serial. It has to precede pytest because
-#      a handful of tests serve the built bundle out of `static/`, and it is
-#      also the frontend failure people hit most, so it is worth failing on
-#      before spending minutes elsewhere.
-#   3. pyright, serial, fail-fast (~2min). It is the slowest gate after pytest.
-#      It used to run beside pytest, so a type error was only printed once
-#      pytest finished, even when every test passed: a whole run wasted to
-#      learn one fact. Here it stops the run at ~2.5min.
-#      Running it first costs little on a green run, because the box is
-#      CPU-bound: beside pytest it was taking cores pytest would otherwise use
-#      (pytest took 406-444s with pyright alongside, 336-350s without). Measured
-#      warm on a 4-vCPU box: 455-483s concurrent, 501s with pyright first.
-#   4. The remaining heavy, mutually independent stages *concurrently*:
-#      pip-audit, the vulture whitelist check, the frontend unit suite, and
-#      pytest.
+#   1. The stale-tree check, alone (~0.2s): every other gate passes by
+#      construction on the wrong tree, so whether it is the right tree is asked
+#      first.
+#   2. The cheap gates, CONCURRENTLY, every one to completion. Linters, doc
+#      invariants, snapshot drift: fourteen single-threaded checks that read
+#      the tree and write nothing, bounded by codespell (~9s warm). Serially
+#      they were 37s; together they are the length of the slowest one, and one
+#      pass reports every stage-2 failure instead of the first.
+#   3. The heavy whole-repo gates, concurrently, in two kinds:
+#        - GATING lanes, which must be green before pytest starts: pyright and
+#          the frontend production build. pyright is the slowest gate after
+#          pytest and the one a type error fails; the build is the frontend
+#          failure people actually hit, and pytest serves the bundle it writes
+#          to `static/`, so building while pytest reads would race. The first
+#          gating lane to fail stops the run there, with its log: dying before
+#          pytest skips most of the runtime, which is the cheap side of the
+#          fail-fast trade.
+#        - FREE lanes, which start now and are collected after pytest:
+#          pip-audit, the vulture whitelist check, `npm audit`, and the
+#          Vitest suite (started the moment the build is green, because both
+#          regenerate the API client and must not do so at once). pyright
+#          leaves two of four cores idle for its whole run; the free lanes
+#          fill them, instead of starting beside pytest's four workers, where
+#          they cost it 77s (startup went from 25s to 73s).
+#      pyright itself is incremental: scripts/pyright-incremental.py checks
+#      only the files changed since the last green check plus everything that
+#      transitively imports them, which is exact rather than heuristic (a
+#      file's diagnostics depend on its text, its transitive imports, the
+#      installed packages and the config, and nothing else). A fresh clone, a
+#      changed config or environment, or VTSEARCH_FRESH=1 gets the full check.
+#      Measured: 239s full, ~3s for one changed test file.
+#   4. pytest, alone on the box. Tests that already passed on this identical
+#      working tree -- in a group run a minute ago, or in a full run nothing
+#      has changed since -- are not re-run (tests_shared/pass_cache.py keys
+#      the record on a hash of the tree and the environment); the rest run.
+#      Then the free lanes are collected and every failure is reported
+#      together.
 #
-# Stage 4 deliberately does NOT stop at the first failure: every lane runs to
-# completion and all failures are reported together. A serial chain that dies
-# on the first bad gate makes you pay the whole runtime again per fix. pyright
-# is the exception because it is the cheap side of that trade: dying on it
-# skips pytest, which is most of the runtime.
+# Group runs (`./run-tests.sh <group>`) run stages 1-2 and their own tests, and
+# skip the whole-repo gates in stage 3 that are not about the code you just
+# changed -- pyright, pip-audit and the vulture whitelist check. That keeps
+# the edit/test loop in the seconds it should be. The skip is announced on
+# every group run and named in the verdict, because the full run is what
+# actually gates a push. Set VTSEARCH_FULL_GATES=1 to force those three back
+# on for a group run. The frontend gates follow the group, not that variable:
+# the build and npm audit run for `core` and `frontend`, Vitest for `frontend`
+# alone.
 #
-# Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
-# skip the whole-repo gates in stages 3 and 4 that are not about the code you
-# just changed — pyright, pip-audit and the vulture whitelist check. That keeps
-# the edit/test loop in the seconds it should be instead of paying ~2.5min of
-# whole-repo checks to run a five-second group. The skip is announced on every
-# group run and named in the verdict, because the full run is what actually
-# gates a push. Set VTSEARCH_FULL_GATES=1 to force those three back on for a
-# group run. The frontend gates follow the group, not that variable: the build
-# and npm audit run for `core` and `frontend`, Vitest for `frontend` alone.
+# Three fast paths prune a full run further, each on a premise the run checks
+# against the branch's diff rather than trusts, and each announcing itself:
 #
-# `slides` goes further and is the one group that also gates a push, because a
-# change confined to slides/ cannot reach anything else in the repo: nothing
-# imports slides/build.py (it is a standalone script), pyrightconfig.json does
-# not include it, and no test in either tree touches a deck. So the group runs
-# only the four gates that can actually observe a deck — ruff (build.py),
+# `slides` is the one group that also gates a push, because a change confined
+# to slides/ cannot reach anything else in the repo: nothing imports
+# slides/build.py (it is a standalone script), pyrightconfig.json does not
+# include it, and no test in either tree touches a deck. So the group runs
+# only the four gates that can actually observe a deck -- ruff (build.py),
 # codespell (slide prose), check-docs.py (fragments are tracked markdown), and
-# build.py --check — and skips pytest and every whole-repo gate. ~8s against
-# ~8min. The exemption is self-policing: the group refuses to run when the
-# branch touches anything outside slides/, so it cannot be taken by mistake.
+# build.py --check -- and skips pytest and every whole-repo gate. The group
+# refuses to run when the branch touches anything outside slides/, so the
+# exemption cannot be taken by mistake.
 #
-# `docs` is the same idea one step wider, and it does not wait to be asked.
-# A change confined to tracked markdown cannot be seen by pyright (which
-# excludes markdown), by pip-audit, by the frontend build or its unit suite, or
-# by nearly all of the Python tests. So a *bare* `./run-tests.sh` looks at what
-# the branch actually changed and, when the answer is "markdown and nothing
-# else", keeps the whole of stage 1 — the gates that genuinely read markdown
-# live there — and narrows pytest to the tests that can observe a doc
-# (tests_shared/markdown_surface.py names them, and a meta test keeps that list
-# honest). ~35s against ~8min.
+# The markdown-only path is the same idea one step wider, and it does not wait
+# to be asked. A change confined to tracked markdown cannot be seen by pyright
+# (which excludes markdown), by pip-audit, by the frontend build or its unit
+# suite, or by nearly all of the Python tests. So a *bare* `./run-tests.sh`
+# looks at what the branch actually changed and, when the answer is "markdown
+# and nothing else", keeps the whole of stage 2 -- the gates that genuinely
+# read markdown live there -- and narrows pytest to the tests that can observe
+# a doc (tests_shared/markdown_surface.py names them, and a meta test keeps
+# that list honest). It auto-engages because the thing being fixed is the
+# *default* path: a plan-file session pays the full run precisely by running
+# the command everyone runs.
 #
-# It auto-engages because the thing being fixed is the *default* path: a
-# plan-file session pays the full ~8 minutes precisely by running the command
-# everyone runs. A group you have to remember to type would not have caught it.
-# The pruning is announced in full, and VTSEARCH_FULL_GATES=1 turns it off.
-# Naming the group explicitly (`./run-tests.sh docs`) is the same gate with the
-# slides-style guard: it refuses to run when the branch changes anything else.
+# The frontend-only path is its mirror: when the branch changes nothing
+# outside frontend/, pyright (which excludes that tree), pip-audit and the
+# vulture whitelist check cannot see the change and are skipped, the build,
+# npm audit and Vitest run in full, and pytest is narrowed to the tests that
+# can observe the frontend -- the ones that read a file under frontend/, serve
+# the built bundle, or ask the Flask client for a route the SPA catch-all
+# answers with it (tests_shared/frontend_surface.py names them; a meta test
+# keeps that list honest too).
+#
+# The frontend gates also prune themselves on any full run: when the branch
+# changes no frontend/ path they have nothing to judge (that is a claim about
+# the diff, decided by scripts/check-frontend-gate.py), so the build, npm audit
+# and Vitest are skipped and the verdict says so. The build still runs when
+# `static/` holds no bundle, so the tests that serve one do not build it inside
+# a pytest worker.
+#
+# VTSEARCH_FULL_GATES=1 turns the markdown-only and frontend-only narrowing off
+# and forces the whole-repo gates on; VTSEARCH_FRESH=1 ignores every record of
+# an earlier run (full pyright, every test re-run) without disabling the
+# pruning that is proven against the diff.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -303,10 +339,11 @@ _blocked() {
 # linted by a full run and is exactly the kind of thing that should not ride
 # along unchecked on a narrowed one.
 #
-# Both fast paths below rest on this: `slides` verifies the diff is confined to
-# slides/, and the markdown path both detects and verifies. Returns non-zero
-# when there is no origin/dev to diff against, in which case neither path can
-# establish its premise and both decline to narrow anything.
+# Every fast path below rests on this: `slides` verifies the diff is confined
+# to slides/, and the markdown-only and frontend-only paths both detect and
+# verify. Returns non-zero when there is no origin/dev to diff against, in
+# which case no path can establish its premise and all of them decline to
+# narrow anything.
 _branch_changed_paths() {
     local base
     base=$(git merge-base HEAD origin/dev 2>/dev/null || true)
@@ -361,15 +398,15 @@ fi
 # *copies* docs/user/*.md into the bundle (frontend/docs-assets is a symlink to
 # it) and cannot fail on its contents, and of the Python tests only the ones
 # named in tests_shared/markdown_surface.py ever open a doc. What *can* see a
-# doc is stage 1 — check-docs, codespell, the doc-inventory and screenshot
-# wiring snapshots, the deck preflight — so a markdown-only run keeps stage 1
-# whole and prunes the rest.
+# doc is the cheap-gate stage — check-docs, codespell, the doc-inventory and
+# screenshot wiring snapshots, the deck preflight — so a markdown-only run
+# keeps that stage whole and prunes the rest.
 #
 # Unlike `slides`, this engages on a bare `./run-tests.sh`. The complaint it
 # answers is about the default: a session that writes one plan file pays the
-# full ~8 minutes by running the command everybody runs, and a group name you
-# have to remember would not have been typed. So the diff decides, the pruning
-# is announced in full, and VTSEARCH_FULL_GATES=1 opts out.
+# full run by running the command everybody runs, and a group name you have to
+# remember would not have been typed. So the diff decides, the pruning is
+# announced in full, and VTSEARCH_FULL_GATES=1 opts out.
 #
 # Three things keep the narrowing honest rather than optimistic:
 #   - it needs a diff to reason about. No origin/dev, or no changes at all, and
@@ -434,7 +471,7 @@ fi
 
 _docs_targets=()
 if $_is_docs_run; then
-    # Nothing outside stage 1 and the markdown surface can see a doc.
+    # Nothing outside the cheap gates and the markdown surface can see a doc.
     _run_whole_repo_gates=false
     _run_frontend_check=false
     _run_frontend_unit=false
@@ -454,6 +491,70 @@ if $_is_docs_run; then
 fi
 
 # ---------------------------------------------------------------------------
+# The frontend-only fast path: the markdown-only path's mirror.
+#
+# A change confined to frontend/ is invisible to pyright (pyrightconfig.json
+# excludes that tree), to pip-audit (it reads the venv) and to the vulture
+# whitelist check (it reads Python). What can see it runs in full: every cheap
+# gate (codespell and check-docs read TypeScript and SCSS), the production
+# build, npm audit and the Vitest suite. Of the Python tests, only the ones
+# that read a file under frontend/, serve the built bundle, or ask the Flask
+# client for a route the SPA catch-all answers with that bundle can observe
+# the change; tests_shared/frontend_surface.py names them, and
+# tests_lib/meta/test_frontend_surface.py fails when a test outside that list
+# learns to reach the frontend.
+#
+# Same shape as the markdown path: engages on a bare `./run-tests.sh` when the
+# diff says so, announces itself, and VTSEARCH_FULL_GATES=1 opts out. It needs
+# a readable, non-empty diff; without one nothing is pruned. The explicit
+# `frontend` group is a different, narrower thing — the build, audit and Vitest
+# with no pytest — and stays the inner-loop gate for a mixed branch.
+# ---------------------------------------------------------------------------
+_is_frontend_only_run=false
+if $_is_full_run && ! $_is_docs_run && [[ "${VTSEARCH_FULL_GATES:-}" != "1" ]]; then
+    if _fe_changed=$(_branch_changed_paths) && [[ -n "$_fe_changed" ]]; then
+        _fe_outside=$(printf '%s\n' "$_fe_changed" | grep -v '^frontend/' || true)
+        if [[ -z "$_fe_outside" ]]; then
+            _is_frontend_only_run=true
+            echo "============================================================"
+            echo "FRONTEND-ONLY CHANGE: narrowing this run"
+            echo ""
+            echo "$_fe_changed" | sed 's/^/  /'
+            echo ""
+            echo "Nothing outside frontend/ has changed, so this run keeps every cheap"
+            echo "gate, runs the production build, npm audit and the Vitest suite in"
+            echo "full, narrows pytest to the tests that can observe the frontend, and"
+            echo "skips pyright, pip-audit and the vulture whitelist check — none of"
+            echo "which can see a file under frontend/."
+            echo ""
+            echo "Set VTSEARCH_FULL_GATES=1 to run everything anyway."
+            echo "============================================================"
+            echo ""
+        fi
+    fi
+fi
+
+_frontend_targets=()
+if $_is_frontend_only_run; then
+    _run_whole_repo_gates=false
+    _run_frontend_check=true
+    _run_frontend_unit=true
+    _run_pytest=true
+    # Single-sourced with the gate that proves the list is complete; see
+    # tests_shared/frontend_surface.py.
+    _fe_surface=$(python -c 'from tests_shared.frontend_surface import FRONTEND_TEST_SURFACE as s; print(" ".join(s))' 2>/dev/null || true)
+    if [[ -z "$_fe_surface" ]]; then
+        _blocked "could not read FRONTEND_TEST_SURFACE from tests_shared/frontend_surface.py"
+        echo ""
+        echo "The frontend-only path narrows pytest to that list, so an unreadable"
+        echo "list would silently run no tests at all. Run './run-tests.sh' with"
+        echo "VTSEARCH_FULL_GATES=1, and fix the import."
+        exit 1
+    fi
+    read -r -a _frontend_targets <<< "$_fe_surface"
+fi
+
+# ---------------------------------------------------------------------------
 # The skip ledger.
 #
 # A gate that does not run must say so in the verdict, because the failure this
@@ -463,46 +564,147 @@ fi
 # the same shape as the globbing coverage gate in #4011 and the stale recipe
 # docstring in #4007: a check that quietly judges less than it claims.
 #
-# The fast paths above do NOT record here. They verify against the diff that
-# what they skip could not have seen the change, and each prints its own
-# verdict saying so -- a proven-irrelevant gate is not an unjudged one.
+# The fast paths above do NOT record here, and neither does the frontend gates'
+# diff-proven skip below. Each verifies against the diff that what it skips
+# could not have seen the change, and each is named in its own verdict line --
+# a proven-irrelevant gate is not an unjudged one, but it is still named.
 # ---------------------------------------------------------------------------
 _skipped_gates=()
 _note_skipped() { _skipped_gates+=("$1"); }
 
-# Frontend gates vs a worktree with no node_modules.
+# Which frontend gates run, decided up front against the branch diff by
+# scripts/check-frontend-gate.py, so a frontend change in a worktree with no
+# node_modules fails in the first seconds instead of after pytest, and a
+# backend-only change does not spend the build and the Vitest suite re-checking
+# origin/dev's frontend. An unreadable answer is a block: a gate that cannot
+# say what it checked must not read as having checked everything.
 #
-# Decided by scripts/check-frontend-gate.py against the branch diff, and
-# decided HERE rather than at the gates themselves so a frontend change fails
-# in the first seconds instead of after pytest. An unreadable answer is a
-# block: a gate that cannot say what it checked must not read as having
-# checked everything.
-_fe_gate_decision=""
+# Naming the `frontend` group asks for the gates explicitly, so the diff does
+# not decide there; only node_modules does.
+_bundle_present() { [[ -f static/index.html && -f static/main.js ]]; }
+_fe_proven_skip=false
+_run_frontend_build=false
 if $_run_frontend_check || $_run_frontend_unit; then
-    _fe_gate_decision=$(python scripts/check-frontend-gate.py || true)
-    case "$_fe_gate_decision" in
-        run) ;;
-        skip)
-            _note_skipped "frontend build (no frontend/node_modules)"
-            _note_skipped "npm audit (no frontend/node_modules)"
-            $_run_frontend_unit && _note_skipped "frontend unit tests (no frontend/node_modules)"
-            ;;
-        *)
-            _blocked "the frontend gates cannot run in this worktree"
+    if _group_named frontend; then
+        if [ -d frontend/node_modules ]; then
+            _run_frontend_build=true
+        else
+            _blocked "the 'frontend' group needs frontend/node_modules"
             echo ""
-            echo "This run would otherwise have skipped the frontend build, npm audit"
-            echo "and the Vitest suite and still reported every gate green (#4019)."
+            echo "Install them:  cd frontend && npm install"
             exit 1
-            ;;
-    esac
+        fi
+    else
+        _fe_why=$(mktemp)
+        _fe_gate_decision=$(python scripts/check-frontend-gate.py 2> "$_fe_why" || true)
+        case "$_fe_gate_decision" in
+            run)
+                _run_frontend_build=true
+                ;;
+            skip)
+                _fe_proven_skip=true
+                _run_frontend_check=false
+                _run_frontend_unit=false
+                echo "Frontend gates skipped: $(tr '\n' ' ' < "$_fe_why" | sed 's/  */ /g')"
+                if [ -d frontend/node_modules ] && ! _bundle_present; then
+                    # A convenience, not a gate: the tests that serve the bundle
+                    # would otherwise build it inside a pytest worker.
+                    _run_frontend_build=true
+                    echo "The production build still runs: static/ holds no bundle for the tests that serve one."
+                fi
+                ;;
+            *)
+                _blocked "the frontend gates cannot run in this worktree"
+                echo ""
+                cat "$_fe_why"
+                echo ""
+                echo "This run would otherwise have skipped the frontend build, npm audit"
+                echo "and the Vitest suite and still reported every gate green (#4019)."
+                rm -f "$_fe_why"
+                exit 1
+                ;;
+        esac
+        rm -f "$_fe_why"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
-# Stage 1: cheap gates. Serial and fail-fast — the whole set is ~8s, so
-# stopping at the first failure costs nothing.
+# Lanes: every gate from here on runs as a background job writing to its own
+# log, in one of three kinds --
+#   gate    a cheap stage-2 check; all run together and all are reported
+#   gating  a heavy check pytest must wait for (pyright, the frontend build);
+#           the first to fail stops the run
+#   free    a heavy check pytest need not wait for; collected after pytest
+# -- so that one pass of the box reports everything that is broken, and a run
+# that dies takes its children with it.
 # ---------------------------------------------------------------------------
+_lane_log_dir=$(mktemp -d)
+_ln_kind=(); _ln_name=(); _ln_pid=(); _ln_log=(); _ln_start=()
+_ln_done=(); _ln_status=(); _ln_elapsed=()
 
-# Stale-tree ("phantom base") check.
+_start_lane() {
+    local kind="$1" name="$2"; shift 2
+    local log
+    log="$_lane_log_dir/$(printf '%s' "$name" | tr -c 'A-Za-z0-9' '_').log"
+    # The subshell times itself into a sidecar, because a free lane is only
+    # collected after pytest and the collection time says nothing about it.
+    (
+        set +e
+        _t0=$SECONDS
+        "$@"
+        _st=$?
+        echo "$(( SECONDS - _t0 ))" > "$log.elapsed"
+        exit $_st
+    ) > "$log" 2>&1 &
+    _ln_kind+=("$kind"); _ln_name+=("$name"); _ln_pid+=("$!")
+    _ln_log+=("$log"); _ln_start+=("$SECONDS")
+}
+
+_lane_wait_one() {
+    local i="$1" st
+    set +e
+    wait "${_ln_pid[$i]}"
+    st=$?
+    set -e
+    _ln_status[$i]=$st
+    _ln_done[$i]=1
+    if [[ -r "${_ln_log[$i]}.elapsed" ]]; then
+        _ln_elapsed[$i]=$(< "${_ln_log[$i]}.elapsed")
+    else
+        _ln_elapsed[$i]=$(( SECONDS - _ln_start[$i] ))
+    fi
+}
+
+_kill_tree() {
+    local pid="$1" child
+    for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+        _kill_tree "$child"
+    done
+    kill "$pid" 2>/dev/null || true
+}
+
+_kill_all_lanes() {
+    local i
+    for i in "${!_ln_pid[@]}"; do
+        if [[ -z "${_ln_done[$i]:-}" ]] && kill -0 "${_ln_pid[$i]}" 2>/dev/null; then
+            _kill_tree "${_ln_pid[$i]}"
+        fi
+    done
+}
+
+_cleanup_lanes() {
+    _kill_all_lanes
+    rm -rf "$_lane_log_dir"
+}
+trap _cleanup_lanes EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+# Strip ANSI colour so a gate's last line reads cleanly in the per-gate report.
+_last_line() { sed -r 's/\x1b\[[0-9;]*m//g' "$1" | grep -v '^[[:space:]]*$' | tail -n 1 | cut -c1-90; }
+
+# ---------------------------------------------------------------------------
+# Stage 1: the stale-tree ("phantom base") check, alone.
 #
 # Runs before every other gate, because a clobbered tree passes all of them by
 # construction: when a branch reverts the PRs that merged just before it, the
@@ -519,250 +721,141 @@ fi
 # clobber whose reverted hunks sit inside files that survive deletes nothing
 # at all). See scripts/check-phantom-base.py for both and their measured
 # false-positive rates.
+# ---------------------------------------------------------------------------
 echo "Checking for a stale tree..."
 if ! python scripts/check-phantom-base.py ; then
     _blocked "branch reverts work it never touched (stale tree)"
     exit 1
 fi
 
-# Ruff lint + format check.
-# Fast (~0.5s), and catches mistakes the pytest / frontend stages can't see,
-# e.g. F401 unused-import on TYPE_CHECKING imports whose only "use" is inside
-# a string-form forward reference.
-echo "Running ruff check..."
-if ! ruff check . ; then
-    _blocked "ruff check failed"
-    exit 1
-fi
-echo "Running ruff format --check..."
-if ! ruff format --check . ; then
-    _blocked "ruff format --check failed (run 'ruff format .')"
-    exit 1
-fi
-
-echo "Running codespell..."
-if ! codespell --toml pyproject.toml ; then
-    _blocked "codespell found typos"
-    exit 1
-fi
-
+# ---------------------------------------------------------------------------
+# Stage 2: the cheap gates, concurrently, every one to completion.
+#
+# Fourteen single-threaded checks that read the tree and write nothing but
+# temp files, so they cannot interfere with each other. Serially they took
+# 37s on a warm box (codespell ~9s, check-docs ~4s, the rest a second or two
+# each, plus a cold page cache on the first run of a session); together they
+# take as long as the slowest, and one pass reports every failure instead of
+# the first one. Each gate is a function so its fix-it hint prints with its
+# failure.
+# ---------------------------------------------------------------------------
+_gate_ruff_check() { ruff check . ; }
+_gate_ruff_format() {
+    ruff format --check . || { echo "Fix with: ruff format ."; return 1; }
+}
+_gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # Documentation drift: relative links, in-page anchors, backticked repo paths,
 # leaked absolute machine paths, plan-file citations anywhere in the tree, and
 # broken code fences. Pure invariants against the current tree — nothing to
-# re-pin — and it imports nothing, so it costs ~0.4s and sits with the linters.
-echo "Checking documentation..."
-if ! python scripts/check-docs.py ; then
-    _blocked "documentation check found drift"
-    exit 1
-fi
+# re-pin.
+_gate_check_docs() { python scripts/check-docs.py ; }
+_gate_deptry() { python -m deptry . ; }
+# OpenAPI snapshot drift: regenerate the flask-smorest spec from the live app
+# and diff against the checked-in snapshot at frontend/openapi.json. The
+# frontend's generated TS client is built from this snapshot, so a stale file
+# means the generated client lags the real API.
+_gate_openapi_drift() {
+    local regen log
+    regen=$(mktemp); log=$(mktemp)
+    if ! python scripts/dump_openapi.py > "$regen" 2> "$log"; then
+        echo "OpenAPI spec dump failed:"
+        cat "$log"
+        rm -f "$regen" "$log"
+        return 1
+    fi
+    if ! diff -u frontend/openapi.json "$regen" > /dev/null; then
+        echo "OpenAPI snapshot is stale. Run 'npm run regenerate-openapi-snapshot' (or"
+        echo "'python scripts/dump_openapi.py > frontend/openapi.json') and commit the result."
+        diff -u frontend/openapi.json "$regen" | head -80
+        rm -f "$regen" "$log"
+        return 1
+    fi
+    rm -f "$regen" "$log"
+    echo "OpenAPI snapshot up to date"
+}
+# Generated doc-inventory drift: regenerate the registry-backed tables embedded
+# in the docs (embedders, plugin families, demo datasets, ...) and fail if any
+# committed region is stale. See scripts/gen-docs-inventories.py.
+_gate_doc_inventories() {
+    python scripts/gen-docs-inventories.py --check \
+        || { echo "Run 'python scripts/gen-docs-inventories.py' and commit the result."; return 1; }
+}
+_gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
+# User-docs screenshot wiring: every manifest shot id has both theme PNGs on
+# disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
+# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+# (check.sh) needs chromium and stays a manual chore.
+_gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
+# vtscore package docs: every top-level module / sub-package of vtscore/ is
+# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor.
+_gate_vtscore_docs() { python scripts/check-vtscore-docs.py ; }
+# Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
+# contract for the same plugin ABCs in their own words; this holds both to the
+# class. See scripts/check-extension-docs.py.
+_gate_extension_docs() { python scripts/check-extension-docs.py ; }
+# Calibration script index: every .py/.sh in scripts/experiments/calibration/
+# is filed under exactly one study in that directory's README (#3409).
+_gate_calibration_index() { python scripts/check-calibration-index.py ; }
+# Slide decks: every deck manifest names fragments that exist and figures that
+# resolve. Marp only *warns* on a missing figure and still exits 0.
+_gate_slide_decks() { python slides/build.py --check ; }
+# Eval/app sync: the eval framework reproduces a handful of app surfaces it
+# cannot call; this notices when one of them changes, so the eval default arm
+# can't quietly stop being the shipped algorithm.
+_gate_eval_app_sync() { python scripts/check-eval-app-sync.py ; }
 
+echo "Running the cheap gates concurrently..."
+_stage2_start=$SECONDS
+_start_lane gate "ruff check" _gate_ruff_check
+_start_lane gate "ruff format --check" _gate_ruff_format
+_start_lane gate "codespell" _gate_codespell
+_start_lane gate "documentation" _gate_check_docs
 # Skipped on a `slides` run: none of these can see a deck. deptry reads
 # imports, the OpenAPI and doc-inventory snapshots are generated from the
 # app's registries, and the rest scan Dockerfiles / user-docs screenshots /
 # vtscore. The guard above has already established that nothing outside
 # slides/ changed, so there is nothing here for them to find.
 if ! $_is_slides_run; then
-    echo "Running deptry..."
-    if ! python -m deptry . ; then
-        _blocked "deptry found dependency issues"
-        exit 1
-    fi
-
-    # OpenAPI snapshot drift check: regenerate the flask-smorest spec from
-    # the live app and diff against the checked-in snapshot at
-    # frontend/openapi.json. The frontend's generated TS client is built
-    # from this snapshot, so a stale file means the generated client lags
-    # the real API. Cheap (~2s) and runs every invocation.
-    echo "Checking OpenAPI snapshot drift..."
-    _openapi_regen=$(mktemp)
-    _openapi_dump_log=$(mktemp)
-    if ! python scripts/dump_openapi.py > "$_openapi_regen" 2> "$_openapi_dump_log"; then
-        _blocked "OpenAPI spec dump failed"
-        cat "$_openapi_dump_log"
-        rm -f "$_openapi_regen" "$_openapi_dump_log"
-        exit 1
-    fi
-    if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
-        _blocked "OpenAPI snapshot is stale"
-        echo "Run 'npm run regenerate-openapi-snapshot' (or"
-        echo "'python scripts/dump_openapi.py > frontend/openapi.json') and"
-        echo "commit the result."
-        diff -u frontend/openapi.json "$_openapi_regen" | head -80
-        rm -f "$_openapi_regen" "$_openapi_dump_log"
-        exit 1
-    fi
-    rm -f "$_openapi_regen" "$_openapi_dump_log"
-
-    # Generated doc-inventory drift check: regenerate the registry-backed
-    # tables embedded in the docs (embedders, plugin families, demo datasets,
-    # ...) and fail if any committed region is stale. Same shape as the
-    # OpenAPI snapshot gate above; see scripts/gen-docs-inventories.py.
-    echo "Checking generated doc inventories..."
-    if ! python scripts/gen-docs-inventories.py --check ; then
-        _blocked "generated doc inventories are stale"
-        echo "Run 'python scripts/gen-docs-inventories.py' and commit the"
-        echo "result."
-        exit 1
-    fi
-
-    echo "Checking Dockerfiles..."
-    if ! python scripts/check-dockerfiles.py ; then
-        _blocked "Dockerfile check failed"
-        exit 1
-    fi
-
-    # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
-    # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
-    # browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
-    # (check.sh) needs chromium and stays a manual chore.
-    echo "Checking user-docs screenshot wiring..."
-    if ! python scripts/screenshots/wiring-check.py ; then
-        _blocked "user-docs screenshot wiring check failed"
-        exit 1
-    fi
-
-    # vtscore package docs: every top-level module / sub-package of vtscore/ is
-    # covered by a packages/ doc, and no doc cites a file.py:NNN line anchor (they
-    # rot on the next edit; cite module-and-symbol instead). Regex sweep, imports
-    # nothing, ~0.1s. See scripts/check-vtscore-docs.py for the policy.
-    echo "Checking vtscore package docs..."
-    if ! python scripts/check-vtscore-docs.py ; then
-        _blocked "vtscore package docs check failed"
-        exit 1
-    fi
-
-    # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
-    # contract for the same plugin ABCs in their own words, so each can drift
-    # from the code and from the other. This holds both to the class: every
-    # member named in a contract table exists, and neither presents a public
-    # wrapper as the override point when an _impl hook sits behind it. AST
-    # sweep, imports nothing, ~1s. See scripts/check-extension-docs.py.
-    echo "Checking extension docs..."
-    if ! python scripts/check-extension-docs.py ; then
-        _blocked "extension docs check failed"
-        exit 1
-    fi
-
-    # Calibration script index: every .py/.sh in scripts/experiments/calibration/
-    # is filed under exactly one study (or the shared layer) in that directory's
-    # README, and every file the index names exists. The directory is flat by
-    # decision (#3409), so the table IS the navigation - and an unchecked table
-    # decays back into 120 unclassified files. Pure stdlib, ~20ms.
-    echo "Checking calibration script index..."
-    if ! python scripts/check-calibration-index.py ; then
-        _blocked "calibration script index is out of date"
-        exit 1
-    fi
+    _start_lane gate "deptry" _gate_deptry
+    _start_lane gate "OpenAPI snapshot drift" _gate_openapi_drift
+    _start_lane gate "generated doc inventories" _gate_doc_inventories
+    _start_lane gate "Dockerfiles" _gate_dockerfiles
+    _start_lane gate "user-docs screenshot wiring" _gate_screenshot_wiring
+    _start_lane gate "vtscore package docs" _gate_vtscore_docs
+    _start_lane gate "extension docs" _gate_extension_docs
+    _start_lane gate "calibration script index" _gate_calibration_index
+    _start_lane gate "eval/app sync" _gate_eval_app_sync
 fi
+_start_lane gate "slide decks" _gate_slide_decks
 
-# Slide decks: every deck manifest names fragments that exist and figures that
-# resolve. Marp only *warns* on a missing figure and still exits 0, so a rotted
-# deck is otherwise silent until someone rebuilds it the morning of a talk.
-# Pure stdlib, reads slides/ only, ~0.05s. See slides/README.md.
-echo "Checking slide decks..."
-if ! python slides/build.py --check ; then
-    _blocked "slide deck preflight failed"
+_failed_gates=()
+for _i in "${!_ln_kind[@]}"; do
+    [[ "${_ln_kind[$_i]}" == gate ]] || continue
+    _lane_wait_one "$_i"
+    if [[ ${_ln_status[$_i]} -eq 0 ]]; then
+        printf '  %-28s OK   %s\n' "${_ln_name[$_i]}" "$(_last_line "${_ln_log[$_i]}")"
+    else
+        printf '  %-28s FAILED\n' "${_ln_name[$_i]}"
+        _failed_gates+=("$_i")
+    fi
+done
+if [[ ${#_failed_gates[@]} -gt 0 ]]; then
+    for _i in "${_failed_gates[@]}"; do
+        _blocked "${_ln_name[$_i]} failed"
+        tail -n 80 "${_ln_log[$_i]}"
+    done
     exit 1
 fi
-
-# Eval/app sync: the eval framework reproduces a handful of app surfaces it
-# cannot call (the TypeScript autopilot phase machine, the app's default
-# resolution). This gate notices when one of those app surfaces changes, so the
-# eval default arm can't quietly stop being the shipped algorithm. Parses
-# source, imports nothing, ~0.3s.
-if ! $_is_slides_run; then
-    echo "Checking eval/app sync..."
-    if ! python scripts/check-eval-app-sync.py ; then
-        _blocked "eval framework is out of sync with the app"
-        exit 1
-    fi
-fi
+echo "Cheap gates OK ($(( SECONDS - _stage2_start ))s)"
 
 # ---------------------------------------------------------------------------
-# Stage 2: frontend production build (serial).
+# Stage 3: the heavy whole-repo gates, concurrently.
 #
-# Ahead of the parallel stage on purpose. `tests/core/test_frontend.py` and
-# parts of `tests/api/test_dashboard.py` serve the built bundle out of
-# `static/`, so building it *while* pytest reads it would race; and a broken
-# build is the frontend failure that actually happens, so it is worth learning
-# about before the long stage starts.
-# ---------------------------------------------------------------------------
-if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
-    echo "Checking frontend TypeScript build..."
-    _fe_log=$(mktemp)
-    if (cd frontend && npm run build:prod 2>&1) > "$_fe_log"; then
-        # Treat Angular compiler warnings (e.g. NG8107) and budget warnings as
-        # errors. Angular colourises its output even when stdout is a file, and
-        # it interleaves the escapes *inside* the marker
-        # (`ESC[33m▲ ESC[43;33m[ESC[43;30mWARNING…`), so the literal
-        # `▲ [WARNING]` never matches the raw log — that blindness let an
-        # over-budget initial bundle sail past this gate for months. Match
-        # against an ANSI-stripped copy instead.
-        _fe_plain=$(mktemp)
-        sed -r 's/\x1b\[[0-9;]*m//g' "$_fe_log" > "$_fe_plain"
-        if grep -q '▲ \[WARNING\]' "$_fe_plain"; then
-            _blocked "Frontend build has warnings (treated as errors)"
-            grep -A 10 '▲ \[WARNING\]' "$_fe_plain"
-            rm -f "$_fe_log" "$_fe_plain"
-            exit 1
-        fi
-        rm -f "$_fe_plain"
-        echo "Frontend build OK"
-    else
-        _blocked "Frontend build failed"
-        cat "$_fe_log"
-        rm -f "$_fe_log"
-        exit 1
-    fi
-    rm -f "$_fe_log"
-elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
-    # Already recorded in the ledger, and already proven harmless against the
-    # diff by check-frontend-gate.py; this only says it out loud in place.
-    echo "Skipping frontend build check (no node_modules; diff touches no frontend/ path)"
-fi
-
-# ---------------------------------------------------------------------------
-# Stage 3: pyright (serial, fail-fast).
-#
-# Full static type check across vtsearch/ and tests/ (see `pyrightconfig.json`
-# for the gated scope). Before pytest rather than beside it so a type error
-# ends the run in ~2.5min instead of being printed after pytest; see the
-# staging note at the top for the measurements.
-#
-# Two threads when there is memory for them, one otherwise. On a 4-vCPU box
-# pyright took ~200s on one thread, 86-117s on two and 110-188s on four, so
-# two is the most worth having. But each thread holds its own copy of the
-# program: peak RSS was ~5.4G on one thread and ~9.6G on two. Below 12G
-# available a second thread risks an OOM kill (see the memory check at the
-# top), and a slow pass beats a dead one. Measured, not derived; re-measure
-# before changing either number.
-#
-# The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
-# pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
-# pull.
-# ---------------------------------------------------------------------------
-if $_run_whole_repo_gates; then
-    _pyright_threads=1
-    if [[ -r /proc/meminfo ]] \
-        && awk '/^MemAvailable:/ {exit !($2 >= 12 * 1048576)}' /proc/meminfo; then
-        _pyright_threads=2
-    fi
-    echo "Checking types (pyright, $_pyright_threads thread(s))..."
-    _pyright_start=$SECONDS
-    if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright --threads "$_pyright_threads"; then
-        _blocked "pyright found type errors"
-        exit 1
-    fi
-    echo "pyright OK ($(( SECONDS - _pyright_start ))s)"
-fi
-
-# ---------------------------------------------------------------------------
-# Stage 4: the remaining heavy, mutually independent stages, run concurrently.
-#
-# pytest runs in the foreground so its progress still streams live (it is the
-# output people actually watch); everything else runs as a background lane
-# writing to its own log, reported after pytest returns. Every lane runs to
-# completion even if another fails, so one pass surfaces every problem.
+# GATING lanes must be green before pytest starts, and the first to fail ends
+# the run with its log; FREE lanes start now and are collected after pytest.
+# The staging note at the top explains the split. pytest runs alone afterwards
+# (stage 4) so its four workers have the box to themselves; a free lane still
+# running when pytest starts simply finishes beside it, as every lane used to.
 # ---------------------------------------------------------------------------
 
 # pip-audit: scans installed Python packages against the PyPI advisory
@@ -800,20 +893,6 @@ PIP_AUDIT_IGNORE=(
     --ignore-vuln CVE-2026-49265
 )
 
-_lane_names=()
-_lane_pids=()
-_lane_logs=()
-
-_start_lane() {
-    local name="$1"; shift
-    local log
-    log=$(mktemp)
-    "$@" > "$log" 2>&1 &
-    _lane_pids+=("$!")
-    _lane_names+=("$name")
-    _lane_logs+=("$log")
-}
-
 _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # Vulture whitelist hygiene. NOT the dead-code audit itself: a vulture hit on a
 # public vtscore name is not evidence of anything (out-of-tree extensions import
@@ -821,7 +900,7 @@ _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # per docs/RELEASE.md step 1. What *is* mechanically checkable is the whitelist:
 # an entry that suppresses no finding is unfalsifiable and will outlive the
 # symbol it was written for. That is how the file rotted before -- 49 of 102
-# entries were asserting nothing. Whole-repo scan (~5s), hence a lane.
+# entries were asserting nothing. Whole-repo scan (~14s), hence a lane.
 _lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
 # Audits the whole tree, dev deps included. This used to be `--omit=dev`
 # because `@angular-devkit/build-angular` dragged in the webpack toolchain
@@ -837,27 +916,122 @@ _lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
 # (and fails the gate) the moment upstream ships a fix (#4447).
 _lane_npm_audit() { python scripts/npm-audit-gate.py; }
 # `npm run test:ci` regenerates the API client (pretest:ci) then runs
-# `ng test --no-watch`, which exits non-zero on any spec failure.
+# `ng test --no-watch`, which exits non-zero on any spec failure. Started only
+# once the build lane is green: both regenerate the API client under
+# frontend/src/app/generated/, and must not do so at the same time.
 _lane_frontend_unit() { (cd frontend && npm run test:ci); }
+# The frontend production build. Treats Angular compiler warnings (e.g.
+# NG8107) and budget warnings as errors. Angular colourises its output even
+# when stdout is a file, and it interleaves the escapes *inside* the marker
+# (`ESC[33m▲ ESC[43;33m[ESC[43;30mWARNING…`), so the literal `▲ [WARNING]`
+# never matches the raw log — that blindness let an over-budget initial bundle
+# sail past this gate for months. Match against an ANSI-stripped copy instead.
+_lane_frontend_build() {
+    local log plain
+    log=$(mktemp)
+    if ! (cd frontend && npm run build:prod) > "$log" 2>&1; then
+        echo "Frontend build failed:"
+        cat "$log"
+        rm -f "$log"
+        return 1
+    fi
+    plain=$(mktemp)
+    sed -r 's/\x1b\[[0-9;]*m//g' "$log" > "$plain"
+    if grep -q '▲ \[WARNING\]' "$plain"; then
+        echo "Frontend build has warnings (treated as errors):"
+        grep -A 10 '▲ \[WARNING\]' "$plain"
+        rm -f "$log" "$plain"
+        return 1
+    fi
+    rm -f "$log" "$plain"
+    echo "Frontend build OK"
+}
+# pyright, incrementally: scripts/pyright-incremental.py checks the files
+# changed since the last green check plus everything that transitively imports
+# them, and the whole tree when there is no record to work from (a fresh
+# clone), when pyrightconfig.json, pyproject.toml or the installed packages
+# changed, or when VTSEARCH_FRESH=1 asks for it. Scope is `pyrightconfig.json`.
+#
+# Two threads when there is memory for them, one otherwise. On a 4-vCPU box a
+# full check took ~283s on one thread, ~239s on two and ~340s on four (each
+# thread holds its own copy of the program, so more threads re-parse more), so
+# two is the most worth having. Peak RSS was ~5.4G on one thread and ~9.6G on
+# two. Below 12G available a second thread risks an OOM kill (see the memory
+# check at the top), and a slow pass beats a dead one. Measured, not derived;
+# re-measure before changing either number.
+#
+# The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
+# pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
+# pull.
+_pyright_threads=1
+if [[ -r /proc/meminfo ]] \
+    && awk '/^MemAvailable:/ {exit !($2 >= 12 * 1048576)}' /proc/meminfo; then
+    _pyright_threads=2
+fi
+_lane_pyright() {
+    PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 python scripts/pyright-incremental.py --threads "$_pyright_threads"
+}
 
+_vitest_pending=false
+if $_run_frontend_build && [ -d frontend/node_modules ]; then
+    _start_lane gating "frontend build" _lane_frontend_build
+    if $_run_frontend_unit; then
+        _vitest_pending=true
+    fi
+elif $_run_frontend_unit && [ -d frontend/node_modules ]; then
+    _start_lane free "frontend unit tests (Vitest)" _lane_frontend_unit
+fi
 if $_run_whole_repo_gates; then
-    _start_lane "pip-audit" _lane_pip_audit
-    _start_lane "vulture whitelist" _lane_vulture_whitelist
+    _start_lane gating "pyright ($_pyright_threads thread(s))" _lane_pyright
+    _start_lane free "pip-audit" _lane_pip_audit
+    _start_lane free "vulture whitelist" _lane_vulture_whitelist
 fi
-if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
-    _start_lane "npm audit" _lane_npm_audit
-elif $_run_frontend_check; then
-    # This one used to vanish without even a line of output.
-    echo "Skipping npm audit (no node_modules; diff touches no frontend/ path)"
-fi
-if $_run_frontend_unit && [ -d "frontend/node_modules" ]; then
-    _start_lane "frontend unit tests (Vitest)" _lane_frontend_unit
-elif $_run_frontend_unit && [ ! -d "frontend/node_modules" ]; then
-    echo "Skipping frontend unit tests (no node_modules; diff touches no frontend/ path)"
+if $_run_frontend_check && [ -d frontend/node_modules ]; then
+    _start_lane free "npm audit" _lane_npm_audit
 fi
 
-if [[ ${#_lane_names[@]} -gt 0 ]]; then
-    echo "Running in parallel with the tests: ${_lane_names[*]}"
+_gating_names=()
+for _i in "${!_ln_kind[@]}"; do
+    [[ "${_ln_kind[$_i]}" == gating ]] && _gating_names+=("${_ln_name[$_i]}")
+done
+if [[ ${#_gating_names[@]} -gt 0 ]]; then
+    echo "Waiting for the gating lanes: $(IFS=,; echo "${_gating_names[*]}" | sed 's/,/, /g')"
+fi
+_pending=1
+while [[ $_pending -eq 1 ]]; do
+    _pending=0
+    for _i in "${!_ln_kind[@]}"; do
+        [[ "${_ln_kind[$_i]}" == gating && -z "${_ln_done[$_i]:-}" ]] || continue
+        if kill -0 "${_ln_pid[$_i]}" 2>/dev/null; then
+            _pending=1
+            continue
+        fi
+        _lane_wait_one "$_i"
+        if [[ ${_ln_status[$_i]} -ne 0 ]]; then
+            _kill_all_lanes
+            _blocked "${_ln_name[$_i]} failed"
+            cat "${_ln_log[$_i]}"
+            exit 1
+        fi
+        echo "  ${_ln_name[$_i]}: OK (${_ln_elapsed[$_i]}s) $(_last_line "${_ln_log[$_i]}")"
+        if [[ "${_ln_name[$_i]}" == "frontend build" ]] && $_vitest_pending; then
+            _start_lane free "frontend unit tests (Vitest)" _lane_frontend_unit
+            _vitest_pending=false
+        fi
+    done
+    if [[ $_pending -eq 1 ]]; then
+        sleep 1
+    fi
+done
+
+_free_running=()
+for _i in "${!_ln_kind[@]}"; do
+    if [[ "${_ln_kind[$_i]}" == free ]] && kill -0 "${_ln_pid[$_i]}" 2>/dev/null; then
+        _free_running+=("${_ln_name[$_i]}")
+    fi
+done
+if $_run_pytest && [[ ${#_free_running[@]} -gt 0 ]]; then
+    echo "Still running beside the tests: $(IFS=,; echo "${_free_running[*]}" | sed 's/,/, /g')"
 fi
 if $_is_slides_run; then
     # Deliberately not the "a full run is the gate before pushing" notice below:
@@ -867,12 +1041,17 @@ if $_is_slides_run; then
     echo "outside slides/ changed, and no test or type-check reads a deck."
 elif $_is_docs_run; then
     # Also not the "a full run is the gate" notice: for a change confined to
-    # tracked markdown this *is* the gate. Stage 1 ran whole; what is left is
-    # the tests that can actually open a doc.
+    # tracked markdown this *is* the gate. The cheap gates ran whole; what is
+    # left is the tests that can actually open a doc.
     echo "Markdown-only run: every cheap gate ran; pytest is narrowed to the"
     echo "tests that read a repo doc (${_docs_targets[*]}), and pyright,"
     echo "pip-audit, the vulture whitelist check and the frontend lanes are"
     echo "skipped — none of them can see a markdown file."
+elif $_is_frontend_only_run; then
+    echo "Frontend-only run: every cheap gate ran, the frontend gates run in full,"
+    echo "pytest is narrowed to the tests that can observe the frontend"
+    echo "(${_frontend_targets[*]}), and pyright, pip-audit and the vulture"
+    echo "whitelist check are skipped — none of them can see a file under frontend/."
 elif ! $_run_whole_repo_gates; then
     _note_skipped "pyright"
     _note_skipped "pip-audit"
@@ -882,7 +1061,9 @@ elif ! $_run_whole_repo_gates; then
     echo "VTSEARCH_FULL_GATES=1 to force them)."
 fi
 
-# --- pytest, in the foreground ---------------------------------------------
+# ---------------------------------------------------------------------------
+# Stage 4: pytest, in the foreground, with the box to itself.
+# ---------------------------------------------------------------------------
 _pytest_status=0
 if $_run_pytest; then
     # Build the pytest marker expression
@@ -925,12 +1106,19 @@ if $_run_pytest; then
     # Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
     # The two trees have independent conftests; pytest's auto-merge picks
     # the right autouse fixtures per test based on file location.
+    #
+    # Tests that already passed on this identical working tree are deselected
+    # by tests_shared/pass_cache.py (wired through both conftests) and named
+    # in pytest's own summary; VTSEARCH_FRESH=1 re-runs them.
     set +e
     if $_is_docs_run; then
         # Paths, not a marker: the markdown surface is one folder plus one file
         # in another group, and no marker expression names that set. Leaving -m
         # off keeps pyproject.toml's `not gpu and not slow` default in force.
         python -m pytest "${_docs_targets[@]}" -q --tb=short --no-header -n auto --dist loadgroup ${COV_ARGS[@]+"${COV_ARGS[@]}"} ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+    elif $_is_frontend_only_run; then
+        # Same shape as the markdown surface.
+        python -m pytest "${_frontend_targets[@]}" -q --tb=short --no-header -n auto --dist loadgroup ${COV_ARGS[@]+"${COV_ARGS[@]}"} ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
     elif [[ -n "$MARKER_EXPR" ]]; then
         python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto --dist loadgroup -m "$MARKER_EXPR" ${COV_ARGS[@]+"${COV_ARGS[@]}"} ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
     else
@@ -940,20 +1128,22 @@ if $_run_pytest; then
     set -e
 fi
 
-# --- collect the background lanes ------------------------------------------
+# --- collect the free lanes ------------------------------------------------
 _failed_lanes=()
-if [[ ${#_lane_names[@]} -gt 0 ]]; then
+_free_names=()
+for _i in "${!_ln_kind[@]}"; do
+    [[ "${_ln_kind[$_i]}" == free ]] && _free_names+=("${_ln_name[$_i]}")
+done
+if [[ ${#_free_names[@]} -gt 0 ]]; then
     echo ""
-    echo "Waiting for: ${_lane_names[*]}"
-    for _i in "${!_lane_pids[@]}"; do
-        set +e
-        wait "${_lane_pids[$_i]}"
-        _st=$?
-        set -e
-        if [[ $_st -eq 0 ]]; then
-            echo "  ${_lane_names[$_i]}: OK"
+    echo "Collecting: $(IFS=,; echo "${_free_names[*]}" | sed 's/,/, /g')"
+    for _i in "${!_ln_kind[@]}"; do
+        [[ "${_ln_kind[$_i]}" == free ]] || continue
+        _lane_wait_one "$_i"
+        if [[ ${_ln_status[$_i]} -eq 0 ]]; then
+            echo "  ${_ln_name[$_i]}: OK (${_ln_elapsed[$_i]}s)"
         else
-            echo "  ${_lane_names[$_i]}: FAILED"
+            echo "  ${_ln_name[$_i]}: FAILED"
             _failed_lanes+=("$_i")
         fi
     done
@@ -962,11 +1152,8 @@ fi
 # Report every failing lane, not just the first: the point of running them
 # concurrently is that one pass tells you everything that is broken.
 for _i in ${_failed_lanes[@]+"${_failed_lanes[@]}"}; do
-    _blocked "${_lane_names[$_i]} failed"
-    tail -80 "${_lane_logs[$_i]}"
-done
-for _log in ${_lane_logs[@]+"${_lane_logs[@]}"}; do
-    rm -f "$_log"
+    _blocked "${_ln_name[$_i]} failed"
+    tail -80 "${_ln_log[$_i]}"
 done
 
 # Final verdict banner. With lanes reporting after pytest, pytest's own
@@ -980,7 +1167,7 @@ if [[ ${#_failed_lanes[@]} -gt 0 || $_pytest_status -ne 0 ]]; then
         _verdict_parts+=("pytest")
     fi
     for _i in ${_failed_lanes[@]+"${_failed_lanes[@]}"}; do
-        _verdict_parts+=("${_lane_names[$_i]}")
+        _verdict_parts+=("${_ln_name[$_i]}")
     done
     _joined=$(IFS=", "; echo "${_verdict_parts[*]}")
     echo "RUN FAILED: $_joined"
@@ -992,6 +1179,8 @@ if [[ ${#_failed_lanes[@]} -gt 0 || $_pytest_status -ne 0 ]]; then
 fi
 if $_is_docs_run; then
     echo "RUN PASSED (markdown-only; this is the full gate for a markdown-only change)"
+elif $_is_frontend_only_run; then
+    echo "RUN PASSED (frontend-only; this is the full gate for a frontend-only change)"
 elif [[ ${#_skipped_gates[@]} -gt 0 ]]; then
     # Deliberately not "all gates green": everything that ran is green, and
     # these did not run. Naming them is the whole point of #4019.
@@ -999,10 +1188,18 @@ elif [[ ${#_skipped_gates[@]} -gt 0 ]]; then
     for _g in "${_skipped_gates[@]}"; do
         echo "  - $_g"
     done
+    if $_fe_proven_skip; then
+        echo "  (frontend build, npm audit and Vitest skipped: this branch changes no frontend/ path)"
+    fi
     echo ""
     echo "Everything that ran is green. This is not the full gate."
 elif $_run_pytest; then
-    echo "RUN PASSED (all gates green; pytest summary above)"
+    if $_fe_proven_skip; then
+        echo "RUN PASSED (all gates green; frontend build, npm audit and Vitest skipped:"
+        echo "            this branch changes no frontend/ path, so they had nothing to judge)"
+    else
+        echo "RUN PASSED (all gates green; pytest summary above)"
+    fi
 elif $_is_slides_run; then
     echo "RUN PASSED (slides-only; this is the full gate for a slides-only change)"
 else
