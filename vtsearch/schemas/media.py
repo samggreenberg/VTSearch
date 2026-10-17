@@ -174,6 +174,16 @@ class MediaEntrySchema(Schema):
     clip_end = fields.Float()
     clip_index = fields.Integer()
     clip_box = fields.List(fields.Float())
+    clip_box_frame = fields.List(
+        fields.Integer(),
+        metadata={
+            "description": (
+                "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. "
+                "On an anamorphic video the player reports display pixels, so it scales the box by "
+                "this before cropping. Absent on a box recorded without one, which is used as is."
+            )
+        },
+    )
     has_original = fields.Boolean(
         metadata={
             "description": (

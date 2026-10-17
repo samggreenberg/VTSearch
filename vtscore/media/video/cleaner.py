@@ -334,7 +334,8 @@ class VideoLetterboxCropCleaner(MediaCleaner):
     same detector the image gate uses
     (:func:`~vtscore.media.image.edge_trim.solid_edge_box`) where the content
     starts in each, and records the **union** of those content boxes as the
-    unit's ``clip_box``.
+    unit's ``clip_box``, with the size of the frames it was measured on as
+    ``clip_box_frame`` (see :mod:`vtscore.media.video.crop`).
 
     Taking the union rather than the intersection is what makes the crop safe
     on moving pictures: a margin is removed only when *every* sampled frame
@@ -567,4 +568,5 @@ class VideoLetterboxCropCleaner(MediaCleaner):
         dx, dy = (base[0], base[1]) if base is not None else (0, 0)
         cleaned = dict(media)
         cleaned["clip_box"] = [union[0] + dx, union[1] + dy, union[2] + dx, union[3] + dy]
+        cleaned["clip_box_frame"] = [full_width, full_height]
         return cleaned
