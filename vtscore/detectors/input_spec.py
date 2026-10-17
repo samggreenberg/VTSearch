@@ -2,7 +2,7 @@
 
 A detector's ``input_spec`` describes the input format it was trained on
 - specifically the clipper that split source media into the clips its
-MLP saw.  At inference time the CLI uses this to decide whether the
+head saw.  At inference time the CLI uses this to decide whether the
 loaded dataset matches the detector's expected granularity.
 
 The module also assembles the ``detector_meta`` block that travels with
@@ -75,7 +75,7 @@ def build_detector_meta(
 
     Pulls ``media_type`` and ``input_spec`` straight from the detector
     JSON dict and folds in the supplied *threshold* (typically the active
-    in-memory MLP's calibrated threshold).  Keys with empty/None values
+    in-memory head's calibrated threshold).  Keys with empty/None values
     are omitted so the block stays minimal - a detector with neither an
     ``input_spec`` nor a current threshold produces a block containing
     only ``media_type``.
@@ -101,7 +101,7 @@ def apply_detector_meta(
     Writes ``input_spec`` (and ``media_type`` when the receiver doesn't
     already have one) so the receiving detector picks up the originating
     detector's expected input format.  Does **not** persist ``threshold``
-    - the receiver retrains its own MLP from the imported labels, so the
+    - the receiver retrains its own head from the imported labels, so the
     threshold is rederived on the next load.
 
     Returns ``True`` when *detector_data* was modified.

@@ -237,19 +237,21 @@ def _train_and_calibrate(
     *haystack_X* (an ``(N, D)`` matrix of the simulation set's whole-image
     vectors) switches the ``gp_*`` path to the **rank-transferred** cut
     (:func:`_rank_transferred_threshold`); ``None`` leaves every path on its
-    raw-score rule.  It is ignored by the app path, whose shipped estimator
+    raw-score rule.  It is ignored by the app path, whose fold-anchored cut
     already transfers by rank.
 
     *fold_anchored* (``gp_*`` path only, issue #3959) makes the GP path hand
     back its own calibration fold models and held-out orderings, drawn on the
-    app's splits, so the shipped fold-anchored estimator can run on the GP's
+    app's splits, so the app's fold-anchored estimator can run on the GP's
     posteriors (see :func:`_gp_train_and_calibrate`).
 
     *head* selects the head on both production paths (see :data:`HEADS`):
-    ``"linear_svm"`` (the default, :data:`PRODUCTION_HEAD`) trains the head the
-    live detector has, ``"linear"`` the logistic head it replaced, ``"mlp"`` the
-    legacy auto-sized hidden layer.  It is ignored by the standalone SVM path,
-    which fits its own estimator rather than a head.
+    ``"linear_svm_prior"`` (the default, :data:`PRODUCTION_HEAD`) trains the head
+    the live detector has, the linear SVM started from the Goods' centroid;
+    ``"linear_svm"`` the plain SVM, ``"linear"`` the logistic head the SVM
+    replaced and ``"mlp"`` the legacy auto-sized hidden layer are named arms.
+    It is ignored by the standalone SVM path, which fits its own estimator
+    rather than a head.
 
     Dispatches on *trainer*: :data:`~vtscore.eval.step_model.APP_TRAINER`
     (``"app"``) runs the app's own pipeline (see
@@ -410,8 +412,10 @@ def _app_train_and_calibrate(
     hidden_dim = resolve_hidden_dim(head, n_labels)
     t_xcal = time.monotonic()
     # The folds' orderings *and* models ride out in ``details`` unconditionally:
-    # the shipped safe threshold anchors on the fold models' held-out scores, so
-    # they are an input to the baseline arm, not study-only extras.
+    # the app's line is drawn from them (the labels' line from the held-out
+    # orderings; its fold-anchored fallback from each fold model's haystack
+    # scores, anchored by those orderings), so they are an input to the
+    # baseline arm, not study-only extras.
     holdouts: list[list[int]] = []
     folds = calibration_folds(
         X_list,
@@ -635,8 +639,9 @@ def _style_train_and_calibrate(
         details["neg_score_rows"] = [score_rows_by_group[("b", vid)] for vid in bad_votes]
     else:
         # Same fold work as the metrics branch, minus the study extras: the
-        # shipped safe threshold anchors on the fold models, so they ride out
-        # in ``details`` on every path (see :func:`_safe_threshold_for_step`).
+        # app's line is drawn from the folds (the labels' line and its
+        # fold-anchored fallback), so they ride out in ``details`` on every
+        # path (see :func:`_safe_threshold_for_step`).
         holdouts: list[list[int]] = []
         folds = calibration_folds(
             X_list,
@@ -749,9 +754,9 @@ def _calibrate_with_details(
             details["fold_count_data"] = {
                 "orderings": orderings,
                 # The **untrimmed** fold models, so the #3116 anchored arm can
-                # re-fit production's rule at every K.  `details["fold_models"]`
+                # re-fit the fold-anchored rule at every K.  `details["fold_models"]`
                 # is deliberately cut to the live count so nothing downstream
-                # can accidentally widen the shipped threshold's own fit.
+                # can accidentally widen the live line's own fit.
                 "models": list(fold_models),
                 "seconds": fold_seconds,
                 # Everything in the calibration wall clock that is *not* a fold
@@ -954,7 +959,7 @@ def _gp_train_and_calibrate(
     sizes, same stratified draws off ``RandomState(calibration_seed)``),
     with a GP fitted in place of the torch head on each fold.  The fold models
     and their held-out orderings go back in *details* under the keys the app
-    path uses, so the shipped fold-anchored estimator
+    path uses, so the app's fold-anchored estimator
     (:func:`vtscore.eval.voting_iterations._safe_threshold_for_step`) fits each
     fold's mixture on **that fold GP's own** haystack scores, anchored by its
     held-out votes, and carries the cut to the final GP by quantile.  No raw

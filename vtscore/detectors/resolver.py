@@ -855,7 +855,7 @@ def resolve_label_embeddings(
             Callers that will mix these vectors with a dataset's stored
             embeddings (e.g. find-label training) must pass the dataset's
             embedder so all training vectors share one space; mixing
-            output from two embedders into a single MLP produces garbage.
+            output from two embedders into a single head produces garbage.
             Empty ``""`` falls back to the media type's first registered
             embedder.
 

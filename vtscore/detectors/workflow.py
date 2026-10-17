@@ -1,4 +1,4 @@
-"""Apply labels and retrain a detector's MLP.
+"""Apply labels and retrain a detector's head.
 
 Provides :func:`apply_and_retrain` which resolves new label entries against
 the loaded dataset, applies them, and retrains the detector model with
@@ -19,7 +19,7 @@ def apply_and_retrain(  # noqa: C901
     new_entries: list[dict],
     detector_name: str,
 ) -> tuple[int, bool]:
-    """Resolve new label entries into a loaded detector and retrain its MLP.
+    """Resolve new label entries into a loaded detector and retrain its head.
 
     Temporarily overrides the active detector context so vote proxies resolve
     to *det_ctx* for the duration of this call (via
@@ -186,7 +186,7 @@ def apply_and_retrain(  # noqa: C901
                     training[cid] = snap[cid]
             det_ctx.training_medias = training
             first = next(iter(snap.values()), {})
-            # Stamp the *cache-space* marker with the space the MLP was actually
+            # Stamp the *cache-space* marker with the space the head was actually
             # trained in: the detector's chosen primary when this dataset
             # supplies it, else the dataset score precedence
             # (keying_embedder_for_snap).  Legacy detectors (no chosen primary)

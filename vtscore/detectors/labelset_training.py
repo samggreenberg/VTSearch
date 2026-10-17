@@ -3,7 +3,7 @@
 The detector's saved labelset on disk is origin-keyed and dataset-agnostic.
 At load time we resolve every element to a file via its origin importer,
 embed it, and cache the resulting vector on
-:attr:`~vtscore.state.core.DetectorContext.label_embeddings`.  MLP
+:attr:`~vtscore.state.core.DetectorContext.label_embeddings`.  Head
 training (load-time and during interactive learned-sort) then iterates the
 labelset directly, so labels from datasets that aren't currently loaded
 still contribute.
@@ -155,7 +155,7 @@ def _patch_pooled_from_file(
     → :func:`nearest_patch_to_box`) for the cross-dataset case: re-derive the
     patch grid via :func:`_patch_output_from_file` and pick the raw patch under
     the user-drawn box - so a Good region-vote trains on one of the very rows
-    the MLP will max-pool over on the new dataset.  Returns ``None`` when the
+    the head will max-pool over on the new dataset.  Returns ``None`` when the
     grid can't be rebuilt, so the caller can fall back to an image-level
     embedding.
     """
@@ -269,7 +269,7 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
 def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     """Drop the label-embedding cache when the active dataset's embedder changed.
 
-    Mixing vectors from two embedders into one MLP produces garbage.  When
+    Mixing vectors from two embedders into one head produces garbage.  When
     ``det_ctx.embedder`` is empty (fresh load or legacy state) we keep the
     cache; otherwise a mismatch with the active embedder forces a rebuild.
     """
@@ -1220,7 +1220,7 @@ def labelset_train_and_score(
     label_quota: bool = False,
     text_query: str = "",
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
-    """Train an MLP on the full labelset, then score every media in *clips_dict*.
+    """Train the detector head on the full labelset, then score every media in *clips_dict*.
 
     Counterpart to :func:`~vtscore.detectors.training.train_and_score` that
     trains on cross-dataset labels.  It assembles ``(X_list, y_list)`` from
