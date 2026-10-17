@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
+import { Subject } from 'rxjs';
 import { DatasetStatsModalComponent } from './dataset-stats-modal.component';
+import type { LoadingTask } from '../../../models/api.models';
+import { ProgressEventsService } from '../../../services/progress-events.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
@@ -10,6 +13,7 @@ describe('DatasetStatsModalComponent', () => {
   let component: DatasetStatsModalComponent;
   let fixture: ComponentFixture<DatasetStatsModalComponent>;
   let httpMock: HttpTestingController;
+  let loadingTasks$: Subject<LoadingTask[]>;
 
   const mockStats = {
     name: 'My Dataset',
@@ -26,12 +30,14 @@ describe('DatasetStatsModalComponent', () => {
     embedder: 'clap',
     file_type_counts: { wav: 80, mp3: 20 },
     source: { importer: 'server_folder', params: { path: '/data', media_type: 'audio' } },
+    coverage_atlas: null,
   };
 
   beforeEach(async () => {
+    loadingTasks$ = new Subject<LoadingTask[]>();
     await configureZoneless({
       imports: [DatasetStatsModalComponent],
-      providers: [...provideHttpTesting()],
+      providers: [...provideHttpTesting(), { provide: ProgressEventsService, useValue: { loadingTasks$ } }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatasetStatsModalComponent);
@@ -173,5 +179,116 @@ describe('DatasetStatsModalComponent', () => {
     const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('gone');
+  });
+
+  // Issue #4995: a loaded dataset past the auto-build threshold has no
+  // coverage atlas, and this row is the only way to build one from the GUI.
+  describe('Coverage atlas row', () => {
+    const atlas = (built: boolean, building = false) => ({ built, building, auto_build_threshold: 50000 });
+    const statsUrl = '/api/datasets/registry/ds1/stats';
+    const buildUrl = '/api/datasets/registry/ds1/coverage-atlas';
+    const atlasTask = (status: string): LoadingTask =>
+      ({ task_id: '_atlas_ds1', dataset_id: 'ds1', status, message: '', current: 0, total: 0, name: 'ds', created_at: 0 }) as LoadingTask;
+
+    async function open(stats: object): Promise<void> {
+      await fixture.whenStable();
+      httpMock.expectOne(statsUrl).flush({ ...mockStats, ...stats });
+      await settleZoneless(fixture);
+    }
+
+    const buildBtn = () => fixture.nativeElement.querySelector('.build-atlas-btn') as HTMLButtonElement | null;
+    const text = () => fixture.nativeElement.textContent as string;
+
+    it('is hidden when the dataset has an atlas', async () => {
+      await open({ coverage_atlas: atlas(true) });
+      expect(buildBtn()).toBeNull();
+      expect(text()).not.toContain('Coverage atlas');
+    });
+
+    it('is hidden when the dataset is not loaded', async () => {
+      await open({ coverage_atlas: null });
+      expect(buildBtn()).toBeNull();
+      expect(text()).not.toContain('Coverage atlas');
+    });
+
+    it('shows "Not built" with the threshold reason for a large dataset', async () => {
+      await open({ num_items: 60000, coverage_atlas: atlas(false) });
+      expect(text()).toContain('Coverage atlas');
+      expect(text()).toContain('Not built');
+      expect(text()).toContain('over 50,000 items');
+      expect(buildBtn()!.disabled).toBe(false);
+    });
+
+    it('leaves the threshold reason off a dataset under it', async () => {
+      // A small dataset with no atlas is one whose build was cancelled.
+      await open({ coverage_atlas: atlas(false) });
+      expect(text()).toContain('Not built');
+      expect(text()).not.toContain('items skip it');
+    });
+
+    it('issues exactly one POST on a click and disables the button', async () => {
+      await open({ num_items: 60000, coverage_atlas: atlas(false) });
+      buildBtn()!.click();
+      buildBtn()!.click();
+      await settleZoneless(fixture);
+
+      const posts = httpMock.match(buildUrl);
+      expect(posts.length).toBe(1);
+      expect(posts[0].request.method).toBe('POST');
+      expect(buildBtn()!.disabled).toBe(true);
+      expect(text()).toContain('Building…');
+
+      // The task row running is no reason to re-read the stats.
+      loadingTasks$.next([atlasTask('loading')]);
+      posts[0].flush({ ok: true, message: 'started', task_id: '_atlas_ds1' });
+      await settleZoneless(fixture);
+      httpMock.expectNone(statsUrl);
+      expect(buildBtn()!.disabled).toBe(true);
+    });
+
+    it('re-reads the stats when the build ends, and hides the row once built', async () => {
+      await open({ num_items: 60000, coverage_atlas: atlas(false) });
+      buildBtn()!.click();
+      await settleZoneless(fixture);
+      httpMock.expectOne(buildUrl).flush({ ok: true, message: 'started', task_id: '_atlas_ds1' });
+      // The POST answered before the channel showed the task: the stats say
+      // the build is still on, so the window keeps waiting.
+      httpMock.expectOne(statsUrl).flush({ ...mockStats, num_items: 60000, coverage_atlas: atlas(false, true) });
+      await settleZoneless(fixture);
+      expect(buildBtn()!.disabled).toBe(true);
+
+      loadingTasks$.next([atlasTask('loading')]);
+      await settleZoneless(fixture);
+      httpMock.expectNone(statsUrl);
+
+      loadingTasks$.next([atlasTask('idle')]);
+      await settleZoneless(fixture);
+      httpMock.expectOne(statsUrl).flush({ ...mockStats, num_items: 60000, coverage_atlas: atlas(true) });
+      await settleZoneless(fixture);
+      expect(buildBtn()).toBeNull();
+      expect(text()).not.toContain('Coverage atlas');
+    });
+
+    it('brings the button back when the build is cancelled', async () => {
+      await open({ num_items: 60000, coverage_atlas: atlas(false, true) });
+      expect(text()).toContain('Building…');
+      expect(buildBtn()!.disabled).toBe(true);
+
+      loadingTasks$.next([{ ...atlasTask('idle'), error: 'Cancelled' } as LoadingTask]);
+      await settleZoneless(fixture);
+      httpMock.expectOne(statsUrl).flush({ ...mockStats, num_items: 60000, coverage_atlas: atlas(false) });
+      await settleZoneless(fixture);
+      expect(text()).toContain('Not built');
+      expect(buildBtn()!.disabled).toBe(false);
+    });
+
+    it('re-enables the button when the build request fails', async () => {
+      await open({ coverage_atlas: atlas(false) });
+      buildBtn()!.click();
+      await settleZoneless(fixture);
+      httpMock.expectOne(buildUrl).flush({ message: 'not loaded' }, { status: 400, statusText: 'Bad Request' });
+      await settleZoneless(fixture);
+      expect(buildBtn()!.disabled).toBe(false);
+    });
   });
 });
