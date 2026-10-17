@@ -455,6 +455,111 @@ def turn_pages(
     return added, same, different, changes, problems
 
 
+#: Appended to the note of an adjudication row `drop_duplicate_marks` re-points.
+DUPLICATE_NOTE = " [was mark {old}: a copy of mark {new} on {page}, #5052]"
+
+
+def drop_duplicate_marks(
+    pages: Sequence[Page],
+    classes: dict[str, Any],
+    same_rows: Sequence[dict[str, Any]],
+    diff_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    """Drop every mark that repeats an earlier one on its page, then recount the classes.
+
+    Re-applying a completeness verdict appended its hand-added box to the page
+    again each time, so one instance stood on the page two or three times
+    (#5052: three ``logo_asg54f00_1`` marks on each of ``jdc94f00``,
+    ``kjj24f00`` and ``yme01e00-page01_1``).  A copy is a mark with the same
+    kind, box and class as an earlier mark on its page.
+
+    Every adjudication naming a copy is re-pointed at the mark it copies.
+    Re-applying wrote a must-link per copy, so most rows then repeat a row on
+    file, and those go.  A copy goes only from the end of its page, so no
+    other mark is renumbered.  A copy anywhere else, or a re-pointed row that
+    would name one mark twice or rule a pair both ways, is reported, not done.
+
+    Then each class's ``page_ids`` is recounted from the marks that carry it,
+    one entry per mark as `build_corpus` writes them, and ``n_instances`` with
+    it.  The completeness pass listed a page once however many of the class's
+    marks it accepted there, so a page carrying the mark twice counted once.
+
+    Changes *pages* and *classes* in place and returns ``(same, different,
+    changes, problems)``; with any problem the caller writes nothing.  Running
+    it again changes nothing.
+    """
+    same = [dict(r) for r in same_rows]
+    different = [dict(r) for r in diff_rows]
+    changes: list[str] = []
+    problems: list[str] = []
+
+    def names(row: dict[str, Any], page_id: str, index: int) -> bool:
+        ends = any(row[f"{s}_page_id"] == page_id and row.get(f"{s}_mark_index") == index for s in ("left", "right"))
+        return ends or any([page_id, index] in (row.get(f"{s}_members") or []) for s in ("left", "right"))
+
+    for page in pages:
+        first: dict[tuple[Any, ...], int] = {}
+        copies: list[tuple[int, int]] = []
+        for j, mark in enumerate(page.marks):
+            key = (mark.kind, tuple(mark.box), mark.class_id)
+            if key in first:
+                copies.append((j, first[key]))
+            else:
+                first[key] = j
+        if not copies:
+            continue
+        if min(j for j, _ in copies) < len(page.marks) - len(copies):
+            problems.append(f"{page.page_id}: a copy sits before a mark that is not one; dropping it would renumber")
+            continue
+        # Last first, so each drop leaves the next one's index where it was.
+        for j, i in sorted(copies, reverse=True):
+            mark = page.marks[j]
+            where = f"{page.page_id} mark {j} is a copy of mark {i}"
+            changes.append(f"{where}: {mark.kind} {list(mark.box)} ({mark.provenance}, {mark.class_id})")
+            note = DUPLICATE_NOTE.format(old=j, new=i, page=page.page_id)
+            old, new = [page.page_id, j], [page.page_id, i]
+            for rows, other in ((same, different), (different, same)):
+                on_file = {pair_key(r) for r in rows if not names(r, page.page_id, j)}
+                ruled_otherwise = {pair_key(r) for r in other}
+                kept = []
+                for r in rows:
+                    if not names(r, page.page_id, j):
+                        kept.append(r)
+                        continue
+                    for side in ("left", "right"):
+                        if r[f"{side}_page_id"] == page.page_id and r.get(f"{side}_mark_index") == j:
+                            r[f"{side}_mark_index"] = i
+                        if old in (r.get(f"{side}_members") or []):
+                            r[f"{side}_members"] = [new if m == old else m for m in r[f"{side}_members"]]
+                    after = pair_key(r)
+                    if after[0] == after[1]:
+                        problems.append(f"{where}, but then a row names one mark twice: {describe_pair(r)}")
+                    elif after in ruled_otherwise:
+                        problems.append(f"{where}, but then a pair is ruled both ways: {describe_pair(r)}")
+                    if after in on_file:
+                        changes.append(f"  dropped, it repeats a row on file: {describe_pair(r)}")
+                        continue
+                    r["note"] = str(r.get("note") or "") + note
+                    on_file.add(after)
+                    changes.append(f"  re-pointed: {describe_pair(r)}")
+                    kept.append(r)
+                rows[:] = kept
+            del page.marks[j]
+
+    marks_of: dict[str, list[str]] = {}
+    for page in pages:
+        for mark in page.marks:
+            if mark.class_id in classes:
+                marks_of.setdefault(mark.class_id, []).append(page.page_id)
+    for class_id, meta in sorted(classes.items()):
+        counted = sorted(marks_of.get(class_id, []))
+        if counted != sorted(meta.get("page_ids", [])):
+            changes.append(f"{class_id}: {meta.get('n_instances')} -> {len(counted)} instance(s), one per mark")
+            meta["page_ids"] = counted
+            meta["n_instances"] = len(counted)
+    return same, different, changes, problems
+
+
 #: What ``resplit_classes`` writes into a piece's ``audit.notes``.  Parsed, not
 #: just displayed: on a corpus split before #3343 it is the only surviving
 #: record of which parent a piece came out of.
@@ -1328,6 +1433,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="give the Tobacco800 pages in TURNED_180 their turned boxes, folding any hand-added mark that turns out "
         "to be the same instance into its source mark (#4871), then exit",
     )
+    ap.add_argument(
+        "--drop-duplicate-marks",
+        action="store_true",
+        help="drop every mark that repeats an earlier one on its page, re-point the adjudications naming it, and "
+        "recount each class's instances from its marks (#5052), then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -1368,6 +1479,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             save_adjudications(same, diff, adjudications_path)
             write_manifest(pages, manifest_path)
             print(f"wrote {added_path}, {adjudications_path} and {manifest_path}")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
+
+    if args.drop_duplicate_marks:
+        from cluster_marks import load_adjudication_rows, save_adjudications  # noqa: PLC0415
+
+        pages = list(read_manifest(manifest_path))
+        old_same, old_diff = load_adjudication_rows(adjudications_path)
+        same, diff, changes, problems = drop_duplicate_marks(pages, classes, old_same, old_diff)
+        for line in changes:
+            print(f"  {line}")
+        for problem in problems:
+            print(f"  PROBLEM: {problem}")
+        if problems:
+            return 1
+        if not changes:
+            print("no page carries a mark twice, and every class counts its marks")
+            return 0
+        if args.apply:
+            # The stores before the manifest, as for --turn-pages.
+            save_adjudications(same, diff, adjudications_path)
+            classes_path.write_text(json.dumps(classes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_manifest(pages, manifest_path)
+            print(f"wrote {adjudications_path}, {classes_path} and {manifest_path}")
         else:
             print("dry run — pass --apply to write")
         return 0

@@ -349,3 +349,88 @@ class TestLazyCleanedVariants:
 
         assert client.get(f"/api/medias/{media_id}/text").status_code == 404
         assert client.get(f"/api/medias/{media_id}/text?variant=original").status_code == 404
+
+    def test_crop_bytes_of_an_edited_source_are_none_not_the_edited_file(self, client, lazy_cleaned_image_media):
+        """The example-sort crop path read ``media_path`` again after the resolver declined it."""
+        import os
+
+        from PIL import Image
+        from vtsearch.routes.media.server import _resolve_media_bytes
+
+        media_id, src = lazy_cleaned_image_media
+        assert _resolve_media_bytes(medias[media_id]) is not None
+        before = src.stat()
+        canvas = Image.new("RGB", (64, 64), "white")
+        canvas.paste(Image.new("RGB", (32, 32), "blue"), (16, 16))
+        buf = io.BytesIO()
+        canvas.save(buf, format="PNG")
+        src.write_bytes(buf.getvalue())
+        os.utime(src, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+
+        assert _resolve_media_bytes(medias[media_id]) is None
+
+
+# ---------------------------------------------------------------------------
+# A cleaned converter output of a reference import: replayed from the PDF (#5041)
+# ---------------------------------------------------------------------------
+
+
+def _pdf_bytes(text: str) -> bytes:
+    fitz = pytest.importorskip("fitz")  # PyMuPDF, from the ``agpl`` extra
+    doc = fitz.open()
+    doc.new_page(width=300, height=300).insert_text((20, 100), text)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
+def lazy_cleaned_pdf_text_media(tmp_path, monkeypatch):
+    """Install the text of a thin-imported PDF that the whitespace gate rewrote."""
+    from vtscore.converters.runner import run_converters_on_folder
+    from vtscore.datasets.stages import clipper as clipper_stage
+    from vtscore.state import DatasetContext
+
+    src = tmp_path / "doc.pdf"
+    src.write_bytes(_pdf_bytes("hello      world"))
+    monkeypatch.setattr(clipper_stage, "_fixup_clip_md5_and_embeddings", lambda *a, **k: None)
+    imported: dict[int, dict] = {}
+    run_converters_on_folder(
+        tmp_path, "text", imported, thin=True, converter_specs=[{"converter": "document2text", "params": {}}]
+    )
+    clipper_stage._apply_clipper(
+        imported, "text_default", None, chain_steps=[{"kind": "cleaner", "name": "text_whitespace", "params": {}}]
+    )
+    ctx = DatasetContext("_test_thin_cleaned_pdf_routes")
+    ctx.medias = imported
+    clipper_stage._relazify_reference_clips_stage(ctx)
+    (item,) = imported.values()
+    assert item["media_string"] is None and "original_media_string" not in item
+    media_id = max(medias.keys(), default=0) + 1
+    item["id"] = media_id
+    medias[media_id] = item
+    try:
+        yield media_id, src
+    finally:
+        medias.pop(media_id, None)
+
+
+class TestLazyCleanedConverterOutput:
+    def test_text_and_original_are_replayed_from_the_pdf(self, client, lazy_cleaned_pdf_text_media):
+        media_id, _src = lazy_cleaned_pdf_text_media
+        resp = client.post("/api/medias/batch", json={"ids": [media_id]})
+        assert resp.get_json()[0]["has_original"] is True
+        assert client.get(f"/api/medias/{media_id}/text").get_json()["content"] == "hello world"
+        original = client.get(f"/api/medias/{media_id}/text?variant=original").get_json()
+        assert original["content"] == "hello      world"
+
+    def test_an_edited_pdf_is_a_404_not_other_text(self, client, lazy_cleaned_pdf_text_media):
+        import os
+
+        media_id, src = lazy_cleaned_pdf_text_media
+        before = src.stat()
+        src.write_bytes(_pdf_bytes("goodbye      world"))
+        os.utime(src, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+
+        assert client.get(f"/api/medias/{media_id}/text").status_code == 404
+        assert client.get(f"/api/medias/{media_id}/text?variant=original").status_code == 404

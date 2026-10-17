@@ -444,15 +444,15 @@ def fit_quality_row(
         row["ident_mu_hi_err"] = ident["mu_hi_err"]
         row["ident_n"] = ident["n_ident"]
 
-    # *fit* is the SHIPPED (anchored) fit, because every other statistic in this
-    # row has to describe the fit the app actually cut from; *unanchored_fit* is
-    # the counterfactual refitted on the same sample.  The delta is therefore
+    # *fit* is the ANCHORED fit, because every other statistic in this row has
+    # to describe the fit the app's fold-anchored cut is drawn from;
+    # *unanchored_fit* is the counterfactual refitted on the same sample.  The delta is therefore
     # anchored MINUS unanchored - "how far did the labels move it?".
     #
     # This used to take the opposite argument, `anchored_fit`, which no call
     # site ever passed: the three columns were emitted as NaN on every row of
     # the first real run (#3329) and H3 scored as a refutation it had never
-    # measured.  Keeping *fit* as the shipped one is what makes the parameter
+    # measured.  Keeping *fit* as the anchored one is what makes the parameter
     # passable from the fold scope at all.
     if unanchored_fit is not None:
         row["anchored_dmu_lo"] = float(fit.mu_lo - unanchored_fit.mu_lo)

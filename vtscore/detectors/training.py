@@ -6,7 +6,7 @@ by detector route handlers and test helpers.
 This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
 vote) and :func:`train_detector_from_origins` (the **library-tier**
-re-derivation of an MLP from a saved labelset, for embedders driving
+re-derivation of a detector head from a saved labelset, for embedders driving
 ``vtscore`` directly; the app does not call it - see that function's
 "Who calls this" note). Both build on the generic
 :mod:`vtscore.training` primitives but layer in the patch-region max-
@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
     """Resolve the score embedder (structural ▸ patch ▸ text) for the medias in *snap*.
 
-    The detector MLP trains and scores against this embedder's vectors (the v3
+    The detector head trains and scores against this embedder's vectors (the v3
     routing table).  Derived from the embedder names *those* medias carry
     rather than the active context, since :func:`_score_all_media` /
     :func:`_build_vote_xy` may be handed an arbitrary snapshot (a test fixture,
@@ -986,7 +986,7 @@ def _build_vote_xy(
 
     *embedder_name* is the detector's primary embedder; when ``None`` the
     dataset score precedence for *clips_dict* is used (the pre-per-detector
-    behaviour).  Either way the MLP trains in the same space
+    behaviour).  Either way the head trains in the same space
     :func:`_score_all_media` scores against.
 
     All three patch behaviours above - the Good vote's region pool, the Bad
@@ -1047,7 +1047,7 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
     bounds that copy at ``ROW_CHUNK`` rows.
 
     :func:`~vtscore.utils.scores.sigmoid_to_finite_array` replaces NaN/±Inf
-    with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
+    with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised head cannot
     leak non-finite floats into the JSON response.  The downstream segmented
     max-pool then incidentally drops sentinels in favour of any real score (in
     ``[0, 1]``) for the same media.
@@ -1167,7 +1167,7 @@ def scoring_rows_for_snap(
         if has_regions:
             # One row per (media, score row) pair, built once and cached on the
             # dataset context (the patch vectors never change between votes -
-            # only the MLP weights do), so online retraining no longer rebuilds
+            # only the head's weights do), so online retraining no longer rebuilds
             # a multi-million-row matrix on every vote.
             return ScoringRows(*get_region_matrix_for_snap(snapshot))
         ids, matrix = get_embedding_matrix_for_snap(snapshot, resolved)
@@ -1624,7 +1624,7 @@ def train_detector_from_origins(
         embedder_name: Name of the embedder the detector was originally
             trained with. Passed through to :func:`embed_file` so every
             re-embedded media is encoded by the same model that produced
-            the saved vectors - otherwise the MLP trains on a mix of
+            the saved vectors - otherwise the head trains on a mix of
             embedder outputs and learns garbage. Pass ``""`` only when you
             genuinely want the media type's default embedder (e.g. a
             brand-new detector with no recorded embedder yet).

@@ -2,7 +2,7 @@
 
 :func:`resolve_or_train_detector` is the cold-path counterpart to the
 ``DetectorContext.model`` fast path: given a detector id and (optionally) its
-on-disk data plus a media snapshot, it returns the MLP + threshold to score
+on-disk data plus a media snapshot, it returns the head + threshold to score
 with, training from the detector's labelset when no live model exists.
 
 This logic lived inline in ``vtsearch/routes/detectors/scoring.py`` until it
@@ -132,7 +132,7 @@ def resolve_or_train_detector(
     use_loaded_context: bool = True,
     ctx_sink: list | None = None,
 ) -> tuple[Any | None, float, dict | None]:
-    """Return (mlp, threshold, diagnostic) for *detector_id*.
+    """Return (head, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`~vtscore.state.core.DetectorContext` first, when
     its head was trained from the labelset in *det_data*
@@ -155,7 +155,7 @@ def resolve_or_train_detector(
     collapses to the historical single-vector behaviour.
 
     The balance is a pure cutoff knob: a change does **not** retrain or
-    drop the MLP, it re-derives the threshold from the cached estimators.
+    drop the head, it re-derives the threshold from the cached estimators.
     ``train_from_labelset`` passes the detector context down to
     :func:`~vtscore.detectors.training.train_and_threshold`, which caches them
     on it — without that cache a later balance change can't move the cutoff (it
@@ -192,7 +192,7 @@ def resolve_or_train_detector(
     if det_ctx is not None:
         # Defense against H5: scoring AutoFind detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
-        # have invalidated their stale MLPs.  Drop them here so the next
+        # have invalidated their stale heads.  Drop them here so the next
         # branch trains fresh against the detector's primary.  The keying
         # marker returns the detector's primary when the active dataset can
         # supply it (so a valid cached model survives), else the dataset score

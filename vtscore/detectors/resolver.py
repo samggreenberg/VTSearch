@@ -540,33 +540,34 @@ def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> 
 
 
 def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] | None:
-    """Normalize a flat ``run_converters_on_folder`` origin into a one-step chain.
+    """Normalize a flat ``run_converters_on_folder`` origin into a converter-led chain.
 
     The importer-level converter path stamps a *flat* origin -
     ``converter`` / ``converter_param_<key>`` plus the Phase 2b sub-output
     disambiguators ``converter_out_index`` / ``converter_n_out`` /
     ``converter_content_hash`` - rather than the ``clipper_chain`` trail the
-    chain stage records.  Reshaping it into a single :class:`ChainStep` lets
-    the resolver reuse the one replay code path
+    chain stage records.  Reshaping it into a :class:`ChainStep` lets the
+    resolver reuse the one replay code path
     (:func:`~vtscore.datasets.clipper_chain.replay_chain_on_file`) and the
     shared sub-output selector, so a reference-converted label re-embeds from
-    the source file + recipe exactly like a chain-converted one.
+    the source file + recipe exactly like a chain-converted one.  Any
+    ``clipper_chain`` the origin also carries ran on the converter's *output*
+    (a tiling of the rendered page, a whitespace pass over the text), so it
+    follows the converter step rather than running on the file.
 
-    The dialect is decoded by
-    :func:`~vtscore.media.clip_recipe.parse_converter_recipe`, the same parser
-    the lazy-clip byte route reads it with, so the two replay paths cannot
-    disagree about what a given origin records.
+    The dialect and the composition both come from
+    :func:`~vtscore.media.clip_recipe.converter_trail`, which the lazy-clip
+    byte route reads them with too, so the two replay paths cannot disagree
+    about what a given origin records.
 
-    Returns ``None`` when no ``converter`` is recorded, or when the recipe
+    Returns ``None`` when no ``converter`` is recorded, when the recipe
     carries no sub-output disambiguator - the selector would refuse to guess
-    anyway, so there is nothing to gain from running the converter first.
+    anyway, so there is nothing to gain from running the converter first - or
+    when the recorded chain is malformed.
     """
-    from vtscore.media.clip_recipe import parse_converter_recipe
+    from vtscore.media.clip_recipe import converter_trail
 
-    recipe = parse_converter_recipe(params)
-    if recipe is None or not recipe.is_replayable:
-        return None
-    return [recipe.chain_step()]
+    return converter_trail(params)
 
 
 def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[np.ndarray, bytes | None] | None:
@@ -629,8 +630,23 @@ def _apply_clip_and_embed(
     presence/absence of ``clip_bytes`` to decide whether to MD5-hash the
     clip or fall back to a parent-bytes + boundary-tag scheme. Returns
     ``None`` when embedding fails entirely.
+
+    A flat converter origin is replayed converter first
+    (:func:`_converter_origin_to_chain`): *file_path* is then the converter's
+    source (the PDF, the video), and whatever ``clipper_chain`` or legacy
+    clipper keys the origin carries describe steps that ran on the
+    converter's output, not on that file.
     """
     params = origin.get("params", {})
+
+    if params.get("converter"):
+        chain = _converter_origin_to_chain(params)
+        result = _replay_chain(file_path, chain, embedder_name) if chain is not None else None
+        if result is not None:
+            return result
+        # Replay failed (converter gone, no output matched): fall through to a
+        # whole-file embed rather than dropping the label entirely.
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     chain_raw = params.get("clipper_chain")
     if chain_raw:
@@ -729,25 +745,17 @@ def _embed_resolved_label(
     default embedder.
     """
     params = origin.get("params", {}) if origin is not None else {}
-    if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
+    # A flat converter origin (run_converters_on_folder) goes the same way: the
+    # converter is re-run on the resolved source file and the recorded
+    # sub-output re-selected, so a reference-converted label embeds the
+    # rendered page/frame (or its tile, or its cleaned text), not the raw
+    # source file.
+    if origin is not None and (params.get("clipper") or params.get("clipper_chain") or params.get("converter")):
         result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
         if result is None:
             return None
         embedding, _clip_bytes = result
         return embedding
-    # Flat converter origin (run_converters_on_folder): re-run the converter on
-    # the resolved source file and re-select the recorded sub-output, so a
-    # reference-converted label embeds the rendered page/frame, not the raw
-    # source file.  Normalized into a one-step chain to reuse the chain replay.
-    if origin is not None and params.get("converter"):
-        chain = _converter_origin_to_chain(params)
-        if chain is not None:
-            result = _replay_chain(file_path, chain, embedder_name)
-            if result is not None:
-                embedding, _clip_bytes = result
-                return embedding
-        # Replay failed (converter gone, no output matched): fall through to a
-        # whole-file embed rather than dropping the label entirely.
     return embed_file(file_path, media_type, embedder_name)
 
 
@@ -855,7 +863,7 @@ def resolve_label_embeddings(
             Callers that will mix these vectors with a dataset's stored
             embeddings (e.g. find-label training) must pass the dataset's
             embedder so all training vectors share one space; mixing
-            output from two embedders into a single MLP produces garbage.
+            output from two embedders into a single head produces garbage.
             Empty ``""`` falls back to the media type's first registered
             embedder.
 

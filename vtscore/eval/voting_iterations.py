@@ -756,7 +756,7 @@ def _safe_threshold_for_step(
     fold_haystacks: list[Any] = []
     # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
     # fold model is a real, K-proportional part of the calibration a live run at
-    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # K pays for - the fold-anchored rule anchors every fold's mixture on that fold's
     # own haystack - and it is paid *here*, outside `train_seconds`,
     # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
     # unmeasured it is invisible to every cost model built out of those four,
@@ -781,7 +781,7 @@ def _safe_threshold_for_step(
     _keep_fold_sim(details, keep_fold_sim, ids, all_scores, fold_sim, excluding)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
-    # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
+    # fold-anchored rule at each K, and `details["fold_models"]` is trimmed to the
     # live `calibrate_count`.  Score the extra Kmax-run folds here, where the
     # sim set and the scoring machinery are already in hand, and stash them
     # beside the orderings for :func:`_fold_count_variant_rows`.  Only the
@@ -1364,8 +1364,8 @@ def _standalone_calibration_row(
     :func:`_evaluate_on_test` already computed, with the step's fold orderings
     (when its trainer kept any) as the calibration set, so ``oracle_cost``,
     ``regret`` and ``threshold_provenance`` mean on a ``gp_*`` row exactly what
-    they mean on the app's.  The provenance is the shipped estimator's when the
-    safe-threshold path set one, else the trainer's own ``threshold_rule``.
+    they mean on the app's.  The provenance is the safe-threshold path's when
+    it set one, else the trainer's own ``threshold_rule``.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -2994,8 +2994,10 @@ def simulate_voting_iterations(  # noqa: C901
             ``target_prevalence`` the test set is untouched, so it combines with
             ``test_bands`` and each cell pairs with its natural twin (#4184).
         sim_fraction: Fraction of medias used for simulated voting.
-        safe_thresholds: The shipped threshold path - fuse the haystack score
-            distribution into the trained cut (the fold-anchored estimator, see
+        safe_thresholds: The shipped threshold path - the line drawn where
+            the app draws it (:func:`_safe_threshold_for_step`): the labels'
+            line under a balance (#4452), else the haystack score distribution
+            fused into the trained cut (the fold-anchored estimator, see
             :func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`).
             **On by default, matching the app**, which has no switch for it.
             Set ``False`` only to run the no-fusion control arm: pure
@@ -3378,8 +3380,9 @@ def simulate_voting_iterations(  # noqa: C901
             are the paired, reporting-only view of the same rules.
         live_threshold: A **retired** live threshold rule (issue #4184), one of
             :data:`~vtscore.eval.live_threshold_rules.LIVE_THRESHOLD_RULES`, or
-            ``None`` (default) for the shipped fold-anchored cut.  The named rule
-            replaces the step's live cut after the fused path has fitted it -
+            ``None`` (default) for the step's own line (the labels' line under
+            a balance, else the fold-anchored cut).  The named rule replaces
+            that line once the safe-threshold path has drawn it -
             reporting, acquisition and every later vote read it - so, like
             *live_cut_rule*, it is a run-level arm.  The acquisition offset does
             not apply under it: the retired rules predate the offset and have no
@@ -3398,7 +3401,7 @@ def simulate_voting_iterations(  # noqa: C901
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
             ``"anchored"`` (issue #3959) is the GP-native rule: the GP fits its
-            own calibration folds on the app's splits and the **shipped**
+            own calibration folds on the app's splits and the app's **own**
             fold-anchored estimator runs on them - each fold's mixture on that
             fold GP's haystack scores, anchored by its held-out votes, carried
             to the final GP by quantile.  Needs *safe_thresholds* (that is where
@@ -5567,7 +5570,7 @@ def run_voting_iterations_eval(
             would only re-weight ``cost``.  The app has no such setting
             (#4269); 0 is the cut it draws with no balance.
         sim_fraction: Fraction of medias reserved for simulated voting.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
             (see :func:`simulate_voting_iterations`).
         calibrate_count: Number of random Train/Calibrate splits for threshold
@@ -5722,7 +5725,7 @@ def run_voting_iterations_eval_from_pickles(
         inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
             needs ``beta="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).

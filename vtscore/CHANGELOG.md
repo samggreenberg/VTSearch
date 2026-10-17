@@ -24,6 +24,21 @@ instead, since every commit on `dev` is effectively a new app release.)
   snapshot's ids). Both are additive. The Train view's learned-sort cache still misses while a quota
   head is on the context, as it did when that head had no ranking.
 
+- **A converter output a clipper or cleaner changed replays converter first** (issue #5041). The new
+  `vtscore.media.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
+  the `clipper_chain` that ran on its output: the converter's step, then that chain (`None` when either cannot
+  be read). `lazy_clip.clip_recipe` returns it as a `("chain", …)` recipe for an audio / image / text
+  converter output some clipper cut or cleaner rewrote; it used to return the converter recipe, which rebuilds
+  the whole output, so every tile of a page served the whole page. The replay hands the converter the
+  source's name and path, as a reference import does. `recipe_is_exclusive` is now true for converter
+  recipes too, and for a converter output with no replayable recipe, so `_resolve_media_bytes` /
+  `_resolve_media_string` and `embed_view` never fall through to the file it was converted from.
+  `_relazify_reference_clips_stage` drops any chain-replayed unit's payload (and Original) only after a dry
+  run reproduces it, and keeps a converter output it cannot replay. In the label resolver,
+  `_apply_clip_and_embed` replays a converter origin converter first (`_converter_origin_to_chain` returns the
+  whole composed trail) and `_embed_resolved_label` sends converter origins through it; the chain on such an
+  origin used to be replayed on the source file itself. No plugin contract changes.
+
 - **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
   produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
   after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`

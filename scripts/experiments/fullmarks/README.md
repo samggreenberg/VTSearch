@@ -350,6 +350,11 @@ In the order you run them. Only the first two are needed for a first eval.
    That store is written deduped on `(page_id, box, class_id)`, so re-applying a
    class does not record its boxes twice; `audit_to_corrections.py
    --tidy-added-marks` drops the duplicates a store written before that carries.
+   The page is guarded the same way: a re-applied box takes the mark already
+   there instead of adding a copy, and a page carrying two accepted instances
+   is listed twice in `page_ids`. A corpus written before that holds copies;
+   `--drop-duplicate-marks` drops them, re-points their adjudications and
+   recounts each class from its marks (#5052, v5.1).
    Rejected candidates become cannot-links: permanent hard negatives.
    Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
    ten classes, and 104 missing members turned up over 23 classes. Candidates
