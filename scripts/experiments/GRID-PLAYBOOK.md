@@ -90,9 +90,13 @@ common self-inflicted wound here.
 | mount | size | use it for |
 |---|---|---|
 | `/exp/$USER` | **50 G** | the checkout and its venv. Nothing else. |
-| `/expscratch/$USER` | **~1 T**, flash | the embedding pile, study outputs, worktrees, archives |
+| `/expscratch/$USER` | **1 T**, flash | the embedding pile, study outputs, worktrees, archives |
 | `/scratch/jobs/$USER/$SLURM_JOB_ID` | ~286 G, node-local | per-job temp; wiped when the job ends |
-| `/exp/scale26` | 25 T, shared | staged source datasets (read-mostly, ~94% full) |
+| `/exp/scale26` | 29 T, shared | staged source datasets (read-mostly, 98% full) |
+
+Sizes are `df -h` on the mount, 2026-10-17 (#5047): `/expscratch/$USER` is
+exactly 1 TiB (1,099,511,627,776 bytes). Run `df -h <mount>` before a big
+write; `/expscratch/$USER` has filled more than once.
 
 - **`/exp` is a small quota** and the venv alone is ~13 G of it. Write no study
   output there at all — an ENOSPC kills the whole array mid-run.
