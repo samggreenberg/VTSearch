@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 from flask import Flask
+from flask.sessions import SecureCookieSessionInterface
 
 import app as app_module
 from vtsearch.auth import ApiKeyLoginProvider, TrivialLoginProvider, set_login_provider
@@ -35,7 +36,9 @@ def _forge_session_cookie(payload: dict) -> str:
     """Sign ``payload`` as a session cookie with the public default key."""
     forger = Flask("forger")
     forger.secret_key = DEFAULT_SECRET_KEY
-    return forger.session_interface.get_signing_serializer(forger).dumps(payload)
+    serializer = SecureCookieSessionInterface().get_signing_serializer(forger)
+    assert serializer is not None
+    return serializer.dumps(payload)
 
 
 class TestReplacesTheDefault:
