@@ -244,38 +244,61 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
     source file (the parent recording, the source PDF), not the slice/page, so
     embedding it lazily would embed the wrong content.
 
-    **Cleaned items are re-lazified only after a dry run.**  A cleaner rewrites
-    the payload (re-encoded bytes, trimmed text) rather than slicing it, so the
-    item's recipe is its whole chain trail, replayed from the source
-    (:mod:`vtscore.media.lazy_clip`).  Its stored payload and ``original_*``
-    snapshot are dropped only when that replay reproduces both of them here,
-    byte for byte; otherwise - a replay that is not deterministic, a cleaned
-    converter output, a trail recorded before ``original_hash`` existed - the
-    item keeps both payloads, as every cleaned item used to.
+    **Chain-replayed items are re-lazified only after a dry run.**  A cleaner
+    rewrites the payload (re-encoded bytes, trimmed text) rather than slicing
+    it, and a clipper that cut a converter's output (a rendered page tiled, a
+    document's text split into sentences) cut something no file holds, so the
+    item's recipe is its whole chain trail, replayed from the source and led
+    by the converter for a converter output (:mod:`vtscore.media.lazy_clip`).
+    Its stored payload and any ``original_*`` snapshot are dropped only when
+    that replay reproduces both of them here, byte for byte; otherwise - a
+    replay that is not deterministic, a trail recorded before
+    ``original_hash`` existed - the item keeps its payloads, as every cleaned
+    item used to.  So does a converter output with no recipe at all: its
+    ``media_path`` names the file it was converted from, never its payload.
 
-    **Text clips stay materialized.**  A text unit some clipper cut out of its
-    source has no slice recipe, and its ``media_path`` would serve the whole
-    document; text is small, so it keeps its ``media_string``.  A whole-file
+    **Text clips without a recipe stay materialized.**  A text unit some
+    clipper cut out of a text file has no slice recipe, and its ``media_path``
+    would serve the whole document; text is small, so it keeps its
+    ``media_string``.  A whole-file
     text unit (no clipper in its trail) goes back to its ``media_path`` when
     reading that file serves the same text (:func:`_source_serves_same`).
     """
-    from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
-    from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
-
     for clip in ctx.medias.values():
         source = clip.pop("_lazy_source", None)
-        if source is None:
+        if source is None or not _serves_same_lazily(clip, source):
             continue
-        if has_original_payload(clip):
-            if not _replay_reproduces(clip, source):
-                continue
-            clip.pop("original_media_bytes", None)
-            clip.pop("original_media_string", None)
-        elif clip.get("media_type") == "text" and clip_recipe(clip) is None and not _source_serves_same(clip, source):
-            continue
+        clip.pop("original_media_bytes", None)
+        clip.pop("original_media_string", None)
         clip["media_path"] = source
         clip["media_bytes"] = None
         clip["media_string"] = None
+
+
+def _serves_same_lazily(clip: dict, source: str) -> bool:
+    """True iff *clip*, stripped back to a reference to *source*, still serves what it holds.
+
+    A chain recipe must pass a dry run (:func:`_replay_reproduces`).  An
+    Original with no chain recipe to replay it from, or a converter output
+    with no recipe at all, leaves nothing that could stand in for the stored
+    payload.  A text unit with no recipe passes only when the whole file reads
+    back as its text (:func:`_source_serves_same`).  Anything else - a slice
+    recipe, a converter output no step changed, an audio or image unit served
+    by its whole file - is rebuilt by its recipe or is that file.
+    """
+    from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+    from vtscore.media.lazy_clip import clip_recipe, recipe_is_exclusive  # noqa: PLC0415
+
+    recipe = clip_recipe(clip)
+    if recipe is not None and recipe[0] == "chain":
+        return _replay_reproduces(clip, source)
+    if has_original_payload(clip):
+        return False
+    if recipe is None and recipe_is_exclusive(clip):
+        return False
+    if recipe is None and clip.get("media_type") == "text":
+        return _source_serves_same(clip, source)
+    return True
 
 
 def _payload_of(media: dict, key_prefix: str = "") -> bytes | None:
@@ -288,22 +311,27 @@ def _payload_of(media: dict, key_prefix: str = "") -> bytes | None:
 
 
 def _replay_reproduces(clip: dict, source: str) -> bool:
-    """True iff *clip*'s chain recipe, replayed from *source*, rebuilds both payloads.
+    """True iff *clip*'s chain recipe, replayed from *source*, rebuilds what it holds.
 
-    The dry run behind re-lazifying a cleaned item: the lazy view it would
-    become must serve exactly the cleaned payload the dataset embedded and
-    hashed, and exactly the Original snapshot it would drop.
+    The dry run behind re-lazifying a chain-replayed item: the lazy view it
+    would become must serve exactly the payload the dataset embedded and
+    hashed, and - for a cleaned item - exactly the Original snapshot it would
+    drop.
     """
-    from vtscore.media.lazy_clip import lazy_clip_bytes, lazy_original_bytes, recipe_is_exclusive  # noqa: PLC0415
+    from vtscore.datasets.clipper_chain import has_original_payload  # noqa: PLC0415
+    from vtscore.media.lazy_clip import lazy_clip_bytes, lazy_original_bytes  # noqa: PLC0415
 
-    cleaned, original = _payload_of(clip), _payload_of(clip, "original_")
-    if cleaned is None or original is None:
+    payload = _payload_of(clip)
+    if payload is None:
         return False
     view = {k: v for k, v in clip.items() if not k.startswith("original_media_")}
     view.update(media_path=source, media_bytes=None, media_string=None)
-    if not recipe_is_exclusive(view):
+    if lazy_clip_bytes(view) != payload:
         return False
-    return lazy_clip_bytes(view) == cleaned and lazy_original_bytes(view) == original
+    if not has_original_payload(clip):
+        return True
+    original = _payload_of(clip, "original_")
+    return original is not None and lazy_original_bytes(view) == original
 
 
 def _source_serves_same(clip: dict, source: str) -> bool:

@@ -8,7 +8,7 @@ duplicating the source bytes once per derived item in the dataset pickle: a
 5-minute recording tiled into 30 clips stores the recipe 30 times (a few bytes
 each) instead of 30 copies of the audio.
 
-Two recipe families participate:
+Three recipe families participate:
 
 * **clip slices** - the media type's clipper re-slices the source bytes:
 
@@ -28,19 +28,25 @@ Two recipe families participate:
   ``converter_n_out`` / ``converter_content_hash``) via the shared
   :func:`~vtscore.datasets.clipper_chain._select_chain_output` selector.
 
-* **cleaned units** - some :class:`~vtscore.media.cleaner.MediaCleaner`
+* **chain replays** - some :class:`~vtscore.media.cleaner.MediaCleaner`
   rewrote the payload (a silence trim, an edge trim, a whitespace pass), which
-  no slice of the source reproduces.  The recipe is the unit's whole chain
-  trail (``origin.params['clipper_chain']``): the source is loaded the way the
-  import hydrated it (:func:`load_reference_source`), every recorded step is
-  re-run via :func:`~vtscore.datasets.clipper_chain.replay_chain_on_media`,
-  and the result is served only if its content hash still equals the one the
-  trail recorded.  The unit's "Original" is the same trail cut before its
-  first cleaner, checked against the trail's ``original_hash``.  These
-  recipes are *exclusive* (:func:`recipe_is_exclusive`): when a replay no
-  longer matches - the source file was edited, or a library upgrade changed a
-  re-encode - the unit serves **no** bytes, never the source file in their
-  place, and a warning names the file.
+  no slice of the source reproduces, or a clipper cut a converter's output (a
+  rendered page tiled, a document's text split into sentences), which the
+  converter alone does not.  The recipe is the unit's whole chain trail
+  (``origin.params['clipper_chain']``), led for a converter output by the
+  converter itself (:func:`~vtscore.media.clip_recipe.converter_trail`): the
+  source is loaded the way the import hydrated it (:func:`load_reference_source`)
+  or handed it to the converter, every recorded step is re-run via
+  :func:`~vtscore.datasets.clipper_chain.replay_chain_on_media`, and the
+  result is served only if its content hash still equals the one the trail
+  recorded.  A cleaned unit's "Original" is the same trail cut before its
+  first cleaner, checked against the trail's ``original_hash``.
+
+Chain and converter recipes are *exclusive* (:func:`recipe_is_exclusive`):
+the unit's ``media_path`` names its source - the uncleaned file, the PDF a
+page came from - so when a replay no longer matches (the source file was
+edited, or a library upgrade changed a re-encode) the unit serves **no**
+bytes, never the source file in their place, and a warning names the file.
 
 Resolved bytes are held in process-scoped LRU caches.  Per the
 no-persisted-bytes rule, these caches are purely in-memory: nothing here writes
@@ -61,7 +67,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
-from vtscore.media.clip_recipe import parse_clip_box, parse_converter_recipe
+from vtscore.media.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
 
 log = logging.getLogger(__name__)
 
@@ -175,6 +181,42 @@ def _converter_recipe(params: dict[str, Any]) -> tuple | None:
     return recipe.cache_key()
 
 
+def _converter_output_recipe(params: dict[str, Any], media_type: Any) -> tuple | None:
+    """Return the recipe of a unit whose ``params`` record a flat converter, or ``None``.
+
+    A unit that *is* the converter's output - nothing after the converter cut
+    or rewrote it - replays the converter alone (:func:`_converter_recipe`).
+    One a clipper cut or a cleaner rewrote replays the converter and then the
+    rest of its trail (:func:`~vtscore.media.clip_recipe.converter_trail`),
+    checked like any chain replay.  ``None`` when that trail cannot be read or
+    checked (a type outside :data:`CHAIN_REPLAY_TYPES`, no recorded content
+    hash): the converter alone would rebuild the whole page, not the tile.
+    """
+    from vtscore.datasets.clipper_chain import _trail_cleaned  # noqa: PLC0415
+
+    trail = converter_trail(params)
+    if trail is None:
+        return None
+    after = trail[1:]
+    if not _trail_cleaned(after) and all(entry["kind"] == "cleaner" for entry in after):
+        return _converter_recipe(params)
+    if media_type not in CHAIN_REPLAY_TYPES or not trail[-1].get("content_hash"):
+        return None
+    return ("chain", media_type, _trail_key(trail))
+
+
+def _origin_params(media: dict[str, Any]) -> dict[str, Any]:
+    """Return *media*'s ``origin.params`` (empty when it has none)."""
+    origin = media.get("origin")
+    params = origin.get("params", {}) if isinstance(origin, dict) else {}
+    return params if isinstance(params, dict) else {}
+
+
+def _is_converter_output(media: dict[str, Any]) -> bool:
+    """True iff *media* came out of a flat converter, so its ``media_path`` names the file it was converted from."""
+    return bool(_origin_params(media).get("converter"))
+
+
 def clip_recipe(media: dict[str, Any]) -> tuple | None:
     """Return a hashable recipe describing *media*'s derivation, or ``None``.
 
@@ -186,8 +228,10 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
 
     * ``("converter", name, params_items, out_index, n_out, content_hash)`` -
       a converter output re-rendered from the source file.
-    * ``("chain", media_type, trail_json)`` - a cleaned unit, replayed from
-      its whole chain trail (see :func:`_chain_trail`).
+    * ``("chain", media_type, trail_json)`` - a unit replayed from its whole
+      chain trail: a cleaned unit (see :func:`_chain_trail`), or a converter
+      output some clipper or cleaner then changed, whose trail the converter
+      leads (see :func:`_converter_output_recipe`).
     * ``("audio", clip_start, clip_end)`` - seconds, both floats.
     * ``("image", (x1, y1, x2, y2))`` - integer pixel box.
 
@@ -196,10 +240,11 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
 
     The converter branch is checked first and is keyed by the ``converter``
     param, not the target media type: a ``document2image`` output has
-    ``media_type == "image"`` but is a converter output, not an image *clip*.
-    The chain branch comes next: a cleaned audio tile also carries the tile's
-    ``clip_start`` / ``clip_end``, but slicing them out of the source would
-    yield the *uncleaned* tile.
+    ``media_type == "image"`` but is a converter output, not an image *clip* -
+    and a tile cut from it carries a ``clip_box`` relative to the rendered
+    page, not to the PDF.  The chain branch comes next: a cleaned audio tile
+    also carries the tile's ``clip_start`` / ``clip_end``, but slicing them out
+    of the source would yield the *uncleaned* tile.
 
     **Archive members never lazy-slice.** A ``local_archive_member`` media may
     carry ``clip_start`` / ``clip_end`` (a windowed import), but its window is
@@ -214,13 +259,11 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
     if archive_member_ref(media) is not None:
         return None
 
-    origin = media.get("origin")
-    params = origin.get("params", {}) if isinstance(origin, dict) else {}
+    params = _origin_params(media)
+    media_type = media.get("media_type")
 
     if params.get("converter"):
-        return _converter_recipe(params)
-
-    media_type = media.get("media_type")
+        return _converter_output_recipe(params, media_type)
 
     trail = _chain_trail(params, media_type)
     if trail is not None:
@@ -364,9 +407,23 @@ def _replay_from_source(
                 return None
             return replay_chain_on_media(dict(picked), steps[1:], run_step=lambda i, e, m: run_step(i + 1, e, m))
 
+    return replay_chain_on_media(_replay_source(path, media_type, steps), steps, run_step=run_step)
+
+
+def _replay_source(path: Path, media_type: str, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Rebuild, from the reference source at *path*, what the first of *steps* saw at import.
+
+    A converter-led trail (a flat converter output, see
+    :func:`~vtscore.media.clip_recipe.converter_trail`) starts from what a
+    reference import's ``run_converters_on_folder`` handed the converter: the
+    file's name and path, which the converter reads itself.  Any other trail
+    starts from the parent the import hydrated (:func:`load_reference_source`).
+    """
+    if steps and steps[0]["kind"] == "converter":
+        return {"filename": path.name, "media_path": str(path)}
     source = {"media_type": media_type, "filename": path.name, "media_path": str(path)}
     source.update(load_reference_source(media_type, path))
-    return replay_chain_on_media(source, steps, run_step=run_step)
+    return source
 
 
 def _checked_replay(
@@ -462,12 +519,18 @@ def lazy_original_bytes(media: dict[str, Any]) -> bytes | None:
 def recipe_is_exclusive(media: dict[str, Any]) -> bool:
     """True iff *media*'s recipe is the only legitimate source of its payload.
 
-    A cleaned unit's ``media_path`` names the *uncleaned* source, so when its
-    replay fails the resolvers must stop there rather than fall through to
-    reading that file: no bytes, never other bytes.
+    A cleaned unit's ``media_path`` names the *uncleaned* source, and a
+    converter output's names the file it was converted from (the PDF a page's
+    text came from, the video a frame was cut out of), so when the recipe
+    fails the resolvers must stop there rather than fall through to reading
+    that file: no bytes, never other bytes.  A converter output whose recipe
+    cannot be replayed at all is no exception - its source file still is not
+    its payload.
     """
     recipe = clip_recipe(media)
-    return recipe is not None and recipe[0] == "chain"
+    if recipe is not None:
+        return recipe[0] in ("chain", "converter")
+    return _is_converter_output(media)
 
 
 class _LazyPayloadView(dict):
@@ -514,15 +577,16 @@ def embed_view(media: dict[str, Any]) -> dict[str, Any]:
     """Return what an embedder should be handed for *media*.
 
     *media* itself, unless it is a lazy unit (no inline payload, a recipe in
-    its origin): then a view whose payload resolves from that recipe.  Every
-    embedder falls back to ``media_path`` when it finds no payload, and for a
-    lazy unit that names the whole source - the recording a tile was cut from,
-    the photo before its edge trim - so embedding the media directly would
-    embed the wrong content.
+    its origin) or a converter output: then a view whose payload resolves from
+    that recipe, if any.  Every embedder falls back to ``media_path`` when it
+    finds no payload, and for these that names the whole source - the
+    recording a tile was cut from, the photo before its edge trim, the PDF a
+    page came from - so embedding the media directly would embed the wrong
+    content.
     """
     if media.get("media_bytes") is not None or media.get("media_string") is not None:
         return media
-    if clip_recipe(media) is None:
+    if clip_recipe(media) is None and not _is_converter_output(media):
         return media
     return _LazyPayloadView(media)
 

@@ -26,6 +26,9 @@ and each caller keeps its own replay and fallback policy:
   path (``run_converters_on_folder``), returned as a
   :class:`FlatConverterRecipe` that can render itself into either caller's
   shape — a hashable cache key or a one-step chain entry.
+* :func:`converter_trail` — that flat dialect *composed* with the
+  ``clipper_chain`` trail of whatever clipped or cleaned the converter's
+  output afterwards: the one trail that rebuilds such a unit from its source.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from typing import Any
 
 __all__ = [
     "FlatConverterRecipe",
+    "converter_trail",
     "parse_clip_box",
     "parse_converter_recipe",
 ]
@@ -166,3 +170,31 @@ def parse_converter_recipe(params: dict[str, Any]) -> FlatConverterRecipe | None
         n_out=_as_int(params.get("converter_n_out")),
         content_hash=params.get("converter_content_hash"),
     )
+
+
+def converter_trail(params: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Return the whole replay trail of a flat converter output, or ``None``.
+
+    The flat dialect records only the converter.  A clipper or cleaner that
+    later ran on the converter's *output* (a page's text cut into sentences, a
+    rendered page tiled, the text's whitespace collapsed) records its steps in
+    ``clipper_chain``, and that trail starts from the output, not the source
+    file.  So the trail that rebuilds the unit from its source is the converter
+    step followed by the recorded chain; replaying the chain alone would feed
+    the source file (a PDF, a video) to a text or image step.
+
+    ``None`` when no replayable converter is recorded (see
+    :attr:`FlatConverterRecipe.is_replayable`) or the recorded chain is
+    malformed: a unit whose trail cannot be read cannot be rebuilt, and the
+    converter step alone would rebuild its *whole* output.
+    """
+    from vtscore.datasets.clipper_chain import parse_trail  # noqa: PLC0415
+
+    recipe = parse_converter_recipe(params)
+    if recipe is None or not recipe.is_replayable:
+        return None
+    raw = params.get("clipper_chain")
+    chain = parse_trail(raw) if raw is not None else []
+    if chain is None:
+        return None
+    return [recipe.chain_step(), *chain]

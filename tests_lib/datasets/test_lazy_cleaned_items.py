@@ -6,6 +6,10 @@ served only while it still reproduces the content hash the trail recorded (see
 full and require the two to agree on every observable: the bytes, the stored
 MD5, the embedding, and the Original.  They also pin the failure mode: a source
 edited after import serves *nothing*, never the edited file.
+
+The same holds for a converter output (a PDF's text, a rendered page) that a
+cleaner rewrote or a clipper cut (#5041): its trail is led by the converter, so
+the replay starts from the PDF.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import numpy as np
 import pytest
 
 import vtscore.media as media_registry
+from vtscore.converters.runner import run_converters_on_folder
 from vtscore.datasets.clipper_chain import has_original_payload, original_hash, parse_trail
 from vtscore.datasets.loader_folder import load_dataset_from_folder
 from vtscore.datasets.stages import clipper as clipper_stage
@@ -28,7 +33,7 @@ from vtscore.datasets.stages.embedding import embed_missing
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.cleaner import MediaCleaner
 from vtscore.media.embedder import MediaEmbedder
-from vtscore.media.lazy_clip import embed_view, lazy_original_bytes, recipe_is_exclusive
+from vtscore.media.lazy_clip import clip_recipe, embed_view, lazy_original_bytes, recipe_is_exclusive
 from vtscore.state import DatasetContext
 
 # ---------------------------------------------------------------------------
@@ -403,3 +408,164 @@ class TestDryRunGate:
         assert item["media_string"] == "hello #1"
         assert item["original_media_string"] == "hello"
         assert counting.runs == 2  # the import, then the dry run that failed
+
+
+# ---------------------------------------------------------------------------
+# Converter outputs a cleaner rewrote or a clipper cut (#5041)
+# ---------------------------------------------------------------------------
+
+
+def _pdf(*lines: str, height: int = 300) -> bytes:
+    """A one-page PDF with one line of text per 200pt band, so the tiles of its render differ."""
+    fitz = pytest.importorskip("fitz")  # PyMuPDF, from the ``agpl`` extra
+    doc = fitz.open()
+    page = doc.new_page(width=200, height=height)
+    for i, line in enumerate(lines):
+        page.insert_text((20, 100 + 200 * i), line)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _step(kind: str, name: str) -> dict[str, Any]:
+    return {"kind": kind, "name": name, "params": {}}
+
+
+#: case -> (target type, converter, chain steps, PDF lines, page height)
+_CONVERTED: dict[str, tuple[str, str, list[dict[str, Any]], tuple[str, ...], int]] = {
+    "cleaned text": ("text", "document2text", [_step("cleaner", "text_whitespace")], ("hello      world",), 300),
+    "sentences": ("text", "document2text", [_step("clipper", "text_sentence")], ("One here. Two there.",), 300),
+    "cleaned sentences": (
+        "text",
+        "document2text",
+        [_step("clipper", "text_sentence"), _step("cleaner", "text_whitespace")],
+        ("One   here. Two   there.",),
+        300,
+    ),
+    "page tiles": ("image", "document2image", [_step("clipper", "image_tiling")], ("top", "middle", "bottom"), 600),
+}
+
+#: The cases whose units carry an Original.
+_CLEANED_CASES = {"cleaned text", "cleaned sentences"}
+
+
+def _import_converted(folder: Path, case: str, *, thin: bool) -> dict[int, dict[str, Any]]:
+    """Convert every PDF in *folder* the way *case* says, run its chain, re-lazify."""
+    target, converter, steps, _lines, _height = _CONVERTED[case]
+    medias: dict[int, dict[str, Any]] = {}
+    run_converters_on_folder(
+        folder, target, medias, thin=thin, converter_specs=[{"converter": converter, "params": {}}]
+    )
+    clipper_stage._apply_clipper(
+        medias, f"{target}_default", None, chain_steps=steps, embedder=_ContentEmbedder(target)
+    )
+    ctx = DatasetContext("_test_lazy_converted")
+    ctx.medias = medias
+    clipper_stage._relazify_reference_clips_stage(ctx)
+    return medias
+
+
+@pytest.fixture
+def pdf_for(tmp_path):
+    """Write one case's PDF (or *lines* in its place) and return ``(folder, path)``."""
+
+    def make(case: str, lines: tuple[str, ...] | None = None) -> tuple[Path, Path]:
+        _target, _converter, _steps, default_lines, height = _CONVERTED[case]
+        path = tmp_path / "doc.pdf"
+        path.write_bytes(_pdf(*(lines or default_lines), height=height))
+        return tmp_path, path
+
+    return make
+
+
+@pytest.mark.parametrize("case", sorted(_CONVERTED))
+class TestConvertedThinMatchesFull:
+    def test_each_unit_stores_only_a_recipe(self, case, pdf_for):
+        folder, path = pdf_for(case)
+        thin = _import_converted(folder, case, thin=True)
+
+        assert len(thin) > (1 if _CONVERTED[case][2][0]["kind"] == "clipper" else 0)
+        for item in thin.values():
+            assert item["media_bytes"] is None
+            assert item["media_string"] is None
+            assert not [k for k in item if k.startswith("original_media_")]
+            assert item["media_path"] == str(path.resolve())
+            recipe = clip_recipe(item)
+            assert recipe is not None and recipe[0] == "chain"
+            assert recipe_is_exclusive(item)
+
+    def test_bytes_md5_embedding_and_original_match_a_full_import(self, case, pdf_for):
+        folder, _path = pdf_for(case)
+        full = _import_converted(folder, case, thin=False)
+        thin = _import_converted(folder, case, thin=True)
+        assert len(thin) == len(full)
+
+        name = _ContentEmbedder.NAME
+        originals = 0
+        for f, t in zip(full.values(), thin.values()):
+            assert _served(t) == _served(f)
+            assert t["md5"] == f["md5"]
+            np.testing.assert_array_equal(media_embedding(t, name), media_embedding(f, name))
+            assert has_original_payload(t) == has_original_payload(f)
+            if has_original_payload(f):
+                originals += 1
+                assert lazy_original_bytes(t) == _stored_original(f)
+                assert lazy_original_bytes(t) != _served(t)
+        assert (originals > 0) == (case in _CLEANED_CASES), "the cleaner must fire exactly where the case says"
+
+    def test_an_edited_pdf_serves_nothing_rather_than_other_content(self, case, pdf_for):
+        folder, path = pdf_for(case)
+        thin = _import_converted(folder, case, thin=True)
+        before = {i: _served(m) for i, m in thin.items()}
+        assert all(before.values())  # warms the caches: the edit must still be noticed
+
+        stat = path.stat()
+        path.write_bytes(_pdf(*(f"edited {line}" for line in _CONVERTED[case][3]), height=_CONVERTED[case][4]))
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+        after = {i: _served(m) for i, m in thin.items()}
+        assert any(served is None for served in after.values())
+        # A unit the edit happened to leave byte-identical may still serve; nothing serves other bytes.
+        assert all(after[i] in (None, before[i]) for i in thin)
+        assert all(lazy_original_bytes(m) is None for m in thin.values())
+
+    def test_a_label_on_a_unit_embeds_what_the_dataset_holds(self, case, pdf_for, monkeypatch):
+        """Cross-dataset training resolves a label to the PDF and replays the
+        same converter-led trail; replaying the chain alone fed it the PDF."""
+        from vtscore.detectors import resolver  # noqa: PLC0415
+
+        embedded: list[bytes] = []
+
+        def capture(path, media_type, embedder_name="", **_kwargs):
+            embedded.append(Path(path).read_bytes())
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver, "embed_file", capture)
+        folder, path = pdf_for(case)
+        for item in _import_converted(folder, case, thin=False).values():
+            embedded.clear()
+            assert resolver._embed_resolved_label(path, item["media_type"], item["origin"]) is not None
+            assert embedded == [_served(item)]
+
+
+class TestConvertedOutputsNoStepChanged:
+    def test_an_unchanged_output_keeps_the_plain_converter_recipe(self, pdf_for):
+        folder, _path = pdf_for("cleaned text", lines=("already clean",))
+        (item,) = _import_converted(folder, "cleaned text", thin=True).values()
+
+        assert not has_original_payload(item)
+        assert item["media_string"] is None
+        recipe = clip_recipe(item)
+        assert recipe is not None and recipe[0] == "converter"
+        assert _served(item) == b"already clean"
+
+    def test_a_later_reembed_sees_the_cleaned_text(self, pdf_for, monkeypatch):
+        folder, _path = pdf_for("cleaned text")
+        (full,) = _import_converted(folder, "cleaned text", thin=False).values()
+        (thin,) = _import_converted(folder, "cleaned text", thin=True).values()
+        later = _ContentEmbedder("text", name="content_test_embedder_later")
+        monkeypatch.setitem(media_registry._embedder_registry, later.name, later)
+
+        embed_missing({1: full, 2: thin}, later.name)
+
+        np.testing.assert_array_equal(media_embedding(thin, later.name), media_embedding(full, later.name))

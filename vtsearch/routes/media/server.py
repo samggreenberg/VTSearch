@@ -470,8 +470,12 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
     media_bytes = media.get("media_bytes")
     if media_bytes is not None:
         return media_bytes
+    from vtscore.media.lazy_clip import recipe_is_exclusive  # noqa: PLC0415
+
     media_path = media.get("media_path")
-    if media_path:
+    # A unit whose recipe no longer replays (a cleaned item, a converter
+    # output) names its *source* here; the resolver above already refused it.
+    if media_path and not recipe_is_exclusive(media):
         from vtscore.security.path_validation import resolve_media_file_path  # noqa: PLC0415
 
         p = resolve_media_file_path(media_path)
