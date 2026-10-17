@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector with too few labels for a trained head reports the set it actually keeps** (issue
+  #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
+  typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of
+  1) whatever its line kept, and a headless `--autodetect` run said it "exports its top 32" while it
+  exported everything over the line. Both now count what the line keeps.
+
 - **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
   that failed showed a "Failed" row in the datasets table, but the row went the next time the page
   reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.

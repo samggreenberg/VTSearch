@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A head the label quota gives keeps the ranking its line is counted on** (issue #5048). The Goods'
+  centroid (#4643) and a typed query's head (#4758) used to install with `line_ranking = None`, so
+  `detector_balance_state` reported the balance's cap (32 at beta 1 or below, 128 above) as their
+  `count` wherever no Find pass had ranked them: the Train view's balance, and a headless CLI run's
+  `detector_unchecked` event, while the run exported what the head's line kept. Installing one now
+  scores it over the corpus its line was drawn on and parks that `LineRanking`, the labelled media
+  marked voted as a trained head's retrain marks them, so the count is what the line keeps.
+  `install_centroid_head` takes `ids=` (one per score its `score` returns; without them it keeps no
+  ranking, as before) and `install_query_head` takes `voted=` (the labelled media, in the scored
+  snapshot's ids). Both are additive. The Train view's learned-sort cache still misses while a quota
+  head is on the context, as it did when that head had no ranking.
+
 - **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
   produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
   after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`
