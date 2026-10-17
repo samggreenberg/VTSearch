@@ -81,14 +81,18 @@ class Mirror:
     Attributes:
         id: Stable key into the pins file.  Renaming one re-pins from scratch.
         app: The app-side source. ``py:<dotted.path.to.symbol>`` for Python,
+            or ``py:<dotted.module>.<symbol>,<symbol>`` when the original is
+            spread over more than one top-level name in one module;
             ``ts:<repo-relative file>::<anchor>`` for a TypeScript block (the
             anchor is matched literally, then brace-matched from the first
             ``{`` after it).
         harness: Where the reproduction lives, as ``<repo-relative file>::<symbol>``,
             or ``::<symbol>,<symbol>`` when the reproduction is spread over
-            more than one top-level name.  Each is resolved by parsing, so a
-            name surviving only inside a comment does not count as present, and
-            deleting or renaming the harness side trips the gate.
+            more than one name.  A name is top-level, or ``Class.method`` for
+            a reproduction that lives on a method.  Each is resolved by
+            parsing, so a name surviving only inside a comment does not count
+            as present, and deleting or renaming the harness side trips the
+            gate.
         kind: ``ported`` or ``default`` - see the module docstring.
         note: What is reproduced, and what to re-check when either side moves.
         divergence: A *declared, intentional* difference from the app.  Not an
@@ -513,6 +517,45 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="progress.eval_cached_models",
+        app=(
+            "py:vtscore.detectors.labeling_progress."
+            "_eval_cached_models,_model_step_indices,_build_eval_rows,_smart_status_uncached"
+        ),
+        harness="vtscore/eval/step_trainers.py::_labelset_error_costs",
+        kind="ported",
+        note=(
+            "Which models the Smart indicator re-scores, against which eval set, and what each "
+            "cost is priced at: the input plumbing progress.smart_status declares and "
+            "progress.eval_geometry sits inside (#5005). The app windows its last SMART_WINDOW "
+            "model-bearing steps (`_model_step_indices`, sliced in `_smart_status_uncached`), builds "
+            "one eval set from the current votes' scoring rows (`_build_eval_rows`), and prices every "
+            "model at `inclusion_cost_weights(SMART_INCLUSION)` (`_eval_cached_models`, #4243). "
+            "`_labelset_error_costs` re-scores the window its caller hands it against the current "
+            "votes at the inclusion it is passed. This is the plumbing that drifted once (#2923): "
+            "re-scoring the whole window against the *current* labelset is the statistic, and a "
+            "cost priced at the user's inclusion rather than SMART_INCLUSION moves every point of "
+            "the slope. If either side changes which models are in the window, what they are scored "
+            "against, or how a cost is priced, change the other. How a model is scored is "
+            "progress.eval_geometry's."
+        ),
+        divergence=(
+            "The harness's window is sliced, and its inclusion chosen, by its caller: "
+            "`voting_iterations` keeps `del recent_steps[:-SMART_WINDOW]` and passes "
+            "`SMART_INCLUSION`, inline in a function too large to digest, so a change to either is "
+            "caught by tests_lib/detectors/test_smart_pricing.py, not here. It trains a "
+            "model every step, so its last SMART_WINDOW steps are the app's last SMART_WINDOW models "
+            "(progress.smart_status, consequence (1)). Three smaller differences: the app rounds "
+            "each cost to four places (`_score_step`, which also feeds the chart) and regresses on "
+            "the rounded value, where the harness keeps the float, which can move the light only on "
+            "a window within a rounding step of one of the rule's thresholds; the app returns its "
+            "own yellow, with its own reason, while fewer than SMART_MIN_POINTS steps carry a model, "
+            "where the harness leaves that test to `smart_status_from_costs`, whose answer is the "
+            "same yellow; and the harness returns [] for a labelset missing either class, which the "
+            "app never scores because `_smart_status_uncached` stops at MIN_PER_CLASS first."
+        ),
+    ),
+    Mirror(
         id="progress.stable_status",
         app="py:vtscore.detectors.labeling_progress._compute_stable_status",
         harness="vtscore/eval/autopilot_flow.py::stable_status,stable_detail",
@@ -530,7 +573,42 @@ MIRRORS: list[Mirror] = [
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
-            "in rather than read from a `_ProgressCache`'s `steps`."
+            "in rather than read from a `_ProgressCache`'s `steps`. That plumbing is "
+            "progress.step_stability's."
+        ),
+    ),
+    Mirror(
+        id="progress.step_stability",
+        app="py:vtscore.detectors.labeling_progress._compute_step_stability",
+        harness="vtscore/eval/autopilot_flow.py::AutopilotFlow.record_step",
+        kind="ported",
+        note=(
+            "The Stable indicator's inputs: one `stability_entry` per retraining (#5005). The app "
+            "scores the pool in serving geometry, drops the ids labeled so far, cuts at the served "
+            "line, and counts flips against the previous model's snapshot with the whole pool as "
+            "the denominator; `record_step` takes the still-unlabeled pool's scores, the cut and "
+            "`num_pool` from its caller and counts the same way. The counting itself is "
+            "`vtscore.detectors.stability.stability_entry`, shared, so what this pins is what each "
+            "side hands it: which items, at which cut, against which baseline, over which "
+            "denominator. If either side changes one of those, change the other. `record_step` also "
+            "replaces the Smart window with the costs it is handed; that half is the harness end of "
+            "progress.eval_cached_models, pinned here because it is one method."
+        ),
+        divergence=(
+            "The app rebases its baseline when the balance changes (#4745): a snapshot drawn at "
+            "another beta becomes the new baseline instead of being compared against. "
+            "`record_step` has no balance argument, because a harness run draws every step's line "
+            "at the run's one balance, so the rebase could never fire. Its scores are handed in: "
+            "`voting_iterations` scores the remaining pool in the arm's geometry "
+            "(`step_trainers._score_pool`) and passes `num_pool=len(sim_ids)`, the haystack with "
+            "labeled items included, as the app divides by its whole scored pool. The app records "
+            "an entry only for a label set a sort trained a model on, and keeps its baseline across "
+            "the steps between (`_resolve_step_model`); the harness trains every step, so it has no "
+            "such gap. At the edges: the app drops its baseline when a model arrives with no pool "
+            "to score (a sort racing the caller's decision to skip the pool), where "
+            "`record_step(scores=None)` keeps it, and no caller passes None; and once the pool is "
+            "exhausted the app records a zero-flip entry even with no baseline, where the harness "
+            "records one only once it has a baseline."
         ),
     ),
     Mirror(
@@ -1129,35 +1207,46 @@ def _ts_block(path: Path, anchor: str) -> str:
 
 
 def _py_symbol_source(path: Path, symbol: str) -> str:
-    """The source of top-level *symbol* in *path*, found by parsing not importing.
+    """The source of *symbol* in *path*, found by parsing not importing.
+
+    *symbol* is a top-level name, or ``Class.method`` for a member of a
+    top-level class, so a reproduction that lives on a method can be pinned
+    as it stands rather than lifted out of its class first (#5005).
 
     Parsing keeps the gate fast and dependency-free: it runs before the test
     suite has installed torch, and reading a module for its text should never
     execute it.
     """
     text = path.read_text(encoding="utf-8")
-    tree = ast.parse(text)
+    body = ast.parse(text).body
     lines = text.splitlines()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == symbol:
+    *classes, name = symbol.split(".")
+    for cls in classes:
+        node = next((n for n in body if isinstance(n, ast.ClassDef) and n.name == cls), None)
+        if node is None:
+            raise MirrorError(f"{_rel(path)} has no class {cls!r} - did it move or get renamed?")
+        body = node.body
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
             start = min([node.lineno, *[d.lineno for d in node.decorator_list]]) - 1
             return "\n".join(lines[start : node.end_lineno])
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if any(isinstance(t, ast.Name) and t.id == symbol for t in targets):
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets):
                 return "\n".join(lines[node.lineno - 1 : node.end_lineno])
-    raise MirrorError(f"{_rel(path)} has no top-level {symbol!r} - did it move or get renamed?")
+    where = "member" if classes else "top-level"
+    raise MirrorError(f"{_rel(path)} has no {where} {symbol!r} - did it move or get renamed?")
 
 
 def _app_source(mirror: Mirror) -> str:
     """The normalized app-side source *mirror* is pinned against."""
     kind, _, ref = mirror.app.partition(":")
     if kind == "py":
-        module_path, _, symbol = ref.rpartition(".")
+        module_path, _, symbols = ref.rpartition(".")
         path = REPO_ROOT / (module_path.replace(".", "/") + ".py")
         if not path.exists():
             raise MirrorError(f"module {module_path} ({_rel(path)}) does not exist")
-        return _normalize_python(_py_symbol_source(path, symbol))
+        return "\n".join(_normalize_python(_py_symbol_source(path, s.strip())) for s in symbols.split(","))
     if kind == "ts":
         rel, _, anchor = ref.partition("::")
         path = REPO_ROOT / rel
