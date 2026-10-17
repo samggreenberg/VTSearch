@@ -172,7 +172,7 @@ class _LabelVector(NamedTuple):
 
     ``region_box`` is the element's own box whenever resolving that box again
     would produce *vec* again: it was pooled under the box, or the box can't be
-    used at all (a whole-image embedder, a clipper-bearing origin).  It is
+    used at all (a whole-image embedder, a clipped or converted origin).  It is
     ``None`` when the element had no box, and when a patch pool failed, so
     :func:`populate_label_embeddings` retries that fallback on its next pass
     rather than keeping it.
@@ -200,13 +200,15 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
     * a whole-image embedder has no patch space, so the box stays on the
       label unused - expected, and logged at DEBUG only.  A WARNING here
       fired once per boxed label per retrain (#4192);
-    * an origin carrying a clipper we'd have to replay against an unknown
-      patch grid - a known limitation, WARNING;
+    * an origin whose unit was cut or converted out of the resolved file (a
+      clipper, a converter): the box is on that unit, not on the file, so the
+      patch path can't run on the file - a known limitation, WARNING;
     * a patch-capable embedder whose forward pass produced nothing - a real
       failure, WARNING.
     """
     from vtscore.detectors.resolver import (
         _apply_clip_and_embed,
+        _needs_clip_replay,
         embed_file,
         resolve_file_context,
     )
@@ -217,7 +219,9 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
 
         origin = elem.origin or {}
         params = origin.get("params", {}) if isinstance(origin, dict) else {}
-        has_clipper = isinstance(params, dict) and bool(params.get("clipper"))
+        # A clipped or converted unit: *file_path* is its source (the parent
+        # recording, the PDF), so the unit has to be replayed out of it.
+        derived = isinstance(params, dict) and _needs_clip_replay(params)
 
         box = _as_box(elem.region_box)
         if elem.region_box is not None:
@@ -231,7 +235,7 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
                     elem.origin_name or elem.filename or "<unknown>",
                     embedder_name or "<default>",
                 )
-            elif not has_clipper:
+            elif not derived:
                 pooled = _patch_pooled_from_file(
                     file_path,
                     media_type=media_type,
@@ -251,12 +255,12 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
             else:
                 log.warning(
                     "labelset_training: region_box on %r cannot be honored cross-dataset "
-                    "because the origin carries a clipper; falling back to image-level "
-                    "embedding",
+                    "because the origin is a clipped or converted unit; falling back to "
+                    "image-level embedding",
                     elem.origin_name or elem.filename or "<unknown>",
                 )
 
-        if has_clipper:
+        if derived:
             result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
             if result is None:
                 return None

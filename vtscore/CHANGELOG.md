@@ -2080,6 +2080,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **Label training and label ingest replay a converter output no clipper touched** (issue #5058).
+  `labelset_training._embed_one` replayed a label's unit only when its origin carried a `clipper` key, and
+  label ingest only for `clipper` / `clipper_chain`. So a `run_converters_on_folder` output with neither (an
+  import that converted and did not clip) embedded its source file whole: the PDF read as text, or decoded as
+  an image. A chain whose only step is a converter stamps no `clipper` key either, so training missed that too.
+  All three callers, `_embed_resolved_label` included, now ask one predicate (`resolver._needs_clip_replay`),
+  which accepts a clipper, chain or converter origin. A `region_box` on such a unit is on the converter's
+  output, not on the source, so training takes the replayed output's image-level vector with a warning, as it
+  does for a clipped unit. Label ingest also never reached a converter origin: `_media_type_from_origin`
+  found no media type on it, every ingest path declined, and the label was silently left out. It now takes
+  the converter's `target_type`, stores the replayed output's bytes and MD5, and skips an output it cannot
+  rebuild rather than storing the source file as the item. No plugin contract changes.
+
 - **A video label re-embeds its own window and crop** (issue #4994). `replay_chain_on_file` copied a
   video unit to a tempfile and embedded the path alone, so the frame sampler never saw the unit's
   `clip_start` / `clip_end` / `clip_box` and sampled the whole video, uncropped. A video unit whose

@@ -1025,6 +1025,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
+  When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
+  detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
+  as an image. Pulling such labelled items into another dataset skipped them without a word. Training now
+  uses each item's own text or page, and pulling the items in brings in that text or page. If a PDF has
+  changed since the import and the page can no longer be found, the item is left out rather than brought
+  in as the whole PDF.
+
 - **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
   rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
   player showed the full padded frame, so an item previewed without its black bars and played with them.
