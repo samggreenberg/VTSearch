@@ -1183,12 +1183,13 @@ nothing. In single-user / no-auth mode it is a pass-through, matching
 Clippers and cleaners on reference parents transiently hydrate the parent's
 payload from its source file (tagging it with `_lazy_source`; audio, image and
 text), clip and clean as normal, then re-lazify the resulting units back to
-references (`vtscore/datasets/stages/clipper.py`); converter chains re-lazify
-similarly via a byte-bounded LRU cache (`vtscore/media/lazy_clip.py`). A chain
-that mixes a converter and a clipper, and the demo-dataset / standalone-PDF
-conversion paths, still fall back to full materialization rather than lazy
-resolution. Text clips stay materialized too: they have no slice recipe, and
-text is small.
+references (`vtscore/datasets/stages/clipper.py`); an importer-level
+converter's outputs (`run_converters_on_folder`: rendered PDF pages, a PDF's
+text, extracted frames) re-lazify similarly, resolved through a byte-bounded LRU
+cache (`vtscore/media/lazy_clip.py`). A clipper chain that contains a converter
+step, and the demo-dataset / standalone-PDF conversion paths, still fall back
+to full materialization rather than lazy resolution. Text clips cut from a text
+file stay materialized too: they have no slice recipe, and text is small.
 
 A unit some cleaner rewrote (a silence trim, an edge trim, a whitespace pass)
 is no slice of its source, so its recipe is its whole chain trail
@@ -1205,6 +1206,17 @@ edited after import, or a library upgrade changes a re-encode, the unit and its
 Original serve **nothing** (a 404, and a logged warning naming the file) rather
 than falling through to the edited or uncleaned source. A sibling memo keeps the
 replay of N cleaned tiles of one recording to one tiling of it.
+
+A converter output that a clipper cut or a cleaner rewrote (a rendered page's
+tiles, a PDF's text with its whitespace collapsed) is no output the converter
+alone rebuilds, so it gets the same chain recipe, led by the converter's own
+step (`vtscore.media.clip_recipe.converter_trail`): the replay hands the
+converter the source file the import converted, re-selects the recorded output,
+then re-runs the rest of the trail. The same dry run gates dropping its payload,
+cleaned or not. The label resolver replays the same composed trail when it
+re-embeds such a unit from its source. A converter output's recipes are
+exclusive as well, since its `media_path` names the PDF or video it came from,
+never its payload.
 
 Anything that embeds a lazy unit after import — a detector whose embedder the
 dataset lacks, a side-channel back-fill — is handed `lazy_clip.embed_view(media)`

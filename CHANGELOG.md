@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A "reference files in place" import of PDFs shows the right part of each converted item, and stores
+  less** (issue #5041). When an import converted files (a PDF's text, a PDF's pages as images) and then cut
+  them with a clipper, a reference import showed every sentence as the PDF's whole text and every tile as
+  the whole page. An item a cleanup gate changed also kept both its cleaned copy and its Original inside the
+  dataset. Such items now keep only how they were made, are rebuilt from the source file on demand, and
+  match what a copying import of the same folder shows. If the PDF is edited after import, they show nothing
+  (and the server log names the file) rather than other content. When a detector is trained from labels on
+  such items by re-reading their source files, each label now embeds the item's own text or tile; it used
+  to embed the raw PDF file read as text.
+
 - **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
   that failed showed a "Failed" row in the datasets table, but the row went the next time the page
   reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.

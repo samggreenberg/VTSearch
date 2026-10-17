@@ -13,10 +13,12 @@ See ``vtscore/media/clip_recipe.py``, and issue #3378.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from vtscore.detectors.resolver import _converter_origin_to_chain
-from vtscore.media.clip_recipe import parse_clip_box, parse_converter_recipe
+from vtscore.media.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
 from vtscore.media.lazy_clip import _converter_recipe, clip_recipe
 
 
@@ -115,8 +117,54 @@ class TestParseConverterRecipe:
         assert len({a.cache_key(), b.cache_key()}) == 1
 
 
+#: A tiling of the rendered page, recorded after the converter ran.
+_TILE_TRAIL = [
+    {
+        "kind": "clipper",
+        "name": "image_tiling",
+        "params": {},
+        "out_index": 1,
+        "n_out": 3,
+        "content_hash": "0123456789ab",
+    }
+]
+
+
+class TestConverterTrail:
+    """A flat converter composed with the chain that ran on its output (#5041)."""
+
+    def test_the_recorded_chain_follows_the_converter_step(self):
+        params = _converter_params(clipper_chain=json.dumps(_TILE_TRAIL))
+        recipe = parse_converter_recipe(params)
+        assert recipe is not None
+        assert converter_trail(params) == [recipe.chain_step(), *_TILE_TRAIL]
+
+    def test_no_chain_is_the_converter_alone(self):
+        recipe = parse_converter_recipe(_converter_params())
+        assert recipe is not None
+        assert converter_trail(_converter_params()) == [recipe.chain_step()]
+
+    def test_a_malformed_chain_cannot_be_replayed(self):
+        # The converter alone would rebuild the whole page, not the tile.
+        assert converter_trail(_converter_params(clipper_chain="{not a trail")) is None
+
+    def test_an_unreplayable_converter_cannot_be_replayed(self):
+        params = _converter_params(
+            converter_out_index=None, converter_content_hash=None, clipper_chain=json.dumps(_TILE_TRAIL)
+        )
+        assert converter_trail(params) is None
+
+
 class TestBothPathsAgree:
     """The regression guard: one origin, two readers, one reading."""
+
+    def test_a_cut_converter_output_replays_the_same_trail_on_both_paths(self):
+        params = _converter_params(clipper_chain=json.dumps(_TILE_TRAIL))
+        recipe = clip_recipe({"media_type": "image", "origin": {"params": params}})
+        assert recipe is not None
+        kind, media_type, trail_json = recipe
+        assert (kind, media_type) == ("chain", "image")
+        assert json.loads(trail_json) == _converter_origin_to_chain(params)
 
     @pytest.mark.parametrize(
         "params",
