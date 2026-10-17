@@ -573,15 +573,24 @@ from `vtscore.state.sort_results_cache` (not re-exported).
 | `SORT_WINDOW_HEAD` (500) / `SORT_WINDOW_TAIL` (200) | Above-threshold rows, and past-boundary context rows, in the initial window |
 | `initial_window_end(total, above_threshold)` | End index (exclusive) of that initial window |
 | `result_score(result)` / `count_above_threshold(results, threshold)` | Read a row's score under either key; count rows at or above a cut |
-| `SORT_CACHE_MAX_ROWS` (2,000,000) | Cap on the rows the cache holds across all its rankings; the newest is kept even when it alone is longer |
+| `SORT_CACHE_MAX_ROWS` (8,000,000) | Cap on the rows the cache holds across all its rankings; the newest is kept even when it alone is longer |
 | `SortResultsCache(max_entries=8, max_rows=SORT_CACHE_MAX_ROWS)`, `.store(...)` / `.page(...)` | LRU of full lists, bounded by count and by total rows: stash one and mint a token; page into a stored one |
-| `.derived(token, key, build, *, dataset_id=None)` / `.forget_derived(token, key)` | A view built once over a stored list (`build(results)`) and kept with it, evicted with it; the app keeps Collapse to photos' grouping here (#4751) |
+| `.derived(token, key, build, *, dataset_id=None)` / `.forget_derived(token, key)` | A view built once over a stored list (`build(results)`, given the rows as a fresh list of dicts) and kept with it, evicted with it; the app keeps Collapse to photos' grouping here (#4751) |
 | `.redraw(token, beta, *, dataset_id=None)` | Redraw a stored text or example sort's line at another balance through the `RedrawableLine` passed to `.store(..., line=)` (#4760); the ranking does not move |
 | `sort_results_cache` | The process-wide instance |
 
 Only the lightweight ranking rows (`{"id", "score"}` or
 `{"id", "similarity"[, "best_region"]}`) are cached - never embeddings
-or weights, and nothing is serialised.
+or weights, and nothing is serialised. A ranking is held as columns, not
+a dict per row (#5012): an int64 id and a float64 score a row, plus, on a
+region sort, an index into a table of the distinct boxes. That is 16
+bytes a row (20 with boxes) against about 250 for a dict. `page` builds
+dicts for the window it returns, equal to the rows stored, with keys in
+the order `id`, score key, `best_region`. A row with any other key or
+value type is kept whole, so it comes back as stored. Because `store`
+copies the rows, the caller may change its list afterwards. Scores stay
+float64, so the cache counts rows at a line exactly as
+`count_above_threshold` does.
 
 The token doubles as a **sort-generation** token: a re-sort mints a fresh
 one, so a client holding an old token either reads its own consistent

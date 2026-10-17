@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`SortResultsCache` holds a ranking as columns, and holds four times the rows** (issue #5012). A
+  stored ranking was a list of row dicts, about 250 bytes a row (336 with `best_region`). It is now an
+  int64 id column, a float64 score column and, on a region sort, an index into a table of the distinct
+  boxes: 16 bytes a row, or 20. `SORT_CACHE_MAX_ROWS` rises from 2,000,000 to 8,000,000, so all eight
+  of the most recent sorts of a 1M-item dataset stay pageable (two did) in about 160 MB at most (#4978's
+  cap allowed about 0.6 GB). `page()` builds fresh dicts for the window it returns, and `derived()`
+  hands `build` the whole ranking as a fresh `list[dict]`. Both are equal to the rows stored, keys in the
+  order `id`, score key, `best_region`, but they are no longer the stored objects. A row with another key
+  or value type is kept whole and comes back as stored. `store()` copies the rows, so a caller may now
+  change its list after handing it off. Scores stay float64, so `redraw()` counts rows at the line
+  exactly as `count_above_threshold` does. Signatures unchanged.
+
 - **A folder load width-checks every named pre-computed vector** (issue #4966). `load_dataset_from_folder` /
   `load_dataset_from_folder_chunked` check a `content_vectors` entry filed under `content_embedder_name`, and
   each column of a per-embedder `{embedder: vector}` entry, against the width that embedder declares
