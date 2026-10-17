@@ -1,6 +1,6 @@
 # FullMarks — datasheet and use register
 
-**Corpus version v5.0** (`fullmarks_config.CORPUS_VERSION`), 2026-09-23. FullMarks
+**Corpus version v5.1** (`fullmarks_config.CORPUS_VERSION`), 2026-10-17. FullMarks
 is a benchmark for **finding a given stamp or printed logo in a pile of scanned
 pages**, from one query crop. It exists so that ideas about that task (matchers,
 shortlists, embedders, query handling) can be tested against labels someone has
@@ -14,9 +14,9 @@ covers what the data *is* and what a study may *conclude* from it.
 | | |
 |---|---|
 | pages | **199,855**, in three nested tiers: `s` = 4,999 ⊂ `m` = 49,969 ⊂ `l` = 199,855 |
-| roster | **36 classes**, **2,260 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
+| roster | **36 classes**, **2,262 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
 | instances per class | 5 to 399, median 31 |
-| other labels | 733 must-link and 1,159 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
+| other labels | 951 must-link and 1,325 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
 | query | one primary crop per class (`query_crop`) plus up to four hand-chosen alternates (`query_crops`), **119 in all**, so a study can average over queries (#3949) |
 | cells | tiers `s` and `m`: `siglip` and `sift_vlad`. Tier `l`: `siglip` only (`sift_vlad` was cancelled because its keypoint budget starves it, #3911) |
 | lives at | `/expscratch/sgreenberg/fullmarks/corpus/` (`corpus.jsonl`, `classes.json`, `adjudications.json`, `added_marks.json`, `roster.json`); cells under `vts-cache/datadir/embeddings/fullmarks_<tier>__<embedder>.pkl` |
@@ -26,12 +26,16 @@ covers what the data *is* and what a study may *conclude* from it.
 One roster class breaks the otherwise one-instance-per-page rule.
 `tobacco800/logo_asg54f00_1` is a letterhead mark printed **three times on each
 of four pages** — `asg54f00`, `bjn43c00-page02_1`, `dqn43c00` and
-`nrg54f00-page02_1` — and once on six others: 18 instances over 10 pages.
+`nrg54f00-page02_1` — twice on each of two more, `cjb54c00` and `kjj24f00`, and
+once on four others: 20 instances over 10 pages.
 
 This is the data, not a labelling error; the letterhead really does carry the
-logo three times. A study that assumes one instance per page will undercount
-this class, so **rank by mark, not by page**, and count a page-level hit as
-correct when it matches any instance on that page.
+logo more than once. The owner confirmed both instances on `cjb54c00` and
+`kjj24f00` in the completeness pass. Up to v5.0 the class counted 18, because
+that pass listed a page once however many instances it accepted there (#5052).
+A study that assumes one instance per page will undercount this class, so
+**rank by mark, not by page**, and count a page-level hit as correct when it
+matches any instance on that page.
 
 Every other roster class has at most one instance per page.
 
@@ -40,7 +44,7 @@ Every other roster class has at most one instance per page.
 | source | what it is | pages | roster classes | roster instances |
 |---|---|---:|---:|---:|
 | SPODS | pseudo-official documents made for the dataset, carrying logos, stamps and signatures | 1,088 | 17 (5 logos, 12 stamps) | 568 |
-| Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 13 logos | 1,329 |
+| Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 13 logos | 1,331 |
 | StaVer | German scanned invoices carrying rubber stamps | 400 | 2 stamps | 28 |
 | UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4.0 four roster classes of its own** | 197,077 | 4 logos | 335 |
 
@@ -50,12 +54,12 @@ add **only UCSF pages**, so a class's same-source hard negatives are the same
 pages in every tier.
 
 **But since v4.0 a larger tier adds positives too, not only distractors.** The
-four UCSF roster classes put **10 instances in `s`, 256 more in `m` and 55 more
-in `l`**. For those four classes the positive set grows with the tier, so their
-tier-`s` and tier-`l` numbers are not measured over the same ground truth and
-must not be compared as though they were. The other 23 classes are unaffected:
-every one of their instances is on an anchor page, and every anchor page is in
-`s`.
+four UCSF roster classes put **10 instances in `s`, 270 more in `m` and 55 more
+in `l`**, the 335 of the source table. For those four classes the positive set
+grows with the tier, so their tier-`s` and tier-`l` numbers are not measured
+over the same ground truth and must not be compared as though they were. The
+other 32 classes are unaffected: every one of their instances is on an anchor
+page, and every anchor page is in `s`.
 
 | UCSF industry | in `s` | in `m` | in `l` |
 |---|---:|---:|---:|
@@ -108,7 +112,7 @@ those four classes and needs re-checking (#4050).
 | `tobacco800/logo_afm90c00-first_1_0` | logo | 112 | 95 × 95 |
 | `tobacco800/logo_ajj10e00_1` | logo | 399 | 312 × 79 |
 | `tobacco800/logo_ald41a00-ernest_1` | logo | 206 | 156 × 45 |
-| `tobacco800/logo_asg54f00_1` | logo | 18 | 147 × 147 |
+| `tobacco800/logo_asg54f00_1` | logo | 20 | 147 × 147 |
 | `tobacco800/logo_azb11c00_1` | logo | 33 | 69 × 78 |
 | `tobacco800/logo_bea6aa00_1` | logo | 6 | 260 × 358 |
 | `tobacco800/logo_bqz95d00_1` | logo | 10 | 173 × 214 |
@@ -140,7 +144,8 @@ See [`2026-09-13-fullmarks-v3`](../../../docs/experiments/2026-09-13-fullmarks-v
 | v4.1 | 2026-09-22 | the four UCSF classes score against UCSF's un-banded industries (#3922); no page, label or roster change | 2,004 |
 | v4.2 | 2026-09-22 | 1,610 banded pages reviewed for the UCSF classes (#4088): 20 new positives, 1,551 reviewed negatives; SigLIP's top presumed negatives checked for all 27 classes (#4089): 0 of 516 carry the mark | 2,024 |
 | v4.3 | 2026-09-23 | every UCSF-class box reviewed (#4109, #4125): 303 proposals accepted, 30 drawn by hand, 3 set to their query crop's extent; band-located marks 64 → 0; no page, positive or negative changed | 2,024 |
-| **v5.0** | 2026-09-23 | roster 27 → 36 (#4143): six SPODS stamps and three Tobacco800 logos, each identity-, membership- and completeness-reviewed by the owner | **2,260** |
+| v5.0 | 2026-09-23 | roster 27 → 36 (#4143): six SPODS stamps and three Tobacco800 logos, each identity-, membership- and completeness-reviewed by the owner | 2,260 |
+| **v5.1** | 2026-10-17 | six copied marks dropped and `logo_asg54f00_1` counted per mark, 18 → 20 (#5052); records the edits made since v5.0 without a version (#4183, #4866, #4871); no page, positive or negative changed | **2,262** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
@@ -151,32 +156,15 @@ version; a new page set, tier cut or roster bumps the major.
 **v4.0 is a major bump, and by that rule it had to be.** The roster went from 23
 classes to 27, which is the clause that decides it; the page set moved as well,
 from 200,000 records to 199,855, when 137 UCSF pages that had been ingested more
-than once were collapsed to one record each (#4054).
+than once were collapsed to one record each (#4054). The two counts agree: 130
+of those pages had two records, 6 had three and 1 had four, so 145 records went
+(checked against the pre-v4.0 `corpus.jsonl` backup, #5047).
 
 - **A number measured on v3 or v3.1 is not a v4.0 number.** That covers every
   study up to and including #3904, #3911, #3912, #3914 and #3928.
 - A minor bump is comparable after re-scoring against the relabelled cells. A
   major one is not: at v4.0 the baselines are **re-run**, because the roster, the
   positive sets and the page list all moved.
-
-**v5.0 is a major bump: the roster grew from 27 classes to 36** (#4143). The page
-set is unchanged. The nine new classes were proposals the v3 roster passed over:
-six SPODS text stamps and three Tobacco800 logos (the Rockefeller University
-seal, a pointed-oval religious seal and a "Mount Sinai" wordmark). Each went
-through every pass the original classes did:
-- **identity:** 45 pairs against the nearest existing classes and each other,
-  all different;
-- **membership:** every instance confirmed;
-- **completeness:** two rounds of SIFT candidates.
-
-Completeness mattered most here. Five of the six stamps had been split across
-several clusters, so the stamps grew from 77 instances at admission to 219. Traffic Manager
-(`00514`) and NOT-DELIVERED (`00716`) were still turning up scattered copies in
-their second round (3 and 6 of 30), so a few more may sit below SIFT's top 60.
-The President stamp's query crop was chosen by hand (the automatic one, the
-largest instance in the class's core, was a faded print); a rebuild would
-re-pick it. **Every baseline is re-run at v5.0**, and a v4.x mean over 27
-classes is not a v5.0 mean.
 
 **v4.1 is a minor bump.** Pages, tiers, labels and roster are unchanged; only
 the four UCSF classes' pools grew, when the contamination rule for UCSF classes
@@ -197,6 +185,40 @@ every class. The cells need no relabel.
 boxes set to their crop's extent. Retrieval scores are page-level, so every v4.2
 retrieval number is a v4.3 number. A number that reads boxes (localisation,
 crops cut from members) is not.
+
+**v5.0 is a major bump: the roster grew from 27 classes to 36** (#4143). The page
+set is unchanged. The nine new classes were proposals the v3 roster passed over:
+six SPODS text stamps and three Tobacco800 logos (the Rockefeller University
+seal, a pointed-oval religious seal and a "Mount Sinai" wordmark). Each went
+through every pass the original classes did:
+- **identity:** 45 pairs against the nearest existing classes and each other,
+  all different;
+- **membership:** every instance confirmed;
+- **completeness:** two rounds of SIFT candidates.
+
+Completeness mattered most here. Five of the six stamps had been split across
+several clusters, so the stamps grew from 77 instances at admission to 219. Traffic Manager
+(`00514`) and NOT-DELIVERED (`00716`) were still turning up scattered copies in
+their second round (3 and 6 of 30), so a few more may sit below SIFT's top 60.
+The President stamp's query crop was chosen by hand (the automatic one, the
+largest instance in the class's core, was a faded print); a rebuild would
+re-pick it. **Every baseline is re-run at v5.0**, and a v4.x mean over 27
+classes is not a v5.0 mean.
+
+**v5.1 changes marks, not pages or positives.** Re-applying a completeness
+verdict appended its hand-added box to the page again each time. So
+`jdc94f00`, `kjj24f00` and `yme01e00-page01_1` each held one
+`logo_asg54f00_1` instance three times, with a must-link per copy (#5052).
+`audit_to_corrections.py --drop-duplicate-marks` dropped the six copies and
+their six must-links. It also recounted the class from its marks: 20, where the
+completeness pass had listed `cjb54c00` and `kjj24f00` once each though both
+carry two confirmed instances. The cells were relabelled. v5.1 also records
+three edits made after v5.0 was frozen without a version of their own. The
+2026-09-25 rename rewrote the files' paths (#4183). `dic45f00_1`'s boxes were
+turned and its eagle boxed once (#4871); its cells are relabelled only now. The
+adjudication store's bare endpoints were repaired (#4866). No page's positive
+or negative status moved, so every v5.0 retrieval number is a v5.1 number. A
+number that counts marks or reads boxes on those pages is not.
 
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
@@ -220,9 +242,9 @@ boxes and 2,004 roster instances.
 | 3 `confusable` | is each pair of classes different? | **276 of 276** pairs adjudicated; the one pair the owner ruled the same is the merge in row 1 |
 | 4 `cluster` | is a class one mark at all? | recorded per class in `audit.cluster_ok` |
 | 5 `distinctive` | mark or plain shape? | recorded per class in `audit.distinctive`; plain shapes were kept off the roster when it was picked |
-| 6 `letterhead` | do UCSF bands carry a mark? | 157 of 320 sampled bands (49%) do (#3901); no UCSF class yet |
+| 6 `letterhead` | do UCSF bands carry a mark? | 157 of 320 sampled bands (49%) do (#3901); four UCSF classes followed at v4.0 (#3953) |
 | 7 `completeness` | which pages carry a class's mark but aren't members? | **+108 instances**: 613 → 721 (#3927) |
-| 8 `query_crops` | which members make good extra queries? | proposed, awaiting owner review (#3949) |
+| 8 `query_crops` | which members make good extra queries? | up to four alternates per class, applied at v4.0 (#3949) |
 
 **Completeness (#3927).**
 - **Proposals:** SIFT at 8,192 keypoints compared every roster query with
@@ -243,8 +265,7 @@ boxes and 2,004 roster instances.
     crests are positives for each other. Adjudications name mark pairs, not
     class-level rulings, so this lives here and in the class's members.
 
-**Everything decided by hand survives a rebuild.** Three stores are replayed,
-in this order:
+**Everything decided by hand survives a rebuild.** Four stores are replayed:
 - `adjudications.json` (must-link and cannot-link rows, keyed on the mark
   rather than the class id; a cannot-link ruled on a class that has not been
   membership-verified also lists that class's members, so it holds the class
@@ -254,8 +275,7 @@ in this order:
 - `box_overrides.json` (hand-accepted tighter boxes, replaced in place by mark
   index right after the added marks, so every adjudication still names the
   same mark);
-- `query_crops.json` (extra query boxes, replayed after the primary crops,
-  once #3949 is applied).
+- `query_crops.json` (extra query boxes, replayed after the primary crops).
 
 A rebuild that cannot place a stored item warns rather than dropping it.
 
@@ -330,18 +350,18 @@ those copies is scored down for it, and SIFT is not.
 
 | question shape | verdict | what decides it |
 |---|---|---|
-| **Method A vs method B**, `own_verified`, one tier, v3.1 | **supported, with a stated bias** | Same pages and labels for both arms. Residual missed positives are not symmetric between methods: they are the ones SIFT ranked low, so a SIFT-family method is favoured on exactly the pages still unlabelled. Say so beside any SIFT-vs-other result, and inspect the top-ranked "false positives" of the non-SIFT arm before claiming it lost. |
+| **Method A vs method B**, `own_verified`, one tier, one corpus version | **supported, with a stated bias** | Same pages and labels for both arms. Residual missed positives are not symmetric between methods: they are the ones SIFT ranked low, so a SIFT-family method is favoured on exactly the pages still unlabelled. Say so beside any SIFT-vs-other result, and inspect the top-ranked "false positives" of the non-SIFT arm before claiming it lost. |
 | How does a method degrade as the haystack grows (`s` → `m` → `l`)? | **supported for UCSF distractors only** | Tiers `m` and `l` add only UCSF pages; the same-source hard negatives are all already in `s`. The drop measures robustness to real, unrelated scans, not to harder same-style pages. Tier `l` has only a `siglip` cell. |
 | Absolute AP under the `eligible` pool | **not supported as a headline** | The source shortcut: `source_prior` scores AP 1.00 there (#3904). |
 | Anything on the `naive` pool for a Tobacco800 class | **not supported** | UCSF Tobacco pages carry roster letterheads unlabelled; `naive` scores a correct retrieval as a false positive. |
 | Are **stamps** harder than **logos**? Is SPODS easier than Tobacco800? | **not supported** | Kind is confounded with source. Every Tobacco800 class is a logo; 12 of 14 stamp classes are SPODS. The source also sets the imaging: SPODS is clean colour, Tobacco800 is binarised 1990s scans. A kind or source contrast measures all of that at once. |
-| Does a method find **real rubber-stamp impressions**? | **weakly supported: 2 classes, 26 instances** | StaVer is the only source of real hand-stamped impressions on the roster. The SPODS stamp classes vary across copies (median pixel correlation with a reference copy 0.15–0.52: rotation, ink and scale), but SPODS documents were made for the dataset, and nothing here records how their stamps were applied. |
+| Does a method find **real rubber-stamp impressions**? | **weakly supported: 2 classes, 28 instances** | StaVer is the only source of real hand-stamped impressions on the roster. A ranking scores 26 of the 28, because each class's query page is held out of its own pool. The SPODS stamp classes vary across copies (median pixel correlation with a reference copy 0.15–0.52: rotation, ink and scale), but SPODS documents were made for the dataset, and nothing here records how their stamps were applied. |
 | Invariance claims on the **SPODS logos** | **not supported** | The five SPODS logo classes are **pixel copies of one artwork**: 8 members each correlate **0.96–0.99** with a reference copy at 128 × 128 greyscale, and box area has a coefficient of variation of only 0.06–0.20. Within-class variation is print/scan noise, so finding them is close to template matching and says little about appearance change. |
 | **Per-class** AP or recall | **supported with n beside it** | Classes run from 5 to 399 instances (median 31). One miss moves recall by 1/5 on `tobacco800/logo_drm00d00_1` and by 1/399 on `ajj10e00`. |
 | Is class X **harder** than class Y? | **read with the known-gaps list** | Label residuals differ by class (below). `spods/stamp_00931_1` (OUTWARD-) had the weakest SIFT evidence of any class, so its completeness is least certain. |
 | Telling **near-identical marks** apart | **supported** | All 276 v3 roster pairs adjudicated, and each v5.0 class against its three nearest classes and every other new class of its source (45 pairs, #4143); the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
 | **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. The 30 marks no proposal fitted were boxed by hand (#4125), and the 3 query pages carry their crop's own extent. The rjr_script logo is the script. The "Tobacco Company" line is printed under it on some letters and not others, and does not change what the mark is (owner, 2026-09-23). So a box with or without that line is correct: 4 hand-drawn boxes take it in, because the script's loops hug it, and the query crop and the other 64 do not. Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
-| **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
+| **Query sensitivity**: how much does the crop matter? | **not yet measured** | Up to four hand-chosen alternates per class exist (`query_crops`, #3949), so the spread can be measured; this register records no measurement of it. `tobacco800/logo_aeq93a00_1`'s primary crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
 | Retrieval **of UCSF letterheads** (the four roster classes) | **supported at tier `m`, with the control beside it** | At v4.2 a mark-blind Tobacco-industry control scores AP 0.15–0.17 at `m` (above). Quote it beside any UCSF-class number, and read tiers `s` and `l` with their residuals. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |
 
@@ -370,7 +390,7 @@ those copies is scored down for it, and SIFT is not.
   `adjudications.json`.
 - **UCSF distractors are not exhaustively clean.** The per-page rule and the
   Food check (#3914) cover the known routes by which a roster mark could leak.
-  No hand pass covers 197,222 pages. Two measured bounds exist, both at tier `m`:
+  No hand pass covers 197,077 pages. Two measured bounds exist, both at tier `m`:
   six anchor classes, 0 of 239 random pages (≤1.3%, 2026-09-20); and the four
   UCSF classes, 0 of 152 Food and 0 of 48 other random pages (≤2.0% and ≤6.3%).
   A rate bound is not a count bound: 1% of a 46,700-page pool is ~470 pages, and
@@ -402,9 +422,10 @@ python score_ranker.py score --scores my_idea.csv.gz --tiers s,m --name my_idea 
   Queue them with `surprise_review.py`: if one carries the mark, the method was
   right and the labels were not (#4089).
 - Every result is stamped with the corpus version, and with whether the corpus
-  on disk still matches that version's frozen manifest in `versions/`. v4.3 is
-  the first frozen version: `versions/v4.3.json` checksums the six files that
-  define it and all 27 query crops. A version bump runs `score_ranker.py freeze`.
+  on disk still matches that version's frozen manifest in `versions/`
+  (`v4.3.json`, `v5.0.json`, `v5.1.json`), which checksums the six files that define it and
+  each roster class's primary query crop. A version bump runs
+  `score_ranker.py freeze`.
 
 To start from a built-in method, `score_ranker.py export --method siglip --tier m`
 writes SigLIP's scores in that format. Export from the tier you score, because

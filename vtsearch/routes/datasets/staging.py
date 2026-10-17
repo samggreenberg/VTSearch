@@ -291,12 +291,18 @@ def _promote_in_background(
     from vtscore import timing
 
     task_id = f"_promote_{uuid4().hex[:8]}"
+    source_name = source.get("params", {}).get("source_name", "")
     tracker = loading_tasks.create_task(
         task_id,
         name,
         media_type=media_type,
         embedder=embedder,
         step_weights=timing.step_weights(_PROMOTE_TASK, media_type=media_type),
+        created_by=created_by,
+        # Like an import, a failed promote leaves no dataset row behind, so its
+        # row stays until dismissed (#4973).
+        source=f"selection from {source_name}" if source_name else "selection",
+        keep_failure=True,
     )
     tracker.update("loading", "Preparing promoted dataset…", 0, 0, step=1, total_steps=_PROMOTE_TOTAL_STEPS)
 

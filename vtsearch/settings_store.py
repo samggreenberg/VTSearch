@@ -17,8 +17,9 @@ stay as module globals there. The store receives those same objects *by
 reference* in its constructor, so both views mutate one set of containers.
 The reassignable scalars (``server_cache``, ``legacy_migrated``) and the
 per-user sync locks live solely on the store. Path resolution and the
-"apply an imported settings dict" callback are injected so this module
-never imports :mod:`vtsearch.settings` (no import cycle).
+"apply an imported settings dict" callback (with the hook that runs after
+it, outside the sync lock) are injected so this module never imports
+:mod:`vtsearch.settings` (no import cycle).
 
 The canonical lock order is **file lock → settings lock**: file I/O runs
 under the cross-process :func:`file_lock` only, and the in-process
@@ -271,6 +272,25 @@ class UserSyncState:
     dirty_keys: set[str] = field(default_factory=set)
 
 
+@dataclass(frozen=True)
+class AppliedSettings:
+    """What one pass of the injected ``apply_settings`` callback wrote.
+
+    - ``keys``: the keys handed to a writer that accepted them, in the
+      imported dict's order.  Everything else in the dict was skipped: not a
+      per-user setting, a value that failed validation, or (on an auto
+      re-sync) a key the user has edited locally.
+    - ``changed``: the keys whose stored value moved *and* whose change has to
+      reach state beyond the settings files.  The store hands the whole result
+      to the injected ``after_apply`` callback once no per-user sync lock is
+      held, so whatever that state takes its own locks for (loaded detectors,
+      for the training settings) can't be acquired underneath one.
+    """
+
+    keys: tuple[str, ...] = ()
+    changed: frozenset[str] = frozenset()
+
+
 class _LiveDirtyKeys:
     """A ``key in ...`` view onto a user's *current* ``dirty_keys`` set.
 
@@ -324,7 +344,8 @@ class UserSettingsStore:
         syncing: set[str],
         server_path: Callable[[], Path],
         user_path: Callable[[str], Path],
-        apply_settings: Callable[[dict[str, Any], Container[str] | None], None],
+        apply_settings: Callable[[dict[str, Any], Container[str] | None], AppliedSettings],
+        after_apply: Callable[[AppliedSettings], None],
         server_default_source: Callable[[], dict[str, Any] | None],
         sanitize: Callable[[dict[str, Any], str], dict[str, Any]],
         exclude_from_source_export: set[str],
@@ -340,6 +361,7 @@ class UserSettingsStore:
         self._server_path = server_path
         self._user_path = user_path
         self._apply_settings = apply_settings
+        self._after_apply = after_apply
         self._server_default_source = server_default_source
         self._sanitize = sanitize
         self._exclude_from_source_export = exclude_from_source_export
@@ -512,10 +534,16 @@ class UserSettingsStore:
                     # inside the rate-limit window.  No probe, no lock.
                     return cache
 
+        applied: AppliedSettings | None = None
         sync_lock = self.per_user_sync_lock(username)
         with sync_lock:
             if self._needs_sync_from_source(username):
-                self._run_sync_from_source(username)
+                applied = self._run_sync_from_source(username)
+        # Outside the sync lock: ``after_apply`` reaches loaded detectors,
+        # whose lock ``vtscore.state.set_beta`` holds while it persists the
+        # setting (and so while it waits on this same sync lock).
+        if applied is not None:
+            self._after_apply(applied)
 
         return self._user_caches[username]
 
@@ -696,10 +724,12 @@ class UserSettingsStore:
             state = self._sync_state.get(username)
             return state is not None and key in state.dirty_keys
 
-    def _run_sync_from_source(self, username: str) -> None:
+    def _run_sync_from_source(self, username: str) -> AppliedSettings | None:
         """Pull settings from *username*'s configured source and apply them.
 
-        Called with the per-user sync lock held.  Respects ``dirty_keys``:
+        Called with the per-user sync lock held, so it returns what it applied
+        (``None`` when it applied nothing) for the caller to hand to
+        ``after_apply`` once that lock is released.  Respects ``dirty_keys``:
         keys the user has set locally since the last successful
         ``_sync_to_source`` are skipped so a clicked-toggle isn't silently
         overwritten by an upstream value.  The skip set is a **live view**
@@ -719,14 +749,14 @@ class UserSettingsStore:
         # :meth:`resolve_settings_source`).
         cache_cfg, _inherited = self.resolve_settings_source(username)
         if cache_cfg is None:
-            return
+            return None
 
         from vtsearch.settings_io.sources import get_settings_source
 
         source = get_settings_source(cache_cfg["source_name"])
         if source is None:
             logger.warning("Unknown settings source: %s", cache_cfg["source_name"])
-            return
+            return None
 
         field_values = cache_cfg.get("field_values", {})
         new_version: Any = None
@@ -745,11 +775,12 @@ class UserSettingsStore:
                 # Leave last_sync_succeeded as-is: a transient failure after
                 # a previous success must not erase the success flag (the
                 # local cache is still valid).
-            return
+            return None
 
+        applied: AppliedSettings | None = None
         if imported:
             with self._importing(username, honor_dirty=True):
-                self._apply_settings(imported, _LiveDirtyKeys(self, username))
+                applied = self._apply_settings(imported, _LiveDirtyKeys(self, username))
 
         with self._lock:
             state = self._sync_state.setdefault(username, UserSyncState())
@@ -764,6 +795,7 @@ class UserSettingsStore:
         # Stamp the cross-process dedup marker so the next process to start
         # can skip its own first load while the source stays at this version.
         _write_sync_marker(self._user_path(username), new_version)
+        return applied
 
     def mutate_server_locked(self, mutator: Callable[[dict[str, Any]], None]) -> None:
         """Apply *mutator* to a fresh-from-disk server cache, atomically.
@@ -928,8 +960,10 @@ class UserSettingsStore:
         """Pull settings from *cfg*'s source and apply them (explicit/manual).
 
         ``cfg`` is the active user's resolved ``settings_source`` config.
-        Returns the imported settings dict, or ``None`` if the source is
-        unknown, errors, or yields nothing.
+        Returns the part of the source's dict that was applied (see
+        :class:`AppliedSettings`; ``{}`` when the source held nothing this
+        user may set), or ``None`` if the source is unknown, errors, or
+        yields nothing.
 
         This (explicit) path **ignores the local ``dirty_keys`` set**: the
         user clicked "Sync now" precisely to get the source values, so a
@@ -964,7 +998,7 @@ class UserSettingsStore:
         # ``honor_dirty=False``: this is the explicit "Sync now" pull, so
         # locally-edited keys are meant to be overwritten.
         with self._importing(username, honor_dirty=False):
-            self._apply_settings(imported, None)
+            applied = self._apply_settings(imported, None)
 
         with self._lock:
             self._sync_state[username] = UserSyncState(
@@ -976,7 +1010,8 @@ class UserSettingsStore:
         # Local now matches source at this version - stamp the dedup marker.
         _write_sync_marker(self._user_path(username), new_version)
 
-        return imported
+        self._after_apply(applied)
+        return {key: imported[key] for key in applied.keys}
 
     # -- lifecycle -------------------------------------------------------
 

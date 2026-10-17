@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy, inject } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, Subject } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, defer } from 'rxjs';
 import { catchError, takeUntil, tap } from 'rxjs/operators';
 import type { DetectorLabelView } from '../generated/api-client/models/detector-label-view';
 import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
@@ -16,6 +16,17 @@ export class LabelsetStateService implements OnDestroy {
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
   private modelName: string | null = null;
+  /**
+   * Issue id of the newest labels-detail read, and of the newest one whose
+   * response has been applied.  The adaptive poll and ``refresh()`` (fired after
+   * every vote) GET labels-detail independently, so a poll read issued before a
+   * vote committed can resolve *after* the post-vote ``refresh()`` and snap the
+   * just-voted element back to its old pile.  Each read is stamped when it is
+   * subscribed, and a response older than the newest one already applied is
+   * dropped: the same guard ``VoteStateService`` keeps for ``/api/votes``.
+   */
+  private readSeq = 0;
+  private lastAppliedSeq = 0;
 
   readonly good$ = this.goodSubject.asObservable();
   readonly bad$ = this.badSubject.asObservable();
@@ -119,21 +130,28 @@ export class LabelsetStateService implements OnDestroy {
   }
 
   private fetch$(): Observable<DetectorLabelsDetailResponse | never> {
-    if (!this.modelName) {
-      this.goodSubject.next([]);
-      this.badSubject.next([]);
-      this.mediaTypeSubject.next('');
-      return EMPTY;
-    }
-    const name = this.modelName;
-    return this.api.getLabelsDetail(name).pipe(
-      tap((resp) => {
-        if (this.modelName !== name) return;
-        this.goodSubject.next(resp.good ?? []);
-        this.badSubject.next(resp.bad ?? []);
-        this.mediaTypeSubject.next(resp.media_type ?? '');
-      }),
-      catchError(() => EMPTY),
-    );
+    // Deferred so the read is stamped when it is subscribed, which is when its
+    // GET goes out (see readSeq).
+    return defer(() => {
+      if (!this.modelName) {
+        this.goodSubject.next([]);
+        this.badSubject.next([]);
+        this.mediaTypeSubject.next('');
+        return EMPTY;
+      }
+      const name = this.modelName;
+      const seq = ++this.readSeq;
+      return this.api.getLabelsDetail(name).pipe(
+        tap((resp) => {
+          if (this.modelName !== name) return;
+          if (seq < this.lastAppliedSeq) return;
+          this.lastAppliedSeq = seq;
+          this.goodSubject.next(resp.good ?? []);
+          this.badSubject.next(resp.bad ?? []);
+          this.mediaTypeSubject.next(resp.media_type ?? '');
+        }),
+        catchError(() => EMPTY),
+      );
+    });
   }
 }

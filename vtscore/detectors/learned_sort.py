@@ -130,7 +130,7 @@ def update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, train
         det_ctx.training_medias = training
     if snap:
         first = next(iter(snap.values()), {})
-        # Stamp the *cache-space* marker with the space the MLP was actually
+        # Stamp the *cache-space* marker with the space the head was actually
         # trained in: the detector's chosen primary when this dataset supplies
         # it, else the dataset score precedence (keying_embedder_for_snap).  For
         # a legacy detector with no chosen primary this is the precedence,

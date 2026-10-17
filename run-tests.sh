@@ -21,7 +21,7 @@
 #                   docs (markdown-only: every cheap gate, plus the few tests
 #                   that read a doc — see the note below), gpu
 #
-# Each group is a folder under tests/ AND tests_lib/. Marker assignment is
+# Each group is a folder under tests/, tests_lib/, or both. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
 # by the respective conftest.  tests_lib/ holds Flask-free library tests
 # (see vtscore/docs/architecture.md).
@@ -39,9 +39,9 @@
 # ---------------------------------------------------------------------------
 # How the run is staged
 #
-# Nothing tests in CI, so a *full* `./run-tests.sh` remains the only real gate and
-# still runs every check. What changed is the shape of the run, because the
-# stages are independent of each other and the box has more than one core:
+# Nothing tests in CI, so a *full* `./run-tests.sh` is the only real gate and
+# runs every check. The run is staged, because the stages are independent of
+# each other and the box has more than one core:
 #
 #   1. Cheap gates, serial, fail-fast (~8s total). Linters, doc invariants,
 #      snapshot drift. These are quick enough that stopping at the first
@@ -50,24 +50,33 @@
 #      a handful of tests serve the built bundle out of `static/`, and it is
 #      also the frontend failure people hit most, so it is worth failing on
 #      before spending minutes elsewhere.
-#   3. The heavy, mutually independent stages *concurrently*: pyright,
+#   3. pyright, serial, fail-fast (~2min). It is the slowest gate after pytest.
+#      It used to run beside pytest, so a type error was only printed once
+#      pytest finished, even when every test passed: a whole run wasted to
+#      learn one fact. Here it stops the run at ~2.5min.
+#      Running it first costs little on a green run, because the box is
+#      CPU-bound: beside pytest it was taking cores pytest would otherwise use
+#      (pytest took 406-444s with pyright alongside, 336-350s without). Measured
+#      warm on a 4-vCPU box: 455-483s concurrent, 501s with pyright first.
+#   4. The remaining heavy, mutually independent stages *concurrently*:
 #      pip-audit, the vulture whitelist check, the frontend unit suite, and
-#      pytest. Sequentially these were
-#      ~338s on a 4-vCPU box; overlapped they land at ~250s, within a few
-#      percent of what the machine's cores can physically do.
+#      pytest.
 #
-# Stage 3 deliberately does NOT stop at the first failure: every lane runs to
+# Stage 4 deliberately does NOT stop at the first failure: every lane runs to
 # completion and all failures are reported together. A serial chain that dies
-# on the first bad gate makes you pay the whole runtime again per fix.
+# on the first bad gate makes you pay the whole runtime again per fix. pyright
+# is the exception because it is the cheap side of that trade: dying on it
+# skips pytest, which is most of the runtime.
 #
 # Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
-# skip the stage-3 gates that are not about the code you just changed —
-# pyright, pip-audit, the vulture whitelist check, and the frontend suite. That
-# keeps the edit/test loop in
-# the seconds it should be instead of paying ~105s of whole-repo checks to run
-# a five-second group. The skip is announced on every group run, because the
-# full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
-# the complete chain on a group run.
+# skip the whole-repo gates in stages 3 and 4 that are not about the code you
+# just changed — pyright, pip-audit and the vulture whitelist check. That keeps
+# the edit/test loop in the seconds it should be instead of paying ~2.5min of
+# whole-repo checks to run a five-second group. The skip is announced on every
+# group run and named in the verdict, because the full run is what actually
+# gates a push. Set VTSEARCH_FULL_GATES=1 to force those three back on for a
+# group run. The frontend gates follow the group, not that variable: the build
+# and npm audit run for `core` and `frontend`, Vitest for `frontend` alone.
 #
 # `slides` goes further and is the one group that also gates a push, because a
 # change confined to slides/ cannot reach anything else in the repo: nothing
@@ -76,7 +85,7 @@
 # only the four gates that can actually observe a deck — ruff (build.py),
 # codespell (slide prose), check-docs.py (fragments are tracked markdown), and
 # build.py --check — and skips pytest and every whole-repo gate. ~8s against
-# ~3.5min. The exemption is self-policing: the group refuses to run when the
+# ~8min. The exemption is self-policing: the group refuses to run when the
 # branch touches anything outside slides/, so it cannot be taken by mistake.
 #
 # `docs` is the same idea one step wider, and it does not wait to be asked.
@@ -87,10 +96,10 @@
 # else", keeps the whole of stage 1 — the gates that genuinely read markdown
 # live there — and narrows pytest to the tests that can observe a doc
 # (tests_shared/markdown_surface.py names them, and a meta test keeps that list
-# honest). ~35s against ~3.5min.
+# honest). ~35s against ~8min.
 #
 # It auto-engages because the thing being fixed is the *default* path: a
-# plan-file session pays the full 3.5 minutes precisely by running the command
+# plan-file session pays the full ~8 minutes precisely by running the command
 # everyone runs. A group you have to remember to type would not have caught it.
 # The pruning is announced in full, and VTSEARCH_FULL_GATES=1 turns it off.
 # Naming the group explicitly (`./run-tests.sh docs`) is the same gate with the
@@ -110,8 +119,9 @@ _self="$(pwd)/$(basename "$0")"
 # Memory headroom check.
 #
 # The gates in this script are the memory-hungry part of the repo, not pytest:
-# `pyright` runs under node with a ~1.8 GB default heap, and the Angular
-# `build:prod` wants a comparable amount. On a small machine the run does not
+# `pyright` runs under node and peaks around 5.4G RSS on one thread (it takes
+# a second thread only when 12G is free; see stage 3), and the Angular
+# `build:prod` is node too and also memory-hungry. On a small machine the run does not
 # fail cleanly — node aborts with "Ineffective mark-compacts near heap limit",
 # or the kernel's OOM killer takes whatever it likes, including the shell that
 # launched the run. That is not hypothetical either: a 3 GB box died this way
@@ -127,7 +137,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
         echo "============================================================"
         echo "LOW MEMORY: ${_mem_avail_gb}G available; a full run wants ~6G"
         echo ""
-        echo "pyright (node, ~1.8G heap) and the Angular build are what need"
+        echo "pyright (node, ~5.4G peak) and the Angular build are what need"
         echo "it. Below this they tend to die as an OOM kill rather than a"
         echo "test failure, and can take the session with them."
         echo ""
@@ -359,7 +369,7 @@ fi
 #
 # Unlike `slides`, this engages on a bare `./run-tests.sh`. The complaint it
 # answers is about the default: a session that writes one plan file pays the
-# full 3.5 minutes by running the command everybody runs, and a group name you
+# full ~8 minutes by running the command everybody runs, and a group name you
 # have to remember would not have been typed. So the diff decides, the pruning
 # is announced in full, and VTSEARCH_FULL_GATES=1 opts out.
 #
@@ -714,7 +724,42 @@ elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Stage 3: the heavy, mutually independent stages, run concurrently.
+# Stage 3: pyright (serial, fail-fast).
+#
+# Full static type check across vtsearch/ and tests/ (see `pyrightconfig.json`
+# for the gated scope). Before pytest rather than beside it so a type error
+# ends the run in ~2.5min instead of being printed after pytest; see the
+# staging note at the top for the measurements.
+#
+# Two threads when there is memory for them, one otherwise. On a 4-vCPU box
+# pyright took ~200s on one thread, 86-117s on two and 110-188s on four, so
+# two is the most worth having. But each thread holds its own copy of the
+# program: peak RSS was ~5.4G on one thread and ~9.6G on two. Below 12G
+# available a second thread risks an OOM kill (see the memory check at the
+# top), and a slow pass beats a dead one. Measured, not derived; re-measure
+# before changing either number.
+#
+# The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
+# pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
+# pull.
+# ---------------------------------------------------------------------------
+if $_run_whole_repo_gates; then
+    _pyright_threads=1
+    if [[ -r /proc/meminfo ]] \
+        && awk '/^MemAvailable:/ {exit !($2 >= 12 * 1048576)}' /proc/meminfo; then
+        _pyright_threads=2
+    fi
+    echo "Checking types (pyright, $_pyright_threads thread(s))..."
+    _pyright_start=$SECONDS
+    if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright --threads "$_pyright_threads"; then
+        _blocked "pyright found type errors"
+        exit 1
+    fi
+    echo "pyright OK ($(( SECONDS - _pyright_start ))s)"
+fi
+
+# ---------------------------------------------------------------------------
+# Stage 4: the remaining heavy, mutually independent stages, run concurrently.
 #
 # pytest runs in the foreground so its progress still streams live (it is the
 # output people actually watch); everything else runs as a background lane
@@ -771,11 +816,6 @@ _start_lane() {
     _lane_logs+=("$log")
 }
 
-# Pyright: full static type check across vtsearch/ and tests/
-# (see `pyrightconfig.json` for the gated scope). The PYRIGHT_PYTHON_FORCE_VERSION
-# pin keeps everyone on the same underlying pyright binary regardless of
-# what the `pyright` PyPI wrapper would otherwise pull.
-_lane_pyright() { PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright; }
 _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # Vulture whitelist hygiene. NOT the dead-code audit itself: a vulture hit on a
 # public vtscore name is not evidence of anything (out-of-tree extensions import
@@ -803,7 +843,6 @@ _lane_npm_audit() { python scripts/npm-audit-gate.py; }
 _lane_frontend_unit() { (cd frontend && npm run test:ci); }
 
 if $_run_whole_repo_gates; then
-    _start_lane "pyright" _lane_pyright
     _start_lane "pip-audit" _lane_pip_audit
     _start_lane "vulture whitelist" _lane_vulture_whitelist
 fi

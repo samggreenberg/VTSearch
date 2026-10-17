@@ -831,13 +831,6 @@ class TestApplySettings:
         settings._apply_settings({"theme": "neon"})
         assert settings.get_theme() == orig_theme
 
-    def test_apply_settings_available_from_routes(self):
-        """The routes module re-exports _apply_settings from settings."""
-        from vtsearch.routes.settings.io import _apply_settings
-        from vtsearch.settings import _apply_settings as canonical
-
-        assert _apply_settings is canonical
-
     def test_apply_settings_ignores_infra_setters(self, isolated_settings, tmp_path):
         """Imported/synced settings dicts are file content, not trusted code.
 
@@ -865,13 +858,19 @@ class TestApplySettings:
         assert settings._USER_DATA_DIR_OVERRIDE == orig_override
         assert settings.get_settings_source_config() is None
 
-    def test_setter_map_contains_only_schema_keys(self):
-        """Every importable key must be a real server/user-tier schema key."""
+    def test_setter_map_contains_only_user_tier_keys(self):
+        """Every importable key must be a per-user schema key (#4965)."""
         from vtsearch import settings
 
-        schema_keys = set(settings._all_defaults())
         setter_keys = set(settings._get_setter_map())
-        assert setter_keys <= schema_keys, sorted(setter_keys - schema_keys)
+        assert setter_keys == settings._USER_KEYS, sorted(setter_keys ^ settings._USER_KEYS)
+        assert not setter_keys & settings._SERVER_KEYS
+
+    def test_apply_settings_reports_what_it_wrote(self, isolated_settings):
+        from vtsearch import settings
+
+        applied = settings._apply_settings({"volume": 0.5, "theme": "neon", "detectors_dir": "/x", "nope": 1})
+        assert applied.keys == ("volume",)
 
 
 # ---------------------------------------------------------------------------

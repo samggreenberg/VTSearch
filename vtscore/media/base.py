@@ -660,7 +660,8 @@ class MediaType(ABC):
         2. *lazy clip* - a derived sub-media that carries a clip recipe in
            ``origin.params`` instead of materialized bytes; its bytes are
            sliced/cropped from the source on demand (see
-           :mod:`vtscore.media.lazy_clip`).
+           :mod:`vtscore.media.lazy_clip`).  A cleaned unit's recipe is
+           exclusive: if its replay fails, nothing is served.
         3. *archive member* - a ``local_archive_member`` media's bytes,
            streamed out of its tar/zip shard on demand (see
            :func:`_resolve_archive_member_bytes`).
@@ -671,11 +672,13 @@ class MediaType(ABC):
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
             return media_bytes
-        from vtscore.media.lazy_clip import lazy_clip_bytes  # noqa: PLC0415
+        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         clipped = lazy_clip_bytes(media)
         if clipped is not None:
             return clipped
+        if recipe_is_exclusive(media):
+            return None
         archive_bytes = _resolve_archive_member_bytes(media)
         if archive_bytes is not None:
             return archive_bytes
@@ -695,14 +698,23 @@ class MediaType(ABC):
 
         For text media types, which store ``media_string`` instead of
         ``media_bytes``.  Resolution order: ``media_string`` (already in
-        memory), then ``media_path`` (thin mode), then ``media_url`` (through
-        the SSRF guard in :func:`_fetch_media_url`).  Unlike
-        :meth:`_resolve_media_bytes` there is no lazy-clip or archive-member
-        step.  Returns ``""`` when nothing resolves.
+        memory), then a lazy recipe (a cleaned unit, a ``document2text`` page;
+        exclusive, so a failed replay serves ``""``), then ``media_path`` (thin
+        mode) - after the recipe, since ``media_path`` names its *source* -
+        then ``media_url`` (through the SSRF guard in :func:`_fetch_media_url`).
+        Unlike :meth:`_resolve_media_bytes` there is no archive-member step.
+        Returns ``""`` when nothing resolves.
         """
         media_string = media.get("media_string")
         if media_string is not None:
             return media_string
+        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+
+        derived = lazy_clip_bytes(media)
+        if derived is not None:
+            return derived.decode("utf-8", errors="replace")
+        if recipe_is_exclusive(media):
+            return ""
         media_path = media.get("media_path")
         if media_path:
             path = resolve_media_file_path(media_path)

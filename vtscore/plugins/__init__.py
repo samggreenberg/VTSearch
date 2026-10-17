@@ -693,7 +693,7 @@ class PluginBase:
             detail: Optional second line carrying the specifics.
             items: Optional list of the things the message is about, one
                 entry each (every skipped file, not the first ten).  The app
-                shows them behind a *Details* toggle with a *Copy list*
+                shows them behind a *Details* toggle with a *Copy List*
                 button; see :func:`vtscore.concurrency.notifications.notify`
                 for the caps.
 

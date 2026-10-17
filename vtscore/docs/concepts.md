@@ -42,7 +42,7 @@ medias[42] = {
 ```
 
 The shape is defined by `vtscore/datasets/loader_folder.py` (the
-`_build_per_file_media` helper) and consistent across every loader. The
+`_build_folder_media_data` helper) and consistent across every loader. The
 type key is `media_type`, never `type`. Plugin authors who add a new media
 type extend the shape with their own keys (declared in the type's
 `load_media_data`) but must preserve the base contract.
@@ -74,7 +74,7 @@ from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 
 vec = media_embedding(media)             # the primary embedder's vector, or None
 vec = media_embedding(media, "clap")     # a named embedder's vector, or None
-set_media_embedding(media, "clap", vec)  # write (also records the primary name)
+set_media_embedding(media, "clap", vec)  # write (records the primary name if none is set)
 ```
 
 `media_embedding` resolves the primary vector via `media["embedder"]`,
@@ -265,8 +265,8 @@ class MediaEmbedder:
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """(D,) float32 text-query embedding in the same space, or None."""
 
-    def patch_forward(self, media: dict) -> Optional[np.ndarray]:
-        """Optional. (P, D) patch grid for region-aware scoring."""
+    def patch_forward(self, media: dict) -> Optional[PatchEmbedOutput]:
+        """Optional. CLS vector, (H, W, D) patch grid and saliency, for region-aware scoring."""
 ```
 
 Note the unit of work is the **media dict**, not a path: an embedder reads
@@ -290,7 +290,11 @@ and [extending/embedders.md](extending/embedders.md) to write your own.
 ## 6. Detector
 
 A **detector** in `vtscore` is a **linear SVM classifier head** plus a
-calibrated decision threshold, both derived from a `LabelSet`.
+calibrated decision threshold, both derived from a `LabelSet`. Below the
+label quota (`vtscore.detectors.label_quota`: too few Goods and Bads to fit
+a head), the paths that hand a detector out (`train_from_labelset`, a cold
+Find) give the Goods' centroid instead, with a line of its own
+(`vtscore.detectors.centroid_head`).
 
 Architecture (`vtscore/training/mlp.py`):
 
@@ -300,24 +304,25 @@ input  (D,)
   → (no activation; the output is the SVM's decision function)
 ```
 
-Other heads share the same entry point but not the same fit: `LINEAR_SVM_HEAD`
-(`-1`) is the plain SVM, without the production head's start from the Goods'
-centroid; `LINEAR_HEAD` (`0`) builds the identical `Linear(D, 1)` and fits it
-with balanced BCE-with-logits, making it logistic regression; and any
-`hidden_dim > 0` builds the older MLP (`Linear(D, H) → ReLU → Dropout(p) →
-Linear(H, 1)`, width from `_auto_hidden_dim`). They serve only the eval
-harness's head-sweep arms and unit tests - production always passes
-`LINEAR_SVM_PRIOR_HEAD`. See
+Production always passes `LINEAR_SVM_PRIOR_HEAD`: the linear SVM started
+from the Goods' centroid (`vtscore.training.svm_prior`), which makes the
+centroid direction cheap, so a head fitted to a few labels starts there
+rather than at the origin. The other heads share the same entry point but
+not the same fit: `LINEAR_SVM_HEAD` (`-1`) is the plain SVM; `LINEAR_HEAD`
+(`0`) builds the identical `Linear(D, 1)` and fits it with balanced
+BCE-with-logits, making it logistic regression (`LINEAR_LOGREG_HEAD`, `-2`,
+fits the same loss to convergence); and any `hidden_dim > 0` builds the older
+MLP (`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
+`_auto_hidden_dim`). They survive only for the eval harness's head-sweep arms
+and unit tests. See
 [`docs/ML.md`](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
 for why the head is a linear SVM.
 
 Training (`vtscore.training.train_model`):
 
 - The production head is fitted by liblinear (`LinearSVC`, squared hinge + L2,
-  `class_weight="balanced"`, with the Goods' centroid a cheap direction),
-  deterministic given the caller-supplied seed
-  (default 42). Inclusion does *not* enter training - it is the unit cuts are
-  measured in, applied later at threshold time.
+  `class_weight="balanced"`), deterministic given the caller-supplied seed
+  (default 42). The balance does *not* enter training - only the cut reads it.
 - The BCE heads instead run a class-weighted BCE-with-logits loop with
   inverse-frequency balancing and label-smoothed targets
   (`MLP_LABEL_SMOOTHING`), using a local `torch.Generator` seeded with the
@@ -326,29 +331,28 @@ Training (`vtscore.training.train_model`):
   calls don't race on the global RNG (the linear head has no dropout, so
   this only bites the MLP arm).
 
-Thresholding (`vtscore/training/thresholds/`):
+Thresholding (`vtscore/training/thresholds/`; the full account is
+[`docs/ML.md` § Threshold Calibration](../../docs/ML.md#threshold-calibration)):
 
-- `calculate_cross_calibration_threshold` runs k-fold cross-cal (k =
-  `calibrate_count`), pools the held-out fold scores, and applies the
-  conformal inclusion rule (`conformal_threshold`): `inclusion_value ∈
-  [-10, +10]` maps to quantiles of the calibration score distributions
-  (positive values buy a smaller false-negative budget, halving per
-  step; negative values walk toward only the surest matches).
-- `fold_anchored_gmm_threshold` is the shipped cut: a semi-supervised
-  mixture fitted per calibration fold on that fold model's haystack
-  scores, anchored on its held-out labels, rank-transferred back to the
-  final model's scale. Unconditional - there is no setting for it. The
-  voted media themselves are dropped from every haystack the estimator
-  fits or realizes on (their scores under the models trained on them
-  are optimistically shifted - issue #3308), unless fewer than
-  `EXCLUSION_MIN_REMAINDER` scores would remain; the app-tier callers
-  pass the voted ids into `train_and_threshold` / `train_and_score`
-  for that.
-- `calculate_safe_threshold` blends the conformal cut with a plain GMM
-  cut on a label-count schedule; the fallback for label sets too small
-  to form calibration folds.
-- `calculate_gmm_threshold` is a 2-component GMM midpoint, used as the
-  ultimate fallback when cross-cal can't converge.
+- The calibration folds (`calibrate_count` splits, `calibration_folds`)
+  hold every vote out once and score it with a head that never saw it.
+- Under the detector's balance (F-beta's beta) the line is the **labels
+  line** (`fit_labels_line`): a class model of the folds' held-out Good and
+  Bad scores, cut where the expected F-beta peaks at the prevalence it
+  estimates on the corpus being scored. While the folds hold too few Goods
+  for that model, the line is a count of what stands out in the head's own
+  scores instead (`head_count_cut`).
+- With no class model (too few votes, one class) or no balance (a library
+  caller's choice), the line falls back to the fold-anchored cut
+  (`fold_anchored_gmm_threshold`) at Inclusion 0, and with no fitted cut at
+  all to the schedule blend (`calculate_safe_threshold`). The fold-anchored
+  estimator drops the voted media from every haystack it fits on (their
+  scores under the models trained on them are optimistically shifted -
+  issue #3308) unless fewer than `EXCLUSION_MIN_REMAINDER` scores would
+  remain; the app-tier callers pass the voted ids into
+  `train_and_threshold` / `train_and_score` for that.
+- `calculate_gmm_threshold` is a 2-component GMM midpoint; a query sort
+  uses it for its acquisition cut, where Autopilot's Hard select samples.
 
 The combined pipeline is `vtscore.detectors.training.train_and_threshold`:
 one call gives you `(model, threshold)` from `(X_list, y_list)`. The
@@ -435,9 +439,13 @@ Every plugin is:
 - A subclass of the family's base ABC (e.g. `DatasetImporter`).
 - Declared at module level via a **sentinel** attribute (`IMPORTER`,
   `EXPORTER`, `EMBEDDER`, `CLIPPERS`, …).
-- Auto-discovered by the family's `PluginRegistry` at construction time.
+- Auto-discovered at import time: by the family's `PluginRegistry`, or,
+  for media types, embedders, clippers and cleaners, by the
+  `vtscore.media` sub-package scan.
 - Optionally exposed to third parties via an `importlib.metadata` entry
-  point under `vtscore.<family>`.
+  point (group names are listed in
+  [extending/README.md § The families](extending/README.md#the-families));
+  the four media families have no entry-point group.
 
 The full mechanics are documented in [packages/plugins.md](packages/plugins.md)
 and the per-family authoring guides under [extending/](extending/).

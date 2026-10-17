@@ -1,11 +1,11 @@
 """Run the vulture dead-code audit, and gate the whitelist against rot.
 
-This script is the **single source of truth** for the vulture invocation.
-It used to be a copy-pasted command line living in two places at once
-(``.vulture-whitelist.py``'s docstring and ``docs/RELEASE.md``), which is
-how it silently drifted: both copies scanned ``vtsearch/ app.py tests/``
-and nothing else, so ``vtscore/`` -- 100k lines and the tier that external
-extensions actually import -- was never looked at.
+This script is the **single source of truth** for the vulture invocation:
+``.vulture-whitelist.py``'s docstring and ``docs/RELEASE.md`` point here
+rather than carry a copy of the command line, because a copy drifts
+silently. One that scans ``vtsearch/ app.py tests/`` and nothing else
+never looks at ``vtscore/`` -- 100k lines and the tier that external
+extensions actually import.
 
 Two modes:
 

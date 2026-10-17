@@ -128,7 +128,7 @@ export class ImageViewerComponent implements OnDestroy {
    *  `null`. See {@link showImage}. */
   private claimedSrc: string | null = null;
 
-  // Region voting state (v2 of the patch-embedder plan, UI only; see docs/plans/patch-embedder.md).
+  // Region voting state (UI only; see docs/ARCHITECTURE.md → "Embedder binding and routing").
   // These are signals because they are written from un-patched callbacks (window
   // mouse/key listeners, the shake `setTimeout`) that schedule no change detection
   // under zoneless; a signal write read in the template is on the notification path.
@@ -772,7 +772,7 @@ export class ImageViewerComponent implements OnDestroy {
     // closes the modal must not also clear the drawn region box underneath.
     if (document.querySelector('.modal-backdrop')) return;
     // Esc while a bad-vote-with-box discard is armed cancels the armed state but
-    // keeps the box (per the v2 patch-embedder plan, drawing a box is real work,
+    // keeps the box (drawing a box is real work,
     // and Esc should be the "I changed my mind about voting no" out, not "throw
     // away the box"). Only consume the key if we actually had an action to take.
     if (this.pendingBadConfirm()) {

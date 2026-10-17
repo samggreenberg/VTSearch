@@ -759,7 +759,7 @@ def _safe_threshold_for_step(
     fold_haystacks: list[Any] = []
     # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
     # fold model is a real, K-proportional part of the calibration a live run at
-    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # K pays for - the fold-anchored rule anchors every fold's mixture on that fold's
     # own haystack - and it is paid *here*, outside `train_seconds`,
     # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
     # unmeasured it is invisible to every cost model built out of those four,
@@ -784,7 +784,7 @@ def _safe_threshold_for_step(
     _keep_fold_sim(details, keep_fold_sim, ids, all_scores, fold_sim, excluding)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
-    # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
+    # fold-anchored rule at each K, and `details["fold_models"]` is trimmed to the
     # live `calibrate_count`.  Score the extra Kmax-run folds here, where the
     # sim set and the scoring machinery are already in hand, and stash them
     # beside the orderings for :func:`_fold_count_variant_rows`.  Only the
@@ -1367,8 +1367,8 @@ def _standalone_calibration_row(
     :func:`_evaluate_on_test` already computed, with the step's fold orderings
     (when its trainer kept any) as the calibration set, so ``oracle_cost``,
     ``regret`` and ``threshold_provenance`` mean on a ``gp_*`` row exactly what
-    they mean on the app's.  The provenance is the shipped estimator's when the
-    safe-threshold path set one, else the trainer's own ``threshold_rule``.
+    they mean on the app's.  The provenance is the safe-threshold path's when
+    it set one, else the trainer's own ``threshold_rule``.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -2997,8 +2997,10 @@ def simulate_voting_iterations(  # noqa: C901
             ``target_prevalence`` the test set is untouched, so it combines with
             ``test_bands`` and each cell pairs with its natural twin (#4184).
         sim_fraction: Fraction of medias used for simulated voting.
-        safe_thresholds: The shipped threshold path - fuse the haystack score
-            distribution into the trained cut (the fold-anchored estimator, see
+        safe_thresholds: The shipped threshold path - the line drawn where
+            the app draws it (:func:`_safe_threshold_for_step`): the labels'
+            line under a balance (#4452), else the haystack score distribution
+            fused into the trained cut (the fold-anchored estimator, see
             :func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`).
             **On by default, matching the app**, which has no switch for it.
             Set ``False`` only to run the no-fusion control arm: pure
@@ -3381,8 +3383,9 @@ def simulate_voting_iterations(  # noqa: C901
             are the paired, reporting-only view of the same rules.
         live_threshold: A **retired** live threshold rule (issue #4184), one of
             :data:`~vtscore.eval.live_threshold_rules.LIVE_THRESHOLD_RULES`, or
-            ``None`` (default) for the shipped fold-anchored cut.  The named rule
-            replaces the step's live cut after the fused path has fitted it -
+            ``None`` (default) for the step's own line (the labels' line under
+            a balance, else the fold-anchored cut).  The named rule replaces
+            that line once the safe-threshold path has drawn it -
             reporting, acquisition and every later vote read it - so, like
             *live_cut_rule*, it is a run-level arm.  The acquisition offset does
             not apply under it: the retired rules predate the offset and have no
@@ -3401,7 +3404,7 @@ def simulate_voting_iterations(  # noqa: C901
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
             ``"anchored"`` (issue #3959) is the GP-native rule: the GP fits its
-            own calibration folds on the app's splits and the **shipped**
+            own calibration folds on the app's splits and the app's **own**
             fold-anchored estimator runs on them - each fold's mixture on that
             fold GP's haystack scores, anchored by its held-out votes, carried
             to the final GP by quantile.  Needs *safe_thresholds* (that is where
@@ -3775,6 +3778,15 @@ def simulate_voting_iterations(  # noqa: C901
     if seed_examples is not None:
         pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
         seed_scores = example_sort(clips_dict, pending_examples)
+    # The sort the session walks (#5004).  The app sorts the dataset it has
+    # loaded, which the run models with the voting half, so the selector's cut
+    # and rank distances, a schedule's cuts and the pick log's ranks are read
+    # over that half alone.  ``query_scores`` above keeps every media: the typed
+    # query's Test reads the withheld half's cosines from it.
+    sim_id_set = set(sim_ids)
+    sim_seed_scores: Optional[dict[int, float]] = (
+        None if seed_scores is None else {cid: v for cid, v in seed_scores.items() if cid in sim_id_set}
+    )
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -4062,15 +4074,17 @@ def simulate_voting_iterations(  # noqa: C901
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
     startup_cuts: list[float] = []
-    if startup_state is not None and seed_scores is not None:
-        sort_values = list(seed_scores.values())
+    if startup_state is not None and sim_seed_scores is not None:
+        sort_values = list(sim_seed_scores.values())
         startup_cuts = [round_cut(sort_values, rnd) for rnd in startup_state.rounds]
     # The seed sort as a ranking, for the pick log: where in the sort each click
     # landed is the mining record the study reads.
     seed_rank: dict[int, int] = {}
-    if pick_sink is not None and seed_scores is not None:
-        seed_rank = {cid: i for i, cid in enumerate(sorted(seed_scores, key=lambda c: seed_scores[c], reverse=True))}
-    seed_sorted_scores: list[float] = sorted(seed_scores.values(), reverse=True) if seed_scores else []
+    if pick_sink is not None and sim_seed_scores is not None:
+        seed_rank = {
+            cid: i for i, cid in enumerate(sorted(sim_seed_scores, key=lambda c: sim_seed_scores[c], reverse=True))
+        }
+    seed_sorted_scores: list[float] = sorted(sim_seed_scores.values(), reverse=True) if sim_seed_scores else []
     # Recent per-step models (each with the threshold it was calibrated at),
     # re-scored every step against the *current* labelset so the Smart
     # indicator's slope regresses over one shared eval set - exactly what the
@@ -4134,7 +4148,9 @@ def simulate_voting_iterations(  # noqa: C901
                 "picked_seed_percentile": (
                     round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
                 ),
-                "picked_seed_score": round6(seed_scores[cid]) if seed_scores and cid in seed_scores else float("nan"),
+                "picked_seed_score": (
+                    round6(sim_seed_scores[cid]) if sim_seed_scores and cid in sim_seed_scores else float("nan")
+                ),
                 "picked_detector_score": round6(pool_scores[cid]) if cid in pool_scores else float("nan"),
                 "acq_threshold": round6(acq_threshold),
                 "n_good": len(good_votes),
@@ -4488,7 +4504,7 @@ def simulate_voting_iterations(  # noqa: C901
                     atlas=atlas,
                     rng=rng,
                     pool_labels=pool_labels,
-                    seed_scores=seed_scores,
+                    seed_scores=sim_seed_scores,
                     phase=phase,
                     startup_cut=startup_cut,
                     uncertainty=pool_uncertainty,
@@ -5557,7 +5573,7 @@ def run_voting_iterations_eval(
             would only re-weight ``cost``.  The app has no such setting
             (#4269); 0 is the cut it draws with no balance.
         sim_fraction: Fraction of medias reserved for simulated voting.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
             (see :func:`simulate_voting_iterations`).
         calibrate_count: Number of random Train/Calibrate splits for threshold
@@ -5712,7 +5728,7 @@ def run_voting_iterations_eval_from_pickles(
         inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
             needs ``beta="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).

@@ -24,7 +24,9 @@ from vtscore.datasets.registry import (
     list_datasets_for_user,
     register_dataset,
     set_readers,
+    update_readers,
 )
+from vtscore.security.readers import ReadersUpdate
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +167,14 @@ class TestSetReaders:
         assert ok is True
         assert can_user_access(entry["id"], "bob") is False
 
+    def test_update_reports_each_case(self):
+        entry = _make_dataset("sr4", created_by="alice")
+        assert update_readers(entry["id"], ["bob"], "alice") is ReadersUpdate.UPDATED
+        assert update_readers(entry["id"], ["carol"], "bob") is ReadersUpdate.NOT_CREATOR
+        assert update_readers("nonexistent_id", ["bob"], "alice") is ReadersUpdate.NOT_FOUND
+        assert can_user_access(entry["id"], "bob") is True
+        assert can_user_access(entry["id"], "carol") is False
+
 
 # ---------------------------------------------------------------------------
 # API endpoint tests
@@ -217,6 +227,17 @@ class TestReadersEndpoint:
             json={"readers": ["bob"]},
         )
         assert resp.status_code == 404
+
+    def test_status_does_not_depend_on_message_wording(self, client, monkeypatch):
+        # #5000: the status used to come from finding "creator" in the message.
+        monkeypatch.setattr(ReadersUpdate, "message", lambda self, kind: "Refused")
+        entry = _make_dataset("api5", created_by="other_user")
+        resp = client.put(f"/api/datasets/registry/{entry['id']}/readers", json={"readers": ["bob"]})
+        assert resp.status_code == 403
+        assert resp.get_json()["message"] == "Refused"
+        resp = client.put("/api/datasets/registry/nonexistent/readers", json={"readers": ["bob"]})
+        assert resp.status_code == 404
+        assert resp.get_json()["message"] == "Refused"
 
 
 class TestRegistryListingFiltered:

@@ -2,9 +2,9 @@
 
 A media's vectors live in ``media["embeddings"]`` — a dict keyed by embedder
 name — so the vectors of multiple bound embedders can coexist on one media
-(the three-slot embedder design in ``docs/plans/patch-embedder.md`` → "V3
-design").  That dict is the *only* per-media vector store: there is no
-singular ``media["embedding"]`` on a live media.
+(the three-slot embedder binding, ``docs/ARCHITECTURE.md`` → "Embedder
+binding and routing").  That dict is the *only* per-media vector store: there
+is no singular ``media["embedding"]`` on a live media.
 
 This module is the one place that resolves a vector for a media; every read
 site goes through :func:`media_embedding` and every write through

@@ -29,6 +29,7 @@ from vtscore.concurrency.async_jobs import AsyncJob
 from vtscore.datasets.archive_stream import build_archive_member_origin
 from vtscore.datasets.thumbnail_warm import (
     _ByteBudget,
+    _sweep,
     pending_archive_thumbnail_ids,
     start_archive_thumbnail_warm,
     warm_archive_thumbnails,
@@ -413,6 +414,21 @@ class TestKick:
             assert all(m["thumbnail_bytes"] for m in ctx.medias.values())
         finally:
             unregister_context(ctx.dataset_id)
+
+    def test_a_kick_whose_dataset_was_unloaded_still_warms_the_rest(self, tmp_path: Path):
+        """The sweep warms every loaded dataset, so a kick's ``dataset_id`` is
+        only a tag.  A kick parked while its own dataset was unloaded must
+        still run for the datasets that remain, not fail as an unloaded job
+        on a context-binding manager would (#4976)."""
+        from vtscore.concurrency.async_jobs import archive_thumbnail_jobs
+
+        _archive, _payloads, medias = _image_corpus(tmp_path, n=3)
+        ctx = _ctx_with(medias, dataset_id="_warm_survivor")
+        job = archive_thumbnail_jobs.start(("archive-thumbnail-warm", "_warm_gone"), _sweep, dataset_id="_warm_gone")
+        assert job.done_event.wait(timeout=30), "warm-up job did not finish"
+        assert job.status == "done"
+        assert job.result == {"warmed": 3}
+        assert all(m["thumbnail_bytes"] for m in ctx.medias.values())
 
 
 class TestConcurrentMutation:

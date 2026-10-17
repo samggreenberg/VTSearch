@@ -44,22 +44,14 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **Stop-list templates from Bad votes (#4162; a candidate, not confirmed,
-  #4180).** The first rule that learns from Bads in SIFT space.
-  - Each Bad page marks the template descriptors that ratio-match it as "not the
-    mark", and those are dropped from every template before verification.
-  - On FullMarks tier `s`, after 10 shared votes, it is +0.018 AP over
-    max-over-templates (interval [+0.005, +0.035]).
-  - At tier `m` it is +0.022, but that interval crosses zero; it is +0.049 at
-    20 votes.
-  - It fails when a Bad carries the mark inside a larger lockup: it strips the
-    mark's own descriptors (−0.24 on one RJR class). #4180 adds a guard and
-    re-confirms.
-  - It is cheap: one ratio test per template × Bad, and no training.
-  - Wiring it into `build_templates` needs the Bad votes' `local_features`,
-    which `maybe_structural_rerank` already has.
-  - Its limit is a mark made of printed text, whose box templates match any
-    typed page (#4170).
+- **Stop-list templates from Bad votes — priced, not shipped.** Each Bad page
+  drops the template descriptors that ratio-match it before verification
+  (`_stoplist` in `vtscore/training/structural_similarity.py`, behind
+  `STOPLIST_POLICY = "off"`). #4180 added the lockup guard and #4432 made it
+  cheap, but pooled over two replicates it did not clear its pre-registered AP
+  bar ([report](../experiments/2026-10-02-stoplist-cheap-4432/REPORT.md)). A later
+  design starts from that code. Its known limit is a mark made of printed text,
+  whose box templates match any typed page (#4170).
 
 <!-- item-sep -->
 
@@ -90,7 +82,7 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **FullMarks — build the stamp-detection eval set and run it.** The builder is
+- **FullMarks — grow the stamp-detection eval set.** The builder is
   in `scripts/experiments/fullmarks/` (see its README). It exists because the
   2026-07-13 result — the first configuration where structural search beats the
   deep embedder on a real corpus — rests on two corpora of 259 and 1,088 pages
@@ -102,25 +94,11 @@ reorders what was previously planned here.
   unlimited unlabelled distractors. Both directions of the ground truth are
   stored — a shared class id for "must be found together", a permanent
   `separations.json` entry for "must be told apart" — because a threshold alone
-  decides the second one, and moving the threshold silently rewrites it. Owed:
-  - [ ] #3343 — Build the full corpus on the GRID: all four sources, three
-    tiers, embedding cells. Measured at 0.75 UCSF pages/s, tier `m` is 18.5 h
-    and tier `l` is 74 h of wall clock against a shared public API, which is
-    what makes it a queue job. The ~2,800-page anchor layer does *not* need the
-    GRID and is where all the hand-annotation happens, so the human loop is not
-    blocked on it; the real blocker there is a Kaggle token for StaVer and
-    Tobacco800, whose mirrors stay unverified without one.
-  - **The eval side of the contamination rule.** `classes.json` records each
-    class's `eligible_distractor_sources`, and `roster.eligible_pages` splits a
-    corpus into positive / known-negative / presumed-negative — but *nothing
-    consumes either yet*. Until a scoring path honours them, a Tobacco800 query
-    scored over the whole corpus is marked wrong for retrieving real matches out
-    of UCSF's tobacco archive. This is the item that makes the rest of the
-    design load-bearing rather than decorative.
-  - **Expand the roster past SPODS** once the first eval runs: StaVer stamps
-    (the line-art case where SIFT collapsed to 5.1%), then Tobacco800 logos,
-    then UCSF letterhead via the `letterhead` candidate pass.
-  - **More artwork and more haystack, if the first run justifies it**: the ICDAR
+  decides the second one, and moving the threshold silently rewrites it. The
+  corpus is built (#3343), its roster spans SPODS, Tobacco800 and StaVer, and
+  the contamination split is consumed (`roster.eligible_pages` in
+  `eval_retrieval.py`). Still owed:
+  - **More artwork and more haystack, if the runs justify it**: the ICDAR
     2023 ReST seal set (10,000 real seals, behind an RRC registration, so it
     needs a manual fetch into `--synth-pool-dir`), full RVL-CDIP rather than the
     100-per-class sample the downloader currently wires, and DocILE (~932k real
@@ -147,7 +125,10 @@ reorders what was previously planned here.
   multiplies Stage-1 AP by 5.4×. Below ~32 px nothing helps — that floor is real.
   This is a Stage-1 *and* Stage-2 change (tile the corpus at ingest, max-pool over
   tiles), so it wants its own scoping pass; it is the cheapest known lever for the
-  screenshot/iconography regime.
+  screenshot/iconography regime. Stage 1 of it has shipped for document pages
+  only: a `sift_vlad_doc` dataset ranks by tiled VLAD, a page scoring by its best
+  tile (`vtscore/media/structural_tiles.py`, #3928). Photos and screenshots still
+  match whole images.
 
 <!-- item-sep -->
 
@@ -179,24 +160,9 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **The 30th-vote transient (a bug the study caught; now narrower).** The detector
-  head has since moved to the linear SVM (`LINEAR_SVM_HEAD`, no hidden layer), so
-  the retrieval side no longer has it, and the structural verification
-  classifier that kept the auto-sized `train_model` width was removed by #4169, so
-  nothing on the structural path has it now. For the record: the width
-  `max(8, n_train // 3)` stepped 9→10 neurons at exactly 30 labels from a fixed
-  `seed=42` init. The study saw a sharp, synchronized quality dip at exactly t=30 (25 of 175 queries lose
-  >0.3 P@10 at t=30, none at t=28 or 29; recovery by t=33). It is deterministic and
-  user-visible: a user's 30th–32nd vote can transiently make results worse. Cheap
-  fixes, for any head that still auto-sizes: average 2–3 seeds at width-change
-  boundaries, derive the init seed from the vote set, or add hysteresis to the
-  width step.
-
 <!-- item-sep -->
 
-- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass each
-  run SIFT once per image. Acceptable for v1; a combined single-detect pass is a
-  cheap later optimisation.
+- [ ] #4996 — Detect SIFT once per image when loading a structural dataset (Sonnet)
 
 <!-- item-sep -->
 
@@ -219,36 +185,17 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **The inlier gate is the scorer; the verification classifier is gone (#4169).**
-  Stage 2 scores every fit with the inlier gate (`DEFAULT_MIN_INLIERS` maps to
-  0.5) and orders fits past its saturation by raw inliers. A match-statistic MLP
-  used to replace the gate from 3 votes on. OpenLogo found the *trained* classifier
-  statistically indistinguishable from that cold gate (0.090 vs 0.071 AP at t=40),
-  so for structural detectors labels are calibration rather than learning — ~3–5
-  votes capture essentially all the benefit, and structural search stays honest
-  with zero votes. Revisit only if a better Stage 1 changes the economics. Worth
-  surfacing as user guidance: on `sift_vlad` datasets, vote a handful of times to
-  calibrate and then stop; put sustained labeling effort into deep-embedder
-  detectors (the SigLIP MLP converts 40 votes into AP 0.39 → 0.67 and shows no
-  saturation).
-  **FullMarks (#4162) makes the trained classifier a liability, not a wash.**
-  - Where SIFT is strong, the Bads that reach the top are hard negatives, and
-    the MLP trained on them ranks worse than the inlier gate in every class
-    where it had a Bad: 10 of 10, −0.18 AP on average.
-  - Re-picking one "best" exemplar from the Goods was also measured, and is a
-    null (−0.03).
-  - Max over templates is the rule that learns (+0.13 AP over the exemplar
-    after 10 votes).
-  - **#4169 removed it**
-    ([report](../experiments/2026-09-30-structural-rerank-mlp-4169/REPORT.md)).
-    Replayed on FullMarks tiers `s`/`m` and on BelgaLogos (10k press photos,
-    18 logos, the shipped 1,024-keypoint photo budget; OpenLogo is no longer on
-    the GRID), the MLP ranks worse than max-over-templates inliers at 10 votes
-    (AP −0.18 / −0.18 / −0.07) and its accept decision is worse than the gate's
-    (F1 −0.07 / −0.03 / −0.13). On the app's own path (VLAD top 50) the gate is
-    +0.03 AP and +0.15 F1 on FullMarks and neutral on BelgaLogos. Votes now
-    add templates and nothing else; a rule that learns from Bads (#4180)
-    has to beat the gate the same way.
+- **The inlier gate is the scorer (#4169).** Stage 2 scores every fit with the
+  inlier gate (`DEFAULT_MIN_INLIERS` maps to 0.5) and orders fits past its
+  saturation by raw inliers; votes add templates (max over templates) and nothing
+  else, and Bads never enter the ranking. The match-statistic classifier that
+  replaced the gate from 3 votes on ranked worse than it on FullMarks and
+  BelgaLogos ([report](../experiments/2026-09-30-structural-rerank-mlp-4169/REPORT.md)).
+  Still open: a rule that learns from Bads has to beat the gate the same way (the
+  stop-list above did not), and whether to tell users how many votes a
+  `sift_vlad` detector is worth. OpenLogo's "3–5 votes capture the benefit" was
+  measured on the removed classifier, while on FullMarks max over templates kept
+  gaining (+0.13 AP over the single exemplar after 10 votes).
 
 <!-- item-sep -->
 
@@ -325,9 +272,11 @@ metric spaces that both reuse `train_model` verbatim:
 For structural detectors the region box **defines the template** (stronger than
 patch's salient-area hint). **RegionYes** keeps only in-box keypoints as the
 query template (`LabeledElement.region_box`, already shipped in patch v2 — no new
-schema; templates re-derive on load). Whole-image Yes is allowed but noisy. No
-feeds the verification negatives + optional stop-list down-weighting. Multiple
-RegionYes → multiple templates, score = **max over templates**.
+schema; templates re-derive on load). Whole-image Yes is allowed but noisy. A
+No never enters the ranking (#4169): on a tiled dataset the Bads set the
+threshold (a page must fit better than every Bad did, #4367), and the stop-list
+(`STOPLIST_POLICY`, off) would prune templates. Multiple RegionYes → multiple
+templates, score = **max over templates**.
 
 ### Feature backend — SIFT for v1, pluggable for learned features
 
@@ -347,14 +296,15 @@ uint8, capped per image at the top-M by response). ~128–256 KB/image, same ord
 as patch's `patch_grid`. Local features live **only** in the dataset pickle (the
 sanctioned snapshot) and RAM — never in detector JSON or `settings.json`. The
 detector persists `origin + region_box` per labelled example and re-derives
-templates + both classifiers on load. The VLAD **visual vocabulary** is a fixed,
+templates and the retrieval head on load. The VLAD **visual vocabulary** is a fixed,
 pre-trained codebook shipped with the code (like model weights), not a
 per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 
 ### Integration points
 
-- **Embedder(s):** `vtscore/media/image/embedder_sift_vlad.py` (`sift_vlad`) on a
-  shared `_structural_shared.py` base.
+- **Embedder(s):** `vtscore/media/image/embedder_sift_vlad.py` (`sift_vlad`) and
+  `embedder_sift_vlad_doc.py` (`sift_vlad_doc`: a document-sized keypoint budget
+  and the tiled Stage 1) on a shared `_structural_shared.py` base.
 - **Matcher abstraction:** `vtscore/media/structural.py` — protocol + SIFT impl
   (`detect_and_describe`, `aggregate_vlad`, `verify`, `match_stats_to_features`).
   Library-tier, import-clean.
@@ -395,22 +345,20 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 - **v1 (shipped):** SIFT + VLAD + RANSAC, image-only, single `sift_vlad`
   embedder; `supports_geometric_verification`; `local_features` storage;
   two-stage retrieval + re-rank across all sort paths; match-stat verification
-  classifier; RegionYes-as-template; matched-region overlay. Text sort greyed.
+  classifier (removed by #4169); RegionYes-as-template; matched-region overlay. Text sort greyed.
 - **v2:** learned-local-feature backend (GPU-gated) **plus** the audio backend,
   both under the media-agnostic `StructuralMatcher` protocol.
 - **Patch v3 (shipped):** structural is the third role in the text/patch/structural
   trio — `DatasetContext.structural_embedder` binds it, score routing resolves
   `structural ▸ patch ▸ text` (`vtscore/embedding/binding.py`), and the
-  dataset-create flow offers the Instance-embedder picker. The living spec for the
-  trio, and its remaining open questions, are in
-  [`patch-embedder.md`](patch-embedder.md).
+  dataset-create flow offers the Instance-embedder picker. The trio's design is in
+  [`ARCHITECTURE.md`](../ARCHITECTURE.md#embedder-binding-and-routing).
 
 ### Tests
 
 Matcher units (synthetic correspondences recover a known transform);
 VLAD-aggregation shape/determinism/round-trip; two-stage promotion (an item VLAD
 ranks mid-pack but that verifies strongly outranks a high-VLAD no-geometry item);
-match-stat classifier separates RegionYes from No with cold-start fallback;
 capability flag surfaces; voting (box defines template, max-over-templates);
 no-persist (detector JSON = origins + `region_box` only); GPU (v2) learned-feature
 integration.

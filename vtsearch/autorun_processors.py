@@ -8,6 +8,12 @@ applies them; the app owns the registry of "which ones are active".
 
 This module holds that registry and its CRUD.  The storage is
 process-global and thread-safe.
+
+**No in-repo caller, kept on purpose (#3452).**  Nothing in this repo calls
+this registry's routes (``vtsearch/routes/processors/``) or the frontend's
+``ProcessorsApiService``, but an out-of-tree client or processor plugin may,
+and in-repo evidence cannot see who calls a REST API.  The surface stays until
+#3452 finds out; do not delete it as dead code before then.
 """
 
 from __future__ import annotations

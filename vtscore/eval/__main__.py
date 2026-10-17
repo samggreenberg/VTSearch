@@ -17,6 +17,9 @@ Usage::
     # Custom train/test split for learned-sort
     python -m vtscore.eval --mode learned --train-fraction 0.6
 
+    # Learned-sort at the Inclusion 0 cut instead of the app's balance
+    python -m vtscore.eval --mode learned --beta off
+
     # Save results as JSON
     python -m vtscore.eval --output results.json
 
@@ -34,6 +37,20 @@ initialize_models()
 
 from vtscore.eval.config import EVAL_DATASETS
 from vtscore.eval.runner import format_results_json, run_eval
+from vtscore.training.thresholds import NO_BALANCE, resolve_line_knobs
+
+
+def _beta_arg(value: str) -> float | str:
+    """``--beta``: ``off`` for the Inclusion 0 cut, or a balance in ``[0.25, 4]``."""
+    text = value.strip().lower()
+    if text == NO_BALANCE:
+        return NO_BALANCE
+    try:
+        beta = float(text)
+        resolve_line_knobs(beta)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected {NO_BALANCE!r} or a beta in [0.25, 4], got {value!r}") from None
+    return beta
 
 
 def main() -> None:
@@ -66,7 +83,10 @@ def main() -> None:
         "--train-fraction",
         type=float,
         default=0.5,
-        help="Fraction of medias used for training in learned-sort eval (default: 0.5).",
+        help=(
+            "Fraction of learned-sort's simulation half that is voted; the rest of that half is "
+            "the unlabeled haystack, and the other half is held out for test (default: 0.5)."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -140,6 +160,16 @@ def main() -> None:
             "Genome)."
         ),
     )
+    parser.add_argument(
+        "--beta",
+        type=_beta_arg,
+        default=None,
+        metavar="B",
+        help=(
+            "Balance (F-beta's beta) learned-sort draws its line at, in [0.25, 4], "
+            "or 'off' for the Inclusion 0 cut (default: the app's own balance)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -166,6 +196,7 @@ def main() -> None:
         calibration_fraction=args.calibration_fraction,
         embedder_name=args.embedder,
         region_voting=args.region_voting,
+        beta=args.beta,
     )
 
     # Print summary

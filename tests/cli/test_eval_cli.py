@@ -137,6 +137,35 @@ class TestEvalMainRun:
         assert called["yes"] is False
 
 
+class TestEvalMainBeta:
+    """``--beta`` hands learned-sort its balance; unset is the app's own (#4971)."""
+
+    @pytest.fixture
+    def captured(self, monkeypatch):
+        seen: dict = {}
+
+        def _fake(**kwargs):
+            seen.update(kwargs)
+            return []
+
+        monkeypatch.setattr(eval_main, "run_eval", _fake)
+        return seen
+
+    @pytest.mark.parametrize(("argv", "expected"), [([], None), (["--beta", "off"], "off"), (["--beta", "4"], 4.0)])
+    def test_beta_reaches_run_eval(self, monkeypatch, captured, argv, expected):
+        monkeypatch.setattr(sys, "argv", ["prog", "--mode", "learned", *argv])
+        eval_main.main()
+        assert captured["beta"] == expected
+
+    def test_out_of_range_beta_is_refused(self, monkeypatch, capsys, captured):
+        monkeypatch.setattr(sys, "argv", ["prog", "--mode", "learned", "--beta", "9"])
+        with pytest.raises(SystemExit) as excinfo:
+            eval_main.main()
+        assert excinfo.value.code == 2
+        assert "expected 'off' or a beta in [0.25, 4]" in capsys.readouterr().err
+        assert captured == {}
+
+
 # ---------------------------------------------------------------------------
 # vtscore.eval.label_curve_main
 # ---------------------------------------------------------------------------

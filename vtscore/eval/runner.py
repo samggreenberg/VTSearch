@@ -6,10 +6,11 @@ Two evaluation modes:
    similarity to the query embedding, and measure how well medias of the
    target category float to the top (AP, P@k, R@k).
 
-2. **Learned sort**: For each category, randomly split its medias into
-   train/test.  Simulate votes (target = good, rest = bad) on the
-   train set, run ``train_and_score``, and measure classification
-   quality on the held-out test set.
+2. **Learned sort**: For each category, randomly split its medias into a
+   simulation half and a held-out test half.  Simulate votes (target = good,
+   rest = bad) on part of the simulation half, run ``train_and_score`` on the
+   simulation half alone, and measure classification quality on the test half
+   at the line the app draws.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from vtscore.eval.metrics import (
     compute_binary_classification_metrics,
     compute_metrics,
 )
+from vtscore.training.thresholds import resolve_line_knobs
 
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -143,24 +145,40 @@ def eval_learned_sort(
     calibration_fraction: float | None = None,
     start_time: float | None = None,
     region_voting: bool = False,
+    beta: float | str | None = None,
+    sim_fraction: float = 0.5,
 ) -> list[LearnedSortMetrics]:
     """Run learned-sort evaluation via simulated voting.
 
     For each query/category:
       1. Partition medias into target-category (positive) and others (negative).
-      2. Randomly split both pools into train and test by ``train_fraction``.
-      3. Build ``good_votes`` from train positives, ``bad_votes`` from train
-         negatives.
-      4. Call ``train_and_score`` on the full media set.
-      5. Measure accuracy/precision/recall/F1 on the test set using the
-         threshold ``train_and_score`` returns with no balance: the
-         fold-anchored cut at Inclusion 0, or the schedule blend where no
-         calibration folds form.
+      2. Randomly split both pools into a simulation half and a held-out test
+         half by ``sim_fraction``.
+      3. Build ``good_votes`` / ``bad_votes`` from ``train_fraction`` of the
+         simulation half's positives / negatives.
+      4. Call ``train_and_score`` on the simulation half alone at the balance
+         *beta*, so its unvoted remainder is the haystack the threshold is
+         fitted on.
+      5. Score the test half with the returned model and measure
+         accuracy/precision/recall/F1 there at the threshold
+         ``train_and_score`` returns: under a balance, the labels line the app
+         draws (#4452).
+
+    The test half never reaches ``train_and_score`` (#5003).  The threshold is
+    fitted over the unlabeled remainder of whatever snapshot it is handed, so
+    handing it the whole pool fitted the cut on the very items it was then
+    scored on - the leak :func:`~vtscore.eval.voting_iterations.simulate_voting_iterations`
+    refuses by fitting on its simulation set alone.  Handing it only the votes
+    would be no better: with no unvoted remainder the exclusion of voted items
+    switches off and the cut is fitted on the votes' own optimistic scores.
 
     Args:
         medias: Loaded media dict.
         queries: List of :class:`EvalQuery` (one per category to test).
-        train_fraction: Fraction of medias to use for training (rest for test).
+        train_fraction: Fraction of the simulation half's positives and of its
+            negatives that are voted (at least one of each).  The rest of the
+            simulation half is the unlabeled haystack the threshold is fitted
+            on; ``1.0`` votes it all, leaving the estimator nothing unlabeled.
         seed: Random seed for reproducible splits.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
@@ -177,13 +195,36 @@ def eval_learned_sort(
             the whole image.  Requires a patch dataset with stored ``regions``
             and ``patch_grid``; on any other dataset the boxes are absent and
             this is a no-op.
+        beta: The balance the line is drawn at (#4413), resolved by
+            :func:`~vtscore.training.thresholds.resolve_line_knobs`.  ``None``
+            (the default) is the app's own default balance, ``DEFAULT_BETA``,
+            so the metrics describe the line a live detector draws (#4971).  A
+            number pins a balance in ``[0.25, 4]``; ``"off"``
+            (:data:`~vtscore.training.thresholds.NO_BALANCE`) is the
+            Inclusion arm, the Inclusion 0 cut every run measured before #4971.
+        sim_fraction: Fraction of each class that joins the simulation half
+            (at least one); the rest is the held-out test half.  The default
+            ``0.5`` is :func:`~vtscore.eval.voting_iterations.simulate_voting_iterations`'
+            own.  A category whose test half comes out empty is skipped.
 
     Returns:
         List of :class:`LearnedSortMetrics`, one per query.
-    """
-    from vtscore.detectors.training import train_and_score
-    from vtscore.eval.labels import region_box_for_category
 
+    Raises:
+        ValueError: If the medias are structural (they carry ``local_features``).
+            There the threshold is the Stage-2 inlier gate's, which no score
+            the held-out half gets from the detector head is on the scale of.
+    """
+    from vtscore.detectors.training import detector_score_embedder, score_media_with_model, train_and_score
+    from vtscore.eval.labels import region_box_for_category
+    from vtscore.training.structural_similarity import snapshot_is_structural
+
+    line_beta = resolve_line_knobs(beta)
+    if snapshot_is_structural(medias):
+        raise ValueError(
+            "eval_learned_sort cannot score a structural dataset: its threshold is the Stage-2 "
+            "inlier gate's, and the held-out half is scored by the detector head alone"
+        )
     rng = np.random.RandomState(seed)
     results: list[LearnedSortMetrics] = []
 
@@ -196,20 +237,25 @@ def eval_learned_sort(
         if len(target_ids) < 2 or len(other_ids) < 2:
             continue  # not enough data
 
-        # Shuffle and split
+        # Shuffle, then hold out the test half before anything else is drawn.
         rng.shuffle(target_ids)
         rng.shuffle(other_ids)
 
-        n_target_train = max(1, int(len(target_ids) * train_fraction))
-        n_other_train = max(1, int(len(other_ids) * train_fraction))
+        n_target_sim = max(1, int(len(target_ids) * sim_fraction))
+        n_other_sim = max(1, int(len(other_ids) * sim_fraction))
 
-        train_good = target_ids[:n_target_train]
-        test_good = target_ids[n_target_train:]
-        train_bad = other_ids[:n_other_train]
-        test_bad = other_ids[n_other_train:]
+        sim_good = target_ids[:n_target_sim]
+        test_good = target_ids[n_target_sim:]
+        sim_bad = other_ids[:n_other_sim]
+        test_bad = other_ids[n_other_sim:]
 
         if not test_good or not test_bad:
             continue  # empty test set
+
+        # The votes are a prefix of the already-shuffled simulation half, so a
+        # random draw from it; the unvoted rest is the haystack.
+        train_good = sim_good[: max(1, int(len(sim_good) * train_fraction))]
+        train_bad = sim_bad[: max(1, int(len(sim_bad) * train_fraction))]
 
         # Build vote dicts
         good_votes: dict[int, None] = {cid: None for cid in train_good}
@@ -227,19 +273,28 @@ def eval_learned_sort(
                 if (box := region_box_for_category(medias[cid], query.target_category)) is not None
             }
 
-        # Run train_and_score
-        scored, threshold, _model = train_and_score(
-            medias,
+        # Train on the simulation half alone: the test half must not be in the
+        # population the threshold is fitted on.
+        sim_snapshot = {cid: pool[cid] for cid in sim_good + sim_bad}
+        _scored, threshold, model = train_and_score(
+            sim_snapshot,
             good_votes,
             bad_votes,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             vote_region_boxes=vote_region_boxes,
+            beta=line_beta,
         )
 
-        # Evaluate on test set
-        score_map = {r["id"]: r["score"] for r in scored}
+        # Score the test half with the returned model, in the space it was
+        # trained in and through the scorer train_and_score scores with.  No
+        # model (training was not possible) scores nothing, so nothing passes.
         test_ids = test_good + test_bad
+        score_map: dict[int, float] = {}
+        if model is not None:
+            test_snapshot = {cid: pool[cid] for cid in test_ids}
+            scored_test = score_media_with_model(model, test_snapshot, detector_score_embedder(None, sim_snapshot))
+            score_map = {r["id"]: r["score"] for r in scored_test}
         predictions = [1 if score_map.get(cid, 0) >= threshold else 0 for cid in test_ids]
         labels = [1] * len(test_good) + [0] * len(test_bad)
 
@@ -256,6 +311,8 @@ def eval_learned_sort(
                 num_test=len(test_ids),
                 target_category=query.target_category,
                 elapsed_seconds=elapsed,
+                threshold=float(threshold),
+                beta=line_beta,
             )
         )
 
@@ -273,6 +330,7 @@ def run_eval(
     calibration_fraction: float | None = None,
     embedder_name: str = "",
     region_voting: bool = False,
+    beta: float | str | None = None,
 ) -> list[DatasetResult]:
     """Run evaluation on one or more eval datasets.
 
@@ -285,7 +343,9 @@ def run_eval(
         mode: ``"text"`` for text-sort only, ``"learned"`` for learned-sort
             only, ``"both"`` for both.
         k_values: k values for P@k/R@k.
-        train_fraction: Train/test split ratio for learned-sort.
+        train_fraction: Fraction of learned-sort's simulation half that is
+            voted (see :func:`eval_learned_sort`); the rest of that half is the
+            haystack the threshold is fitted on, and the other half is held out.
         seed: Random seed.
         enrich: If ``True``, use enriched (wrapper-averaged) text embeddings
             for text-sort evaluation.
@@ -303,6 +363,9 @@ def run_eval(
         region_voting: When ``True``, learned-sort Good votes are region-pooled
             from each media's ground-truth box (see :func:`eval_learned_sort`).
             Only affects patch datasets with stored ``regions`` (Visual Genome).
+        beta: The balance learned-sort draws its line at (see
+            :func:`eval_learned_sort`): ``None`` (the default) is the app's,
+            a number pins one, ``"off"`` is the Inclusion 0 cut.
 
     Returns:
         List of :class:`DatasetResult`, one per evaluated dataset.
@@ -310,6 +373,7 @@ def run_eval(
     from vtscore.datasets.config import DEMO_DATASETS
     from vtscore.datasets.loader import load_demo_dataset
 
+    resolve_line_knobs(beta)  # a malformed balance fails before any dataset loads
     if dataset_ids is None:
         dataset_ids = list(EVAL_DATASETS.keys())
 
@@ -389,6 +453,7 @@ def run_eval(
                 calibration_fraction=calibration_fraction,
                 start_time=start_time,
                 region_voting=region_voting,
+                beta=beta,
             )
             ds_result.learned_sort = learned_results
 

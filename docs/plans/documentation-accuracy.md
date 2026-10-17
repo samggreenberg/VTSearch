@@ -93,19 +93,11 @@ separately.
 
 <!-- item-sep -->
 
-- **`patch-embedder.md` is a shipped plan kept alive as a spec.** Everything it owes has
-  shipped or is explicitly out of scope, but its "living spec" (the V3 trio, score precedence,
-  per-detector embedder type) is cited by ~20 source docstrings and exists nowhere in the permanent
-  docs. Fold it into `docs/ARCHITECTURE.md` (or `vtscore/docs/concepts.md`), repoint the citations,
-  then delete the plan. `structural-embedder.md`'s design spec (two-stage VLAD + RANSAC, the
-  match-statistics classifier, why 4-DoF) wants the same treatment once its open work ships, and
+- **Two plans double as specs.** `structural-embedder.md`'s design spec (two-stage VLAD +
+  RANSAC, the match-statistics classifier, why 4-DoF) belongs in the permanent docs once its open
+  work ships, the way `patch-embedder.md`'s went into `docs/ARCHITECTURE.md`; and
   `user-docs-screenshots.md` is the de-facto reference for the screenshot system.
 
 <!-- item-sep -->
-
-- **Hand-restated API schemas.** `docs/api/medias.md` and `docs/api/datasets.md` still restate long
-  response schemas that `frontend/openapi.json` already carries. Accurate as of the 2026-09-28
-  audit, but they will drift; slim them to purpose, non-obvious semantics and a pointer to the spec,
-  as `settings.md` now does.
 
 <!-- item-sep -->

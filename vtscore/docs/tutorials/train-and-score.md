@@ -143,7 +143,7 @@ labels = {
     "1-100032-A-0.wav": "good",      # dog
     "1-110389-A-0.wav": "good",      # dog
     "2-114587-A-0.wav": "good",      # dog
-    "1-30226-A-7.wav": "bad",        # rooster
+    "1-30226-A-7.wav": "bad",        # insects
     "1-103298-A-9.wav": "bad",       # crow
     "1-105019-A-3.wav": "bad",       # cow
 }
@@ -156,7 +156,7 @@ print(f"Labelled {len(labelled)} items.")
 ```
 
 ESC-50 uses `<fold>-<clip_id>-A-<category_id>.wav`; category 0 is "dog",
-category 7 is "rooster", etc. Replace these filenames with whatever you
+category 7 is "insects", etc. Replace these filenames with whatever you
 actually have. Six labels is enough - the linear head is small.
 
 ## Step 3: Train the detector
@@ -188,13 +188,14 @@ print(f"Trained detector; threshold = {threshold:.3f}")
 The production head is a single `Linear(512, 1)` - the
 `hidden_dim=LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel in `vtscore/training/mlp.py` -
 fitted to the class-balanced maximum-margin boundary by liblinear, with the
-Goods' centroid a cheap direction so a head fitted to a few labels starts at the
-centroid. `LINEAR_SVM_HEAD` (`-1`) is the plain SVM without that start,
+Goods' centroid a cheap direction so a head fitted to a few labels starts near
+the centroid. `LINEAR_SVM_HEAD` (`-1`) is the plain SVM without that start,
 `LINEAR_HEAD` (`0`) fits the same architecture with balanced BCE-with-logits
-(logistic regression), and a positive `hidden_dim` builds the older MLP
+(logistic regression), `LINEAR_LOGREG_HEAD` (`-2`) fits logistic regression to
+convergence, and a positive `hidden_dim` builds an MLP
 (`Linear(512, H) → ReLU → Dropout → Linear(H, 1)`, `H` auto-sized by
-`_auto_hidden_dim`); all three serve only the eval harness and tests. See
-[docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
+`_auto_hidden_dim`); those are eval arms and test fixtures.
+See [docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
 The default seed makes training deterministic.
 
 ## Step 4: Score all loaded items
@@ -391,7 +392,7 @@ This is what an autodetect job does - the CLI wraps the same calls in
 ## Step 8: Evaluate the detector
 
 If you have ground-truth labels for the held-out set, run the eval
-runner to get precision / recall / AP:
+runner to get precision / recall / F1:
 
 Ground truth lives **on the medias**, not in a separate dict: the harness
 reads `media["category"]` (or `media["categories"]` for multi-label data)
@@ -406,7 +407,8 @@ from vtscore.eval.runner import eval_learned_sort
 for media in held_out.values():
     media["category"] = "dog" if "dog" in media["filename"] else "other"
 
-# Trains on a random `train_fraction` slice per query and scores the rest.
+# Holds out half of each query's media, votes a `train_fraction` slice of the
+# other half, and scores the held-out half.
 metrics_list = eval_learned_sort(
     held_out,
     [EvalQuery("a dog barking", "dog")],
@@ -420,11 +422,14 @@ for metrics in metrics_list:
 ```
 
 `eval_learned_sort` is in `vtscore/eval/runner.py` (it is not re-exported
-from `vtscore.eval`). It simulates a voting session per query - train
-positives become Good votes, train negatives Bad votes - calls
-`train_and_score` on the full media set, and measures
-accuracy / precision / recall / F1 on the held-out half against the
-cross-calibrated threshold. A query whose category has fewer than 2
+from `vtscore.eval`). It simulates a voting session per query on one
+half of the media - voted positives become Good votes, voted negatives
+Bad votes - calls `train_and_score` on that half alone, so the threshold
+is fitted on its unvoted rest and never on the items it is scored on,
+and measures accuracy / precision / recall / F1 on the held-out half at
+the line the app draws: the labels line under its default balance. Pass `beta` to pin
+another balance, or `beta="off"` for the Inclusion 0 cut. Each result
+records the `threshold` it was measured at. A query whose category has fewer than 2
 positives or 2 negatives is skipped, so the returned list can be shorter
 than the query list. For ranking metrics (AP, P@10) use the text-sort side
 of the runner instead; see [packages/eval.md](../packages/eval.md) for the
@@ -448,8 +453,9 @@ The same shape generalises to:
 - **Video** (`from vtscore.media import video`, X-CLIP, 512-D).
 - **Documents** (`from vtscore.media import document` plus a converter).
 
-Mix media types by combining datasets via the
-[`combine_datasets` importer](../packages/datasets.md#importers).
+To merge several saved datasets of the **same** media type into one,
+use the [`combine_datasets` importer](../packages/datasets.md#importers)
+(it rejects a mix of media types).
 
 ## Where to next
 

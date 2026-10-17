@@ -85,8 +85,10 @@ clippers, cleaners — have their own registration story; see
 ### PluginField
 
 A dataclass describing a single user-configurable input. All plugin
-families share this one field type; each family's base module re-exports
-`PluginField` so you can import it alongside the family's base class.
+families share this one field type. Most families' base modules re-export
+`PluginField` so you can import it alongside the family's base class; the
+datasource and seed importer packages do not, so import it from
+`vtscore.plugins` there (that path works for every family).
 
 The first three parameters are positional and have no default; every
 other parameter is optional.
@@ -108,7 +110,7 @@ other parameter is optional.
 | `allow_free_text` | `bool`  | `False`  | For `"select"` fields: render as a combobox the user can type an arbitrary value into (even one the option list omits). On refresh, a typed value absent from the new list is kept; a strict `select` clears it |
 | `min`         | `str`       | `""`     | For `"number"` fields: minimum allowed value (string form; empty = unbounded) |
 | `max`         | `str`       | `""`     | For `"number"` fields: maximum allowed value (string form; empty = unbounded) |
-| `step`        | `str`       | `""`     | For `"number"` fields: step increment. A non-integer step (`"0.05"`) makes the CLI parse the value as `float`; an integer step uses `int` |
+| `step`        | `str`       | `""`     | For `"number"` fields: step increment. The CLI parses the value as `int` only when `step`, `default`, `min` and `max` all lack a decimal point; otherwise (e.g. `step="0.05"`) as `float` |
 | `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 | `hidden`      | `bool`      | `False`  | When `True`, no GUI form renders a widget for this field: the value is yours to fix via `default`, not the user's to type. Pair the two — the framework fills a hidden field in from its default like any other blank field, so your `run()` / `export()` reads it exactly as if the user had typed it. A plugin whose fields are *all* hidden presents as a bare action button. Hiding is a **GUI affordance only** (the field-level sibling of `PluginBase.hidden_from_picker`): the field keeps its CLI flag, stays on the wire, and is validated and normalised like any other, so it is never a place to put a secret — use `field_type="password"` for that |
 | `opened_in_browser` | `bool` | `False` | For `"url"` fields: the URL is opened by the user's browser (e.g. an exporter's `open_url`) and never fetched by the server, so it is validated with `validate_browser_url` (scheme allowlist; `localhost` and LAN hosts pass) instead of the SSRF guard `validate_url`. Leave it `False` for any URL your plugin fetches itself |
@@ -266,9 +268,8 @@ PluginField(
 ```
 
 With `template_vars` omitted (the default `()`), a user's
-`{detector_name}` reaches your plugin as the literal seven-plus
-characters — a silent no-op that looks like a plugin bug. Supported
-names:
+`{detector_name}` reaches your plugin as that literal string — a silent
+no-op that looks like a plugin bug. Supported names:
 
 | Variable | Resolves to |
 |----------|-------------|
@@ -344,7 +345,7 @@ def run(self, field_values):
 | `message` | Headline, one short sentence. Truncated at 300 characters |
 | `level`   | `"info"` (default), `"success"`, `"warning"`, or `"error"`. The first two fade after a few seconds; the last two stay until the user dismisses them |
 | `detail`  | Optional second line with the specifics — which endpoint, how many, why. Truncated at 2000 characters |
-| `items`   | Optional list of the things the message is about, one string each — every skipped file, not the first ten. The toast shows them behind a **Details** toggle with a **Copy list** button. At most 1000 entries of 300 characters |
+| `items`   | Optional list of the things the message is about, one string each — every skipped file, not the first ten. The toast shows them behind a **Details** toggle with a **Copy List** button. At most 1000 entries of 300 characters |
 
 Your `display_name` is attached automatically as the notification's source,
 so the toast says which plugin spoke. Code that isn't a `PluginBase`
@@ -457,7 +458,7 @@ Output formats:
 | Flag value      | Use case                                                |
 |-----------------|---------------------------------------------------------|
 | `plain` (default) | Human-readable grouped table                          |
-| `json`          | Machine-readable; full `{name, display_name, description}` for each plugin |
+| `json`          | Machine-readable; `{name, display_name, description}` for each plugin, plus family-specific keys for converters, media types, embedders, clippers and cleaners |
 | `names`         | One name per line; with a family, bare names: without one, `family:name` pairs |
 
 The same inventory is also available programmatically as
@@ -488,8 +489,10 @@ vtscore/datasets/importers/<your_importer>/
 ### What to implement
 
 Subclass `DatasetImporter` from `vtscore.datasets.importers.base`.
-Set the required class attributes and implement the `run()` method.
-Expose a module-level `IMPORTER` instance.
+Set the required class attributes and implement one of its override
+points (see [Choosing your override point](#choosing-your-override-point));
+the example below overrides `run()`. Expose a module-level `IMPORTER`
+instance.
 
 > **`DatasetImporter` vs `ImporterBase`.** `DatasetImporter` is the
 > full-featured base most importers want: it layers the source-spec →
@@ -669,6 +672,9 @@ to the framework.
 | `run_outputs()` | `(field_values, outputs: list[OutputSpec], thin) -> Iterator[tuple[OutputSpec, dict]]` | **Multi-dataset import:** produce every dataset in `outputs` from one run, yielding `(output, medias)`. Default runs `run()` once per output. Override to acquire the source once. See [Multi-dataset imports](#multi-dataset-imports) |
 | `run_outputs_chunked()` | `(field_values, outputs, chunk_size, thin) -> Iterator[tuple[OutputSpec, dict]]` | Chunked twin of `run_outputs()`; the hook the pipeline drives when `supports_chunked` is `True`. Default runs `run_chunked()` once per output |
 | `multi_output` | `bool` (class attribute, default `True`) | Whether one run may produce several datasets. Set `False` on an importer fixed to one dataset (the demo importer); the form then never offers **Multi-Dataset** and the API refuses `outputs` |
+| `category` | `str` (class attribute, default `"services"`) | The Add Dataset picker tab: `"services"`, `"server"`, `"local"`, `"demo"`, or `""` (left out of the tabbed picker). A new tab id can be given a label and icon with `vtscore.datasets.importers.tabs.register_picker_tab()` |
+| `origin_suppressed` | `bool` (class attribute, default `False`) | `True` makes `build_origin()` return empty `params`; for importers that set a per-media origin on every record (see [Direct media dict construction](#direct-media-dict-construction)) |
+| `extra_origin_keys` | `tuple[str, ...]` (class attribute, default `()`) | Non-field `field_values` keys to copy into the origin `params`; `source_specs` is always added |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
@@ -684,12 +690,18 @@ to the framework.
 |-----------|------|-------------|
 | `content_vectors` | `dict[str, np.ndarray]` | Pre-computed embeddings keyed by filename; skips embedding model |
 | `content_md5s` | `dict[str, str]` | Pre-computed MD5 hashes keyed by filename; skips hash computation |
+| `custom_metadata_map` | `dict[str, dict]` | Per-file `custom_metadata`; a non-empty `"md5"` or an `"embedding"` key in it overrides the two dicts above. `yield_precomputed(filename, embedding=, md5=, metadata=)` writes all three at once |
+
+These three are inputs to `load_dataset_from_folder()` and its chunked
+twin (pass `content_vectors=self.content_vectors`, and so on), which is
+where they take effect; nothing else reads them off the importer.
 
 ### Element-level origin tracking
 
 Every clip produced by an importer is automatically tagged with an
-**origin**; a dict identifying the importer and its parameters. This
-happens in `_run_importer_in_background()` after `run()` completes:
+**origin**; a dict identifying the importer and its parameters. The load
+pipeline stamps it (`_tag_origins()` in `vtscore/datasets/load_pipeline.py`)
+after `run()` completes:
 
 ```python
 clip["origin"]      = {"importer": "s3", "params": {"bucket": "my-data"}}
@@ -747,8 +759,8 @@ no vector after `run()` returns, using the user-selected embedder (or the
 default for the media type).  Only pre-populate `embeddings` when your data
 source ships pre-computed vectors that are dimension-compatible with the
 embedder the user picked: set `embeddings={"<name>": vec}` and `embedder="<name>"`
-naming that embedder.  (There is no singular `embedding` key any more —
-`media["embeddings"]` is the sole per-media vector store.)
+naming that embedder.  `media["embeddings"]` is the sole per-media vector
+store.
 
 ```python
 def run(self, field_values, medias, thin=False):
@@ -776,16 +788,19 @@ def run(self, field_values, medias, thin=False):
         }
 ```
 
-If the source ships pre-computed vectors, prefer
-`self.content_vectors[filename] = vec` or
-`self.custom_metadata_map[filename] = {"embedding": vec}`; the framework
-treats those as already-embedded and skips them.
+A dict you build yourself carries its vector in `embeddings` as shown
+above. `self.content_vectors[filename] = vec` and
+`self.custom_metadata_map[filename] = {"embedding": vec}` are the
+equivalent for files you hand to `load_dataset_from_folder()`; they do
+nothing for dicts you build directly. Either way, the framework treats an
+item that already has a vector as embedded and skips it.
 
 #### Pre-computed vectors are validated
 
-Whatever you put in `content_vectors` / `custom_metadata_map` is checked
-before it becomes a media's stored vector, by
-`vtscore.embedding.precomputed.normalize_vector`.  A vector must be a flat,
+Whatever you hand `load_dataset_from_folder()` through `content_vectors` /
+`custom_metadata_map` is checked before it becomes a media's stored vector,
+by `vtscore.embedding.precomputed.normalize_vector`. (A vector you put
+straight into a dict's `embeddings` skips this check.)  A vector must be a flat,
 finite, numeric row; it is coerced to `float32`, so a `float64` export or a
 half-precision embed is widened for you rather than leaving the dataset
 holding mixed dtypes.  Anything else — a ragged array, a `(3, 4)` block where
@@ -801,10 +816,14 @@ all, it silently poisons every score, threshold comparison and sort it reaches.
 
 Two related checks you will hit:
 
-- **Width vs. the embedder you name.** If you set `embedder="<name>"` (or ship
-  an `.npz` whose `embedder_name` says so), the vectors must match that
-  embedder's declared `embedding_dim`.  Declaring `siglip2_l` while shipping
-  768-dim rows is a self-contradiction, and it is rejected at import.
+- **Width vs. the embedder you name.** If you ship an `.npz` whose
+  `embedder_name` names an embedder, its vectors must match that embedder's
+  declared `embedding_dim`.  Declaring `siglip2_l` while shipping 768-dim
+  rows is a self-contradiction, and it is rejected at import.  A name you
+  set yourself (`embedder="<name>"` on a dict you build, or
+  `content_embedder_name=` on `load_dataset_from_folder()`) is not
+  width-checked as it is ingested; a mismatch surfaces only when that
+  embedder's embedding matrix is first built, so get it right.
 - **Nameless vectors.** A vector supplied with no embedder name is stored under
   a sentinel key and re-keyed to the embedder the load actually picked — the
   user's pick, or, when nothing was picked and the framework had items of
@@ -813,12 +832,12 @@ Two related checks you will hit:
   supply the name yourself if you know it.  A fully pre-computed nameless
   import with nothing left to embed keeps the sentinel and is never re-keyed.
 
-When building dicts directly, the importer should also override
-`build_origin()` to return an empty origin (since the default
-implementation captures dataset-level field values like query IDs that
-are not useful per-media).  The post-processing step only backfills
-`origin` on media that have `origin=None`, so per-media origins set
-in `run()` are preserved.
+When building dicts directly, the importer should also set
+`origin_suppressed = True` (or override `build_origin()`) so the
+dataset-level origin is empty, since the default captures dataset-level
+field values like query IDs that are not useful per-media.  The
+post-processing step only backfills `origin` on media that have
+`origin=None`, so per-media origins set in `run()` are preserved.
 
 ### Bulk-record hooks
 
@@ -841,6 +860,7 @@ class MyServiceImporter(DatasetImporter):
         return {
             "media_type": "audio",
             "filename": record["id"],
+            "md5": record["md5"],  # nothing computes it for you on this path
             "embeddings": {"my_embedder": _api.get_embedding(record["id"])},
             "embedder": "my_embedder",
             "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
@@ -861,7 +881,7 @@ class MyServiceImporter(DatasetImporter):
                 pool.map(lambda r: _api.fetch_bytes(r["url"]), records)
             )
         return [
-            {"media_type": "audio", "filename": r["id"],
+            {"media_type": "audio", "filename": r["id"], "md5": r["md5"],
              "embeddings": {"my_embedder": v}, "embedder": "my_embedder",
              "media_bytes": b, "media_url": r["url"]}
             for r, v, b in zip(records, vectors, blobs)
@@ -961,8 +981,9 @@ route of the same shape — `POST /api/dataset/import/<name>/options`
 `{"options": [{"value": "...", "label": "..."}, ...]}` — both the plain-
 string and `(value, label)` shapes are coerced to `{value, label}` before
 serialisation. Any exception your `get_field_options()` raises is returned
-as a 502 with the exception message; perfect for surfacing remote-service
-errors directly to the user.
+as a 502 with the exception message (a `NotImplementedError`, which the
+base class raises for a key you don't handle, is a 501); perfect for
+surfacing remote-service errors directly to the user.
 
 ### Naming the imported dataset
 
@@ -1026,8 +1047,9 @@ is never worth blocking an import over.
 1. `GET /api/dataset/all-importers` returns all registered importers (your
    importer appears automatically). Note: `GET /api/dataset/importers` only
    returns importers with `ui_mode == "form"`.
-2. `POST /api/dataset/import/<name>` invokes `run()` in a background
-   daemon thread.
+2. `POST /api/dataset/import/<name>` invokes `run()` (or `run_chunked()`
+   when `supports_chunked`, or the `run_outputs*()` hooks for a
+   multi-dataset import) in a background daemon thread.
 3. `POST /api/dataset/import/<name>/options` invokes `get_field_options()`
    to populate dynamic-options dropdowns (see above).
 4. The import runs as a loading task, so the `loading-tasks` channel on
@@ -1169,7 +1191,7 @@ for how converters compose with importers.
 ### Multi-dataset imports
 
 Multi-media imports are **many-to-one**: several source types feed one
-dataset. A **multi-dataset** import (issue #4703) is the other direction:
+dataset. A **multi-dataset** import is the other direction:
 one run of the importer produces **several datasets**, one per
 `OutputSpec` (`vtscore.datasets.importers.base`). The Add Dataset dialog's
 **Multi-Dataset** box builds the list (one row per kind of media the user
@@ -1247,8 +1269,7 @@ path, a third-party service) so users can supply exemplar media — e.g. the
 seed examples of a new detector — from the same kinds of places a whole
 dataset can come from. The New Detector modal's example-media picker lists
 every registered datasource importer and renders its declared fields as a
-dynamic form, exactly like the Add Dataset modal does for dataset importers
-(GitHub issue #2767).
+dynamic form, exactly like the Add Dataset modal does for dataset importers.
 
 ### File structure
 
@@ -1354,7 +1375,7 @@ new (blank) detector: items that are *close but not quite* what the user is
 hunting for. It sits between the two families it resembles — a datasource
 importer fetches one exemplar the user picked by hand, a label importer
 imports media that already carry a `good` / `bad` verdict — by importing
-media with **no verdict attached** (GitHub issue #3140).
+media with **no verdict attached**.
 
 Each registered seed importer becomes **its own tab in the New Detector
 modal's Blank flow**, beside the stock Text and media tabs, with its
@@ -1364,8 +1385,8 @@ packages.
 
 A run's results appear **on the importer's own tab**, under its form: the
 media tab's example stack is mirrored there, so a batch lands in view where
-the user asked for it rather than switching them to the media tab
-(issue #3192). It is one list, not a copy — the seed tab's Remove buttons
+the user asked for it rather than switching them to the media tab.
+It is one list, not a copy — the seed tab's Remove buttons
 edit the same stack the media tab shows, and only the media tab carries the
 "+ Add" browse affordance, since a seed tab adds through its own form.
 
@@ -1511,13 +1532,12 @@ rather than letting you deliver an empty export.
 `supported_payloads` is **derived** from which methods you overrode; there is
 nothing to declare, and therefore nothing to forget.
 
-**Legacy single-method exporters still work.** Before the kinds were named, an
-exporter implemented one `export()` and told the shapes apart itself with
-`if "labels" in results`. The default `export_find_results()` /
-`export_labelset()` delegate to `export()`, so an existing out-of-tree plugin
-needs no changes; it is credited with both kinds (nothing can tell which it
-handles) and logs a line at import pointing at the named methods. New exporters
-should implement those instead.
+**Legacy single-method exporters still work.** An exporter that implements
+only `export()`, telling the shapes apart itself with `if "labels" in results`,
+needs no changes: the default `export_find_results()` / `export_labelset()`
+delegate to `export()`. It is credited with both kinds (nothing can tell which
+it handles) and logs a line at import pointing at the named methods. New
+exporters should implement those instead.
 
 **Library contract:**
 [`vtscore/docs/extending/results-exporters.md`](../vtscore/docs/extending/results-exporters.md)
@@ -1631,8 +1651,11 @@ def supports_streaming(self) -> bool:
 
 def export_cli_streaming(self, header, records, field_values):
     # header = {"media_type": str,
-    #           "detectors": [{"detector_name": str, "threshold": float}, ...],
-    #           "keep_negatives": bool}
+    #           "detectors": [{"detector_name": str, "threshold": float,
+    #                          "balance": dict | None}, ...],
+    #           "keep_negatives": bool,
+    #           "dataset": {...}}  # only when one import makes several datasets;
+    #                              # this method is then called once per dataset
     # records yields (detector_name, hit) tuples in CHUNK order (not globally
     # sorted by score). Each hit is the build_media_hit() dict plus a "label"
     # key ("good" above threshold, "bad" otherwise — "bad" only appears when
@@ -1655,8 +1678,9 @@ dropping it, which keeps peak memory bounded just the same (see
 incremental mode at all leaves `supports_streaming` at `False`, and requesting
 `--stream-results` with it is rejected with a clear error. File-based streamers
 should write to a sibling `.tmp` path and `os.replace` on success so a crash
-mid-stream can't leave a half-written file at the destination. See
-`docs/plans/cli-stream-massive-images.md` for the full design.
+mid-stream can't leave a half-written file at the destination. Open
+follow-ups (globally sorted output, resume) are tracked in
+`docs/plans/cli-stream-massive-images.md`.
 
 **Default class attributes:**
 
@@ -1675,6 +1699,12 @@ return it. A delivery exporter whose remote hands back a permalink returns the
 same key.
 
 ```python
+from urllib.parse import quote
+
+from vtscore.exporters.base import ResultsExporter
+from vtscore.security.url_validation import validate_browser_url
+
+
 class ReviewSiteExporter(ResultsExporter):
     name = "review_site"
     display_name = "Review Site"
@@ -1730,7 +1760,9 @@ the same way in each.
 ### How it gets invoked
 
 1. `GET /api/exporters` returns available exporters.
-2. `POST /api/exporters/export` with `exporter_name` and `field_values`.
+2. `POST /api/exporters/export` with `exporter_name`, `field_values`, the
+   payload as `results`, and an optional `payload_kind` (`find_results` /
+   `labelset`; inferred from the payload's shape when omitted).
 3. `POST /api/exporters/field-options/<name>` serves dynamic field
    options.
 
@@ -1843,7 +1875,12 @@ LABEL_IMPORTER = PostgresLabelImporter()
 
 1. `GET /api/label-importers` returns available label importers.
 2. `POST /api/label-importers/import/<name>` invokes `run()` and applies
-   returned labels by matching clip MD5 hashes.
+   the returned labels to the active dataset's media, matching each entry
+   by its `origin` + `origin_name` and by `md5`
+   (`vtscore.state.media_lookup.resolve_media_ids`). Entries that match
+   nothing go to a background task that tries to fetch them from their
+   `origin` and applies their labels when it lands, so return the origin
+   when your source has one.
 
 ---
 
@@ -1853,10 +1890,12 @@ VTSearch detectors are not plugin-based; they live as JSON labelset
 files and are trained on demand from origins.  To publish or share a
 classifier:
 
-1. Use `POST /api/detectors` (or
+1. Use `POST /api/detectors/registry` (or
    `POST /api/detectors/registry/from-labelset/<importer>`) to create a
    detector file under `data/detectors/` (named after a slug of the
-   detector name, e.g. `Dog Barks` → `dog_barks.json`).
+   detector name, e.g. `Dog Barks` → `dog_barks.json`) and its registry
+   entry. (`POST /api/detectors` writes the file alone, with no registry
+   entry to toggle in step 2.)
 2. Toggle its AutoFind flag with
    `PUT /api/detectors/registry/<id>/autofind` so it runs on every web
    import, from a dataset's Run AutoFind, from `/api/auto-detect`, and in
@@ -1969,8 +2008,9 @@ vtsearch/settings_io/exporters/<your_exporter>/
 ### What to implement
 
 Subclass `SettingsExporter` from `vtsearch.settings_io.exporters.base`.
-The `export()` method receives the full settings dict and must return a
-dict with a `"message"` key.
+The `export()` method receives the current user's per-user settings
+(`vtsearch.settings.get_user_settings()`, without the server-tier keys)
+and must return a dict with a `"message"` key.
 
 ```python
 # vtsearch/settings_io/exporters/s3/__init__.py
@@ -1992,7 +2032,7 @@ class S3SettingsExporter(SettingsExporter):
         """Export settings to S3.
 
         Args:
-            settings_data: The full settings dict from settings.get_all().
+            settings_data: The user's settings from settings.get_user_settings().
             field_values: User-supplied field values.
 
         Returns:
@@ -2035,8 +2075,8 @@ Settings modal.
 
 1. `GET /api/settings-exporters` returns available exporters.
 2. `POST /api/settings-exporters/export` invokes `export()` with the
-   current settings and user-supplied field values. The exporter is
-   named in the **body**, not the path:
+   current user's settings and the user-supplied field values. The
+   exporter is named in the **body**, not the path:
 
    ```json
    {"exporter_name": "s3", "field_values": {"bucket": "b", "key": "k.json"}}
@@ -2086,7 +2126,7 @@ class S3SettingsSource(SettingsSource):
     icon = "☁️"
     fields = [
         PluginField("bucket", "S3 Bucket", "text"),
-        PluginField("key", "Object Key", "text"),
+        PluginField("key", "Object Key", "text", template_vars=("username",)),
     ]
 
     # Override the underscored template methods, NOT load() / save().
@@ -2125,7 +2165,9 @@ The sentinel `SETTINGS_SOURCE` at module level is required for auto-discovery.
 Override `_do_load` / `_do_save` / `_do_peek_version` (not `load` / `save` /
 `peek_version`): `SyncSource`'s public methods normalize `field_values` and
 then dispatch to the underscored hooks, so a subclass that overrides the
-public names directly is never called. `_do_peek_version` is optional — the
+public names replaces that wrapper and gets raw, unnormalized values (no
+stripping, no template substitution, no URL / path validation).
+`_do_peek_version` is optional — the
 default returns `None` — but without it the source is imported once per
 process and never auto-refreshed; see [the freshness
 probe](#the-freshness-probe-and-its-cost).
@@ -2165,8 +2207,8 @@ consulted on an ongoing basis from three places:
 
 **There is no boot-time sync**, and that is deliberate: a settings source
 binds to a *user*, and at server start there is no current user to sync
-for (`initialize_server` in `app.py` loads models and preloads embedders,
-nothing more). Sync is per-user and lazy. A source whose values you expect
+for (`initialize_server` in `app.py` never touches a settings source).
+Sync is per-user and lazy. A source whose values you expect
 to see immediately after a restart will be read on the first request that
 touches settings, not before.
 
@@ -2346,8 +2388,10 @@ without a product reason.
 
 ### Making your source the active auto-import
 
-To use a custom settings source for auto-import at startup, set it as
-the active source in `data/settings.json`:
+`settings_source` is a per-user key, so a user is bound to your source in
+their own `user_settings.json` (`data/user_settings.json` for the
+single-user default; see [DEPLOYMENT.md § Settings file
+schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
 
 ```json
 {
@@ -2361,7 +2405,11 @@ the active source in `data/settings.json`:
 }
 ```
 
-Or set it via the API:
+To bind every user who has not chosen otherwise, put the same object under
+`default_settings_source` in the server file `data/settings.json` instead
+(see [Which source a user is bound to](#which-source-a-user-is-bound-to)).
+
+Or set the current user's binding via the API:
 
 ```bash
 curl -X PUT http://localhost:5000/api/settings-sources/active \
@@ -2373,6 +2421,12 @@ On that user's next settings access, VTSearch calls `source.load()` and
 applies the returned settings. The built-in `server_json_file` source
 does this with a local file path; your custom source can fetch from S3, a
 database, a remote API, etc.
+
+Only the user's own settings are applied, through the same checks as
+`PUT /api/settings`: a server-tier key (`detectors_dir`, `solo_media_type`,
+…) or an invalid value in what `load()` returns is skipped, so a source can
+never change the deployment for every user. `save()` is only ever handed the
+per-user tier, so a source that round-trips what it was given never meets one.
 
 If the source is unavailable (file missing, network error) the import is
 logged and skipped, and the local settings file is used as the fallback —
@@ -2451,7 +2505,9 @@ LABELSET_SOURCE = DatabaseLabelsetSource()
 The sentinel `LABELSET_SOURCE` at module level is required for auto-discovery.
 As with settings sources, override `_do_load` / `_do_save` (not `load` /
 `save`): the public methods normalize `field_values` before dispatching to
-these hooks, so a direct `load` / `save` override never runs. A source with
+these hooks, so a `save` override receives unnormalized values, and a `load`
+override never runs at all, because the pull path calls `load_full()`,
+which reaches `_do_load()` without going through `load()`. A source with
 richer metadata (detector name, embedder, examples) may additionally
 override `_do_load_full(field_values) -> LabelSet`; the default wraps
 `_do_load()` in a `LabelSet` with no `detector_meta`.

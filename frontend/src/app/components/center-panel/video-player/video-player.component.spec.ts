@@ -74,4 +74,54 @@ describe('VideoPlayerComponent', () => {
     await settleZoneless(fixture);
     expect(video.currentTime).toBe(5);
   });
+
+  describe('letterbox crop (clip_box)', () => {
+    // jsdom has no media pipeline, so videoWidth/videoHeight read 0; give the
+    // element the natural size (loadedmetadata) would report. The CSS itself
+    // can't be checked here (jsdom drops object-view-box), only the value the
+    // template binds; utils/clip-box.spec.ts covers the box-to-CSS rule.
+    async function loadAt(media: Media, width: number, height: number): Promise<HTMLVideoElement> {
+      fixture.componentRef.setInput('media', media);
+      await settleZoneless(fixture);
+      const video: HTMLVideoElement = fixture.nativeElement.querySelector('video');
+      Object.defineProperty(video, 'videoWidth', { configurable: true, get: () => width });
+      Object.defineProperty(video, 'videoHeight', { configurable: true, get: () => height });
+      component.onLoadedMetadata();
+      return video;
+    }
+
+    it('crops the picture to clip_box once the frame size is known', async () => {
+      const boxed: Media = { ...mockMedia, clip_box: [0, 60, 640, 420] };
+      fixture.componentRef.setInput('media', boxed);
+      await settleZoneless(fixture);
+      expect(component.viewBox()).toBeNull();
+
+      await loadAt(boxed, 640, 480);
+      expect(component.viewBox()).toBe('inset(60px 0px 60px 0px)');
+    });
+
+    it('applies a clip_box that batch hydration delivers after the video loaded', async () => {
+      await loadAt(mockMedia, 640, 480);
+      expect(component.viewBox()).toBeNull();
+
+      fixture.componentRef.setInput('media', { ...mockMedia, clip_box: [100, 120, 580, 420] });
+      await settleZoneless(fixture);
+      expect(component.viewBox()).toBe('inset(120px 60px 60px 100px)');
+    });
+
+    it('leaves a unit without a clip_box uncropped', async () => {
+      await loadAt(mockMedia, 640, 480);
+      expect(component.viewBox()).toBeNull();
+    });
+
+    it('drops the crop when the player moves to another item', async () => {
+      await loadAt({ ...mockMedia, clip_box: [0, 60, 640, 420] }, 640, 480);
+      expect(component.viewBox()).not.toBeNull();
+
+      // The next item's box must not be clamped against the last item's frame.
+      fixture.componentRef.setInput('media', { ...mockMedia, id: 4, clip_box: [0, 10, 320, 230] });
+      await settleZoneless(fixture);
+      expect(component.viewBox()).toBeNull();
+    });
+  });
 });

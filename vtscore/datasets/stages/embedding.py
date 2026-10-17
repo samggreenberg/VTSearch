@@ -25,6 +25,7 @@ from vtscore.embedding.media_vectors import (
     set_media_embedding,
 )
 from vtscore.embedding.precomputed import require_dim
+from vtscore.media.lazy_clip import embed_view
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
@@ -339,6 +340,27 @@ def _needs_side_channel(m: dict[str, Any], embedder_name: str, key: str) -> bool
     return media_embedding(m, embedder_name) is not None and m.get(key) is None
 
 
+#: The per-media side channels :func:`_side_channel_passes` back-fills.
+_SIDE_CHANNEL_KEYS = ("patch_grid", "local_features", "tile_vectors")
+
+
+def _keep_view_side_channels(view: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy onto *media* any side channel its embedder stored on *view*, a lazy unit's :func:`embed_view`.
+
+    An embedder may store a side channel on the dict it is handed while it
+    embeds (the shipped structural embedders store ``local_features``, #4996).
+    For a lazy unit that dict is a copy, so without this the back-fill would
+    derive the channel a second time.  The view's payload is the unit's own, so
+    what the embedder stored is what the back-fill would have derived.
+    """
+    if view is media:
+        return
+    for key in _SIDE_CHANNEL_KEYS:
+        value = view.get(key)
+        if value is not None and value is not media.get(key):
+            media[key] = value
+
+
 def _run_embed_pass(
     emb,
     medias: dict[int, dict[str, Any]],
@@ -364,7 +386,9 @@ def _run_embed_pass(
     who = f"The {_embedder_label(emb)} embedder"
     missing_ids = [mid for mid, _ in missing]
 
-    inputs = [m for _, m in missing]
+    # A lazy unit (a reference clip, a cleaned unit) is handed over as a view
+    # that resolves its own payload: its ``media_path`` names the whole source.
+    inputs = [embed_view(m) for _, m in missing]
     try:
         with emb.progress_scope(on_progress):
             vectors = emb.embed_media_bulk(inputs)
@@ -404,7 +428,7 @@ def _run_embed_pass(
         return
     n_failed = 0
     declined = f"{who} returned no vector (the item may be unreadable, empty, or in a format it cannot decode)"
-    for (mid, _), vec in zip(missing, vectors):
+    for (mid, _), view, vec in zip(missing, inputs, vectors):
         if vec is None:
             n_failed += 1
             _record_failures(failures, (mid,), declined)
@@ -413,6 +437,7 @@ def _run_embed_pass(
         if media is None:
             continue
         set_media_embedding(media, embedder_id, vec)
+        _keep_view_side_channels(view, media)
     if n_failed:
         # Items the embedder could not embed stay at ``None`` and are dropped
         # by the finalize stage; that drop is announced there, but this is the
@@ -453,7 +478,7 @@ def _run_backfill_pass(
         return
     try:
         with emb.progress_scope(on_progress):
-            outputs = forward(inputs)
+            outputs = forward([embed_view(m) for m in inputs])
     except Exception:
         logging.getLogger(__name__).exception(fail_message, media_type, len(inputs))
         outputs = [None] * len(inputs)
@@ -485,7 +510,9 @@ def _side_channel_passes(emb) -> list[_SideChannel]:
       have no patch data, which is what an already-embedded dataset that never
       ran the patch pass would otherwise get;
     * **local features** (``local_features``): structural embedders (SIFT/VLAD),
-      the keypoints Stage 2 verifies, stored compact (fp16/uint8);
+      the keypoints Stage 2 verifies, stored compact (fp16/uint8).  The shipped
+      ones attach them during the embed pass, from the detection that made the
+      vector (#4996), so this pass reaches only media that arrived embedded;
     * **tile vectors** (``tile_vectors``): document structural embedders, the
       tiled Stage 1 (#3928), derived from the local features and so after them.
       A key of their own, not ``patch_grid``: the tiles overlap, where

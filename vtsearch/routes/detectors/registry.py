@@ -149,6 +149,45 @@ def _keep_creation_beta(detector_data: dict, beta: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _fill_type_and_examples(entry: dict) -> None:
+    """Set *entry*'s ``embedder_type`` and ``examples``, reading the detector JSON at most once.
+
+    The locked embedder type drives the frontend's type-based compatibility
+    gate, and the seed-example list is what the label session reads so
+    Autopilot can sort by every media example.  Both normally come from the
+    registry entry.  An entry missing either (registered before the field
+    existed, or created with no dataset loaded, which leaves the type ``""``)
+    falls back to one parse of the detector JSON, and whatever that parse
+    learns is written back to the registry so later listings never open the
+    file for it again (#5001).  A type the JSON cannot supply either stays
+    ``""`` unpersisted (it resolves at first train), and a missing file has
+    nothing to persist.
+    """
+    needs_type = not entry.get("embedder_type")
+    needs_examples = "examples" not in entry
+    if not (needs_type or needs_examples):
+        return
+    data = _read_detector(_detector_path(entry.get("name", "")))
+    learned: dict = {}
+    if needs_type:
+        entry["embedder_type"] = detector_embedder_type_from_data(data or {})
+        if entry["embedder_type"]:
+            learned["embedder_type"] = entry["embedder_type"]
+    if needs_examples:
+        entry["examples"] = (data or {}).get("examples", [])
+        if data is not None:
+            learned["examples"] = entry["examples"]
+    if not learned:
+        return
+    from vtscore.detectors.registry import update_detector
+
+    try:
+        update_detector(entry["id"], **learned)
+    except Exception as exc:
+        # A listing must not fail over a cache write; the next one retries.
+        logger.warning("Failed to persist %s for detector %s: %s", sorted(learned), entry["id"], exc)
+
+
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
@@ -199,19 +238,7 @@ def list_registered_detectors():
             entry["embedder"] = ctx_emb or entry.get("embedder", "") or ""
         else:
             entry["embedder"] = entry.get("embedder", "") or ""
-        # The detector's locked embedder type drives the frontend's
-        # type-based compatibility gate.  Prefer the persisted entry value;
-        # fall back to (legacy-migrated) read of the detector JSON for entries
-        # registered before the field existed.
-        entry["embedder_type"] = entry.get("embedder_type") or detector_embedder_type_from_data(
-            _read_detector(_detector_path(entry.get("name", ""))) or {}
-        )
-        # Seed-example list, read by the label session so Autopilot can sort
-        # by every media example.  Entries registered before the field existed
-        # fall back to the detector JSON (same pattern as embedder_type).
-        if "examples" not in entry:
-            det_data = _read_detector(_detector_path(entry.get("name", ""))) or {}
-            entry["examples"] = det_data.get("examples", [])
+        _fill_type_and_examples(entry)
         if entry["autofind"]:
             latest = verdict_summaries(_read_detector(_detector_path(entry.get("name", ""))), latest_only=True)
             entry["test_verdict"] = latest[0] if latest else None
@@ -1113,13 +1140,15 @@ def update_detector_readers(body: dict, detector_id: str):
     Body: ``{"readers": ["alice", "bob"]}``. Use ``["*"]`` to make the
     detector visible to all users. Mirrors the dataset readers endpoint.
     """
-    from vtscore.detectors.registry import set_detector_readers
+    from vtscore.detectors.registry import update_detector_readers as _reg_update_readers
+    from vtscore.security.readers import ReadersUpdate
 
     readers = body["readers"]
-    ok, err = set_detector_readers(detector_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(detector_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("detector"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("detector"))
     return {"ok": True, "readers": readers}
 
 

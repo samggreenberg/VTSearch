@@ -512,8 +512,8 @@ def set_vote(
         media_id: Integer ID of the media to vote on.
         target: ``"good"``, ``"bad"``, or ``"none"``.
         region_box: Optional normalised ``(x0, y0, x1, y1)`` good-vote region.
-            Only honoured when *target* is ``"good"`` (patch-embedder v2:
-            no-votes are always image-level).
+            Only honoured when *target* is ``"good"`` (no-votes are
+            always image-level; see ``docs/ARCHITECTURE.md``).
         count_streak: Pass False for bulk applications (e.g. the
             ``/api/medias/vote-bulk`` "Verified Good/Bad" action over a
             hand-selected set) so the batch credits every other vote

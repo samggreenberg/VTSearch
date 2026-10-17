@@ -589,6 +589,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 }
 
+// The wrapper for a group of footer buttons (`<div class="form-actions"
+// modal-footer>`). Projection matches the element carrying `modal-footer`, so a
+// group needs one wrapper, and the footer's own flex row lays out that wrapper,
+// not the buttons inside it: this rule gives them the same spacing. No top
+// margin: `.modal-body` already spaces the footer, and a margin would push the
+// buttons off-centre from a `[modal-footer-start]` item beside them.
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+}
+
 // --- Drawer slide (side panels) ---
 //
 // The Find/Label left & right panels and the Browse selection panel mount and
@@ -679,15 +691,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // the per-modal copies can't drift into three different sizes again; the
 // `.selected` state is provided for pickers that keep a persistent choice.
 //
-// The container layout stays with each picker (a responsive grid for the
-// settings/label pickers below, a vertical `.source-list` for the others);
-// only the card itself is unified.
+// The settings and label pickers share their list wrapper too:
+// `.importer-picker` / `.exporter-picker` stack the cards in a column. The
+// other pickers keep their own vertical `.source-list`. A consumer may tune
+// the gap or margins locally (`vt-source-picker` wraps tab bars, not cards,
+// so it sets `gap: 0`); a picker that wants a grid should opt in with a
+// modifier class rather than redeclaring `display` on the base.
 
 .importer-picker,
 .exporter-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
 .picker-card {

@@ -4,6 +4,10 @@
 
 > These endpoints read/mutate the active dataset and detector via the
 > [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
+>
+> How the line is drawn and checked is in [`docs/ML.md`](../ML.md#threshold-calibration);
+> this page covers what the endpoints return. Exact fields are in the OpenAPI
+> spec ([Machine-readable schema](../API.md#machine-readable-schema)).
 
 ---
 
@@ -15,7 +19,7 @@
 GET /api/balance
 ```
 
-→ `{"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}, "threshold": 0.5123, "n_returned": 32}`
+→ The balance fields in the table below.
 
 ```
 POST /api/balance
@@ -24,17 +28,15 @@ POST /api/balance
 **Body:** `{"beta": 1}`
 
 The balance is the user's precision/recall preference, as F-beta's beta: what
-the line should make the most of (#4413, the owner's ruling of 2026-10-01,
-priced by #4411 in
-[`REPORT.md`](../experiments/2026-10-01-fbeta-line-4411/REPORT.md)). The
-app's Threshold control offers three presets as unnumbered radios along a
-False Positives to False Negatives spectrum: **4** (recall-leaning, the left
-radio: the line returns the most, with more wrong ones in it), **1**
-(balanced, the default) and **1/4** (precision-leaning, the right radio:
-only the surest, missing more). The ends were 2 and 0.5 until #4448; the
-control shows a stored balance off the list on its nearest radio in log
-space, a tie going to the radio that leans further, so a stored 2 or 0.5
-keeps its side. The API takes any beta in `[0.25, 4]`; a
+the line should make the most of (#4413). The app's Threshold control offers
+three presets as unnumbered radios along a False Positives to False Negatives
+spectrum: **4** (recall-leaning, the left radio: the line returns the most,
+with more wrong ones in it), **1** (balanced, the default) and **1/4**
+(precision-leaning, the right radio: only the surest, missing more). A stored
+balance off the list (one set through the API or the CLI) is snapped to its
+nearest radio in log space, a tie going to the radio that leans further: the
+control sends that preset as a pick would, once no sort is running. The API
+takes any beta in `[0.25, 4]`; a
 number outside it is clamped, and a boolean, non-number or `null` is a 422.
 The balance is kept per detector, on the detector's JSON (#4665): it is asked
 for when the detector is created, and every `POST` here stores the new value
@@ -44,22 +46,29 @@ is seeded on first read from the user's `beta` setting, which every pick also
 updates: it is the user's last pick, and what the New Detector form starts
 on.
 
-Since #4452 the line comes **from the labels alone**, so an exported labelset
-draws it again on any corpus: the calibration folds' held-out scores of the
-votes give a class model (two normals of one spread on the logit scale);
-fits over the unvoted scores of the corpus being decided (the Train dataset in
-Train, the searched dataset in Find, AutoFind and the CLI) give how many
-positives it holds and each item's chance of being one; and the threshold is
-the cut where the expected F-beta of what it would return from that corpus
-peaks ([`docs/ML.md`](../ML.md#threshold-calibration) has the model). There is no count and no cap: the line keeps every unvoted
-item at or above the threshold, which on a corpus with nothing like the
-target can be none. A detector whose folds support no class model (too few
-votes, one class) keeps its retrain's fallback cut, never a count.
+The line comes **from the labels** (#4452), so an exported labelset draws it
+again on any corpus: the calibration folds' held-out scores of the votes give
+a class model (two normals of one spread on the logit scale); fits over the
+unvoted scores of the corpus being decided (the Train dataset in Train, the
+searched dataset in Find, AutoFind and the CLI) give how many positives it
+holds and each item's chance of being one; and the threshold is the cut where
+the expected F-beta of what it would return from that corpus peaks. Nothing
+caps the line: it keeps every unvoted item at or above the threshold, which on
+a corpus with nothing like the target can be none. Folds that hold no Good out
+(a single Good), or that score the Goods no higher than the Bads, give way to
+the head's own in-sample scores of the labels as the class model. While the
+class model holds fewer than 6 held-out Goods, the line keeps the head's
+count instead: what stands out in the head's own scores of the corpus, at the
+balance (#4786, #4798). Only labels of one class keep the retrain's fallback
+cut. Under the label quota the detector is the Goods' centroid or its typed
+query, each with its own line ([find-label](find.md#find-label-score--label-the-active-dataset)).
+[`docs/ML.md`](../ML.md#threshold-calibration) has the model and the
+reasons.
 
 - **Unchecked**: no spot check has run at this beta.
 - **Checked**: a spot check has walked the ranking ([below](#the-spot-check)).
-  The check is **advisory** at every preset: its ranges describe the set it
-  audited, its picks are ordinary votes the next retrain learns from, and
+  The check is **advisory** at every preset: its ranges describe the set the
+  line kept when it started, its picks are ordinary votes the next retrain learns from, and
   the line stays where the labels put it.
 
 A `POST` is a pure cutoff move: the active detector's line moves to the new
@@ -76,18 +85,18 @@ detector's.
 |---|---|
 | `beta` | The active detector's balance: F-beta's beta. |
 | `status` | `unchecked` (no spot check has run at this beta), `checked` (a walk has run; it informs the line and never moves it), or `gate` (#4505): a structural (`sift_vlad` / `sift_vlad_doc`) detector's line, which is the verification gate's boundary rather than a cut on a ranking. No check applies there, so `gate` carries no ranges and `checkable` is `false`. |
-| `shape` | How a check treats the line: always `advisory` since #4452 (the walk's ranges inform the line, its picks train, and the line stays where the labels put it). `trim` - the walk may only step shallower and the line takes its end - was the beta-2 shape of the count line (#4427) and is no longer sent. |
+| `shape` | How a check treats the line: always `advisory` (the walk's ranges inform the line, its picks train, and the line stays where the labels put it). |
 | `audited` | The set the last walk ended on, a band edge; what `fbeta` describes - not the set the line keeps. `null` while unchecked. |
 | `kept_at_check` | How many unvoted items the line kept when the last check started: the set `precision` and `recall` describe (#4483). `null` while unchecked. |
-| `count` | How many unvoted items of the ranking the detector last scored are at or above `threshold`: what the line keeps there, possibly 0. No cap bounds it (#4452). Under `gate`, how many unvoted items the verification gate passed on the last re-rank. |
+| `count` | How many unvoted items of the ranking the detector last scored are at or above `threshold`: what the line keeps there, possibly 0. No cap bounds it. Under `gate`, how many unvoted items the verification gate passed on the last re-rank. |
 | `precision` | The check's **likely range** for how much of the set the line kept when the check started (`kept_at_check`) is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked or when that set was empty. Each band's part of the set is bounded exactly for its known size from the picks that fell in it (hypergeometric, each tail at `alpha`), weighted by size; exact where the picks cover a part, 0-100% where none reached it (#4483). `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
 | `recall` | The check's likely range for how much of the corpus's positives the set `kept_at_check` names holds: its parts' bounds times their sizes, over the mixture's count of positives in the unvoted ranking (fixed when the walk started). The same `labelled`, `right` and `stale`; `null` while unchecked. The rougher of the two ranges: the picks cannot measure its denominator. |
 | `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
 | `checkable` | Whether a spot check can start on this line (#4489): `false` with no ranking to walk - a structural (`sift_vlad` / `sift_vlad_doc`) detector, whose line is the verification gate's boundary rather than a cut on a ranking, or a detector not yet trained on this dataset - or with nothing in it left unvoted. `POST /api/precision-check/start` refuses those with a **409**, so Autopilot runs no check there. |
 | `separation` | The labels' d' (#4496): how many spreads apart the labels line's Good and Bad score components sit, the spread the line was cut with. When the calibration folds scored the held-out Goods no higher than the Bads, it is the folds' own gap, 0 or below (#4899), though the line is drawn from the head's in-sample scores. `null` before a retrain has drawn the labels' line. |
-| `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and 25 votes since the last check ended (finished or closed). Autopilot runs the check. Never `true` in Find, while a check runs, or on a face detector (`media_type` `face`, #4799: there the check costs the session and finds nothing); `separation` is still reported. |
+| `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and no check has ended yet (finished or closed): it is due once at most (#4909). Autopilot runs the check. Never `true` in Find, while a check runs, or on a face detector (`media_type` `face`, #4799: there the check costs the session and finds nothing); `separation` is still reported. |
 | `done_check_due` | `true` when Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25 votes. Autopilot reads it once Done is due (every quality light green, the labels line's level met, or the 200-vote cap), and skips the check when it is `false` (a weak-separation check just ran, or the session was re-entered right after its own check). Never `true` in Find, while a check runs, or where `checkable` is `false`; unlike `check_due` it is read on face detectors too. |
-| `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first; no longer a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
+| `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first, not a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
 | `threshold` | The line: the labels' cut at this beta. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the ranking the detector last scored, voted items included. `null` before a retrain has scored one. |
 
@@ -95,12 +104,10 @@ The precision range comes only from the check's picks, never from a model:
 model-chosen votes break most of an estimator's promises once the reference
 pool is consistent, while a uniform pick has no such bias. The recall range
 and the F-beta estimate lean on the mixture's count of positives, so they are
-wider and rougher (#4411: the walk's own F-beta estimate is off by
-0.15-0.21).
+wider and rougher.
 
-The balance replaced the Inclusion knob (`/api/inclusion` is gone).
-Inclusion survives only as the internal unit Autopilot's acquisition cut and
-the Smart indicator are measured in.
+*Inclusion* is an internal unit only (Autopilot's acquisition cut and the
+Smart indicator are measured in it); no endpoint takes or returns it.
 
 ### The line state
 
@@ -111,11 +118,8 @@ the check found on it: the
 [`/api/find-label`](find.md#find-label-score--label-the-active-dataset), the
 [Find stats](find.md#find-stats-detector-evaluation), each detector of
 [`/api/auto-detect`](find.md#auto-detect), the CLI's autodetect results, and
-every `/api/precision-check` verb.
-
-```json
-{"beta": 1.0, "status": "checked", "count": 48, "precision": {"lo": 0.55, "hi": 0.8, "labelled": 15, "right": 10, "stale": false}, "recall": {"lo": 0.3, "hi": 0.6, "labelled": 15, "right": 10, "stale": false}, "fbeta": 0.61, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}}
-```
+every `/api/precision-check` and [`/api/line-test`](find.md#test-the-line)
+verb.
 
 The fields mean what they do on `/api/balance` above, less `threshold` and
 `n_returned`. The line keeps a set in both states: every match, count and
@@ -135,8 +139,9 @@ POST /api/precision-check/votes
 POST /api/precision-check/cancel
 ```
 
-Every verb returns `{"balance": <balance state>, "check": <check> | null}`,
-the check being the running one, else the last finished one.
+**All but `GET` require** `X-Detector-Id`. Every verb returns
+`{"balance": <balance state>, "check": <check> | null}`, the check being the
+running one, else the last finished one.
 
 **`start`** fixes the unvoted ranking off the active detector's current one
 (the ranking its last learned sort or Find pass scored, in rank order), cuts
@@ -146,9 +151,9 @@ than that. The ids never change after this, so every band samples one list
 however the model retrains behind it. The walk also fixes `n_pos`, the
 mixture's count of positives in the unvoted ranking, which its recall is
 read against; when no mixture fits the ranking, or the fit collapsed onto a
-few near-duplicate scores (#4419), `n_pos` is the balance's cap
-(`schedule.candidate`) lowered to the unvoted count - the bands a walk starts
-from - so the check still starts. The walk starts at the
+few near-duplicate scores (#4419), or counted fewer than one positive,
+`n_pos` is `schedule.candidate` lowered to the unvoted count - the bands a
+walk starts from - so the check still starts. The walk starts at the
 bands that hold `schedule.candidate` items. **409** when there is no ranking
 (none yet, or a structural detector's, which never has one), nothing in it is
 unvoted - the two cases the balance's `checkable` reports - or the list is the one the last finished check
@@ -178,21 +183,7 @@ result shows again if the beta moves back.
 **`cancel`** abandons a running check; its votes so far stay ordinary votes
 and the line's state is as it was.
 
-```json
-{
-  "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-  "check": {
-    "status": "running", "beta": 1.0,
-    "fbeta": null, "recall": {"lo": 0.25, "hi": 0.7, "labelled": 15, "right": 10},
-    "round": 4, "rounds": 12, "picks_per_round": 5,
-    "candidate": 64, "start_candidate": 32,
-    "bands": 4, "band": {"index": 3, "lo": 33, "hi": 64}, "direction": "deeper", "estimate": null,
-    "picks": [811, 42, 300, 57, 129],
-    "labelled": 15, "right": 10,
-    "range": {"lo": 0.4, "hi": 0.85, "labelled": 15, "right": 10}
-  }
-}
-```
+The `check` object:
 
 | Field | Meaning |
 |---|---|
@@ -228,16 +219,9 @@ detector was trained for (see the note under
 step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
 would draw at Inclusion 0, whatever the balance is.
 
-→
-```json
-{
-  "total_labels": 40,
-  "total_medias": 500,
-  "error_cost_over_time": [{"num_labels": 10, "error_cost": 0.3, "fpr": 0.1, "fnr": 0.2, "time_index": 9}],
-  "stability_over_time": [{"num_labels": 11, "num_flips": 12, "num_confident_flips": 3, "num_unlabeled": 470, "num_pool": 470, "time_index": 10}],
-  "diversity_level_over_time": [{"num_labels": 10, "diversity_level": 2, "depth": 3}]
-}
-```
+→ `{total_labels, total_medias, error_cost_over_time, stability_over_time,
+diversity_level_over_time}`, each series a list of per-step points keyed by
+`num_labels`.
 
 ### Labeling status indicators
 
@@ -245,18 +229,9 @@ would draw at Inclusion 0, whatever the balance is.
 GET /api/labeling-status
 ```
 
-→
-```json
-{
-  "smart": {"status": "green", "reason": "..."},
-  "stable": {"status": "yellow", "reason": "..."},
-  "span": {"status": "red", "reason": "...", "level": 13, "depth": 121, "target": 40},
-  "good_count": 12,
-  "bad_count": 9,
-  "total_count": 500,
-  "stale": false
-}
-```
+→ `{stop_rule, smart, stable, span, level, good_count, bad_count, total_count,
+stale}` (a document collection answers `dry_run` in place of `level`; see
+below).
 
 Each metric has a `status` of `"red"`, `"yellow"`, or `"green"` and an
 optional human-readable `reason`. `span` also carries its coverage-atlas
@@ -270,27 +245,19 @@ otherwise the last snapshot is returned at once with `stale: true` (counts and
 `span` live, `smart` / `stable` lagging) and the cache is advanced by a
 background worker for a later poll.
 
-`stop_rule` names what ends labeling: `"lights"` (the three metrics above) or,
-on a document collection whose pages carry tiles (`sift_vlad_doc`), `"dry_run"`
-(issue #4488). A document collection's response is computed from the vote order
-alone, so it is never stale; `smart`, `stable` and `span` read `"off"`, and
-`dry_run` carries the stop:
+`stop_rule` names what ends labeling. `"lights"` is the three metrics above
+all green, or `level` met (#4878): `level` is the labels line's own reading,
+`{expected_fbeta, level, met}`, its estimate of the F-beta of the set it keeps
+at the detector's balance (`null` with no class model behind the line yet, or
+while the line is the head's count), the level Done stops at (0.5), and
+whether the estimate reaches it. It is the last retrain's, so it is live even
+when `stale` is `true`.
 
-```json
-{
-  "stop_rule": "dry_run",
-  "dry_run": {"status": "yellow", "reason": "9 of 16 votes in a row without a Good.", "run": 9, "target": 16},
-  "smart": {"status": "off", "reason": "..."},
-  "stable": {"status": "off", "reason": "..."},
-  "span": {"status": "off", "reason": "..."},
-  "good_count": 3,
-  "bad_count": 13,
-  "total_count": 16,
-  "stale": false
-}
-```
-
-`run` counts the standing non-Good votes cast since the last Good: each media's
+On a document collection whose pages carry tiles (`sift_vlad_doc`),
+`stop_rule` is `"dry_run"` (#4488). That response is computed from the vote
+order alone, so it is never stale; `smart`, `stable` and `span` read `"off"`,
+there is no `level`, and a `dry_run` object (`status`, `reason`, `run`,
+`target`) carries the stop. `run` counts the standing non-Good votes cast since the last Good: each media's
 last vote, in vote order. It is red until half of `target`, yellow from there,
 and green at `target` once the labelset holds a Good.
 
@@ -385,13 +352,8 @@ job is unknown.
 ### Evaluation progress (SSE)
 
 Eval progress streams on the `eval` channel of
-[`/api/events`](events.md):
-
-```json
-{"status": "running", "message": "Computing smart...", "current": 5, "total": 10}
-```
-
-`status` is `"idle"` or `"running"`; the operation is done once `status`
+[`/api/events`](events.md) as a
+[progress object](events.md#progress-object-shape). `status` is `"idle"` or `"running"`; the operation is done once `status`
 is back to `"idle"` and `current >= total`.
 
 ---

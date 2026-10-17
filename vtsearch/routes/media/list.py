@@ -26,6 +26,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import MediaResponse
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
@@ -224,7 +225,11 @@ def _variant_media(media: dict) -> dict:
 
     ``?variant=original`` instead returns a throwaway view with the snapshot
     promoted into the canonical keys, so the ordinary resolution chain streams
-    the original bytes without any route having to know cleaners exist.  Every
+    the original bytes without any route having to know cleaners exist.  A
+    cleaned unit of a reference import keeps no snapshot; its Original is
+    replayed from the source instead
+    (:func:`~vtscore.media.lazy_clip.lazy_original_bytes`), and is served as
+    nothing when that replay no longer matches the import.  Every
     non-inline backing (``media_path`` / ``media_url``) is stripped from the
     view: those point at the *source* file, which the resolver would otherwise
     fall through to and serve as if it were the snapshot.  ``md5`` is dropped
@@ -248,6 +253,14 @@ def _variant_media(media: dict) -> dict:
     view = dict(media)
     view["media_bytes"] = media.get("original_media_bytes")
     view["media_string"] = media.get("original_media_string")
+    if view["media_bytes"] is None and view["media_string"] is None:
+        from vtscore.media.lazy_clip import lazy_original_bytes  # noqa: PLC0415
+
+        replayed = lazy_original_bytes(media)
+        if media.get("media_type") == "text":
+            view["media_string"] = replayed.decode("utf-8", errors="replace") if replayed is not None else None
+        else:
+            view["media_bytes"] = replayed
     if media.get("original_duration") is not None:
         view["duration"] = media["original_duration"]
     # Derived metadata (counts, dimensions, hash, thumbnail) all describe the
@@ -496,10 +509,22 @@ def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Respons
 
 
 def _resolve_string(media: dict) -> str | None:
-    """Return media string, lazy-loading from media_path if needed."""
+    """Return media string, lazy-loading from its recipe or media_path if needed.
+
+    A lazy recipe (see :mod:`vtscore.media.lazy_clip`) comes before the
+    whole-file read, since ``media_path`` names its *source*; a cleaned unit
+    whose replay no longer matches the import yields ``None``.
+    """
     media_string = media.get("media_string")
     if media_string is not None:
         return media_string
+    from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+
+    derived = lazy_clip_bytes(media)
+    if derived is not None:
+        return derived.decode("utf-8", errors="replace")
+    if recipe_is_exclusive(media):
+        return None
     media_path = media.get("media_path")
     if media_path:
         p = resolve_media_file_path(media_path)
@@ -744,10 +769,11 @@ def media_source_batch(body: dict):
 @medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 def media_audio(query: dict, media_id: int):
-    """Stream the WAV audio bytes for a single media item.
+    """Stream the audio bytes for a single media item.
 
-    Returns an ``audio/wav`` file response on success (HTTP 200), or a 404
-    JSON envelope if the media does not exist or its bytes are unavailable.
+    Returns the bytes on success (HTTP 200), typed by their container (an MP3
+    import is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON
+    envelope if the media does not exist or its bytes are unavailable.
 
     Accepts ``?variant=original`` to stream the pre-clean payload of an item a
     cleaner rewrote at load time (see :func:`_variant_media`).
@@ -776,11 +802,12 @@ def media_audio(query: dict, media_id: int):
         resp.set_etag(etag)
         resp.headers["Cache-Control"] = "private, max-age=86400"
         return resp
+    mimetype, sniffed_ext = sniff_audio_format(media_bytes)
     resp = make_response(
         send_file(
             io.BytesIO(media_bytes),
-            mimetype="audio/wav",
-            download_name=f"media_{media_id}.wav",
+            mimetype=mimetype,
+            download_name=f"media_{media_id}{sniffed_ext}",
         )
     )
     resp.set_etag(etag)
@@ -1070,7 +1097,7 @@ def vote_media(body: dict, media_id: int):
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
     ``"bad"`` and ``"none"`` targets must not include ``region_box``; by
-    design no-votes are image-level always (patch-embedder v2).
+    design no-votes are image-level always (``docs/ARCHITECTURE.md``).
 
     An optional ``provenance`` block records how the item was surfaced
     (flow / autopilot phase / select mode / sort / rank / score).  It is

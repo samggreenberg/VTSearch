@@ -6,6 +6,10 @@
 > involved, the active dataset) via the
 > [`X-Dataset-Id` / `X-Detector-Id` context headers](../API.md#context-headers-x-dataset-id--x-detector-id).
 > Requirements are noted per endpoint.
+>
+> This page covers purpose and non-obvious semantics. Exact request and
+> response fields are in the [OpenAPI spec](../API.md#machine-readable-schema)
+> (`frontend/openapi.json`).
 
 ---
 
@@ -24,7 +28,9 @@ loads the detector into memory.
 GET /api/detectors
 ```
 
-→ `{"detectors": [{"name": "Dog Barks", "text_query": "dog barking", "media_type": "audio", "examples": [...], "num_labels": 50, "created_at": 1234567890.0}]}`
+→ `{"detectors": [...]}`: a summary of every detector file (`name`,
+`text_query`, `media_example`, `media_type`, `examples`, `num_labels`,
+`created_at`, `embedder_type`), whether or not it has a registry entry.
 
 ### Create detector
 
@@ -57,7 +63,7 @@ what the GUI uses, and also creates the registry entry.
 GET /api/detectors/{name}
 ```
 
-→ Full detector object including `labelset`.
+→ Full detector object including `labelset`. 404 if not found.
 
 ### Delete detector
 
@@ -65,7 +71,11 @@ GET /api/detectors/{name}
 DELETE /api/detectors/{name}
 ```
 
-→ `{"success": true, "name": "..."}`
+Deletes the detector file only; a registry entry for it is left in place
+([`DELETE /api/detectors/registry/{detector_id}`](#delete-registered-detector)
+removes both).
+
+→ `{"success": true, "name": "..."}`. 404 if not found.
 
 ### Rename detector
 
@@ -77,7 +87,9 @@ PUT /api/detectors/{name}/rename
 
 → `{"success": true, "old_name": "...", "new_name": "Cat Meows"}`
 
-409 if new name already exists. When the detector syncs to a
+Also renames the detector's registry entry (and its loaded context) and its
+place on the AutoFind list. 400 for a blank `new_name`; 404 if not found; 409
+if the new name already exists. When the detector syncs to a
 [labelset source](settings.md#labelset-sources-sync) whose server file path
 is templated on `{detector_name}`, the rename moves that file to the new
 name's path before the detector's next push can write there (never over an
@@ -115,11 +127,15 @@ POST /api/detectors/{name}/labels
 
 **Requires** `X-Dataset-Id` **and** `X-Detector-Id`.
 
-Saves the current good/bad votes as the detector's labelset.
+Saves the current good/bad votes into the detector's labelset. The save
+merges rather than replaces: entries that resolve into the active dataset are
+reconciled against the votes, and entries gathered on other datasets are kept
+as they are.
 
 → `{"success": true, "name": "...", "num_labels": 50}`
 
-409 if the detector's vote state isn't aligned with the active dataset.
+404 if the detector is not found; 409 if the detector's vote state isn't
+aligned with the active dataset.
 
 ### Import labels into detector
 
@@ -141,7 +157,8 @@ a fresh head is trained with a cross-validated threshold.
 `resolved` counts labels resolved into the loaded detector context (0 when no
 context is loaded); `trained` is `true` when a fresh head was retrained.
 
-404 if detector or importer not found. 400 on validation errors.
+404 if detector or importer not found. 422 when a field fails validation;
+400 when the importer rejects its input.
 
 ### Combine detectors
 
@@ -158,7 +175,15 @@ labels across sources. The new detector keeps the sources' balance
 (`beta`, #4665) when they all keep the same one; otherwise it keeps none and
 takes the user's balance when it is loaded.
 
+The new detector also gets a registry entry, so it shows on the Dashboard; it
+keeps the sources' embedder type only when they all agree, and no source's
+labelset-source binding.
+
 → `{"success": true, "name": "A+B", "media_type": "audio", "num_labels": 73, "combined_from": ["A", "B"], "source_label_counts": [50, 30], "examples": [...]}` (201)
+
+400 if the sources' media types differ (or are not specific); 404 if a source
+is missing; 409 if `new_name` is taken; 422 for fewer than two `names`, or a
+merge that drops every element.
 
 ### Labels detail
 
@@ -170,18 +195,10 @@ Returns the detector's saved labelset split into good/bad lists with right-pane
 render data. Not gated on a loaded dataset (but when one is loaded, each item's
 `cid` / `time` / `score` resolve against it).
 
-→
-```json
-{
-  "media_type": "audio",
-  "good": [
-    {"id": "...", "label": "good", "media_type": "audio", "name": "...",
-     "filename": "dog.wav", "origin_name": "...", "md5": "...", "cid": 12,
-     "time": 1234567890.0, "score": 0.97, "region_box": null}
-  ],
-  "bad": [...]
-}
-```
+→ `{"media_type", "good": [...], "bad": [...]}`. Each element carries a stable
+`id` (derived from its origin / MD5 identity: the `element_id` the routes
+below take), its `label`, display `name`, `origin_name`, `md5` and
+`region_box`, plus the dataset-resolved `cid` / `time` / `score`.
 
 404 if the detector is not found.
 
@@ -226,7 +243,7 @@ recorded only when the label actually flips.
 `"removed"`, or `"unchanged"`.
 
 400 (malformed `provenance`), 404 (detector or element not found), 422
-(`target` outside the three values).
+(`target` outside the three values, or an unrecognised `provenance` value).
 
 ### Export portable bundle
 
@@ -242,12 +259,11 @@ embedder space and streams a zipped, standalone scoring bundle (ONNX model +
 manifest + README).
 
 This route has no GUI affordance and is meant to be called directly: the bundle
-is an expert artifact most users never need, and as a dashboard menu item it sat
-beside **Export labels** reading as a confusing second "export". The headless
+is an expert artifact most users never need. The headless
 equivalent is the `portable_detector` CLI exporter (see
 [`docs/CLI.md`](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
-→ Binary `.zip` download (`<detector>-detector.zip`).
+→ Binary `.zip` download (`<slug-of-name>-detector.zip`).
 
 400 (no medias loaded, or no labels to score), 404 (detector not found), 409
 (active dataset can't supply the detector's embedder type).
@@ -262,28 +278,14 @@ equivalent is the `portable_detector` CLI exporter (see
 GET /api/detectors/registry
 ```
 
-→
-```json
-{
-  "detectors": [
-    {
-      "id": "abc123",
-      "name": "Dog Barks",
-      "media_type": "audio",
-      "text_query": "dog barking",
-      "num_training": 50,
-      "loaded": true,
-      "detector_loaded": true,
-      "autofind": false,
-      "last_trained_at": 1234567890.0
-    }
-  ]
-}
-```
-
-Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
-`created_at`, `created_by`, `readers`, and `is_owner`; see the
-`DetectorRegistryListResponse` schema in the spec. An AutoFind detector
+→ `{"detectors": [...]}`: every registered detector the caller can read (its
+own, plus those whose `readers` name the caller or `"*"`), with its `id`,
+`name`, `media_type`, `num_training`, load state (`loaded` and
+`detector_loaded`, the same flag), `autofind` flag, examples, embedder and
+ownership fields (`created_by`, `readers`, `is_owner`); the full entry is the
+`DetectorRegistryListResponse` schema in the spec. `embedder` is the loaded
+context's live embedder when the detector is loaded, else the one it last
+trained in. An AutoFind detector
 (`autofind: true`) also carries `test_verdict`: the newest test verdict it
 keeps, in the shape of the [stats](#detector-statistics)' `test_verdicts`
 entries, or `null` when it was never tested. Drafts leave it out.
@@ -296,8 +298,8 @@ values are filled in. The binding's field values are never listed.
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
 labelset and lives only in RAM. `autofind` mirrors whether the
-detector's name appears in `autofind_detectors` settings (toggle it with
-the route below).
+detector's name appears in the caller's `autofind_detectors` setting (toggle
+it with the route below).
 
 ### Register detector
 
@@ -385,10 +387,12 @@ string, and an empty one means none), plus the importer's own fields
 (plugin-dependent, so not described in `/api/openapi.json`).
 
 Runs the label importer and creates a detector seeded with the labels it
-returns. The media type is inferred from the labels' origins; labels spanning
-more than one media type are rejected (400).
+returns (entries labelled neither `good` nor `bad` are counted in `skipped`).
+The media type is inferred from the labels' origins; labels spanning more than
+one media type, or none whose origin names one, are rejected (400). A missing
+`name` is a 422; a taken one a 409.
 
-→
+→ (201)
 ```json
 {
   "ok": true,
@@ -422,11 +426,13 @@ PUT /api/detectors/registry/{detector_id}/autofind
 
 **Body:** `{"autofind": true}`
 
-→ `{"ok": true, "autofind": true}` (writes the detector's name into
-`autofind_detectors` so `/api/auto-detect` and the CLI
-`--autodetect` flow pick it up). In the GUI this is the Dashboard's
-Drafts ↔ AutoFind detector-tab move: `autofind: true` detectors sit on
-the frozen AutoFind tab, everything else on Drafts.
+→ `{"ok": true, "autofind": true}` (writes the detector's name into the
+calling user's `autofind_detectors` setting, so each user curates their own
+list, and `/api/auto-detect` and the CLI `--autodetect` flow pick it up). In
+the GUI this is the Dashboard's Drafts ↔ AutoFind detector-tab move:
+`autofind: true` detectors sit on the frozen AutoFind tab, everything else on
+Drafts. 403 if the caller cannot access the detector; 404 if it does not
+exist.
 
 ### Load / unload detector
 
@@ -442,7 +448,10 @@ a header naming a registered-but-unloaded dataset is a 409.
 
 → `{"ok": true, "message": "Loading started", "task_id": "..."}` when
 loading; `{"ok": true, "labels_restored": 0, "examples_seeded": 0}`
-when unloading.
+when unloading. A load already under way answers with its `task_id`. A
+detector already in memory answers the unloading shape, unless its labels were
+embedded with another embedder than the active dataset's: it then re-embeds
+them, answering `{"ok": true, "message": "Re-embedding labels", "task_id": ...}`.
 
 Loading is async; subscribe to the `detector-loading-tasks` channel
 on [`/api/events`](events.md) (SSE) for progress. 403 if access is denied; 404
@@ -463,11 +472,8 @@ Drops the detector's in-memory context (votes, trained head).
 ### Detector loading tasks (SSE)
 
 Active detector loading tasks are streamed on the `detector-loading-tasks`
-channel of [`/api/events`](events.md):
-
-```json
-[{"task_id": "...", "name": "...", "status": "loading", "message": "...", "current": 50, "total": 100}]
-```
+channel of [`/api/events`](events.md), in the
+[task shape](events.md#task-object-shape-loading-tasks--detector-loading-tasks).
 
 ### Cancel detector loading
 
@@ -486,9 +492,11 @@ labelset-media ingest, or a positives-browse build.
 DELETE /api/detectors/registry/{detector_id}
 ```
 
-Also cleans up the on-disk labelset file and clears the AutoFind flag.
+Also cleans up the on-disk labelset file, unloads the detector if it is
+loaded, and clears the AutoFind flag.
 
-→ `{"ok": true}`
+→ `{"ok": true}`. 403 if the caller isn't the creator; 404 if it does not
+exist.
 
 ### Rename registered detector
 
@@ -501,8 +509,10 @@ PUT /api/detectors/registry/{detector_id}/rename
 → `{"ok": true, "name": "New Name"}`
 
 A templated labelset-source file follows the rename, as on
-[`PUT /api/detectors/{name}/rename`](#rename-detector). 403 if the caller isn't
-the creator. 409 if the new name is already taken. Names are compared by the labelset
+[`PUT /api/detectors/{name}/rename`](#rename-detector), as does the
+detector's place on the AutoFind list. 400 for a blank name; 403 if the caller
+isn't the creator; 404 if it does not exist. 409 if the new name is already
+taken. Names are compared by the labelset
 *slug* (lowercased, punctuation collapsed), so "My Cat" and "my cat" collide;
 re-spelling a detector's own name that way is allowed.
 
@@ -538,39 +548,15 @@ detector has been retrained since (see
 [the kept verdict](find.md#the-kept-verdict)). The Stats dialog's *Tested on*
 section reads it.
 
-→
-```json
-{
-  "name": "cat-sounds",
-  "media_type": "audio",
-  "num_positive": 24,
-  "num_negative": 18,
-  "num_total": 42,
-  "num_positive_resolved": 20,
-  "active_dataset_name": "ESC-50",
-  "embedder": "laion_clap",
-  "embedder_type": "semantic",
-  "text_query": "cat meowing",
-  "media_example": "",
-  "clipper": "",
-  "created_at": 1743412500.0,
-  "last_trained_at": 1743419700.0,
-  "created_by": "default",
-  "readers": [],
-  "autofind": false,
-  "test_verdicts": [
-    {
-      "dataset_id": "4f2c…", "dataset_name": "esc50-new", "tested_at": 1790000000.0,
-      "beta": 1.0, "line_count": 64, "size": 1200, "labelled": 34,
-      "precision": {"point": 0.78, "lo": 0.70, "hi": 0.85},
-      "recall": {"point": 0.52, "lo": 0.38, "hi": 0.66},
-      "fbeta": {"point": 0.62, "lo": 0.51, "hi": 0.72},
-      "found": "about half of them found",
-      "stale": false
-    }
-  ]
-}
-```
+→ The positive / negative / total label counts, `num_positive_resolved` and
+`active_dataset_name`, the detector's `embedder` (the loaded context's live
+one, else the one it last trained in), `embedder_type`, query and example,
+`clipper`, creation and training times, ownership, its `autofind` flag, and
+`test_verdicts`. Each verdict carries the tested dataset, `tested_at`, the
+`beta` it was tested at, `line_count` (the line kept the top `line_count` of
+the `size` items scored), `labelled` (the picks the ranges rest on),
+`precision` / `recall` / `fbeta` as `{point, lo, hi}` ranges, a plain-language
+`found` line, and `stale`.
 
 403 if the caller cannot access the detector; 404 if it does not exist.
 
@@ -587,15 +573,7 @@ mixed-source detectors work and no dataset need be loaded. The resulting
 throwaway context (vectors + preview bytes, never persisted) is registered
 under a synthetic `dataset_id` the browse view opens.
 
-→
-```json
-{
-  "ok": true,
-  "dataset_id": "__detpos__<detector_id>",
-  "task_id": "_detbrowse_<id>",
-  "media_type": "audio"
-}
-```
+→ `{"ok": true, "dataset_id": "__detpos__<detector_id>", "task_id": "...", "media_type": "audio"}`
 
 The build runs in the background; its progress rides the detector-loading
 task channel (the dashboard row shows it). 409 if the detector has no
@@ -608,4 +586,5 @@ POST /api/detectors/registry/{detector_id}/browse-positives/release
 Free the ephemeral positives-browse context (called when leaving the view).
 Idempotent.
 
-→ `{"ok": true, "released": true}`
+→ `{"ok": true, "released": true}` (`released` is `false` when there was
+nothing to free).

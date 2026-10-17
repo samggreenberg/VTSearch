@@ -291,19 +291,52 @@ class TestResolveOrTrain:
 
 
 class TestTheBalance:
-    def test_the_state_counts_what_the_query_line_keeps_and_a_change_redraws_it(self, world):
-        from vtscore.state.core import detector_balance_state, recut_detector_threshold
-        from vtscore.training.thresholds import LineRanking
+    """A typed query's head keeps the ranking its line is counted on (#5048), so the state counts that line."""
 
-        snap, _proto, make, _embedded = world
-        ctx = _ctx()
-        lt.train_from_labelset(ctx, make([1], [40]), media_type="image", snap=snap, text_query=QUERY)
+    LABELLED = {1, 40}
+
+    def _unvoted_scores(self, ctx: DetectorContext, snap: dict[int, dict]) -> list[float]:
         rows = scoring_rows_for_snap(snap, EMBEDDER)
         scores = score_rows_with_model(ctx.model, rows)[0]
-        ctx.line_ranking = LineRanking.from_scores(rows.ids, scores, ())
+        return [s for cid, s in zip(rows.ids, scores, strict=True) if cid not in self.LABELLED]
+
+    def test_the_state_counts_what_the_query_line_keeps_and_a_change_redraws_it(self, world):
+        from vtscore.state.core import detector_balance_state, recut_detector_threshold
+        from vtscore.training.thresholds import BALANCE_UNCHECKED, balance_count
+
+        snap, _proto, make, _embedded = world
+        for cid, media in snap.items():
+            media["md5"] = f"m{cid}"  # the labels resolve in this corpus
+        ctx = _ctx()
+        lt.train_from_labelset(ctx, make([1], [40]), media_type="image", snap=snap, text_query=QUERY)
+        assert is_query_head(ctx.model)
+        assert ctx.line_ranking is not None and ctx.line_ranking.voted == self.LABELLED, "labelled media marked voted"
+        unvoted = self._unvoted_scores(ctx, snap)
+        kept = sum(1 for s in unvoted if s >= ctx.threshold)
+        assert kept != balance_count(1.0, None), "the cap says something else"
         state = detector_balance_state(ctx, 1.0)
-        assert state is not None and state["count"] == int(sum(s >= ctx.threshold for s in scores))
-        assert recut_detector_threshold(ctx, beta=4.0) == pytest.approx(ctx.centroid_line.threshold_at(4.0))
+        assert state["status"] == BALANCE_UNCHECKED and state["count"] == kept
+
+        recut = recut_detector_threshold(ctx, beta=4.0)
+        assert recut is not None
+        ctx.threshold = recut
+        assert ctx.threshold == pytest.approx(ctx.centroid_line.threshold_at(4.0))
+        assert detector_balance_state(ctx, 4.0)["count"] == sum(1 for s in unvoted if s >= ctx.threshold)
+
+    def test_a_cold_find_keeps_the_ranking_too(self, world):
+        from vtscore.state.core import detector_balance_state
+
+        snap, _proto, make, _embedded = world
+        for cid, media in snap.items():
+            media["md5"] = f"m{cid}"
+        ctx = _ctx()
+        _results, threshold, model = lt.labelset_train_and_score(
+            ctx, make([1], [40]), media_type="image", clips_dict=snap, label_quota=True, text_query=QUERY
+        )
+        assert is_query_head(model) and ctx.line_ranking is not None
+        assert ctx.line_ranking.voted == self.LABELLED
+        kept = sum(1 for s in self._unvoted_scores(ctx, snap) if s >= threshold)
+        assert detector_balance_state(ctx, 1.0)["count"] == kept
 
 
 # ---------------------------------------------------------------------------

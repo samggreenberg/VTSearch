@@ -7,7 +7,7 @@ the detector in the dashboard grid.
 Every entry is backed by a labelset file under ``data/detectors/``, named
 after a slug of the detector name rather than the name itself (see
 :func:`vtscore.detectors.store._slug`).
-The MLP that scores the detector is trained on demand from the labelset and
+The head that scores the detector is trained on demand from the labelset and
 lives only in RAM (see :class:`~vtsearch.state.DetectorContext`).
 
 Multiple detectors can be *loaded* into memory simultaneously.  Which detector
@@ -26,6 +26,7 @@ from typing import Any, TypeVar
 
 from vtscore.config import DATA_DIR
 from vtscore.io import atomic_write_json, file_lock
+from vtscore.security.readers import ReadersUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -353,22 +354,35 @@ def list_detectors_for_user(username: str) -> list[dict[str, Any]]:
         return result
 
 
-def set_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
-    """Update a detector's ``readers`` list. Only the creator may call this.
+def update_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> ReadersUpdate:
+    """Replace a detector's ``readers`` list. Only the creator may call this.
 
-    Returns ``(success, error_message)``.
+    Mirrors :func:`vtscore.datasets.registry.update_readers`: returns which
+    case happened, so a caller never reads it out of a message.
     """
 
-    def mutate(entries: list[dict[str, Any]]) -> tuple[bool, str]:
+    def mutate(entries: list[dict[str, Any]]) -> ReadersUpdate:
         for entry in entries:
             if entry["id"] == detector_id:
                 if entry.get("created_by", "default") != requesting_user:
-                    return False, "Only the detector creator can modify readers"
+                    return ReadersUpdate.NOT_CREATOR
                 entry["readers"] = readers
-                return True, ""
-        return False, "Detector not found"
+                return ReadersUpdate.UPDATED
+        return ReadersUpdate.NOT_FOUND
 
     return _read_modify_write(mutate)
+
+
+def set_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
+    """Update a detector's ``readers`` list. Only the creator may call this.
+
+    Returns ``(success, error_message)``: :func:`update_detector_readers`'s
+    outcome, with :meth:`ReadersUpdate.message` as the message.  To act on
+    why it failed, call :func:`update_detector_readers` instead of parsing
+    the message.
+    """
+    outcome = update_detector_readers(detector_id, readers, requesting_user)
+    return outcome is ReadersUpdate.UPDATED, outcome.message("detector")
 
 
 def add_loaded_detector_id(detector_id: str) -> None:

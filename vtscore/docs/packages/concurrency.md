@@ -8,8 +8,8 @@ it, and capping how many run at once.
 `__init__.py` - it is a PEP 420 implicit namespace package, so it exports
 nothing of its own and `from vtscore.concurrency import JobManager` raises
 `ImportError`. Every snippet below imports from the module that defines the
-name: `async_jobs`, `progress`, `memory_budget`, or `events`. The same is
-true of `vtscore.security`.
+name (`async_jobs`, `progress`, `memory_budget`, `gate`, `notifications`).
+The same is true of `vtscore.security`.
 
 ## Contents
 
@@ -101,7 +101,7 @@ no job is bound, so shared library code can call it unconditionally).
 
 ### `JobManager`
 
-`JobManager(name, max_history=8, *, user_visible=True)`. One
+`JobManager(name, max_history=8, *, user_visible=True, binds_context=True)`. One
 background job runs at a time; one **pending slot** coalesces
 follow-up requests. A second `start()` while a job is in flight stashes
 the new `(signature, target)` in the pending slot. Further `start()`
@@ -127,6 +127,7 @@ def my_target(job):
         job.update_progress(i, 100, f"step {i}")
     job.result = {"hits": 42}
 
+# Both ids must name loaded contexts; see "Context binding" below.
 job = mgr.start(
     signature=("dataset_a", "detector_x"),
     target=my_target,
@@ -151,13 +152,31 @@ still promoted so a queued follow-up runs. The manager is
 thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
+`start()` captures `vtscore.state.current_user.get_current_user()` as
+`job.user` (`"default"` when neither a request resolver nor a
+`thread_user` binding names someone).
+
+Context binding: unless the manager was built with
+`binds_context=False`, the worker binds the contexts that `start()`'s
+`dataset_id` / `detector_id` name as its thread-local active ones, so the
+target reads that dataset's medias and that detector's votes through
+`get_active_context()` / `get_active_detector_context()`. If either id no
+longer resolves when the worker starts (the dataset or detector was unloaded
+while the job sat in the pending slot), the job ends `status = "error"` with
+`job.error` naming it (`"dataset <id> is no longer loaded"`), the target never
+runs, `cached_for()` never serves it, and the pending slot is still promoted.
+A manager whose targets name every context they touch, and so use the ids only
+as a tag, passes `binds_context=False`: its jobs bind nothing and require
+nothing. `archive_thumbnail_jobs` is one: its sweep warms every loaded
+dataset, so a kick whose own dataset was unloaded still runs for the rest.
+
 When a job spawns its daemon thread, the manager enters the Flask-free
-`vtscore.state.current_user.thread_user(job.user)` context manager
-before invoking the target so per-user settings resolution works from
-inside the worker; the context manager clears the thread-local on exit.
-`JobManager` never imports from `vtsearch.auth` — the whole point of the
-`current_user` extraction is that `start()` stands alone. Library-only
-consumers leave `user=None`.
+`thread_user(job.user)` context manager, plus `thread_dataset_context` /
+`thread_detector_context` for the job's `dataset_id` / `detector_id` when
+the manager binds context (above), before invoking the target, so per-user settings and the
+active-context proxies resolve from inside the worker. Each context manager
+restores the previous binding on exit. `JobManager` never imports from
+`vtsearch.auth`, so `start()` works in a Flask-free process.
 
 ### Module-level managers and `JOB_MANAGERS`
 
@@ -168,7 +187,7 @@ eval_jobs              = JobManager("eval-train-score")
 labeling_status_jobs   = JobManager("labeling-status", user_visible=False)
 projection_jobs        = JobManager("projection")
 signpost_relabel_jobs  = JobManager("signpost-relabel", user_visible=False)
-archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False)
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False, binds_context=False)
 
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,
@@ -273,14 +292,17 @@ the clock resets. After 5 seconds of elapsed work the raw ETA is
 value is never the raw estimate: it is snapped to a coarse ladder of
 round values (`_ETA_LADDER`: 10 s … 24 h) and only moves to a
 neighbouring rung once the smoothed estimate overshoots the boundary by
-15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch.
+15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch. When the
+caller reports a `step` / `total_steps` structure, the ETA is instead
+extrapolated from the whole-job `overall` fraction, with its rate window
+rebased at every forward step boundary.
 A tracker built with `publish_eta=False` never publishes one:
 `eta_seconds` stays `None` on every snapshot while `current`/`total` and
 `overall` update as usual. The ingest paths (dataset import, staging
 import, labelset missing-media fetch) always build theirs that way: an
-import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()`,
-which once read the `CoreConfig.hide_ingest_eta` switch, is deprecated and
-always returns `True`.
+import's rate is too erratic to estimate (#4667). `ingest_eta_hidden()` is
+deprecated and always returns `True`; it stays importable for out-of-tree
+callers.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -313,9 +335,13 @@ The tracker `create_task` returns already reports `status="loading"`
 terminal status readers wait for, and the task is published before the
 caller's first `update()`.
 
-Methods: `create_task(task_id, ...)` (register and return tracker),
-`get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
+Methods: `create_task(task_id, ...)` (register and return tracker;
+`created_by=` defaults to the current user, `source=` names what the task
+reads, `keep_failure=` keeps a failure until dismissed), `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
 `is_finished(task_id)`, `remove_task(task_id)`,
+`dismiss_task(task_id)` (removes a *finished* task; `False` if it is unknown
+or still running), `visible_to(tasks, viewer)` (filters a snapshot for one
+user; see below),
 `cancel_task(task_id)` / `cancel_all()`, `set_worker(task_id, thread)`
 / `worker_alive(task_id)` (lets a cancel tell a live worker from a
 phantom row), `active_task_ids()`, `set_dataset_id(task_id, ds_id)`
@@ -327,6 +353,16 @@ Stale-prune policy: finished tasks without errors are removed 5 seconds
 after `mark_finished()`; tasks with errors are kept for 30 seconds so
 the polling frontend can display them. The prune runs lazily inside
 `list_tasks()`.
+
+A task created with `keep_failure=True` instead keeps its failure (an `error`
+that is not `CANCELLED_ERROR`) until `dismiss_task()` removes it; the tracker
+holds at most `max_kept_failures` of them (constructor argument, default 20),
+dropping the oldest first. Every import sets it: a failed import produces no
+dataset, so its task row is the only place the failure stays visible. A kept
+failure belongs to the user who started the task: `visible_to(tasks, viewer)`
+drops other users' kept failures from a snapshot (everything else, and kept
+failures owned by `"default"`, stays visible to everyone), and the SSE stream
+applies it per connection (`stream_progress_events(viewer=...)`).
 
 ---
 
@@ -383,8 +419,8 @@ positional arguments alone.
 
 ## Per-thread progress callback
 
-Background loading threads inside `vtscore.datasets` and
-`vtscore.embedding.loader` write progress through a per-thread callback,
+Background loading threads inside `vtscore.datasets` (the loaders and
+downloaders) and the media types' demo sources write progress through a per-thread callback,
 not directly to a tracker. This is the **only** resolution there is: a
 thread that bound nothing reports into a no-op, not into a shared sink.
 
@@ -507,7 +543,7 @@ n_workers = cap_workers_by_memory(
 
 Available-memory detection prefers `/proc/meminfo`'s `MemAvailable:`,
 falls back to `sysconf(SC_AVPHYS_PAGES) * SC_PAGE_SIZE`, and lastly
-uses a 1 GiB floor. The function always returns at least 1.
+assumes 1 GiB available. The function always returns at least 1.
 
 ---
 
@@ -536,7 +572,7 @@ misconfigured setting cannot deadlock the pipeline.
 ```python
 from vtscore.concurrency.gate import ConcurrencyGate
 
-gate = ConcurrencyGate(lambda: CoreConfig.from_settings().concurrent_downloads)
+gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
 if gate.acquire(timeout=30):
     try:
         ...
@@ -568,9 +604,13 @@ to each tracker's notify stream, and emits
 
 The generator subscribes to each tracker, drains a private bounded
 queue per client, and unsubscribes in a `finally` block on disconnect.
-Heartbeats every 5 seconds keep the connection alive and re-emit the
-task channels so clients see finished tasks vanish once the stale-prune
-window elapses. This module is thin wiring - most library consumers
+Every 5 seconds (`HEARTBEAT_SECONDS`) it emits a named `heartbeat` event
+and re-emits every channel's snapshot: task channels so clients see
+finished tasks vanish once the stale-prune window elapses, tracker
+channels so a client whose queue overflowed recovers a dropped terminal
+frame. Between those, an idle stream writes a bare SSE comment every
+`KEEPALIVE_SECONDS` (1 s) so a vanished client's write fails fast and its
+slot is released. This module is thin wiring - most library consumers
 don't need to touch it.
 
 It also carries one channel that is *not* a tracker: `NOTIFICATION_CHANNEL`
@@ -606,7 +646,7 @@ notify(
 
 | Name | Description |
 |------|-------------|
-| `notify(message, *, level="info", detail=None, source=None, items=None) -> Notification` | Publish and log one message. Never raises. `items` is shown behind the toast's **Details** toggle with a **Copy list** button; capped at `MAX_ITEMS` entries of `MAX_ITEM_CHARS` characters |
+| `notify(message, *, level="info", detail=None, source=None, items=None) -> Notification` | Publish and log one message. Never raises. `items` is shown behind the toast's **Details** toggle with a **Copy List** button; capped at `MAX_ITEMS` entries of `MAX_ITEM_CHARS` characters |
 | `Notification` | Frozen dataclass: `id`, `level`, `message`, `detail`, `source`, `timestamp`, `items`, `.to_dict()` |
 | `NotificationBroker` | `subscribe` / `unsubscribe` / `publish` / `subscriber_count` / `clear_subscribers` |
 | `notifications` | The process-wide broker singleton |

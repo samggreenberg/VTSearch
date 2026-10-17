@@ -26,6 +26,7 @@ from uuid import uuid4
 from vtscore.config import CoreConfig, DATA_DIR
 from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
+    CANCELLED_ERROR,
     CancelledError,
     clear_thread_progress,
     loading_tasks,
@@ -274,6 +275,7 @@ def _start_import_task(
     weights: list[float] | None = None,
     extra_fields: dict[str, Any] | None = None,
     created_by: str = "",
+    source: str = "",
 ) -> _ImportTask:
     """Register a background import on ``loading_tasks``.
 
@@ -288,6 +290,11 @@ def _start_import_task(
     themselves, and its estimate swung too wildly to be worth showing (#4667);
     the bar itself still fills.
 
+    A failed import keeps its row until the user dismisses it
+    (``keep_failure``): no dataset row is left to say it happened (#4973).
+    *source* says what was being imported (the origin, as the user would name
+    it), so that row can show what the import was reading.
+
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
     env-gated phase profiler in between: a profiler that missed the step-1
@@ -296,6 +303,7 @@ def _start_import_task(
     from vtscore.state.current_user import get_current_user  # noqa: PLC0415
 
     task_id = f"{prefix}{uuid4().hex[:8]}"
+    request_user = created_by or get_current_user()
     tracker = loading_tasks.create_task(
         task_id,
         display_name,
@@ -304,13 +312,30 @@ def _start_import_task(
         extra_fields=extra_fields,
         step_weights=weights,
         publish_eta=False,
+        created_by=request_user,
+        source=source,
+        keep_failure=True,
     )
     return _ImportTask(
         task_id=task_id,
         tracker=tracker,
-        request_user=created_by or get_current_user(),
+        request_user=request_user,
         total_steps=total_steps,
     )
+
+
+def _describe_source(origin: dict | Callable[[], dict]) -> str:
+    """Name what an import reads, for its task's ``source``; ``""`` if that fails.
+
+    *origin* may be a callable building it, for the staging flow, which has no
+    origin of its own to hand.  Either way the description runs plugin code
+    (``build_origin`` / ``origin_display``), and a label for a failure row is
+    not worth failing the import over.
+    """
+    try:
+        return _origin_to_str(origin() if callable(origin) else origin)
+    except Exception:
+        return ""
 
 
 def _spawn_import_worker(task: _ImportTask, body: Callable[[], None]) -> str:
@@ -491,7 +516,7 @@ def _warmup_embedder_async(media_dict: dict) -> None:
 
 
 #: What a cancelled import's tracker carries as its ``error``; see :func:`_failure_message`.
-_CANCELLED_MESSAGE = "Cancelled"
+_CANCELLED_MESSAGE = CANCELLED_ERROR
 
 
 def _failure_message(exc: BaseException, fallback: str) -> str:
@@ -527,13 +552,17 @@ def _handle_load_failure(
     context_id: str,
     tracker,
     registry_entry_id: str | None = None,
+    task_id: str | None = None,
 ) -> None:
     """Unregister the context and write the failure into *tracker*.
 
     If *registry_entry_id* is set, the on-disk registry entry (and its
     backing pkl) is also removed; this prevents an orphaned dashboard
     row when a load fails after :func:`_register_and_migrate` has
-    already written the entry.
+    already written the entry.  The task named *task_id* then drops the
+    ``dataset_id`` it was given at registration: its failure is kept until
+    dismissed, and a later import that reuses the id (a demo's) must not
+    find that row attached to its own dataset.
     """
     from vtscore.state.core import unregister_context  # noqa: PLC0415
 
@@ -545,6 +574,8 @@ def _handle_load_failure(
             _reg_unregister(registry_entry_id)
         except Exception:
             traceback.print_exc()
+        if task_id:
+            loading_tasks.set_dataset_id(task_id, "")
     gc.collect()
     tracker.update("idle", "", 0, 0, error=error, step=None, total_steps=None)
 
@@ -786,6 +817,7 @@ def _run_origin_load_in_background(
         embedder=embedder,
         weights=load_step_weights(media_type, n=n_hint, download_size_mb=download_size_mb_hint, embedder=embedder),
         created_by=created_by,
+        source=_describe_source(origin),
     )
     task_id, tracker = task.task_id, task.tracker
     # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); a no-op
@@ -878,7 +910,9 @@ def _run_origin_load_in_background(
                     # helper, shared with the multi-dataset import.
                     _finish_dataset_load(ctx, tracker, pacer, spec, ids)
                 except Exception as exc:
-                    _handle_load_failure(exc, ids.context_id, tracker, registry_entry_id=ids.registry_entry_id)
+                    _handle_load_failure(
+                        exc, ids.context_id, tracker, registry_entry_id=ids.registry_entry_id, task_id=task_id
+                    )
                 finally:
                     controller.release()
         finally:
@@ -1267,6 +1301,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         embedder=staged_embedder,
         weights=step_weights(_STAGE_TASK, media_type=staged_media_type, embedder=staged_embedder),
         extra_fields={"staging_result": None},
+        source=_describe_source(lambda: importer.build_origin(field_values)),
     )
     tracker = task.tracker
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)

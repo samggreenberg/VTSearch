@@ -376,14 +376,14 @@ def _drop_line_ranking(det_ctx) -> None:
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
-    """Drop *det_ctx*'s cached MLP when *new_embedder* differs.
+    """Drop *det_ctx*'s cached head when *new_embedder* differs.
 
     ``DetectorContext.model`` is trained against a specific embedding space -
-    ``det_ctx.embedder`` records which.  Scoring with a cross-space MLP
+    ``det_ctx.embedder`` records which.  Scoring with a cross-space head
     either crashes (different dim → ``nn.Linear`` size-mismatch) or
     silently produces garbage labels (same dim, different space).  When
     the dataset about to be scored uses a different embedder than the one
-    the cached MLP was trained on, clear the embedder-tagged scoring
+    the cached head was trained on, clear the embedder-tagged scoring
     caches (``model``, ``threshold``, ``last_learned_scores``,
     ``training_medias``, and the two threshold estimators -
     ``calibration_cache``, ``anchored_cut_cache``)
@@ -449,7 +449,7 @@ def _embedder_of_active_dataset(det_ctx=None) -> str:
     primary whenever the active dataset can supply it (so a valid cached model
     survives a dataset switch), else the dataset score precedence (so a genuine
     mismatch invalidates).  See :func:`keying_embedder_for_snap` and
-    patch-embedder.md → "Per-detector primary embedder".  For a single-embedder
+    ``docs/ARCHITECTURE.md`` → "Per-detector embedder type".  For a single-embedder
     dataset the primary *is* that one embedder, so this returns it unchanged -
     byte-for-byte the pre-per-detector behaviour.
     """
@@ -466,7 +466,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     """Active-context wrapper for :func:`invalidate_detector_model_on_embedder_mismatch`.
 
     Called from ``before_request`` so a dataset switch can't leave the
-    active detector pointing at an MLP trained against the old embedder
+    active detector pointing at a head trained against the old embedder
     (silent garbage scores at best, ``nn.Linear`` size-mismatch crash at
     worst).  Vote-rehydrate in :func:`ensure_votes_match_active_dataset`
     handles cid-keyed votes; this handles the embedder-specific caches

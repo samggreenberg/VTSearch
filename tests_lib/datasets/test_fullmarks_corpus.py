@@ -3289,6 +3289,127 @@ class TestATurnedTobacco800Page:
         assert different[0]["left_members"] == [["tobacco800/afm90c00-first_1", 0], [self.PAGE, 1]]
 
 
+class TestACopiedMark:
+    """One hand-added box standing on its page three times (#5052).
+
+    The numbers are ``tobacco800/kjj24f00``'s: a clustered leaf the completeness
+    pass accepted as mark 1, then a hand-added box appended as mark 2 and again
+    as marks 3 and 4 each time the verdict was re-applied, with a must-link per
+    copy.
+    """
+
+    PAGE, ANCHOR = "tobacco800/kjj24f00", "tobacco800/asg54f00"
+    CLASS = "tobacco800/logo_asg54f00_1"
+    LEAF, BOX = (523, 60, 80, 146), (269, 61, 122, 110)
+    NOTE = "completeness: missing member of tobacco800/logo_asg54f00_1 confirmed by hand"
+
+    def _built(self, mods):
+        anchor = _page(mods, self.ANCHOR, "tobacco800", [("logo", (275, 57, 141, 143), self.CLASS, "clustered")])
+        marks = [("signature", (566, 775, 302, 63), "tobacco800/signature_daigle_w_p", "gt")]
+        marks += [("logo", self.LEAF, self.CLASS, "clustered")]
+        marks += [("logo", self.BOX, self.CLASS, "completeness")] * 3
+        page = _page(mods, self.PAGE, "tobacco800", marks)
+        classes = {self.CLASS: {"page_ids": [self.ANCHOR, self.PAGE], "n_instances": 2}}
+        same = [self._link(i) for i in (1, 2, 3, 4)]
+        return [anchor, page], classes, same
+
+    def _link(self, index, note=None):
+        return {
+            "left_page_id": self.ANCHOR,
+            "left_mark_index": 0,
+            "right_page_id": self.PAGE,
+            "right_mark_index": index,
+            "note": self.NOTE if note is None else note,
+        }
+
+    def test_the_copies_go_with_their_must_links_and_the_page_counts_twice(self, mods):
+        pages, classes, same = self._built(mods)
+        same_after, different, changes, problems = mods["audit"].drop_duplicate_marks(pages, classes, same, [])
+        assert not problems
+        assert [m.box for m in pages[1].marks] == [(566, 775, 302, 63), self.LEAF, self.BOX]
+        # The rows for marks 1 and 2 are the reviewer's, verbatim; the copies' rows repeat mark 2's.
+        assert same_after == [self._link(1), self._link(2)] and different == []
+        assert sum("repeats a row on file" in c for c in changes) == 2
+        # Two of the class's marks are on the page, so it is listed twice.
+        assert classes[self.CLASS] == {"page_ids": [self.ANCHOR, self.PAGE, self.PAGE], "n_instances": 3}
+
+    def test_running_it_again_changes_nothing(self, mods):
+        pages, classes, same = self._built(mods)
+        same, different, _changes, _problems = mods["audit"].drop_duplicate_marks(pages, classes, same, [])
+        again = mods["audit"].drop_duplicate_marks(pages, classes, same, different)
+        assert again == (same, different, [], [])
+
+    def test_a_row_only_a_copy_was_named_in_is_re_pointed_and_noted(self, mods):
+        pages, classes, same = self._built(mods)
+        apart = {
+            "left_page_id": self.PAGE,
+            "left_mark_index": 4,
+            "right_page_id": "tobacco800/zzz00000",
+            "right_mark_index": 0,
+            "note": "",
+        }
+        _same, different, _changes, problems = mods["audit"].drop_duplicate_marks(pages, classes, same, [apart])
+        assert not problems
+        assert different[0]["left_mark_index"] == 2
+        assert "a copy of mark 2" in different[0]["note"]
+
+    def test_recorded_members_are_re_pointed_too(self, mods):
+        pages, classes, same = self._built(mods)
+        apart = {
+            "left_page_id": self.ANCHOR,
+            "left_mark_index": 0,
+            "left_members": [[self.ANCHOR, 0], [self.PAGE, 3]],
+            "right_page_id": "tobacco800/zzz00000",
+            "right_mark_index": 0,
+            "note": "",
+        }
+        _same, different, _changes, problems = mods["audit"].drop_duplicate_marks(pages, classes, same, [apart])
+        assert not problems
+        assert different[0]["left_members"] == [[self.ANCHOR, 0], [self.PAGE, 2]]
+
+    def test_a_copy_ruled_the_other_way_is_refused(self, mods):
+        pages, classes, same = self._built(mods)
+        rejected = self._link(3, note="membership: rejected")
+        *_rest, problems = mods["audit"].drop_duplicate_marks(pages, classes, [self._link(2)], [rejected])
+        assert any("ruled both ways" in p for p in problems)
+
+    def test_a_copy_before_a_mark_that_is_not_one_is_refused(self, mods):
+        pages, classes, same = self._built(mods)
+        pages[1].marks.append(mods["common"].Mark("logo", (40, 40, 80, 80), "tobacco800/logo_other", "completeness"))
+        *_rest, problems = mods["audit"].drop_duplicate_marks(pages, classes, same, [])
+        assert any("would renumber" in p for p in problems)
+
+    def test_the_same_box_under_another_class_is_not_a_copy(self, mods):
+        pages, classes, _same = self._built(mods)
+        Mark = mods["common"].Mark
+        pages[1].marks[3:] = [Mark("logo", self.BOX, None, "completeness")]
+        _same, _diff, changes, problems = mods["audit"].drop_duplicate_marks(pages, classes, [], [])
+        assert not problems and len(pages[1].marks) == 4
+        assert not any("copy" in c for c in changes)
+
+    def test_the_cli_writes_nothing_without_apply_and_then_all_three_stores(self, mods, tmp_path, capsys):
+        pages, classes, same = self._built(mods)
+        mods["common"].write_manifest(pages, tmp_path / "corpus.jsonl")
+        (tmp_path / "classes.json").write_text(json.dumps(classes), encoding="utf-8")
+        mods["cluster"].save_adjudications(same, [], tmp_path / "adjudications.json")
+        before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+
+        assert mods["audit"].main(["--corpus", str(tmp_path), "--drop-duplicate-marks"]) == 0
+        assert "dry run" in capsys.readouterr().out
+        assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == before
+
+        assert mods["audit"].main(["--corpus", str(tmp_path), "--drop-duplicate-marks", "--apply"]) == 0
+        (page,) = [p for p in mods["common"].read_manifest(tmp_path / "corpus.jsonl") if p.page_id == self.PAGE]
+        assert len(page.marks) == 3
+        assert json.loads((tmp_path / "classes.json").read_text())[self.CLASS]["n_instances"] == 3
+        stored = json.loads((tmp_path / "adjudications.json").read_text())["same"]
+        assert sorted(r["right_mark_index"] for r in stored) == [1, 2]
+
+        capsys.readouterr()
+        assert mods["audit"].main(["--corpus", str(tmp_path), "--drop-duplicate-marks"]) == 0
+        assert "no page carries a mark twice" in capsys.readouterr().out
+
+
 class TestSiglipClusterBackend:
     """The ``siglip`` cluster backend named symbols that do not exist.
 

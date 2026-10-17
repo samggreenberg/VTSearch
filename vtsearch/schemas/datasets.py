@@ -1205,7 +1205,7 @@ class DatasetAutofindRequestSchema(Schema):
 
 
 class DatasetRegistryOkResponseSchema(Schema):
-    """Bare ``{"ok": true}`` response (unload, delete)."""
+    """Bare ``{"ok": true}`` response (unload, delete, dismissing a finished task)."""
 
     ok = fields.Boolean(required=True)
 

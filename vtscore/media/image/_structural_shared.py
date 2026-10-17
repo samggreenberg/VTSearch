@@ -28,7 +28,6 @@ from vtscore.media.embedder import MediaEmbedder
 from vtscore.media.image._image_bulk import (
     _load_pil,
     _pil_source_for,
-    bulk_embed_image_files,
     bulk_patch_forward_image_files,
 )
 from vtscore.media.structural import (
@@ -179,30 +178,47 @@ class _StructuralImageBase(MediaEmbedder):
         feat = self._matcher.detect_and_describe(gray, max_features=self.max_features)
         return aggregate_vlad(feat.descriptors, self._codebook)
 
-    def _forward_vlad_batch(self, images: list["Image.Image"]) -> np.ndarray:
-        assert self._matcher is not None and self._codebook is not None
-        vecs = [
-            aggregate_vlad(
-                self._matcher.detect_and_describe(self._pil_to_gray(im), max_features=self.max_features).descriptors,
-                self._codebook,
-            )
-            for im in images
-        ]
-        return np.stack(vecs, axis=0)
+    def _vlad_and_features_batch(self, images: list["Image.Image"]) -> list[tuple[np.ndarray, StructuralFeatures]]:
+        """Each image's VLAD vector and compact local features, from one detection.
+
+        The vector is aggregated from the full-precision descriptors; only the
+        compact copy outlives the batch.
+        """
+        assert self._codebook is not None
+        codebook = self._codebook
+        return [(aggregate_vlad(feat.descriptors, codebook), feat.compact()) for feat in self._detect_batch(images)]
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """VLAD vectors for *medias*, storing each image's ``local_features`` on its dict.
+
+        A vector and Stage 2's features come from the same detection, so both are
+        kept from one decode and one SIFT pass.  The features go on the input dict
+        compact, as the load's back-fill would store them, and the back-fill then
+        skips the image instead of detecting it again (#4996); it still covers
+        media that arrive already embedded.
+        """
         if self._matcher is None or self._codebook is None:
             self.load_models()
         if self._matcher is None or self._codebook is None:
             return [None] * len(medias)
         with self._embed_lock:
-            return bulk_embed_image_files(
+            outputs = bulk_patch_forward_image_files(
                 medias,
-                forward_pil_batch=self._forward_vlad_batch,
+                forward_pil_batch=self._vlad_and_features_batch,
                 batch_size=self.embed_batch_size,
                 on_progress=self._on_progress,
                 label=self.display_name,
+                verb="Embedding",
             )
+        vectors: list[Optional[np.ndarray]] = []
+        for media, out in zip(medias, outputs):
+            if out is None:
+                vectors.append(None)
+                continue
+            vec, feats = out
+            media["local_features"] = feats
+            vectors.append(vec)
+        return vectors
 
     # --- Stage 2: local features -------------------------------------------
 

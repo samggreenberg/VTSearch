@@ -628,3 +628,119 @@ class TestEmbedResolvedLabelFlatConverter:
         embedding = _embed_resolved_label(src, "image", origin, "")
         assert embedding is not None
         assert captured["bytes"] == b"RAWPDF"  # whole-file fallback
+
+
+class TestVideoUnitEmbed:
+    """A video label re-embeds its own window, as the dataset did (#4994).
+
+    Video clippers cut by metadata, so a unit is the parent file plus a
+    ``clip_start`` / ``clip_end``.  Both the trail replay and the legacy-keys
+    fallback have to hand that window to the embedder with the path.
+    """
+
+    @staticmethod
+    def _record_embeds(monkeypatch) -> list[tuple]:
+        from vtscore.detectors import resolver as resolver_module
+
+        calls: list[tuple] = []
+
+        def fake_embed_file(path, media_type, embedder_name="", *, extra_fields=None):
+            calls.append((path, media_type, extra_fields))
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+        return calls
+
+    def test_tiled_trail_replays_to_its_tile(self, tmp_path, monkeypatch):
+        """The replay probes the source's length, as the loader did, so the
+        tiling clipper cuts the same tiles and the trail's pick is found.
+        Without it every tiled trail came back ``None`` and the resolver fell
+        back to embedding the whole video."""
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips, parse_trail, replay_chain_on_file
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
+        from vtscore.media.video import decode
+
+        monkeypatch.setattr(decode, "probe", lambda path: decode.VideoInfo(duration=6.0, fps=10.0))
+        calls = self._record_embeds(monkeypatch)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+
+        # What the loader hands the chain: the payload and its probed length.
+        parent = {
+            "id": 1,
+            "media_type": "video",
+            "filename": src.name,
+            "media_bytes": b"video-bytes",
+            "duration": 6.0,
+            "origin": {"importer": "server_folder", "params": {"path": str(tmp_path), "media_type": "video"}},
+            "origin_name": src.name,
+        }
+        clips = {1: parent}
+        apply_chain_to_clips(clips, [{"kind": "clipper", "name": "video_tiling", "params": {"duration": 2.0}}])
+        assert len(clips) == 3
+        middle = next(c for c in clips.values() if c["clip_start"] == 2.0)
+        trail = parse_trail(middle["origin"]["params"]["clipper_chain"])
+        assert trail is not None
+
+        result = replay_chain_on_file(src, trail)
+        assert result is not None
+        assert result[1] is None
+
+        [(path, media_type, extra_fields)] = calls
+        assert (path, media_type) == (src, "video")
+        assert extra_fields == {"clip_start": 2.0, "clip_end": 4.0}
+        dataset_input = _build_clip_embed_input(middle, "video")
+        assert extra_fields == {k: dataset_input[k] for k in ("clip_start", "clip_end")}
+
+    def test_legacy_keys_embed_their_window(self, tmp_path, monkeypatch):
+        """With no trail to replay, the legacy keys' window still reaches the embedder."""
+        from vtscore.detectors.resolver import _apply_clip_and_embed
+
+        calls = self._record_embeds(monkeypatch)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+        origin = {
+            "importer": "server_folder",
+            "params": {"clipper": "video_tiling", "clip_start": "2.0", "clip_end": "4.0", "clip_index": "1"},
+        }
+
+        result = _apply_clip_and_embed(src, "video", origin)
+        assert result is not None
+        assert result[1] is None
+        assert calls == [(src, "video", {"clip_start": "2.0", "clip_end": "4.0"})]
+
+    def test_payload_rewritten_by_a_step_embeds_the_new_bytes(self, tmp_path, monkeypatch):
+        """A step that replaced the payload leaves *file_path* stale, so the unit
+        is embedded from a tempfile of its own bytes, as before."""
+        import vtscore.media as media_registry
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.detectors import resolver as resolver_module
+        from vtscore.media.cleaner import MediaCleaner
+
+        class _Reencode(MediaCleaner):
+            @property
+            def name(self) -> str:
+                return "video_test_reencode"
+
+            @property
+            def media_type(self) -> str:
+                return "video"
+
+            def clean(self, media):
+                return {**media, "media_bytes": b"re-encoded"}
+
+        monkeypatch.setattr("vtscore.media.video.decode.probe", lambda path: None)
+        monkeypatch.setitem(media_registry._cleaner_registry, "video_test_reencode", _Reencode())
+        seen: list[bytes] = []
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            seen.append(path.read_bytes())
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+
+        result = replay_chain_on_file(src, [{"kind": "cleaner", "name": "video_test_reencode", "params": {}}])
+        assert result is not None
+        assert seen == [b"re-encoded"]

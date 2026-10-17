@@ -2,12 +2,12 @@
 
 A detector locks exactly one **embedder type** at create time - one of
 ``"semantic"``, ``"patch_semantic"``, ``"structural"`` (see
-``docs/plans/patch-embedder.md`` → "Per-detector embedder type").  It is the
-*kind* of vector space the detector's MLP trains and scores in, not a specific
+``docs/ARCHITECTURE.md`` → "Per-detector embedder type").  It is the
+*kind* of vector space the detector's head trains and scores in, not a specific
 embedder name: the detector is compatible with any dataset (of the same
-``media_type``) that binds an embedder of that type, and the MLP re-derives
+``media_type``) that binds an embedder of that type, and the head re-derives
 against whichever concrete embedder that dataset supplies.  Only the type is
-persisted on the detector JSON - never a vector or MLP - so it satisfies the
+persisted on the detector JSON - never a vector or trained head - so it satisfies the
 "No Persisted Vectors or MLPs" rule.
 
 This module holds the pure resolution / validation used by the detector-create

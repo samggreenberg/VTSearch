@@ -4,8 +4,8 @@ This document maps the Angular single-page app in `frontend/`. It is the
 front-end counterpart to [ARCHITECTURE.md](ARCHITECTURE.md), which covers the
 Python tiers.
 
-It is a **map, not an inventory.** The SPA holds roughly ninety components and
-sixty services; enumerating them here would be a list that rots on the next
+It is a **map, not an inventory.** The SPA holds roughly a hundred components and
+seventy-five services; enumerating them here would be a list that rots on the next
 commit. Instead this document explains the handful of mechanisms everything
 else is built on — the change-detection model, the service layer, the
 active-dataset/detector context, the generated API client, and the component
@@ -79,7 +79,7 @@ list to keep in sync.
 of recent sessions, dataset/detector pulldowns, achievements/help/settings
 buttons), the toast container, the offline banner, the dialog host, the
 achievement-unlock host, and the app-level modals (Settings, Achievements,
-Keyboard help, Add Dataset, New Detector). Route content renders into
+Keyboard help, Add Dataset, New Detector, Find Results). Route content renders into
 `<router-outlet>` inside `.main-content`.
 
 **Routes** (`app.routes.ts`) are all lazy (`loadComponent`) and encode the
@@ -108,7 +108,7 @@ frontend/
 ├── proxy.conf.json         Dev server: /api and /static → localhost:5000
 ├── vitest.config.ts        isolate: false — the cascade guard is in test-setup.ts (see §10)
 ├── docs-assets/            Symlink to docs/user/ — the in-app user guide is served from here
-├── public/                 Favicons, logo (copied verbatim into the build output)
+├── public/                 Favicons, logo, Toasty's faces (copied verbatim into the build output)
 ├── scripts/
 │   ├── openapi-gen-cached.mjs   Hash-stamped wrapper around ng-openapi-gen
 │   └── build-stamp.mjs          Writes generated/build-stamp.ts (the bundle's version, §7)
@@ -189,7 +189,7 @@ one-line forwarders for the handlers its template binds, so what is left in
 `label-view.component.ts` is panel chrome, Autopilot's phase wiring and the
 re-sort prompt. Neither service is `providedIn: 'root'`: the requests in them
 are cancelled by the *component's* pair scope, which a singleton has no way to
-name — see the note on `SortStateService` in `PairScopeService`'s header.
+name — see the note on `SortStateService` in `PairScopeService.seedBeta`.
 
 Two ordering rules keep what the view serves independent of which request
 answers first (#4318). Starting a sort ends whichever one is still in flight,
@@ -239,8 +239,8 @@ open width, and the `.layout--*-collapsed` classes put the strip's 48px in its
 place. A folded right panel is unmounted, which is why the views, not
 `vt-right-panel`, own the votes poll.
 
-**The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
-top row; #4413) is the one knob on the detector's line. The balance is
+**The Threshold** (`vt-balance`, the balance, in Train's Manual tab and on
+both of Test's tabs; #4413) is the one knob on the detector's line. The balance is
 F-beta's beta: which way to lean between false positives and false negatives.
 It is the detector's own, kept on the detector (#4665): the New Detector modal
 mounts the same control (with no line, so no state line) and sends the pick
@@ -251,10 +251,11 @@ The line is the set with the best estimated F-beta, and a spot check just says
 what it estimated. Two values back the control, and they travel separately:
 `SortStateService.beta` is the balance the radios show, seeded per pair by
 `PairScopeService.seedBeta` (`GET /api/balance`); `balance` is the state of
-the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked` or
-`checked`, the count kept, the check's two likely ranges and its F-beta
-estimate), and only ever arrives *with* that line (a sort, a Test pass, or the
-balance POST's own response). Each view has one write path, both
+the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked`,
+`checked`, or `gate` for a structural detector's verification gate, the count
+kept, the check's two likely ranges and its F-beta estimate), and only ever
+arrives *with* that line (a sort, a Test pass, or the balance POST's own
+response). Each view has one write path, both
 `switchMap`-ed and pair-scoped so a balance the user moved past can never land
 last. Test's
 (`betaRequests$`, debounced) installs the returned line straight over the
@@ -357,17 +358,14 @@ a shorter list."), and the check is finished when `check.status` is
 55–100% right, about half of them found (checked 15)." over "The line keeps
 the top 30 you haven't voted on, where your labels put it: the check informs
 the line and does not move it. The ranges are what the picks say about the 32
-it kept when the check started; …" (#4483)." Each round's `voted` event refreshes the piles; a
+it kept when the check started; …" (#4483). Each round's `voted` event refreshes the piles; a
 finished check has moved the line server-side, so the view re-reads it with
 `GET /api/balance` and installs it over the ranking on screen through
 `SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
 under the result, which is what reports it `stale`, and the owner's model is
 that *later* votes do that. The line draws the same in every state; the state
-and its likely range live in the balance control and on the Stats chart
-(which draws no horizontal line any more: a balance is a preference, not a
-precision to keep), and a stale range differs only in its tooltip. The Test
-view draws neither the range nor the Stats chart that used to carry it: its
-result pane draws the test's own ranges.
+and its likely range live in the balance control, and a stale range differs
+only in its tooltip (`staleNote`).
 
 ### Test view (`components/find-view/`)
 
@@ -396,8 +394,8 @@ testing: the guided flow is the default, the open one a tab away.
 **The Test autopilot** measures the line on the corpus in front of the user
 with uniform picks from rank bands on both sides of it (`vtscore/docs/packages/training.md`;
 the statistics are `vtscore/training/thresholds/line_test.py`, the routes
-`/api/line-test`). The server owns the sample and derives the phase on every
-read (`line_phase`), so nothing in the frontend accumulates it: the view's
+`/api/line-test*` in `vtsearch/routes/line_test.py`). The server owns the
+sample and derives the phase on every read (`line_phase`), so nothing in the frontend accumulates it: the view's
 component-provided `LineTestSessionService` holds the last `/api/line-test`
 response plus the one thing the wire does not carry, the round *as dealt*
 (the stage's dots show every pick of the round with its vote, where the
@@ -417,24 +415,22 @@ Browser, and clears it with the pair state.
   a pick is drawn from a band, and the list would show its rank (#4267).
 - `vt-line-test-stage` (centre): the current pick with Good and Bad, the
   round's dots, the phase's prompt, through a `KeyboardService.captureVoteKeys`
-  claim held while it is on screen, as the spot-check modal's round, but as
-  the view rather than a modal over a list.
+  claim held while it is on screen, as the spot check's stage does in Train.
 - `vt-line-test-result` (right): the result as it forms, in place of the two
   piles: the F-beta headline, the Right and Found ranges with their lights,
-  the band-resolution precision curve (which replaces the retired Stats
-  modal's *Checked by you* curve), the picks by band, and at Done the
+  the band-resolution precision curve, the picks by band, and at Done the
   verdict with its three exits (**Move to AutoFind**, which sets the
   detector's autofind flag and heads to the Dashboard; **Lean the
   Threshold**, the per-preset table the server prices from the same picks,
   whose click is the control's own balance pick; **Add Corrections and
-  retrain**, the view's existing corrections path). The Stats modal's trust
-  chips (Training-domain overlap, Evidence coverage) and its 2×2 of the
-  session's checks live under the verdict, read once the test is done.
+  retrain**, the view's existing corrections path). The trust chips
+  (Training-domain overlap, Evidence coverage) and a 2×2 of the session's
+  checks live under the verdict, read once the test is done.
 - The balance is live between phases and frozen within one
   (`LineTestSessionService.locked`): the view drops a pick while a phase
   runs, and after a pick lands it re-reads the test so the result reports
   the line `moved`. **Add Corrections** marks it `stale` (the detector has
-  now seen the test set), as `find_eval_stale` always did.
+  now seen the test set; the server's `find_eval_stale`).
 - The verdict is kept on the detector server-side (#4526), so a `start` over
   an unchanged ranking can come back already `done` with `test.kept_at` set:
   the result pane says when those picks were taken, and the service re-reads
@@ -482,7 +478,10 @@ follow.
 
 One method per endpoint, returning an `Observable` of a generated type. They
 hold **no state**. Each wraps a function from the generated client rather than
-hand-building a URL:
+hand-building a URL, unless the spec cannot type the call; those stay on plain
+`HttpClient` with a comment saying why (a plugin-field route whose body is the
+plugin's, a multipart upload, a blob download, the Browse projection
+endpoints):
 
 ```ts
 getMediaIds(): Observable<MediaIdsListResponse[]> {
@@ -521,7 +520,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
-| `AutoFindService` | The end of a background AutoFind: opens the results of a Find this tab started (the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, a dataset's ⋯ **Run AutoFind**, or a Find that landed while the dialog was open) with a **View results** action, and holds the run the app-root Find Results dialog shows. AutoFind is the unattended path and never opens the dialog on its own (#4615) |
+| `AutoFindService` | The end of a background AutoFind: opens the results of a Find this tab started (the Dashboard's big **Find** button, one run per ticked dataset) unless the dialog already shows another, toasts any other run of the user's (an import's, a dataset's ⋯ **Run AutoFind**, or a Find that landed while the dialog was open) with a **View Results** action, and holds the run the app-root Find Results dialog shows. AutoFind is the unattended path and never opens the dialog on its own (#4615) |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -564,18 +563,16 @@ this codebase, and it is silent.
   `testing/getter-signal-zoneless.spec.ts` pins this.
 - **Per-media-type settings prefs go through `SettingsStateService.perMediaType`.**
   A `{media_type: value}` settings key bound to a media-type signal returns a
-  `computed` value plus a merge-preserving setter, replacing the shadow
-  `Record` field + settings-mirror `effect()` + media-switch `effect()` +
-  hand-spread write that used to be repeated at every consumer. Two things it
-  buys: the value is a real signal (so a template binding on it repaints on its
-  own, instead of relying on some co-located `effect()` to dirty the view), and
-  there is no mirror left to go stale when a key disappears server-side. The
-  setter **merges**; a setter that replaced the dict would wipe every other
-  media type's preference. It takes a plain key, or a *signal* of a key where
+  `computed` value plus a merge-preserving setter; do not hand-roll a shadow
+  `Record` field kept in sync by `effect()`s. The value is a real signal (a
+  template binding on it repaints on its own), and there is no mirror to go
+  stale when a key disappears server-side. The setter **merges**; a setter
+  that replaced the dict would wipe every other media type's preference. It takes a plain key, or a *signal* of a key where
   the key itself varies (`vt-view-controls` picks `focus_mode_left` /
   `_right` / `_popup` from its `side` input). `LabelViewPanelStateService` is
-  the reference use; `find-view`, `browse-view`, `browse-bin-popup` and
-  `view-controls` are the other consumers.
+  the reference use; `find-view`, `browse-view`, `browse-bin-popup`,
+  `browse-selection-panel`, `right-panel` and `view-controls` are the other
+  consumers.
 
   Two notes on where the seams are. **The Settings modal is deliberately not a
   consumer**: it edits a *draft* settings signal across *every* media type via
@@ -842,12 +839,13 @@ render their own inline validation. The error still propagates to
 ### Server push, and polling when push won't do
 
 `ProgressEventsService` holds **one** `EventSource` on `/api/events` and fans
-it out to every consumer, replacing what used to be several REST polls.
+it out to every consumer.
 Channels: `server` (a per-connect `boot_id`, so a backend restart fires
-`serverReset$` and consumers can drop state keyed on dead `task_id`s),
-`dataset`, `loading-tasks`, `detector-loading-tasks`, `sort`, `find`, `eval`.
-Every one of those carries the same `ProgressEvent` shape, so any of them can
-be rendered by `utils/format-progress.ts`. The channel state is held in
+`serverReset$` and consumers can drop state keyed on dead `task_id`s);
+`loading-tasks` and `detector-loading-tasks` (`LoadingTask[]` lists); and
+`sort`, `find`, `eval`, which carry the `ProgressEvent` shape that
+`utils/format-progress.ts` renders. A payload-less `heartbeat` keeps the
+circuit breaker online during long silent operations. The channel state is held in
 signals — a signal write inside the SSE callback notifies Angular's scheduler
 directly, which is precisely what makes the pump work without zone.js.
 
@@ -900,8 +898,9 @@ component is very much still alive. It legitimately takes one of two shapes,
 and both are correct as written:
 
 - A **scope subject** fired on each reset, for a family of streams that share
-  a lifetime shorter than the component's: `findPolling$` (`dashboard`) and
-  `stopPolling$` (`VoteStateService`) cancel a superseded poll. Name it for the
+  a lifetime shorter than the component's: `polling$`
+  (`DashboardLoadingTasksService`), `stopPolling$` (`VoteStateService`) and
+  `sortSuperseded$` (`SortRunnerService`) cancel superseded work. Name it for the
   scope it bounds, never `destroy$`.
 
   The dataset/detector pair's scope is the one case where the subject is not a
@@ -910,8 +909,7 @@ and both are correct as written:
   operator, because the *ordering* around firing it is load-bearing. A pair
   switch must supersede **before** any of the new pair's state is installed, or
   a late response repaints the old pair's ranking over the new one's — a silent
-  wrong-results bug, not a crash. Both views used to spell that sequence out in
-  a comment and enforce nothing; `resetForNewPair()` is now the only caller that
+  wrong-results bug, not a crash. `resetForNewPair()` is the only caller that
   can fire the scope, so the order is not a caller's to get wrong. The service's
   own `ngOnDestroy` covers destroy-time teardown, so a view must not (and need
   not) fire the scope by hand.
@@ -1043,8 +1041,10 @@ next to the Browse canvas from swallowing keyboard focus on mousedown.
 Services are root-provided by default; provide one on a component only when
 per-instance state or a component-bound lifetime is the point.  The complete
 list today: `LabelViewPanelStateService` and `SortRunnerService`
-(`label-view`), `PairScopeService` (`label-view`, `find-view`), and
-`BrowseViewportService` / `BrowseSelectionService` (`browse-view`).
+(`label-view`), `PairScopeService` (`label-view`, `find-view`),
+`LineTestSessionService` (`find-view`), `BrowseViewportService` /
+`BrowseSelectionService` (`browse-view`), and `SiblingLoadService`
+(`photo-grid`, `source-photo-modal`).
 
 ---
 
@@ -1093,6 +1093,10 @@ Shared fragments live in `src/app/testing/` and compose freely in a
 - `provideZoneless()` / `configureZoneless()` — put the `TestBed` under
   zoneless change detection.
 - `mocks.ts` — shared service stubs.
+- `settle-resource.ts` — `settleResource()` / `settleZoneless(fixture)`, the
+  awaits the two subsections below rely on.
+- `line-balance.ts` / `line-test.ts` — wire-shaped fixtures for the balance and
+  Test-autopilot payloads.
 
 ### The zoneless oracle
 

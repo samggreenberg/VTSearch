@@ -224,10 +224,11 @@ export class LineTestResultComponent {
 
   // --- Training-domain overlap (coverage-atlas domain-shift report) --------
   // Compares the active dataset against a reference dataset's coverage atlas,
-  // the dataset the detector was trained on. The reference can't be inferred
-  // (a handed-over detector may not carry its haystack), so the user picks it
-  // from the loaded datasets with a matching embedder. See
-  // docs/plans/coverage-atlas.md §6.5.
+  // the dataset the detector was trained on. The picker lists the loaded
+  // datasets with a matching embedder and preselects the one holding most of
+  // the detector's labelled examples (#4961); a handed-over detector's
+  // haystack may not be loaded at all, so the user can still pick another.
+  // See docs/plans/coverage-atlas.md §6.5.
   readonly refCandidates = signal<DatasetRegistryEntry[]>([]);
   readonly selectedRefId = signal<string>('');
   readonly domainLoading = signal(false);
@@ -320,7 +321,11 @@ export class LineTestResultComponent {
       });
   }
 
-  /** Populate the reference-dataset picker from the loaded registry and, with a candidate, run the check. */
+  /**
+   * Populate the reference-dataset picker from the loaded registry and, with a
+   * candidate, run the check against the dataset the detector was trained on:
+   * the one holding most of its labelled examples (#4961), else the first.
+   */
   private initDomainOverlap(): void {
     const activeId = this.activeCtx.datasetId;
     const activeEmbedder = this.activeDataset.dataset()?.embedder ?? '';
@@ -328,7 +333,26 @@ export class LineTestResultComponent {
       (d) => d.loaded && d.id !== activeId && (d.embedder ?? '') === activeEmbedder,
     );
     this.refCandidates.set(candidates);
-    if (candidates.length > 0) this.selectRef(candidates[0].id);
+    if (candidates.length === 0) return;
+    this.domainLoading.set(true);
+    this.findApi
+      .getTrainingDomain()
+      .pipe(this.pairScope.scoped())
+      .subscribe({
+        next: (report) => {
+          const trainedOn = candidates.find((d) => d.id === report.reference_dataset_id);
+          if (trainedOn && report.domain_shift) {
+            // The same report the picker would fetch: show it rather than ask twice.
+            this.selectedRefId.set(trainedOn.id);
+            this.domainError.set('');
+            this.domainShift.set(report.domain_shift);
+            this.domainLoading.set(false);
+          } else {
+            this.selectRef((trainedOn ?? candidates[0]).id);
+          }
+        },
+        error: () => this.selectRef(candidates[0].id),
+      });
   }
 
   /** Run the domain-shift report against *refId*'s coverage atlas, or clear it. */

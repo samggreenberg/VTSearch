@@ -66,8 +66,10 @@ Discovery is **eager** - by the time `from vtscore.exporters import
 list_exporters` returns, every sub-package under
 `vtscore/exporters/` exposing an `EXPORTER` attribute is registered,
 and the `vtscore.exporters` entry-point group has been scanned. Failed
-imports emit a `UserWarning` and are skipped; broken third-party entry
-points warn and are skipped; built-ins win on name clash. See
+imports emit a `UserWarning` and are skipped; a third-party entry point
+whose own import raises warns and becomes a tombstone (left out of
+`list_exporters()`, re-raising its error once `get_exporter()` hands it
+out and it is used); built-ins win on name clash. See
 [`plugins.md`](plugins.md) for the underlying mechanics.
 
 ```python

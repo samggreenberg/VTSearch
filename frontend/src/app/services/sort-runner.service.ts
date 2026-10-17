@@ -109,7 +109,7 @@ export class SortRunnerService {
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
-  /** True while a windowed-sort "Load more" page fetch is in flight. */
+  /** True while a windowed-sort "Load More" page fetch is in flight. */
   readonly loadingMoreSort = signal(false);
 
   /**
@@ -440,7 +440,7 @@ export class SortRunnerService {
   }
 
   /**
-   * Page in the next window of a windowed ranking (the media-list "Load more"
+   * Page in the next window of a windowed ranking (the media-list "Load More"
    * trigger). Fetches from the sort token at the current loaded offset and
    * appends. A failed/expired token just stops paging (the user can re-sort).
    */

@@ -38,8 +38,10 @@ importing `vtscore`; they are read at import time.
 
 ## 1. Set up `CoreConfig`
 
-Library-only consumers construct `CoreConfig` directly. The app installs a
-builder that reads from `vtsearch.settings`; you don't need one.
+Library-only consumers construct `CoreConfig` directly and register a
+builder that returns it, because library code reads its configuration through
+`CoreConfig.from_settings()` (the detector store finds `detectors_dir` that
+way). The app's own builder reads from `vtsearch.settings`; you don't need it.
 
 ```python
 from pathlib import Path
@@ -77,7 +79,8 @@ that bite:
   dataclass with defaults only for its optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
   `autofind_cli_delete_dataset`, `projection_n_neighbors`,
-  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`, `beta`,
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
+  `default_labelset_source`, `labelset_source_push_interval`, `beta`,
   `hide_ingest_eta` and `inclusion` (both deprecated)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
