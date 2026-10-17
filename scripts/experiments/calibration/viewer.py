@@ -512,8 +512,10 @@ def _metric_list(main: pd.DataFrame, oracle_keys: Sequence[str] = ()) -> list[di
     return out
 
 
-def opening_view(keys: Sequence[str], *, metric: str | None = None, hide: Sequence[str] = ()) -> dict:
-    """The payload's ``view`` block: the metric the page opens on, and the ones it hides.
+def opening_view(
+    keys: Sequence[str], *, metric: str | None = None, hide: Sequence[str] = (), dataset: str | None = None
+) -> dict:
+    """The payload's ``view`` block: the metric the page opens on, the ones it hides, and how it opens its datasets.
 
     *keys* are the metrics the payload carries.  The block says how the page
     **opens**, never what it carries, so it can be rewritten on a built page
@@ -527,6 +529,11 @@ def opening_view(keys: Sequence[str], *, metric: str | None = None, hide: Sequen
     ``hide`` that leaves nothing to offer each fail the build here.  Hiding a
     known metric the run never emitted is allowed, since the page then has
     nothing to hide.
+
+    *dataset* ``"each"`` opens a page with several datasets on one series per
+    dataset rather than their pool (#4959: a page whose datasets are one bench
+    at three prevalences means nothing pooled).  ``"all"``, ``""`` or ``None``
+    is the pool, the default, and is not written.
     """
     from vtscore.eval.calibration_metrics import DETECTION_METRICS
 
@@ -543,11 +550,15 @@ def opening_view(keys: Sequence[str], *, metric: str | None = None, hide: Sequen
         raise SystemExit(f"viewer: cannot open on {metric!r}: the payload carries only {', '.join(keys)}")
     if metric and metric in hidden:
         raise SystemExit(f"viewer: cannot open on {metric!r} and hide it")
+    if dataset not in (None, "", "all", "each"):
+        raise SystemExit(f"viewer: a page opens its datasets 'each' or 'all', not {dataset!r}")
     view: dict = {}
     if metric:
         view["metric"] = metric
     if hidden:
         view["hide"] = hidden
+    if dataset == "each":
+        view["dataset"] = "each"
     return view
 
 
@@ -1213,6 +1224,7 @@ def build_viewer(  # noqa: C901
     score_empty_sets: bool = True,
     arms_control: Mapping[str, str] | None = None,
     embedder_labels: Mapping[str, str] | None = None,
+    default_dataset: str | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*.
 
@@ -1225,8 +1237,8 @@ def build_viewer(  # noqa: C901
     by its key (:func:`page_embedder_labels`, #4655); an embedder without one
     shows its key.
 
-    *default_metric* and *hide_metrics* set the page's opening ``view``; see
-    :func:`opening_view`.  Without a *default_metric* the page opens on
+    *default_metric*, *hide_metrics* and *default_dataset* set the page's opening
+    ``view``; see :func:`opening_view`.  Without a *default_metric* the page opens on
     :data:`DEFAULT_METRIC`, F1 (#4635), and the ``view`` says nothing about it.
     A frame that offers no F1 but carries a beta opens on the objective (#4584),
     its columns filled from the rates where the cells predate them; any other
@@ -1289,7 +1301,7 @@ def build_viewer(  # noqa: C901
         if objective.OBJECTIVE in shown:
             default_metric = objective.OBJECTIVE
     # Checked before the expensive part, so a misspelt flag fails in a second.
-    view = opening_view(offered, metric=default_metric, hide=hide_metrics)
+    view = opening_view(offered, metric=default_metric, hide=hide_metrics, dataset=default_dataset)
 
     den = denominator if denominator is not None and not denominator.empty else main
     den = den.copy()
@@ -1568,6 +1580,7 @@ def reskin(
     title: str | None = None,
     subtitle: str | None = None,
     embedder_labels: Mapping[str, str] | None = None,
+    default_dataset: str | None = None,
 ) -> Path:
     """Re-substitute *page*'s own payload into the current template, in place.
 
@@ -1602,7 +1615,8 @@ def reskin(
         raise SystemExit(f"{page}: no payload script tag - not a viewer page")
     blob = m.group(1)
     relabel = title is not None or subtitle is not None or embedder_labels is not None
-    if default_metric is not None or hide_metrics is not None or fill_gaps or relabel:
+    reviewed = default_metric is not None or hide_metrics is not None or default_dataset is not None
+    if reviewed or fill_gaps or relabel:
         payload = json.loads(blob)
         if title is not None:
             payload["title"] = title
@@ -1612,12 +1626,13 @@ def reskin(
             fill_payload_gaps(payload)
         if embedder_labels is not None:
             _with_embedder_labels(payload, page_embedder_labels(payload["embedders"], embedder_labels))
-        if default_metric is not None or hide_metrics is not None:
+        if reviewed:
             was = payload.pop("view", None) or {}
             view = opening_view(
                 [spec["key"] for spec in payload["metrics"]],
                 metric=was.get("metric") if default_metric is None else default_metric,
                 hide=was.get("hide", []) if hide_metrics is None else hide_metrics,
+                dataset=was.get("dataset") if default_dataset is None else default_dataset,
             )
             if view:
                 payload["view"] = view
@@ -1686,6 +1701,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "run with a balance, else the first it offers); with --reskin, '' drops the page's own choice",
     )
     ap.add_argument(
+        "--default-dataset",
+        choices=("each", "all", ""),
+        default=None,
+        help="how a page with several datasets opens: one series per dataset ('each', #4959) or their pool "
+        "('all', the default); with --reskin, '' drops the page's own choice",
+    )
+    ap.add_argument(
         "--hide-metrics",
         metavar="KEYS",
         help="comma-separated metrics the page does not offer, though it still carries them; "
@@ -1738,6 +1760,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 title=args.title,
                 subtitle=args.subtitle,
                 embedder_labels=labels,
+                default_dataset=args.default_dataset,
             )
             print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
         return 0
@@ -1761,6 +1784,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "embedder_labels": labels,
         "default_metric": args.default_metric or None,
         "hide_metrics": hide or (),
+        "default_dataset": args.default_dataset or None,
     }
     if args.beta_run:
         if args.skyline_results:

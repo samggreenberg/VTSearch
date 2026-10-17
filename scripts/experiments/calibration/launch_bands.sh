@@ -66,6 +66,8 @@ export CALIB_CATEGORY_MODE=all
 
 # THE STUDY. Every other export on this page exists to hold something still.
 export CALIB_TEST_BANDS="${CALIB_TEST_BANDS:-all}"
+# `off` runs without the per-band columns: a whole-cell prevalence arm refuses them (#4959).
+[[ "$CALIB_TEST_BANDS" == off ]] && export CALIB_TEST_BANDS=""
 
 # Sized to make a PER-CELL rate readable, because the off-diagonal is where the
 # interesting variance is and it is measured on a held-out fraction of a band.
