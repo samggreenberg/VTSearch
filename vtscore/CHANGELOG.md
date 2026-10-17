@@ -77,6 +77,18 @@ instead, since every commit on `dev` is effectively a new app release.)
   than running unbound. Register the contexts first, omit the ids, or build the manager with
   `binds_context=False`.
 
+- **`eval_learned_sort` no longer fits its threshold on the items it scores** (issue #5003). It handed
+  `train_and_score` the whole pool, so the threshold was fitted over the held-out test items it was
+  then measured on (they were the unvoted haystack). Each category is now split into a simulation half
+  and a held-out test half first (new `sim_fraction`, default `0.5`, the same default as
+  `simulate_voting_iterations`); `train_fraction` is now the fraction of the **simulation half** that is
+  voted, its unvoted rest is the haystack, and only that half reaches `train_and_score`. The test half is
+  scored with the returned model (`score_media_with_model`). `num_train` counts the votes, so
+  `num_train + num_test` no longer covers the pool. Reported `python -m vtscore.eval --mode learned`
+  metrics will move: the leak is gone and, at the default fractions, a quarter of the pool is voted
+  rather than half. A structural dataset is now refused with a `ValueError`, since its threshold is
+  the Stage-2 gate's and the held-out half is scored by the head.
+
 - **`AudioMediaType.media_response` types the payload by its container** (issue #4981). It returned
   `audio/wav` and a `media_<id>.wav` download name whatever the bytes, though an MP3 / FLAC / OGG / M4A
   import keeps its file verbatim. New `vtscore.media.audio.sniff.sniff_audio_format(data)` returns

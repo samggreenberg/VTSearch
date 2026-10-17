@@ -526,7 +526,8 @@ class TestEvalSnippet:
         assert metrics.target_category == "dog"
         for field in ("accuracy", "precision", "recall", "f1"):
             assert 0.0 <= getattr(metrics, field) <= 1.0
-        assert metrics.num_train + metrics.num_test == len(loaded_medias)
+        # The votes and the held-out half; the unvoted rest of the simulation half is in neither.
+        assert metrics.num_train + metrics.num_test <= len(loaded_medias)
 
     def test_eval_learned_sort_is_not_re_exported_from_the_package(self):
         import vtscore.eval as eval_pkg
