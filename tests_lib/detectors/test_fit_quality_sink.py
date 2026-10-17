@@ -16,6 +16,11 @@ from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS
 from vtscore.eval.voting_columns import FIT_QUALITY_ROW_COLUMNS
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 
+from .sweep_cache import memoize_sweep
+
+# One worker, so a run several tests read is simulated once (see sweep_cache.py).
+pytestmark = pytest.mark.xdist_group("fit-quality-sink")
+
 DIM = 32
 
 
@@ -40,8 +45,11 @@ def _blob_dataset(n_per_cat=120, seed=0, separation=3.0, dim=DIM):
     return medias
 
 
-def _run(sink, *, stride=5, max_steps=12):
-    return simulate_voting_iterations(
+@memoize_sweep
+def _sink(*, stride=5, max_steps=12) -> list[dict]:
+    """The goodness-of-fit rows one run emits (shared between tests: read-only)."""
+    sink: list[dict] = []
+    simulate_voting_iterations(
         _blob_dataset(),
         target_category="cat0",
         # The trained head's cut is the subject: under the label quota (#4643)
@@ -57,40 +65,36 @@ def _run(sink, *, stride=5, max_steps=12):
         fit_quality_sink=sink,
         fit_quality_stride=stride,
     )
+    return sink
 
 
 class TestFitQualitySink:
     def test_rows_are_emitted(self):
-        sink: list[dict] = []
-        _run(sink)
+        sink = _sink()
         assert sink, "no goodness-of-fit rows were emitted at all"
 
     def test_every_emitted_key_survives_the_column_tuple(self):
         # The failure mode the repo has already paid for once: a key the sink
         # emits that is absent from the column tuple is dropped by pandas with
         # no error, so the column simply never appears in the CSV.
-        sink: list[dict] = []
-        _run(sink)
+        sink = _sink()
         cols = set(FIT_QUALITY_ROW_COLUMNS)
         for row in sink:
             missing = set(row) - cols
             assert not missing, f"keys emitted but not in FIT_QUALITY_ROW_COLUMNS: {sorted(missing)}"
 
     def test_the_statistics_columns_are_all_present(self):
-        sink: list[dict] = []
-        _run(sink)
+        sink = _sink()
         for col in FIT_QUALITY_COLUMNS:
             assert col in sink[0], f"{col} missing from the emitted row"
 
     def test_both_scopes_appear(self):
-        sink: list[dict] = []
-        _run(sink)
+        sink = _sink()
         scopes = {r["scope"] for r in sink}
         assert any(s.startswith("sim:") for s in scopes), f"no labelled sim scope emitted; got {scopes}"
 
     def test_the_sim_scope_carries_labelled_statistics(self):
-        sink: list[dict] = []
-        _run(sink)
+        sink = _sink()
         sim_rows = [r for r in sink if str(r["scope"]).startswith("sim:")]
         assert sim_rows
         # At least one step must have produced a real identification reading;
@@ -102,18 +106,15 @@ class TestFitQualitySink:
         # The blobs are linearly separable, so the fitted mixture's split really
         # should coincide with the class split. If this ever drops to chance the
         # statistic has stopped tracking what it claims to.
-        sink: list[dict] = []
-        _run(sink, max_steps=16)
+        sink = _sink(max_steps=16)
         accs = [r["ident_bal_acc"] for r in sink if str(r["scope"]).startswith("sim:")]
         accs = [a for a in accs if np.isfinite(a)]
         assert accs, "no identification readings"
         assert max(accs) > 0.7, f"separable data identified at only {max(accs):.3f}"
 
     def test_stride_controls_the_row_count(self):
-        dense: list[dict] = []
-        sparse: list[dict] = []
-        _run(dense, stride=1, max_steps=12)
-        _run(sparse, stride=6, max_steps=12)
+        dense = _sink(stride=1, max_steps=12)
+        sparse = _sink(stride=6, max_steps=12)
         assert len(sparse) < len(dense), f"stride did not thin the frame ({len(sparse)} vs {len(dense)})"
 
     def test_no_sink_is_a_no_op(self):
@@ -140,8 +141,7 @@ class TestFoldScope:
     anywhere of the mixture the *shipped* threshold is actually cut from."""
 
     def test_fold_rows_carry_the_fitted_parameters(self):
-        sink: list[dict] = []
-        _run(sink, stride=1, max_steps=20)
+        sink = _sink(stride=1, max_steps=20)
         fold_rows = [r for r in sink if str(r["scope"]).startswith("fold")]
         if not fold_rows:
             pytest.skip("no fold-anchored cut formed on this small synthetic run")
@@ -151,8 +151,7 @@ class TestFoldScope:
         assert r["fq_mu_hi"] >= r["fq_mu_lo"], "components are not ordered by mean"
 
     def test_fold_rows_record_the_anchor_mass(self):
-        sink: list[dict] = []
-        _run(sink, stride=1, max_steps=20)
+        sink = _sink(stride=1, max_steps=20)
         fold_rows = [r for r in sink if str(r["scope"]).startswith("fold")]
         if not fold_rows:
             pytest.skip("no fold-anchored cut formed on this small synthetic run")
@@ -166,8 +165,7 @@ class TestFoldScope:
         # no call site passed the counterfactual, and `anchor_n` was the count
         # of FOLDS rather than of votes. Either alone is enough to score H3 as
         # a refutation of something never measured (#3329).
-        sink: list[dict] = []
-        _run(sink, stride=1, max_steps=20)
+        sink = _sink(stride=1, max_steps=20)
         fold_rows = [r for r in sink if str(r["scope"]).startswith("fold")]
         if not fold_rows:
             pytest.skip("no fold-anchored cut formed on this small synthetic run")
@@ -182,8 +180,7 @@ class TestFoldScope:
         # `anchor_n` flat across a growing label set is the signature of the
         # fold-count bug: the votes each fold anchors on are its held-out share,
         # which grows with the run.
-        sink: list[dict] = []
-        _run(sink, stride=1, max_steps=20)
+        sink = _sink(stride=1, max_steps=20)
         anchored = [r for r in sink if str(r["scope"]).startswith("fold") and r["anchor_n"] > 0]
         if len({int(r["t"]) for r in anchored}) < 2:
             pytest.skip("too few anchored checkpoints on this small synthetic run")

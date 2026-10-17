@@ -26,6 +26,8 @@ from vtscore.datasets.labelset import LabeledElement, LabelSet
 from vtscore.detectors.labelset_training import labeled_media_ids, labeled_media_labels
 from vtscore.detectors.training import train_and_score, train_and_threshold
 
+from .sweep_cache import memoize_sweep
+
 DIM = 32
 
 
@@ -259,6 +261,8 @@ class TestHarnessArmKnob:
         assert all(size == on.size for size in excluded_sizes)
 
 
+# One worker, so the default arm three tests read runs once (see sweep_cache.py).
+@pytest.mark.xdist_group("voted-haystack-arms")
 class TestArmSemanticsEndToEnd:
     """#3312: a full simulated run under each arm, which is what the GRID
     submits.  These pin the two things the study's validity rests on - the
@@ -277,6 +281,7 @@ class TestArmSemanticsEndToEnd:
         return out
 
     @staticmethod
+    @memoize_sweep
     def _run(floor):
         from vtscore.eval.voting_iterations import simulate_voting_iterations
 
