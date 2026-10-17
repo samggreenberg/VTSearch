@@ -196,6 +196,17 @@ class TestApply:
         assert problems and "merge" in problems[0]
         assert pages[3].marks[0].class_id == "tobacco800/logo_q" and merges == []
 
+    def test_two_marks_accepted_on_one_page_are_two_instances(self, mods):
+        """#5052: ``cjb54c00`` carries the leaf twice, and both were accepted, but it counted once."""
+        pages, classes = _corpus(mods)
+        Mark = mods["common"].Mark
+        pages[2].marks = [Mark("logo", (100, 100, 50, 50), None), Mark("logo", (300, 100, 50, 50), None)]
+        cands = [dict(NOBOX, box=list(m.box), mark_index=i) for i, m in enumerate(pages[2].marks)]
+        _, problems, merges, _, _ = mods["c"].apply_completeness(pages, classes, [_row(cands, "0,1")])
+        assert problems == [] and len(merges) == 2
+        assert classes["tobacco800/logo_a"]["page_ids"] == ["tobacco800/member", "tobacco800/nobox", "tobacco800/nobox"]
+        assert classes["tobacco800/logo_a"]["n_instances"] == 3
+
     def test_blank_verdict_is_skipped_and_garbage_is_a_problem(self, mods):
         pages, classes = _corpus(mods)
         before = copy.deepcopy(classes)
@@ -263,6 +274,17 @@ class TestReApplyingDoesNotGrowTheStore:
     def test_a_box_stored_as_a_tuple_matches_the_same_box_as_a_list(self, mods):
         row = self._rows(mods)[0]
         assert mods["c"].dedupe_added_marks([row, dict(row, box=tuple(row["box"]))]) == [row]
+
+    def test_re_applying_puts_the_new_box_on_its_page_once(self, mods):
+        """#5052: the page took a second copy of the box each time, and the store hid it."""
+        pages, classes = _corpus(mods)
+        mods["c"].apply_completeness(pages, classes, [_row([NOBOX], "0")])
+        _, problems, merges, _, added = mods["c"].apply_completeness(pages, classes, [_row([NOBOX], "0")])
+        assert problems == [] and added == []
+        assert [m.box for m in pages[2].marks] == [(300, 400, 80, 90)]
+        assert merges[0]["right_mark_index"] == 0
+        assert classes["tobacco800/logo_a"]["page_ids"] == ["tobacco800/member", "tobacco800/nobox"]
+        assert classes["tobacco800/logo_a"]["n_instances"] == 2
 
     def test_a_store_written_before_the_dedupe_is_tidied_by_the_next_save(self, mods, tmp_path):
         row = self._rows(mods)[0]
