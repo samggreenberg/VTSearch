@@ -158,7 +158,10 @@ def umap_fit_transform(
 
     import umap  # noqa: PLC0415
 
-    reducer = umap.UMAP(
+    # ``Any``, not the inferred ``UMAP``: umap-learn ships no annotations, so
+    # pyright would infer ``fit_transform``'s return type from its body (and
+    # ``fit``'s, and everything it calls), which cost 15-60s per check (#5070).
+    reducer: Any = umap.UMAP(
         n_components=n_components,
         n_neighbors=n_neighbors,
         min_dist=min_dist,
