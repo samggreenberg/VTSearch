@@ -2254,11 +2254,11 @@ class _CheckState:
     """Where one :func:`simulate_voting_iterations` run's spot checks stand between steps.
 
     One object rather than loose locals of the voting loop, for pyright's sake
-    (#5070): a ``x is None`` test on a *typed local* makes pyright re-derive
-    ``x`` at that point for its "narrowing for implied else", and inside a
-    ~1,000-line loop each such re-derivation walks the whole loop, through
-    every other such test.  The check state's tests were most of the 45s the
-    file took to check.  A test on an attribute is narrowed without that walk.
+    (#5070): its "narrowing for implied else" re-derives any *declared* name
+    tested with ``is None``, ``==`` or ``in`` at the test, and inside a
+    ~1,000-line loop each re-derivation walks the whole loop, through every
+    other such test.  The check state's tests were most of the 45s the file
+    took to check; a test on an attribute is narrowed without that walk.
     """
 
     #: The check running now, or the last one started.
