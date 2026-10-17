@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server that trusts session cookies no longer signs them with the key printed in the source**
+  (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
+  anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
+  OAuth state. When `--login trivial` or `HF_OAUTH_CLIENT_ID` is in force and the variable is unset,
+  startup now uses a random key for that process and logs a warning: sessions end at a restart, and
+  a deployment with more than one gunicorn worker must set the variable. Single-user mode without
+  HuggingFace sign-in is unchanged.
+
 - **A detector with too few labels for a trained head reports the set it actually keeps** (issue
   #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
   typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of

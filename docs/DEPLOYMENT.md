@@ -114,10 +114,18 @@ cloud or multi-homed host that is every interface, not just loopback.
   it, so a gunicorn deployment runs the default single-user provider unless
   you install another in code (`vtsearch.auth.set_login_provider`).
 - **Set `VTSEARCH_SECRET_KEY` to a random value.** The default is a constant
-  visible in the source. `TrivialLoginProvider`'s session cookie is only
-  integrity-protected by that key, so with the default anyone can forge a
-  cookie naming any user — and therefore read that user's `data/<username>/`
-  subtree.
+  visible in the source, and the signed session cookie is only
+  integrity-protected by that key. Two features trust what the cookie says:
+  `--login trivial` keeps the username in it, and Sign in with HuggingFace
+  (live whenever `HF_OAUTH_CLIENT_ID` is set, under any login provider) keeps
+  its OAuth `state` and PKCE verifier there. When either is active and the
+  variable is unset, startup replaces the default with a random key for that
+  process and logs a warning, so nobody can forge a cookie from the source —
+  but sessions then end at every restart. That is safe with the single worker
+  `gunicorn.conf.py` runs; a deployment with more than one worker **must** set
+  the variable, or each worker rejects the cookies the others signed.
+  Single-user mode without HuggingFace sign-in trusts no cookie and keeps the
+  default.
 - **Let the OS be the real boundary.** In single-user mode the only limit on
   file access is what the process account can read and write, so run VTSearch
   as an unprivileged, dedicated user (or in a container) whose only writable
@@ -833,7 +841,7 @@ evaluation, sorting, voting) works fully offline.
 |----------|---------|-------------|
 | `VTSEARCH_DATA_DIR` | `<repo root>/data` | **Relocates the entire data directory** (settings, per-user dirs, model cache, embeddings, detectors, media, demo downloads). The default is anchored to the *repository root*, not the current working directory, so a systemd unit or cron job started from elsewhere still finds existing state. This is the one variable most production deployments need: point it at a persistent volume outside the checkout so a redeploy never touches user state. |
 | `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | HuggingFace model cache. Split it out from the data dir when several instances should share one ~4.1 GB model download. Read independently of `VTSEARCH_DATA_DIR`, so setting only this variable works even with the data dir unset. |
-| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
+| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**). Left unset with `--login trivial` or `HF_OAUTH_CLIENT_ID` in force, startup swaps in a random per-process key and warns; see [Security](#security). |
 | `VTSEARCH_PORT` | `5000` | Bind port for the **dev server** (`python app.py`); `--port` wins over it. Gunicorn ignores this — use `VTSEARCH_BIND` below. |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
