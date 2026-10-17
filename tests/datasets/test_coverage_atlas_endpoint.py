@@ -75,14 +75,29 @@ def _loaded_dataset(n: int = 30, *, name: str = "Atlas", seed_offset: int = 0, s
     return entry, ctx
 
 
-def _wait_for_atlas(dataset_id: str, timeout: float = 10.0):
+# A real hierarchical k-means build: seconds on an idle box, but well past 10 s
+# on a loaded one (a 10 s wait flaked), so the waits are generous.
+_BUILD_TIMEOUT = 60.0
+
+
+def _wait_until(predicate, timeout: float = _BUILD_TIMEOUT) -> bool:
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        ctx = get_context(dataset_id)
-        if ctx is not None and ctx.coverage_atlas is not None:
-            return ctx.coverage_atlas
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
         time.sleep(0.05)
-    return None
+    return True
+
+
+def _wait_for_atlas(dataset_id: str, timeout: float = _BUILD_TIMEOUT):
+    def _built() -> bool:
+        ctx = get_context(dataset_id)
+        return ctx is not None and ctx.coverage_atlas is not None
+
+    if not _wait_until(_built, timeout):
+        return None
+    ctx = get_context(dataset_id)
+    return ctx.coverage_atlas if ctx is not None else None
 
 
 class TestCoverageAtlasEndpoint:
@@ -109,11 +124,12 @@ class TestCoverageAtlasEndpoint:
 
         entry, _ = _loaded_dataset(name="AtlasIdle")
         task_id = client.post(f"/api/datasets/registry/{entry['id']}/coverage-atlas").get_json()["task_id"]
+        # Held so the row can't be pruned from under the check once finished.
+        tracker = loading_tasks.get_tracker(task_id)
+        assert tracker is not None
 
-        deadline = time.monotonic() + 10
-        while not loading_tasks.is_finished(task_id) and time.monotonic() < deadline:
-            time.sleep(0.05)
-        (row,) = [t for t in loading_tasks.list_tasks() if t["task_id"] == task_id]
+        assert _wait_until(lambda: loading_tasks.is_finished(task_id))
+        row = tracker.get()
         assert row["status"] == "idle"
         assert not row.get("error")
 
@@ -181,7 +197,7 @@ class TestStatsCoverageAtlasStatus:
         url = f"/api/datasets/registry/{entry['id']}/coverage-atlas"
 
         task_id = client.post(url).get_json()["task_id"]
-        assert started.wait(timeout=10)
+        assert started.wait(timeout=_BUILD_TIMEOUT)
         tracker = loading_tasks.get_tracker(task_id)
         status = self._status(client, entry["id"])
         assert status["built"] is False
@@ -196,9 +212,7 @@ class TestStatsCoverageAtlasStatus:
 
         # Cancelled, the build leaves no atlas and nothing running.
         assert loading_tasks.cancel_task(task_id)
-        deadline = time.monotonic() + 10
-        while loading_tasks.worker_alive(task_id) and time.monotonic() < deadline:
-            time.sleep(0.05)
+        assert _wait_until(lambda: not loading_tasks.worker_alive(task_id))
         status = self._status(client, entry["id"])
         assert status["built"] is False
         assert status["building"] is False
