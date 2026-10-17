@@ -465,6 +465,7 @@ def learned_sort(body: dict):
         resolve_active_labelset,
         run_learned_sort,
     )
+    from vtscore.detectors.query_head import is_quota_head
     from vtscore.detectors.training import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
@@ -515,9 +516,12 @@ def learned_sort(body: dict):
     # A dataset switch drops ``line_ranking`` (media ids are per dataset) while
     # the votes, and so the signature, come back unchanged; reusing the result
     # then would draw a line the detector can no longer re-cut or spot-check,
-    # so train again instead (#4317).
+    # so train again instead (#4317).  Train again, too, when the context holds
+    # a head the label quota gives (a load or a re-embed under the quota): it
+    # keeps a ranking of its own (#5048), but the learned sort never leaves
+    # one behind, so the cached result's head is not the one on the context.
     cached = learned_sort_jobs.cached_for(signature)
-    if cached is not None and det_ctx.line_ranking is not None:
+    if cached is not None and det_ctx.line_ranking is not None and not is_quota_head(det_ctx.model):
         return _learned_sort_done_payload(cached)
 
     # _run closes over the resolved inputs and delegates the train → score →

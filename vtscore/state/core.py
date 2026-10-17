@@ -1081,7 +1081,8 @@ class DetectorContext:
         # an ``AttributeError``.
         "precision_floor_cache",  # None
         # The ranking the line is drawn over (``LineRanking``, #4272): the
-        # haystack the last retrain scored, sorted, with the items the trainer
+        # haystack the last retrain scored (or that a head the label quota
+        # gives drew its line on, #5048), sorted, with the items the trainer
         # held as voted.  The balance keeps the top *count* unvoted items of it;
         # a re-cut (``recut_detector_threshold``) and the spot check's
         # candidate both read it.  Ids and scores only - never serialised.
