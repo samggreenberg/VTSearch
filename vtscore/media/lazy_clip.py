@@ -8,7 +8,7 @@ duplicating the source bytes once per derived item in the dataset pickle: a
 5-minute recording tiled into 30 clips stores the recipe 30 times (a few bytes
 each) instead of 30 copies of the audio.
 
-Two recipe families participate:
+Three recipe families participate:
 
 * **clip slices** - the media type's clipper re-slices the source bytes:
 
