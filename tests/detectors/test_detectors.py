@@ -158,6 +158,113 @@ class TestRegisterDetectorExamples:
         assert listed[detector_id]["examples"] == self._EXAMPLES
 
 
+class TestRegistryListingBackfill:
+    """The listing's detector-JSON fallback runs once, then lives in the registry (#5001)."""
+
+    _EXAMPLES = [{"type": "media", "value": "a1b2.wav"}]
+
+    @staticmethod
+    def _count_reads(monkeypatch) -> list:
+        """Spy on the listing's detector-JSON reads; returns the list of paths read."""
+        from vtsearch.routes.detectors import registry as route_module
+
+        reads: list = []
+        real = route_module._read_detector
+
+        def spy(path):
+            reads.append(path)
+            return real(path)
+
+        monkeypatch.setattr(route_module, "_read_detector", spy)
+        return reads
+
+    @staticmethod
+    def _write_json(name: str, **fields) -> None:
+        from vtscore.detectors.store import _detector_path, _write_detector
+
+        _write_detector(
+            _detector_path(name),
+            {"name": name, "media_type": "audio", "labelset": {"labels": []}, **fields},
+        )
+
+    @staticmethod
+    def _entry(detector_id: str) -> dict:
+        from vtscore.detectors.registry import get_detector
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        return entry
+
+    def _list(self, client, ids) -> dict:
+        res = client.get("/api/detectors/registry")
+        assert res.status_code == 200
+        return {d["id"]: d for d in res.get_json()["detectors"] if d["id"] in ids}
+
+    def test_second_listing_reads_no_detector_json(self, client, monkeypatch):
+        from vtscore.detectors import registry as reg_module
+        from vtscore.detectors.store import _detector_path
+
+        # Created with no dataset loaded: the entry's type is "", but the JSON
+        # has one (here, a legacy ``primary_embedder`` name it migrates from).
+        self._write_json("Typeless", primary_embedder="dinov3_patch", examples=self._EXAMPLES)
+        typeless = reg_module.register_detector(name="Typeless", media_type="audio", examples=self._EXAMPLES)
+        # Registered before ``examples`` existed on the entry.
+        self._write_json("NoExamples", embedder_type="structural", examples=self._EXAMPLES)
+        legacy = reg_module.register_detector(name="NoExamples", media_type="audio", embedder_type="structural")
+
+        def drop_examples(entries):
+            for e in entries:
+                if e["id"] == legacy["id"]:
+                    e.pop("examples", None)
+
+        reg_module._read_modify_write(drop_examples)
+
+        ids = {typeless["id"], legacy["id"]}
+        paths = {_detector_path("Typeless"), _detector_path("NoExamples")}
+        reads = self._count_reads(monkeypatch)
+
+        first = self._list(client, ids)
+        assert sorted(p.name for p in reads if p in paths) == sorted(p.name for p in paths)
+        assert first[typeless["id"]]["embedder_type"] == "patch_semantic"
+        assert first[legacy["id"]]["examples"] == self._EXAMPLES
+
+        reads.clear()
+        second = self._list(client, ids)
+        assert [p for p in reads if p in paths] == []
+        assert second == first
+
+        assert self._entry(typeless["id"])["embedder_type"] == "patch_semantic"
+        assert self._entry(legacy["id"])["examples"] == self._EXAMPLES
+
+    def test_nothing_to_learn_persists_nothing(self, client, monkeypatch):
+        from vtscore.detectors import registry as reg_module
+        from vtscore.detectors.store import _detector_path
+
+        # A JSON with no type either: still typeless until first train.
+        self._write_json("StillTypeless", examples=self._EXAMPLES)
+        typeless = reg_module.register_detector(name="StillTypeless", media_type="audio", examples=self._EXAMPLES)
+        # No JSON at all, and no examples on the entry.
+        orphan = reg_module.register_detector(name="Orphan", media_type="audio", embedder_type="semantic")
+
+        def drop_examples(entries):
+            for e in entries:
+                if e["id"] == orphan["id"]:
+                    e.pop("examples", None)
+
+        reg_module._read_modify_write(drop_examples)
+
+        ids = {typeless["id"], orphan["id"]}
+        reads = self._count_reads(monkeypatch)
+        listed = self._list(client, ids)
+        assert listed[typeless["id"]]["embedder_type"] == ""
+        assert listed[orphan["id"]]["examples"] == []
+        # One read per entry per listing, and nothing written back.
+        assert reads.count(_detector_path("StillTypeless")) == 1
+        assert reads.count(_detector_path("Orphan")) == 1
+        assert self._entry(typeless["id"])["embedder_type"] == ""
+        assert "examples" not in self._entry(orphan["id"])
+
+
 class TestExamplesBecomeLabels:
     """Media exemplars supplied at create time are labels, not just hints (issue #3045)."""
 
