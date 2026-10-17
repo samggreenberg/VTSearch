@@ -2249,6 +2249,38 @@ class _RunKnobs:
     calibration_seed: int
 
 
+@dataclass
+class _CheckState:
+    """Where one :func:`simulate_voting_iterations` run's spot checks stand between steps.
+
+    One object rather than loose locals of the voting loop, for pyright's sake
+    (#5070): a ``x is None`` test on a *typed local* makes pyright re-derive
+    ``x`` at that point for its "narrowing for implied else", and inside a
+    ~1,000-line loop each such re-derivation walks the whole loop, through
+    every other such test.  The check state's tests were most of the 45s the
+    file took to check.  A test on an attribute is narrowed without that walk.
+    """
+
+    #: The check running now, or the last one started.
+    check: SpotCheck | None = None
+    #: What stamps the running check's rows and picks (#4496): ``"prompt"``
+    #: for a prompted check (clicks), ``"check"`` for the end-of-run one.
+    phase: str = "check"
+    #: The last finished check: what a prompted check the budget cut short
+    #: leaves in place.
+    finished: SpotCheck | None = None
+    #: The vote count when the last check Autopilot ran ended (the app's
+    #: ``check_ended_votes``): the weak prompt's cooldown counts from it, and
+    #: so does whether the check before Done runs.
+    last_end: int | None = None
+    #: The labels separate weakly (#4496): a prompted check starts next step.
+    weak_due: bool = False
+    #: The end-of-run check has started.
+    end_checked: bool = False
+    #: #4664's early check: settled (run, or skipped) once a run.
+    early_settled: bool = True
+
+
 def _resolve_head(head: Optional[str], trainer: str) -> str:
     """Validate an explicit head name, or resolve ``None`` to the app's.
 
@@ -4165,10 +4197,10 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
     # The balance's spot check (#4272, #4413), run once the voting steps are
     # spent: the simulated user checks the line as the app's check step does,
-    # its picks answered from ground truth and cast as votes.  ``line_ranking``
-    # is the ranking the last step's line was drawn over, which the walk's
-    # bands are cut from and a finished result is fingerprinted against.
-    check: SpotCheck | None = None
+    # its picks answered from ground truth and cast as votes; ``checks`` holds
+    # where it stands.  ``line_ranking`` is the ranking the last step's line
+    # was drawn over, which the walk's bands are cut from and a finished
+    # result is fingerprinted against.
     line_ranking: LineRanking | None = None
     # How many unvoted items the line keeps on it: the set a check started next
     # ranges over (#4483).
@@ -4186,18 +4218,8 @@ def simulate_voting_iterations(  # noqa: C901
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
     # #4496: under ``spot_check="weak"`` the app prompts a check when the labels
-    # separate weakly.  ``check_phase`` stamps the running check's rows and
-    # picks: ``"prompt"`` for a prompted check (clicks), ``"check"`` for the
-    # end-of-run one.
-    check_phase = "check"
-    end_checked = False
-    weak_due = False
-    # The vote count when the last check Autopilot ran ended (the app's
-    # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
-    # does whether the check before Done runs.
-    last_check_end: int | None = None
-    # #4664's early check: settled (run, or skipped) once a run.
-    early_settled = early_check is None
+    # separate weakly.
+    checks = _CheckState(early_settled=early_check is None)
     if flow is not None and (spot_check == "off" or not done_check or beta is None):
         # No check before Done: the arm before the app ran it, a run that never
         # checks, or the Inclusion arm, which has no balance to check.
@@ -4237,9 +4259,6 @@ def simulate_voting_iterations(  # noqa: C901
             kept=line_kept if walk_shape_resolved != CHECK_TRIM else None,
         )
 
-    # The last finished check: what a prompted check the budget cut short leaves in place.
-    finished_check: SpotCheck | None = None
-
     def _settle_done_check() -> None:
         """Whether the check before Done runs, decided the step the flow reaches it, as the app decides it.
 
@@ -4254,7 +4273,7 @@ def simulate_voting_iterations(  # noqa: C901
             return
         n = len(good_votes) + len(bad_votes)
         if (
-            not done_check_due(n, last_check_end)
+            not done_check_due(n, checks.last_end)
             or line_ranking is None
             or not pool
             or n + _check_start_cost() > n_steps
@@ -4267,6 +4286,94 @@ def simulate_voting_iterations(  # noqa: C901
             return 0
         schedule = balance_schedule(beta)
         return schedule.rounds * (walk_picks or schedule.picks)
+
+    def _check_round(t: int) -> list[int] | None:  # noqa: C901 - the loop's check scheduling, moved out whole (#5070)
+        """The picks of the check round this step is, or ``None`` when it is an ordinary step.
+
+        The running check's next round, else a check started now: prompted
+        (the weak prompt, the check before Done, the early check) or, once
+        the voting steps are spent, the end-of-run one.  An empty list ends
+        the run: the steps are spent and there is nothing left to check.
+        """
+        picks: list[int] | None = None
+        if checks.check is not None and checks.check.running:
+            if checks.phase == "prompt" and t + len(checks.check.pending) > n_steps:
+                # The budget is spent mid-check: the user stops there, as closing
+                # the step does, and the end-of-run check takes over (#4496).
+                checks.check.cancel()
+                checks.check = checks.finished
+                checks.last_end = t
+                if flow is not None:
+                    flow.end_spot_check()
+            else:
+                picks = list(checks.check.pending)
+        if picks is None and not (checks.check is not None and checks.check.running):
+            if checks.weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                # The labels separate weakly (#4496): the user checks now, and
+                # the check's picks are clicks, so its opening bands must fit
+                # the budget left.
+                checks.weak_due = False
+                checks.last_end = t
+                started = _start_check()
+                if started is not None and started.pending:
+                    checks.check, checks.phase = started, "prompt"
+                    picks = list(started.pending)
+                    # The step is Autopilot's Spot Check.  Not in the opening,
+                    # which only the ``weak_phase="any"`` arm prompts in and the
+                    # app never does: there the flow keeps the walk's phase, as
+                    # that arm was priced.
+                    if flow is not None and flow.phase not in _OPENING_PHASES:
+                        flow.begin_spot_check("weak")
+            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
+                # Every light went green last step and the check before Done is
+                # due (``_settle_done_check`` let it stand): the user runs it now.
+                started = _start_check() if line_ranking is not None and pool else None
+                if started is not None and started.pending:
+                    checks.check, checks.phase = started, "prompt"
+                    picks = list(started.pending)
+                    flow.begin_spot_check("done")
+                else:
+                    flow.skip_done_check()
+            if picks is None and (t >= n_steps or not pool):
+                # The voting steps are spent.  Check the line once, if the run
+                # checks at all and there is a ranking with something unvoted in it.
+                if spot_check == "off" or checks.end_checked or beta is None or line_ranking is None:
+                    return []
+                checks.end_checked = True
+                started = _start_check()
+                if started is None:
+                    return []
+                checks.check, checks.phase = started, "check"
+                picks = list(started.pending)
+                if not picks:
+                    return []
+
+        if (
+            not checks.early_settled
+            and early_check is not None
+            and flow is not None
+            and t >= early_check
+            and flow.phase not in _OPENING_PHASES
+        ):
+            # #4664: every session is checked at early_check votes, once.  A
+            # prompted check running now or started this step, or one whose
+            # rounds reached that vote (a round casts its picks at once, so it
+            # can step over it), is that check; otherwise the user checks now,
+            # if a check can start.
+            if (checks.check is not None and checks.check.running and checks.phase == "prompt") or (
+                checks.last_end is not None and checks.last_end >= early_check
+            ):
+                checks.early_settled = True
+            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
+                checks.early_settled = True
+                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        checks.last_end = t
+                        checks.check, checks.phase = started, "prompt"
+                        picks = list(started.pending)
+                        flow.begin_spot_check("early")
+        return picks
 
     t = 0
 
@@ -4356,111 +4463,40 @@ def simulate_voting_iterations(  # noqa: C901
         return score
 
     while True:
-        picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
         # requested click this step reaches, which a check round can jump past.
         t_before = t
-        if check is not None and check.running:
-            if check_phase == "prompt" and t + len(check.pending) > n_steps:
-                # The budget is spent mid-check: the user stops there, as closing
-                # the step does, and the end-of-run check takes over (#4496).
-                check.cancel()
-                check = finished_check
-                last_check_end = t
-                if flow is not None:
-                    flow.end_spot_check()
-            else:
-                picks = list(check.pending)
-        if picks is None and not (check is not None and check.running):
-            if weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
-                # The labels separate weakly (#4496): the user checks now, and
-                # the check's picks are clicks, so its opening bands must fit
-                # the budget left.
-                weak_due = False
-                last_check_end = t
-                started = _start_check()
-                if started is not None and started.pending:
-                    check, check_phase = started, "prompt"
-                    picks = list(check.pending)
-                    # The step is Autopilot's Spot Check.  Not in the opening,
-                    # which only the ``weak_phase="any"`` arm prompts in and the
-                    # app never does: there the flow keeps the walk's phase, as
-                    # that arm was priced.
-                    if flow is not None and flow.phase not in _OPENING_PHASES:
-                        flow.begin_spot_check("weak")
-            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
-                # Every light went green last step and the check before Done is
-                # due (``_settle_done_check`` let it stand): the user runs it now.
-                started = _start_check() if line_ranking is not None and pool else None
-                if started is not None and started.pending:
-                    check, check_phase = started, "prompt"
-                    picks = list(check.pending)
-                    flow.begin_spot_check("done")
-                else:
-                    flow.skip_done_check()
-            if picks is None and (t >= n_steps or not pool):
-                # The voting steps are spent.  Check the line once, if the run
-                # checks at all and there is a ranking with something unvoted in it.
-                if spot_check == "off" or end_checked or beta is None or line_ranking is None:
-                    break
-                end_checked = True
-                started = _start_check()
-                if started is None:
-                    break
-                check, check_phase = started, "check"
-                picks = list(check.pending)
-                if not picks:
-                    break
-
-        if (
-            not early_settled
-            and early_check is not None
-            and flow is not None
-            and t >= early_check
-            and flow.phase not in _OPENING_PHASES
-        ):
-            # #4664: every session is checked at early_check votes, once.  A
-            # prompted check running now or started this step, or one whose
-            # rounds reached that vote (a round casts its picks at once, so it
-            # can step over it), is that check; otherwise the user checks now,
-            # if a check can start.
-            if (check is not None and check.running and check_phase == "prompt") or (
-                last_check_end is not None and last_check_end >= early_check
-            ):
-                early_settled = True
-            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
-                early_settled = True
-                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
-                    started = _start_check()
-                    if started is not None and started.pending:
-                        last_check_end = t
-                        check, check_phase = started, "prompt"
-                        picks = list(check.pending)
-                        flow.begin_spot_check("early")
+        # Undeclared on purpose: a typed ``picks`` makes every ``picks is None``
+        # below cost pyright a walk of the whole loop (see ``_CheckState``).
+        picks = _check_round(t)
+        if picks == []:
+            break
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
             # move what the next round samples.
-            phase = check_phase
+            phase = checks.phase
             startup_round, startup_cut = -1, None
             round_votes = {cid: _cast(cid, phase) for cid in picks}
             t = len(good_votes) + len(bad_votes)
             for cid in picks:
                 _log_pick(cid, round_votes[cid], phase, startup_round, startup_cut)
             is_positive = round_votes[picks[-1]]
-            assert check is not None and line_ranking is not None
-            check.record(round_votes)
-            if check.finished and check_phase == "prompt":
-                last_check_end = t
+            assert checks.check is not None and line_ranking is not None
+            checks.check.record(round_votes)
+            if checks.check.finished and checks.phase == "prompt":
+                checks.last_end = t
                 if flow is not None:
                     # The step ends with the check; this step's update reads the phase after it.
                     flow.end_spot_check()
-            if check.finished:
-                finished_check = check
+            if checks.check.finished:
+                checks.finished = checks.check
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
-                check.fingerprint = line_ranking.fingerprint(check.range_count, set(good_votes) | set(bad_votes))
+                checks.check.fingerprint = line_ranking.fingerprint(
+                    checks.check.range_count, set(good_votes) | set(bad_votes)
+                )
         else:
             phase = flow.phase if flow is not None else None
             startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
@@ -4679,7 +4715,7 @@ def simulate_voting_iterations(  # noqa: C901
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
-                    check=check,
+                    check=checks.check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
                     line_shape=line_shape,
@@ -4701,12 +4737,12 @@ def simulate_voting_iterations(  # noqa: C901
                 if weak_line is not None and weak_check_due(
                     weak_line.separation,
                     t,
-                    last_check_end,
+                    checks.last_end,
                     threshold=weak_separation,
                     min_votes=weak_min_t,
                     cooldown=weak_repeat if weak_repeat > 0 else None,
                 ):
-                    weak_due = True
+                    checks.weak_due = True
             if live_threshold is not None:
                 # A retired rung replaces the shipped cut, and the fit it
                 # replaced is dropped with it so acquisition cannot re-cut an
@@ -4868,7 +4904,7 @@ def simulate_voting_iterations(  # noqa: C901
                 # its scores and labels, Train's threshold and the labels' class
                 # model, so any Find corpus drawn from it is priced post hoc.
                 find_line = details.get("find_line")
-                snap_phase = check_phase if picks is not None else (flow.phase if flow is not None else "")
+                snap_phase = checks.phase if picks is not None else (flow.phase if flow is not None else "")
                 # #4936: the fold models' own scores ride on the snapshot run_cells keeps for a listed click.
                 fold_scale: dict[str, Any] = {}
                 if fold_scale_pending and snap_phase != "check" and int(t) >= fold_scale_pending[0]:
@@ -5011,7 +5047,7 @@ def simulate_voting_iterations(  # noqa: C901
         # Identifying columns shared by every row this step emits.
         base_row = _ident_row(
             t,
-            check_phase if picks is not None else (flow.phase if flow is not None else ""),
+            checks.phase if picks is not None else (flow.phase if flow is not None else ""),
             acq_threshold,
             threshold,
             pool_scores,
@@ -5078,7 +5114,7 @@ def simulate_voting_iterations(  # noqa: C901
             # the centroid's line keeps the same set at every balance.
             metric_rows, base_scores, base_labels, base_ids = calibration
             if (rank_frame_sink is not None or line_test_sink is not None) and (
-                picks is None or check_phase == "prompt"
+                picks is None or checks.phase == "prompt"
             ):
                 last_ordinary = {
                     "t": t,
@@ -5097,7 +5133,7 @@ def simulate_voting_iterations(  # noqa: C901
         elif calibration is not None:
             metric_rows, base_scores, base_labels, base_ids = calibration
             # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
-            is_click = picks is None or check_phase == "prompt"
+            is_click = picks is None or checks.phase == "prompt"
             if (rank_frame_sink is not None or line_test_sink is not None) and is_click:
                 # Kept by reference and turned into the ``last`` frame after the
                 # loop: nothing here is mutated later, and the voted set is a
