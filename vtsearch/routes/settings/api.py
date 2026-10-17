@@ -139,9 +139,9 @@ _CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 # otherwise pick up.
 #
 # ``calibrate_count`` / ``calibration_fraction`` change what a *retrain*
-# produces, so their setters invalidate the cached MLP
+# produces, so their setters invalidate the cached head
 # (``invalidate_loaded_detector_models``). ``beta`` (the balance, #4413) is a
-# pure cutoff knob, so its setter keeps the MLP and only re-derives the
+# pure cutoff knob, so its setter keeps the head and only re-derives the
 # threshold from the cached ranking (``recompute_detector_thresholds``). All
 # three persist back to :mod:`vtsearch.settings` through the shim's
 # setting-persister hook (:func:`vtsearch.shim.register_app_persistence_hooks`),

@@ -258,7 +258,7 @@ def _load_and_train_detectors(
     snap: dict[int, dict[str, Any]],
     routed: "_RoutedSnapshots | None" = None,
 ) -> dict[str, dict[str, Any]]:
-    """Resolve, re-embed, and train an MLP for each named detector.
+    """Resolve, re-embed, and train a head for each named detector.
 
     For every name in *detector_names* the on-disk JSON is read, the
     labelset's origins are resolved via their importer's ``resolve_file()``,
@@ -520,7 +520,7 @@ def _score_medias_with_detectors(
     detector_mlps: dict[str, dict[str, Any]],
     routed: "_RoutedSnapshots | None" = None,
 ) -> dict[str, dict[str, Any]]:
-    """Score *medias* against pre-trained detector MLPs, routing across types.
+    """Score *medias* against pre-trained detector heads, routing across types.
 
     *medias* may arrive unembedded and may mix source types.  For each group of
     detectors sharing a target ``media_type`` + embedder + re-clip granularity,

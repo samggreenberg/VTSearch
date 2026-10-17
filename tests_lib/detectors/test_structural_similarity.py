@@ -338,12 +338,12 @@ class TestMaybeStructuralRerank:
         assert out[1]["score"] >= STRUCTURAL_DECISION_THRESHOLD > out[2]["score"]
 
     def test_it_drops_the_mlp_scale_estimators_from_the_detector(self, monkeypatch):
-        """The boundary it returns is not on the retrieval MLP's scale, so nothing may re-cut it.
+        """The boundary it returns is not on the retrieval head's scale, so nothing may re-cut it.
 
-        Stage 1 parks the MLP's fold-anchored estimator and calibration folds on
+        Stage 1 parks the head's fold-anchored estimator and calibration folds on
         the detector.  Left there, the next re-cut - a floor or Inclusion change,
         the acquisition cut - replaced the gate's boundary
-        with an MLP-scale threshold and applied it to verification scores.
+        with a head-scale threshold and applied it to verification scores.
         """
         from vtscore.state.core import DetectorContext, recut_detector_threshold
 
@@ -356,7 +356,7 @@ class TestMaybeStructuralRerank:
         }
         monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: m)
         det_ctx = DetectorContext(detector_id="det-structural", media_type="image")
-        det_ctx.anchored_cut_cache = object()  # stand-ins for Stage 1's MLP-scale caches
+        det_ctx.anchored_cut_cache = object()  # stand-ins for Stage 1's head-scale caches
         det_ctx.calibration_cache = ("key", object())
 
         results = [{"id": 3, "score": 0.95}, {"id": 2, "score": 0.40}, {"id": 1, "score": 0.30}]

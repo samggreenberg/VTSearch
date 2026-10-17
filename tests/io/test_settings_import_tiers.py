@@ -72,7 +72,7 @@ def _import(client, tmp_path: Path, data: dict[str, Any], **kwargs):
 def _loaded_ctx(detector_id: str = "det-4965"):
     """A registered detector context holding a cached head and fold orderings.
 
-    The sentinel object stands in for a trained MLP. The fold orderings let a
+    The sentinel object stands in for a trained head. The fold orderings let a
     balance change re-cut the threshold without a model to re-score with.
     """
     from vtscore.training.thresholds import CalibrationFolds

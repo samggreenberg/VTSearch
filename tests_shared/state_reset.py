@@ -16,7 +16,7 @@ import pytest
 from vtscore.host_seams import HostSeams, restore_host_seams
 
 #: Training epochs for the whole test session (production default is 200; 30 is
-#: enough for the tiny MLP heads to converge on the small test fixtures).
+#: enough for the tiny epoch-trained heads to converge on the small test fixtures).
 #: Re-asserted per test by :func:`reset_shared_state` because
 #: ``test_torch_config.py`` reloads ``vtscore.config``, which resets every
 #: module-level constant to its import-time value — and a leaked 200 silently

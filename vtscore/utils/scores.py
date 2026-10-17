@@ -1,6 +1,6 @@
 """Score-sanitization helpers shared by every score-emitting code path.
 
-A trained MLP can produce ``NaN`` logits when training destabilises (bad
+A trained head can produce ``NaN`` logits when training destabilises (bad
 optimisation, corrupted input embeddings, AMP overflow on CUDA, extreme
 class-weight bias from a large ``inclusion_value`` shift, etc.).
 ``torch.sigmoid(NaN)`` is ``NaN``, and ``json.dumps`` happily emits the
@@ -45,7 +45,7 @@ def sigmoid_to_finite_scores(
     every site whose output reaches a JSON response.
 
     Args:
-        logits: Raw MLP output, shape ``(N, 1)`` or ``(N,)``.
+        logits: Raw head output, shape ``(N, 1)`` or ``(N,)``.
         default: Sentinel substituted for ``NaN`` / ``+Inf`` / ``-Inf``.
             Defaults to :data:`NON_FINITE_SCORE_SENTINEL`.
 
@@ -74,7 +74,7 @@ def sigmoid_to_finite_array(
     ``O(N)`` pass that matters in the background training thread.
 
     Args:
-        logits: Raw MLP output, shape ``(N, 1)`` or ``(N,)``.
+        logits: Raw head output, shape ``(N, 1)`` or ``(N,)``.
         default: Sentinel substituted for ``NaN`` / ``+Inf`` / ``-Inf``.
             Defaults to :data:`NON_FINITE_SCORE_SENTINEL`.
 

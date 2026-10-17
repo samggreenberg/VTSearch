@@ -1649,10 +1649,10 @@ class TestLoadModelEndpoint:
 
 
 class TestEmbedderMismatchInvalidatesStaleModel:
-    """H5: a detector's cached MLP is trained against a specific embedder
+    """H5: a detector's cached head is trained against a specific embedder
     space (``DetectorContext.embedder``).  When the active dataset uses a
-    different embedder, the cached MLP must be invalidated; otherwise
-    scoring with a cross-space MLP either crashes (different dim) or
+    different embedder, the cached head must be invalidated; otherwise
+    scoring with a cross-space head either crashes (different dim) or
     silently produces garbage labels (same dim).
     """
 
@@ -1725,7 +1725,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
 
     def test_before_request_hook_invalidates_active_detector(self, client):
         """End-to-end: switching the active dataset to one with a different
-        embedder triggers invalidation of the active detector's MLP via
+        embedder triggers invalidation of the active detector's head via
         ``ensure_detector_model_matches_active_embedder``.
         """
         from unittest.mock import MagicMock
@@ -1759,8 +1759,8 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         client.post(f"/api/medias/{a_ids[1]}/vote", json={"target": "bad"})
 
         det_ctx = get_active_detector_context()
-        # Pin a fake MLP + embedder marker to simulate a trained model.
-        det_ctx.model = MagicMock(name="stale-mlp")
+        # Pin a fake head + embedder marker to simulate a trained model.
+        det_ctx.model = MagicMock(name="stale-head")
         det_ctx.threshold = 0.42
         det_ctx.embedder = "ye-olde-embedder"
         det_ctx.label_embeddings["seed"] = "vec"  # type: ignore[assignment]
@@ -1784,10 +1784,10 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         set_thread_dataset_context(ctx_b)
 
         # Fire a no-op request; the before_request hook should run and
-        # invalidate the stale MLP because the embedders no longer match.
+        # invalidate the stale head because the embedders no longer match.
         client.get("/healthz", headers={"X-Dataset-Id": "ds_b_for_h5", "X-Detector-Id": mid})
 
-        assert det_ctx.model is None, "stale MLP must be cleared on embedder mismatch"
+        assert det_ctx.model is None, "stale head must be cleared on embedder mismatch"
         assert det_ctx.threshold == 0.5
         # The embedder marker stays at the old value so the load endpoint
         # can still detect the mismatch and schedule a progress-tracked
@@ -2745,7 +2745,7 @@ class TestRegisterModelFromLabelset:
     a label importer in a single call: the importer runs, the trainable
     model JSON is written with the full labelset, and a registry entry is
     created.  The frontend then calls the load endpoint to resolve origins
-    and train the MLP.
+    and train the head.
 
     Media type is inferred from the labels' origins; no ``media_type``
     request field is accepted.

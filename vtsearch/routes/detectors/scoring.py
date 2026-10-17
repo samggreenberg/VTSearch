@@ -281,7 +281,7 @@ def find_label(body: dict):
         from vtscore.detectors.training import score_media_with_model
         from vtscore.embedding.binding import keying_embedder_for_type
 
-        # Score in the same space the MLP was trained in: the concrete embedder of
+        # Score in the same space the head was trained in: the concrete embedder of
         # the detector's locked type this dataset supplies, else the dataset score
         # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
         # cold path and the learned-sort cache-space marker.
@@ -655,7 +655,7 @@ def find_corrections_to_detector():
 
     The correction items are written into the detector's on-disk labelset
     (superseding any prior entry for the same source media) and the registry's
-    training counters are refreshed.  The cached MLP is invalidated so the next
+    training counters are refreshed.  The cached head is invalidated so the next
     scoring pass retrains from the merged labelset.
 
     The current Find session is deliberately *not* re-scored or reset: its
@@ -757,7 +757,7 @@ def find_corrections_to_detector():
         # would make the before_request rehydrate wipe the in-memory votes /
         # find_scores / find_initial_labels and re-derive them from the new labelset.
         # Re-point the cached labelset + mtime at the file we just wrote so that
-        # rehydrate is a no-op, invalidate the cached MLP so the next scoring pass
+        # rehydrate is a no-op, invalidate the cached head so the next scoring pass
         # retrains from the merged labelset, and flag the displayed evaluation stale.
         new_mtime = _detector_file_mtime(path)
         media_type = data.get("media_type", "") or ""
@@ -795,7 +795,7 @@ def auto_detect(body: dict):
     """Score the active dataset with every detector on the caller's AutoFind list.
 
     Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each
-    one's MLP on demand from its on-disk labelset.  Returns one result column
+    one's head on demand from its on-disk labelset.  Returns one result column
     per detector. Pass ``detector_name`` to run a single AutoFind detector.
 
     The synchronous, scripted sibling of the Dashboard's background AutoFind
