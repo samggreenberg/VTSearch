@@ -24,7 +24,7 @@ where ``label`` is ``"good"`` or ``"bad"``.
 
 Example – a minimal database label importer skeleton::
 
-    # vtsearch/labels/importers/postgres/__init__.py
+    # vtscore/labels/importers/postgres/__init__.py
     from vtscore.labels.importers.base import LabelImporter, PluginField
 
     class PostgresLabelImporter(LabelImporter):
@@ -76,15 +76,23 @@ class LabelImporter(PluginBase):
 
         [{"md5": "<media-md5>", "label": "good"}, ...]
 
-    where ``label`` is ``"good"`` or ``"bad"``.  The route handler applies
-    these to the global vote state (``good_votes`` / ``bad_votes``) by
-    matching media MD5 hashes.
+    where ``label`` is ``"good"`` or ``"bad"``.  An entry may also carry
+    ``origin`` / ``origin_name`` alongside (or instead of) ``md5``.  The route
+    handler applies these to the vote state (``good_votes`` / ``bad_votes``),
+    matching each entry to the medias that share its ``origin`` +
+    ``origin_name`` *or* its ``md5`` (the union of both; see
+    :func:`vtscore.state.media_lookup.resolve_media_ids`).  Entries that
+    match no loaded media are auto-resolved: pulled in from their origins on
+    a background task, then labelled.
 
     CLI support
     -----------
     Label importers are used via the web API (``POST /api/label-importers/import/<name>``).
-    From the CLI, labels can be applied indirectly by using the ``label_file``
-    processor importer in a settings file for the autodetect workflow.
+    From the CLI, ``--import-labels-into <detector>`` (with
+    ``--label-importer`` and ``--label-importer-file`` /
+    ``--label-importer-field``) runs a label importer and merges its labels
+    into that saved detector before an autodetect run scores with it (see
+    :func:`vtscore.cli.import_labels_into_detector`).
 
     The default :meth:`add_cli_arguments` derives ``argparse`` arguments
     from :attr:`fields` and :meth:`run_cli` wraps any

@@ -1568,11 +1568,6 @@ whole instance to that type. This is an **admin setting, not a user
 preference**: it's set when the server starts and shown read-only on the
 Settings modal's **Server** tab. Once set:
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.webp" />
-  <img src="assets/settings-appearance.light.webp" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
-</picture>
-
 - The dataset importer and new-detector dialogs stop asking which
   media type you want - they lock to your chosen type.
 - Converter offerings filter to those that produce your type
@@ -1589,6 +1584,11 @@ per-user override.
 ---
 
 ## Settings tabs
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.webp" />
+  <img src="assets/settings-appearance.light.webp" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
+</picture>
 
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
 eight tabs:
@@ -1612,7 +1612,7 @@ eight tabs:
   (signposts, signpost text, colormap, cell size, thumbnail border,
   popup thumbnail size, mouse-zooms per level; the tile shape is chosen
   automatically from the media type — squares for browsable thumbnails,
-  hexagons for audio and text — and is not a setting), plus a
+  audio's waveform included, hexagons for text — and is not a setting), plus a
   **Graphics** control that applies to every media type. Leave Graphics
   on **Auto** and VTSearch picks for you: browsers without hardware
   acceleration get the cheaper

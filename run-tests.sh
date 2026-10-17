@@ -313,7 +313,9 @@ fi
 # requested group, skip pytest entirely so it doesn't error on an empty
 # `-m frontend` selection.
 _run_pytest=true
+_is_frontend_run=false
 if [[ ${#TEST_GROUPS[@]} -eq 1 && "${TEST_GROUPS[0]}" == "frontend" ]]; then
+    _is_frontend_run=true
     _run_pytest=false
 fi
 
@@ -1199,6 +1201,23 @@ if $_is_docs_run; then
     echo "RUN PASSED (markdown-only; this is the full gate for a markdown-only change)"
 elif $_is_frontend_only_run; then
     echo "RUN PASSED (frontend-only; this is the full gate for a frontend-only change)"
+elif $_is_frontend_run && $_run_frontend_build; then
+    # The explicit `frontend` group's own verdict, whenever the gates it exists
+    # for (build, npm audit, Vitest) actually ran -- which is every time it gets
+    # this far: without node_modules the group blocks before stage 1. Unlike
+    # slides/docs and the frontend-only fast path above it is not a proven fast
+    # path, so the whole-repo gates a plain group run skips stay in the ledger
+    # and are named here (#4019).
+    echo "RUN PASSED (frontend-only; no Python tests in the 'frontend' group)"
+    if [[ ${#_skipped_gates[@]} -gt 0 ]]; then
+        echo ""
+        echo "${#_skipped_gates[@]} GATE(S) DID NOT RUN:"
+        for _g in "${_skipped_gates[@]}"; do
+            echo "  - $_g"
+        done
+        echo ""
+        echo "Everything that ran is green. This is not the full gate."
+    fi
 elif [[ ${#_skipped_gates[@]} -gt 0 ]]; then
     # Deliberately not "all gates green": everything that ran is green, and
     # these did not run. Naming them is the whole point of #4019.
@@ -1218,10 +1237,9 @@ elif $_run_pytest; then
     else
         echo "RUN PASSED (all gates green; pytest summary above)"
     fi
-elif $_is_slides_run; then
-    echo "RUN PASSED (slides-only; this is the full gate for a slides-only change)"
 else
-    echo "RUN PASSED (frontend-only; no Python tests in the 'frontend' group)"
+    # The only other run without pytest: a frontend run lands above either way.
+    echo "RUN PASSED (slides-only; this is the full gate for a slides-only change)"
 fi
 echo "============================================================"
 exit 0

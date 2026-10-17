@@ -90,9 +90,9 @@ split as Test would at each click: until the labels meet the label quota (3
 Goods and 4 Bads, or a Good and 16 Bads) the typed query's own set from the first
 vote (#4758; the Goods' centroid from the first Good in a run before it), the
 trained head from there (``detector_tier``).  The session shows the trained head
-only from the Hard phase (``app_trained``, #4605): Autopilot's opening is the
+only once Autopilot's opening ends (``app_trained``, #4605): the opening is the
 text sort, so Test and the session agree before the quota and differ between the
-quota and the Hard phase.  This report follows the
+quota and the end of the opening.  This report follows the
 session there (:func:`_shown_from`): every user-facing number before the hand-off
 is the typed query's set.  The viewer draws what Test gives instead
 (``calibration/viewer.py``), so the two differ through the opening on purpose.
@@ -589,8 +589,10 @@ def _run_frames(frames: pd.DataFrame) -> dict[tuple, dict[str, pd.DataFrame]]:
 def _shown_from(ordinary: pd.DataFrame) -> dict[tuple, float]:
     """Per run key, the first click at which the app shows a detector (#4605); ``inf`` when it never does.
 
-    The app stays on the text sort through Autopilot's opening (Good, Bad, More) and sorts by the
-    detector only from the Hard phase on. The harness marks the steps the app shows as
+    The app stays on the text sort through Autopilot's opening (the Good, Bad and More phases,
+    ``autopilot_flow.OPENING_PHASES``) and shows the detector only once the run leaves it: into Hard,
+    or straight to the spot check or Done when the level or the vote cap is met first
+    (``autopilot_flow.TRAINED_PHASES``). The harness marks the steps the app shows as
     ``app_trained == 1`` (:func:`vtscore.eval.autopilot_flow.app_has_detector`): a detector it scores
     earlier - the Goods' centroid under the label quota, or a trained head inside the opening
     (#4643) - is what Test would give there, but not what the session shows. So every user-facing

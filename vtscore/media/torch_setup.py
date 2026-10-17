@@ -1,6 +1,6 @@
 """Runtime torch configuration for embedder code.
 
-Lives in ``vtsearch/media/`` because every embedder (the bottom layer of the
+Lives in ``vtscore/media/`` because every embedder (the bottom layer of the
 sort/training stack) must run :func:`ensure_torch_configured` before invoking
 torch.  Higher layers (``vtscore.training``) call it via the same hook.
 """

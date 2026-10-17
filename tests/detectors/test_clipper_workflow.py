@@ -677,6 +677,27 @@ class TestAPIClipMetadata:
             medias.clear()
             medias.update(saved)
 
+    def test_video_clip_box_arrives_with_its_frame(self, client):
+        """The player scales a letterbox box by the frame it was measured on (#5032)."""
+        saved = dict(medias)
+        medias.clear()
+        try:
+            boxed = _make_video_media(1)
+            boxed.update(clip_box=[0, 60, 720, 420], clip_box_frame=[720, 480])
+            medias[1] = boxed
+            medias[2] = {**_make_video_media(2), "clip_box": [0, 60, 720, 420]}
+
+            resp = client.post("/api/medias/batch", json={"ids": [1, 2]})
+            assert resp.status_code == 200
+            data = {item["id"]: item for item in resp.get_json()}
+            assert data[1]["clip_box"] == [0, 60, 720, 420]
+            assert data[1]["clip_box_frame"] == [720, 480]
+            # A box recorded before the frame was is sent alone.
+            assert "clip_box_frame" not in data[2]
+        finally:
+            medias.clear()
+            medias.update(saved)
+
 
 # ---------------------------------------------------------------------------
 # Default clippers should be no-ops

@@ -892,7 +892,9 @@ python app.py --login api_key    # Bearer-key auth against data/api_keys.json
 ```
 
 - **`trivial`** shows a username prompt (no password) and tracks the user via a
-  cookie; useful for low-stakes multi-user setups.
+  cookie; useful for low-stakes multi-user setups. Without `VTSEARCH_SECRET_KEY`
+  the cookie is signed with a random per-process key, so users sign in again
+  after a restart (see [DEPLOYMENT.md § Security](DEPLOYMENT.md#security)).
 - **`api_key`** authenticates each request via an `Authorization: Bearer <key>`
   header, checking the key against `data/api_keys.json`. This is the same key
   store the CLI's `--user` + `--api-key` flags use (see [Which user's AutoFind

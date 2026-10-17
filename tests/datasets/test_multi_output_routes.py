@@ -97,6 +97,19 @@ class TestGenericImportRoute:
         assert resp.status_code == 400
         assert "one dataset per run" in resp.get_json()["message"]
 
+    def test_an_importer_without_a_media_type_field_refuses_outputs(self, client):
+        """``combine_datasets`` never opts out, but has no ``media_type`` for the outputs to multiply."""
+        with patch(
+            "vtsearch.routes.datasets.staging._run_multi_output_load_in_background",
+            side_effect=AssertionError("a refused import must not start"),
+        ):
+            resp = client.post(
+                "/api/dataset/import/combine_datasets",
+                json={"datasets": "a.pkl,b.pkl", "outputs": [{"media_type": "audio"}]},
+            )
+        assert resp.status_code == 400
+        assert "one dataset per run" in resp.get_json()["message"]
+
 
 class TestLocalFolderRoute:
     def test_outputs_start_a_multi_dataset_upload(self, client, tmp_path, monkeypatch):

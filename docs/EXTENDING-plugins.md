@@ -180,7 +180,7 @@ don't pick one get a letter instead of inheriting yours), and its
 
 | Attribute            | Type   | Default  | Description                                     |
 |----------------------|--------|----------|-------------------------------------------------|
-| `ui_mode`            | `str`  | `"form"` | `"form"`, `"file_upload"`, `"custom"`, `"none"` |
+| `ui_mode`            | `str`  | `"form"` | `"form"` (listed by `GET /api/dataset/importers`), or `"file_upload"` / `"custom"` to stay out of that listing |
 | `hidden_from_picker` | `bool` | `False`  | Exclude from generic picker list in frontend     |
 
 **Inherited methods (available on all plugins):**
@@ -1286,9 +1286,9 @@ other families; see
 ### What to implement
 
 Subclass `DataSourceImporter` from `vtscore.datasource_importers`, declare
-`fields`, pick a `category` (the picker tab: `"services"`, `"server"`,
-`"local"`, or `"demo"`), and implement `fetch()`. Expose a module-level
-`DATASOURCE_IMPORTER` instance.
+`fields`, pick a `category` (the picker tab: `"services"`, `"server"` or
+`"demo"`; a new tab needs `vtscore.datasets.importers.tabs.register_picker_tab`),
+and implement `fetch()`. Expose a module-level `DATASOURCE_IMPORTER` instance.
 
 ```python
 # vtscore/datasource_importers/pastebin/__init__.py

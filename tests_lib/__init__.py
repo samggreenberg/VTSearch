@@ -4,7 +4,7 @@ Tests under :mod:`tests_lib` exercise ``vtscore`` and never import
 ``vtsearch`` — not :mod:`vtsearch.app`, :mod:`vtsearch.routes` or
 :mod:`vtsearch.settings`, and not :mod:`vtsearch.state` either, whose
 ``medias`` is an app-tier *proxy* rather than the library object.  The split
-is the test-suite half of Phase 7 in ``../vtscore/docs/architecture.md``.
+is seam 7 ("Test suite") in ``../vtscore/docs/architecture.md``.
 
 That promise sat here unchecked until issue #3421, when ``conftest.py`` and
 ``fixtures/medias.py`` were both found importing ``vtsearch.state``.  Two

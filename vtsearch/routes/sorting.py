@@ -1,6 +1,6 @@
 """Blueprint for sorting and voting routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
@@ -445,9 +445,9 @@ def _validate_learned_sort_inputs(labelset, good, bad) -> None:
 def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
-    Training is GIL-bound and ran inline used to stall every other request
+    Training is GIL-bound, so run inline it would stall every other request
     served by the small ``gthread`` pool (votes polls, thumbnails, and even
-    media bytes).  The endpoint now hands the work off to a background daemon
+    media bytes).  The endpoint hands the work off to a background daemon
     thread and returns immediately with a ``job_id``; clients poll
     :func:`learned_sort_result` until ``status == "done"``.
 
@@ -544,9 +544,10 @@ def learned_sort(body: dict):
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.  It sits four inclusion steps stricter than the line:
-        # under a balance no inclusion drew that line, so none is passed and it
-        # is derived from the line itself (#4245).
+        # carries one.  Its fallback, when neither a head's own line nor the
+        # target precision (#3546) answers, sits four inclusion steps stricter
+        # than the line: under a balance no inclusion drew that line, so none
+        # is passed and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
         # What the balance says about the line rides with it (#4247, #4413).

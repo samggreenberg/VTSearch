@@ -473,14 +473,14 @@ def embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], i
 def train_and_score_active(
     X_list: list, y_list: list[float], embedder_name: str | None = None
 ) -> tuple[list[dict[str, Any]], float]:
-    """Train an MLP on (X, y), then score every media in the active dataset.
+    """Train the detector head on (X, y), then score every media in the active dataset.
 
     *embedder_name* is the embedder the external labels in *X_list* were
     embedded with; scoring sources the haystack vectors from the same embedder
-    so the trained MLP and the scored vectors share one space.  ``None`` reads
+    so the trained head and the scored vectors share one space.  ``None`` reads
     each media's primary vector.  The same name is handed to
-    :func:`vtscore.detectors.training.train_and_threshold` so the safe-threshold
-    GMM is fitted on exactly the score distribution returned here - including
+    :func:`vtscore.detectors.training.train_and_threshold` so the line is
+    fitted on exactly the score distribution returned here - including
     the region max-pool on a patch dataset, where results also gain a
     ``best_region`` box.
     """

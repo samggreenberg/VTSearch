@@ -1,8 +1,9 @@
 """Flask routes for the Recent Sessions API.
 
-The frontend's burger-menu submenu calls ``POST /api/sessions/recent``
-whenever the user enters ``/label/:ds/:det`` or ``/find/:ds/:det`` to
-bump that pair's ``last_activity`` timestamp, and reads
+The frontend's active-context route guard calls ``POST /api/sessions/recent``
+whenever the user enters ``/label/:datasetId/:detectorId`` or
+``/test/:datasetId/:detectorId`` to bump that pair's ``last_activity``
+timestamp, and the burger menu's "Recent sessions" submenu reads
 ``GET /api/sessions/recent`` to render the list.
 
 Storage lives in the per-user settings tier under the ``recent_sessions``

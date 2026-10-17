@@ -2,16 +2,16 @@
 
 Each array task handles exactly one ``(dataset, embedder, category, seed)``
 cell and runs *all* styles for that embedder inside it (they share the one
-loaded pickle), so the MaxHAC / MaxPatch / whole-image trajectories are paired
-on identical data, identical sim/test splits, and the identical startup
-exemplar.  The cell for this task is ``array_cells(...)[SLURM_ARRAY_TASK_ID]``
-- a stable enumeration derived from ``prepare_info.json``.
+loaded pickle), so the MaxPatch / tree-hybrid / whole-image trajectories are
+paired on identical data, identical sim/test splits, and the identical opening.
+The cell for this task is ``array_cells(...)[SLURM_ARRAY_TASK_ID]`` - a stable
+enumeration derived from ``prepare_info.json``.
 
-The startup sort mirrors the "train a new detector from an example" flow: the
-cell's exemplar (a cropped positive, pre-embedded by ``prepare_data.py``) is
-scored against the dataset **per style** - whole-image cosine, max cosine over
-HAC region nodes, or max cosine over raw patches - and the Autopilot seed
-phase votes down that ranking.
+The opening is the app's: the typed query's text sort (:func:`_text_seed_scores`,
+cosine from the query to each media's whole-image vector), computed once per
+cell and shared by every style, and Autopilot votes down that ranking.  A cell
+with no query, or an embedder with no text tower (the DINOs), opens on random
+known-good examples instead, the app's other real start.
 
 Results land in ``results/cells/task_<idx>.csv``; the summariser concatenates
 whatever tasks completed.
@@ -45,20 +45,12 @@ def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]
 def _seed_query_text(ds: str, cat: str) -> str:
     """The text a user would type to find *cat* in *ds*, or "" if none is known.
 
-    Two tables, because there are two kinds of dataset.  ``EXPERIMENT_QUERIES``
-    covers fixtures that exist only inside this experiment (``vg_scale``);
-    ``vtscore.eval.config.EVAL_DATASETS`` covers the real demo datasets the app
-    ships (``visual_genome_m``, ``caltech101_m``).  The experiment table wins so
-    a fixture can override, but neither is required -- an unknown dataset simply
-    has no query, and the autopilot seeds from known-goods instead.
+    Every dataset this study runs is a real demo dataset, so the query comes
+    from the app's own demo-query table, ``vtscore.eval.config.EVAL_DATASETS``
+    (``visual_genome_m``, ``caltech101_m``).  A dataset or category it does not
+    cover (``openlogo_a``) simply has no query, and the autopilot seeds from
+    known-goods instead.
     """
-    try:
-        local = cfg.EXPERIMENT_QUERIES.get(ds) or {}
-    except AttributeError:
-        local = {}
-    if cat in local:
-        return local[cat]
-
     from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
 
     info = EVAL_DATASETS.get(ds)
@@ -84,7 +76,7 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     signal for the autopilot to seed from *three random known-good examples*
     instead, the app's other real start ("3 random examples pulled from the
     Good").  Both are things a user does; ranking by cosine to a cropped box is
-    not, which is why this no longer seeds from crops.
+    not, so this never seeds from a crop.
     """
     from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
@@ -154,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
 
     all_rows: list[dict] = []
     for style in styles:
-        # The exemplar startup sort, computed in this style's own geometry.
+        # Every style opens on the same seed_scores, so the arms stay paired.
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,

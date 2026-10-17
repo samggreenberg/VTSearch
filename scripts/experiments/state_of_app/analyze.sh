@@ -7,8 +7,9 @@
 #                                AP and the line at each floor (#4357)
 #   analysis/viewer.html         the shared calibration viewer, for browsing
 #                                cells; the report reads the tables below.
-#                                It opens on AP and does not offer cost,
-#                                which the review retired (#4357, #4576)
+#                                It opens on F1 (the viewer's default) and
+#                                does not offer cost, which the review
+#                                retired (#4357, #4576)
 #   analysis/cells.csv, lines.csv, curves.csv, influence.csv, images.csv,
 #   image_detector.csv, summary.md
 #   analysis/figures/*.png, analysis/images.md + images/ (thumbnails)

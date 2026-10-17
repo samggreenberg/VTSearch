@@ -17,7 +17,7 @@ import {
   viewLevelForZoom,
   type SignViewContext,
 } from './sign-layout';
-import type { RegionLabelPayload, ViewTransform } from '../../models/projection.models';
+import type { RegionLabel, ViewTransform } from '../../models/projection.models';
 
 /** Character-count text measurer: deterministic, canvas-free. */
 const measure = (text: string, fontPx: number): number => text.length * fontPx * 0.6;
@@ -29,7 +29,7 @@ const centeredView = (viewLevel: number, zoom = 1): SignViewContext => ({
   viewLevel,
 });
 
-const label = (over: Partial<RegionLabelPayload> = {}): RegionLabelPayload => ({
+const label = (over: Partial<RegionLabel> = {}): RegionLabel => ({
   level: 0,
   x: 0,
   y: 0,
@@ -294,7 +294,7 @@ const STEP = 1.8;
 /** A four-layer clustered tree, finest (rank 0, `level` 5.4) to coarsest
  *  (rank 3, `level` 0) — the shape the C4 table measured. Anchors are spread
  *  across the 800 px viewport so nothing de-clutters or falls off screen. */
-const fourLayers = (): RegionLabelPayload[] =>
+const fourLayers = (): RegionLabel[] =>
   [0, 1, 2, 3].map((rank) =>
     label({
       level: (3 - rank) * STEP,

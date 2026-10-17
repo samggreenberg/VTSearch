@@ -37,6 +37,11 @@ from vtscore.eval.startup_schedule import (
 from vtscore.eval.voting_columns import PICK_COLUMNS
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 
+from .sweep_cache import memoize_sweep
+
+# One worker, so a session several tests read runs once (see sweep_cache.py).
+pytestmark = pytest.mark.xdist_group("startup-schedule")
+
 DIM = 24
 
 
@@ -67,6 +72,7 @@ def _seeded_dataset(n_pos=70, n_neg=200, seed=0):
     return medias, {i: cos(m["embedding"]) for i, m in medias.items()}
 
 
+@memoize_sweep
 def _run(schedule, *, max_steps=24, seed=3, n_pos=70):
     medias, seed_scores = _seeded_dataset(n_pos=n_pos)
     picks: list[dict] = []

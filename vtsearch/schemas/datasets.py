@@ -22,8 +22,8 @@ plugin family can add keys of its own:
   :class:`~vtsearch.schemas.common.PluginExtrasSchema`, so the fixed fields
   get real types while the plugin extras still reach the client verbatim.
   The generated model picks up an index signature from
-  ``additionalProperties: true``, which is exactly the shape the frontend
-  used to hand-maintain.
+  ``additionalProperties: true``, so the frontend gets that shape without
+  hand-maintaining it.
 """
 
 from __future__ import annotations
@@ -657,9 +657,9 @@ class BrowseMediaFilesResponseSchema(Schema):
         dump_default="",
         metadata={
             "description": (
-                "Suggested initial relative sub-path for this source, for example "
-                "the server user's home directory when ``source=server_fs``. Empty "
-                "for sources where the root is already the right starting point."
+                "Suggested initial relative sub-path for this source. Empty for "
+                "every source, since each one's root is already the right "
+                "starting point."
             )
         },
     )
@@ -683,14 +683,15 @@ class DetectMediaTypeQuerySchema(Schema):
     """Query for ``GET /api/dataset/detect-media-type``.
 
     The ``limit`` field is capped to ``[1, 500]`` by the handler; the
-    schema only narrows the type. Invalid integer strings fall back to
-    the default rather than rejecting the request, preserving the
-    pre-migration permissiveness for this hint endpoint.
+    schema only narrows the type, so a ``limit`` that is not an integer is
+    rejected with a 422.
     """
 
     source = fields.String(
         load_default="folder",
-        metadata={"description": "One of ``demo:<name>`` or ``folder`` (matches ``/api/browse-media-files``)."},
+        metadata={
+            "description": "One of ``demo:<name>``, ``folder``, or ``server_fs`` (matches ``/api/browse-media-files``)."
+        },
     )
     path = fields.String(load_default="")
     recursive = fields.Boolean(load_default=True)
@@ -1283,6 +1284,20 @@ class DatasetDomainShiftResponseSchema(Schema):
     shifted = fields.Boolean(required=True)
 
 
+class DatasetCoverageAtlasStatusSchema(Schema):
+    """A loaded dataset's coverage-atlas state, on its stats response."""
+
+    built = fields.Boolean(required=True, metadata={"description": "Whether the dataset has a coverage atlas."})
+    building = fields.Boolean(
+        required=True,
+        metadata={"description": "Whether an on-demand build (POST .../coverage-atlas) is running."},
+    )
+    auto_build_threshold = fields.Integer(
+        required=True,
+        metadata={"description": "Item count above which loading leaves the atlas unbuilt."},
+    )
+
+
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``.
 
@@ -1319,6 +1334,12 @@ class DatasetRegistryStatsResponseSchema(Schema):
     source = fields.Dict(required=True)
     clipper = fields.String(required=True)
     embedder = fields.String(required=True)
+    coverage_atlas = fields.Nested(
+        DatasetCoverageAtlasStatusSchema,
+        required=True,
+        allow_none=True,
+        metadata={"description": "The dataset's coverage-atlas state; null when the dataset is not loaded."},
+    )
 
 
 class DuplicateSetMemberSchema(Schema):

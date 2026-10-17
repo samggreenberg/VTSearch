@@ -91,12 +91,6 @@ DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in i
 option_string  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Flask reads ``app.secret_key`` via attribute access for session signing.
-# Setting it is the side-effecting "use".
-# ---------------------------------------------------------------------------
-secret_key  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
 # their ``update_<tracker>_progress`` partners. The corresponding
 # trackers (``sort_progress``, ``find_progress``) are imported and read
@@ -351,3 +345,11 @@ disclaim_encoder  # noqa: F821 - vtscore.timing.recorder.TaskTimingRecorder no-o
 status_phases  # noqa: F821 - vtscore.timing.recorder.record_task kwarg, accepted and ignored
 auto_finish  # noqa: F821 - same
 only_phases  # noqa: F821 - same
+
+# ---------------------------------------------------------------------------
+# ``tests_shared/xdist_plumbing.py`` hooks that third-party test plugins call
+# by name: xdist's scheduler invokes ``remove_node`` when a worker dies, and
+# pytest-timeout's ``pytest_timeout_cancel_timer`` reads ``cancel_timeout``.
+# ---------------------------------------------------------------------------
+remove_node  # noqa: F821
+cancel_timeout  # noqa: F821

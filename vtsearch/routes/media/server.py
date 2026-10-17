@@ -1,6 +1,6 @@
 """Blueprint for server media file management and example-sort routes.
 
-Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 ``/api/openapi.json`` spec.
 
 The thumbnail GET route serves binary bytes (or an error JSON) and only

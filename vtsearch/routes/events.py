@@ -1,7 +1,7 @@
 """SSE endpoint streaming all progress channels to connected clients.
 
-Replaces per-tracker REST polling (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel.
+Clients read every progress channel (dataset loading, sort, find, eval, …)
+from this one push stream rather than polling a REST endpoint per tracker.
 """
 
 from __future__ import annotations

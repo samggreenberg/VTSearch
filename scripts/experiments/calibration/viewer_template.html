@@ -209,7 +209,7 @@
       <select id="metric"></select>
     </div>
     <div class="ctl" id="embWrap">
-      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one or more; one panel each, never averaged</span></label>
+      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one or more; never averaged together</span></label>
       <div class="chips" id="emb"></div>
     </div>
     <div class="ctl" id="drawWrap">
@@ -503,7 +503,8 @@
   mSel.value = state.metric;
   mSel.onchange = () => { state.metric = mSel.value; render(); };
 
-  // Embedders: a non-empty subset, one panel each.  Hidden entirely when the
+  // Embedders: a non-empty subset, a panel each when split and a hue each when
+  // overlaid, never averaged.  Hidden entirely when the
   // study ran a single embedder - a control with one option is furniture.
   if (P.embedders.length < 2) $("embWrap").style.display = "none";
   chips($("emb"), P.embedders.map((e) => ({ id: e, label: EMB_LABEL[e] || e || "(unnamed)" })), state.embedders, render);

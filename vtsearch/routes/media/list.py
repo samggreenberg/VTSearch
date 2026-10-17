@@ -1,6 +1,6 @@
 """Blueprint for media-related routes.
 
-Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 ``/api/openapi.json`` spec.
 
 The binary-streaming routes (``audio``, ``video``, ``image``, ``media``)
@@ -28,6 +28,7 @@ from vtscore.embedding.media_vectors import init_embeddings, media_embedder_name
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import MediaResponse
+from vtscore.media.provenance import CLIP_WINDOW_FIELDS
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
 from vtscore.datasets.vote_provenance import normalize_provenance
@@ -236,8 +237,11 @@ def _variant_media(media: dict) -> dict:
     too, so ETag-emitting routes hash the bytes they actually serve rather than
     labelling the original with the cleaned item's hash.
 
-    An unknown variant, or ``original`` on a media with no snapshot, falls back
-    to the canonical payload: a stale bookmark should show the item, not 404.
+    ``original`` on a media with no snapshot falls back to the canonical
+    payload: a stale bookmark should show the item, not 404.  An unknown
+    variant never gets here - every route that calls this validates its query
+    with :class:`~vtsearch.schemas.media.MediaVariantQuerySchema`, which
+    rejects it with a 422.
     """
     if request.args.get("variant") != "original":
         return media
@@ -662,7 +666,7 @@ def batch_medias(body: dict):
         # the offsets still reach the UI as provenance via ``custom_metadata``
         # ("Clip Start" / "Clip End") from ``display_metadata`` above.
         audio_serves_slice = media_type_id == "audio" and archive_member_ref(c) is None
-        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
+        for clip_key in CLIP_WINDOW_FIELDS:
             if clip_key not in c:
                 continue
             if audio_serves_slice and clip_key in ("clip_start", "clip_end"):
@@ -1086,11 +1090,10 @@ def vote_media(body: dict, media_id: int):
 
     Behaviour is **idempotent**: sending the current state is a no-op
     that does not append to ``label_history``, does not credit
-    achievements, and returns the existing click-time.  This is the
-    fix for logical-bug-audit H1; two stale-view tabs that race the
-    same media no longer alternate ADD/REMOVE on the server, so the
-    achievement counter no longer inflates beyond the number of real
-    labeling decisions.
+    achievements, and returns the existing click-time, so two stale-view
+    tabs that race the same media cannot alternate ADD/REMOVE on the
+    server or inflate the achievement counter beyond the number of real
+    labeling decisions (logical-bug-audit H1).
 
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
@@ -1127,12 +1130,11 @@ def vote_media(body: dict, media_id: int):
     _old, new_state, click_time = set_vote(media_id, target, region_box=region_box, provenance=provenance)
 
     # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
-    # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
-    # uncaught 500 with no rollback, leaving the in-memory vote committed
-    # while the on-disk labelset stayed at its prior value (audit finding
-    # H30).  Now we explicitly surface the failure as a 500 with a clear
-    # message; the in-memory mutation is rare enough to be acceptable
-    # since the next vote re-merges and retries.  The write also schedules
+    # EBUSY/ENOSPC under ``_write_detector``) leaves the in-memory vote
+    # committed while the on-disk labelset stays at its prior value (audit
+    # finding H30), so it is surfaced as a 500 with a clear message; the
+    # in-memory mutation is rare enough to be acceptable since the next vote
+    # re-merges and retries.  The write also schedules
     # the push to the detector's labelset source, if it has one.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 

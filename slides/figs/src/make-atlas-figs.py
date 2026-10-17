@@ -85,13 +85,11 @@ INK, SOFT, RULE = INTRO.INK, INTRO.SOFT, "#d8dee6"
 CELL_LINE = "#aeb8c6"
 BLUE, RED, GREEN = INTRO.BLUE, INTRO.RED, INTRO.GREEN
 CANVAS, UNIT_PT, R = INTRO.CANVAS, INTRO.UNIT_PT, INTRO.R
-#: The two figures drawn on the deck's plane share that plane's slide slot and
-#: its headline shape, so they take its measured one-line notch rather than the
-#: deck's two-line reserve — see `slides/STYLE.md`. Both headlines are one line;
-#: gaining a second would mean re-measuring, and `build.py --check` would not
-#: catch it, because a figure under a two-line headline is legal and merely
-#: wrong. The other two figures here are drawings of my own with room to spare,
-#: so they keep clear of the full reserve and take the standard.
+#: All four figures sit under one-line headlines, so all four take the deck
+#: plane's measured one-line notch rather than the deck's two-line reserve —
+#: see `slides/STYLE.md`. A headline gaining a second line would mean
+#: re-measuring, and `build.py --check` would not catch it, because a figure
+#: under a two-line headline is legal and merely wrong.
 NOTCH = INTRO.VOTE_NOTCH_PX
 
 #: Type sizes, in points at `UNIT_PT` per drawing unit. The floor is 20 slide

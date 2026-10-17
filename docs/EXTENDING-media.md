@@ -1095,7 +1095,15 @@ in, by four readers that have to agree (the parsing and the crop live once in
 | `sample_video_frames` (`vtscore/media/video/_frame_sampling.py`) | what the embedder actually sees |
 | the video thumbnailers (`vtscore/media/video/media_type.py`) | so the grid preview frames the same picture |
 | `_fixup_clip_md5_and_embeddings` (`vtscore/datasets/stages/clipper.py`) | folds the box into the boundary-tag MD5 so two crops of one parent don't collide |
-| `VideoPlayerComponent`, via `frontend/src/app/utils/clip-box.ts` | so the detail player shows the picture that was embedded; a TypeScript mirror of `clamp_clip_box`, applied with CSS `object-view-box` |
+| `VideoPlayerComponent`, via `frontend/src/app/utils/clip-box.ts` | so the detail player shows the picture that was embedded; a TypeScript mirror of `clamp_clip_box`, applied with CSS `object-view-box` after scaling the box by `clip_box_frame` |
+
+The box is in the pixels of the frames the decoder returns, which are *stored*
+pixels. The browser sizes a video in *display* pixels, and on an anamorphic
+video (non-square pixels) the two differ, so the letterbox cleaner writes the
+frame size it measured on beside the box, as `clip_box_frame: [width, height]`.
+The player scales the box from that frame to the one it plays; the server-side
+readers decode stored pixels and need no scaling. A box with no frame recorded
+is read as is.
 
 If you add a media type whose units are likewise metadata-only, follow the same
 shape: narrow the keys, let the readers honour them, and snapshot nothing.

@@ -57,16 +57,10 @@ import {
   type PanDirection,
   type TileCoord,
 } from './prefetch-geometry';
-import type {
-  HexCellPayload,
-  ProjectionMeta,
-  RegionLabelPayload,
-  TilePayload,
-  ViewTransform,
-} from '../../models/projection.models';
+import type { HexCell, ProjectionLayout, RegionLabel, ViewTransform } from '../../models/projection.models';
 
 export interface HexHoverEvent {
-  cell: HexCellPayload;
+  cell: HexCell;
   screenX: number;
   screenY: number;
 }
@@ -113,7 +107,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private destroyRef = inject(DestroyRef);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
-  readonly meta = input<ProjectionMeta | null>(null);
+  readonly meta = input<ProjectionLayout | null>(null);
   /**
    * Active dataset media type. For thumbnail types (``usesThumbnails`` —
    * image / video / document / audio, audio via its waveform PNG) the
@@ -151,7 +145,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * the colormap's dedicated one-item colour (`single`) painted as a hard-edged
    * (sharp-cornered) rectangle, so a lone item reads as "exactly one" and stands
    * out against the background. ``0`` disables both (cells fall back to the faint
-   * dark separator). Only takes effect in {@link thumbnailMode} (image/video).
+   * dark separator). Only takes effect in {@link thumbnailMode} (every type with a thumbnail).
    */
   readonly thumbnailBorder = input(0);
   /**
@@ -176,7 +170,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * run for this dataset. Which signs show at a given moment is a function of
    * the zoom: see ``sign-layout.ts`` for the visibility/size bands.
    */
-  readonly labels = input<RegionLabelPayload[]>([]);
+  readonly labels = input<RegionLabel[]>([]);
   /**
    * Whether the signpost layer is drawn at all — the per-media
    * ``browse_signposts`` setting, surfaced as (and toggled by) the signpost
@@ -382,7 +376,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   // or arrow-key glide inside the double-click window moves the transform, so a
   // late hit-test of the captured screen point would land on a different bin.
   // Binding the cell here keeps the toggle on the bin the user actually clicked.
-  private pendingToggleCell: HexCellPayload | null = null;
+  private pendingToggleCell: HexCell | null = null;
   private static readonly DBLCLICK_MS = 250;
   // `event.timeStamp` of the last right-click that landed on empty canvas (no
   // bin under the cursor), used to detect a double-right-click there; see
@@ -432,7 +426,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   // bin's border; hovering still breaks the whole image out unchanged.
   private imageTiles = false;
 
-  private hoveredCell: HexCellPayload | null = null;
+  private hoveredCell: HexCell | null = null;
   /**
    * Pyramid level {@link hoveredCell} was resolved at, or -1 when nothing is
    * hovered. A cell's axial ``(q, r)`` is only unique *within* a level, so the
@@ -451,7 +445,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * pins that one instead. Rendered enlarged via the same {@link drawHoveredHex}
    * path as a hover; see the ``pinnedCell ?? hoveredCell`` pick in {@link draw}.
    */
-  private pinnedCell: HexCellPayload | null = null;
+  private pinnedCell: HexCell | null = null;
   /** Pyramid level {@link pinnedCell} was pinned at, or -1 when nothing is
    *  pinned. Same role as {@link hoveredLevel}: the pin survives wheel zooms, so
    *  after a level-crossing zoom the pinned bin no longer exists among the drawn
@@ -1032,7 +1026,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // canvas (free), and the extra ring is re-rendered from the source level's
     // bins, painting whatever the off-view prefetch already warmed: cached
     // thumbnails in thumbnail mode, colour-mapped hexes in flat-density mode
-    // (audio/text). Both come straight from the tile cache, so the ring fills the
+    // (text). Both come straight from the tile cache, so the ring fills the
     // margin for every media type rather than only thumbnail ones. The shrunk
     // blit then covers the canvas with real content. Zoom-in needs no overscan
     // (the frame grows past the viewport), so it stays the cheap copy.
@@ -1378,7 +1372,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const screenRadius = radius * this.effZoom;
 
     const visibleTiles = this.getVisibleTiles();
-    let allCells: HexCellPayload[] = [];
+    let allCells: HexCell[] = [];
 
     for (const { tx, ty } of visibleTiles) {
       const cached = this.tileCache.getCached(level, tx, ty);
@@ -1421,7 +1415,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // match some unrelated finer cell once the zoom crosses a level.
     const enlargedCell = this.pinnedCell ?? this.hoveredCell;
     const enlargedLevel = this.pinnedCell ? this.pinnedLevel : this.hoveredLevel;
-    let hovered: { cell: HexCellPayload; sx: number; sy: number } | null = null;
+    let hovered: { cell: HexCell; sx: number; sy: number } | null = null;
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
@@ -1480,7 +1474,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * tile / thumbnail lands with its own redraw, so a later draw re-runs this
    * check until the view is whole; a one-shot timer, armed the first time we
    * start waiting on thumbnails, releases the cover if an image hangs. Pure
-   * density media (audio/text) paint no thumbnails, so it fires as soon as the
+   * density media (text) paint no thumbnails, so it fires as soon as the
    * visible tiles are in.
    */
   private maybeReportFirstView(): void {
@@ -1544,8 +1538,8 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   /** Selection state of a cell: 0 = none, 1 = partial, 2 = full. Memoized on
    *  the cell against the selection version so a steady-state pan doesn't
    *  re-scan every bin's members each frame. */
-  private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
-    const memo = cell as HexCellPayload & { _selVer?: number; _selState?: 0 | 1 | 2 };
+  private selStateFor(cell: HexCell): 0 | 1 | 2 {
+    const memo = cell as HexCell & { _selVer?: number; _selState?: 0 | 1 | 2 };
     if (memo._selVer === this.selection.version() && memo._selState !== undefined) {
       return memo._selState;
     }
@@ -1659,7 +1653,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cx: number,
     cy: number,
     radius: number,
-    cell: HexCellPayload,
+    cell: HexCell,
     cmap: ResolvedColormap,
     selectionActive: boolean,
     trim: { hw: number; hh: number } | null = null,
@@ -1791,7 +1785,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     cx: number,
     cy: number,
     radius: number,
-    cell: HexCellPayload,
+    cell: HexCell,
     cmap: ResolvedColormap,
     selectionActive: boolean,
   ): void {
@@ -1931,10 +1925,10 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
-    // Image/video datasets paint a thumbnail per cell; warm the off-view ring's
+    // Thumbnail datasets paint a thumbnail per cell; warm the off-view ring's
     // thumbnails (a pan) and the finer level's centre thumbnails (a zoom-in) on
     // idle so they're decoded before the cells appear. Pure-density media
-    // (audio/text) draw no thumbnails, so there's nothing to warm. Warming follows
+    // (text) draw no thumbnails, so there's nothing to warm. Warming follows
     // the same resolution tier (capped /thumbnail vs full-res /image) and the same
     // count-bounded LRU as on-demand loads, so it can't raise the memory ceiling —
     // it only reaches it sooner, and visible thumbnails (which bump recency) are
@@ -2377,7 +2371,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Member media ids of a cell, falling back to its representative. */
-  private cellMembers(cell: HexCellPayload): number[] {
+  private cellMembers(cell: HexCell): number[] {
     return cell.member_ids && cell.member_ids.length > 0 ? cell.member_ids : [cell.rep_id];
   }
 
@@ -2513,7 +2507,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // Render the overscan ring for every media type: without it the revealed
     // edge is bare background (a black gap) until the glide lands. The ring comes
     // straight from the cached tiles — thumbnails in thumbnail mode, colour-mapped
-    // hexes in flat-density mode (audio/text) — so both slide in real content.
+    // hexes in flat-density mode (text) — so both slide in real content.
     const doBorder = marginX > 1 || marginY > 1;
     this.panSnapW = this.width + 2 * Math.ceil(marginX);
     this.panSnapH = this.height + 2 * Math.ceil(marginY);
@@ -2850,7 +2844,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private hitTest(sx: number, sy: number): HexCellPayload | null {
+  private hitTest(sx: number, sy: number): HexCell | null {
     const meta = this.meta();
     if (!meta) return null;
     const [px, py] = this.screenToProj(sx, sy);
@@ -2866,7 +2860,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // Gather every cell from the 3×3 block of tiles around the cursor, then let
     // the pure `pickCell` rule find the nearest-and-containing one (or null over
     // blank space). The tile lookup stays here; the geometry is testable on its own.
-    const candidates: HexCellPayload[] = [];
+    const candidates: HexCell[] = [];
     for (let dtx = -1; dtx <= 1; dtx++) {
       for (let dty = -1; dty <= 1; dty++) {
         const tile = this.tileCache.getCached(level, txEst + dtx, tyEst + dty);

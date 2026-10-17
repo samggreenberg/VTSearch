@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Submit the full Max-Patch pipeline to SLURM with dependencies.
 #
-#   prepare (embed every dataset x embedder, cache pickles + exemplar crops)
+#   prepare (embed every dataset x embedder, cache pickles, select categories)
 #     -> run_cells (array: one task per dataset x embedder x category x seed)
 #       -> summarize (REPORT.md + figures)
 #
@@ -14,6 +14,11 @@
 # the dinov3_patch arms are skipped by prepare_data.py.
 #
 # Usage:  bash queue_all.sh [N_ARRAY_CELLS]
+#
+# The array is submitted before prepare has picked the categories, so its size
+# defaults to the grid's upper bound (experiment_config.max_array_cells);
+# indices past the real count exit as no-ops. Pass the exact count from
+# `run_cells.py --print-cells` to size it tightly once prepare has run.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,7 +30,11 @@ GRES="${MAXPATCH_GRES:-gpu:a100:1}"
 MEM="${MAXPATCH_MEM:-64G}"
 CPUS="${MAXPATCH_CPUS:-8}"
 TIME="${MAXPATCH_TIME:-8:00:00}"
-NCELLS="${1:-240}"   # array size; pass the count printed by run_cells.py --print-cells
+NCELLS="${1:-$(cd "$HERE" && python3 -c 'import experiment_config as c; print(c.max_array_cells())')}"
+if ! [[ "$NCELLS" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: could not size the cells array from experiment_config; pass N_ARRAY_CELLS." >&2
+  exit 1
+fi
 
 # Wrap a python stage in an srun-friendly one-liner sourced from gridenv.sh.
 STAGE_WRAP="source $WT/gridenv.sh && cd $HERE"

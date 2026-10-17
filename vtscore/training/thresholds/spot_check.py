@@ -1,11 +1,13 @@
-"""The spot check that decides the balance's line, and what it estimated (#4272, #4388, #4413).
+"""The spot check that audits the balance's line, and what it estimated (#4272, #4388, #4413).
 
 The user's preference is a **balance** of precision and recall: F-beta's
-*beta* (presets 0.5, 1 and 2).  Before any check the line keeps the
-mixture's F-beta argmax under the balance's cap (:func:`balance_count`); a
-**spot check** then audits the ranking with the user's votes on uniform
-random picks, whose labels say how much of a set is right without the bias
-model-chosen votes carry (#4256, #4257).
+*beta* (presets 1/4, 1 and 4).  The line under a balance is the labels'
+(:mod:`~vtscore.training.thresholds.labels_line`, #4452); a context with no
+trained head falls back to the **count rule** here, the mixture's F-beta
+argmax under the balance's cap (:func:`balance_count`).  A **spot check**
+audits the ranking with the user's votes on uniform random picks, whose
+labels say how much of a set is right without the bias model-chosen votes
+carry (#4256, #4257).
 
 **The check walks the ranking in bands (#4383, the owner's ruling of
 2026-09-30).**
@@ -25,8 +27,9 @@ model-chosen votes carry (#4256, #4257).
   beta <= 1, 128 above it; :func:`balance_schedule`), auditing each.  It goes
   one band deeper while the F-beta estimate rises and, from a start whose
   first deeper step does not, shallower while it does not fall; the peak is
-  the set it keeps (#4411's ``fb-walk``).  How the check treats the line
-  follows the preset (:func:`check_shape`, #4427).
+  the set it ends on (#4411's ``fb-walk``).  The walk never moves the app's
+  line: :func:`check_shape` is ``advisory`` at every preset (#4452), and
+  ``trim`` (#4427) is a shape only the eval harness forces.
 * **How close.**  A check carries a **likely range** for the precision and
   the recall of the set the line kept when it started (#4483, the owner's
   ruling of 2026-10-15; the walk's own set where no count was recorded): each
@@ -35,8 +38,10 @@ model-chosen votes carry (#4256, #4257).
   was censused, 0-100% where no pick reached it), weighted by size
   (:meth:`SpotCheck.range_over`).
 
-The line always keeps a set.  The states a balance reports
-(:data:`BALANCE_STATES`): ``unchecked`` and ``checked``.  A finished result
+The count rule always keeps a set; the labels' line may keep none.  The
+states a balance reports (:data:`BALANCE_STATES`): ``unchecked``,
+``checked``, and ``gate`` on a structural detector's line
+(:func:`gate_balance_state`).  A finished result
 is kept and goes **stale** quietly once the ranking under it moves: later
 votes retrain the model, the line follows the new ranking, and the ranges
 stay with a ``stale`` flag.
@@ -89,10 +94,12 @@ CHECK_MIN_PICKS = 5
 BALANCE_PRESETS: tuple[float, ...] = (0.25, 1.0, 4.0)
 DEFAULT_BETA = 1.0
 BETA_MIN, BETA_MAX = 0.25, 4.0
-#: How a check treats the line at a balance (#4427's pricing, 2026-10-02):
-#: ``advisory`` at beta <= 1 - the walk runs and its votes train, but the line
-#: keeps the unchecked rule's count - and ``trim`` above - the walk audits the
-#: bands holding the line, may only step shallower, and the line takes its end.
+#: How a check treats the line at a balance (:func:`check_shape`):
+#: ``advisory``, the app's at every preset (#4452) - the walk runs and its
+#: votes train, but the line stays where the labels (or, with no trained head,
+#: the unchecked count rule) put it - and ``trim`` (#4427's pricing), which the
+#: eval harness can force - the walk audits the bands holding the line, may
+#: only step shallower, and the line takes its end.
 CHECK_ADVISORY = "advisory"
 CHECK_TRIM = "trim"
 CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
@@ -1208,8 +1215,10 @@ class BalanceState:
     and ``recall`` are the likely ranges of the set the line kept when the
     check started (``kept_at_check``, #4483), or of the audited set where the
     check recorded no count; ``fbeta`` is the walk's estimate for its own set.
-    Under the ``advisory`` shape (#4427) the audited set is the walk's end and
-    the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
+    Under the ``advisory`` shape (the app's, :func:`check_shape`) the audited
+    set is the walk's end and the kept ``count`` is the line's - what a drawn
+    line keeps (the labels' line, #4452), else the unchecked count rule's;
+    under ``trim`` they coincide.
     """
 
     beta: float
@@ -1220,9 +1229,9 @@ class BalanceState:
     fbeta: float | None
     stale: bool
     schedule: CheckSchedule
-    #: How a check treats the line at this beta (:func:`check_shape`, #4427):
-    #: ``advisory`` (the ranges inform, the count stays the unchecked rule's)
-    #: or ``trim`` (the walk's end is the count).
+    #: How a check treats the line at this beta (:func:`check_shape`):
+    #: ``advisory``, the app's at every preset (the ranges inform, the count
+    #: stays the line's), or ``trim``, an eval arm (the walk's end is the count).
     shape: str = CHECK_TRIM
     #: The set the last check audited (the walk's end), which under ``advisory``
     #: is not the set the line keeps; ``None`` while unchecked.
@@ -1274,8 +1283,8 @@ def balance_count(beta: float, result: SpotCheck | None, proposal: int | None = 
     The unchecked count is the balance's cap (:func:`balance_schedule`),
     lowered to *proposal* when the caller has one: the mixture's F-beta argmax
     (:func:`fbeta_count`).  Under the ``advisory`` shape (:func:`check_shape`,
-    beta <= 1; #4427) a finished walk informs the line and never moves it;
-    *shape* overrides the preset's (the harness's full-walk arm).
+    every preset; #4452) a finished walk informs the line and never moves it;
+    *shape* overrides the preset's (the harness's ``walk_shape`` arms).
     """
     applicable = applicable_balance(beta, result)
     if applicable is not None and (shape or check_shape(beta)) != CHECK_ADVISORY:
@@ -1311,9 +1320,10 @@ def balance_state(
 ) -> BalanceState:
     """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
 
-    With *threshold* (the app's labels line, #4452) the count is how many
-    unvoted items of *ranking* score at or above it - the set the line keeps
-    there, which may be none - rather than the count rule's.
+    With *threshold* (the detector's line: the labels' line, #4452, a
+    centroid or typed-query head's line, or a trained head's fallback cut) the
+    count is how many unvoted items of *ranking* score at or above it - the set
+    the line keeps there, which may be none - rather than the count rule's.
 
     *shape* overrides the preset's check shape (:func:`check_shape`); the
     harness's full-walk arm passes ``trim`` so the walk's end is the count.

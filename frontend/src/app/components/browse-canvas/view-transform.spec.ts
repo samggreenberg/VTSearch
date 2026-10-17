@@ -17,7 +17,7 @@ import {
   softFloorZoom,
   type ViewGeomContext,
 } from './view-transform';
-import type { ProjectionMeta, ViewTransform } from '../../models/projection.models';
+import type { ProjectionLayout, ViewTransform } from '../../models/projection.models';
 
 /**
  * Unit coverage for the framework-free pan/zoom/clamp/rubber-band geometry
@@ -26,8 +26,9 @@ import type { ProjectionMeta, ViewTransform } from '../../models/projection.mode
  * enough to exercise every invariant the component's JSDoc calls out.
  */
 describe('view-transform', () => {
-  function meta(partial: Partial<ProjectionMeta> = {}): ProjectionMeta {
+  function meta(partial: Partial<ProjectionLayout> = {}): ProjectionLayout {
     return {
+      status: 'ready',
       projection_id: 'p1',
       bounds: [0, 0, 100, 100],
       base_radius: 10,

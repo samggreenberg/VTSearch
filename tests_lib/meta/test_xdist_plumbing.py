@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -156,6 +157,54 @@ def test_a_send_to_a_worker_already_gone_hands_the_unit_back(tmp_path):
     assert "INTERNALERROR" not in out
     assert "crashed while running 'test_g.py::test_g2" in out
     assert "1 failed, 10 passed" in out
+
+
+class _Node:
+    """A worker as the scheduler sees one: hashable, and records what it is sent."""
+
+    def __init__(self) -> None:
+        self.shutting_down = False
+        self.sent: list[list[int]] = []
+
+    def send_runtest_some(self, indices: list[int]) -> None:
+        self.sent.append(list(indices))
+
+    def shutdown(self) -> None:
+        self.shutting_down = True
+
+
+def test_a_replacement_still_collecting_is_not_handed_work(tmp_path):
+    """Two replacements join; the first to finish collecting must not schedule the other (#4966).
+
+    A slow machine lost two workers to the timeout minutes apart, and the
+    second's replacement was still collecting when the first's collection
+    arrived.  Offering work to every node then reached the one whose collection
+    the scheduler did not hold yet: ``KeyError`` on that worker, an
+    ``INTERNALERROR`` that ended the run.  The queue is long enough to keep
+    work pending for both offers.
+    """
+    from collections import OrderedDict
+
+    from tests_shared.xdist_plumbing import CrashSafeLoadGroupScheduling
+
+    collection = [f"test_{i}.py::test" for i in range(8)]
+    # Built without __init__ (which reads the run's --tx specs) and fed stand-in
+    # nodes, so typed loosely.
+    sched: Any = CrashSafeLoadGroupScheduling.__new__(CrashSafeLoadGroupScheduling)
+    sched.log = lambda *args: None
+    sched.numnodes = 2
+    sched.collection = collection
+    sched.workqueue = OrderedDict((nodeid.rsplit("::", 1)[0], {nodeid: False}) for nodeid in collection)
+    ready, collecting = _Node(), _Node()
+    sched.assigned_work = {ready: {}, collecting: {}}
+    sched.registered_collections = {ready: list(collection)}
+
+    sched.schedule()
+
+    assert ready.sent and not collecting.sent
+    sched.registered_collections[collecting] = list(collection)
+    sched.schedule()
+    assert collecting.sent
 
 
 def test_other_modes_keep_their_own_scheduler_and_timer():

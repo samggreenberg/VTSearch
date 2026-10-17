@@ -68,9 +68,9 @@ type Dot = 'green' | 'yellow' | 'none';
  * In Test (the Find view since #4524) the host supplies the state line
  * (`lineState`): this corpus's test result, or *untested*, never Train's
  * check range, which measured the training corpus and would read as this
- * one's. While a test phase runs the host sets `locked`: the balance is live
- * between phases and frozen within one, because moving it would move the
- * line and the bands under the picks.
+ * one's. While a test runs, through both its phases (matches, then misses),
+ * the host sets `locked`: the balance stays frozen until the test is done,
+ * because moving it would move the line and the bands under the picks.
  *
  * Content marked `balanceActions` is projected onto the Threshold heading's
  * line, so a host can seat controls there (Find's work-queue actions).

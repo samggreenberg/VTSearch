@@ -1281,8 +1281,8 @@ def labelset_train_and_score(
     patch detector, one ``patch_forward``).  A caller driving a progress bar -
     or wanting a cancellation checkpoint - passes it.
 
-    *beta* is the balance to cut at (the line keeps the set the balance
-    keeps, #4413), or ``None`` for no balance (the Inclusion 0 cut).
+    *beta* is the balance to cut at (the line is the labels' line at it,
+    #4413, #4452), or ``None`` for no balance (the Inclusion 0 cut).
     *inclusion_value* is deprecated
     (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
     any other value raises ``ValueError``.

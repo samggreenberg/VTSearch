@@ -4,9 +4,9 @@ Photo Finish and Patch Notes drew the objective as straight segments between fiv
 (25, 50, 100, 150 and after the check), so a session's first clicks read as a steady climb from the
 typed query. The owner (2026-10-07): "shouldn't the FBeta stay flat for the first few clicks, since
 we're measuring and collecting before we're learning?" It does: the app stays on the text sort through
-Autopilot's whole opening and shows a detector only from the Hard phase on (#4605), a median ~40 clicks
-in. (A first version switched at the opening's own first detector, around click 4, and drew a dip there
-that no user sees.)
+Autopilot's whole opening and shows a detector only once the opening (Good, Bad, More) ends (#4605), a
+median ~40 clicks in. (A first version switched at the opening's own first detector, around click 4,
+and drew a dip there that no user sees.)
 
 `curves.csv` (analyze.py) records each run's objective (``thr_fbeta``, at the run's own beta) at every
 click once the app shows the run's detector (``app_trained``), and nothing before. This fills the gap the

@@ -12,6 +12,32 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A folder load width-checks every named pre-computed vector** (issue #4966). `load_dataset_from_folder` /
+  `load_dataset_from_folder_chunked` check a `content_vectors` entry filed under `content_embedder_name`, and
+  each column of a per-embedder `{embedder: vector}` entry, against the width that embedder declares
+  (`vtscore.embedding.binding.expected_dim_for_embedder`, no model load), as the `.npz` readers already did,
+  and raise `MismatchedVectorError` naming both widths. A vector with no embedder name, or one naming an
+  unregistered embedder or one that declares no width, is not width-checked there.
+
+- **An import width-checks every named vector the importer hands in** (issue #4966). Before anything is
+  embedded, the load pipeline's embed stage, its staging import and the CLI's import embed pass check each
+  vector filed under a registered embedder's name against that embedder's declared width, so a plugin
+  importer's `media["embeddings"] = {name: vec}` from a `fetch_record` / `fetch_source_media` hook or a `run()`
+  override is held to the same rule as the folder and `.npz` paths. A mismatch raises `MismatchedVectorError`
+  naming the media and both widths. Shape only; a nameless vector, an unregistered name and an embedder that
+  declares no width are not checked, and `embed_missing` itself does not re-check vectors the app made.
+
+- **`VideoXClipEmbedder.embedding_dim` is 512** (issue #4966). X-CLIP returns its 512-wide `projection_dim`
+  for both videos and text; the declared 768 was the vision tower's hidden width, so a width check rejected
+  genuine X-CLIP vectors.
+
+- **`detector_balance_state` counts what a trained head's fallback line keeps** (issue #4966). A trained head
+  whose labels give no class model (no `labels_line`: too few votes, one class) is cut at the retrain's
+  fallback, and the state's `count` is now how many unvoted items of `line_ranking` that threshold keeps, as
+  it already was under the labels line and a quota head's line. It was the count rule's (the mixture's F-beta
+  argmax under the balance's cap), a set that line never keeps. Only a context with no head reads the count
+  rule. A headless CLI run's `detector_unchecked` event and `balance` entry carry the same count.
+
 - **Library code reads one setting at a time: `vtscore.config.get_setting`** (issue #4997). `CoreConfig`
   was meant to be built once per request and passed down; instead 28 call sites built one with
   `CoreConfig.from_settings()` to read a field or two, each a snapshot of every setting. They now call the
@@ -365,6 +391,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
+  `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
+  pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.
+  `frame_at` still returns stored pixels. `VideoLetterboxCropCleaner` now writes `clip_box_frame: [width,
+  height]`, the decoded frame size it measured `clip_box` on, beside the box, and
+  `vtscore.media.provenance.CLIP_WINDOW_FIELDS` carries it, so a saved dataset keeps it. The video thumbnailers
+  stretch the frame by the SAR, so an anamorphic video previews at its display aspect. Additive.
 
 - **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
   (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and

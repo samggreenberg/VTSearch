@@ -20,7 +20,7 @@ Run:
 python scripts/vulture-audit.py
 ```
 
-The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
+The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `tests_shared/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
 
 The **findings** are intentionally **not** a `run-tests.sh` gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
 

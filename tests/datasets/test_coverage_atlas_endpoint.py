@@ -12,6 +12,7 @@ active dataset without hands-on verification.
 
 from __future__ import annotations
 
+import threading
 import time
 
 import numpy as np
@@ -74,14 +75,29 @@ def _loaded_dataset(n: int = 30, *, name: str = "Atlas", seed_offset: int = 0, s
     return entry, ctx
 
 
-def _wait_for_atlas(dataset_id: str, timeout: float = 10.0):
+# A real hierarchical k-means build: seconds on an idle box, but well past 10 s
+# on a loaded one (a 10 s wait flaked), so the waits are generous.
+_BUILD_TIMEOUT = 60.0
+
+
+def _wait_until(predicate, timeout: float = _BUILD_TIMEOUT) -> bool:
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        ctx = get_context(dataset_id)
-        if ctx is not None and ctx.coverage_atlas is not None:
-            return ctx.coverage_atlas
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
         time.sleep(0.05)
-    return None
+    return True
+
+
+def _wait_for_atlas(dataset_id: str, timeout: float = _BUILD_TIMEOUT):
+    def _built() -> bool:
+        ctx = get_context(dataset_id)
+        return ctx is not None and ctx.coverage_atlas is not None
+
+    if not _wait_until(_built, timeout):
+        return None
+    ctx = get_context(dataset_id)
+    return ctx.coverage_atlas if ctx is not None else None
 
 
 class TestCoverageAtlasEndpoint:
@@ -101,6 +117,22 @@ class TestCoverageAtlasEndpoint:
         # Every media with an embedding lands in a leaf.
         assert set(atlas.vector_to_leaf.keys()) == set(ctx.medias.keys())
 
+    def test_finished_build_reports_idle(self, client):
+        """A finished build's row goes ``idle``, so clients see it end at once
+        rather than when the tracker prunes it (the Stats window waits on it)."""
+        from vtscore.concurrency.progress import loading_tasks
+
+        entry, _ = _loaded_dataset(name="AtlasIdle")
+        task_id = client.post(f"/api/datasets/registry/{entry['id']}/coverage-atlas").get_json()["task_id"]
+        # Held so the row can't be pruned from under the check once finished.
+        tracker = loading_tasks.get_tracker(task_id)
+        assert tracker is not None
+
+        assert _wait_until(lambda: loading_tasks.is_finished(task_id))
+        row = tracker.get()
+        assert row["status"] == "idle"
+        assert not row.get("error")
+
     def test_not_loaded_returns_400(self, client):
         from vtscore.datasets.registry import register_dataset
 
@@ -111,6 +143,79 @@ class TestCoverageAtlasEndpoint:
     def test_unknown_dataset_returns_404(self, client):
         resp = client.post("/api/datasets/registry/does-not-exist/coverage-atlas")
         assert resp.status_code == 404
+
+
+class TestStatsCoverageAtlasStatus:
+    """The ``coverage_atlas`` block on ``GET .../stats``, read by the Stats window's Build row (#4995)."""
+
+    @staticmethod
+    def _status(client, dataset_id: str):
+        resp = client.get(f"/api/datasets/registry/{dataset_id}/stats")
+        assert resp.status_code == 200
+        return resp.get_json()["coverage_atlas"]
+
+    def test_loaded_with_atlas_is_built(self, client):
+        from vtscore.coverage.atlas import CoverageAtlas
+        from vtscore.state.coverage import COVERAGE_ATLAS_AUTO_THRESHOLD
+
+        entry, ctx = _loaded_dataset(name="StatsBuilt")
+        ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ctx.medias.items()}, k=3)
+
+        assert self._status(client, entry["id"]) == {
+            "built": True,
+            "building": False,
+            "auto_build_threshold": COVERAGE_ATLAS_AUTO_THRESHOLD,
+        }
+
+    def test_loaded_without_atlas_is_not_built(self, client):
+        entry, ctx = _loaded_dataset(name="StatsNotBuilt")
+        ctx.coverage_atlas = None
+
+        status = self._status(client, entry["id"])
+        assert status["built"] is False
+        assert status["building"] is False
+
+    def test_unloaded_is_null(self, client):
+        from vtscore.datasets.registry import register_dataset
+
+        entry = register_dataset(name="StatsUnloaded", media_type="audio", num_items=1, pkl_path="/tmp/atlas_su.pkl")
+        assert self._status(client, entry["id"]) is None
+
+    def test_running_build_reports_building_and_absorbs_a_repeat_request(self, client, monkeypatch):
+        from vtscore.concurrency.progress import loading_tasks
+
+        started = threading.Event()
+
+        def _endless_build(ctx, on_progress):
+            started.set()
+            while True:  # exits ONLY via CancelledError, which on_progress raises once cancelled
+                on_progress(0, 0)
+                time.sleep(0.05)
+
+        monkeypatch.setattr("vtsearch.state.build_coverage_atlas_for_context", _endless_build)
+        entry, _ = _loaded_dataset(name="StatsBuilding")
+        url = f"/api/datasets/registry/{entry['id']}/coverage-atlas"
+
+        task_id = client.post(url).get_json()["task_id"]
+        assert started.wait(timeout=_BUILD_TIMEOUT)
+        tracker = loading_tasks.get_tracker(task_id)
+        status = self._status(client, entry["id"])
+        assert status["built"] is False
+        assert status["building"] is True
+
+        # A repeat request attaches to the running build rather than starting
+        # a twin that would replace its task row.
+        repeat = client.post(url)
+        assert repeat.status_code == 200
+        assert repeat.get_json()["task_id"] == task_id
+        assert loading_tasks.get_tracker(task_id) is tracker
+
+        # Cancelled, the build leaves no atlas and nothing running.
+        assert loading_tasks.cancel_task(task_id)
+        assert _wait_until(lambda: not loading_tasks.worker_alive(task_id))
+        status = self._status(client, entry["id"])
+        assert status["built"] is False
+        assert status["building"] is False
 
 
 class TestDomainShiftEndpoint:

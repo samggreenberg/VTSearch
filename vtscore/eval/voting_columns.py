@@ -387,10 +387,12 @@ VOTING_COLUMNS: tuple[str, ...] = (
 #: vote the simulated user casts, emitted only when the caller passes a
 #: ``pick_sink``.
 #:
-#: The main frame cannot answer the questions this study asks.  It starts at the
-#: first *trainable* step - before one Good and one Bad vote coexist there is no
-#: model, no threshold and no metrics row - so the opening, which is the whole
-#: subject here, is exactly the part it does not record.  This frame records
+#: The main frame cannot answer the questions this study asks.  Under the app's
+#: label quota it starts at the first Good (#4643: Test gives the Goods'
+#: centroid from there; a typed-query run starts at the first vote, #4758), and
+#: its Train side - the line, the pool scores - only once a Good and a Bad
+#: coexist, so the opening, which is the whole subject here, is the part it
+#: records least: the votes before the first Good not at all.  This frame records
 #: every click instead: what was picked, whether it turned out to be a positive,
 #: and **where on the seed sort it came from**, which is what makes "why was this
 #: arm better" answerable rather than merely visible in the totals.

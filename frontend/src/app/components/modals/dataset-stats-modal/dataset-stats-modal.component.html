@@ -27,6 +27,30 @@
             }
           </td>
         </tr>
+        @if (showAtlasRow) {
+          <tr>
+            <td
+              class="stat-label"
+              title="The map of the dataset that the New select mode and the training-domain check read"
+            >Coverage atlas</td>
+            <td class="stat-value">
+              @if (atlasBuilding()) {
+                Building…
+              } @else {
+                Not built
+                @if (atlasSkipThreshold; as threshold) {
+                  <span class="atlas-reason">(datasets over {{ threshold | number }} items skip it at load)</span>
+                }
+              }
+              <button
+                class="btn btn--secondary btn--sm build-atlas-btn"
+                [disabled]="atlasBuilding()"
+                (click)="buildAtlas()"
+                title="Build the coverage atlas now; its progress shows on the dataset's row"
+              >Build</button>
+            </td>
+          </tr>
+        }
       </tbody>
     </table>
 

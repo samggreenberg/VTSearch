@@ -23,9 +23,9 @@ The per-plugin shape of ``field_values`` on ``POST
 ``fields.Dict()``: the inner keys vary per exporter and ``field_values``
 is validated inside the handler against the selected plugin's
 :attr:`fields` declaration.  The multipart-or-JSON ``POST
-/api/settings-importers/import/<importer_name>`` route stays on the
-legacy plain-Flask path (no decorator) for the same reason; see
-"Routes absent from the spec" in ``docs/API.md``.
+/api/settings-importers/import/<importer_name>`` route declares no request
+schema for the same reason; see "Routes with no typed schema" in
+``docs/API.md``.
 """
 
 from __future__ import annotations

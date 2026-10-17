@@ -10,7 +10,7 @@ Angular app (`frontend/src/app/`), projection backend in `vtscore/projection/`
 (library tier, Flask-free). It adds a **dataset-only** workflow (no detector,
 no labels/votes, no MLP/eval) alongside Find and Train: a 2-D UMAP projection
 of the content-embedding space, drawn as a pannable/zoomable tiled field of
-**hexagons** (audio/text) or **squares** (image/video/document), where hovering
+**hexagons** (text) or **squares** (image, video, document, face, audio), where hovering
 a bin previews a representative item. Bin color encodes item count (density);
 zooming subdivides bins (level-of-detail). It reuses VTSearch's importers,
 embedders, embedding matrix, media serving, clipper, and concurrency stack.
@@ -203,9 +203,10 @@ cache invalidation is a non-problem by construction: projections never change
 underneath anyone; `projection_id` survives only as a cache-namespacing key.
 
 **Bin shape** is a fixed property of the media type, not a user choice
-(`bin_shape_for_media_type`): browsable-thumbnail media (image/video/document)
-tile as **squares** (pack edge-to-edge, perfectly zoom-persistent quadtree
-reps); audio/text tile as **hexes** (density map). The UMAP layout is
+(`bin_shape_for_media_type`): browsable-thumbnail media (image, video,
+document, face, and audio by its waveform) tile as **squares** (pack
+edge-to-edge, perfectly zoom-persistent quadtree reps); text tiles as **hexes**
+(density map). The UMAP layout is
 shape-independent (both binnings share coords + `projection_id`);
 `build_pyramid(projection, *, bin_shape=...)` dispatches the three
 lattice-specific ops through a `_BinGeometry` record; the square side is
@@ -240,7 +241,7 @@ viewport.
 | Bin color | **Density (count)** | Log/sqrt-scaled; aggregated by the pyramid for free. |
 | UMAP seeding | **Unseeded (fast)** | Safe only because the projection is frozen at ingest. |
 | Projection lifetime | **Frozen at ingest, persisted** | Carve-out from "No Persisted Vectors/MLPs" (coords + pyramid only). Dissolves tile-cache invalidation. |
-| Bin shape | **Fixed by media type** | Square for image/video/document, hex for audio/text; no user toggle. |
+| Bin shape | **Fixed by media type** | Square for image/video/document/face/audio, hex for text; no user toggle. |
 
 ### Library-tier placement
 
