@@ -8,6 +8,7 @@ guard, the per-dataset gate, and the columnar storage of a ranking (#5012).
 
 from __future__ import annotations
 
+import inspect
 from copy import deepcopy
 
 import numpy as np
@@ -185,12 +186,10 @@ class TestRowCap:
         assert cache.page(t1, 0, 10) is None
 
     def test_the_default_cap_is_sort_cache_max_rows(self):
-        # One shared row repeated: a list of pointers, so this stays cheap.
-        cache = SortResultsCache()
-        t1 = cache.store([{"id": 0, "score": 1.0}] * SORT_CACHE_MAX_ROWS, 0.5)
-        t2 = cache.store(_ranking(1), 0.5)  # one row over the cap: t1 goes
-        assert cache.page(t1, 0, 10) is None
-        assert cache.page(t2, 0, 10) is not None
+        # Read off the signature: storing the 8 M rows to reach the cap would
+        # copy each into the columns (#5012), about 300 MB.  The tests above
+        # cover the eviction itself.
+        assert inspect.signature(SortResultsCache).parameters["max_rows"].default == SORT_CACHE_MAX_ROWS
 
 
 class _Line:

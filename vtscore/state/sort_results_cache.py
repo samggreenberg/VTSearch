@@ -65,9 +65,10 @@ SORT_WINDOW_TAIL = 200
 
 #: Cap on the ranking rows the cache holds across all its sorts (#4978).  A row
 #: is held in columns, 16 bytes (20 with ``best_region``, #5012), so this keeps
-#: the cache's rankings to about 40 MB.  The newest ranking is kept even when it
+#: the cache's rankings to about 160 MB while all eight of ``max_entries``
+#: rankings of a 1 M-item dataset fit.  The newest ranking is kept even when it
 #: alone is longer, so a fresh sort can page.
-SORT_CACHE_MAX_ROWS = 2_000_000
+SORT_CACHE_MAX_ROWS = 8_000_000
 
 
 def initial_window_end(total: int, above_threshold: int) -> int:
