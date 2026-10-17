@@ -168,10 +168,12 @@ def _fold_count_arms(
         )
         arms.append((combine, value, prov, nan))
 
-    # The arms for the rule users actually get.  ``anchored`` is production
-    # (`FOLD_ANCHOR_COMBINE`); ``anchored_qmedian`` re-cuts the *same* fit under
-    # the robust combine, which puts #3115's contamination question on the
-    # shipped path rather than only on the retired blend.
+    # The fold-anchored arms: the app's line until #4452, and its fallback
+    # since (no balance, or labels that support no class model).  ``anchored``
+    # is production's combine (`FOLD_ANCHOR_COMBINE`); ``anchored_qmedian``
+    # re-cuts the *same* fit under the robust combine, which puts #3115's
+    # contamination question on the fold-anchored path rather than only on the
+    # retired blend.
     #
     # Fitted **once** and re-cut, not fitted twice.  `FoldAnchoredCut` exists to
     # separate the fit from the cut, and the combine rule is read at cut time, so
@@ -195,14 +197,14 @@ def _fold_count_arms(
             _stop(timings, t_anchored)
             arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
         else:
-            shipped = cut.threshold_at(inclusion)
-            # The clock stops HERE, on production's own cut and before the
-            # `qmedian` re-cut: that arm is a counterfactual read of the same
+            anchored = cut.threshold_at(inclusion)
+            # The clock stops HERE, on the app's own fold-anchored cut and before
+            # the `qmedian` re-cut: that arm is a counterfactual read of the same
             # fitted mixture and costs a live run nothing, so timing it would
             # charge K for the harness's own instrumentation.  (Sharing the fit
             # is exactly why the two arms are cheap; see the note above.)
             _stop(timings, t_anchored)
-            arms.append(("anchored", shipped, cut.provenance, nan))
+            arms.append(("anchored", anchored, cut.provenance, nan))
             robust = dataclasses.replace(cut, combine="qmedian")
             arms.append(("anchored_qmedian", robust.threshold_at(inclusion), robust.provenance, nan))
     return arms
@@ -223,9 +225,9 @@ def _fold_count_variant_rows(
 
     *sim_fit_scores* is the sim haystack under the #3308 population convention
     (voted items dropped); the ``anchored`` / quantile-space arms realize their
-    cuts on it, mirroring the shipped rule, while the retired ``blend`` arm
-    keeps fitting *sim_pooled_scores* - production's fallback blend also keeps
-    the full distribution.  ``None`` falls back to *sim_pooled_scores*.
+    cuts on it, mirroring the app's fold-anchored rule, while the retired
+    ``blend`` arm keeps fitting *sim_pooled_scores* - production's fallback
+    blend also keeps the full distribution.  ``None`` falls back to *sim_pooled_scores*.
 
     The study's screen for "does more cross-calibration buy anything, and what
     does it cost".  It is exact rather than approximate, because the folds are
@@ -238,7 +240,7 @@ def _fold_count_variant_rows(
     reproduces this step's own pre-blend conformal cut - the control that
     licenses the rest of the table.
 
-    Arms per K, because the fold count and the shipped threshold are different
+    Arms per K, because the fold count and the threshold rule are different
     questions - and, since #3115, because *how* the folds are combined is a
     third one.  Every arm below re-reads the same already-trained fold prefix,
     so the whole table costs arithmetic:
@@ -250,16 +252,17 @@ def _fold_count_variant_rows(
       across K and this arm isolates how much of K's benefit survives being
       averaged with the GMM cut.  Emitted only when the step has the pooled sim
       scores the blend fits.
-    * ``folds_k{K}_anchored`` - **production's rule** (#3116).  The blend above
-      was retired by the 2026-08-05 population-anchored run; the shipped path is
+    * ``folds_k{K}_anchored`` - **the fold-anchored rule** (#3116), the app's
+      line until #4452 and its fallback since.  The blend above was retired by
+      the 2026-08-05 population-anchored run in favour of
       :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`, which
       fits one anchored mixture *per fold* and combines them in quantile space.
-      K therefore moves the shipped threshold through a path the other two arms
+      K therefore moves that threshold through a path the other two arms
       do not exercise at all - the blend's GMM half is a single unanchored fit
       on the sim haystack and is K-independent by construction, so ``blend``
       varies only in its x-cal half.  Without this arm every conclusion about
-      what ``calibrate_count`` does to the threshold users actually get is
-      partial.  Emitted when the step carries at least K fold haystacks, which
+      what ``calibrate_count`` does to the fold-anchored threshold is partial.
+      Emitted when the step carries at least K fold haystacks, which
       :func:`_safe_threshold_for_step` supplies (so: under safe thresholds).
     * ``folds_k{K}_{tmean,tmedian,qmean,qmedian}`` - **the combine rule**
       (#3115).  ``xcal`` above *is* the pooled control: it calls
@@ -270,9 +273,9 @@ def _fold_count_variant_rows(
       see :data:`~vtscore.training.thresholds.FOLD_CONFORMAL_COMBINES` for what
       each leg of the contrast isolates.  ``q*`` needs a haystack per fold and
       so shares the ``anchored`` arm's condition.
-    * ``folds_k{K}_anchored_qmedian`` - production's rule re-cut under the
-      robust combine, which puts the contamination question on the **shipped**
-      path and not only on the retired blend.
+    * ``folds_k{K}_anchored_qmedian`` - the fold-anchored rule re-cut under
+      the robust combine, which puts the contamination question on the
+      **fold-anchored** path and not only on the retired blend.
 
     Note what is *not* a defect here: the unanchored ``fit_gmm_threshold`` is
     hoisted out of the K loop, and that is correct rather than a frozen
@@ -288,7 +291,7 @@ def _fold_count_variant_rows(
     and outside every other timing column the frame carries:
 
     * ``fold_score_seconds`` - one scoring pass over the sim set per fold, so
-      the shipped rule can anchor each fold's mixture on that fold's own
+      the fold-anchored rule can anchor each fold's mixture on that fold's own
       haystack (measured in :func:`_safe_threshold_for_step`).
     * ``anchored_seconds`` - production's ``fit_fold_anchored_cut`` over the
       prefix: one anchored EM per fold.

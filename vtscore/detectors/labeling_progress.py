@@ -138,8 +138,8 @@ class _ProgressCache:
     #: Last fully-computed ``/api/labeling-status`` payload (minus the transient
     #: ``stale`` flag).  ``compute_labeling_status`` refreshes it on every full
     #: compute; the route returns it immediately to pollers while a background
-    #: worker advances the per-step cache, so the 2 s poll never blocks on an
-    #: MLP retrain (issue #2397).
+    #: worker advances the per-step cache, so the 2 s poll never blocks on a
+    #: head retrain (issue #2397).
     status_snapshot: Optional[dict[str, Any]] = None
 
     #: Live models injected by ``train_and_score`` during sorting.  Keyed by
@@ -1134,7 +1134,7 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
 
     Depends only on the coverage-atlas ``span_info`` passed in from the route
     (``level`` = consecutive BFS-order seen nodes, ``depth`` = total nodes),
-    not on the per-step MLP cache, so it stays cheap and is reused verbatim by
+    not on the per-step model cache, so it stays cheap and is reused verbatim by
     the pending-status placeholder.
 
     ``target`` is the green bar itself, ``min(autopilot_goal_diversity,
@@ -1374,7 +1374,7 @@ def _pending_labeling_status(
 ) -> dict[str, Any]:
     """Build a status from only the cheap fields (counts + Span).
 
-    The MLP-derived Smart / Stable indicators show a transient "computing"
+    The head-derived Smart / Stable indicators show a transient "computing"
     state; :func:`stale_labeling_status` overlays the real ones from the last
     snapshot when one exists.
     """

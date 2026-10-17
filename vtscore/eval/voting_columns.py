@@ -688,8 +688,9 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base
     # row's `threshold_provenance`) and the fold sentinel behind a fallback, so
-    # a schedule row on a fallback step is never pooled with a replacement
-    # counterfactual on a fused one.  Blank on every row that is not a schedule row.
+    # a schedule row on a blend-fallback step is never pooled with a replacement
+    # counterfactual on a step the labels' line or the fused cut drew.  Blank on
+    # every row that is not a schedule row.
     "shipped_provenance",
     "fold_fallback",
     "cut_fallback",
@@ -853,7 +854,7 @@ CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
 )
 
 #: Column order for the **goodness-of-fit** side frame (issue #3329): one row per
-#: (step, scope), where *scope* is either a calibration fold of the **shipped**
+#: (step, scope), where *scope* is either a calibration fold of the **live**
 #: fold-anchored cut or the labelled sim set under one pooling geometry.
 #:
 #: This frame exists because every other diagnostic in this module is
@@ -867,10 +868,10 @@ CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
 #: conflating them would silently compare a fold model's haystack with the final
 #: model's sim set:
 #:
-#: * ``fold<i>`` - fold *i* of the shipped :class:`FoldAnchoredCut`, scored
+#: * ``fold<i>`` - fold *i* of the step's :class:`FoldAnchoredCut`, scored
 #:   against **its own** haystack.  Label-free, so it carries the distance and
 #:   anchoring columns only.  Nothing in the eval tier has ever read
-#:   ``FoldAnchoredCut.fits``; these are the shipped mixture's first observations.
+#:   ``FoldAnchoredCut.fits``; these are the fold-anchored mixture's first observations.
 #: * ``sim:<geometry>`` - the unanchored mixture on the labelled sim scores.
 #:   Carries the class-shape and identification columns, which need labels.
 FIT_QUALITY_ROW_COLUMNS: tuple[str, ...] = (

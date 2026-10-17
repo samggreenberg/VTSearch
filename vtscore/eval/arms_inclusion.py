@@ -115,7 +115,7 @@ def _cut_inclusion_rows(
     *sim_scores* arrives under the #3308 population convention (the caller
     passes the voted-items-dropped haystack when it has one), matching the
     already-filtered *fold_haystacks*, so every re-cut here realizes its
-    quantile on the same population the shipped cut does.
+    quantile on the same population the app's fold-anchored cut does.
     """
     import numpy as np  # noqa: PLC0415
 

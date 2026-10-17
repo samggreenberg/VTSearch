@@ -9,8 +9,9 @@ is today.  A paired re-cut riding the shipped trajectory (the ``schedule`` and
 ``gmm_variant`` rows) cannot stand in for that, because the line decides what
 gets asked next, and a rung that never chose its own questions is not the rung.
 
-Each rule here *replaces* the shipped live cut after
-:func:`vtscore.eval.voting_iterations._safe_threshold_for_step` has fitted it,
+Each rule here *replaces* the live line
+:func:`vtscore.eval.voting_iterations._safe_threshold_for_step` drew for the
+step (the labels' line under a balance, #4452, else the fold-anchored cut),
 reading only what that step already computed - the fold orderings, the final
 model's haystack scores, the fitted :class:`FoldAnchoredCut` - so a rung costs
 no extra training and cannot move the fold models, the splits or the head.
@@ -36,11 +37,12 @@ The rules, in the deck's order:
 * ``anchored_rawmean`` - **iteration 4's strawman**, the ``b`` build of "No
   Mean Feat": each fold's anchored mixture cut at its own midpoint, and the
   per-fold cuts averaged *as raw scores* on the final model.  The slide's point
-  is that this is wrong - three models, three scales - and the shipped
-  quantile transfer is the fix.
+  is that this is wrong - three models, three scales - and the
+  fold-anchored cut's quantile transfer is the fix.
 
-An unset rule (``None``) is the shipped fold-anchored cut, untouched, so the
-harness's default arm cannot drift from the app through this module.
+An unset rule (``None``) leaves the step's own line untouched - the labels'
+line under a balance, else the fold-anchored cut - so the harness's default arm
+cannot drift from the app through this module.
 
 One retired piece of the labels line lives here too, for #4668's build-up of
 the F-beta era: :func:`sigma_floor` ``("absolute")`` holds the line's spread
@@ -152,17 +154,19 @@ def live_threshold(
     a pooled conformal cut, or the fold rule's sentinel when the folds could not
     form - and *details* carries the fold orderings and ``fold_fallback``.
     *haystack_scores* are the final model's scores over the simulation set.
-    *fitted_cut* is the shipped estimator's fit (``None`` on its blend fallback)
-    and *shipped_threshold* / *shipped_provenance* are what it returned.
+    *fitted_cut* is the fold-anchored estimator's fit (``None`` with no usable
+    folds), and *shipped_threshold* / *shipped_provenance* are the line the step
+    drew and its provenance: the labels' line under a balance (#4452), else
+    that fit's cut, else the blend.
 
     Where a rule has nothing to cut on it falls back the way the app of its era
     did: ``xcal_mincost`` to the fold rule's sentinel (the too-few-labels
     ``0.5`` / ``NO_GOOD_THRESHOLD`` the fold computation has always returned),
     ``blend`` to blending ``NO_GOOD_THRESHOLD`` in place of the missing x-cal
     cut (production's substitution, see ``_blend_xcal_input``), and
-    ``anchored_rawmean`` to the shipped estimator's own fallback, which is the
-    blend.  The provenance names the fallback, so a reader can count how many
-    steps a rung really cut.
+    ``anchored_rawmean`` to the step's own line, which with no fold-anchored
+    fit is the labels' line under a balance, else the blend.  The provenance
+    names the fallback, so a reader can count how many steps a rung really cut.
     """
     from vtscore.training.thresholds import calculate_safe_threshold  # noqa: PLC0415
 

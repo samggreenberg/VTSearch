@@ -7,7 +7,7 @@ the detector in the dashboard grid.
 Every entry is backed by a labelset file under ``data/detectors/``, named
 after a slug of the detector name rather than the name itself (see
 :func:`vtscore.detectors.store._slug`).
-The MLP that scores the detector is trained on demand from the labelset and
+The head that scores the detector is trained on demand from the labelset and
 lives only in RAM (see :class:`~vtsearch.state.DetectorContext`).
 
 Multiple detectors can be *loaded* into memory simultaneously.  Which detector
