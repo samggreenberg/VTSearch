@@ -2,7 +2,7 @@
 
 The progress-plot modal used to load its series through the
 ``calculate_*_over_time`` helpers, which call ``_ensure_cache`` and therefore
-retrain one MLP per uncached label step - plus, on a cold cache, a full
+run a scoring pass per uncached label step - plus, on a cold cache, a full
 hierarchical-k-means coverage-atlas build - on the calling thread while holding
 ``_progress_lock``.  ``/api/labeling-status`` deliberately defers exactly that
 work to a background worker (issue #2397), so the cache is behind for most of a

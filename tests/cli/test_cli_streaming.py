@@ -29,7 +29,7 @@ def _make_audio_media(media_id: int) -> dict:
     # 2-dim *unit-norm* embedding whose dim 0 strictly decreases with id
     # (0.9, 0.8, 0.7, 0.6, 0.5 for ids 1..5).  Embeddings are L2-normalized at
     # ingest, so we store a unit vector to make that normalization a no-op and
-    # keep dim 0 the clean, id-ordered signal the stubbed MLP thresholds on.
+    # keep dim 0 the clean, id-ordered signal the stubbed head thresholds on.
     e0 = 1.0 - 0.1 * media_id
     e1 = (1.0 - e0 * e0) ** 0.5
     return {
@@ -117,7 +117,7 @@ def _clean_detectors_dir():
 
 @pytest.fixture
 def _stub_split_training(monkeypatch):
-    """Train a deterministic MLP whose logit is ``100 * (embedding[0] - 0.65)``.
+    """Train a deterministic head whose logit is ``100 * (embedding[0] - 0.65)``.
 
     With the unit-norm embeddings from ``_make_audio_media`` (dim 0 = 0.9, 0.8,
     0.7, 0.6, 0.5 for ids 1..5) and threshold 0.5 (sigmoid), the 0.65 boundary

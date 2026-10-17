@@ -423,7 +423,7 @@ class DatasetContext:
         # media-id list it corresponds to, and the ``media_revision`` it was
         # built at.  Built lazily on first access by
         # ``vtscore.embedding.matrix.get_embedding_matrix`` and reused
-        # across cosine sort, MLP scoring, and coverage-atlas construction so
+        # across cosine sort, head scoring, and coverage-atlas construction so
         # we don't rebuild a 10k-row matrix per call.  Cache validity is the
         # revision match; the id list is kept for the returned tuple / region
         # snap-key match.
@@ -866,11 +866,11 @@ class DatasetContext:
         * ``"structural"`` - instance retrieval / geometric verification: the
           structural slot, or ``None`` (the caller 400s; structural ops need a
           structural embedder).
-        * ``"score"`` - cosine example sort, the detector MLP (train + score),
+        * ``"score"`` - cosine example sort, the detector head (train + score),
           and the coverage atlas: the structural slot if bound, else the patch
           slot, else the text slot, else ``None``.  ``None`` means a slot-less
           single-vector dataset (e.g.  ``dinov2_single``); the matrix layer then
-          reads each media's primary vector, so cosine sort / MLP scoring keep
+          reads each media's primary vector, so cosine sort / head scoring keep
           working rather than 400-ing.
 
         Returns an embedder *name* (or ``None``).  Pass the result straight to
@@ -909,7 +909,7 @@ class DetectorContext:
     """All mutable state that belongs to a single loaded detector.
 
     Bundles per-detector vote state, training artifacts, and cached in-memory
-    data (MLP, threshold, training media with embeddings).  Multiple detectors
+    data (head, threshold, training media with embeddings).  Multiple detectors
     can be loaded simultaneously; one is "active" (feeding the labeling UI).
     """
 
@@ -917,7 +917,7 @@ class DetectorContext:
         "detector_id",
         "name",
         "media_type",
-        # The concrete space the label cache / MLP is *currently* built in (an
+        # The concrete space the label cache / head is *currently* built in (an
         # adaptive marker, re-stamped when the active dataset's space changes).
         # Distinct from ``embedder_type``: it names whichever concrete embedder
         # of the detector's type the active dataset supplied, so the
@@ -1013,7 +1013,7 @@ class DetectorContext:
         # origins, never persisted; cleared on embedder switch alongside
         # ``label_embeddings``.
         "label_score_regions",
-        "model",  # nn.Sequential | None (current trained MLP)
+        "model",  # nn.Sequential | None (current trained head)
         # Signature of the labelset ``model`` was trained from
         # (:func:`~vtscore.detectors.model_loading.labelset_signature`), or
         # None when unknown.  Stamped by every writer of ``model``; Find reuses
@@ -1081,7 +1081,8 @@ class DetectorContext:
         # an ``AttributeError``.
         "precision_floor_cache",  # None
         # The ranking the line is drawn over (``LineRanking``, #4272): the
-        # haystack the last retrain scored, sorted, with the items the trainer
+        # haystack the last retrain scored (or that a head the label quota
+        # gives drew its line on, #5048), sorted, with the items the trainer
         # held as voted.  The balance keeps the top *count* unvoted items of it;
         # a re-cut (``recut_detector_threshold``) and the spot check's
         # candidate both read it.  Ids and scores only - never serialised.
@@ -1171,7 +1172,7 @@ class DetectorContext:
         self.training_medias: dict[int, dict[str, Any]] = {}
         # Embeddings for every saved labelset element, keyed by
         # stable_element_id.  Populated at detector load (resolve_file +
-        # embed_file) and topped up when new votes come in.  Lets MLP
+        # embed_file) and topped up when new votes come in.  Lets head
         # training and learned-sort use *all* saved labels, including
         # those whose underlying media isn't part of the active dataset.
         self.label_embeddings: dict[str, Any] = {}
@@ -1606,7 +1607,7 @@ def clear_all_detector_contexts() -> None:
 
 
 def invalidate_loaded_detector_models() -> None:
-    """Drop the cached MLP and threshold on every loaded detector context.
+    """Drop the cached head and threshold on every loaded detector context.
 
     Called by the setters of training-relevant settings (``calibrate_count``,
     ``calibration_fraction``) so
@@ -1976,7 +1977,7 @@ def detector_line_inclusion(ctx: "DetectorContext", beta: float | None) -> float
 
 
 def recompute_detector_thresholds(beta: float | None) -> None:
-    """Re-derive each loaded detector's threshold at its own balance, leaving the MLP in place.
+    """Re-derive each loaded detector's threshold at its own balance, leaving the head in place.
 
     The balance is a pure cutoff knob: a change must not drop the model or
     re-score the haystack - only move the threshold over already-computed
@@ -2016,15 +2017,13 @@ def recompute_detector_thresholds(beta: float | None) -> None:
 def user_beta() -> float | None:
     """The user's balance: what a detector that has not read its own yet will be seeded with.
 
-    ``None`` - no balance - when no settings builder is registered (a
-    library-only process that never configured one), rather than raising.
+    The ``beta`` setting: ``None`` - no balance - only when it is set so
+    (``CoreConfig(beta=None)``), and :data:`~vtscore.config.DEFAULT_BETA` in a
+    library-only process that never configured one.
     """
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
-    try:
-        beta = CoreConfig.from_settings().beta
-    except RuntimeError:
-        return None
+    beta = get_setting("beta")
     return None if beta is None else float(beta)
 
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable, Iterable, NamedTuple, Sequence
 
 import numpy as np
 
@@ -172,7 +172,7 @@ class _LabelVector(NamedTuple):
 
     ``region_box`` is the element's own box whenever resolving that box again
     would produce *vec* again: it was pooled under the box, or the box can't be
-    used at all (a whole-image embedder, a clipper-bearing origin).  It is
+    used at all (a whole-image embedder, a clipped or converted origin).  It is
     ``None`` when the element had no box, and when a patch pool failed, so
     :func:`populate_label_embeddings` retries that fallback on its next pass
     rather than keeping it.
@@ -200,13 +200,15 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
     * a whole-image embedder has no patch space, so the box stays on the
       label unused - expected, and logged at DEBUG only.  A WARNING here
       fired once per boxed label per retrain (#4192);
-    * an origin carrying a clipper we'd have to replay against an unknown
-      patch grid - a known limitation, WARNING;
+    * an origin whose unit was cut or converted out of the resolved file (a
+      clipper, a converter): the box is on that unit, not on the file, so the
+      patch path can't run on the file - a known limitation, WARNING;
     * a patch-capable embedder whose forward pass produced nothing - a real
       failure, WARNING.
     """
     from vtscore.detectors.resolver import (
         _apply_clip_and_embed,
+        _needs_clip_replay,
         embed_file,
         resolve_file_context,
     )
@@ -217,7 +219,9 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
 
         origin = elem.origin or {}
         params = origin.get("params", {}) if isinstance(origin, dict) else {}
-        has_clipper = isinstance(params, dict) and bool(params.get("clipper"))
+        # A clipped or converted unit: *file_path* is its source (the parent
+        # recording, the PDF), so the unit has to be replayed out of it.
+        derived = isinstance(params, dict) and _needs_clip_replay(params)
 
         box = _as_box(elem.region_box)
         if elem.region_box is not None:
@@ -231,7 +235,7 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
                     elem.origin_name or elem.filename or "<unknown>",
                     embedder_name or "<default>",
                 )
-            elif not has_clipper:
+            elif not derived:
                 pooled = _patch_pooled_from_file(
                     file_path,
                     media_type=media_type,
@@ -251,12 +255,12 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
             else:
                 log.warning(
                     "labelset_training: region_box on %r cannot be honored cross-dataset "
-                    "because the origin carries a clipper; falling back to image-level "
-                    "embedding",
+                    "because the origin is a clipped or converted unit; falling back to "
+                    "image-level embedding",
                     elem.origin_name or elem.filename or "<unknown>",
                 )
 
-        if has_clipper:
+        if derived:
             result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
             if result is None:
                 return None
@@ -975,6 +979,7 @@ def install_centroid_head(
     *,
     beta: float | None = None,
     line_mask: Any = None,
+    ids: Sequence[int] | None = None,
 ) -> tuple[Any, float]:
     """Store the Goods' centroid head on *det_ctx* as its detector, and return ``(head, threshold)``.
 
@@ -988,22 +993,46 @@ def install_centroid_head(
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
     the centroid has no calibration folds, no fitted cut and no labels line.  It
     keeps its own line instead (``det_ctx.centroid_line``), so a balance change
-    redraws it on the cosines it was drawn on.  No ranking is kept; a Find pass
-    builds one from its own scores.  The head is stamped with *labelset*'s
-    signature like a trained one (#4204).
+    redraws it on the cosines it was drawn on.  *ids*, one per score *score*
+    returns, name the media it scores: given, the head's scores over them are
+    kept as the ranking its line is counted on (#5048), the media *line_mask*
+    leaves out marked voted, so the balance counts what the line keeps.
+    Without them no ranking is kept, and a Find pass builds one from its own
+    scores.  The head is stamped with *labelset*'s signature like a trained one
+    (#4204).
     """
     from vtscore.detectors.centroid_head import fit_centroid
 
     head, threshold, line = fit_centroid(goods, score, beta=beta, line_mask=line_mask)
-    _store_quota_head(det_ctx, head, threshold, line, labelset)
+    voted = [] if ids is None or line_mask is None else [i for i, n in zip(ids, line_mask, strict=True) if not n]
+    _store_quota_head(det_ctx, head, threshold, line, labelset, _quota_ranking(head, score, ids, voted))
     return head, threshold
 
 
-def _store_quota_head(det_ctx, head: Any, threshold: float, line: Any, labelset: LabelSet | None) -> None:
+def _quota_ranking(head: Any, score: Callable[[Any], Any], ids: Sequence[int] | None, voted: Iterable[int]) -> Any:
+    """The ranking a quota head's line is counted on (#5048): *head*'s scores over *ids*, *voted* marked.
+
+    *score* scores a head over the corpus the line was drawn on, one score per
+    id, as a trained head's retrain ranks its final scores
+    (:func:`~vtscore.detectors.training.train_and_threshold`).  ``None`` with
+    no *ids*.
+    """
+    from vtscore.training.thresholds import LineRanking
+
+    if ids is None:
+        return None
+    return LineRanking.from_scores(ids, score(head), voted)
+
+
+def _store_quota_head(
+    det_ctx, head: Any, threshold: float, line: Any, labelset: LabelSet | None, ranking: Any = None
+) -> None:
     """Make *head*, a head the quota gives (the Goods' centroid or a typed query), *det_ctx*'s detector.
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped;
-    the head keeps its own line instead.  Stamped with *labelset*'s signature.
+    the head keeps its own line instead, and *ranking* (:func:`_quota_ranking`)
+    as the ranking that line is counted on, or none.  Stamped with *labelset*'s
+    signature.
     """
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -1014,7 +1043,7 @@ def _store_quota_head(det_ctx, head: Any, threshold: float, line: Any, labelset:
     det_ctx.anchored_cut_cache = None
     det_ctx.labels_line = None
     det_ctx.centroid_line = line
-    det_ctx.line_ranking = None
+    det_ctx.line_ranking = ranking
     det_ctx.gate_passed = None
 
 
@@ -1046,15 +1075,20 @@ def install_query_head(
     *,
     media_type: str,
     beta: float | None = None,
+    voted: Iterable[int] = (),
 ) -> tuple[Any, float, Any] | None:
     """Store a typed query's head on *det_ctx* as its detector: ``(head, threshold, rows)``, or ``None``.
 
     What a typed-query detector gives until it has a trained head (#4758): see
     :mod:`~vtscore.detectors.query_head`.  *text* is embedded and *snap* scored
     in *snap*'s text space, and the line is the text sort's, drawn over every
-    media at *beta*.  *rows* are those text-space rows, for a caller that scores
-    the head next.  ``None``, with *det_ctx* untouched, when *snap* has no text
-    slot or the query does not embed: the caller falls back to the centroid.
+    media at *beta*.  The head's scores over *snap* are kept as the ranking that
+    line is counted on (#5048), with *voted* (the labelled media, in *snap*'s
+    ids) marked voted as a trained head's retrain marks its labelset's, so the
+    balance counts what the line keeps of the rest.  *rows* are those text-space
+    rows, for a caller that scores the head next.  ``None``, with *det_ctx*
+    untouched, when *snap* has no text slot or the query does not embed: the
+    caller falls back to the centroid.
     """
     from vtscore.detectors.query_head import embed_detector_query, fit_query_head, text_embedder_for_snap
     from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
@@ -1079,10 +1113,12 @@ def install_query_head(
             int(rows.matrix.shape[1]),
         )
         return None
-    head, threshold, line = fit_query_head(
-        vec, lambda h: score_rows_with_model(h, rows)[0], beta=beta, embedder=embedder, text=text
-    )
-    _store_quota_head(det_ctx, head, threshold, line, labelset)
+
+    def score(h: Any) -> list[float]:
+        return score_rows_with_model(h, rows)[0]
+
+    head, threshold, line = fit_query_head(vec, score, beta=beta, embedder=embedder, text=text)
+    _store_quota_head(det_ctx, head, threshold, line, labelset, _quota_ranking(head, score, rows.ids, voted))
     return head, threshold, rows
 
 
@@ -1142,22 +1178,25 @@ def train_from_labelset(
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the threshold's pass in that same space.
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
+    hay = haystack.medias if haystack is not None else snap
+    # The labelled media, which every head's line is counted without (#3308,
+    # #4779, #5048); a haystack names them in its own ids.
+    labels = labeled_media_labels(labelset, snap)
+    if haystack is not None:
+        labels = {hid: labels[src] for hid, src in haystack.to_source.items() if src in labels}
+    labelled = set(labels)
     if text_query and _query_tier(tier, labelset, det_ctx.embedder):
-        hay = haystack.medias if haystack is not None else snap
         if (
-            install_query_head(det_ctx, text_query, hay, labelset, media_type=media_type, beta=_centroid_beta(det_ctx))
+            install_query_head(
+                det_ctx, text_query, hay, labelset, media_type=media_type, beta=_centroid_beta(det_ctx), voted=labelled
+            )
             is not None
         ):
             return True
     if tier == TIER_CENTROID:
         from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
 
-        hay = haystack.medias if haystack is not None else snap
         rows = scoring_rows_for_snap(hay, det_ctx.embedder or None) if hay else None
-        # The line counts the unvoted media (#4779); a haystack names them in its own ids.
-        labelled = set(labeled_media_labels(labelset, snap))
-        if haystack is not None:
-            labelled = {hid for hid, src in haystack.to_source.items() if src in labelled}
         install_centroid_head(
             det_ctx,
             [x for x, y in zip(X_list, y_list, strict=True) if y == 1.0],
@@ -1165,6 +1204,7 @@ def train_from_labelset(
             labelset,
             beta=_centroid_beta(det_ctx),
             line_mask=_unvoted_mask(rows, labelled),
+            ids=rows.ids if rows is not None else None,
         )
         return True
     if tier != TIER_TRAINED:
@@ -1176,13 +1216,6 @@ def train_from_labelset(
 
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
     # (otherwise a balance change can't move the cutoff — see train_and_threshold).
-    labels = labeled_media_labels(labelset, snap)
-    voted_ids = set(labels)
-    if haystack is not None:
-        # The haystack's ids are its own; name the labelled items in them.
-        labels = {hid: labels[src] for hid, src in haystack.to_source.items() if src in labels}
-        voted_ids = set(labels)
-
     # A typed-query detector's head starts from its query as well as the Goods (#4859).
     with typed_query_prior(typed_query_prior_vector(text_query, det_ctx.embedder, media_type), text_query):
         mlp, threshold = train_and_threshold(
@@ -1193,7 +1226,7 @@ def train_from_labelset(
             det_ctx=det_ctx,
             groups=groups,
             score_rows=score_rows,
-            voted_ids=voted_ids,
+            voted_ids=labelled,
             haystack=haystack.medias if haystack is not None else None,
             labels=labels,
         )
@@ -1282,8 +1315,11 @@ def labelset_train_and_score(
         from vtscore.detectors.training import detector_score_embedder, scoring_rows_for_snap
 
         tier = quota_from_groups(groups).tier
+        labelled = set(labeled_media_labels(labelset, clips_dict))
         if text_query and _query_tier(tier, labelset, det_ctx.embedder):
-            installed = install_query_head(det_ctx, text_query, clips_dict, labelset, media_type=media_type, beta=beta)
+            installed = install_query_head(
+                det_ctx, text_query, clips_dict, labelset, media_type=media_type, beta=beta, voted=labelled
+            )
             if installed is not None:
                 head, threshold, query_rows = installed
                 scores, best_region = score_rows_with_model(head, query_rows)
@@ -1300,7 +1336,8 @@ def labelset_train_and_score(
                 lambda h: score_rows_with_model(h, centroid_rows)[0],
                 labelset,
                 beta=beta,
-                line_mask=_unvoted_mask(centroid_rows, set(labeled_media_labels(labelset, clips_dict))),
+                line_mask=_unvoted_mask(centroid_rows, labelled),
+                ids=centroid_rows.ids,
             )
             scores, best_region = score_rows_with_model(head, centroid_rows)
             results = _format_results(centroid_rows.ids, scores, best_region, clips_dict)

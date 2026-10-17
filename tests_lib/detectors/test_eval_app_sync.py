@@ -237,6 +237,11 @@ class TestResolutionFailures:
         with pytest.raises(gate.MirrorError, match="no top-level"):
             gate._app_source(self._mirror(app="py:vtscore.detectors.training.no_such_function"))
 
+    def test_a_missing_name_in_a_multi_symbol_app_ref_is_an_error(self):
+        """Every name in the list resolves, not just the first."""
+        with pytest.raises(gate.MirrorError, match="no top-level 'no_such_function'"):
+            gate._app_source(self._mirror(app="py:vtscore.detectors.training.train_and_threshold,no_such_function"))
+
     def test_missing_app_module_is_an_error(self):
         with pytest.raises(gate.MirrorError, match="does not exist"):
             gate._app_source(self._mirror(app="py:vtscore.detectors.no_such_module.thing"))
@@ -403,6 +408,112 @@ class TestTheHarnessSideIsWatchedToo:
         module.write_text("# next_phase was inlined into the caller\ndef other():\n    return 1\n")
         with pytest.raises(gate.MirrorError, match="no top-level"):
             gate._py_symbol_source(module, "next_phase")
+
+    def test_a_class_member_resolves_to_that_method_alone(self):
+        """`AutopilotFlow.record_step` (#5005): a method is pinned where it stands."""
+        source = gate._py_symbol_source(gate.REPO_ROOT / "vtscore/eval/autopilot_flow.py", "AutopilotFlow.record_step")
+        assert source.lstrip().startswith("def record_step(")
+        assert "def update(" not in source
+
+    def test_a_member_must_live_on_the_class_it_names(self, tmp_path):
+        module = tmp_path / "harness.py"
+        module.write_text("class A:\n    def f(self):\n        return 1\n\n\ndef g():\n    return 2\n")
+        assert "return 1" in gate._py_symbol_source(module, "A.f")
+        with pytest.raises(gate.MirrorError, match="no member 'A.g'"):
+            gate._py_symbol_source(module, "A.g")
+        with pytest.raises(gate.MirrorError, match="no class 'B'"):
+            gate._py_symbol_source(module, "B.f")
+        with pytest.raises(gate.MirrorError, match="no class 'g'"):
+            gate._py_symbol_source(module, "g.f")
+        with pytest.raises(gate.MirrorError, match="no top-level 'f'"):
+            gate._py_symbol_source(module, "f")
+
+    def test_a_multi_symbol_app_ref_covers_every_symbol(self):
+        """The app half of a mirror can span several functions, as the harness half can."""
+        mirror = next(m for m in gate.MIRRORS if m.id == "progress.eval_cached_models")
+        source = gate._app_source(mirror)
+        module = gate.REPO_ROOT / "vtscore/detectors/labeling_progress.py"
+        for name in ("_eval_cached_models", "_model_step_indices", "_build_eval_rows", "_smart_status_uncached"):
+            assert gate._normalize_python(gate._py_symbol_source(module, name)) in source, name
+
+
+class TestTheSmartAndStablePlumbingIsPinned:
+    """#5005: the plumbing that feeds Smart and Stable trips the gate on either side.
+
+    `progress.smart_status` and `progress.stable_status` pin one-line wrappers
+    over the shared rules, which left what feeds those rules unwatched: which
+    models Smart re-scores, against what, at what price, and which items Stable
+    compares, at which cut, against which baseline.  Each probe makes a
+    throwaway logic edit to one pinned symbol in a copy of the two files and
+    asserts the gate names the side that moved.
+    """
+
+    APP = "vtscore/detectors/labeling_progress.py"
+    MIRROR_IDS = ("progress.eval_cached_models", "progress.step_stability")
+    PROBES = [
+        ("progress.eval_cached_models", "app", APP, "_eval_cached_models"),
+        ("progress.eval_cached_models", "app", APP, "_model_step_indices"),
+        ("progress.eval_cached_models", "app", APP, "_build_eval_rows"),
+        ("progress.eval_cached_models", "app", APP, "_smart_status_uncached"),
+        ("progress.eval_cached_models", "harness", "vtscore/eval/step_trainers.py", "_labelset_error_costs"),
+        ("progress.step_stability", "app", APP, "_compute_step_stability"),
+        ("progress.step_stability", "harness", "vtscore/eval/autopilot_flow.py", "AutopilotFlow.record_step"),
+    ]
+
+    @staticmethod
+    def _mirror(mirror_id):
+        return next(m for m in gate.MIRRORS if m.id == mirror_id)
+
+    def _copy_tree(self, tmp_path, mirror):
+        for rel in (self.APP, mirror.harness.partition("::")[0]):
+            dst = tmp_path / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text((gate.REPO_ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
+
+    @staticmethod
+    def _edit(path, symbol):
+        """Append an unreachable statement to *symbol*'s body: inert, but a logic edit."""
+        text = path.read_text(encoding="utf-8")
+        body = ast.parse(text).body
+        *classes, name = symbol.split(".")
+        for cls in classes:
+            body = next(n for n in body if isinstance(n, ast.ClassDef) and n.name == cls).body
+        node = next(n for n in body if isinstance(n, ast.FunctionDef) and n.name == name)
+        lines = text.splitlines(keepends=True)
+        lines.insert(node.end_lineno, " " * node.body[-1].col_offset + "_drift_probe = 1\n")
+        path.write_text("".join(lines), encoding="utf-8")
+
+    def _check_in(self, monkeypatch, tmp_path, mirror):
+        pins = {mirror.id: gate._load_pins()[mirror.id]}
+        monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(gate, "MIRRORS", [mirror])
+        monkeypatch.setattr(gate, "_load_pins", lambda: pins)
+        return gate.check()
+
+    @pytest.mark.parametrize("mirror_id", MIRROR_IDS)
+    def test_registered_with_every_symbol_probed(self, mirror_id):
+        mirror = self._mirror(mirror_id)
+        assert mirror.kind == "ported"
+        assert set(gate._digests(mirror)) == {"app", "harness"}
+        assert mirror.app.startswith(f"py:{self.APP[: -len('.py')].replace('/', '.')}.")
+        named = {("app", n) for n in mirror.app.rpartition(".")[2].split(",")}
+        named |= {("harness", n) for n in mirror.harness.partition("::")[2].split(",")}
+        assert named == {(side, sym) for mid, side, _, sym in self.PROBES if mid == mirror_id}
+
+    @pytest.mark.parametrize("mirror_id", MIRROR_IDS)
+    def test_an_untouched_copy_is_clean(self, monkeypatch, tmp_path, mirror_id):
+        """The control: copying the files is not itself what trips the probes below."""
+        mirror = self._mirror(mirror_id)
+        self._copy_tree(tmp_path, mirror)
+        assert not self._check_in(monkeypatch, tmp_path, mirror)
+
+    @pytest.mark.parametrize(("mirror_id", "side", "rel", "symbol"), PROBES)
+    def test_an_edit_trips_the_side_it_was_made_on(self, monkeypatch, tmp_path, mirror_id, side, rel, symbol):
+        mirror = self._mirror(mirror_id)
+        self._copy_tree(tmp_path, mirror)
+        self._edit(tmp_path / rel, symbol)
+        (drift,) = self._check_in(monkeypatch, tmp_path, mirror)
+        assert drift.reason == f"{side}-changed"
 
 
 class TestThePinsFile:

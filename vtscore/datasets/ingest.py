@@ -51,12 +51,28 @@ def _group_by_origin(
 def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
     """Determine the media type ID from an origin dict.
 
-    Checks origin params (``media_type`` for folder origins) and falls back
-    to the ``DEMO_DATASETS`` config for demo origins.  Returns an empty
-    string if the media type cannot be determined.
+    A converter output is of its converter's target type.  Otherwise checks
+    origin params (``media_type`` for folder origins) and falls back to the
+    ``DEMO_DATASETS`` config for demo origins.  Returns an empty string if the
+    media type cannot be determined.
     """
     params = origin_dict.get("params", {})
     importer_name = origin_dict.get("importer", "")
+
+    # A flat converter origin records the converter but not the media type it
+    # produced (the parent's ``media_type`` names the *source* files, and only
+    # the parent's locator keys are copied over anyway).
+    converter_name = params.get("converter", "")
+    if converter_name:
+        from vtscore.converters import get_converter
+
+        converter = get_converter(converter_name)
+        if converter is None:
+            return ""
+        try:
+            return converter.target_type
+        except Exception:  # an entry-point tombstone re-raises its import error here
+            return ""
 
     # Folder origins store the media type (e.g. "audio")
     folder_import_name = params.get("media_type", "")
@@ -144,9 +160,10 @@ def _build_media_data(
 
 
 def _has_clip_params(origin_dict: dict[str, Any]) -> bool:
-    """Return True if the origin carries any clip-aware params."""
-    params = origin_dict.get("params", {})
-    return bool(params.get("clipper") or params.get("clipper_chain"))
+    """Return True if the origin records a clipped or converted unit rather than a whole file."""
+    from vtscore.detectors.resolver import _needs_clip_replay
+
+    return _needs_clip_replay(origin_dict.get("params", {}))
 
 
 def _boundary_tag(params: dict[str, Any]) -> str:
@@ -177,16 +194,18 @@ def _resolve_clip_content_and_embedding(
 
     * ``embedding`` is the clipped embedding when the origin has clip
       params, otherwise the parent's embedding.
-    * ``content_bytes`` is the clip's bytes (audio / image / text clips)
-      OR the parent's bytes when the clip is metadata-only (e.g. video) or
-      when there are no clip params. The frontend can still play video
-      clips because ``clip_start`` / ``clip_end`` live in the origin.
+    * ``content_bytes`` is the clip's bytes (audio / image / text clips, and
+      a converter's output) OR the parent's bytes when the clip is
+      metadata-only (e.g. video) or when there are no clip params. The
+      frontend can still play video clips because ``clip_start`` /
+      ``clip_end`` live in the origin.
     * ``md5`` is the hash of ``content_bytes`` for true clips and
       non-clipped medias. For metadata-only clips, the MD5 mixes the
       parent's hash with a clip boundary tag so distinct clips of the same
       parent don't collide under :func:`collapse_duplicates`.
 
-    Returns ``None`` when embedding fails.
+    Returns ``None`` when embedding fails, and when a converter output could
+    not be rebuilt from its source.
     """
     from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
 
@@ -197,6 +216,12 @@ def _resolve_clip_content_and_embedding(
         embedding, clip_bytes = result
         if clip_bytes is not None:
             return embedding, clip_bytes, content_md5(clip_bytes)
+        if origin_dict.get("params", {}).get("converter"):
+            # No output bytes: the converter could not be replayed and the
+            # source file (the PDF, the video) was embedded whole.  The only
+            # bytes left are the source's, and storing them would make the
+            # source the item.
+            return None
 
         # Metadata-only clip (video) or fall-through: use parent bytes,
         # but disambiguate the MD5 via a boundary tag so distinct clips of

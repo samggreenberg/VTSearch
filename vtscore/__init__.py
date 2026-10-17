@@ -1,7 +1,7 @@
 """vtscore - trainable media search library.
 
 The Flask-free, app-free core of VTSearch: dataset origins, MediaSources,
-clippers/croppers, embedders, MLP/detector training and scoring, evaluation.
+clippers/croppers, embedders, detector-head training and scoring, evaluation.
 The :mod:`vtsearch` package wraps this with the HTTP / SPA / settings layer.
 
 See ``README.md`` for the quickstart, ``CHANGELOG.md`` for per-release notes,

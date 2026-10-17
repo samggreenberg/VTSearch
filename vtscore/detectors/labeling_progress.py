@@ -1145,9 +1145,9 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
     # The old metric required 4 full tree levels for green, which in a k=3
     # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
     # nodes (capped at total), yellow at 10, red below 10.
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting  # noqa: PLC0415
 
-    SPAN_GREEN = CoreConfig.from_settings().autopilot_goal_diversity
+    SPAN_GREEN = get_setting("autopilot_goal_diversity")
     SPAN_YELLOW = 10
     if span_info is None:
         return {

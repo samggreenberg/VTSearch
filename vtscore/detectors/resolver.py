@@ -605,6 +605,19 @@ def _embed_uncut(
     return embedding, None
 
 
+def _needs_clip_replay(params: dict[str, Any]) -> bool:
+    """True when *params* record a unit derived from the resolved file, not the file itself.
+
+    A clipper (``clipper`` / ``clipper_chain``) cut the unit out of the file, or
+    a converter (``converter``) rendered it from the file, so embedding the file
+    whole embeds the wrong content: the PDF instead of its page, the recording
+    instead of its window.  Every caller that resolves an origin to a file and
+    embeds it sends these origins to :func:`_apply_clip_and_embed`, and asks
+    here so the callers cannot disagree about which origins those are (#5058).
+    """
+    return bool(params.get("clipper") or params.get("clipper_chain") or params.get("converter"))
+
+
 def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
@@ -750,7 +763,7 @@ def _embed_resolved_label(
     # sub-output re-selected, so a reference-converted label embeds the
     # rendered page/frame (or its tile, or its cleaned text), not the raw
     # source file.
-    if origin is not None and (params.get("clipper") or params.get("clipper_chain") or params.get("converter")):
+    if origin is not None and _needs_clip_replay(params):
         result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
         if result is None:
             return None

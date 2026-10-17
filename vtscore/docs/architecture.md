@@ -162,19 +162,22 @@ library actually reads:
 Every field without a default is required, so constructing one by hand
 means passing all eleven (as below).
 
-Library code calls `CoreConfig.from_settings()` to get a populated config
-for the current request / thread. That classmethod is a thin wrapper that
-delegates to whatever builder the app installed via
-`register_core_config_builder()`. In the VTSearch app that builder is
-`build_core_config` in `vtsearch/shim/__init__.py`, which reads
-`vtsearch.settings`. The builder is called with one positional
-`settings_path` argument, so declare it even if you ignore it.
+Library code reads one knob at a time, where it needs it, with
+`vtscore.config.get_setting(name)` - the field names are the setting
+names. It answers from the getter a host registered for that knob with
+`register_setting_getter()`, else that field of the `CoreConfig` a
+builder registered with `register_core_config_builder()` returns, else
+the field's default. In the VTSearch app the getters are installed by
+`register_app_setting_getters` in `vtsearch/shim/__init__.py`, one per
+knob, each reading `vtsearch.settings` live for the current user - so a
+read costs the one setting it asks about, not a snapshot of all of them.
 
-**Library-only consumers still install a builder** if they use anything
-that reads configuration internally - detector storage
+**Library-only consumers install a builder** if they use anything that
+reads configuration internally - detector storage
 (`vtscore.detectors.store`), the dataset registry, the load pipeline and
-the balance accessors (`vtscore.state.get_beta`) all call
-`CoreConfig.from_settings()` themselves. The builder can simply return a
+the balance accessors (`vtscore.state.get_beta`) all call `get_setting()`
+themselves. The builder is called with one positional `settings_path`
+argument, so declare it even if you ignore it, and can simply return a
 fixed value built once:
 
 ```python
@@ -200,10 +203,16 @@ register_core_config_builder(lambda _settings_path=None: config)
 
 Pure functions that take their inputs as arguments (`train_model`,
 `load_dataset_from_folder`, `embed_missing`, …) need no builder at all.
-If a library consumer calls `CoreConfig.from_settings()` without first
-installing a builder, the method raises a clear `RuntimeError`. That's
-intentional - silent fallback to "some default" would mask integration
-bugs.
+With no builder and no getters, a knob that has a `CoreConfig` default
+reads it, but a required one - `detectors_dir`, `calibrate_count`, … -
+raises a clear `RuntimeError`. That's intentional - silent fallback to
+"some default" for where your detectors live would mask integration bugs.
+
+`CoreConfig.from_settings()` still returns the whole bundle for a caller
+that wants it (the builder's config, or one assembled from
+`get_setting()`), but library code no longer calls it: it was meant to be
+built once per request and passed down, and instead every caller built
+one to read a field or two (#4997).
 
 ## Plugin discovery
 
@@ -415,8 +424,11 @@ complete list):
    `register_detector_context_resolver`, plus
    `register_request_context_predicate` (the "inside a request?" test the
    request-missing sentinel needs). Wired in `vtsearch/shim/`.
-2. **`CoreConfig` builder** - `register_core_config_builder`. Maps
-   `vtsearch.settings` to `CoreConfig`. Wired in `vtsearch/shim/`.
+2. **Setting getters** - `register_setting_getter`, one per knob, plus
+   `register_settings_path_redirect` for the CLI's `--settings`. Map
+   `vtsearch.settings` to the knobs `get_setting()` reads. Wired in
+   `vtsearch/shim/`. (A library-only consumer answers the same reads
+   with a `register_core_config_builder` builder instead.)
 3. **Plugin families** - `register_plugin_family(provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like

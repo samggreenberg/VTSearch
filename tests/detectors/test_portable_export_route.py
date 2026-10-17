@@ -53,7 +53,7 @@ class TestPortableExport:
         assert manifest["contains_media_data"] is False
 
     def test_export_onnx_scores_match_find(self, client):
-        """The exported ONNX must score the dataset identically to the live MLP."""
+        """The exported ONNX must score the dataset identically to the live head."""
         ort = pytest.importorskip("onnxruntime")
         import numpy as np  # noqa: PLC0415
 
