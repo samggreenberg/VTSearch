@@ -517,6 +517,8 @@ class TestTheRealTree:
         assert "scripts/experiments/pile/pile_config.py" in reg
         assert "scripts/experiments/calibration/experiment_config.py" in reg
         assert "tests_shared/state_reset.py" in graph["tests_lib/conftest.py"]
+        # stubPath: a change to the local transformers stub re-checks its importers.
+        assert "typings/transformers/__init__.pyi" in graph["vtscore/config/processor_backend.py"]
 
     def test_a_core_module_reaches_most_of_the_tree(self, tree) -> None:
         cfg, files, _, graph = tree

@@ -198,6 +198,8 @@ VTSearch/
 ├── tests/                  App-tier test suite (Flask client, vtsearch.*)
 ├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*)
 ├── tests_shared/           Conftest machinery both suites import
+├── typings/               Local stubs pyright reads in place of an installed package
+│                           (transformers; see docs/TESTING.md)
 ├── scripts/                Repo tooling: run-tests.sh gates, doc generators, experiments
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
