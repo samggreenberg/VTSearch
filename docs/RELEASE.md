@@ -216,8 +216,11 @@ reached `main`.
    step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
    commit left on a branch misses this release.
 2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
-   full `./run-tests.sh` on it, unless this run already ran one on exactly that
-   SHA. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
+   full `VTSEARCH_FRESH=1 ./run-tests.sh` on it, unless this run already ran one on
+   exactly that SHA. `VTSEARCH_FRESH=1` makes the run stand on its own — the full
+   pyright check rather than the incremental one, every test rather than the ones
+   an earlier run on the same tree recorded — because the release gate is the one
+   run that should owe nothing to any other. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
    All Errors") and gate again. If it cannot be fixed in this run, leave the
    release PR open, comment on it naming the failing gates, and file an issue.
 3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A

@@ -49,7 +49,10 @@ def print_summary_and_exit(config, exitstatus: int) -> None:
     import os
     import sys
 
+    from tests_shared.pass_cache import pass_cache_info
+
     reporter = config.pluginmanager.getplugin("terminalreporter")
+    cache = pass_cache_info(config)
     print("", flush=True)
     print("=" * 60, flush=True)
     if reporter:
@@ -65,11 +68,29 @@ def print_summary_and_exit(config, exitstatus: int) -> None:
             if xfailed:
                 parts.append(f"{xfailed} xfailed")
             print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
+        elif passed == 0 and cache["reused"]:
+            # Nothing passed *this* run because every test that could pass was
+            # recorded as passing on this identical tree -- a pass, not an empty
+            # run. Skips and xfails are never recorded, so they still ran.
+            still_ran = [f"{n} {what}" for n, what in ((skipped, "skipped"), (xfailed, "xfailed")) if n]
+            tail = f"; {', '.join(still_ran)}" if still_ran else ""
+            print(
+                f"ALL {cache['reused']} TESTS ALREADY PASSED ON THIS TREE (nothing re-run{tail})",
+                flush=True,
+            )
         else:
             extra = f"{skipped} skipped"
             if xfailed:
                 extra += f", {xfailed} xfailed"
             print(f"ALL {passed} TESTS PASSED ({extra}, total: {total})", flush=True)
+        if cache["reused"]:
+            print(
+                f"Pass cache: {cache['reused']} tests not re-run (passed on this identical tree "
+                f"at {cache['previous_when']}); {cache['newly_recorded']} newly recorded.",
+                flush=True,
+            )
+        elif cache["active"] and cache["newly_recorded"]:
+            print(f"Pass cache: {cache['newly_recorded']} passes recorded for this tree (none reused).", flush=True)
     else:
         status = "PASSED" if exitstatus == 0 else "FAILED"
         print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
