@@ -56,11 +56,33 @@ def _install_fake_broken_cuml(monkeypatch):
     monkeypatch.setattr(gb, "cuml_enabled", lambda: True)
 
 
-@pytest.mark.xdist_group("numba-umap-jit")
+def _install_fake_cpu_umap(monkeypatch) -> list[dict]:
+    """Register a ``umap`` whose UMAP records its kwargs and returns a fixed layout.
+
+    A real umap-learn fit numba-JIT-compiles its kernels first, which is ~20s of
+    CPU on an idle box and passed the 300s per-test cap on a loaded one (#5051).
+    The fallback is proved by *which* reducer ran and with what arguments, not by
+    the layout it drew; real fits stay in test_umap_projection.py.
+    """
+    calls: list[dict] = []
+
+    class _RecordingUMAP:
+        def __init__(self, **kw):
+            self._kw = kw
+
+        def fit_transform(self, mat):
+            calls.append({**self._kw, "n_rows": len(mat)})
+            return np.zeros((len(mat), self._kw["n_components"]), dtype=np.float32)
+
+    umap = types.ModuleType("umap")
+    umap.UMAP = _RecordingUMAP  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "umap", umap)
+    return calls
+
+
 def test_umap_fit_transform_falls_back_when_cuml_fit_raises(monkeypatch, caplog):
-    # Real umap-learn fit → shares the JIT-compile worker with
-    # test_umap_projection.py (see the pytestmark comment there).
     _install_fake_broken_cuml(monkeypatch)
+    cpu_fits = _install_fake_cpu_umap(monkeypatch)
     rng = np.random.default_rng(0)
     mat = rng.standard_normal((60, 16)).astype(np.float32)
 
@@ -69,10 +91,13 @@ def test_umap_fit_transform_falls_back_when_cuml_fit_raises(monkeypatch, caplog)
             mat, n_components=2, n_neighbors=15, min_dist=0.1, metric="euclidean", random_state=42
         )
 
-    # CPU umap-learn produced a real layout despite the cuML blowup.
+    # The CPU umap-learn reducer ran once, with the caller's parameters, and its
+    # layout is what came back despite the cuML blowup.
+    assert cpu_fits == [
+        {"n_components": 2, "n_neighbors": 15, "min_dist": 0.1, "metric": "euclidean", "random_state": 42, "n_rows": 60}
+    ]
     assert isinstance(coords, np.ndarray)
     assert coords.shape == (60, 2)
-    assert np.isfinite(coords).all()
     # The failure was logged and the process-global kill switch flipped.
     assert gb._cuml_runtime_failed is True
     assert any("cuML UMAP failed" in r.message for r in caplog.records)
