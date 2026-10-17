@@ -67,18 +67,26 @@ class TestRepoIsClean:
         The bound is deliberately loose. It catches what the test is for — a
         gate that grew super-linear in repo size, or reintroduced a per-file
         subprocess — not tenths of a second.
+
+        **User** CPU only, not system. A 1.3 s-user run of this gate took 2.9 s
+        of system time on a healthy cloud container and 30 s of it on the same
+        container once its memory and file paths had degraded late in a
+        session (every page fault and read slowed, the gate's own work did
+        not). System time is the machine's cost of serving the gate; the
+        gate's algorithm is all in user time, and that is what the bound is
+        about.
         """
         import resource
-        import time
 
         def cpu_seconds() -> float:
+            own = resource.getrusage(resource.RUSAGE_SELF)
             children = resource.getrusage(resource.RUSAGE_CHILDREN)
-            return time.process_time() + children.ru_utime + children.ru_stime
+            return own.ru_utime + children.ru_utime
 
         start = cpu_seconds()
         gate.main([])
         elapsed = cpu_seconds() - start
-        assert elapsed < 20.0, f"check-docs used {elapsed:.1f}s of CPU; it runs on every ./run-tests.sh invocation"
+        assert elapsed < 20.0, f"check-docs used {elapsed:.1f}s of user CPU; it runs on every ./run-tests.sh invocation"
 
 
 class TestSlugify:

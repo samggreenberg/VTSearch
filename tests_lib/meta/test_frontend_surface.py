@@ -29,7 +29,9 @@ one of three shapes, and each gets a rule:
 Docstrings are excluded from the string scan, as in
 ``tests_lib/meta/test_markdown_surface.py``: prose that *mentions*
 ``frontend/src/app/utils/plugin-fields.ts`` is not a read, and flagging it
-would train people to route around this gate.
+would train people to route around this gate.  Only ``test_*.py`` modules are
+scanned: a conftest or helper is not something the fast path could skip, and
+what it provides reaches a test through a fixture name or an import.
 """
 
 from __future__ import annotations
@@ -70,7 +72,14 @@ def _tracked_test_files() -> tuple[str, ...]:
         capture_output=True,
         check=True,
     )
-    return tuple(p for p in out.stdout.decode("utf-8").split("\0") if p.endswith(".py"))
+    # Test modules only. A conftest, a helpers module or a fixture file is not
+    # a test the fast path could skip: what it holds reaches a test through a
+    # fixture name or an import, and the FIXTURE rule catches the one that
+    # matters (tests/conftest.py defines ``angular_bundle``, and would
+    # otherwise be flagged for naming the bundle it builds).
+    return tuple(
+        p for p in out.stdout.decode("utf-8").split("\0") if p.endswith(".py") and Path(p).name.startswith("test_")
+    )
 
 
 def _code_strings(tree: ast.AST) -> list[str]:
