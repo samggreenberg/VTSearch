@@ -366,6 +366,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
+  `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
+  pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.
+  `frame_at` still returns stored pixels. `VideoLetterboxCropCleaner` now writes `clip_box_frame: [width,
+  height]`, the decoded frame size it measured `clip_box` on, beside the box, and
+  `vtscore.media.provenance.CLIP_WINDOW_FIELDS` carries it, so a saved dataset keeps it. The video thumbnailers
+  stretch the frame by the SAR, so an anamorphic video previews at its display aspect. Additive.
+
 - **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
   (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
   `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user

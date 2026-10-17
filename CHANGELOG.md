@@ -1033,6 +1033,12 @@ not list every commit. Use `git log` for the full history.
   changed since the import and the page can no longer be found, the item is left out rather than brought
   in as the whole PDF.
 
+- **An anamorphic video plays its letterbox crop whole, and previews at its true shape** (issue #5032). A
+  video with non-square pixels, such as a 720×480 DVD rip shown at 16:9, lost about 15% of its picture
+  off the right edge once Letterbox Crop cropped its bars, and its grid thumbnail was squeezed to 3:2. The
+  player now crops only the bars, and the thumbnail has the shape the video plays at. A dataset needs
+  importing again to pick this up: one imported before keeps its old crop and thumbnail.
+
 - **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
   rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
   player showed the full padded frame, so an item previewed without its black bars and played with them.

@@ -87,8 +87,10 @@ SOURCE_BOX_FIELD = "source_box"
 #: but only as a re-derivation *recipe* and in a different shape (``clip_box``
 #: is comma-joined there), so the two are not interchangeable — which is why
 #: :func:`vtscore.datasets.loader.export_dataset_to_file` has to persist these
-#: fields in their own right.
-CLIP_WINDOW_FIELDS = ("clip_start", "clip_end", "clip_index", "clip_box")
+#: fields in their own right.  ``clip_box_frame`` rides with ``clip_box``: the
+#: size of the frame the box was measured on, which the video player scales the
+#: box by (see :mod:`vtscore.media.video.crop`).  It renders no row of its own.
+CLIP_WINDOW_FIELDS = ("clip_start", "clip_end", "clip_index", "clip_box", "clip_box_frame")
 
 #: ``origin.params`` keys left out of the ``Imported Via`` line.  These are
 #: either represented by the curated fields above, duplicated by a dedicated

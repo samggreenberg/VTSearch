@@ -5978,6 +5978,13 @@
             },
             "type": "array"
           },
+          "clip_box_frame": {
+            "description": "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. On an anamorphic video the player reports display pixels, so it scales the box by this before cropping. Absent on a box recorded without one, which is used as is.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "clip_end": {
             "type": "number"
           },
@@ -8404,6 +8411,13 @@
           "clip_box": {
             "items": {
               "type": "number"
+            },
+            "type": "array"
+          },
+          "clip_box_frame": {
+            "description": "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. On an anamorphic video the player reports display pixels, so it scales the box by this before cropping. Absent on a box recorded without one, which is used as is.",
+            "items": {
+              "type": "integer"
             },
             "type": "array"
           },
