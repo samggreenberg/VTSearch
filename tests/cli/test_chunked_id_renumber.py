@@ -76,7 +76,7 @@ def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
 
 
 def _write_pretrained_detector(name: str, dim: int = 2) -> Path:
-    """Write a detector with a labelset that yields a trainable MLP.
+    """Write a detector with a labelset that yields a trainable head.
 
     The CLI re-resolves the labelset's origins and re-embeds; we stub
     that resolution out at runtime in the test bodies, so the labelset
@@ -130,8 +130,8 @@ def _stub_detector_training(monkeypatch):
 
     The CLI's ``_load_and_train_detectors`` walks the labelset, resolves
     origins, and re-embeds them.  For these tests we only care that
-    *some* trained MLP comes back; we stub the loader to return a
-    fixed (mlp, threshold) pair so the test focuses on chunk-id
+    *some* trained head comes back; we stub the loader to return a
+    fixed (head, threshold) pair so the test focuses on chunk-id
     renumbering, not training mechanics.
     """
     import torch

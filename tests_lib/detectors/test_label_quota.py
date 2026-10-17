@@ -326,17 +326,65 @@ class TestLabelsetTrainAndScore:
 
 
 class TestTheBalanceCountsTheCentroidsLine:
-    def test_the_state_counts_what_the_line_keeps(self, labels):
-        """The centroid draws its own line (#4732), so its state counts that line, not a proposal."""
-        from vtscore.state.core import detector_balance_state
-        from vtscore.training.thresholds import LineRanking
+    """The centroid draws its own line (#4732) and keeps the ranking it is counted on (#5048).
 
-        snap, make = labels
-        ctx = _ctx()
-        lt.train_from_labelset(ctx, make([1, 2], [40]), media_type="image", snap=snap)
+    With no ranking the balance's state fell back to its cap (32 at beta 1), so
+    the count a load or the CLI reported was not what the head's line kept.
+    """
+
+    LABELLED = {1, 2, 40}
+
+    def _unvoted_scores(self, ctx: DetectorContext, snap: dict[int, dict]) -> list[float]:
         rows = scoring_rows_for_snap(snap, EMBEDDER)
         scores = score_rows_with_model(ctx.model, rows)[0]
-        ctx.line_ranking = LineRanking.from_scores(rows.ids, scores, ())
+        return [s for cid, s in zip(rows.ids, scores, strict=True) if cid not in self.LABELLED]
+
+    def test_a_centroid_counts_what_its_line_keeps(self, labels):
+        from vtscore.state.core import detector_balance_state, recut_detector_threshold
+        from vtscore.training.thresholds import BALANCE_UNCHECKED, balance_count
+
+        snap, make = labels
+        for cid, media in snap.items():
+            media["md5"] = f"m{cid}"  # the labels resolve in this corpus
+        ctx = _ctx()
+        lt.train_from_labelset(ctx, make([1, 2], [40]), media_type="image", snap=snap)
+        assert is_centroid_head(ctx.model)
+        assert ctx.line_ranking is not None and ctx.line_ranking.voted == self.LABELLED, "labelled media marked voted"
+        unvoted = self._unvoted_scores(ctx, snap)
+        kept = sum(1 for s in unvoted if s >= ctx.threshold)
+        line = ctx.centroid_line
+        assert kept == int((line.cosines >= line.cut).sum()), "what the line counted when it was drawn (#4779)"
+        assert kept != balance_count(1.0, None), "the cap says something else"
         state = detector_balance_state(ctx, 1.0)
-        assert state is not None
-        assert state["count"] == int(sum(s >= ctx.threshold for s in scores))
+        assert state["status"] == BALANCE_UNCHECKED and state["count"] == kept
+
+        # A balance change redraws the line on the same cosines; the ranking counts the new one.
+        recut = recut_detector_threshold(ctx, beta=4.0)
+        assert recut is not None
+        ctx.threshold = recut
+        assert detector_balance_state(ctx, 4.0)["count"] == sum(1 for s in unvoted if s >= ctx.threshold)
+
+    def test_a_cold_find_keeps_the_ranking_too(self, labels):
+        from vtscore.state.core import detector_balance_state
+
+        snap, make = labels
+        for cid, media in snap.items():
+            media["md5"] = f"m{cid}"
+        ctx = _ctx()
+        _results, threshold, model = lt.labelset_train_and_score(
+            ctx, make([1, 2], [40]), media_type="image", clips_dict=snap, label_quota=True
+        )
+        assert is_centroid_head(model) and ctx.line_ranking is not None
+        assert ctx.line_ranking.voted == self.LABELLED
+        kept = sum(1 for s in self._unvoted_scores(ctx, snap) if s >= threshold)
+        assert detector_balance_state(ctx, 1.0)["count"] == kept
+
+    def test_without_ids_no_ranking_is_kept(self, labels):
+        """A caller that names no ids keeps the old contract: no ranking, and a Find pass builds one."""
+        snap, _make = labels
+        rows = scoring_rows_for_snap(snap, EMBEDDER)
+        ctx = _ctx()
+        lt.install_centroid_head(
+            ctx, [snap[1]["embeddings"][EMBEDDER]], lambda h: score_rows_with_model(h, rows)[0], None, beta=1.0
+        )
+        assert is_centroid_head(ctx.model) and ctx.line_ranking is None

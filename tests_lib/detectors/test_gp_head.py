@@ -383,7 +383,7 @@ class TestGPVotingSimulation:
 
 
 # ---------------------------------------------------------------------------
-# The GP-native threshold: the shipped fold-anchored estimator on the GP's own
+# The GP-native threshold: the fold-anchored estimator on the GP's own
 # calibration folds (issue #3959)
 # ---------------------------------------------------------------------------
 

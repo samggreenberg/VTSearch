@@ -144,6 +144,68 @@ class TestTrainingRecordsTheState:
         assert (event["status"], event["count"]) == ("unchecked", 5)
 
 
+class TestAQuotaHeadReportsWhatItExports:
+    """Under the label quota the export is the head's own line, and the state counts that line (#5048).
+
+    The Goods' centroid installed with no ranking, so the state fell back to the
+    cap: the event said "exports its top 32" while the run exported everything
+    over the centroid's line.
+    """
+
+    DIM = 8
+    EMBEDDER = "test_embedder"
+
+    def _corpus(self, rng: np.random.Generator, proto: np.ndarray, n: int) -> dict[int, dict[str, Any]]:
+        """A tight cluster of 12 around *proto* and a broad cloud: the centroid's line keeps about the cluster."""
+        snap: dict[int, dict[str, Any]] = {}
+        for cid in range(1, n + 1):
+            vec = proto + (0.15 if cid <= 12 else 1.5) * rng.standard_normal(self.DIM)
+            snap[cid] = {
+                "id": cid,
+                "media_type": "image",
+                "embedder": self.EMBEDDER,
+                "embeddings": {self.EMBEDDER: (vec / np.linalg.norm(vec)).astype(np.float32)},
+            }
+        return snap
+
+    def test_the_centroids_event_counts_its_export(self, client, monkeypatch, capsys):
+        import vtscore.detectors.labelset_training as lt
+        import vtscore.detectors.store as store_mod
+        from vtscore.detectors.centroid_head import is_centroid_head
+        from vtscore.detectors.labelset_elements import stable_element_id
+
+        rng = np.random.default_rng(5048)
+        proto = rng.standard_normal(self.DIM)
+        proto = (proto / np.linalg.norm(proto)).astype(np.float32)
+        snap = self._corpus(rng, proto, 200)
+        # Two Goods from another collection, as a CLI run's labels usually are: under the quota.
+        goods = {f"g{i}": proto + 0.15 * rng.standard_normal(self.DIM) for i in (1, 2)}
+        det = {
+            "name": "det",
+            "media_type": "image",
+            "labelset": {"labels": [{"md5": md5, "label": "good"} for md5 in goods]},
+        }
+        monkeypatch.setattr(store_mod, "_read_detector", lambda _p: det)
+        monkeypatch.setattr("vtscore.detectors.input_spec.extract_input_spec_from_medias", lambda _m: None)
+
+        def _fake_populate(det_ctx, labelset, *, media_type, snap, on_progress=None):
+            det_ctx.embedder = self.EMBEDDER
+            for elem in labelset.elements:
+                det_ctx.label_embeddings[stable_element_id(elem)] = goods[elem.md5].astype(np.float32)
+
+        monkeypatch.setattr(lt, "populate_label_embeddings", _fake_populate)
+        set_beta(1.0)
+        cli_progress.set_format("json")
+
+        out = cli._load_and_train_detectors(["det"], "image", snap)
+        assert is_centroid_head(out["det"]["mlp"])
+        exported = cli._score_direct_all(["det"], out, snap, self.EMBEDDER)["det"]["total_hits"]
+        assert 0 < exported != 32, "the centroid's line keeps a set of its own"
+        assert out["det"]["balance"]["status"] == "unchecked" and out["det"]["balance"]["count"] == exported
+        event = [e for e in _events(capsys) if e["event"] == "detector_unchecked"][0]
+        assert event["count"] == exported
+
+
 BALANCE = {
     "beta": 1.0,
     "status": "unchecked",

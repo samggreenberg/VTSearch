@@ -500,7 +500,7 @@ class TestResolveLabelEmbeddings:
         """``embedder_name`` must reach ``embed_file`` so training vectors
         live in the same space as the snap embeddings they'll be mixed with.
 
-        Mixing vectors from two embedders into a single MLP produces
+        Mixing vectors from two embedders into a single head produces
         garbage (different output dimensions crash; same dim silently
         corrupts), so the dataset's embedder propagating through to the
         resolver is part of the H5-secondary fix.

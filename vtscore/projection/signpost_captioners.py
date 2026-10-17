@@ -13,7 +13,8 @@ a free-text description from the raw media:
   (the cleanest signs on the audio study's real-world sets).
 
 These are **opt-in per media type**: the ``browse_signpost_captioner`` user
-setting flows through :class:`~vtscore.config.CoreConfig` into
+setting flows through the ``signpost_captioner`` knob
+(:func:`~vtscore.config.get_setting`) into
 :func:`~vtscore.projection.signpost_texts.provider_for`, which selects the
 captioner and wraps the tag provider as a fallback (model-load failure or a
 per-item decode failure degrades to tags, so a missing model download never

@@ -10,9 +10,9 @@ resolves anything itself; both call :func:`resolve_projection_params`.
 
 Resolution order for ``n_neighbors`` / ``min_dist``:
 
-1. an explicit ``ServerSettings`` override, read off the library-tier
-   :class:`~vtscore.config.CoreConfig` (the app populates its
-   ``projection_n_neighbors`` / ``projection_min_dist`` fields from the
+1. an explicit ``ServerSettings`` override, read with
+   :func:`~vtscore.config.get_setting` (the app answers its
+   ``projection_n_neighbors`` / ``projection_min_dist`` knobs from the
    settings file).  "Explicit" means a value that *differs* from the global
    config default, so an operator who deliberately picks the global value
    simply gets it;
@@ -34,9 +34,10 @@ parallel fit) when it is not.  Like ``compact`` it is not a setting: it exists
 so a process that needs the same map every time, such as the user-docs
 screenshot harness, can ask for one.
 
-Reading ``CoreConfig`` is best-effort: a library-only process with no app
-config builder installed falls back to the tuned/global defaults rather than
-failing a fit.
+Reading the settings is best-effort: a library-only process that configured
+neither knob reads their global defaults, which are no override, and a settings
+read that fails falls back to the tuned/global defaults rather than failing a
+fit.
 """
 
 from __future__ import annotations
@@ -103,15 +104,14 @@ def _settings_overrides() -> tuple[int | None, float | None]:
     """The operator's explicit ``(n_neighbors, min_dist)`` overrides, if any.
 
     ``None`` in a slot means "left at the global default", i.e. no override —
-    which is what lets the per-embedder tuned value apply.  A missing or
-    un-built :class:`~vtscore.config.CoreConfig` reads as "no override".
+    which is what lets the per-embedder tuned value apply.  A setting that
+    cannot be read reads as "no override".
     """
     try:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import get_setting  # noqa: PLC0415
 
-        cfg = CoreConfig.from_settings()
-        n = int(cfg.projection_n_neighbors)
-        d = float(cfg.projection_min_dist)
+        n = int(get_setting("projection_n_neighbors"))
+        d = float(get_setting("projection_min_dist"))
     except Exception:
         return None, None
     return (

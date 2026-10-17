@@ -655,7 +655,7 @@ A handful of mirrors name a harness anchor too coarse to digest — one function
 
 ### Adding and diverging
 
-A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when either side moves, not just what the code is. Name every top-level symbol the reproduction spans — `file.py::GOOD_TARGET,BAD_TARGET` — since watching one of a pair is half a mirror.
+A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when either side moves, not just what the code is. Name every top-level symbol the reproduction spans — `file.py::GOOD_TARGET,BAD_TARGET` — since watching one of a pair is half a mirror. The app side lists them the same way (`py:package.module.first,second`), and a reproduction that lives on a method is named where it stands, `file.py::Class.method`, rather than lifted out of its class.
 
 When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — both sides are still pinned — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
 

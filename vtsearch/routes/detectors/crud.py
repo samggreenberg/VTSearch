@@ -426,7 +426,7 @@ def combine_detectors(body: dict):  # noqa: C901
 
     The combined detector is *purely a labelset entry*; no source's
     labelset-source binding carries over (it follows the deployment default,
-    if any), and the threshold/MLP
+    if any), and the threshold/head
     are computed later when the detector is activated against a dataset.
     """
     names = body["names"]

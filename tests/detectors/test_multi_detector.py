@@ -1,5 +1,5 @@
 """Tests for multiple loaded detectors: DetectorContext lifecycle, vote isolation,
-model registry multi-loaded support, activate/unload endpoints, and MLP caching."""
+model registry multi-loaded support, activate/unload endpoints, and head caching."""
 
 import shutil
 
@@ -388,12 +388,12 @@ class TestModelLoadingTasks:
 
 
 # ---------------------------------------------------------------------------
-# MLP caching in DetectorContext
+# Head caching in DetectorContext
 # ---------------------------------------------------------------------------
 
 
 class TestMLPCaching:
-    """learned_sort caches the MLP in the active DetectorContext."""
+    """learned_sort caches the head in the active DetectorContext."""
 
     def test_learned_sort_caches_model(self, client):
         from vtsearch.state import (

@@ -286,7 +286,7 @@ class TestScoreMarkerEmbedder:
     (``docs/ARCHITECTURE.md`` → "Per-detector embedder type").
 
     The marker must equal the **score** embedder (structural ▸ patch ▸ text)
-    the MLP is trained/scored against, falling back to the primary *name* for a
+    the head is trained/scored against, falling back to the primary *name* for a
     slot-less single-vector dataset so it is always a concrete string to compare
     against ``DetectorContext.embedder``.
     """
@@ -306,9 +306,9 @@ class TestScoreMarkerEmbedder:
 
     def test_dual_marks_patch_not_primary(self, fake_caps):
         # The crux of Phase 2b.5: a dual dataset's primary mirror is the text
-        # embedder, but the MLP scores against the patch embedder.  The marker
+        # embedder, but the head scores against the patch embedder.  The marker
         # must follow the scored space (patch), not media["embedder"] (text),
-        # or a stale cross-space MLP survives a dataset switch.
+        # or a stale cross-space head survives a dataset switch.
         media = self._media("faketext", ["faketext", "fakepatch"])
         assert media["embedder"] == "faketext"
         assert score_marker_embedder(media) == "fakepatch"

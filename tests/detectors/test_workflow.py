@@ -4,7 +4,7 @@ This is the Flask-aware retraining helper called from the
 ``/api/detectors/<name>/import-labels/<importer>`` endpoint after label
 import.  It overrides the active detector context, resolves the new
 label entries against the loaded dataset, applies them, and retrains
-the MLP when both a good and a bad vote are present.
+the head when both a good and a bad vote are present.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ class TestLabelResolution:
 
 
 class TestTraining:
-    """The MLP is only retrained when at least one good AND one bad vote exist."""
+    """The head is only retrained when at least one good AND one bad vote exist."""
 
     def test_only_good_votes_does_not_train(self, det_ctx):
         entries = [_audio_entry(1, "good"), _audio_entry(2, "good")]

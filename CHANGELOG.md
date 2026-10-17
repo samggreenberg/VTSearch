@@ -25,6 +25,12 @@ not list every commit. Use `git log` for the full history.
   a deployment with more than one gunicorn worker must set the variable. Single-user mode without
   HuggingFace sign-in is unchanged.
 
+- **A detector with too few labels for a trained head reports the set it actually keeps** (issue
+  #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
+  typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of
+  1) whatever its line kept, and a headless `--autodetect` run said it "exports its top 32" while it
+  exported everything over the line. Both now count what the line keeps.
+
 - **A "reference files in place" import of PDFs shows the right part of each converted item, and stores
   less** (issue #5041). When an import converted files (a PDF's text, a PDF's pages as images) and then cut
   them with a clipper, a reference import showed every sentence as the PDF's whole text and every tile as
@@ -1026,6 +1032,14 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
+  When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
+  detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
+  as an image. Pulling such labelled items into another dataset skipped them without a word. Training now
+  uses each item's own text or page, and pulling the items in brings in that text or page. If a PDF has
+  changed since the import and the page can no longer be found, the item is left out rather than brought
+  in as the whole PDF.
 
 - **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
   rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the

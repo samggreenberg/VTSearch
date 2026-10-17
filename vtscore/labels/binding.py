@@ -13,8 +13,8 @@ Dashboard cannot disagree about it:
    :class:`~vtscore.state.core.DetectorContext` (``ctx.labelset_source``),
    which lives only in memory - the library-level way to link a source
    without a registry;
-3. otherwise the deployment-wide **default** (``CoreConfig.default_labelset_source``,
-   the app's ``default_labelset_source`` server setting), which the detector
+3. otherwise the deployment-wide **default** (the ``default_labelset_source``
+   setting, the app's server setting of that name), which the detector
    *inherits*;
 4. otherwise no source.
 
@@ -114,16 +114,15 @@ def _valid_config(cfg: Any) -> dict[str, Any] | None:
 def deployment_default_labelset_source() -> dict[str, Any] | None:
     """Return the deployment-wide default binding, or ``None``.
 
-    Read from :meth:`CoreConfig.from_settings` so the library stays
-    settings-import-free; a library-only process with no app builder
-    installed simply has no default.  An opt-out or malformed value reads as
-    no default.
+    Read with :func:`~vtscore.config.get_setting` so the library stays
+    settings-import-free; a library-only process that configured none simply
+    has no default.  An opt-out or malformed value reads as no default.
     """
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting  # noqa: PLC0415
 
     try:
-        cfg = CoreConfig.from_settings().default_labelset_source
-    except Exception:  # noqa: BLE001 - no builder (library-only) or unreadable settings
+        cfg = get_setting("default_labelset_source")
+    except Exception:  # noqa: BLE001 - unreadable settings
         return None
     cfg = _valid_config(cfg)
     if cfg is None or cfg["source_name"].strip() == OPT_OUT:
