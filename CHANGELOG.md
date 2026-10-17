@@ -391,6 +391,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
+  50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
+  Training-domain overlap check reads, and nothing in the app could build one afterwards. Its **Stats**
+  window now shows **Coverage atlas: Not built** with a **Build** button; the build's progress shows on the
+  dataset's dashboard row, and the line goes once the atlas is built. Clicking **Build** while a build is
+  already running no longer starts a second one, and a finished build's row now clears at once instead of
+  sitting at its last progress for a few seconds.
+
 - **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
   remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
   default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import

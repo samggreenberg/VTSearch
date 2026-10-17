@@ -1778,6 +1778,29 @@
         ],
         "type": "object"
       },
+      "DatasetCoverageAtlasStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_build_threshold": {
+            "description": "Item count above which loading leaves the atlas unbuilt.",
+            "type": "integer"
+          },
+          "building": {
+            "description": "Whether an on-demand build (POST .../coverage-atlas) is running.",
+            "type": "boolean"
+          },
+          "built": {
+            "description": "Whether the dataset has a coverage atlas.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto_build_threshold",
+          "building",
+          "built"
+        ],
+        "type": "object"
+      },
       "DatasetDomainShiftResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2220,6 +2243,11 @@
           "clipper": {
             "type": "string"
           },
+          "coverage_atlas": {
+            "$ref": "#/components/schemas/DatasetCoverageAtlasStatus",
+            "description": "The dataset's coverage-atlas state; null when the dataset is not loaded.",
+            "nullable": true
+          },
           "created_at": {
             "nullable": true
           },
@@ -2273,6 +2301,7 @@
         },
         "required": [
           "clipper",
+          "coverage_atlas",
           "created_by",
           "embedder",
           "file_type_counts",
@@ -11015,7 +11044,7 @@
         }
       ],
       "post": {
-        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch.",
+        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch; calling it\nwhile a build is running returns that build's ``task_id`` and starts\nnothing.",
         "operationId": "build_dataset_coverage_atlas",
         "responses": {
           "200": {
