@@ -3,7 +3,7 @@
 Issue #2397 moved the per-step cache advancement off the 2 s poll thread: a
 poll that finds the cache behind ``label_history`` returns the last-computed
 snapshot immediately with ``stale = true`` and kicks a background worker to
-advance the cache, instead of retraining MLPs inline.  These tests exercise
+advance the cache, instead of advancing it inline.  These tests exercise
 the stale→fresh transition, the snapshot placeholder, and the coalescing of a
 rapid poll burst into a single in-flight refresh.
 """
@@ -17,8 +17,8 @@ from vtsearch.state import bad_votes, good_votes, label_history
 
 
 def _seed_votes_and_history():
-    """A handful of good/bad votes plus matching label history — enough for the
-    labeling-status cache to train real per-step MLPs."""
+    """A handful of good/bad votes plus matching label history — enough to put
+    the labeling-status cache behind ``label_history``."""
     for cid in (1, 2, 3):
         good_votes[cid] = None
         label_history.append((cid, "good", 0.0))

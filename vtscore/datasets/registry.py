@@ -31,13 +31,13 @@ REGISTRY_PATH = DATA_DIR / "dataset_registry.json"
 def get_saved_datasets_dir() -> Path:
     """Return the saved-datasets directory.
 
-    Routed through ``CoreConfig.from_settings()`` rather than reading
+    Read with :func:`~vtscore.config.get_setting` rather than from
     ``vtsearch.settings`` directly so this module stays library-clean
     (see the Settings seam in ``../docs/architecture.md``).
     """
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting  # noqa: PLC0415
 
-    return CoreConfig.from_settings().saved_datasets_dir
+    return get_setting("saved_datasets_dir")
 
 
 #: The built-in *default* saved-datasets location: the same path

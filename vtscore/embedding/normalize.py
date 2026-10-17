@@ -21,11 +21,11 @@ applied at each point a vector enters the system:
   :func:`vtscore.datasets.ingest._build_media_data`.
 
 Because the invariant holds at the store, downstream consumers (the cached
-embedding matrix, the coverage atlas's k-means, MLP training, region
+embedding matrix, the coverage atlas's k-means, head training, region
 similarity, and the VTSBrowse UMAP projection) all consume unit vectors
 without re-normalizing.  See ``docs/plans/vtsbrowse.md``
 §Prerequisite for the full rationale and the behaviour changes this implies
-(angular diversity clustering; MLP input scale).
+(angular diversity clustering; head input scale).
 
 The module imports only :mod:`numpy` so it stays a leaf with no risk of an
 import cycle through the embedding package façade.

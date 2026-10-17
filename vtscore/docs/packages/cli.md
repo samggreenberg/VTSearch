@@ -33,12 +33,13 @@ are the underlying primitives.
   this; you call `set_format("json")` once at startup to flip the
   whole CLI into NDJSON mode.
 
-`vtscore.cli` and `vtscore.cli_pipeline` depend on
-`vtscore.config.CoreConfig.from_settings()`, so
-the app-side builder must be registered before calling them in an
-app context. Library-only callers should construct a `CoreConfig`
-directly and skip these entry points entirely if they don't want the
-autodetect *workflow* - the same loaders, trainers, and exporters
+`vtscore.cli` and `vtscore.cli_pipeline` read their settings (the
+AutoFind list and exporter, the detectors directory, …) with
+`vtscore.config.get_setting()`, and apply `--settings` with
+`redirect_settings_path()`, so the app's setting getters - or a
+library consumer's `CoreConfig` builder - must be registered before
+calling them. Library-only callers can skip these entry points entirely
+if they don't want the autodetect *workflow* - the same loaders, trainers, and exporters
 are accessible piece-by-piece from `vtscore.datasets`,
 `vtscore.detectors`, and `vtscore.exporters`.
 

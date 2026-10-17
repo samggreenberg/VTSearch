@@ -23,8 +23,14 @@
 
 // "View" affordance beside the Duplicate-groups count (opens the child
 // Duplicates modal).
-.view-dupes-btn {
+.view-dupes-btn,
+.build-atlas-btn {
   margin-left: var(--space-md);
+}
+
+// Why a large dataset has no coverage atlas, beside "Not built".
+.atlas-reason {
+  color: var(--text-muted);
 }
 
 // Section rhythm provided by the shared `.section-title` utility in

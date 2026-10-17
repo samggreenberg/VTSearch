@@ -95,12 +95,13 @@ pin_training_budget()
 # ---------------------------------------------------------------------------
 # Library-only CoreConfig builder.
 #
-# Library code that goes through ``CoreConfig.from_settings()`` (e.g.
-# ``vtsearch/datasets/registry.py:get_saved_datasets_dir()``) needs *some*
-# builder installed or it raises RuntimeError.  Outside the Flask app we
+# Library code reads its knobs with ``vtscore.config.get_setting()`` (e.g.
+# ``vtscore/datasets/registry.py:get_saved_datasets_dir()``), and a required
+# knob with nothing behind it raises RuntimeError.  Outside the Flask app we
 # install a stable default that points at the repo's ``data/`` tree and
-# uses sensible literals for every knob.  Tests that need a different
-# value can monkey-patch ``vtscore.config._core_config_builder`` or call
+# uses sensible literals for every knob, the way a library-only consumer
+# would.  Tests that need a different value can monkey-patch
+# ``vtscore.config.core_config._core_config_builder`` or call
 # :func:`register_core_config_builder` themselves.
 # ---------------------------------------------------------------------------
 
@@ -122,7 +123,22 @@ def _lib_default_core_config(_settings_path=None):
     )
 
 
-config.register_core_config_builder(_lib_default_core_config)
+def _install_library_settings() -> None:
+    """Answer every setting from the default builder alone, as a library-only consumer.
+
+    When both trees collect in one process, ``app.py`` has already registered
+    the app's per-knob getters, and a getter wins over a builder - so they are
+    cleared, or library tests would read the app's settings and the CLI's
+    ``--settings`` redirect would repoint them.
+    """
+    from vtscore.config import core_config
+
+    core_config._setting_getters.clear()
+    core_config._settings_path_redirect = None
+    config.register_core_config_builder(_lib_default_core_config)
+
+
+_install_library_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -226,10 +242,11 @@ def reset_contexts(tmp_path, monkeypatch):
     # at import time.  That file restores its own snapshot now (issue #3101),
     # but re-assert the builder defensively, so any future reload - or any test
     # that writes to ``vtscore.config`` and forgets to restore - cannot silently
-    # leave ``CoreConfig.from_settings()`` raising for the rest of the session.
-    # (``reset_shared_state`` re-asserts the training budget for the same
-    # reason.)
-    config.register_core_config_builder(_lib_default_core_config)
+    # leave ``get_setting()`` raising for the rest of the session.  (The host
+    # seam restore above also puts back any app getters captured at startup in a
+    # combined run, so they are cleared again; ``reset_shared_state``
+    # re-asserts the training budget for the same reason.)
+    _install_library_settings()
 
 
 @pytest.fixture

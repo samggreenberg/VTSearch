@@ -3,7 +3,7 @@
 DINOv3-style patch datasets expose a raw ``patch_grid`` per media.  Scoring
 flattens every media's score-row stack - the image-level (CLS) vector plus every
 raw patch, :func:`~vtscore.embedding.matrix.media_score_rows` - into one matrix,
-runs one chunked MLP forward pass, then max-pools back down to one score +
+runs one chunked head forward pass, then max-pools back down to one score +
 winning-row index per media.
 
 The matrix used to be rebuilt from scratch on every vote - a

@@ -242,9 +242,9 @@ def _set_request_context():
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
     #
-    # Also drop the detector's cached MLP / per-label embedding cache when
-    # the active dataset's embedder differs from the one the MLP was
-    # trained on; scoring with a cross-space MLP either crashes (different
+    # Also drop the detector's cached head / per-label embedding cache when
+    # the active dataset's embedder differs from the one the head was
+    # trained on; scoring with a cross-space head either crashes (different
     # dim) or silently produces garbage labels (same dim).  See
     # logical-bug-audit H5.
     # Skip the lock-taking state-sync for endpoints whose handlers never

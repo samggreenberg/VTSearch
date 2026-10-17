@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server that trusts session cookies no longer signs them with the key printed in the source**
+  (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
+  anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
+  OAuth state. When `--login trivial` or `HF_OAUTH_CLIENT_ID` is in force and the variable is unset,
+  startup now uses a random key for that process and logs a warning: sessions end at a restart, and
+  a deployment with more than one gunicorn worker must set the variable. Single-user mode without
+  HuggingFace sign-in is unchanged.
+
 - **A detector with too few labels for a trained head reports the set it actually keeps** (issue
   #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
   typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of
@@ -382,6 +390,14 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
+  50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
+  Training-domain overlap check reads, and nothing in the app could build one afterwards. Its **Stats**
+  window now shows **Coverage atlas: Not built** with a **Build** button; the build's progress shows on the
+  dataset's dashboard row, and the line goes once the atlas is built. Clicking **Build** while a build is
+  already running no longer starts a second one, and a finished build's row now clears at once instead of
+  sitting at its last progress for a few seconds.
 
 - **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
   remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
@@ -1024,6 +1040,20 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
+  When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
+  detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
+  as an image. Pulling such labelled items into another dataset skipped them without a word. Training now
+  uses each item's own text or page, and pulling the items in brings in that text or page. If a PDF has
+  changed since the import and the page can no longer be found, the item is left out rather than brought
+  in as the whole PDF.
+
+- **An anamorphic video plays its letterbox crop whole, and previews at its true shape** (issue #5032). A
+  video with non-square pixels, such as a 720×480 DVD rip shown at 16:9, lost about 15% of its picture
+  off the right edge once Letterbox Crop cropped its bars, and its grid thumbnail was squeezed to 3:2. The
+  player now crops only the bars, and the thumbnail has the shape the video plays at. A dataset needs
+  importing again to pick this up: one imported before keeps its old crop and thumbnail.
 
 - **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
   rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the

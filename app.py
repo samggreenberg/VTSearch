@@ -88,25 +88,25 @@ from vtscore.embedding import initialize_models, preload_predicted_embedders  # 
 # the per-request dataset/detector context from ``flask.g`` without
 # ``vtscore.state.core`` itself having to import Flask.  Also wire the
 # library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings`` and install the app-side builder for
-# ``CoreConfig.from_settings()``.  See ``vtscore/docs/architecture.md`` for
+# type) to ``vtsearch.settings`` and install the getters that answer
+# ``vtscore.config.get_setting()``.  See ``vtscore/docs/architecture.md`` for
 # the seam.
 #
 # This block runs BEFORE blueprint modules are imported so that any
-# module-level code in a route that calls ``CoreConfig.from_settings()``
-# (or any other shim-backed hook) finds the builder already installed.
+# module-level code in a route that reads a setting through ``get_setting()``
+# (or any other shim-backed hook) finds the getters already installed.
 # See logical-bug-audit M24.
 from vtsearch.shim import (  # noqa: E402
     register_app_achievement_recorders,
-    register_app_config_builder,
     register_app_persistence_hooks,
     register_app_plugin_families,
+    register_app_setting_getters,
     register_flask_context_resolvers,
 )
 
 register_flask_context_resolvers()
 register_app_persistence_hooks()
-register_app_config_builder()
+register_app_setting_getters()
 register_app_plugin_families()
 register_app_achievement_recorders()
 
@@ -167,8 +167,11 @@ set_progress_callback(update_progress)
 app = Flask(__name__)
 # Secret key for session cookies.  Read from VTSEARCH_SECRET_KEY env var
 # if set; otherwise fall back to a dev-only default.  Production
-# deployments should always set the env var.
-app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
+# deployments should always set the env var.  ``initialize_server`` swaps the
+# default for a random per-process key when a feature trusts session cookies.
+from vtsearch.auth.session_secret import DEFAULT_SECRET_KEY, secure_session_secret  # noqa: E402
+
+app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", DEFAULT_SECRET_KEY)
 
 # Cap on request body size (uploads).  Defaults to 2 GiB (see
 # ``vtscore.config.MAX_UPLOAD_MB``); a positive value rejects oversized
@@ -414,6 +417,11 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     not at server boot; there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
+
+    # Before anything is served. ``_run_server`` has already activated the
+    # ``--login`` provider by now; under gunicorn there is no ``--login``, so
+    # only the HuggingFace sign-in flow can trigger it there.
+    secure_session_secret(app)
 
     # Deployment-level overrides the gunicorn-launched images can only reach
     # through the environment (they never parse argv). An explicit flag wins.

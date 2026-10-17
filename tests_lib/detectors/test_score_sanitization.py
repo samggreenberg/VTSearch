@@ -3,7 +3,7 @@
 Logical-bug audit M13: ``learned_scores`` in ``/api/votes`` (and the cousin
 endpoints ``/api/learned-sort``, ``/api/find-label``, ``/api/find``,
 ``/api/label-file-sort``) used to emit the literal token ``NaN`` when the
-MLP destabilised.  Browser ``JSON.parse`` rejects it, breaking the UI.
+head destabilised.  Browser ``JSON.parse`` rejects it, breaking the UI.
 
 These tests pin the invariant at the source (``sigmoid_to_finite_scores``)
 and at the consumers (``train_and_score``, ``labelset_train_and_score``).
@@ -135,7 +135,7 @@ class TestSigmoidToFiniteArray:
 class _NaNProducingModel(nn.Module):
     """A toy model whose forward pass deterministically returns NaN logits.
 
-    Used to simulate "MLP destabilised during training" without actually
+    Used to simulate "head destabilised during training" without actually
     having to provoke training divergence (which is non-deterministic).
     """
 
@@ -199,7 +199,7 @@ class TestLabelsetTrainAndScoreNaNSafety:
 
         # Replace the real ``train_model`` with one that returns a model
         # that always produces NaN logits.  This is what M13 simulates:
-        # the trainer "successfully" produced an MLP, but its weights have
+        # the trainer "successfully" produced a head, but its weights have
         # destabilised so every forward pass is NaN.
         def fake_train_model(X, y, input_dim, hidden_dim=None):  # noqa: ARG001
             return _NaNProducingModel(input_dim).eval()

@@ -548,8 +548,8 @@ limit is re-read on every `acquire()`) that drive dataset loading:
 
 | Gate              | Limit source                                              | Phase covered                                       |
 |-------------------|-----------------------------------------------------------|-----------------------------------------------------|
-| `_download_gate`  | `CoreConfig.max_concurrent_dataset_downloads`             | Importer's download / import step (bandwidth-bound) |
-| `_embed_gate`     | `CoreConfig.max_concurrent_dataset_embeddings`            | Embedding + post-load (CPU/GPU/RAM-bound)           |
+| `_download_gate`  | `get_setting("max_concurrent_dataset_downloads")`         | Importer's download / import step (bandwidth-bound) |
+| `_embed_gate`     | `get_setting("max_concurrent_dataset_embeddings")`        | Embedding + post-load (CPU/GPU/RAM-bound)           |
 
 A load acquires the download gate first, switches to the embed gate
 on the importer's first `"embedding"` progress event, and runs
@@ -557,7 +557,7 @@ post-load steps (clipping, dedup, coverage atlas)
 under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
 gates directly; they're driven by the load orchestrator and read
-their limits from `CoreConfig`.
+their limits with `vtscore.config.get_setting`.
 
 **Several datasets from one import** (`load_multi.py`). A multi-dataset
 load runs the importer's acquire phase once, under the download gate,

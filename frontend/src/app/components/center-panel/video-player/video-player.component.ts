@@ -37,8 +37,8 @@ export class VideoPlayerComponent implements OnDestroy {
   readonly videoError = signal(false);
 
   // The element's natural frame size, once (loadedmetadata) reports it for the
-  // current videoSrc; null before that. The unit's clip_box is clamped against
-  // it, so no crop can be computed until it is known.
+  // current videoSrc; null before that. The unit's clip_box is scaled into it
+  // and clamped against it, so no crop can be computed until it is known.
   private readonly frameSize = signal<{ width: number; height: number } | null>(null);
 
   /**
@@ -47,10 +47,14 @@ export class VideoPlayerComponent implements OnDestroy {
    * than re-encoding the file, and the embedder and grid thumbnail honour it;
    * this makes the player show the same picture instead of the full padded
    * frame. Recomputed when batch hydration delivers `clip_box` after load.
+   * `clip_box_frame` is the frame size the box was measured on, which differs
+   * from the natural size on an anamorphic video.
    */
   readonly viewBox = computed(() => {
     const size = this.frameSize();
-    return size ? clipBoxViewBox(this.media().clip_box, size.width, size.height) : null;
+    if (!size) return null;
+    const media = this.media();
+    return clipBoxViewBox(media.clip_box, size.width, size.height, media.clip_box_frame);
   });
 
   // Active clip window bounds while enforcement is on, else null. Enforcement is

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from uuid import uuid4
 
-from vtscore.config import CoreConfig, DATA_DIR
+from vtscore.config import DATA_DIR, get_setting
 from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
     CANCELLED_ERROR,
@@ -72,8 +72,8 @@ from vtscore.timing import step_weights
 # settings; defaults derive from the host's CPU/GPU counts (see
 # :func:`vtscore.embedding.loader.default_concurrent_downloads` and
 # :func:`vtscore.embedding.loader.default_concurrent_embeddings`).
-_download_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
-_embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_embeddings)
+_download_gate = ConcurrencyGate(lambda: get_setting("max_concurrent_dataset_downloads"))
+_embed_gate = ConcurrencyGate(lambda: get_setting("max_concurrent_dataset_embeddings"))
 
 
 def reset_load_gates_for_tests() -> None:
@@ -94,8 +94,8 @@ def reset_load_gates_for_tests() -> None:
     """
     global _download_gate, _embed_gate
 
-    _download_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
-    _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_embeddings)
+    _download_gate = ConcurrencyGate(lambda: get_setting("max_concurrent_dataset_downloads"))
+    _embed_gate = ConcurrencyGate(lambda: get_setting("max_concurrent_dataset_embeddings"))
 
 
 # ---------------------------------------------------------------------------

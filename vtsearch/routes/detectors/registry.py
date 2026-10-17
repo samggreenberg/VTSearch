@@ -1,6 +1,6 @@
 """Blueprint for detector-registry routes (the in-memory detector catalog).
 
-Every registered detector is backed by a labelset file on disk and an MLP
+Every registered detector is backed by a labelset file on disk and a head
 that lives only in :class:`~vtsearch.state.DetectorContext` once the user
 loads the detector.
 
@@ -535,7 +535,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 # ---------------------------------------------------------------------------
 
 
-_LOAD_STEPS = 3  # restore labels, seed examples, train MLP
+_LOAD_STEPS = 3  # restore labels, seed examples, train head
 #: Timing task name; its step names and shipped weights live in
 #: :data:`vtscore.timing.tasks.TASKS`.
 _DETECTOR_LOAD_TASK = "detector_load"
@@ -552,7 +552,7 @@ def _run_detector_load_task(
 ) -> None:
     """Background worker for :func:`load_detector_route`.
 
-    Restores labels, seeds example votes, embeds + trains the MLP for the
+    Restores labels, seeds example votes, embeds + trains the head for the
     detector, then marks it loaded. Cancellation and errors tear the
     just-built context back down and surface on the task tracker. Lifted out
     of the route's closure so the route itself stays simple; the captured
@@ -727,7 +727,7 @@ def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
 
     Its cached label embeddings may have been built against a different embedder
     than the currently-active dataset uses (e.g. the user switched from a SigLIP
-    image dataset to a CLIP one). Re-embed the labels in that case so MLP
+    image dataset to a CLIP one). Re-embed the labels in that case so head
     training mixes only same-space vectors; the invalidation itself happens
     inside ``populate_label_embeddings``, this just surfaces the work via a
     progress task instead of letting it run lazily inside the next request.
@@ -765,7 +765,7 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
     task_id = f"_detload_{detector_id}"
     try:
         # Build the context but do NOT register it yet: the worker publishes it
-        # into the global store only after labels/embeddings/MLP are populated,
+        # into the global store only after labels/embeddings/head are populated,
         # so no concurrent request can observe a torn, empty-then-filling
         # detector.
         det_ctx = DetectorContext(
@@ -1197,7 +1197,7 @@ def _active_dataset_name() -> str:
 def get_detector_stats(detector_id: str):
     """Return labelset composition and provenance for a registered detector.
 
-    Counts/metadata only — no embeddings or MLP weights are read or
+    Counts/metadata only — no embeddings or head weights are read or
     returned (the labelset file is the canonical persisted form). The
     ``num_positive_resolved`` / ``active_dataset_name`` pair reports how
     much of the positive set the Browse button could currently project;

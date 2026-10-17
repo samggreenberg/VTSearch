@@ -1284,6 +1284,20 @@ class DatasetDomainShiftResponseSchema(Schema):
     shifted = fields.Boolean(required=True)
 
 
+class DatasetCoverageAtlasStatusSchema(Schema):
+    """A loaded dataset's coverage-atlas state, on its stats response."""
+
+    built = fields.Boolean(required=True, metadata={"description": "Whether the dataset has a coverage atlas."})
+    building = fields.Boolean(
+        required=True,
+        metadata={"description": "Whether an on-demand build (POST .../coverage-atlas) is running."},
+    )
+    auto_build_threshold = fields.Integer(
+        required=True,
+        metadata={"description": "Item count above which loading leaves the atlas unbuilt."},
+    )
+
+
 class DatasetRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/stats``.
 
@@ -1320,6 +1334,12 @@ class DatasetRegistryStatsResponseSchema(Schema):
     source = fields.Dict(required=True)
     clipper = fields.String(required=True)
     embedder = fields.String(required=True)
+    coverage_atlas = fields.Nested(
+        DatasetCoverageAtlasStatusSchema,
+        required=True,
+        allow_none=True,
+        metadata={"description": "The dataset's coverage-atlas state; null when the dataset is not loaded."},
+    )
 
 
 class DuplicateSetMemberSchema(Schema):

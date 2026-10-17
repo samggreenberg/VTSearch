@@ -372,6 +372,11 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
+def _atlas_task_id(dataset_id: str) -> str:
+    """The ``loading-tasks`` id of *dataset_id*'s on-demand coverage-atlas build."""
+    return f"_atlas_{dataset_id[:8]}"
+
+
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/coverage-atlas", methods=["POST"])
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
@@ -385,7 +390,9 @@ def build_dataset_coverage_atlas(dataset_id: str):
     build on demand.  The dataset must already be loaded in memory.  Progress
     is reported on the ``loading-tasks`` channel of ``GET /api/events`` under
     the returned ``task_id``; the build is cancellable.  Calling it on a
-    dataset that already has a tree rebuilds it from scratch.
+    dataset that already has a tree rebuilds it from scratch; calling it
+    while a build is running returns that build's ``task_id`` and starts
+    nothing.
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import (
@@ -401,14 +408,17 @@ def build_dataset_coverage_atlas(dataset_id: str):
         abort(404, message="Dataset not found in registry")
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
-    if not _reg_is_loaded(dataset_id):
+    ctx = get_context(dataset_id) if _reg_is_loaded(dataset_id) else None
+    if ctx is None:
         abort(400, message="Load the dataset before building its coverage atlas")
 
-    ctx = get_context(dataset_id)
-    if ctx is None:
-        abort(400, message="This dataset is not currently loaded")
+    task_id = _atlas_task_id(dataset_id)
+    # One build per dataset at a time: a repeat request (a Stats window
+    # reopened mid-build) attaches to the running build instead of starting a
+    # twin that would replace its task row and race it to install the atlas.
+    if _loading_tasks.worker_alive(task_id):
+        return {"ok": True, "message": "Coverage atlas build already in progress", "task_id": task_id}
 
-    task_id = f"_atlas_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
         task_id,
         entry.get("name", dataset_id),
@@ -440,6 +450,10 @@ def build_dataset_coverage_atlas(dataset_id: str):
                 if det_ctx is not None and getattr(det_ctx, "votes_dataset_id", None) == dataset_id:
                     with _state_lock:
                         resync_coverage_atlas_to_detector(ctx, det_ctx)
+                # Say "done" now, as the load route does: left at "loading",
+                # the row reads as still building until list_tasks() prunes
+                # it, and the Stats window waits that long to show the atlas.
+                tracker.update("idle", "", 0, 0, step=None, total_steps=None)
             except CancelledError:
                 ctx.coverage_atlas = None
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
@@ -712,6 +726,29 @@ def _repaired_file_type_counts(dataset_id: str, stored: dict) -> dict:
     return recounted
 
 
+def _coverage_atlas_status(dataset_id: str) -> dict | None:
+    """Return *dataset_id*'s coverage-atlas state, or ``None`` when it isn't loaded.
+
+    The atlas lives only on the in-memory context, so an unloaded dataset has
+    no state to report.  A loaded one past the auto-build threshold loads
+    without an atlas (as does one whose on-demand build was cancelled); the
+    Stats window offers the build from this.
+    """
+    from vtsearch.state import COVERAGE_ATLAS_AUTO_THRESHOLD, get_context
+
+    ctx = get_context(dataset_id)
+    if ctx is None:
+        return None
+    # The tracker, not the worker: a build reports "idle" before its thread
+    # unwinds, and the window must not read a cancelled build as still running.
+    tracker = _loading_tasks.get_tracker(_atlas_task_id(dataset_id))
+    return {
+        "built": ctx.coverage_atlas is not None,
+        "building": tracker is not None and tracker.get()["status"] != "idle",
+        "auto_build_threshold": COVERAGE_ATLAS_AUTO_THRESHOLD,
+    }
+
+
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/stats")
 @datasets_registry_bp.response(200, DatasetRegistryStatsResponseSchema)
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
@@ -750,6 +787,7 @@ def get_dataset_stats(dataset_id: str):
         "source": entry.get("source") or {},
         "clipper": clipper_display,
         "embedder": entry.get("embedder", ""),
+        "coverage_atlas": _coverage_atlas_status(dataset_id),
     }
 
 

@@ -36,15 +36,14 @@ _MAX_SLUG_LENGTH = 190
 def get_detectors_dir() -> Path:
     """Return the configured detectors directory.
 
-    Reads from ``CoreConfig.from_settings()`` rather than ``vtsearch.settings``
-    directly so this module stays library-clean (see Phase 2 of
-    ``../docs/architecture.md``).  The classmethod still consults the
-    app's settings layer today; after Phase 8 it moves to an app-side shim
-    and library callers pass a ``CoreConfig`` explicitly.
+    Read with :func:`~vtscore.config.get_setting` rather than from
+    ``vtsearch.settings`` directly so this module stays library-clean (see
+    Phase 2 of ``../docs/architecture.md``): the app answers it from its
+    settings, a library-only consumer from the ``CoreConfig`` it registered.
     """
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting  # noqa: PLC0415
 
-    return CoreConfig.from_settings().detectors_dir
+    return get_setting("detectors_dir")
 
 
 #: Default location used by tests that bypass settings.

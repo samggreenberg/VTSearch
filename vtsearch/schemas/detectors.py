@@ -462,7 +462,7 @@ class DetectorRegistryReadersResponseSchema(Schema):
 class DetectorRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/detectors/registry/<id>/stats``.
 
-    Counts and metadata only — never embeddings or MLP weights (see the
+    Counts and metadata only — never embeddings or head weights (see the
     "No Persisted Vectors" rule). ``num_positive_resolved`` is how many of
     the detector's positive labels currently resolve into the active
     dataset (the set the Browse button would project), with

@@ -1,4 +1,4 @@
-"""A re-cut at another inclusion reads the *shipped* estimator, faithfully.
+"""A re-cut at another inclusion reads the *fold-anchored* estimator, faithfully.
 
 Inclusion is no longer a user preference (#4269), but it is still the unit the
 threshold machinery measures cuts in: Autopilot's acquisition cut sits four
@@ -8,7 +8,7 @@ Inclusion 0 cut.  Both re-cut through
 fold-anchored population estimator parked on
 ``DetectorContext.anchored_cut_cache`` - no refit, no re-scoring.
 
-These tests pin that the re-cut is the shipped estimator's (not the raw
+These tests pin that the re-cut is the fold-anchored estimator's (not the raw
 cross-calibration quantile), that it answers the inclusion monotonically, that
 a detector with no estimator falls back to the conformal rule over its cached
 fold orderings, and that a cut the folds never fitted is left alone.
@@ -80,7 +80,7 @@ class TestARecutReadsTheAnchoredEstimator:
         assert all(b <= a + 1e-12 for a, b in zip(seen, seen[1:], strict=False)), seen
         # The cut actually moves, not merely fails to rise: a constant satisfies
         # monotonicity, which is how the inclusion-blind midpoint cut slipped
-        # past this test; the shipped ``mid_tilt`` rule answers the inclusion
+        # past this test; the ``mid_tilt`` rule answers the inclusion
         # (issue #2865).
         assert seen[0] > seen[-1], seen
         # Moving the number is necessary but not sufficient: the cut is carried

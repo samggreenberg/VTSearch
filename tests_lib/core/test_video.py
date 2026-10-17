@@ -178,6 +178,57 @@ class TestThumbnailErrorPaths:
 
 
 # ---------------------------------------------------------------------------
+# Display aspect (anamorphic video)
+# ---------------------------------------------------------------------------
+
+
+class TestDisplayAspectThumbnail:
+    """An anamorphic video previews at the aspect the player shows it (#5032).
+
+    Decoded frames are stored pixels, so a 720x480 DVD rip with SAR 32:27
+    would preview squeezed to 3:2 rather than at its 16:9 display aspect.
+    """
+
+    def _install(self, monkeypatch, frame: np.ndarray, sar: float, size: tuple[int, int] = (72, 48)) -> None:
+        info = decode.VideoInfo(duration=1.0, fps=10.0, width=size[0], height=size[1], sar=sar)
+        monkeypatch.setattr(decode, "probe", lambda _path: info)
+        monkeypatch.setattr(decode, "frame_at", lambda _path, _t: frame)
+
+    def test_stretches_stored_pixels_to_the_display_aspect(self, monkeypatch, tmp_path):
+        self._install(monkeypatch, np.zeros((48, 72, 3), np.uint8), sar=32 / 27)
+        out = generate_video_thumbnail_from_file(tmp_path / "clip.mp4")
+        assert out is not None
+        assert _thumb_size(out) == (85, 48)
+
+    def test_square_pixels_keep_the_frame_aspect(self, monkeypatch, tmp_path):
+        self._install(monkeypatch, np.zeros((48, 72, 3), np.uint8), sar=1.0)
+        out = generate_video_thumbnail_from_file(tmp_path / "clip.mp4")
+        assert out is not None
+        assert _thumb_size(out) == (72, 48)
+
+    def test_crops_in_stored_pixels_then_stretches(self, monkeypatch, tmp_path):
+        # The box is in stored pixels: 72x36 of picture, shown at 85x36.
+        self._install(monkeypatch, np.zeros((48, 72, 3), np.uint8), sar=32 / 27)
+        out = generate_video_thumbnail_from_file(tmp_path / "clip.mp4", crop_box=[0, 6, 72, 42])
+        assert out is not None
+        assert _thumb_size(out) == (85, 36)
+
+    def test_a_quarter_turned_frame_takes_the_reciprocal(self, monkeypatch, tmp_path):
+        # Stored 72x48 at SAR 4:3 displays at 96x48. frame_at autorotates, so a
+        # quarter turn hands back 48x72, whose pixels are 3:4: shown at 36x72.
+        self._install(monkeypatch, np.zeros((72, 48, 3), np.uint8), sar=4 / 3)
+        out = generate_video_thumbnail_from_file(tmp_path / "clip.mp4")
+        assert out is not None
+        assert _thumb_size(out) == (36, 72)
+
+    def test_the_stretched_frame_still_fits_the_thumbnail(self, monkeypatch):
+        self._install(monkeypatch, np.zeros((256, 256, 3), np.uint8), sar=2.0, size=(256, 256))
+        out = generate_video_thumbnail(b"x")
+        assert out is not None
+        assert _thumb_size(out) == (128, 64)
+
+
+# ---------------------------------------------------------------------------
 # Seek-time clamping (_seek_time)
 # ---------------------------------------------------------------------------
 

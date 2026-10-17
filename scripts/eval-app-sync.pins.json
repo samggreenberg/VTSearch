@@ -58,6 +58,10 @@
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
   },
+  "progress.eval_cached_models": {
+    "app": "8edf8f0a3acbd227223f3c737f2299057d38883ff1f142270d8cbf1748cfc00f",
+    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
+  },
   "progress.eval_geometry": {
     "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
     "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
@@ -67,12 +71,16 @@
     "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
   },
   "progress.span_status": {
-    "app": "b71a2dafe924d31d47cb7bf0e292f900559bb5c1b4329b9318841b176577bd02",
+    "app": "7ceccf38877df003f38958e91e71ebb167fa4831d91dc22cfaa59dbd562e63c9",
     "harness": "943c601eab9f7b60b323015d29c3e3e9da6b54edcc17c0d4ceffee3e287530cd"
   },
   "progress.stable_status": {
     "app": "1c90ae2a074e29f58163986c6da63b5cc7b68588ca574393d13334146cbe1354",
     "harness": "107b8ec9007651c51bec2b4e30649d2013de40510615bf022965aaf66df6ac19"
+  },
+  "progress.step_stability": {
+    "app": "5ad8df5e622e6e7c23d408dbaaeb7dc9a81be35f1ffde40e4db48b3e9d7223e4",
+    "harness": "1574f6f0889a2b5274b75c53e6cd5fa430a2090089c89e4c5a0fcc9c2fccce69"
   },
   "thresholds.balance_default": {
     "app": "15f91c543aa7ddff60f9cd0dfaeb5cb31f4d92be569dc7c111a172fb4f7ef46a",

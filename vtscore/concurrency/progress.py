@@ -239,7 +239,7 @@ class ProgressTracker:
 
         Uses per-step weights when :meth:`set_step_weights` has supplied a list
         matching ``total_steps`` (so phases known to dominate wall-clock time —
-        embedding, MLP training — get a proportionally larger slice of the
+        embedding, head training — get a proportionally larger slice of the
         bar), otherwise falls back to equal weight per step::
 
             weighted: (Σ weights[:s-1] + weights[s-1] * within) / Σ weights

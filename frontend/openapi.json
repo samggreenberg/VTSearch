@@ -1778,6 +1778,29 @@
         ],
         "type": "object"
       },
+      "DatasetCoverageAtlasStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_build_threshold": {
+            "description": "Item count above which loading leaves the atlas unbuilt.",
+            "type": "integer"
+          },
+          "building": {
+            "description": "Whether an on-demand build (POST .../coverage-atlas) is running.",
+            "type": "boolean"
+          },
+          "built": {
+            "description": "Whether the dataset has a coverage atlas.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto_build_threshold",
+          "building",
+          "built"
+        ],
+        "type": "object"
+      },
       "DatasetDomainShiftResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2220,6 +2243,11 @@
           "clipper": {
             "type": "string"
           },
+          "coverage_atlas": {
+            "$ref": "#/components/schemas/DatasetCoverageAtlasStatus",
+            "description": "The dataset's coverage-atlas state; null when the dataset is not loaded.",
+            "nullable": true
+          },
           "created_at": {
             "nullable": true
           },
@@ -2273,6 +2301,7 @@
         },
         "required": [
           "clipper",
+          "coverage_atlas",
           "created_by",
           "embedder",
           "file_type_counts",
@@ -5974,6 +6003,13 @@
             },
             "type": "array"
           },
+          "clip_box_frame": {
+            "description": "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. On an anamorphic video the player reports display pixels, so it scales the box by this before cropping. Absent on a box recorded without one, which is used as is.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "clip_end": {
             "type": "number"
           },
@@ -8423,6 +8459,13 @@
             },
             "type": "array"
           },
+          "clip_box_frame": {
+            "description": "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. On an anamorphic video the player reports display pixels, so it scales the box by this before cropping. Absent on a box recorded without one, which is used as is.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "clip_end": {
             "type": "number"
           },
@@ -8973,7 +9016,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoFind detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoFind\n(``POST /api/datasets/registry/<dataset_id>/autofind``); both run through\n:mod:`vtsearch.autofind`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's head on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoFind detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoFind\n(``POST /api/datasets/registry/<dataset_id>/autofind``); both run through\n:mod:`vtsearch.autofind`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -11017,7 +11060,7 @@
         }
       ],
       "post": {
-        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch.",
+        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch; calling it\nwhile a build is running returns that build's ``task_id`` and starts\nnothing.",
         "operationId": "build_dataset_coverage_atlas",
         "responses": {
           "200": {
@@ -11639,7 +11682,7 @@
     },
     "/api/detectors/combine": {
       "post": {
-        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry*; no source's\nlabelset-source binding carries over (it follows the deployment default,\nif any), and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
+        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry*; no source's\nlabelset-source binding carries over (it follows the deployment default,\nif any), and the threshold/head\nare computed later when the detector is activated against a dataset.",
         "operationId": "combine_detectors",
         "requestBody": {
           "content": {
@@ -12118,7 +12161,7 @@
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).",
+        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {
@@ -12212,7 +12255,7 @@
         }
       ],
       "post": {
-        "description": "The detector's MLP is (re)trained from its on-disk labelset in the active\ndataset's embedder space - exactly as Find does - then serialised to an ONNX\nscorer and zipped with a manifest and README.  No embeddings or raw media\nare written; only the trained classifier, the embedder name, and the\nthreshold travel in the bundle.",
+        "description": "The detector's head is (re)trained from its on-disk labelset in the active\ndataset's embedder space - exactly as Find does - then serialised to an ONNX\nscorer and zipped with a manifest and README.  No embeddings or raw media\nare written; only the trained classifier, the embedder name, and the\nthreshold travel in the bundle.",
         "operationId": "export_portable_bundle",
         "responses": {
           "400": {
@@ -12500,7 +12543,7 @@
         }
       ],
       "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh head is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "import_labels_into_detector",
         "responses": {
           "default": {
@@ -12698,7 +12741,7 @@
         }
       ],
       "post": {
-        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.\n\nAn optional ``provenance`` block records how the element was surfaced,\ndefaulting to ``{\"flow\": \"labelset_review\"}`` - this route is the\ndashboard's review of already-saved labels, not a draw off any ranking.\nIt is written only when the label actually flips.",
+        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so head\nretraining and learned-sort see the change.\n\nAn optional ``provenance`` block records how the element was surfaced,\ndefaulting to ``{\"flow\": \"labelset_review\"}`` - this route is the\ndashboard's review of already-saved labels, not a draw off any ranking.\nIt is written only when the label actually flips.",
         "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
@@ -12850,7 +12893,7 @@
     },
     "/api/eval/train-and-score": {
       "post": {
-        "description": "The work walks the full ``label_history`` retraining a small MLP at\nevery step, which used to block every other request on the gthread\npool.  We now run it on a background daemon thread and return a\n``job_id``; clients poll ``/api/eval/train-and-score/result`` for the\nmetric data; the ``eval`` SSE channel on ``/api/events`` carries\nlive progress.\n\nA signature cache keyed by ``(metric, history, votes, dataset,\ndetector)`` short-circuits identical re-runs.\n\nTests can pass ``{\"wait\": true}`` to block until the job completes.",
+        "description": "The work walks the full ``label_history``, scoring every media with\neach step's head, which would block every other request on the gthread\npool, so it runs on a background daemon thread and returns a\n``job_id``; clients poll ``/api/eval/train-and-score/result`` for the\nmetric data; the ``eval`` SSE channel on ``/api/events`` carries\nlive progress.\n\nA signature cache keyed by ``(metric, history, votes, dataset,\ndetector)`` short-circuits identical re-runs.\n\nTests can pass ``{\"wait\": true}`` to block until the job completes.",
         "operationId": "eval_train_and_score",
         "requestBody": {
           "content": {
@@ -13537,7 +13580,7 @@
     },
     "/api/find/corrections-to-detector": {
       "post": {
-        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media) and the registry's\ntraining counters are refreshed.  The cached MLP is invalidated so the next\nscoring pass retrains from the merged labelset.\n\nThe current Find session is deliberately *not* re-scored or reset: its\nscores, queue, votes, and verification stay pinned to the detector version\nthat produced them, so the displayed evaluation (and ``GET /api/find/stats``)\nkeeps showing the previous detector's results.  That evaluation is now out of\ndate relative to the retrained detector, which ``find_eval_stale`` records so\nthe Stats note can say so; the retrained detector takes effect the next time\nthe dataset is scored.",
+        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media) and the registry's\ntraining counters are refreshed.  The cached head is invalidated so the next\nscoring pass retrains from the merged labelset.\n\nThe current Find session is deliberately *not* re-scored or reset: its\nscores, queue, votes, and verification stay pinned to the detector version\nthat produced them, so the displayed evaluation (and ``GET /api/find/stats``)\nkeeps showing the previous detector's results.  That evaluation is now out of\ndate relative to the retrained detector, which ``find_eval_stale`` records so\nthe Stats note can say so; the retrained detector takes effect the next time\nthe dataset is scored.",
         "operationId": "find_corrections_to_detector",
         "responses": {
           "200": {
@@ -13810,7 +13853,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Train MLP on external media files from a label file, then sort all medias.",
+        "summary": "Train a head on external media files from a label file, then sort all medias.",
         "tags": [
           "sorting"
         ]
@@ -14001,7 +14044,7 @@
     },
     "/api/labeling-status": {
       "get": {
-        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``, plus a\n``stale`` flag.\n\nThe frontend polls this every 2 s during labeling.  When the per-step\ncache already covers the full ``label_history`` the status is computed\ninline (cheap: cached-model forward passes over the small labeled set).\nWhen the cache is *behind* - the common case on the first poll after a new\nvote, or after a polarity flip truncated the cache - advancing it would\nretrain one-or-more MLPs and score every unlabeled media, so we return the\nlast-computed snapshot immediately with ``stale = true`` and defer the\nadvancement to a background worker (issue #2397).\n\n``stop_rule`` names what ends labeling.  ``\"lights\"`` is Smart, Stable and\nSpan all green, or (#4878) the labels line's own expected F-beta at the\ndetector's balance reaching ``STOP_LEVEL``: the ``level`` readout, which the\nfrontend's phase machine reads beside the lights.  A document (tiled\nstructural) dataset answers ``\"dry_run\"`` instead, with the ``dry_run``\nreadout and the three lights ``off`` (#4488).",
+        "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``, plus a\n``stale`` flag.\n\nThe frontend polls this every 2 s during labeling.  When the per-step\ncache already covers the full ``label_history`` the status is computed\ninline (cheap: cached-model forward passes over the small labeled set).\nWhen the cache is *behind* - the common case on the first poll after a new\nvote, or after a polarity flip truncated the cache - advancing it would\nscore every media with each new step's head (the one that step's sort\ntrained; the cache trains none of its own), so we return the\nlast-computed snapshot immediately with ``stale = true`` and defer the\nadvancement to a background worker (issue #2397).\n\n``stop_rule`` names what ends labeling.  ``\"lights\"`` is Smart, Stable and\nSpan all green, or (#4878) the labels line's own expected F-beta at the\ndetector's balance reaching ``STOP_LEVEL``: the ``level`` readout, which the\nfrontend's phase machine reads beside the lights.  A document (tiled\nstructural) dataset answers ``\"dry_run\"`` instead, with the ``dry_run``\nreadout and the three lights ``off`` (#4488).",
         "operationId": "labeling_status_indicator",
         "responses": {
           "200": {

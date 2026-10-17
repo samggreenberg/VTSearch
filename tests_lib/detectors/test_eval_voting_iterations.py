@@ -240,7 +240,7 @@ class TestLabelsetErrorCosts:
 
 class TestSimulateVotingIterations:
     # Shape/plumbing tests use small media pools and ``calibrate_count=1``:
-    # each simulated voting step trains an MLP and calibrates per split, so a
+    # each simulated voting step trains a head and calibrates per split, so a
     # full-size sweep costs seconds for assertions that only look at row
     # structure.  Behavioral tests (cost decrease, inclusion sensitivity)
     # keep the full sweep they actually measure.
@@ -672,7 +672,7 @@ def _patch_media(media_id, positive, *, category, with_box=True):
     """A synthetic patch-embedder media (a raw ``patch_grid``).
 
     Positive media have grid cells pointing along ``+e0`` and a ground-truth
-    box; negatives point along ``-e0`` and carry no box.  Separable so the MLP
+    box; negatives point along ``-e0`` and carry no box.  Separable so the head
     trains cleanly without flakiness.
     """
     rng = np.random.default_rng(media_id)

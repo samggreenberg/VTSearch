@@ -761,6 +761,12 @@ histogram is uninformative — every item unknown — and the dataset happens to
 loaded, the endpoint recounts it from the in-memory medias and writes the repair
 back to the registry.
 
+`coverage_atlas` is `null` when the dataset is not loaded (the atlas lives only
+in memory), else `{"built", "building", "auto_build_threshold"}`: whether the
+loaded dataset has a coverage atlas, whether an on-demand
+[build](#build-coverage-atlas) is running, and the item count above which
+loading leaves the atlas unbuilt. The Stats window offers the build from it.
+
 404 if the dataset does not exist.
 
 ### Dataset duplicates
@@ -820,6 +826,11 @@ already-loaded dataset. Progress streams on the `loading-tasks` channel of
 under the returned `task_id`. No body.
 
 → `{"ok": true, "message": "...", "task_id": "_atlas_abc12345"}`
+
+A request while a build is already running returns that build's `task_id` and
+starts nothing. The [stats](#dataset-statistics) response's `coverage_atlas`
+reports whether the dataset has an atlas, and the Stats window's **Build**
+button calls this route.
 
 400 if the dataset isn't loaded; 403 if access is denied; 404 if it doesn't exist.
 

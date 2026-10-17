@@ -19,9 +19,9 @@ it:
 * :mod:`~vtscore.config.processor_backend` - which ``transformers``
   image-processor implementation runs, and on what device.  Reads
   :mod:`~vtscore.config.device`.
-* :mod:`~vtscore.config.core_config` - :class:`CoreConfig` and the app-side
-  builder hook.  Reads the projection defaults from
-  :mod:`~vtscore.config.runtime`.
+* :mod:`~vtscore.config.core_config` - :class:`CoreConfig`, :func:`get_setting`
+  and the hooks a host installs to answer it.  Reads the projection defaults
+  from :mod:`~vtscore.config.runtime`.
 
 Everything public is re-exported here, so ``vtscore.config.X`` resolves exactly
 as it did when this was one module.  **Two things the split does change**, both
@@ -58,7 +58,11 @@ from types import ModuleType
 from vtscore.config.core_config import (
     DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL,
     CoreConfig,
+    get_setting,
+    redirect_settings_path,
     register_core_config_builder,
+    register_setting_getter,
+    register_settings_path_redirect,
 )
 from vtscore.config.device import (
     DEVICE,
@@ -155,7 +159,11 @@ from vtscore.config.runtime import (
 __all__ = [
     "DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL",
     "CoreConfig",
+    "get_setting",
+    "redirect_settings_path",
     "register_core_config_builder",
+    "register_setting_getter",
+    "register_settings_path_redirect",
     "DEVICE",
     "EMBED_PRECISION",
     "embed_autocast_dtype",
@@ -256,8 +264,9 @@ def _reload_all() -> ModuleType:
     tests that exercise an env var go through here instead.
 
     Reloading resets module state as well as constants - notably
-    ``core_config._core_config_builder`` drops back to ``None``, exactly as a
-    whole-module reload always has.  Callers that need the session's state back
+    ``core_config._core_config_builder`` drops back to ``None`` and
+    ``core_config._setting_getters`` to empty, exactly as a whole-module reload
+    always has.  Callers that need the session's state back
     afterwards must snapshot and restore each submodule's ``__dict__``, not just
     this package's.
     """

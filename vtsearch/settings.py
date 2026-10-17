@@ -1338,7 +1338,7 @@ def get_autofind_detectors() -> list[str]:
     """Return the current user's list of detector names flagged for AutoFind.
 
     Each name maps to a JSON file under ``data/detectors/``; scoring resolves
-    the labelset's origins, re-embeds, trains an MLP, and applies it to the
+    the labelset's origins, re-embeds, trains a head, and applies it to the
     loaded dataset. Per-user (with a read-through to the server file for the
     built-in "default" user; see :func:`_read_value`).
     """

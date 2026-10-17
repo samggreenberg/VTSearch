@@ -109,6 +109,14 @@ describe('VideoPlayerComponent', () => {
       expect(component.viewBox()).toBe('inset(120px 60px 60px 100px)');
     });
 
+    it('scales a box measured on stored pixels into an anamorphic frame', async () => {
+      // A 720×480 DVD rip with SAR 32:27: the server decoded 720×480, and the
+      // browser reports 853×480 (#5032). Unscaled, the box would also cut the
+      // right 133 pixels off the picture.
+      await loadAt({ ...mockMedia, clip_box: [0, 60, 720, 420], clip_box_frame: [720, 480] }, 853, 480);
+      expect(component.viewBox()).toBe('inset(60px 0px 60px 0px)');
+    });
+
     it('leaves a unit without a clip_box uncropped', async () => {
       await loadAt(mockMedia, 640, 480);
       expect(component.viewBox()).toBeNull();

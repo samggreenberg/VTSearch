@@ -29,9 +29,9 @@ cached extraction directory.
 Extraction is cached under :data:`~vtscore.config.DATA_DIR` keyed by the
 archive's path, size, and mtime, so re-imports and later resolves reuse the
 same directory (and a replaced archive busts the cache).  Extracted contents
-are source files, not embeddings/MLPs, so caching them on disk is consistent
-with the existing ``http_archive`` resolve cache and the dataset-pickle
-exception to the no-persist rule.
+are source files, not embeddings or trained heads, so caching them on disk is
+consistent with the existing ``http_archive`` resolve cache and the
+dataset-pickle exception to the no-persist rule.
 """
 
 from __future__ import annotations

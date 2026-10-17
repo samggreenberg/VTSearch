@@ -122,9 +122,9 @@ class TestSafeGmmVariantRows:
         variant = [r for r in rows if r["gmm_variant"] != ""]
         assert base and variant
         # The production operating point is the base row; its provenance names
-        # the shipped estimator (the fold-anchored fit, or the blend fallback
-        # when no fold produced one), and it records the pre-fusion conformal
-        # cut alongside.
+        # the estimator that drew its line with no balance (the fold-anchored
+        # fit, or the blend fallback when no fold produced one), and it records
+        # the pre-fusion conformal cut alongside.
         for r in base:
             assert r["threshold_provenance"].startswith("fold_anchored[") or r["threshold_provenance"] == "gmm_blend"
             assert np.isfinite(r["xcal_threshold"])
@@ -136,8 +136,8 @@ class TestSafeGmmVariantRows:
         """The harness must not deviate from the app at the shipped settings.
 
         The arm named by the ``FOLD_ANCHOR_*`` constants *is* the production
-        estimator, so its threshold has to equal the base row's - the value the
-        step actually shipped - at every step.  Reading the arm's settings off
+        estimator, so its threshold has to equal the base row's - the cut the
+        step drew with no balance - at every step.  Reading the arm's settings off
         those constants rather than restating them is what keeps this honest
         when the shipped operating point moves (κ=1/``rate`` → κ=0.3/``mid`` →
         κ=0.3/``mid_tilt``).

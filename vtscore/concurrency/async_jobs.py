@@ -203,13 +203,13 @@ class AsyncJob:
 # Cooperative cancellation of *running* jobs
 # ---------------------------------------------------------------------- #
 #
-# The heavy work a job performs (MLP epoch loops in ``train_model``, eval
+# The heavy work a job performs (head fits in ``train_model``, eval
 # retraining over label history) is GIL-bound Python/torch, so cancelling
 # the parked pending slot - which this module already does - does nothing
 # for a job that is *already running*.  To make cancel real, the running
 # job is bound to its worker thread here and the deep compute loops poll
-# :func:`check_job_cancelled` at their natural boundaries (epoch, eval
-# step).  When the job's ``cancel_event`` is set, the next poll raises
+# :func:`check_job_cancelled` at their natural boundaries (a fit or an
+# epoch, an eval step).  When the job's ``cancel_event`` is set, the next poll raises
 # :class:`CancelledError`, which unwinds the training/eval stack and is
 # caught in :meth:`JobManager._run_inner` to mark the job ``cancelled``.
 #

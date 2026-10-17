@@ -852,7 +852,7 @@ def example_sort():
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
 def label_file_sort():
-    """Train MLP on external media files from a label file, then sort all medias.
+    """Train a head on external media files from a label file, then sort all medias.
 
     On a patch dataset each result also carries the ``best_region`` box of the
     region that drove its score, matching the cosine- and learned-sort paths.

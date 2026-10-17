@@ -2,7 +2,7 @@
 
 Covers the pure-numpy parts end-to-end (no model weights / no GPU
 required) and verifies the integration shapes that the loader,
-similarity helper, and MLP scoring code rely on.
+similarity helper, and head scoring code rely on.
 
 Ingest stores only the raw ``(H, W, D)`` ``patch_grid``; there is no region
 tree (#2886).  The score-row stack every path shares - image-level vector at

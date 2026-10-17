@@ -28,6 +28,7 @@ from vtscore.embedding.media_vectors import init_embeddings, media_embedder_name
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import MediaResponse
+from vtscore.media.provenance import CLIP_WINDOW_FIELDS
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
 from vtscore.datasets.vote_provenance import normalize_provenance
@@ -665,7 +666,7 @@ def batch_medias(body: dict):
         # the offsets still reach the UI as provenance via ``custom_metadata``
         # ("Clip Start" / "Clip End") from ``display_metadata`` above.
         audio_serves_slice = media_type_id == "audio" and archive_member_ref(c) is None
-        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
+        for clip_key in CLIP_WINDOW_FIELDS:
             if clip_key not in c:
                 continue
             if audio_serves_slice and clip_key in ("clip_start", "clip_end"):

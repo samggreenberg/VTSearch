@@ -318,7 +318,7 @@ def import_labels_into_detector(name: str, importer_name: str):
 
     When the detector is loaded into memory, the new labels are also resolved
     against the loaded dataset's medias, applied to the detector's votes, and
-    a fresh MLP is trained with a cross-validated threshold, all inside the
+    a fresh head is trained with a cross-validated threshold, all inside the
     loaded detector context.
 
     Plugin-dependent body shape: the accepted keys are the named
@@ -372,7 +372,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     if resolved > 0:
         msg += f" Resolved {resolved} into the loaded detector."
     if trained:
-        msg += " Retrained MLP."
+        msg += " Retrained the detector."
     return jsonify(
         {
             "applied": applied,
@@ -653,7 +653,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     ``"good"`` / ``"bad"`` set the element's label (a re-assert of the
     current label is an idempotent no-op), ``"remove"`` drops the element.
     When the element resolves into the active dataset, the detector's
-    in-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP
+    in-memory ``good_votes`` / ``bad_votes`` are kept in sync so head
     retraining and learned-sort see the change.
 
     An optional ``provenance`` block records how the element was surfaced,
@@ -700,7 +700,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
         _write_detector(path, data)
 
     # Mirror into in-memory votes when the element resolves into the active
-    # dataset, so the MLP and learned-sort stay aligned with the labelset.
+    # dataset, so the head and learned-sort stay aligned with the labelset.
     # ``set_vote`` takes the same absolute target ("remove" → "none"), so the
     # mirror stays idempotent under stale-tab duplicates.
     if cid_before is not None:

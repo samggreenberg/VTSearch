@@ -56,9 +56,11 @@ Each of these has a hook. Install only the ones you need.
 
 ### Hook 1: `register_core_config_builder`
 
-By default, `CoreConfig.from_settings()` raises `RuntimeError` - the
-library refuses to silently fall back to a guess. Install a builder that
-constructs a `CoreConfig` from your config source:
+Library code reads its settings with `vtscore.config.get_setting(name)`,
+and by default a required one (`detectors_dir`, `calibrate_count`, …)
+raises `RuntimeError` - the library refuses to silently fall back to a
+guess. Install a builder that constructs a `CoreConfig` from your config
+source; `get_setting` reads each knob off what it returns:
 
 ```python
 from pathlib import Path
@@ -66,8 +68,8 @@ from vtscore.config import CoreConfig, register_core_config_builder
 
 def _build_core_config(settings_path=None) -> CoreConfig:
     # Your config source - env vars, settings JSON, database row, …
-    # `settings_path` is whatever the caller passed to
-    # `CoreConfig.from_settings(...)`; ignore it if you have nowhere to put it.
+    # `settings_path` is the CLI's `--settings` file when one is redirected,
+    # else None; ignore it if you have nowhere to put it.
     return CoreConfig(
         data_dir=Path("/var/lib/myapp/data"),
         saved_datasets_dir=Path("/var/lib/myapp/data/datasets"),
@@ -85,10 +87,16 @@ def _build_core_config(settings_path=None) -> CoreConfig:
 register_core_config_builder(_build_core_config)
 ```
 
-Call this **once at startup**, before any library code that calls
-`CoreConfig.from_settings()`. The builder is process-wide, and it is called
+Call this **once at startup**, before any library code reads a setting.
+The builder is process-wide and called on every read of a knob, so keep it
+cheap (return a config built once, or cache your source). It is called
 with one positional argument - a builder declared as `def _build()` raises
-`TypeError` the first time someone passes a settings path.
+`TypeError`.
+
+A host whose settings change at runtime, per user or per request, can
+instead register a getter per knob with
+`register_setting_getter(name, fn)`; a knob's getter wins over the
+builder. That is what the VTSearch app does.
 
 ### Hook 2: `register_*_context_resolver`
 
@@ -437,8 +445,9 @@ the `Authorization` header. To port the idea to your own app:
   it with `set_login_provider()`. Screen client-supplied usernames with
   `is_safe_username()` - they become path components.
 - Build a per-user `CoreConfig` in your `register_core_config_builder`
-  callback - point `data_dir` / `saved_datasets_dir` / `detectors_dir`
-  at the per-user paths.
+  callback (or register per-user `register_setting_getter` getters) -
+  point `data_dir` / `saved_datasets_dir` / `detectors_dir` at the
+  per-user paths.
 - Build a per-user `DatasetContext` / `DetectorContext` in your
   resolver hooks.
 

@@ -20,8 +20,9 @@ from vtscore.detectors import portable_bundle as pb
 from vtscore.detectors.training import serialize_weights
 from vtscore.training.mlp import LINEAR_HEAD, build_model
 
-# The exporter has to handle both heads: the linear (logistic) head production
-# trains (#2790) and the MLP the eval harness still builds.  Parameterising on
+# The exporter has to handle both heads: the linear head production trains
+# (the SVM started from the Goods' centroid, #4785) and the MLP the eval
+# harness still builds.  Parameterising on
 # ``hidden`` runs every graph test over both shapes.
 HEADS = pytest.mark.parametrize("hidden", [LINEAR_HEAD, 8], ids=["linear", "mlp"])
 
