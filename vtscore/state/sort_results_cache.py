@@ -8,7 +8,7 @@ its full descending ``results`` list server-side and hand the client an opaque
 ``GET /api/sort/page?token=…``.
 
 Only in-memory, and only the lightweight ranking rows (``{"id", "score"}`` or
-``{"id", "similarity"[, "best_region"]}``) — never embeddings or MLP weights, so
+``{"id", "similarity"[, "best_region"]}``) — never embeddings or head weights, so
 this stays within the "No Persisted Vectors or MLPs" rule (nothing is
 serialised; the list is re-derived on the next sort).  The cache is bounded to
 the most recent ``max_entries`` sorts and to ``max_rows`` rows across them

@@ -1,7 +1,7 @@
 """Multi-dataset, multi-detector Find routes.
 
 Run selected detectors against selected datasets and return merged hit/miss
-results.  Each detector's MLP is sourced from its in-memory
+results.  Each detector's head is sourced from its in-memory
 :class:`~vtsearch.state.DetectorContext` (when loaded) or trained on demand
 from its on-disk labelset - through
 :func:`~vtscore.detectors.labelset_training.labelset_train_and_score`, the same
@@ -209,11 +209,11 @@ def _build_detector_config(d: dict) -> dict:
     Multi-dataset Find loads each dataset's medias on demand, so the
     embedder check that decides live vs cold has to happen per (detector,
     dataset) pair, not once at config-build time.  We therefore carry
-    *both* the live MLP (when one is cached on the detector context) and
+    *both* the live head (when one is cached on the detector context) and
     the on-disk labelset (when present) so the per-dataset dispatcher can
     pick safely (see :func:`_select_scorer`).
 
-    The live MLP is carried only while it was trained from the labelset on
+    The live head is carried only while it was trained from the labelset on
     disk (:func:`~vtscore.detectors.model_loading.cached_head_is_current`); a
     head left over from before the labels changed is dropped here, and the
     detector scores cold from its current labels (issue #4204).
@@ -286,13 +286,13 @@ def _find_score_embedder(dc: dict, temp_medias: dict[int, dict]) -> str:
 def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
     """Pick ``"live"`` / ``"cold"`` / ``"na"`` for *dc* against *temp_medias*.
 
-    The cached MLP can only be reused when its embedder matches the space the
+    The cached head can only be reused when its embedder matches the space the
     dataset about to be scored resolves to; otherwise the cross-space output is
     silent garbage at best and a ``nn.Linear`` size-mismatch crash at worst
     (H5).  The comparison is against the dataset's *score* embedder for this
     detector's type (:func:`_find_score_embedder`), not its primary vector, so a
     trio dataset whose primary differs from the detector's keying embedder is
-    routed to the live MLP when (and only when) that keying embedder matches.
+    routed to the live head when (and only when) that keying embedder matches.
     When they don't match, fall back to the cold path (which retrains from the
     labelset in that same score embedder), or ``"na"`` if no cold data exists.
 
@@ -405,7 +405,7 @@ def _record_verdicts(
 
 
 def _score_with_live_mlp(dc: dict, rows: ScoringRows, all_ids: list[int], media_results: dict[int, dict]) -> None:
-    """Score with an already-trained MLP from a :class:`DetectorContext`.
+    """Score with an already-trained head from a :class:`DetectorContext`.
 
     The detector keeps its **own** calibrated cut (``det_ctx.threshold``) rather
     than being re-cut against this dataset: the head is fixed, so its threshold
@@ -660,7 +660,7 @@ def _score_dataset(
     # what a detector scores a media at - not an image-level matrix stacked
     # here.  Both scorers read them at that one geometry, because both now score
     # a head the app's own training produced: the live path reuses the cached
-    # MLP, and the cold path re-derives it through `labelset_train_and_score`,
+    # head, and the cold path re-derives it through `labelset_train_and_score`,
     # which floods a Bad label's patch rows as negatives and calibrates on the
     # max-pooled distribution (issue #3525).  Scoring either one's image-level
     # row alone would read a systematically *lower* quantity than the cut it is

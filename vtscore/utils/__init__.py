@@ -19,6 +19,6 @@ Remaining here:
   packages (``ultralytics``, ``PyMuPDF``), which a default install has but an
   ``VTSEARCH_NO_AGPL=1`` install deliberately lacks.
 - :mod:`vtscore.utils.scores` - ``sigmoid_to_finite_scores``/``finite_or`` for
-  JSON-safe MLP scoring (no NaN/Infinity leaks to strict clients).
+  JSON-safe head scoring (no NaN/Infinity leaks to strict clients).
 - :mod:`vtscore.utils.synthetic` - Synthetic media generators for the offline demo importer.
 """

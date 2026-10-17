@@ -251,7 +251,7 @@ class TestPush:
             flush_pending_label_syncs()
             assert "threshold" not in json.loads(remote.read_text())["detector_meta"]
 
-            ctx.model = object()  # stands in for a trained MLP
+            ctx.model = object()  # stands in for a trained head
             ctx.threshold = 0.31
             _rewrite_labels("thresholded", [GOOD_A, BAD_B, GOOD_C])
             flush_pending_label_syncs()

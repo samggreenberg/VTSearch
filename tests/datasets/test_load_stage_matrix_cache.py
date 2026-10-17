@@ -112,7 +112,7 @@ class TestDropNoneEmbeddingsStage:
 
     Audit M11 was framed as "stale media when some embeddings are None"
     via silent zip truncation; the real symptom under numpy 2.x is that
-    a None embedding becomes a NaN row, propagates through the MLP, and
+    a None embedding becomes a NaN row, propagates through the head, and
     forces an always-False threshold compare so the media silently lands
     in negative_hits with a NaN score (and ``NaN`` in the JSON response).
     The drop stage in ``_run_origin_load_in_background`` ensures None

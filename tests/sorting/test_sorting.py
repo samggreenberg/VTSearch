@@ -90,7 +90,8 @@ class TestTrainAndScore:
         assert avg_good > avg_bad
 
     def test_trains_the_linear_head(self):
-        """The vote path's detector is the linear (logistic) head, not the MLP.
+        """The vote path's detector is a linear head (the SVM started from the
+        Goods' centroid, one ``Linear``), not the MLP.
 
         Pins the #2790 swap on the pipeline users actually drive: a revert to
         ``_auto_hidden_dim`` would put back a ReLU and a second Linear here.
@@ -312,7 +313,7 @@ class TestTrainModelEpochs:
 class TestCalibrationAtTinyLabelCounts:
     """Calibration runs at every label count, safe thresholds on or off.
 
-    The shipped fold-anchored estimator anchors on the fold models' held-out
+    The fold-anchored estimator anchors on the fold models' held-out
     scores, so the folds are an *input* to it - the pre-fusion skip below the
     blend schedule's floor (where the schedule multiplied the cross-cal cut by
     zero) has nothing left to save."""

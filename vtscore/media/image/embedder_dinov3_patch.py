@@ -2,7 +2,7 @@
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
 image.  ~30× slower per image and ~100× more storage than the
-single-vector variant, but enables region similarity, region-aware MLP
+single-vector variant, but enables region similarity, region-aware detector
 scoring, and (in v2) region voting.
 
 For the single-vector variant of the same backbone see

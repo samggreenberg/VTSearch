@@ -815,7 +815,7 @@ def get_region_matrix_for_snap(
     array shapes and dtype.  When *snap*'s key set matches the active
     :class:`DatasetContext`'s medias (the common per-vote case), the matrix
     is built once and cached on the context, then reused across subsequent
-    votes; only the MLP weights change between votes, never the patch
+    votes; only the head's weights change between votes, never the patch
     vectors, so the cache is valid until the media-id set changes.  A
     cross-dataset / subset *snap* builds fresh without populating the cache.
 
@@ -900,7 +900,7 @@ def segmented_max_pool(
 ) -> tuple[list[float], list[int]]:
     """Max-pool per-row scores down to one score + winning region per media.
 
-    Shared by the MLP scoring path (:func:`vtscore.detectors.training._score_all_media`)
+    Shared by the head scoring path (:func:`vtscore.detectors.training._score_all_media`)
     and the region-aware cosine sort (:func:`vtscore.training.region_similarity.cosine_sort_with_boxes`),
     both of which flatten every ``(media, region)`` pair into one ``(R,)`` score
     vector (via :func:`get_region_matrix_for_snap`) and need to reduce it back to
