@@ -150,7 +150,7 @@
 
   tbody tr.disabled {
     cursor: not-allowed;
-    opacity: 0.55;
+    opacity: var(--opacity-disabled);
     &:hover { background: none; }
   }
 }
