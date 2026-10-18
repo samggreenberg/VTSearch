@@ -340,6 +340,8 @@ def main(argv: list[str] | None = None) -> int:
     # so it runs style-less: the whole-image path, which is the only one it has.
     styles = cfg.cell_styles(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
+    from vtscore.training.thresholds import labels_line as _LL  # noqa: PLC0415  (the line's defaults, #5040)
+
     common.log(
         f"{cell_progress(idx, len(cells))}: dataset={ds} embedder={emb} "
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
@@ -356,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -390,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.arms_split_rounding import split_rounding
-    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
+    from vtscore.eval.live_threshold_rules import head_count_bads, labels_chances, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -459,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
             head_count_bads(cfg.HEAD_COUNT_BADS),
             split_rounding(cfg.SPLIT_ROUNDING),
             query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
+            labels_chances(cfg.LINE_BAD, cfg.LINE_BOUND_MARGIN),
         ):
             rows = simulate_voting_iterations(
                 medias,
@@ -604,6 +607,8 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
             r["split_rounding"] = cfg.SPLIT_ROUNDING
+            r["line_bad"] = cfg.LINE_BAD or _LL.BAD_COMPONENT
+            r["line_bound_margin"] = cfg.LINE_BOUND_MARGIN if cfg.LINE_BOUND_MARGIN is not None else _LL._BOUND_MARGIN
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
@@ -682,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
     # a run-level knob, so the only other record of which arm a cell belongs to
     # is the directory it was read out of - and a frame that has been
     # concatenated across arms no longer has one.  `split_rounding` (#4864) is
-    # one too.
+    # one too, and so are #5040's chances (`line_bad`, `line_bound_margin`).
     main_cols = [
         *CALIBRATION_COLUMNS,
         "embedder",
@@ -691,6 +696,8 @@ def main(argv: list[str] | None = None) -> int:
         "seed_embedder",
         "calibration_fraction",
         "split_rounding",
+        "line_bad",
+        "line_bound_margin",
         "sim_fraction",
         "stratify_target",
         "exclusion_arm",

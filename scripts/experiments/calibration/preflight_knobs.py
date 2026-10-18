@@ -359,6 +359,23 @@ def probe(C: Any) -> list[str]:
         refuse("split_rounding", "CALIB_SPLIT_ROUNDING", "must be one of %s" % ", ".join(SPLIT_ROUNDINGS))
     elif C.SPLIT_ROUNDING != "nearest":
         rows.append(("split_rounding", C.SPLIT_ROUNDING, "<unset> = nearest, the app's split sizes (#4864)"))
+    # #5040's chances: unset is the app's Bad component (the labels') and counted bound (2x).
+    from vtscore.training.thresholds import labels_line as LL  # noqa: PLC0415
+
+    line_bad = getattr(C, "LINE_BAD", None)
+    if line_bad is not None:
+        if line_bad not in LL.BAD_COMPONENTS:
+            refuse("line_bad", "CALIB_LINE_BAD", "must be one of %s" % ", ".join(LL.BAD_COMPONENTS))
+        elif line_bad != LL.BAD_COMPONENT:
+            rows.append(("line_bad", line_bad, "<unset> = %s, the app's Bad component (#5040)" % LL.BAD_COMPONENT))
+    margin = getattr(C, "LINE_BOUND_MARGIN", None)
+    if margin is not None:
+        if not isinstance(margin, float) or not margin >= 1.0:
+            refuse("line_bound_margin", "CALIB_LINE_BOUND_MARGIN", "must be a number >= 1 (inf: no bound)")
+        elif margin != LL._BOUND_MARGIN:
+            rows.append(
+                ("line_bound_margin", "%g" % margin, "<unset> = %g, the app's counted bound (#5040)" % LL._BOUND_MARGIN)
+            )
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.
     from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415

@@ -430,7 +430,7 @@ def line_test_row(
 
 
 def _snapshot_model(snapshot: Mapping[str, Any], model: Mapping[str, Any]) -> Any:
-    """The snapshot's class model, with its Bads' held-out scores when the snapshot carries its folds (#4490).
+    """The snapshot's class model, with its Bads' held-out scores and spread when the snapshot carries its folds (#4490, #5040).
 
     The JSON keeps the model's scalars; the Bads' scores, which decide whether the
     negatives take the Bads' own shape, travel in the fold arrays.  They are put
@@ -451,7 +451,7 @@ def _snapshot_model(snapshot: Mapping[str, Any], model: Mapping[str, Any]) -> An
     rebuilt = class_score_model([(fs[idx == i], fl[idx == i]) for i in np.unique(idx)])
     if rebuilt is None or abs(rebuilt.mu_pos - cm.mu_pos) > 1e-9 or abs(rebuilt.mu_neg - cm.mu_neg) > 1e-9:
         return cm
-    return replace(cm, neg_logits=rebuilt.neg_logits)
+    return replace(cm, neg_logits=rebuilt.neg_logits, neg_sd=rebuilt.neg_sd)
 
 
 def row_from_snapshot(
