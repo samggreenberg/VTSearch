@@ -632,6 +632,14 @@ LABEL = {
     "good_ssl_no_bound": "Good fitted, no bound",
     "bad_kde_no_bound": "the Bads' density, no bound",
     "both_ssl_no_bound": "both fitted, no bound",
+    "bad_ssl_mean": "Bad fitted: its mean only",
+    "bad_ssl_sd": "Bad fitted: its spread only",
+    "bound_x4": "the bound at 4x",
+    "bad_ssl_no_bound": "Bad fitted, no bound",
+    "bad_ssl_bound_x4": "Bad fitted, the bound at 4x",
+    "bad_ssl_good_own_sd": "Bad fitted + Good's own spread",
+    "bad_ssl_good_own_sd_no_bound": "Bad fitted + Good's own spread, no bound",
+    "good_own_sd_no_bound": "Good's own spread, no bound",
     "post_true": "the true chances (ceiling)",
     "neg_true": "the negatives' own shape (truth)",
     "good_true": "the Good component true (truth)",
@@ -722,18 +730,213 @@ def tables(df: pd.DataFrame, path: str) -> dict[str, pd.DataFrame]:
     return {k: pd.DataFrame(v) for k, v in out.items()}
 
 
+#: The candidates the figures draw, with the ceiling, in the order of their legends.
+SHOW = ("good_own_sd", "good_check", "good_ssl", "bad_kde", "bad_ssl", "bad_ssl_bound_x4", "no_bound", "bound_x4")
+COLOR = {
+    "good_own_sd": "#9ec5f0",
+    "good_check": "#5aa0e6",
+    "good_ssl": "#1b4f8a",
+    "bad_kde": "#c9a227",
+    "bad_ssl": "#2a78d6",
+    "bad_ssl_bound_x4": "#eb6834",
+    "no_bound": "#d62728",
+    "bound_x4": "#f4a6a6",
+    "post_true": "#9467bd",
+}
+
+
+def figures(df: pd.DataFrame, path: str, figdir) -> None:
+    """Per preset over votes: each candidate's gain on the class model's cut, its set against the best, and what it
+    keeps on a corpus with no positives."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+
+    figdir = Path(figdir)
+    figdir.mkdir(parents=True, exist_ok=True)
+    betas = [b for b in PRESETS if b in set(df["beta"])]
+    clicks = [c for c in CLICKS.get(path, ()) if c in set(df["click"])]
+    show = [n for n in SHOW if f"{n}_fbeta" in df] + ["post_true"]
+    fig, axes = plt.subplots(3, len(betas), figsize=(5.4 * len(betas), 11), squeeze=False)
+    for j, b in enumerate(betas):
+        g = df[(df["beta"] == b) & ~df["head_count"]]
+        x = np.array(clicks, dtype=float)
+        for n in show:
+            ls = ":" if n == "post_true" else "-"
+            m, se = map(np.array, zip(*[_by_class(g[g["click"] == c], f"{n}_dF") for c in clicks]))
+            axes[0][j].plot(x, m, ls, marker="o", ms=3, color=COLOR[n], label=LABEL.get(n, n))
+            axes[0][j].fill_between(x, m - se, m + se, color=COLOR[n], alpha=0.12, lw=0)
+            axes[1][j].plot(x, [2 ** g[g["click"] == c][f"{n}_lk"].median() for c in clicks], ls, marker="o", ms=3,
+                            color=COLOR[n])  # fmt: skip
+            if n != "post_true" and f"empty:{n}_kept" in g:
+                axes[2][j].plot(x, [g[g["click"] == c][f"empty:{n}_kept"].mean() for c in clicks], ls, marker="o",
+                                ms=3, color=COLOR[n])  # fmt: skip
+        axes[1][j].plot(x, [2 ** g[g["click"] == c]["today_lk"].median() for c in clicks], "-", marker="o", ms=3,
+                        color="#333333", label="today")  # fmt: skip
+        axes[2][j].plot(x, [g[g["click"] == c]["empty:today_kept"].mean() for c in clicks], "-", marker="o", ms=3,
+                        color="#333333", label="today")  # fmt: skip
+        axes[0][j].axhline(0, color="k", lw=0.8)
+        axes[1][j].axhline(1, color="k", lw=0.8)
+        axes[1][j].set_yscale("log", base=2)
+        axes[2][j].set_yscale("log")
+        titles = (
+            f"beta {b:g}: F-beta gain over today's line, same heads",
+            f"beta {b:g}: set size / the best set's (median)",
+            f"beta {b:g}: images kept on the corpus with no positives (mean)",
+        )
+        for i, t in enumerate(titles):
+            axes[i][j].set_title(t, fontsize=9)
+            axes[i][j].set_xlabel("vote")
+            axes[i][j].grid(alpha=0.3)
+    axes[0][0].legend(fontsize=7)
+    axes[1][0].legend(fontsize=7)
+    fig.suptitle(f"{path}: the class model's cut, each candidate swapped in (dotted: the true chances, the ceiling)",
+                 fontsize=10)  # fmt: skip
+    fig.tight_layout()
+    fig.savefig(figdir / "candidates.png", dpi=110)
+    plt.close(fig)
+
+
+def _find_snapshot(results: list[str], run: str, idx: int, t: int, path: str) -> dict:
+    prefix = {v: k for k, v in PATHS.items()}[path]
+    for res in results:
+        if os.path.basename(os.path.dirname(res.rstrip("/"))) != run:
+            continue
+        npz = os.path.join(res, "cells", f"task_{idx:04d}__testscores.npz")
+        for key, snap in load_snapshots(npz).items():
+            if key.startswith(prefix + "/") and int(snap["t"]) == t:
+                return snap
+    raise KeyError(f"{run} task {idx} t {t}")
+
+
+def cmd_examples(a) -> None:
+    """Literal examples at one preset and click: the arm's median, best and worst sessions against today's line.
+
+    Each row: the withheld half's top (positives green, negatives grey) with today's cut, the arm's and the best;
+    beside it each image's chance of a positive under today's 3-part fit, the arm's and the truth's (isotonic).
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+
+    from vtscore.eval.live_threshold_rules import labels_chances
+    from vtscore.training.thresholds.labels_line import fit_labels_line
+
+    arm = a.arm
+    bad, margin = LIBRARY_ARMS[arm]
+    df = prep(load_passes(a.out))
+    g = df[(df["path"] == a.path) & (df["beta"] == a.beta) & (df["click"] == a.click) & ~df["head_count"]]
+    g = g[g["best_kept"] >= 10].sort_values(f"{arm}_dF")
+    moved = g[g[f"{arm}_dF"].abs() > 1e-9]
+    picks = [("hurt most", moved.iloc[0]), ("median of those it moved", moved.iloc[len(moved) // 2]),
+             ("helped most", moved.iloc[-1])]  # fmt: skip
+    fig, axes = plt.subplots(len(picks), 2, figsize=(13, 3.4 * len(picks)), squeeze=False)
+    rows = []
+    for i, (why, r) in enumerate(picks):
+        s = Snapshot(_find_snapshot(a.results, r["run"], int(r["idx"]), int(r["t"]), a.path))
+        y = s.y.astype(np.int64)
+        lines = {}
+        for name, (b_, m_) in (("today", (None, None)), (arm, (bad, margin))):
+            with labels_chances(b_, m_):
+                line = fit_labels_line(s.orderings() or None, s.sim_scores, s.sim_ids.tolist(), s.labels_dict())
+                assert line is not None
+                lines[name] = line.on_corpus(s.scores)
+        x = _logit(s.scores)
+        best_x = float(np.sort(x)[::-1][int(r["best_kept"]) - 1])
+        cuts = {}
+        from vtscore.training.thresholds.labels_line import corpus_cut
+
+        for name, ln in lines.items():
+            thr = corpus_cut(
+                ln.unvoted_posteriors, ln.unvoted_scores, ln.unvoted_share * ln.unvoted_scores.size, s.beta
+            )
+            cuts[name] = float(_logit([thr])[0])
+        lo = min(*cuts.values(), best_x, float(np.quantile(x[y == 1], 0.1))) - 0.5
+        hi = float(x.max()) + 0.2
+        ax = axes[i][0]
+        bins = np.linspace(lo, hi, 50)
+        ax.hist(x[(y == 0) & (x >= lo)], bins=bins, color="#999999", alpha=0.6, label="withheld negatives")
+        ax.hist(x[(y == 1) & (x >= lo)], bins=bins, color="#2ca02c", alpha=0.8, label="withheld positives")
+        ax.set_yscale("log")
+        ax.set_ylim(0.5, None)
+        ax.axvline(cuts["today"], color="k", lw=1.5, label=f"today's cut ({int(r['today_kept'])} kept)")
+        ax.axvline(cuts[arm], color=COLOR[arm], lw=1.5, label=f"{LABEL[arm]} ({int(r[f'{arm}_kept'])} kept)")
+        ax.axvline(best_x, color="#9467bd", lw=1.5, ls="--", label=f"best cut ({int(r['best_kept'])} kept)")
+        ax.set_title(f"{r['cell']} seed {int(r['seed'])}, vote {int(r['t'])}, beta {a.beta:g}: {why}", fontsize=9)
+        ax.set_xlabel("final model's logit")
+        ax.set_ylabel("images")
+        ax.legend(fontsize=6)
+        ax = axes[i][1]
+        o = np.argsort(x)
+        sel = x[o] >= lo
+        for name, ln, color in (
+            ("today's 3-part fit", lines["today"], "#333333"),
+            (LABEL[arm], lines[arm], COLOR[arm]),
+        ):
+            post = np.interp(x, _logit(ln.unvoted_scores[::-1]), ln.unvoted_posteriors[::-1])
+            ax.plot(x[o][sel], post[o][sel], color=color, label=name)
+        ax.plot(
+            x[o][sel], isotonic_post(x, y.astype(np.float64))[o][sel], color="#9467bd", label="the truth (isotonic)"
+        )
+        for name, c in (("today", "k"), (arm, COLOR[arm])):
+            ax.axvline(cuts[name], color=c, lw=1)
+        ax.axvline(best_x, color="#9467bd", lw=1, ls="--")
+        ax.set_ylim(-0.02, 1.02)
+        ax.set_xlabel("final model's logit")
+        ax.set_ylabel("chance of a positive")
+        ax.legend(fontsize=6)
+        rows.append({
+            "picked as": why, "session": r["cell"], "seed": int(r["seed"]), "vote": int(r["t"]),
+            "kept today / arm / best": f"{int(r['today_kept'])} / {int(r[f'{arm}_kept'])} / {int(r['best_kept'])}",
+            "F today / arm / best": f"{r['today_fbeta']:.2f} / {r[f'{arm}_fbeta']:.2f} / {r['best_fbeta']:.2f}",
+            "chances' sum today / arm / positives": f"{r['today_post_sum']:.0f} / {r[f'{arm}_post_sum']:.0f} / {int(r['n_pos_test'])}",
+            "chance at the best set's edge today / arm": f"{r['today_post_edge']:.2f} / {r[f'{arm}_post_edge']:.2f}",
+        })  # fmt: skip
+    fig.tight_layout()
+    tag = {0.25: "025", 1.0: "1", 4.0: "4"}[float(a.beta)]
+    figdir = Path(a.figs) / a.path
+    figdir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figdir / f"examples_{arm}_b{tag}_vote{a.click}.png", dpi=110)
+    t = pd.DataFrame(rows)
+    print(t.to_string(index=False))
+    if a.docs:
+        (Path(a.docs) / a.path).mkdir(parents=True, exist_ok=True)
+        t.to_csv(Path(a.docs) / a.path / f"examples_{arm}_b{tag}_vote{a.click}.csv", index=False)
+
+
+def load_passes(files: list[str]) -> pd.DataFrame:
+    """Every measure's rows, one per snapshot: the second pass's candidates joined onto the first pass's rows."""
+    frames = [pd.read_csv(f, low_memory=False) for f in files]
+    first = [f for f in frames if "good_ssl_fbeta" in f]
+    second = [f for f in frames if "bad_ssl_bound_x4_fbeta" in f]
+    rest = [f for f in frames if "good_ssl_fbeta" not in f and "bad_ssl_bound_x4_fbeta" not in f]
+    keys = ["run", "idx", "path", "t"]
+    one = pd.concat(first + rest, ignore_index=True) if first or rest else None
+    if not second:
+        return one if one is not None else pd.DataFrame()
+    two = pd.concat(second, ignore_index=True)
+    if one is None:
+        return two
+    extra = [c for c in two if c not in one or c in keys]
+    return one.merge(two[extra], on=keys, how="left")
+
+
 def cmd_report(a) -> None:
     from pathlib import Path
 
-    frames = [pd.read_csv(f, low_memory=False) for f in a.out]
-    df = prep(pd.concat(frames, ignore_index=True))
+    df = prep(load_passes(a.out))
     for path, g in df.groupby("path"):
-        tabs = Path(a.docs or os.path.join(a.out[0], "tables")) / path
+        tabs = Path(a.docs or os.path.join(os.path.dirname(a.out[0]), "tables")) / path
         tabs.mkdir(parents=True, exist_ok=True)
         for name, t in tables(g, path).items():
             t.to_csv(tabs / f"{name}.csv", index=False)
             print(f"\n== {path}: {name}")
             print(t.to_string(index=False))
+        figures(g, path, Path(a.figs or os.path.join(os.path.dirname(a.out[0]), "figures")) / path)
 
 
 def main(argv=None) -> int:
@@ -754,8 +957,18 @@ def main(argv=None) -> int:
     r = sub.add_parser("report")
     r.add_argument("--out", action="append", required=True, help="a measure's snapshots.csv.gz (repeatable)")
     r.add_argument("--docs")
+    r.add_argument("--figs")
+    e = sub.add_parser("examples")
+    e.add_argument("--results", action="append", required=True)
+    e.add_argument("--out", action="append", required=True, help="the measures' snapshots.csv.gz (repeatable)")
+    e.add_argument("--arm", default="bad_ssl_bound_x4", choices=tuple(LIBRARY_ARMS))
+    e.add_argument("--path", default="binary")
+    e.add_argument("--beta", type=float, default=1.0)
+    e.add_argument("--click", type=int, default=50)
+    e.add_argument("--docs")
+    e.add_argument("--figs", required=True)
     a = ap.parse_args(argv)
-    {"measure": cmd_measure, "verify": cmd_verify, "report": cmd_report}[a.cmd](a)
+    {"measure": cmd_measure, "verify": cmd_verify, "report": cmd_report, "examples": cmd_examples}[a.cmd](a)
     return 0
 
 
