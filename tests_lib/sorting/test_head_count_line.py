@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.centroid_head import centroid_cut
-from vtscore.eval.live_threshold_rules import head_count_bads
+from vtscore.eval.live_threshold_rules import head_count_bads, head_count_recall
 from vtscore.training.thresholds import (
     HEAD_COUNT_BADS,
     HEAD_COUNT_GOODS,
@@ -161,3 +161,168 @@ class TestACorpusWithNoPositives:
                 kept.append(_kept(s, head_count_cut(s, 4.0)))
             assert 1 <= int(np.median(kept)) <= 12
             assert max(kept) <= 30
+
+
+def _weak_head(seed: int = 0, n: int = 11_000, n_pos: int = 50):
+    """A weak head's corpus, best first, and its truth: 50 positives spread through the bulk's upper tail."""
+    rng = np.random.default_rng(seed)
+    s = np.r_[_sig(rng.normal(-3, 0.5, n)), _sig(rng.normal(-1.6, 0.5, n_pos))]
+    y = np.r_[np.zeros(n), np.ones(n_pos)]
+    order = np.argsort(-s, kind="stable")
+    return s[order], y[order]
+
+
+def _logits(s):
+    s = np.asarray(s, dtype=np.float64)
+    return np.log(s) - np.log1p(-s)
+
+
+def _f4(y, kept: int) -> float:
+    return 17 * float(y[:kept].sum()) / (16 * float(y.sum()) + kept)
+
+
+#: The arm the closed loop priced: the count at 1.3x at beta 4, the reach from 3 bulk spreads up.
+E13 = math.log(1.3) / math.log(4.0)
+
+
+class TestAboveBetaOne:
+    """#5039: above beta 1 the count grows as beta ** HEAD_COUNT_RECALL_EXPONENT, and the line reaches down the
+    head's excess curve where a held-out Good ranks below what stands out."""
+
+    def test_off_is_the_count_before_5039(self):
+        s, _ = _weak_head()
+        x = _logits(s)
+        deep = x[300:301]
+        with head_count_recall("off", "off"):
+            for beta in (0.25, 1.0, 4.0):
+                assert _kept(s, head_count_cut(s, beta, deep)) == int(np.count_nonzero(x >= centroid_cut(x, beta=beta)))
+
+    def test_neither_piece_moves_a_precision_or_even_balance(self):
+        s, _ = _weak_head()
+        deep = _logits(s)[300:301]
+        for beta in (0.25, 0.5, 1.0):
+            with head_count_recall("off", "off"):
+                count = head_count_cut(s, beta, deep)
+            with head_count_recall(E13, 3.0):
+                assert head_count_cut(s, beta, deep) == count
+
+    def test_the_count_grows_as_the_exponent_says(self):
+        """At beta 4 the count is 4 ** e times what stands out: the #4603 rule at the beta whose 0.708 power that is."""
+        from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT
+
+        s = np.sort(_corpus())[::-1]
+        x = _logits(s)
+        with head_count_recall(E13, "off"):
+            k = _kept(s, head_count_cut(s, 4.0))
+        b_count = 4.0 ** (E13 / TEXT_SORT_COUNT_EXPONENT)
+        assert k == int(np.count_nonzero(x >= centroid_cut(x, beta=b_count)))
+        with head_count_recall("off", "off"):
+            assert k <= _kept(s, head_count_cut(s, 4.0))
+
+    def test_a_good_below_the_count_reaches_down_a_weak_heads_tail(self):
+        """The positives sit in the bulk's tail and a held-out Good ranks below the count: beta 4 keeps deeper."""
+        gains = []
+        for seed in range(5):
+            s, y = _weak_head(seed)
+            deep = _logits(s)[np.flatnonzero(y)[25:26]]  # a held-out Good at the positives' median rank
+            with head_count_recall(E13, "off"):
+                count = _kept(s, head_count_cut(s, 4.0, deep))
+            with head_count_recall(E13, 3.0):
+                reached = _kept(s, head_count_cut(s, 4.0, deep))
+            assert reached > count
+            gains.append(_f4(y, reached) - _f4(y, count))
+        assert np.mean(gains) > 0.05
+
+    def test_no_reach_without_a_good_below_the_count(self):
+        """Every held-out Good among what stands out (a person's faces), or none given: the count stands."""
+        s = np.sort(_corpus())[::-1]
+        x = _logits(s)
+        with head_count_recall(E13, "off"):
+            count = head_count_cut(s, 4.0)
+        with head_count_recall(E13, 3.0):
+            assert head_count_cut(s, 4.0, x[:2]) == count
+            assert head_count_cut(s, 4.0, None) == count
+            assert head_count_cut(s, 4.0, np.empty(0)) == count
+
+    def test_a_recall_lean_keeps_at_least_a_precision_lean(self):
+        with head_count_recall(E13, 3.0):
+            for seed in range(8):
+                s, y = _weak_head(seed)
+                deep = _logits(s)[np.flatnonzero(y)[25:26]]
+                kept = [_kept(s, head_count_cut(s, b, deep)) for b in (0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0)]
+                assert kept == sorted(kept), kept
+
+    def test_the_reach_is_the_excess_curves_fbeta_peak(self):
+        from scipy.special import ndtr
+
+        from vtscore.training.thresholds.labels_line import _excess_depth
+
+        x = _logits(_weak_head()[0])
+        med = np.median(x)
+        sd = 1.4826 * np.median(np.abs(x - med))
+        z = (x - med) / sd
+        k = np.arange(1, x.size + 1)
+        excess = k - x.size * ndtr(-z)
+        total = excess[z >= 3.0].max()
+        f = 17 * np.clip(excess, 0, total) / (16 * total + k)
+        f[z < 3.0] = -1
+        assert _excess_depth(x, 4.0, 3.0) == int(np.argmax(f)) + 1
+
+    def test_too_few_scores_or_no_spread_reach_no_deeper(self):
+        from vtscore.training.thresholds.labels_line import _excess_depth
+
+        assert _excess_depth(np.linspace(3, -3, 40), 4.0, 3.0) == 0
+        assert _excess_depth(np.zeros(500), 4.0, 3.0) == 0
+
+    def test_a_corpus_with_no_positives_keeps_few_without_a_deep_good(self):
+        """A Gaussian bulk alone and no held-out Good below what stands out: the count at 1.3x keeps fewer than today's."""
+        for n in (200, 5_000, 20_000):
+            for seed in range(10):
+                s = np.sort(_sig(np.random.default_rng(seed).normal(-3, 1.0, n)))[::-1]
+                with head_count_recall("off", "off"):
+                    today = _kept(s, head_count_cut(s, 4.0, _logits(s)[:1]))
+                with head_count_recall(E13, 3.0):
+                    assert _kept(s, head_count_cut(s, 4.0, _logits(s)[:1])) <= today
+
+
+class TestTheLineReadsTheHeldOutGoods:
+    def test_the_folds_model_carries_its_goods_and_the_in_sample_stand_in_does_not(self):
+        line = fit_labels_line(_orderings(4, 4), _corpus())
+        assert line is not None and line.model.pos_logits is not None
+        assert line.model.pos_logits.size == 4 and np.all(np.diff(line.model.pos_logits) >= 0)
+        # Folds that rank the Goods no higher than the Bads: the in-sample stand-in draws the line.
+        flipped = [(list(_sig([-2.0, -2.5, 1.0, 1.5])), [1.0, 1.0, 0.0, 0.0])]
+        c = _corpus()
+        ids = list(range(c.size))
+        stand_in = fit_labels_line(flipped, c, ids, {ids[-1]: True, ids[-2]: True, 0: False, 1: False})
+        assert stand_in is not None and stand_in.model.pos_logits is None
+
+    def test_the_thin_line_cuts_with_them(self):
+        line = fit_labels_line(_orderings(4, 4), _corpus())
+        assert line is not None and line.unvoted_scores is not None
+        with head_count_recall(E13, 3.0):
+            for beta in (0.25, 1.0, 4.0):
+                assert line.threshold(beta) == head_count_cut(line.unvoted_scores, beta, line.model.pos_logits)
+
+
+class TestTheRecallKnob:
+    def test_none_is_the_apps_and_the_swap_is_undone(self):
+        from vtscore.training.thresholds import labels_line
+
+        shipped = labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z
+        with head_count_recall(None, None):
+            assert (labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z) == shipped
+        with head_count_recall(0.2, 2.5):
+            assert (labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z) == (0.2, 2.5)
+        with head_count_recall("off", "off"):
+            assert labels_line.HEAD_COUNT_RECALL_EXPONENT is None and labels_line.HEAD_COUNT_RECALL_Z is None
+        assert (labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z) == shipped
+
+    @pytest.mark.parametrize("bad", ["deep", True, math.inf, math.nan])
+    def test_it_refuses_what_is_not_a_number(self, bad):
+        with pytest.raises(ValueError):
+            with head_count_recall(bad, None):
+                pass
+        with pytest.raises(ValueError):
+            with head_count_recall(None, bad):
+                pass

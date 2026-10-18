@@ -158,6 +158,15 @@ HEAD_COUNT_BADS: float = math.inf
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
 HEAD_COUNT_GOODS = 6
+#: How the head's count grows above a balance of 1 (#5039): ``beta ** HEAD_COUNT_RECALL_EXPONENT``
+#: times what stands out, in place of #4603's ``beta ** 0.708`` (:func:`head_count_cut`).
+#: ``None`` keeps #4603's, the count before #5039.
+HEAD_COUNT_RECALL_EXPONENT: float | None = None
+#: Where the head's count line reaches down at a balance above 1 (#5039): when a held-out Good ranks
+#: below the count of what stands out, the line keeps at least as deep as the head's excess curve's
+#: expected F-beta peaks, read from this many bulk spreads up (:func:`_excess_depth`).  ``None``
+#: never reaches, the line before #5039.
+HEAD_COUNT_RECALL_Z: float | None = None
 #: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
 #: the labels line expects at least this F-beta at the session's balance over the corpus it was
 #: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
@@ -224,6 +233,10 @@ class ClassScoreModel:
     #: that places the Bad component on the corpus pools them with (:data:`BAD_COMPONENT`, #5040).  ``None`` with one
     #: Bad, and on a model built by hand.  Not in :meth:`as_dict`.
     neg_sd: float | None = field(default=None, compare=False, repr=False)
+    #: The Goods' held-out logit scores, sorted: where the head's count line looks for a Good ranked
+    #: below what stands out (:data:`HEAD_COUNT_RECALL_Z`, #5039).  ``None`` on a model built by hand,
+    #: and on the in-sample stand-in, whose Goods the head trained on.  Not in :meth:`as_dict`.
+    pos_logits: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def floored(self, floor: float) -> "ClassScoreModel":
         """This model with its spread held to *floor* (a corpus's own, #4492) rather than the absolute one."""
@@ -304,7 +317,9 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
     raw = math.sqrt(var)
     neg = np.sort(xn) if xn.size >= RANDOM_BADS_MIN else None
     neg_sd = float(np.std(xn, ddof=1)) if xn.size > 1 else None
-    return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg, neg_sd)
+    return ClassScoreModel(
+        mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg, neg_sd, np.sort(xp)
+    )
 
 
 #: How the calibration folds' held-out scores reach the class model (#4910).  ``"raw"`` pools
@@ -746,7 +761,7 @@ class LabelsLine:
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
             if head_count_serves(self.model):
-                return head_count_cut(self.unvoted_scores, beta)
+                return head_count_cut(self.unvoted_scores, beta, held_out_goods=self.model.pos_logits)
             total = self.unvoted_share * self.unvoted_scores.size
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
@@ -810,7 +825,7 @@ def head_count_serves(model: ClassScoreModel) -> bool:
     return model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
 
 
-def head_count_cut(scores_desc: Any, beta: float) -> float:
+def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) -> float:
     """The cut that keeps what stands out in the head's own scores at *beta* (#4786).
 
     *scores_desc* are a corpus's unvoted scores, best first.  On their logits the
@@ -820,17 +835,74 @@ def head_count_cut(scores_desc: Any, beta: float) -> float:
     fewer than that drop) counts what stands out; the cut keeps exactly those items,
     placed between the last kept and the first dropped as :func:`corpus_cut` places
     its own.  An empty corpus keeps nothing.
+
+    Above a balance of 1 (#5039) the count grows as ``beta **``
+    :data:`HEAD_COUNT_RECALL_EXPONENT` instead, and where one of
+    *held_out_goods* (the class model's held-out Goods, logits) ranks below the
+    count at a balance of 1 - a positive the count of what stands out misses - the
+    line keeps at least as deep as the head's excess curve's expected F-beta
+    peaks (:func:`_excess_depth`, from :data:`HEAD_COUNT_RECALL_Z` bulk spreads
+    up).  Either constant at ``None`` is that piece before #5039.
     """
     from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT  # noqa: PLC0415
 
     s = np.asarray(scores_desc, dtype=np.float64)
     if s.size == 0:
         return 1.0 + 1e-9
     x = _logit(s)
-    k = int(np.count_nonzero(x >= centroid_cut(x, beta=float(beta))))
+    b = float(beta)
+    above = b > 1.0
+    # The count's own beta: the one whose #4603 multiplier is beta ** HEAD_COUNT_RECALL_EXPONENT.
+    b_count = (
+        b ** (HEAD_COUNT_RECALL_EXPONENT / TEXT_SORT_COUNT_EXPONENT)
+        if above and HEAD_COUNT_RECALL_EXPONENT is not None
+        else b
+    )
+    k = int(np.count_nonzero(x >= centroid_cut(x, beta=b_count)))
+    goods = None if held_out_goods is None else np.asarray(held_out_goods, dtype=np.float64)
+    if above and HEAD_COUNT_RECALL_Z is not None and goods is not None and goods.size:
+        standouts = int(np.count_nonzero(x >= centroid_cut(x, beta=1.0)))
+        if int(np.count_nonzero(x >= float(goods.min()))) > standouts:
+            k = max(k, _excess_depth(x, b, float(HEAD_COUNT_RECALL_Z)))
     if k <= 0:
         return 1.0 + 1e-9
     return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
+
+
+def _excess_depth(x_desc: np.ndarray, beta: float, z_min: float) -> int:
+    """How many of the best logits *x_desc* keep the head's excess curve at its expected F-*beta* peak (#5039).
+
+    The excess at the *k*-th best is *k* less what a Gaussian bulk puts above its
+    score, the bulk's centre and spread the median and ``1.4826`` x the MAD of
+    *x_desc*, as #4603's count reads them; the positives' total is the largest
+    excess from *z_min* bulk spreads up.  The cut at *k* is expected to score
+    ``(1 + beta**2) * excess_k / (beta**2 * total + k)``, the excess held to
+    ``[0, total]``; the depth is where that peaks among the cuts at or above
+    *z_min*.  ``0`` below #4603's fewest scores, with no spread, or with no score
+    that high.
+    """
+    from scipy.special import ndtr  # noqa: PLC0415
+
+    from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_MIN_SCORES  # noqa: PLC0415
+
+    n = int(x_desc.size)
+    if n < TEXT_SORT_COUNT_MIN_SCORES:
+        return 0
+    med = float(np.median(x_desc))
+    sigma = 1.4826 * float(np.median(np.abs(x_desc - med)))
+    if not sigma > 0.0:
+        return 0
+    z = (x_desc - med) / sigma
+    up = z >= z_min
+    if not up.any():
+        return 0
+    k = np.arange(1, n + 1, dtype=np.float64)
+    excess = k - n * ndtr(-z)
+    total = max(float(excess[up].max()), 1.0)
+    b2 = beta * beta
+    f = np.where(up, (1.0 + b2) * np.clip(excess, 0.0, total) / (b2 * total + k), -1.0)
+    return int(np.argmax(f)) + 1
 
 
 def weak_check_prompts(media_type: str | None) -> bool:
@@ -1127,8 +1199,9 @@ def fit_labels_line(
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
         if model is not None:
             # In-sample scores are not held out: the head saw these Bads, so they
-            # cannot stand for the negatives' shape (#4490).
-            model = replace(model, neg_logits=None)
+            # cannot stand for the negatives' shape (#4490), nor its Goods for how deep
+            # the positives reach (#5039).
+            model = replace(model, neg_logits=None, pos_logits=None)
     if model is None:
         return None
     return _line_on(model, corpus_scores, corpus_ids, labels, held_out=wrong_way)

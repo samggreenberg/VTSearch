@@ -51,6 +51,7 @@ floor at the absolute ``MIN_LOGIT_SIGMA``, the floor before #4492.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -294,3 +295,34 @@ def head_count_bads(bads: "int | str | None") -> Iterator[None]:
         yield
     finally:
         labels_line.HEAD_COUNT_BADS = shipped
+
+
+@contextmanager
+def head_count_recall(exponent: "float | str | None" = None, z: "float | str | None" = None) -> Iterator[None]:
+    """Hold the head's count line above a balance of 1 at an arm's pieces while the block runs (#5039).
+
+    *exponent* is how the count grows above beta 1
+    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_EXPONENT`), *z* where
+    the line reaches down the head's excess curve when a held-out Good ranks below the count
+    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_Z`).  ``"off"`` is that
+    piece before #5039 (#4603's ``beta ** 0.708``; no reach), and ``None`` leaves it as the app
+    ships it.  Every line reads the module's constants when it cuts, Train's and Find's alike, so
+    the swap reaches both; it is process-wide, as :func:`head_count_bads`'s is, and undone on the
+    way out.
+    """
+    for name, v in (("exponent", exponent), ("z", z)):
+        if v is None or v == "off":
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError(f"head_count_recall {name} must be a finite number, 'off' or None (the app's); got {v!r}")
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    shipped = labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z
+    if exponent is not None:
+        labels_line.HEAD_COUNT_RECALL_EXPONENT = None if exponent == "off" else float(exponent)
+    if z is not None:
+        labels_line.HEAD_COUNT_RECALL_Z = None if z == "off" else float(z)
+    try:
+        yield
+    finally:
+        labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z = shipped

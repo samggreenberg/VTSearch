@@ -19,6 +19,7 @@ design notes below are the check's own.
 from __future__ import annotations
 
 import inspect
+import math
 import os
 import re
 import sys
@@ -375,6 +376,30 @@ def probe(C: Any) -> list[str]:
         elif margin != LL._BOUND_MARGIN:
             rows.append(
                 ("line_bound_margin", "%g" % margin, "<unset> = %g, the app's counted bound (#5040)" % LL._BOUND_MARGIN)
+            )
+    # #5039's head's count line above beta 1: unset is the app's pieces, `off` each piece before #5039.
+    for attr, knob, env_name, what in (
+        (
+            "HEAD_COUNT_RECALL_EXPONENT",
+            "head_count_recall_exponent",
+            "CALIB_HEAD_COUNT_RECALL_EXPONENT",
+            "growth above beta 1",
+        ),
+        ("HEAD_COUNT_RECALL_Z", "head_count_recall_z", "CALIB_HEAD_COUNT_RECALL_Z", "reach down the excess curve"),
+    ):
+        got = getattr(C, attr, None)
+        if got is None:
+            continue
+        app = getattr(LL, attr)
+        if got != "off" and not (isinstance(got, float) and math.isfinite(got)):
+            refuse(knob, env_name, "must be a number or off")
+        elif (None if got == "off" else got) != app:
+            rows.append(
+                (
+                    knob,
+                    got if got == "off" else "%g" % got,
+                    "<unset> = %s, the app's head-count %s (#5039)" % ("off" if app is None else "%g" % app, what),
+                )
             )
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.

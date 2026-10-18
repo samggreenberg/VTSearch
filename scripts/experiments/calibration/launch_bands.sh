@@ -172,6 +172,8 @@ ENVX="$ENVX CALIB_SET_OVERLAP=${CALIB_SET_OVERLAP:-}"
 ENVX="$ENVX CALIB_QUERY_PRIOR_SHADOW=${CALIB_QUERY_PRIOR_SHADOW:-} CALIB_QUERY_PRIOR=${CALIB_QUERY_PRIOR:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# The head's count line above beta 1 (#5039): unset is the app's; `off` is each piece before #5039.
+ENVX="$ENVX CALIB_HEAD_COUNT_RECALL_EXPONENT=${CALIB_HEAD_COUNT_RECALL_EXPONENT:-} CALIB_HEAD_COUNT_RECALL_Z=${CALIB_HEAD_COUNT_RECALL_Z:-}"
 # The labels line's chances (#5040): unset is the app's; `corpus` fits the Bad component on the corpus, the margin loosens the bound.
 ENVX="$ENVX CALIB_LINE_BAD=${CALIB_LINE_BAD:-} CALIB_LINE_BOUND_MARGIN=${CALIB_LINE_BOUND_MARGIN:-}"
 # The typed query's hold (#4736): unset is the app's; 0 is the hand-over at the quota, before #4736.
