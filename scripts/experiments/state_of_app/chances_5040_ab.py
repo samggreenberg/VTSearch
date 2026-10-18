@@ -13,7 +13,8 @@ An arm's run is identical to the control's until its labels line first differs. 
 from the first retrain (its hard picks sample where they put the line), while the screen still shows the typed
 query's set, so the arms part at about vote 8. The **pairing check** is that the first pick the two disagree on is
 one where the acquisition's threshold moved, or the flow's phase did (a sooner Done), and that the F shown agrees up
-to it.
+to the first click that shows the detector (the arm moves the shown line itself, so after that F may part before
+any pick does).
 
 Per run and click it scores what the app shows on the withheld half, at the run's own beta, as
 ``early_check_4664.py`` does: the typed query's set until the first click with a detector on screen, then the
@@ -184,7 +185,10 @@ def analyse_beta(runs: dict[str, dict], beta: float) -> dict:
         at = np.array([r[1] for r in rows])
         moved = np.array([r[0] >= 0 for r in rows])
         why = np.array([r[2] for r in rows])
-        f_ok = np.array([np.allclose(F[arm][i, : int(at[i]) + 1], F[CONTROL][i, : int(at[i]) + 1], equal_nan=True)
+        # The arm moves the shown line itself, so F may part before any pick does; until the detector is first
+        # shown (the typed query's set, the same in both) and until the picks part, it must not.
+        upto = np.minimum(at, col(CONTROL, "trained_at") - 1)
+        f_ok = np.array([np.allclose(F[arm][i, : int(upto[i]) + 1], F[CONTROL][i, : int(upto[i]) + 1], equal_nan=True)
                          for i in range(len(keys))])  # fmt: skip
         dep[arm] = {"moved": moved, "at": np.where(moved, at, np.nan), "why": why,
                     "f_mismatch": int((~f_ok).sum())}  # fmt: skip

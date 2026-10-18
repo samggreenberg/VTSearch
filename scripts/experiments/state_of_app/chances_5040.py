@@ -745,7 +745,7 @@ def tables(df: pd.DataFrame, path: str) -> dict[str, pd.DataFrame]:
 
 
 #: The candidates the figures draw, with the ceiling, in the order of their legends.
-SHOW = ("good_own_sd", "good_check", "good_ssl", "bad_kde", "bad_ssl", "bad_ssl_bound_x4", "no_bound", "bound_x4")
+SHOW = ("good_own_sd", "good_ssl", "bad_kde", "bad_ssl", "bad_ssl_bound_x4", "bad_ssl_mean_bound_x4", "no_bound")
 COLOR = {
     "good_own_sd": "#9ec5f0",
     "good_check": "#5aa0e6",
@@ -755,6 +755,7 @@ COLOR = {
     "bad_ssl_bound_x4": "#eb6834",
     "no_bound": "#d62728",
     "bound_x4": "#f4a6a6",
+    "bad_ssl_mean_bound_x4": "#1baf7a",
     "post_true": "#9467bd",
 }
 
