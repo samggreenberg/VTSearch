@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Above beta 1 the head's count line keeps 1.3x what stands out at beta 4, and reaches deeper where a held-out Good
+  sits below it** (issue #5039). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods the labels
+  line is the head's count (#4786, #4798). Its count now grows as `beta ** HEAD_COUNT_RECALL_EXPONENT` (0.18925) above
+  beta 1 instead of `beta ** 0.708`, and where the class model's deepest held-out Good ranks below the count at beta 1,
+  `head_count_cut` keeps at least as deep as the head's excess curve's expected F-beta peaks, from
+  `HEAD_COUNT_RECALL_Z` (2.75) bulk spreads up (`_excess_depth`). `head_count_cut` takes the held-out Goods' logits
+  (`held_out_goods=`, which `LabelsLine.threshold` passes); `ClassScoreModel.pos_logits` carries them (`None` on the
+  in-sample stand-in and on a model built by hand). Beta 1 and below are unchanged, and the line stays monotone in
+  beta. `vtscore.eval.live_threshold_rules.head_count_recall(exponent, z)` sets either piece for a run (`"off"` is the
+  line before #5039). Closed loop at beta 4: +0.0035 Find mean F-beta over a Binary Photo session, +0.015 to +0.017
+  over a FHIBE face session (`docs/experiments/2026-10-18-head-count-5039`).
+
 - **`SortResultsCache` holds a ranking as columns, and holds four times the rows** (issue #5012). A
   stored ranking was a list of row dicts, about 250 bytes a row (336 with `best_region`). It is now an
   int64 id column, a float64 score column and, on a region sort, an index into a table of the distinct

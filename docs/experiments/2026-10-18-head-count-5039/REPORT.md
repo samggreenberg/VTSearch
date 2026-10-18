@@ -2,8 +2,8 @@
 
 **Status (2026-10-18): offline on every snapshot on the head's count line of three benches (Binary Photo, Region
 Photo, FHIBE faces) in four corpora each, and closed loop at beta 4 on Binary Photo (720 sessions per arm) and FHIBE
-faces (1,124 per arm). Region Photo is offline only. Both rules gain on both closed-loop benches; which one ships, if either, is the owner's
-call: in this branch the app is unchanged (both knobs default off).**
+faces (1,124 per arm). Region Photo is offline only. Shipped (the owner's call, 2026-10-18): the count at 1.3x what stands out at beta 4
+and the reach from 2.75 bulk spreads, `HEAD_COUNT_RECALL_EXPONENT = 0.18925` and `HEAD_COUNT_RECALL_Z = 2.75`.**
 
 **The count does not need to follow the balance more steeply. At beta 1 and beta 1/4 it is about the F-beta-best
 count already. At beta 4 the benches pull opposite ways, and the one that sits on this line all session (faces)
@@ -27,28 +27,29 @@ the balance. Priced in F-beta instead of set size, on Binary, Region and faces:
    person. A held-out Good ranked below what stands out is the evidence that the positives sit deeper:
    it does so in 46% of Binary's snapshots at beta 4, 38% of Region's and 22% of faces'.
 4. **The rule: above beta 1, the count grows as `beta ** 0.189` (1.3x at beta 4); where a held-out Good ranks below
-   what stands out, the line keeps at least as deep as the head's excess curve's expected F-beta peaks, read from 3
-   bulk spreads up.** Offline it gains at beta 4 on every bench at 0.1%, 0.44% and 1% prevalence (+0.005 to +0.063),
-   and keeps fewer images than today on a corpus with no positives. Beta 1/4 and 1 are today's line exactly.
-5. **Closed loop at beta 4, the sessions themselves:** on faces Find's mean F-beta over votes 1 to 150 rises +0.023
-   (± 0.003) from 1 photo and +0.022 (± 0.004) from 4, in 79% to 80% of people; on Binary, where this line serves 15%
-   of the trained clicks, +0.0017 (± 0.0005) over clicks 0 to 200 and +0.0007 (± 0.0009) after the closing check.
-   From z 2.75 the reach gives Binary twice that (+0.0035, +0.0023 after the check) and faces about a quarter less
-   (+0.017, +0.015).
+   what stands out, the line keeps at least as deep as the head's excess curve's expected F-beta peaks, read from
+   2.75 bulk spreads up (3 was priced beside it).** Offline it gains at beta 4 on every bench at 0.1%, 0.44% and 1%
+   prevalence (+0.016 to +0.051). On a corpus with no positives it keeps fewer images than today on faces and
+   Region and more on Binary (114 against 92). Beta 1/4 and 1 are today's line exactly.
+5. **Closed loop at beta 4, the sessions themselves (the shipped rule):** on Binary, where this line serves 15% of the
+   trained clicks, Find's mean F-beta over clicks 0 to 200 rises +0.0035 (± 0.0007) and +0.0023 (± 0.0013) after the
+   closing check; on faces, over votes 1 to 150, +0.017 (± 0.004) from 1 photo and +0.015 (± 0.004) from 4, in 75% to
+   76% of people. The reach from 3 spreads gave faces more (+0.023, +0.022) and Binary half (+0.0017, +0.0007 after
+   the check); the owner chose 2.75.
 
 | beta 4, per click on the head's count line (mean over classes; people on faces) | Binary Photo | Region Photo | FHIBE faces |
 |---|---|---|---|
 | clicks on the head's count line (share of a session's trained clicks) | 15% (45% before vote 50) | 11% (64% before vote 25) | 100% |
 | today's F-beta / the best cut's | 0.31 / 0.43 | 0.48 / 0.62 | 0.84 / 0.94 |
-| **1.3x + reach from z 3**: F-beta gain at 0.44% / 0.1% / 1% | **+0.015 / +0.029 / +0.005** | **+0.041 / +0.048 / +0.018** | **+0.024 / +0.063 / +0.030** |
-| 1.3x + reach from z 2.75 | +0.023 / +0.029 / +0.018 | +0.039 / +0.040 / +0.022 | +0.016 / +0.051 / +0.028 |
+| **1.3x + reach from z 2.75 (shipped)**: F-beta gain at 0.44% / 0.1% / 1% | **+0.023 / +0.029 / +0.018** | **+0.039 / +0.040 / +0.022** | **+0.016 / +0.051 / +0.028** |
+| 1.3x + reach from z 3 | +0.015 / +0.029 / +0.005 | +0.041 / +0.048 / +0.018 | +0.024 / +0.063 / +0.030 |
 | 1.3x, no reach | -0.016 / +0.018 / -0.032 | +0.032 / +0.069 / -0.001 | +0.020 / +0.076 / +0.025 |
 | the reach alone (today's count) | +0.014 / +0.005 / +0.014 | +0.006 / -0.007 / +0.006 | -0.003 / -0.009 / +0.000 |
 | a steeper exponent: 10x what stands out | -0.027 / -0.064 / +0.007 | -0.153 / -0.129 / -0.130 | -0.196 / -0.245 / -0.203 |
 | the class model's cut instead (0.44%) | +0.030 | -0.000 | -0.019 |
-| images kept on a corpus with no positives: today / 1.3x + reach z 3 (mean) | 92 / 88 | 386 / 242 | 9.6 / 5.3 |
-| **closed loop, 1.3x + reach z 3**: Find's mean F-beta gain per session (Binary clicks 0-200; faces votes 1-150, from 1 / 4 photos) | **+0.0017 (± 0.0005)** | not run | **+0.023 (± 0.003) / +0.022 (± 0.004)** |
-| … 1.3x + reach z 2.75 | +0.0035 (± 0.0007) | not run | +0.017 (± 0.004) / +0.015 (± 0.004) |
+| images kept on a corpus with no positives (mean): today / shipped (z 2.75) / z 3 | 92 / 114 / 88 | 386 / 272 / 242 | 9.6 / 6.0 / 5.3 |
+| **closed loop, shipped (z 2.75)**: Find's mean F-beta gain per session (Binary clicks 0-200; faces votes 1-150, from 1 / 4 photos) | **+0.0035 (± 0.0007)** | not run | **+0.017 (± 0.004) / +0.015 (± 0.004)** |
+| … reach from z 3 | +0.0017 (± 0.0005) | not run | +0.023 (± 0.003) / +0.022 (± 0.004) |
 
 *Faces' corpora are at a person's own prevalence (about 4 of 5,439 crops, 0.07%), their thinned and sparse
 versions at about 0.02% and 0.17%. ± one SE over classes is in `tables/offline_b4.csv`: 0.004 to 0.010 on Binary and
@@ -148,7 +149,8 @@ F-beta, and the reach keeps at least as deep as that peaks (`_excess_depth`).
   makes the smaller count safe for weak heads.
 - **z 3 or 2.75.** From 2.75 the reach goes deeper: +0.008 on Binary at 0.44% and +0.013 at 1%, -0.008 on faces at
   0.07% and -0.012 at 0.02%. Faces carry about seven times Binary's weight in this line's clicks (all their trained
-  clicks against 15%).
+  clicks against 15%), so z 3 gains more in total; z 2.75 gains Binary twice as much in the closed loop, keeps
+  faces' gain at three quarters, and is what shipped.
 
 | beta 4, the corpus as it is (medians) | Binary Photo | Region Photo | FHIBE faces |
 |---|---|---|---|
@@ -209,30 +211,32 @@ returns. Arms against the app, paired run for run (`tables/ab_*.csv` for Binary 
 
 ## Literal examples
 
-Snapshots at beta 4 on the withheld half as it is, picked by rule among those the rule (1.3x + reach from z 3)
-moves: the one it helps most, the median among those whose F-beta it changes, the one it hurts most, per bench
-(`head_count_5039.py examples`; `tables/examples_e13z3.csv`). "What stands out" is the count at beta 1.
+Snapshots at beta 4 on the withheld half as it is, picked by rule among those the shipped rule (1.3x + reach from
+z 2.75) moves: the one it helps most, the median among those whose F-beta it changes, the one it hurts most, per
+bench (`head_count_5039.py examples --arm e13z275`; `tables/examples_e13z275.csv`). "What stands out" is the count at
+beta 1.
 
-![The examples' withheld halves, ranked, with today's cut, the rule's and the best cut](figures/examples_e13z3.png)
+![The examples' withheld halves, ranked, with today's cut, the rule's and the best cut](figures/examples_e13z275.png)
 
 *Each row is one snapshot: the withheld half's head logits by rank (log scale), positives green; today's cut
 (black), the rule's (blue), the best cut (purple dashes) and the deepest held-out Good's rank (orange dots).*
 
 | example | session | seed | click | held-out Goods | what stands out | deepest held-out Good's rank | kept today / rule / best | F-beta today / rule / best |
 |---|---|---|---|---|---|---|---|---|
-| Binary, helped most | dog@medium | 3 | 50 | 4 | 5 | 23 | 12 / 47 / 203 | 0.11 / 0.41 / 0.56 |
-| Binary, the median change | person@small | 2 | 150 | 2 | 14 | 11 | 37 / 18 / 1,936 | 0.041 / 0.042 / 0.19 |
+| Binary, helped most | dog@medium | 3 | 50 | 4 | 5 | 23 | 12 / 65 / 203 | 0.11 / 0.49 / 0.56 |
+| Binary, the median change | motorcycle@small | 1 | 50 | 4 | 140 | 246 | 372 / 453 / 497 | 0.486 / 0.494 / 0.51 |
 | Binary, hurt most | enclosed road vehicle@large | 3 | 35 | 4 | 27 | 9 | 71 / 35 / 76 | 0.62 / 0.43 / 0.64 |
-| Region, helped most | remote@small | 0 | 50 | 4 | 30 | 496 | 79 / 133 / 358 | 0.23 / 0.43 / 0.49 |
-| Region, the median change | parking meter@medium | 0 | 10 | 4 | 103 | 62 | 274 / 133 / 64 | 0.78 / 0.81 / 0.83 |
+| Region, helped most | keyboard@small | 0 | 150 | 2 | 13 | 1,352 | 34 / 209 / 440 | 0.17 / 0.45 / 0.57 |
+| Region, the median change | enclosed road vehicle@large | 0 | 10 | 4 | 302 | 545 | 804 / 524 / 443 | 0.399 / 0.417 / 0.44 |
 | Region, hurt most | fire hydrant@small | 0 | 26 | 0 | 49 | - | 130 / 63 / 464 | 0.29 / 0.13 / 0.45 |
-| faces, helped most | person 9, 1 photo | 0 | 20 | 2 | 1 | 7 | 3 / 15 / 6 | 0.33 / 0.81 / 0.94 |
-| faces, the median change | person 26, 1 photo | 0 | 20 | 2 | 3 | 3 | 8 / 4 / 3 | 0.91 / 0.98 / 1.00 |
+| faces, helped most | person 560, 1 photo | 0 | 60 | 2 | 2 | 14 | 5 / 17 / 7 | 0.32 / 0.78 / 0.93 |
+| faces, the median change | person 504, 1 photo | 0 | 60 | 2 | 3 | 3 | 8 / 4 / 3 | 0.91 / 0.98 / 1.00 |
 | faces, hurt most | person 148, 1 photo | 0 | 150 | 2 | 1 | 1 | 3 / 1 / 3 | 1.00 / 0.35 / 1.00 |
 
 - **`dog@medium` seed 3 is the reach at work.** Five images stand out; a held-out Good ranks 23rd, so the
-  positives go deeper. Today's 2.67x keeps 12; the rule reaches to 47, where the excess curve's expected F-beta
-  peaks, and F-beta goes from 0.11 to 0.41 (the best cut keeps 203 for 0.56).
+  positives go deeper. Today's 2.67x keeps 12; the rule reaches to 65, where the excess curve's expected F-beta
+  peaks, and F-beta goes from 0.11 to 0.49 (the best cut keeps 203 for 0.56). Person 560 is the same on a face: two
+  photos stand out, a third ranks 14th, and the rule keeps 17 (0.32 to 0.78).
 - **The losses are the count at 1.3x where no Good sits below it.** `enclosed road vehicle@large` seed 3: 27 stand
   out, the held-out Goods all rank above that, and the 1.3x count keeps 35 of a best set of 76 (0.62 to 0.43). Person
   148 at click 150: one face stands out above a wide drop, so the count is 1; 2.67x of it kept the other two photos
@@ -255,7 +259,7 @@ moves: the one it helps most, the median among those whose F-beta it changes, th
 
 | | |
 |---|---|
-| code | dev 738219cc7 (#5080 merged) for the face snapshots; the arms from frozen worktree `vts-5039-arm` at 4f5963abf (branch `claude/head-count-5039`) |
+| code | dev 738219cc7 (#5080 merged) for the face snapshots; the arms from frozen worktree `vts-5039-arm` at 4f5963abf (branch `claude/head-count-5039`); shipped as the app's defaults on the same branch |
 | snapshots | Binary and Region: #4937's (`/expscratch/sgreenberg/state-of-the-app/2026-10-16-fscale4936-early4937-binary-b{025,1,4}`, `2026-10-15-fscale4936-region-b1`); faces: `<FHIBE release>-derived/runs/2026-10-18-5039snap-roll-k{1,4}-b{1,4}` (owner-only), 2,248 sessions 06:15-07:05 |
 | extraction | `head_count_5039.py extract` / `extract-faces` -> `/expscratch/sgreenberg/head-count-5039/x{br,f}/`; today's count reproduced on every Binary snapshot (0 mismatches of 3,624) |
 | pricing | `head_count_5039.py price` (234,732 rows) and `grid` -> `/expscratch/sgreenberg/head-count-5039/{priced,grid}/`; tables in `tables/`, figures in `figures/` |
@@ -276,7 +280,7 @@ python $P price --x x --out priced --procs 32 --class-cut
 python $P grid --x x --out grid --procs 32
 D=docs/experiments/2026-10-18-head-count-5039
 python $P report --priced priced --grid grid --docs $D/tables --figs $D/figures --faces-ab <prior_4776 out>
-python $P examples --x x --priced priced --arm e13z3 --docs $D/tables --figs $D/figures
+python $P examples --x x --priced priced --arm e13z275 --docs $D/tables --figs $D/figures
 # the closed loop, from a frozen worktree
 L=scripts/experiments/state_of_app/head_count_5039.sh
 bash $L dirs && for arm in ctl e13z3 e13z275; do CALIB_PACK_JOBS=15 CALIB_PACK_PAR=8 bash $L cpack $arm 4; done

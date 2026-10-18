@@ -479,7 +479,7 @@ def test_the_ceilings_snapshot_rebuilds_its_find_line_from_the_saved_folds():
     ]
     model = class_score_model(folds)
     assert model is not None
-    assert {k: v for k, v in asdict(model).items() if k != "neg_logits"} == snap["model"]
+    assert {k: v for k, v in asdict(model).items() if k not in ("neg_logits", "pos_logits")} == snap["model"]
     json.dumps(snap["model"])  # the snapshot's meta stays JSON: the Bads' scores travel in the folds
     line = fit_labels_line(folds, snap["scores"], ordered, {})
     assert line is not None

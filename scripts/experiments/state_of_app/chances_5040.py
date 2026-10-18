@@ -60,7 +60,7 @@ from early_line_4937 import (  # noqa: E402
 )
 from fold_scale_4936 import PATHS, Snapshot, _ident, _logit, click_of, load_snapshots  # noqa: E402
 
-from vtscore.eval.live_threshold_rules import labels_chances  # noqa: E402
+from vtscore.eval.live_threshold_rules import head_count_recall, labels_chances  # noqa: E402
 
 #: The fewest held-out Goods from a spot check that ``good_check`` reads; with fewer the Good component is today's.
 CHECK_GOODS_MIN = 3
@@ -515,7 +515,7 @@ def _cell_rows(args) -> list[dict]:
         for t, snap in sorted(by_step.items()):
             key = int(ident["idx"]) * 10_000 + t
             try:
-                with labels_chances(*BEFORE_5040):
+                with labels_chances(*BEFORE_5040), head_count_recall(*BEFORE_5039):
                     row = measure(snap, checks.get(EMBEDDER[path], frozenset()), key, path == "region", cands)
             except Exception as exc:
                 rows.append({**ident, "path": path, "t": t, "error": f"{type(exc).__name__}: {exc}"})
@@ -566,6 +566,8 @@ LIBRARY_ARMS = {
 #: The line before #5040, which "today" names throughout: the pricer draws every snapshot under it, so its replay and
 #: its candidates (each a change to this line) read as they did when they were priced, whatever the app ships.
 BEFORE_5040 = ("labels", 2.0)
+#: The head's count line before #5039 (``beta ** 0.708`` at every balance, no reach), under which this study was priced.
+BEFORE_5039 = ("off", "off")
 
 
 def _verify_rows(args) -> list[dict]:
@@ -586,7 +588,7 @@ def _verify_rows(args) -> list[dict]:
             continue
         row = {**ident, "path": path, "t": s.t}
         for arm, (bad, margin) in LIBRARY_ARMS.items():
-            with labels_chances(bad, margin):
+            with labels_chances(bad, margin), head_count_recall(*BEFORE_5039):
                 line = fit_labels_line(s.orderings() or None, s.sim_scores, s.sim_ids.tolist(), s.labels_dict())
                 if line is None:
                     break
@@ -862,7 +864,7 @@ def cmd_examples(a) -> None:
         y = s.y.astype(np.int64)
         lines = {}
         for name, (b_, m_) in (("today", BEFORE_5040), (arm, (bad, margin))):
-            with labels_chances(b_, m_):
+            with labels_chances(b_, m_), head_count_recall(*BEFORE_5039):
                 line = fit_labels_line(s.orderings() or None, s.sim_scores, s.sim_ids.tolist(), s.labels_dict())
                 assert line is not None
                 lines[name] = line.on_corpus(s.scores)

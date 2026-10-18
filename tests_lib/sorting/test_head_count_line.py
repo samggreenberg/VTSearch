@@ -50,11 +50,13 @@ def _kept(scores, threshold: float) -> int:
 
 class TestTheCut:
     def test_it_keeps_what_the_centroids_count_rule_counts_on_the_logits(self):
+        """The count before #5039 at every balance; since #5039 at beta 1 and below (above it, ``TestAboveBetaOne``)."""
         s = np.sort(_corpus())[::-1]
         x = np.log(s) - np.log1p(-s)
-        for beta in (0.25, 1.0, 4.0):
+        for beta, knobs in ((0.25, (None, None)), (1.0, (None, None)), (4.0, ("off", "off"))):
+            with head_count_recall(*knobs):
+                thr = head_count_cut(s, beta)
             k = int(np.count_nonzero(x >= centroid_cut(x, beta=beta)))
-            thr = head_count_cut(s, beta)
             assert _kept(s, thr) == k
             # Between the last kept and the first dropped, never on an item.
             assert s[k] < thr < s[k - 1]
@@ -100,7 +102,7 @@ class TestTheLine:
         line = fit_labels_line(_orderings(4, 4), _corpus())
         assert line is not None and line.unvoted_scores is not None
         for beta in (0.25, 1.0, 4.0):
-            assert line.threshold(beta) == head_count_cut(line.unvoted_scores, beta)
+            assert line.threshold(beta) == head_count_cut(line.unvoted_scores, beta, line.model.pos_logits)
 
     def test_a_recall_lean_keeps_at_least_a_precision_lean(self):
         """The count is beta ** 0.708 times what stands out, so the line keeps more as the balance leans to recall."""
@@ -123,7 +125,7 @@ class TestTheLine:
         other = _corpus(2)
         on = line.on_corpus(other)
         assert on.unvoted_scores is not None
-        assert on.threshold(4.0) == head_count_cut(on.unvoted_scores, 4.0)
+        assert on.threshold(4.0) == head_count_cut(on.unvoted_scores, 4.0, on.model.pos_logits)
 
     def test_gate_zero_is_the_line_before_4786(self):
         line = fit_labels_line(_orderings(4, 4), _corpus())
@@ -131,7 +133,7 @@ class TestTheLine:
         total = float(line.unvoted_share or 0.0) * line.unvoted_scores.size
         with head_count_bads(0):
             assert line.threshold(4.0) == corpus_cut(line.unvoted_posteriors, line.unvoted_scores, total, 4.0)
-        assert line.threshold(4.0) == head_count_cut(line.unvoted_scores, 4.0)
+        assert line.threshold(4.0) == head_count_cut(line.unvoted_scores, 4.0, line.model.pos_logits)
 
 
 class TestTheKnob:
@@ -303,6 +305,27 @@ class TestTheLineReadsTheHeldOutGoods:
         with head_count_recall(E13, 3.0):
             for beta in (0.25, 1.0, 4.0):
                 assert line.threshold(beta) == head_count_cut(line.unvoted_scores, beta, line.model.pos_logits)
+
+
+class TestTheShippedLine:
+    def test_the_app_counts_1_3x_at_beta_4_and_reaches_from_2_75(self):
+        """#5039's closed loop shipped the count at 1.3x what stands out at beta 4 and the reach from 2.75 spreads."""
+        from vtscore.training.thresholds import labels_line
+
+        assert labels_line.HEAD_COUNT_RECALL_EXPONENT == pytest.approx(math.log(1.3) / math.log(4.0), abs=1e-5)
+        assert labels_line.HEAD_COUNT_RECALL_Z == 2.75
+        # A person's faces: fewer than before #5039 at beta 4, the same at beta 1.
+        faces = np.sort(_corpus())[::-1]
+        with head_count_recall("off", "off"):
+            before = {b: _kept(faces, head_count_cut(faces, b, _logits(faces)[:2])) for b in (1.0, 4.0)}
+        assert _kept(faces, head_count_cut(faces, 1.0, _logits(faces)[:2])) == before[1.0]
+        assert _kept(faces, head_count_cut(faces, 4.0, _logits(faces)[:2])) < before[4.0]
+        # A weak head with a held-out Good below what stands out: deeper than before.
+        s, y = _weak_head()
+        deep = _logits(s)[np.flatnonzero(y)[25:26]]
+        with head_count_recall("off", "off"):
+            count = _kept(s, head_count_cut(s, 4.0, deep))
+        assert _kept(s, head_count_cut(s, 4.0, deep)) > count
 
 
 class TestTheRecallKnob:

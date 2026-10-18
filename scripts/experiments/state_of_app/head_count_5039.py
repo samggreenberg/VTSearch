@@ -74,6 +74,7 @@ BETAS = (0.25, 1.0, 4.0)
 
 def _cell_arrays(args) -> list[tuple[dict, np.ndarray, np.ndarray]]:
     """``(key, scores best first, truth in that order, held-out Goods' and Bads' scores)`` per wanted snapshot."""
+    from vtscore.eval.live_threshold_rules import head_count_recall
     from vtscore.training.thresholds.labels_line import _finite_unit, head_count_cut
 
     npz, run, wanted = args
@@ -91,7 +92,8 @@ def _cell_arrays(args) -> list[tuple[dict, np.ndarray, np.ndarray]]:
             y = np.asarray(snap["labels"], dtype=np.int8)
             order = np.argsort(-s, kind="stable")
             s_desc, y_desc = s[order], y[order]
-            thr = head_count_cut(s_desc, float(snap["beta"]))
+            with head_count_recall("off", "off"):  # #4937's line: the head's count before #5039
+                thr = head_count_cut(s_desc, float(snap["beta"]))
             fl = np.asarray(snap["fold_labels"], dtype=np.int8)
             fs = np.asarray(snap["fold_scores"], dtype=np.float64)
             meta = {"run": run, **ident, "path": path, "t": t, "k_today": int((s >= thr).sum())}
@@ -159,6 +161,7 @@ def cmd_extract(a) -> None:
 
 def _face_cell(args) -> list[tuple[dict, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """The head-count snapshots of one FHIBE cell, as ``_cell_arrays`` gives them."""
+    from vtscore.eval.live_threshold_rules import head_count_recall
     from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, _finite_unit, head_count_cut
 
     npz, run, beta = args
@@ -177,7 +180,8 @@ def _face_cell(args) -> list[tuple[dict, np.ndarray, np.ndarray, np.ndarray, np.
         order = np.argsort(-s, kind="stable")
         fl = np.asarray(z[key + "/fold_labels"], dtype=np.int8)
         fs = np.asarray(z[key + "/fold_scores"], dtype=np.float64)
-        thr = head_count_cut(s[order], beta)
+        with head_count_recall("off", "off"):  # the head's count before #5039, as the arms' control draws it
+            thr = head_count_cut(s[order], beta)
         out.append(
             (
                 {"run": run, "idx": idx, "cell": f"face{idx}", "class": f"face{idx}", "band": "", "seed": 0,
@@ -350,6 +354,7 @@ def _count_at(x_desc: np.ndarray, beta: float, c: float) -> int:
 
 def _grid_snapshot(args) -> list[dict]:
     from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT
+    from vtscore.eval.live_threshold_rules import head_count_recall
     from vtscore.training.thresholds.labels_line import _logit, head_count_cut
 
     ident, s, y, _goods, _bads = args
@@ -357,14 +362,16 @@ def _grid_snapshot(args) -> list[dict]:
     for scen, (sv, yv) in scenario_corpora(s, y, ident["key"]).items():
         x = _logit(sv)
         for beta in BETAS:
-            today = int(np.count_nonzero(sv >= head_count_cut(sv, beta)))
+            with head_count_recall("off", "off"):  # today's: the line before #5039
+                today_cut = head_count_cut(sv, beta)
+            today = int(np.count_nonzero(sv >= today_cut))
             r = {**ident, "scenario": scen, "beta": beta, "k_today": today, "n_pos": int(yv.sum())}
             ks = [_count_at(x, beta, c) for c in MULTIPLIERS]
             # The cut sits between the last kept and the first dropped, as head_count_cut places it.
             kept = [int(np.count_nonzero(sv >= ((sv[k - 1] + sv[k]) / 2 if 0 < k < sv.size else sv[-1]))) if k > 0 else 0
                     for k in ks]  # fmt: skip
             r["chk_today"] = abs(
-                int(np.count_nonzero(sv >= head_count_cut(sv, beta)))
+                today
                 - (lambda k: int(np.count_nonzero(sv >= ((sv[k - 1] + sv[k]) / 2 if 0 < k < sv.size else sv[-1]))))(
                     _count_at(x, beta, beta**TEXT_SORT_COUNT_EXPONENT)
                 )

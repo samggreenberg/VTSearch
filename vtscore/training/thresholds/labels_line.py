@@ -54,9 +54,15 @@ component cannot place the corpus's positives: past 32 Bads the 3-part chances
 collapse while the 2-part total stays several times the positives, and a beta-4 cut
 ran to the corpus's end on faces (2.5% of clicks, up to 704 kept for 4 withheld)
 in a way no fix to the total could tell from a hard target's sound deep cut.  That count is ``beta ** 0.708`` times
-what stands out, so the line keeps more as the balance leans to recall.  Like the
-centroid's it is a count on the corpus being decided, not a cut the labels imply;
-the class model takes over once it has the labels to stand on.  The Goods half
+what stands out up to a balance of 1, so the line keeps more as the balance leans to recall.  Above 1 it
+grows as ``beta ** 0.189`` (#5039): 1.3x what stands out at beta 4, not 2.67x, since a person's few faces
+stand above a light-tailed bulk and 2.67x kept two to three other faces each.  A weak head's positives
+sit deeper than what stands out, and the labels say when: where a held-out Good ranks below the count
+at beta 1, the line keeps at least as deep as the head's excess over a Gaussian bulk is expected to
+score best at the balance (:func:`_excess_depth`, from :data:`HEAD_COUNT_RECALL_Z` bulk spreads up).
+The scores alone cannot tell such a tail from a bulk heavier than a Gaussian, which a fifth to a half
+of face sessions have.  Like the centroid's it is a count on the corpus being decided, not a cut the
+labels imply; the class model takes over once it has the labels to stand on.  The Goods half
 matters for a broad target: with many Goods its labels line is sound, while a count
 of what stands out keeps several times the positives (COCO Better's Binary opening
 lost F-beta there).
@@ -159,14 +165,18 @@ HEAD_COUNT_BADS: float = math.inf
 #: times too many.
 HEAD_COUNT_GOODS = 6
 #: How the head's count grows above a balance of 1 (#5039): ``beta ** HEAD_COUNT_RECALL_EXPONENT``
-#: times what stands out, in place of #4603's ``beta ** 0.708`` (:func:`head_count_cut`).
-#: ``None`` keeps #4603's, the count before #5039.
-HEAD_COUNT_RECALL_EXPONENT: float | None = None
+#: times what stands out, in place of #4603's ``beta ** 0.708`` (:func:`head_count_cut`): 1.3x at beta 4
+#: (``log 1.3 / log 4``), what faces and Region Photo's heads want there.  ``None`` keeps #4603's, the
+#: count before #5039.
+HEAD_COUNT_RECALL_EXPONENT: float | None = 0.18925
 #: Where the head's count line reaches down at a balance above 1 (#5039): when a held-out Good ranks
 #: below the count of what stands out, the line keeps at least as deep as the head's excess curve's
-#: expected F-beta peaks, read from this many bulk spreads up (:func:`_excess_depth`).  ``None``
-#: never reaches, the line before #5039.
-HEAD_COUNT_RECALL_Z: float | None = None
+#: expected F-beta peaks, read from this many bulk spreads up (:func:`_excess_depth`).  Closed loop at
+#: beta 4 with the exponent above: Find's mean F-beta +0.0035 over a Binary Photo session's 200 clicks
+#: and +0.015 to +0.017 over a face session's 150 votes; 3 spreads gave faces more (+0.022 to +0.023)
+#: and Binary half (``docs/experiments/2026-10-18-head-count-5039``).  ``None`` never reaches, the line
+#: before #5039.
+HEAD_COUNT_RECALL_Z: float | None = 2.75
 #: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
 #: the labels line expects at least this F-beta at the session's balance over the corpus it was
 #: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
