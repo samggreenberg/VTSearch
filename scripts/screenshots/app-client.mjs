@@ -112,7 +112,6 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
             name,
             media_type: 'image',
             text_query: text,
-            trainable: true,
             ...(embedderType ? { embedder_type: embedderType } : {}),
           },
         })
