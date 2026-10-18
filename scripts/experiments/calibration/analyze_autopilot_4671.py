@@ -267,6 +267,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                             "objective_se": (fm.std(axis=0, ddof=1) / np.sqrt(fm.notna().sum(axis=0))).to_numpy(),
                             "ap": fgot["ap"].mean(axis=0).to_numpy(),
                             "returned_median": fk.median(axis=0).to_numpy(),
+                            "returned_mean": fk.mean(axis=0).to_numpy(),
                             "returned_none": (fk < 0.5).mean(axis=0).to_numpy(),
                             "runs": fm.notna().sum(axis=0).to_numpy(),
                             "runs_counted": fk.notna().sum(axis=0).to_numpy(),
