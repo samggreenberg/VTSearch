@@ -581,9 +581,10 @@ def fit_corpus(
 #: Bads' mean with the class model's pooled spread, fixed.  ``"corpus"``: its mean and spread fitted on the corpus being
 #: decided, the held-out Bads counted as labelled points of it (each M-step pools them with the corpus's soft members
 #: of the component), so it describes the corpus's own negatives near the line rather than the Bads acquisition
-#: picked.  An eval arm: the harness sets it (``vtscore.eval.live_threshold_rules.labels_chances``); the app's is
-#: ``"labels"``.
-BAD_COMPONENTS: tuple[str, ...] = ("labels", "corpus")
+#: picked.  ``"corpus_mean"``: its mean alone fitted so, its spread the class model's (on Region Photo the full fit
+#: overrated the positives near the line, 0.87 against a true 0.37, and the mean alone did not).  An eval arm: the
+#: harness sets it (``vtscore.eval.live_threshold_rules.labels_chances``); the app's is ``"labels"``.
+BAD_COMPONENTS: tuple[str, ...] = ("labels", "corpus", "corpus_mean")
 BAD_COMPONENT = "labels"
 
 
@@ -610,7 +611,8 @@ def corpus_posteriors(
     labelled points of it (their mean and :attr:`ClassScoreModel.neg_sd`):
     each M-step's Bad mean and spread pool those points with the corpus's soft
     Bad members, the spread floored at *floor*, and the bulk's mean is held
-    below the Bad mean the step ends with.
+    below the Bad mean the step ends with.  ``"corpus_mean"`` fits its mean
+    alone, the spread kept at the model's.
     """
     bad = BAD_COMPONENT if bad is None else bad
     if bad not in BAD_COMPONENTS:
@@ -622,7 +624,7 @@ def corpus_posteriors(
     s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), floor)
     w1, wb = 0.01, 0.05
     b_mu, b_sd = model.mu_neg, model.sigma
-    fit_bad = bad == "corpus"
+    fit_bad = bad in ("corpus", "corpus_mean")
     # The held-out Bads as labelled points: their count, mean and sum of squares about that mean.
     n_b = float(model.n_neg)
     m2_b = (n_b - 1.0) * model.neg_sd**2 if model.neg_sd is not None else 0.0
@@ -642,8 +644,11 @@ def corpus_posteriors(
         if fit_bad:
             n = n_b + float(rb.sum())
             nm = (n_b * model.mu_neg + float((rb * x).sum())) / n
-            ss = m2_b + n_b * (model.mu_neg - nm) ** 2 + float((rb * (x - nm) ** 2).sum())
-            ns = max(math.sqrt(ss / n), floor)
+            if bad == "corpus":
+                ss = m2_b + n_b * (model.mu_neg - nm) ** 2 + float((rb * (x - nm) ** 2).sum())
+                ns = max(math.sqrt(ss / n), floor)
+            else:
+                ns = b_sd
             moved = max(abs(nm - b_mu), abs(ns - b_sd))
             b_mu, b_sd = nm, ns
         s_r0 = float(r0.sum())

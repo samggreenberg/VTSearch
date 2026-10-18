@@ -95,6 +95,13 @@ CANDIDATES_2: dict[str, dict] = {
     "bad_ssl_good_own_sd_no_bound": {"bad": "ssl", "good": "own_sd", "bound": False},
     "good_own_sd_no_bound": {"good": "own_sd", "bound": False},
 }
+#: The third pass: the Bad component's mean alone fitted on the corpus, which does not overshoot on Region Photo where
+#: the full fit does, with the bound at 4x as the full fit's best arm has it.
+CANDIDATES_3: dict[str, dict] = {
+    "today": {},
+    "bad_ssl_mean": {"bad": "ssl_mean"},
+    "bad_ssl_mean_bound_x4": {"bad": "ssl_mean", "margin": 4.0},
+}
 #: The truth swaps read beside them on the withheld half (not on the other corpora).
 REFERENCES = ("post_true", "neg_true", "good_true")
 #: The corpora every candidate is drawn on: the withheld half, and three cut from it.
@@ -490,7 +497,7 @@ EMBEDDER = {"binary": "siglip", "region": "siglip+dinov3_patch"}
 
 def _cell_rows(args) -> list[dict]:
     npz, ident, cells, which = args
-    cands = {1: CANDIDATES, 2: CANDIDATES_2}[which]
+    cands = {1: CANDIDATES, 2: CANDIDATES_2, 3: CANDIDATES_3}[which]
     try:
         snaps = load_snapshots(npz)
         checks = _check_ids(cells, int(ident["idx"]))
@@ -548,7 +555,11 @@ def cmd_measure(a) -> None:
 # --- verify: the library's arm against the pricer ------------------------------------------------------------------
 
 #: The arms the library carries (``labels_chances``), each with the pricer's candidate it must reproduce.
-LIBRARY_ARMS = {"bad_ssl": ("corpus", None), "bad_ssl_bound_x4": ("corpus", 4.0)}
+LIBRARY_ARMS = {
+    "bad_ssl": ("corpus", None),
+    "bad_ssl_bound_x4": ("corpus", 4.0),
+    "bad_ssl_mean_bound_x4": ("corpus_mean", 4.0),
+}
 
 
 def _verify_rows(args) -> list[dict]:
@@ -605,6 +616,8 @@ def cmd_verify(a) -> None:
     print(f"{len(lib)} library snapshots, {len(priced)} priced, {len(m)} matched")
     for arm in LIBRARY_ARMS:
         for tag in (arm, f"empty:{arm}"):
+            if f"{tag}_kept" not in m:
+                continue  # a pass that did not price this arm
             both = m[[f"lib_{tag}_kept", f"{tag}_kept"]].dropna()
             d = (both[f"lib_{tag}_kept"] - both[f"{tag}_kept"]).abs()
             print(f"{tag}: {int((d == 0).sum())} of {len(d)} kept sets the same size; max |diff| {d.max():.0f}")
@@ -640,6 +653,7 @@ LABEL = {
     "bad_ssl_good_own_sd": "Bad fitted + Good's own spread",
     "bad_ssl_good_own_sd_no_bound": "Bad fitted + Good's own spread, no bound",
     "good_own_sd_no_bound": "Good's own spread, no bound",
+    "bad_ssl_mean_bound_x4": "Bad fitted: its mean only, the bound at 4x",
     "post_true": "the true chances (ceiling)",
     "neg_true": "the negatives' own shape (truth)",
     "good_true": "the Good component true (truth)",
@@ -664,7 +678,7 @@ def _f(m: float, se: float, digits: int = 3) -> str:
 
 
 def _names(df: pd.DataFrame) -> list[str]:
-    return [c for c in dict.fromkeys([*CANDIDATES, *CANDIDATES_2, *REFERENCES]) if f"{c}_fbeta" in df]
+    return [c for c in dict.fromkeys([*CANDIDATES, *CANDIDATES_2, *CANDIDATES_3, *REFERENCES]) if f"{c}_fbeta" in df]
 
 
 def prep(df: pd.DataFrame) -> pd.DataFrame:
@@ -698,7 +712,7 @@ def tables(df: pd.DataFrame, path: str) -> dict[str, pd.DataFrame]:
         prev["truth: 1.00; today"] = f"{2 ** g['today_lp'].median():.2f}"
         for n in names:
             gain[LABEL.get(n, n)] = _f(*_by_class(g, f"{n}_dF"))
-            if n in CANDIDATES:
+            if n in CANDIDATES or n in CANDIDATES_2 or n in CANDIDATES_3:
                 served[LABEL.get(n, n)] = _f(*_by_class(g_all, f"{n}_served_dF"))
             sizes[LABEL.get(n, n)] = f"{2 ** g[f'{n}_lk'].median():.2f} / {g[f'{n}_lk'].abs().mean():.2f}"
             prev[LABEL.get(n, n)] = f"{2 ** g[f'{n}_lp'].median():.2f}"
@@ -911,18 +925,21 @@ def cmd_examples(a) -> None:
 def load_passes(files: list[str]) -> pd.DataFrame:
     """Every measure's rows, one per snapshot: the second pass's candidates joined onto the first pass's rows."""
     frames = [pd.read_csv(f, low_memory=False) for f in files]
-    first = [f for f in frames if "good_ssl_fbeta" in f]
-    second = [f for f in frames if "bad_ssl_bound_x4_fbeta" in f]
-    rest = [f for f in frames if "good_ssl_fbeta" not in f and "bad_ssl_bound_x4_fbeta" not in f]
+    marks = ("good_ssl_fbeta", "bad_ssl_bound_x4_fbeta", "bad_ssl_mean_bound_x4_fbeta")
+    passes = [[f for f in frames if m in f] for m in marks]
+    passes[0] += [f for f in frames if not any(m in f for m in marks)]
     keys = ["run", "idx", "path", "t"]
-    one = pd.concat(first + rest, ignore_index=True) if first or rest else None
-    if not second:
-        return one if one is not None else pd.DataFrame()
-    two = pd.concat(second, ignore_index=True)
-    if one is None:
-        return two
-    extra = [c for c in two if c not in one or c in keys]
-    return one.merge(two[extra], on=keys, how="left")
+    out = None
+    for frames_k in passes:
+        if not frames_k:
+            continue
+        k = pd.concat(frames_k, ignore_index=True)
+        if out is None:
+            out = k
+            continue
+        extra = [c for c in k if c not in out or c in keys]
+        out = out.merge(k[extra], on=keys, how="left")
+    return out if out is not None else pd.DataFrame()
 
 
 def cmd_report(a) -> None:
@@ -947,7 +964,7 @@ def main(argv=None) -> int:
     m.add_argument("--out", required=True)
     m.add_argument("--procs", type=int, default=8)
     m.add_argument("--limit", type=int, default=0)
-    m.add_argument("--pass", dest="pass_", type=int, default=1, choices=(1, 2))
+    m.add_argument("--pass", dest="pass_", type=int, default=1, choices=(1, 2, 3))
     v = sub.add_parser("verify")
     v.add_argument("--results", action="append", required=True)
     v.add_argument("--priced", action="append", required=True, help="pass 2's snapshots.csv.gz (repeatable)")

@@ -128,6 +128,16 @@ class TestTheCorpusFittedBadComponent:
         assert fitted_bad[truth == 1].sum() > labels[truth == 1].sum()
         assert fitted_bad.sum() < truth.sum(), "still no more chance than there are positives"
 
+    def test_the_mean_alone_keeps_the_models_spread(self):
+        orderings, corpus, truth = _session()
+        line = fit_labels_line(orderings, corpus, None, {})
+        assert line is not None and line.spread is not None
+        fitted = line.model.floored(line.spread)
+        mean = corpus_posteriors(fitted, corpus, floor=line.spread, bad="corpus_mean")
+        labels = corpus_posteriors(fitted, corpus, floor=line.spread)
+        assert mean[truth == 1].sum() > labels[truth == 1].sum()
+        assert not np.array_equal(mean, corpus_posteriors(fitted, corpus, floor=line.spread, bad="corpus"))
+
     @pytest.mark.parametrize("beta", [0.25, 1.0, 4.0])
     def test_the_line_keeps_more_positives_at_every_preset(self, beta):
         orderings, corpus, truth = _session()
@@ -142,8 +152,8 @@ class TestTheCorpusFittedBadComponent:
         """#4452's requirement, at the margin the arm loosens the bound to as well."""
         orderings, _, _ = _session()
         empty = _sig(np.random.default_rng(3).normal(-3.0, 1.0, 2000))
-        for margin in (None, 4.0):
-            with labels_chances("corpus", margin):
+        for bad, margin in (("corpus", None), ("corpus", 4.0), ("corpus_mean", 4.0)):
+            with labels_chances(bad, margin):
                 line = fit_labels_line(orderings, _session()[1], None, {})
                 assert line is not None
                 find = line.on_corpus(empty)

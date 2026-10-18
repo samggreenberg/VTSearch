@@ -239,7 +239,7 @@ def labels_chances(bad: "str | None" = None, bound_margin: "float | None" = None
     *bad* places the 3-part fit's Bad component
     (:data:`~vtscore.training.thresholds.labels_line.BAD_COMPONENT`): ``"corpus"``
     fits it on the corpus being decided, the held-out Bads counted as labelled
-    points of it; ``"labels"`` is the app's.  *bound_margin* is the factor the
+    points of it, ``"corpus_mean"`` its mean alone; ``"labels"`` is the app's.  *bound_margin* is the factor the
     2-part estimate of the positives may exceed the counted bound by
     (``_BOUND_MARGIN``, the app's 2); ``math.inf`` removes the bound.  ``None``
     leaves a piece as the app ships it.  Every line, Train's and Find's alike,

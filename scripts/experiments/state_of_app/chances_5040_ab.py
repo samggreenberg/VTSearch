@@ -5,7 +5,9 @@ and seed), which differ only in the chances the labels line is cut on:
 
 * ``ctl``: the app, the labels' Bad component and the counted bound at 2x;
 * ``bssl``: the Bad component fitted on the corpus, the held-out Bads counted as labelled points of it;
-* ``bssl4``: the same, with the counted bound at 4x.
+* ``bssl4``: the same, with the counted bound at 4x;
+* ``bmean4``: the Bad component's mean alone fitted on the corpus, the bound at 4x (from a second frozen tree whose
+  default path is the first's).
 
 An arm's run is identical to the control's until its labels line first differs. Autopilot reads the line's chances
 from the first retrain (its hard picks sample where they put the line), while the screen still shows the typed
@@ -40,14 +42,15 @@ from early_check_4664 import INK, MUTED, STEP_COLS, _axes_style, _headline, area
 T = 200
 GRID_T = np.arange(T + 1)
 CONTROL = "ctl"
-ARMS = ("ctl", "bssl", "bssl4")
+ARMS = ("ctl", "bssl", "bssl4", "bmean4")
 BETAS = (0.25, 1.0, 4.0)
 NAME = {
     "ctl": "the app (labels' Bad component, bound 2x)",
     "bssl": "Bad component fitted on the corpus",
     "bssl4": "Bad component fitted on the corpus, bound 4x",
+    "bmean4": "Bad component's mean fitted on the corpus, bound 4x",
 }
-COLOR = {"ctl": "#8a8985", "bssl": "#2a78d6", "bssl4": "#eb6834"}
+COLOR = {"ctl": "#8a8985", "bssl": "#2a78d6", "bssl4": "#eb6834", "bmean4": "#1baf7a"}
 CLICKS = (10, 25, 35, 50, 75, 100, 125, 150, 175, 200)
 AREAS = ((0, 50), (0, 100), (0, 150), (0, 200))
 
@@ -325,7 +328,10 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--docs", type=Path, help="the report's tables dir; figures go beside it")
     ap.add_argument("--procs", type=int, default=8)
+    ap.add_argument("--arms", default=",".join(ARMS), help="the arms to read; the control is always one")
     a = ap.parse_args()
+    if CONTROL not in a.arms.split(","):
+        a.arms = f"{CONTROL},{a.arms}"
     base = pd.read_csv(a.baseline)
     base = base[(base["embedder"] == "siglip") & (base["seed"] < a.seeds)]
     res: dict[float, dict] = {}
@@ -335,12 +341,12 @@ def main() -> int:
         tq = {f"{c}|{int(s)}": float(fbeta([p], [r], beta)[0]) for c, s, p, r in
               zip(base["category"], base["seed"], base[f"text_line_precision_b{t}"], base[f"text_line_recall_b{t}"])}  # fmt: skip
         runs = {}
-        for arm in ARMS:
+        for arm in [x for x in ARMS if x in a.arms.split(",")]:
             steps, picks = load_arm(run_dir(a.root, a.date, a.tag, arm, beta), a.seeds, a.procs)
             runs[arm] = per_run(steps, picks, tq, beta)
             counts[f"{arm}-b{t}"] = len(runs[arm])
             print(f"beta {beta:g} {arm}: {len(runs[arm])} runs", flush=True)
-        if min(len(runs[arm]) for arm in ARMS) == 0:
+        if min(len(runs[arm]) for arm in runs) == 0:
             print(f"beta {beta:g}: an arm has no runs yet; skipped")
             continue
         res[beta] = analyse_beta(runs, beta)
