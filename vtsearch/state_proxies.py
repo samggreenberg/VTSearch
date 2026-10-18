@@ -7,7 +7,7 @@ names - its functions resolve the active context explicitly - but the app
 keeps them as a convenience facade so existing code reads naturally.
 
 These proxies live on the app side of the ``vtscore`` / ``vtsearch`` split
-(see Phase 3 of ``../vtscore/docs/architecture.md``).  ``vtsearch.state``
+(the Global state seam in ``../vtscore/docs/architecture.md``).  ``vtsearch.state``
 re-exports them under their original names so ``from vtsearch.state import
 medias`` keeps working; the library tier ``vtscore.state`` never imports the
 proxy classes.
@@ -290,7 +290,7 @@ class _ProxyList(list):
 #   label_history         Combined label history: [(media_id, label, ts), ...]
 #   vote_click_times      Click order (1-indexed) per media_id
 #   vote_region_boxes     media_id -> (x0, y0, x1, y1) normalised box drawn on a
-#                         yes-vote (patch-embedder v2); absent otherwise
+#                         yes-vote; absent otherwise
 #   last_learned_scores   media_id -> learned-sort score (float in [0, 1])
 #   textsort_suggestions  Text queries that got a Good vote, most recent last
 medias: dict[int, dict[str, Any]]

@@ -57,15 +57,27 @@ _SIZE_RE = re.compile(r"(?<![\dx])(\d{2,5})x(\d{2,5})(?![\dx])")
 #: ``30 fps`` / ``29.97 fps`` (``tbr``/``tbn`` deliberately not matched).
 _FPS_RE = re.compile(r"(\d+(?:\.\d+)?)\s+fps")
 
+#: ``SAR 32:27`` - the sample aspect ratio, printed bare (``SAR 853:720 DAR
+#: 853:480``) or bracketed after the size (``720x480 [SAR 32:27 DAR 16:9]``).
+_SAR_RE = re.compile(r"\bSAR (\d+):(\d+)")
+
 
 @dataclass(frozen=True)
 class VideoInfo:
-    """Container metadata for a video file.  Zeroed fields mean "unknown"."""
+    """Container metadata for a video file.  Zeroed fields mean "unknown".
+
+    ``width`` / ``height`` are the *stored* frame size, before any rotation.
+    ``sar`` is the sample aspect ratio, a stored pixel's width over its height:
+    1.0 for square pixels (and when unknown), 32/27 for a 720x480 DVD rip shown
+    at 16:9.  The frames :func:`frame_at` returns are stored pixels, so a caller
+    that shows one at the video's display aspect stretches it by ``sar``.
+    """
 
     duration: float = 0.0
     fps: float = 0.0
     width: int = 0
     height: int = 0
+    sar: float = 1.0
 
     @property
     def frame_count(self) -> int:
@@ -143,12 +155,17 @@ def _parse_probe(stderr: str) -> VideoInfo | None:
     if fps_match is not None:
         fps = float(fps_match.group(1))
 
+    sar = 1.0
+    sar_match = _SAR_RE.search(line)
+    if sar_match is not None and int(sar_match.group(1)) > 0 and int(sar_match.group(2)) > 0:
+        sar = int(sar_match.group(1)) / int(sar_match.group(2))
+
     duration = 0.0
     dur = _DURATION_RE.search(stderr)
     if dur is not None:
         duration = int(dur.group(1)) * 3600 + int(dur.group(2)) * 60 + float(dur.group(3))
 
-    return VideoInfo(duration=duration, fps=fps, width=width, height=height)
+    return VideoInfo(duration=duration, fps=fps, width=width, height=height, sar=sar)
 
 
 def probe(path: str | Path) -> VideoInfo | None:
@@ -343,12 +360,15 @@ def _cv2_probe(path: str | Path) -> VideoInfo | None:
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            sar_num = float(cap.get(cv2.CAP_PROP_SAR_NUM) or 0.0)
+            sar_den = float(cap.get(cv2.CAP_PROP_SAR_DEN) or 0.0)
         finally:
             cap.release()
     except Exception:
         return None
     duration = frame_count / fps if fps > 0 and frame_count > 0 else 0.0
-    return VideoInfo(duration=duration, fps=fps, width=max(0, width), height=max(0, height))
+    sar = sar_num / sar_den if sar_num > 0 and sar_den > 0 else 1.0
+    return VideoInfo(duration=duration, fps=fps, width=max(0, width), height=max(0, height), sar=sar)
 
 
 def _cv2_frame_at(path: str | Path, time_seconds: float) -> np.ndarray | None:

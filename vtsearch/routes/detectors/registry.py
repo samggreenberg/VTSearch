@@ -1,6 +1,6 @@
 """Blueprint for detector-registry routes (the in-memory detector catalog).
 
-Every registered detector is backed by a labelset file on disk and an MLP
+Every registered detector is backed by a labelset file on disk and a head
 that lives only in :class:`~vtsearch.state.DetectorContext` once the user
 loads the detector.
 
@@ -16,7 +16,7 @@ PUT    /api/detectors/registry/<id>/rename            Rename a registered detect
 PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's AutoFind flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``, except for ``POST /from-labelset/<importer>``, which
 takes plugin-dependent fields and declares no schema (see
 "Routes with no typed schema" in ``docs/API.md``).
@@ -149,6 +149,45 @@ def _keep_creation_beta(detector_data: dict, beta: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _fill_type_and_examples(entry: dict) -> None:
+    """Set *entry*'s ``embedder_type`` and ``examples``, reading the detector JSON at most once.
+
+    The locked embedder type drives the frontend's type-based compatibility
+    gate, and the seed-example list is what the label session reads so
+    Autopilot can sort by every media example.  Both normally come from the
+    registry entry.  An entry missing either (registered before the field
+    existed, or created with no dataset loaded, which leaves the type ``""``)
+    falls back to one parse of the detector JSON, and whatever that parse
+    learns is written back to the registry so later listings never open the
+    file for it again (#5001).  A type the JSON cannot supply either stays
+    ``""`` unpersisted (it resolves at first train), and a missing file has
+    nothing to persist.
+    """
+    needs_type = not entry.get("embedder_type")
+    needs_examples = "examples" not in entry
+    if not (needs_type or needs_examples):
+        return
+    data = _read_detector(_detector_path(entry.get("name", "")))
+    learned: dict = {}
+    if needs_type:
+        entry["embedder_type"] = detector_embedder_type_from_data(data or {})
+        if entry["embedder_type"]:
+            learned["embedder_type"] = entry["embedder_type"]
+    if needs_examples:
+        entry["examples"] = (data or {}).get("examples", [])
+        if data is not None:
+            learned["examples"] = entry["examples"]
+    if not learned:
+        return
+    from vtscore.detectors.registry import update_detector
+
+    try:
+        update_detector(entry["id"], **learned)
+    except Exception as exc:
+        # A listing must not fail over a cache write; the next one retries.
+        logger.warning("Failed to persist %s for detector %s: %s", sorted(learned), entry["id"], exc)
+
+
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
@@ -199,19 +238,7 @@ def list_registered_detectors():
             entry["embedder"] = ctx_emb or entry.get("embedder", "") or ""
         else:
             entry["embedder"] = entry.get("embedder", "") or ""
-        # The detector's locked embedder type drives the frontend's
-        # type-based compatibility gate.  Prefer the persisted entry value;
-        # fall back to (legacy-migrated) read of the detector JSON for entries
-        # registered before the field existed.
-        entry["embedder_type"] = entry.get("embedder_type") or detector_embedder_type_from_data(
-            _read_detector(_detector_path(entry.get("name", ""))) or {}
-        )
-        # Seed-example list, read by the label session so Autopilot can sort
-        # by every media example.  Entries registered before the field existed
-        # fall back to the detector JSON (same pattern as embedder_type).
-        if "examples" not in entry:
-            det_data = _read_detector(_detector_path(entry.get("name", ""))) or {}
-            entry["examples"] = det_data.get("examples", [])
+        _fill_type_and_examples(entry)
         if entry["autofind"]:
             latest = verdict_summaries(_read_detector(_detector_path(entry.get("name", ""))), latest_only=True)
             entry["test_verdict"] = latest[0] if latest else None
@@ -508,7 +535,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 # ---------------------------------------------------------------------------
 
 
-_LOAD_STEPS = 3  # restore labels, seed examples, train MLP
+_LOAD_STEPS = 3  # restore labels, seed examples, train head
 #: Timing task name; its step names and shipped weights live in
 #: :data:`vtscore.timing.tasks.TASKS`.
 _DETECTOR_LOAD_TASK = "detector_load"
@@ -525,7 +552,7 @@ def _run_detector_load_task(
 ) -> None:
     """Background worker for :func:`load_detector_route`.
 
-    Restores labels, seeds example votes, embeds + trains the MLP for the
+    Restores labels, seeds example votes, embeds + trains the head for the
     detector, then marks it loaded. Cancellation and errors tear the
     just-built context back down and surface on the task tracker. Lifted out
     of the route's closure so the route itself stays simple; the captured
@@ -700,7 +727,7 @@ def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
 
     Its cached label embeddings may have been built against a different embedder
     than the currently-active dataset uses (e.g. the user switched from a SigLIP
-    image dataset to a CLIP one). Re-embed the labels in that case so MLP
+    image dataset to a CLIP one). Re-embed the labels in that case so head
     training mixes only same-space vectors; the invalidation itself happens
     inside ``populate_label_embeddings``, this just surfaces the work via a
     progress task instead of letting it run lazily inside the next request.
@@ -738,7 +765,7 @@ def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
     task_id = f"_detload_{detector_id}"
     try:
         # Build the context but do NOT register it yet: the worker publishes it
-        # into the global store only after labels/embeddings/MLP are populated,
+        # into the global store only after labels/embeddings/head are populated,
         # so no concurrent request can observe a torn, empty-then-filling
         # detector.
         det_ctx = DetectorContext(
@@ -1113,13 +1140,15 @@ def update_detector_readers(body: dict, detector_id: str):
     Body: ``{"readers": ["alice", "bob"]}``. Use ``["*"]`` to make the
     detector visible to all users. Mirrors the dataset readers endpoint.
     """
-    from vtscore.detectors.registry import set_detector_readers
+    from vtscore.detectors.registry import update_detector_readers as _reg_update_readers
+    from vtscore.security.readers import ReadersUpdate
 
     readers = body["readers"]
-    ok, err = set_detector_readers(detector_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(detector_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("detector"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("detector"))
     return {"ok": True, "readers": readers}
 
 
@@ -1168,7 +1197,7 @@ def _active_dataset_name() -> str:
 def get_detector_stats(detector_id: str):
     """Return labelset composition and provenance for a registered detector.
 
-    Counts/metadata only — no embeddings or MLP weights are read or
+    Counts/metadata only — no embeddings or head weights are read or
     returned (the labelset file is the canonical persisted form). The
     ``num_positive_resolved`` / ``active_dataset_name`` pair reports how
     much of the positive set the Browse button could currently project;

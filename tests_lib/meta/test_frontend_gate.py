@@ -6,11 +6,13 @@ through the suite in a fresh worktree, skipped the frontend build and 2,446
 Vitest specs on a frontend change, and reported every gate green.
 
 So the cases that matter are the two directions: a frontend diff with no
-`node_modules` must block, and a backend-only diff in the same worktree must
-still be allowed to skip. Both are exercised against real git repositories
-rather than a stubbed diff, because the premise being tested is precisely
-"what does the diff say", and a synthesized answer would re-encode the
-assumption instead of checking it.
+`node_modules` must block, and a backend-only diff must be allowed to skip --
+whether or not `node_modules` is present, because the gates can only judge a
+change under `frontend/`, and the skip is a claim about the diff, not about
+what is installed. Both are exercised against real git repositories rather
+than a stubbed diff, because the premise being tested is precisely "what does
+the diff say", and a synthesized answer would re-encode the assumption instead
+of checking it.
 """
 
 from __future__ import annotations
@@ -79,11 +81,20 @@ class TestTheTwoDirections:
         decision, _ = decide(repo)
         assert decision == "skip"
 
-    def test_node_modules_present_always_runs(self, repo: Path) -> None:
+    def test_a_frontend_change_with_node_modules_runs(self, repo: Path) -> None:
         (repo / "frontend" / "node_modules").mkdir()
         (repo / "frontend" / "src").mkdir()
         (repo / "frontend" / "src" / "app.ts").write_text("export const a = 1;\n")
         assert decide(repo)[0] == "run"
+
+    def test_a_backend_change_with_node_modules_skips_too(self, repo: Path) -> None:
+        # The gates can only judge frontend/, so what is installed does not
+        # change what they could have found: nothing.
+        (repo / "frontend" / "node_modules").mkdir()
+        (repo / "vtscore" / "core.py").write_text("x = 2\n")
+        decision, why = decide(repo)
+        assert decision == "skip"
+        assert "no frontend/ path" in why
 
 
 class TestWhatCountsAsAChange:
@@ -121,6 +132,12 @@ class TestFailClosed:
         decision, why = decide(repo)
         assert decision == "block"
         assert "origin/dev" in why
+
+    def test_no_origin_dev_with_node_modules_runs(self, repo: Path) -> None:
+        # Unreadable premise, but running costs only time here, so run.
+        (repo / "frontend" / "node_modules").mkdir()
+        git(repo, "update-ref", "-d", "refs/remotes/origin/dev")
+        assert decide(repo)[0] == "run"
 
     def test_an_empty_diff_still_skips(self, repo: Path) -> None:
         # Nothing changed at all: the gates have nothing to judge either way.

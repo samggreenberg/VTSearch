@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -17,6 +17,8 @@ import type { DatasetStatusResponse } from '../generated/api-client/models/datas
 import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
 import { cancelDatasetLoadTask } from '../generated/api-client/fn/datasets-status/cancel-dataset-load-task';
 import { datasetStatus } from '../generated/api-client/fn/datasets-status/dataset-status';
+import { dismissDatasetTask } from '../generated/api-client/fn/datasets-status/dismiss-dataset-task';
+import { buildDatasetCoverageAtlas } from '../generated/api-client/fn/datasets-registry/build-dataset-coverage-atlas';
 import { datasetDomainShift } from '../generated/api-client/fn/datasets-registry/dataset-domain-shift';
 import { deleteRegisteredDataset } from '../generated/api-client/fn/datasets-registry/delete-registered-dataset';
 import { getDatasetDuplicates } from '../generated/api-client/fn/datasets-registry/get-dataset-duplicates';
@@ -50,6 +52,13 @@ export class DatasetsRegistryApiService {
     );
   }
 
+  /** Remove a finished task's row; a failed import's row stays until this. */
+  dismissTask(taskId: string, context?: HttpContext): Observable<DatasetRegistryOkResponse> {
+    return dismissDatasetTask(this.http, this.config.rootUrl, { task_id: taskId }, context).pipe(
+      map((r) => r.body),
+    );
+  }
+
   getRegistry(): Observable<DatasetsRegistryListResponse> {
     return listRegisteredDatasets(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
@@ -73,16 +82,32 @@ export class DatasetsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
+  /** Build the coverage atlas of a loaded dataset that has none (one past the
+   *  auto-build threshold loads without it). Resolves with the ``task_id``;
+   *  progress arrives on the ``loading-tasks`` channel on a row keyed to the
+   *  dataset. A call while a build runs returns that build's ``task_id``. */
+  buildCoverageAtlas(datasetId: string): Observable<DatasetRegistryLoadResponse> {
+    return buildDatasetCoverageAtlas(this.http, this.config.rootUrl, {
+      dataset_id: datasetId,
+    }).pipe(map((r) => r.body));
+  }
+
   unloadRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {
     return unloadRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
 
-  deleteRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {
-    return deleteRegisteredDataset(this.http, this.config.rootUrl, {
-      dataset_id: datasetId,
-    }).pipe(map((r) => r.body));
+  /** Pass *context* to tag the request, e.g. with {@link SKIP_ERROR_TOAST}
+   *  when the caller reports a failure itself (the Dashboard's bulk delete
+   *  sums a batch's failures into one toast). */
+  deleteRegistered(datasetId: string, context?: HttpContext): Observable<DatasetRegistryOkResponse> {
+    return deleteRegisteredDataset(
+      this.http,
+      this.config.rootUrl,
+      { dataset_id: datasetId },
+      context,
+    ).pipe(map((r) => r.body));
   }
 
   renameRegistered(

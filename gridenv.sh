@@ -41,3 +41,33 @@ export TOKENIZERS_PARALLELISM=false
 # AVX-512 kernels and the Xeons AVX2, whose float32 rounding differs enough to move
 # document VLAD/tile vectors, and with them closed-loop sessions, between node types.
 export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
+# OpenBLAS 0.3.34 (numpy 2.5.2 on) re-tunes GEMM blocking on a Zen 4 CPU (the L40S
+# nodes' EPYC 9534) even under a forced core (#4938): Haswell float64 GEMM and any
+# SVD then segfault, and float32 GEMM sums in another order. It fires only on a 1 MB
+# L2, which the Haswell table reads nowhere else, so 2 MB keeps its blocking. An
+# exported value, an empty one included, wins.
+if [ "${OPENBLAS_CORETYPE,,}" = haswell ]; then
+  export OPENBLAS_L2_SIZE="${OPENBLAS_L2_SIZE-2048}"
+fi
+# And one set of numpy kernels (#4110): numpy dispatches float64 exp/log and argsort
+# to AVX-512 code where the CPU has it (Xeon Silver 4114 and Gold 5218R, EPYC 9534)
+# and not where it does not (EPYC 7713, Xeon E5-2698 v4). The two round exp/log
+# differently and order ties differently, which moved the anchored EM's threshold by
+# 1e-6 and, votes later, a pick. Turning those targets off costs that EM ~40% on an
+# AVX-512 node and nothing on the others. x86-64 only: numpy warns about a feature
+# its build cannot dispatch. The cell runner pins MKL and ATen as well
+# (scripts/experiments/_expcommon.py `cpu_kernel_pins`); they cost a CPU GEMM 2-3x,
+# so they are not set here for every job.
+# The value names numpy's dispatch targets, which numpy 2.4 renamed (#4930), and
+# numpy skips a name its build lacks with a warning Python hides, so the old value
+# disables nothing on numpy 2.4. It comes from the numpy this python has, chosen by
+# the cell runner's own function. An exported value wins, an empty one included.
+if [ "$(uname -m)" = x86_64 ] && [ -z "${NPY_DISABLE_CPU_FEATURES+set}" ]; then
+  if _vts_npy_pin="$(python -c 'import sys; sys.path.insert(0, sys.argv[1]); import _expcommon; print(_expcommon.numpy_kernel_pin())' \
+    "${_VTS_WT}/scripts/experiments" 2>/dev/null)"; then
+    export NPY_DISABLE_CPU_FEATURES="$_vts_npy_pin"
+  else
+    echo "gridenv.sh: could not read numpy's version, so numpy is not pinned and runs AVX-512 kernels where the CPU has them (#4930)" >&2
+  fi
+  unset _vts_npy_pin
+fi

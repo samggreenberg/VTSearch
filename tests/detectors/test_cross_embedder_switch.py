@@ -2,7 +2,7 @@
 
 When the active dataset changes and the new dataset's embedder differs from
 the one the loaded detector's label vectors were built with, mixing the two
-into a single MLP produces garbage. These tests guard the two halves of the
+into a single head produces garbage. These tests guard the two halves of the
 fix:
 
 1. ``populate_label_embeddings`` invalidates ``det_ctx.label_embeddings`` and

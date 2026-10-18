@@ -1,0 +1,23 @@
+# VTSearch: LabBench image dependencies (image search with SigLIP)
+#
+# requirements/labbench.txt (the core every LabBench image shares) plus what
+# the image media type and its default embedder, SigLIP, need.
+#
+# Used by docker/Dockerfile.labbench with MEDIA_TYPE=image (the default).
+
+-r labbench.txt
+
+# ── Image media type ─────────────────────────────────────────────────
+Pillow
+# SigLIP's image processor is requested by backend name rather than
+# inheriting a default (#3173), and the name we ask for is `torchvision`
+# — so torchvision is a hard requirement of the preprocessing path, not
+# an optional accelerator. `torch` does not pull it in and neither does
+# `transformers`, so without this line the processor import raises
+# ImportError the first time an image is embedded. It resolves against
+# the CPU wheel index labbench.txt adds.
+torchvision
+
+# ── SigLIP embedder ──────────────────────────────────────────────────
+sentencepiece
+protobuf

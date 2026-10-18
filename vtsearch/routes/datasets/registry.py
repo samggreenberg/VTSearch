@@ -1,6 +1,6 @@
 """Blueprint for dataset-registry routes (the on-disk dataset catalog).
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``name`` on rename,
@@ -47,10 +47,11 @@ from vtscore.datasets.registry import (
     get_loaded_ids as _reg_loaded_ids,
     remove_loaded_id as _reg_remove_loaded,
     rename_dataset as _reg_rename,
-    set_readers as _reg_set_readers,
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
+    update_readers as _reg_update_readers,
 )
+from vtscore.security.readers import ReadersUpdate
 from vtsearch.schemas.datasets import (
     DatasetAutofindRequestSchema,
     DatasetDomainShiftResponseSchema,
@@ -371,6 +372,11 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
+def _atlas_task_id(dataset_id: str) -> str:
+    """The ``loading-tasks`` id of *dataset_id*'s on-demand coverage-atlas build."""
+    return f"_atlas_{dataset_id[:8]}"
+
+
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/coverage-atlas", methods=["POST"])
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
@@ -384,7 +390,9 @@ def build_dataset_coverage_atlas(dataset_id: str):
     build on demand.  The dataset must already be loaded in memory.  Progress
     is reported on the ``loading-tasks`` channel of ``GET /api/events`` under
     the returned ``task_id``; the build is cancellable.  Calling it on a
-    dataset that already has a tree rebuilds it from scratch.
+    dataset that already has a tree rebuilds it from scratch; calling it
+    while a build is running returns that build's ``task_id`` and starts
+    nothing.
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import (
@@ -400,14 +408,17 @@ def build_dataset_coverage_atlas(dataset_id: str):
         abort(404, message="Dataset not found in registry")
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
-    if not _reg_is_loaded(dataset_id):
+    ctx = get_context(dataset_id) if _reg_is_loaded(dataset_id) else None
+    if ctx is None:
         abort(400, message="Load the dataset before building its coverage atlas")
 
-    ctx = get_context(dataset_id)
-    if ctx is None:
-        abort(400, message="This dataset is not currently loaded")
+    task_id = _atlas_task_id(dataset_id)
+    # One build per dataset at a time: a repeat request (a Stats window
+    # reopened mid-build) attaches to the running build instead of starting a
+    # twin that would replace its task row and race it to install the atlas.
+    if _loading_tasks.worker_alive(task_id):
+        return {"ok": True, "message": "Coverage atlas build already in progress", "task_id": task_id}
 
-    task_id = f"_atlas_{dataset_id[:8]}"
     tracker = _loading_tasks.create_task(
         task_id,
         entry.get("name", dataset_id),
@@ -439,6 +450,10 @@ def build_dataset_coverage_atlas(dataset_id: str):
                 if det_ctx is not None and getattr(det_ctx, "votes_dataset_id", None) == dataset_id:
                     with _state_lock:
                         resync_coverage_atlas_to_detector(ctx, det_ctx)
+                # Say "done" now, as the load route does: left at "loading",
+                # the row reads as still building until list_tasks() prunes
+                # it, and the Stats window waits that long to show the atlas.
+                tracker.update("idle", "", 0, 0, step=None, total_steps=None)
             except CancelledError:
                 ctx.coverage_atlas = None
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
@@ -490,70 +505,19 @@ def dataset_domain_shift(dataset_id: str):
     was priced and failed.  See
     ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
     """
-    import numpy as np
-
     from vtsearch.auth import get_current_user
-    from vtsearch.state import get_active_context, get_context
-    from vtscore.embedding.binding import embedder_supports_patch_regions
-    from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.coverage.atlas import domain_shift_report
+    from vtsearch.state import get_active_context
+    from vtsearch.training_domain import DomainShiftUnavailable, domain_shift_against
 
     entry = _reg_get(dataset_id)
     if entry is None:
         abort(404, message="Dataset not found in registry")
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")
-    ref_ctx = get_context(dataset_id)
-    if ref_ctx is None:
-        abort(400, message="Load the reference dataset before running a domain-shift check")
-    atlas = ref_ctx.coverage_atlas
-    if atlas is None:
-        abort(400, message="Reference dataset has no coverage atlas; build it first")
-
-    active_ctx = get_active_context()
-    if active_ctx.dataset_id == dataset_id:
-        abort(400, message="Active dataset and reference dataset are the same")
-    # Typicality p-values are meaningless across embedding spaces: refuse
-    # instead of returning confident nonsense (the atlas geometry is stamped
-    # by its dataset's embedder).
-    active_entry = _reg_get(active_ctx.dataset_id)
-    ref_embedder = entry.get("embedder", "")
-    active_embedder = (active_entry or {}).get("embedder", "")
-    if ref_embedder != active_embedder:
-        abort(
-            400,
-            message=(
-                f"Embedder mismatch: reference uses {ref_embedder or 'unknown'!r}, "
-                f"active dataset uses {active_embedder or 'unknown'!r}"
-            ),
-        )
-    # Patch spaces are too diffuse for the atlas's fixed-alpha guard to carry
-    # information — measured, not assumed: on ``dinov3_patch`` it fires on 80%
-    # of the reference dataset's *own* held-out data against 93% for a
-    # different corpus, a separation of 0.13, i.e. close to a constant.  Both
-    # obvious repairs (dropping the path averaging, refitting alpha per
-    # embedder) were priced and made it worse.  Refusing is the honest answer;
-    # returning a verdict here answers a direct question with noise.  See
-    # docs/experiments/2026-08-30-fit-quality-3329/REPORT.md (B4-B6).
-    if embedder_supports_patch_regions(ref_embedder):
-        abort(
-            400,
-            message=(
-                f"Domain-shift checks are not supported for patch embedders "
-                f"({ref_embedder!r}): the typicality guard does not separate "
-                f"in-domain from out-of-domain data in a patch space"
-            ),
-        )
-
-    vectors = [
-        np.asarray(emb, dtype=np.float32)
-        for media in active_ctx.medias.values()
-        if (emb := media_embedding(media)) is not None
-    ]
-    if not vectors:
-        abort(400, message="Active dataset has no embeddings to compare")
-    report = domain_shift_report(atlas, np.stack(vectors))
-    return {"reference_dataset_id": dataset_id, **report}
+    try:
+        return domain_shift_against(dataset_id, get_active_context())
+    except DomainShiftUnavailable as e:
+        abort(400, message=str(e))
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autofind", methods=["POST"])
@@ -613,6 +577,7 @@ def run_dataset_autofind(body: dict, dataset_id: str):
 @datasets_registry_bp.response(200, DatasetRegistryOkResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
 @datasets_registry_bp.alt_response(403, description="Only the dataset creator can unload it.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def unload_registered_dataset(dataset_id: str):
     """Unload a specific dataset from memory.
 
@@ -621,6 +586,8 @@ def unload_registered_dataset(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
 
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
     if not _reg_is_owner(dataset_id, get_current_user()):
         abort(403, message="Only the dataset creator can unload it")
     if not _reg_is_loaded(dataset_id):
@@ -664,6 +631,8 @@ def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
     from vtsearch.auth import get_current_user
 
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
     if not _reg_is_owner(dataset_id, get_current_user()):
         abort(403, message="Only the dataset creator can delete it")
 
@@ -680,18 +649,22 @@ def delete_registered_dataset(dataset_id: str):
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
 @datasets_registry_bp.arguments(DatasetRegistryRenameRequestSchema)
 @datasets_registry_bp.response(200, DatasetRegistryRenameResponseSchema)
+@datasets_registry_bp.alt_response(400, description="Empty name after stripping.")
 @datasets_registry_bp.alt_response(403, description="Only the dataset creator can rename it.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def rename_registered_dataset(body: dict, dataset_id: str):
     """Rename a registered dataset."""
     from vtsearch.auth import get_current_user
 
-    if not _reg_is_owner(dataset_id, get_current_user()):
-        abort(403, message="Only the dataset creator can rename it")
-
     new_name = body["name"].strip()
     if not new_name:
         abort(400, message="name is required")
+
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
+    if not _reg_is_owner(dataset_id, get_current_user()):
+        abort(403, message="Only the dataset creator can rename it")
+
     ok = _reg_rename(dataset_id, new_name)
     if not ok:
         abort(404, message="Dataset not found")
@@ -719,10 +692,11 @@ def update_dataset_readers(body: dict, dataset_id: str):
     from vtsearch.auth import get_current_user
 
     readers = body["readers"]
-    ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
-    if not ok:
-        status = 403 if "creator" in err else 404
-        abort(status, message=err)
+    outcome = _reg_update_readers(dataset_id, readers, get_current_user())
+    if outcome is ReadersUpdate.NOT_CREATOR:
+        abort(403, message=outcome.message("dataset"))
+    if outcome is ReadersUpdate.NOT_FOUND:
+        abort(404, message=outcome.message("dataset"))
     return {"ok": True, "readers": readers}
 
 
@@ -750,6 +724,29 @@ def _repaired_file_type_counts(dataset_id: str, stored: dict) -> dict:
         return stored
     _reg_update(dataset_id, file_type_counts=recounted)
     return recounted
+
+
+def _coverage_atlas_status(dataset_id: str) -> dict | None:
+    """Return *dataset_id*'s coverage-atlas state, or ``None`` when it isn't loaded.
+
+    The atlas lives only on the in-memory context, so an unloaded dataset has
+    no state to report.  A loaded one past the auto-build threshold loads
+    without an atlas (as does one whose on-demand build was cancelled); the
+    Stats window offers the build from this.
+    """
+    from vtsearch.state import COVERAGE_ATLAS_AUTO_THRESHOLD, get_context
+
+    ctx = get_context(dataset_id)
+    if ctx is None:
+        return None
+    # The tracker, not the worker: a build reports "idle" before its thread
+    # unwinds, and the window must not read a cancelled build as still running.
+    tracker = _loading_tasks.get_tracker(_atlas_task_id(dataset_id))
+    return {
+        "built": ctx.coverage_atlas is not None,
+        "building": tracker is not None and tracker.get()["status"] != "idle",
+        "auto_build_threshold": COVERAGE_ATLAS_AUTO_THRESHOLD,
+    }
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/stats")
@@ -790,6 +787,7 @@ def get_dataset_stats(dataset_id: str):
         "source": entry.get("source") or {},
         "clipper": clipper_display,
         "embedder": entry.get("embedder", ""),
+        "coverage_atlas": _coverage_atlas_status(dataset_id),
     }
 
 

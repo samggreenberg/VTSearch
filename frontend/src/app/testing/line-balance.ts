@@ -26,8 +26,9 @@ export function shapeFor(beta: number): BalanceShape {
 /**
  * A balance state as the sort state holds it: the balanced default (beta 1)
  * keeping the top 32, with a check's ranges once checked. The shape follows
- * the beta unless overridden, and a checked state audited the set it keeps
- * unless `audited` says otherwise.
+ * the beta unless overridden, and a checked state audited the set it keeps,
+ * and ranges over what the line kept when it started (#4483), unless
+ * `audited` or `keptAtCheck` says otherwise.
  */
 export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalance> = {}): LineBalance {
   const checked = status === 'checked';
@@ -43,6 +44,8 @@ export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: SCHEDULE_DEFAULT,
     shape: shapeFor(beta),
     audited: checked ? count : null,
+    // A server records the kept count under `advisory` only: a `trim` walk's line is its own end.
+    keptAtCheck: checked && shapeFor(beta) === 'advisory' ? count : null,
     checkable: status !== 'gate',
     separation: null,
     checkDue: false,
@@ -64,6 +67,7 @@ export function wireBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: b.schedule ?? SCHEDULE_DEFAULT,
     shape: b.shape,
     audited: b.audited,
+    kept_at_check: b.keptAtCheck,
     checkable: b.checkable,
     separation: b.separation,
     check_due: b.checkDue,

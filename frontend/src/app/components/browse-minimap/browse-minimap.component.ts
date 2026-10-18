@@ -13,7 +13,7 @@ import {
 import { binGeometry } from '../browse-canvas/bin-geometry';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
 import { DecimalPipe } from '@angular/common';
-import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
+import type { HexCell, ProjectionLayout } from '../../models/projection.models';
 
 /**
  * Floor for the tracked container box, so a collapsed panel can never ask for a
@@ -63,7 +63,7 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   });
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
-  readonly meta = input<ProjectionMeta | null>(null);
+  readonly meta = input<ProjectionLayout | null>(null);
   /** Rendered size (CSS px). Written by the component itself rather than bound
    *  by the parent: {@link startContainerSizing} tracks the container's box. */
   private readonly width = signal(200);
@@ -370,8 +370,8 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Pull all cached cells of the overview *level* covering the extent. */
-  private overviewCells(level: number): HexCellPayload[] {
-    const out: HexCellPayload[] = [];
+  private overviewCells(level: number): HexCell[] {
+    const out: HexCell[] = [];
     for (const { tx, ty } of this.overviewTiles(level)) {
       const tile = this.tileCache.getCached(level, tx, ty);
       if (tile) out.push(...tile.cells);
@@ -387,8 +387,8 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
    * so a pan/zoom/theme repaint doesn't re-scan every overview bin's members
    * when the selection hasn't changed.
    */
-  private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
-    const memo = cell as HexCellPayload & { _mmSelVer?: number; _mmSelState?: 0 | 1 | 2 };
+  private selStateFor(cell: HexCell): 0 | 1 | 2 {
+    const memo = cell as HexCell & { _mmSelVer?: number; _mmSelState?: 0 | 1 | 2 };
     if (memo._mmSelVer === this.selection.version() && memo._mmSelState !== undefined) {
       return memo._mmSelState;
     }

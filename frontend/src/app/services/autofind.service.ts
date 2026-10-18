@@ -28,7 +28,7 @@ import { ToastService } from './toast.service';
  *    dataset - in which case it is announced as below rather than replacing
  *    what the user is reading;
  *  - any other run - an import's, a ⋯ Run AutoFind, or a Find from another
- *    tab - announces itself with a toast whose **View results** button opens
+ *    tab - announces itself with a toast whose **View Results** button opens
  *    the dialog. AutoFind is the unattended path, the GUI twin of the CLI's
  *    `--autodetect`: it says it is done and leaves the results a click away,
  *    and a user who wants to work with them runs Find instead (#4615);
@@ -160,7 +160,7 @@ export class AutoFindService {
       message,
       detail,
       action: {
-        label: 'View results',
+        label: 'View Results',
         title: `Open the ${what} results for ${info.dataset_name}`,
         onClick: () => this.openResults(info.run_id),
       },

@@ -25,6 +25,11 @@ from pathlib import Path
 
 import common
 
+if __name__ == "__main__":
+    # Before numpy or torch loads: one set of numeric kernels on every node, so a
+    # cell is bit-identical wherever it runs (#4110).  Only as a script: a test that
+    # imports this module must not change its own process's kernels.
+    common.pin_cpu_kernels()
 common.setup_env()
 
 import numpy as np  # noqa: E402
@@ -81,7 +86,7 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
     in the text half's space, and there are two ways to have those vectors:
 
     * the media already carries them.  ``media["embeddings"]`` is a dict keyed
-      by embedder name (three-slot embedders, ``docs/plans/patch-embedder.md``),
+      by embedder name (three-slot embedders, ``docs/ARCHITECTURE.md``),
       so one media can hold a SigLIP vector and a DINOv3 vector at once.  This
       is the shape production would ship, and it needs no second file.
     * the pile stores one embedder per cell pickle, which is what it actually
@@ -132,7 +137,9 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
     return text_medias, text_pkl.name
 
 
-def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, float] | None":
+def _text_seed_scores(
+    ds: str, emb: str, cat: str, medias: dict, vectors_ds: str | None = None
+) -> "dict[int, float] | None":
     """The app's text sort: cosine from the typed query to every media.
 
     This is what a real user starts from -- they type "boat" and vote down the
@@ -152,6 +159,10 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     instead, the app's other real start ("3 random examples pulled from the
     Good").  Both are things a user does; ranking by cosine to a cropped box is
     not, which is why this no longer seeds from crops.
+
+    *vectors_ds* names the dataset *medias* belong to when it is not *ds*: the
+    query is still *ds*'s for *cat*, ranked over another corpus's medias (the
+    #4960 Find corpus, where the typed query's set is what Test returns).
     """
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
@@ -168,7 +179,7 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     ids = list(medias.keys())
     if not ids:
         return None
-    vectors, _provenance = _text_seed_vectors(ds, emb, medias)
+    vectors, _provenance = _text_seed_vectors(vectors_ds or ds, emb, medias)
     # Named on the paired path, primary on the ordinary one.  Asking for the
     # name is what makes a wrong-space vector a KeyError-shaped None rather than
     # a plausible ranking built from the wrong embedder.
@@ -221,6 +232,43 @@ def cell_opening(ds: str, emb: str, cat: str, medias: dict) -> "tuple[dict[int, 
     if seed_scores is None:
         return None, "known_good", "", ""
     return seed_scores, "text", _seed_query_text(ds, cat), cfg.text_embedder(emb)
+
+
+def find_corpus_inputs(ds: str, emb: str, cat: str, seed_mode: str) -> "tuple[dict | None, dict[int, float] | None]":
+    """#4960's second corpus for this cell: ``(medias, typed-query scores)``, or ``(None, None)`` with none set.
+
+    ``CALIB_FIND_CORPUS`` names a dataset; its pickle in this cell's embedder
+    is the corpus the simulator Finds on (its cell of the same name, drawn by
+    ``CALIB_FIND_MIX``), which is what holds it to the same embedder: there is
+    no other pickle to read.  On a cell that opened on its typed query the
+    query's cosine over those medias rides along, ranked as the opening ranks
+    this cell's (:func:`_text_seed_scores`), since that set is what a
+    typed-query run's Test returns there.  The cell's own dataset is refused:
+    its sim half holds the votes, so it is no second corpus.
+    """
+    if cfg.FIND_CORPUS is None:
+        return None, None
+    if cfg.FIND_CORPUS == ds:
+        raise ValueError(
+            f"CALIB_FIND_CORPUS={ds} is this cell's own dataset; the Find corpus is a second one "
+            "(CALIB_FIND_MIX=0 Finds on the withheld half alone)"
+        )
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
+
+    from _cells_io import load_medias  # noqa: PLC0415
+
+    pkl = EMBEDDINGS_DIR / cfg.pickle_name(cfg.FIND_CORPUS, emb)
+    if not pkl.exists():
+        raise FileNotFoundError(
+            f"CALIB_FIND_CORPUS={cfg.FIND_CORPUS} has no pickle in this cell's embedder ({pkl.name} does not exist)"
+        )
+    medias = load_medias(pkl, repair=True)  # as the app holds them (#4095)
+    scores = (
+        _text_seed_scores(ds, emb, cat, medias, vectors_ds=cfg.FIND_CORPUS)
+        if seed_mode == "text" and cfg.QUERY_TIER
+        else None
+    )
+    return medias, scores
 
 
 def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
@@ -288,6 +336,12 @@ def cell_progress(idx: int, n_launched: int, results: Path | None = None) -> str
     return f"{plain} launched (grid_shape.json: {n_shape} — {verdict})"
 
 
+def _recall_knob(run: "float | str | None", app: "float | None") -> "float | str":
+    """A #5039 head-count knob as a row records it: the run's value, else the app's; ``off`` for the piece before #5039."""
+    v = app if run is None else run
+    return "off" if v is None or v == "off" else float(v)
+
+
 def cell_file(path: Path) -> Path:
     """*path*, gzipped when ``CALIB_CELLS_GZIP=1`` (#4184).  pandas picks the codec off the suffix."""
     return path.with_name(path.name + ".gz") if cfg.CELLS_GZIP else path
@@ -335,6 +389,8 @@ def main(argv: list[str] | None = None) -> int:
     # so it runs style-less: the whole-image path, which is the only one it has.
     styles = cfg.cell_styles(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
+    from vtscore.training.thresholds import labels_line as _LL  # noqa: PLC0415  (the line's defaults, #5040)
+
     common.log(
         f"{cell_progress(idx, len(cells))}: dataset={ds} embedder={emb} "
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
@@ -351,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
-        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} "
+        f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
         f"good_dry_run={cfg.GOOD_DRY_RUN or 'off'} quota_dry_bads={cfg.QUOTA_DRY_BADS or 'off'} "
         f"centroid_line={cfg.CENTROID_LINE or 'app'} centroid_line_variants={cfg.CENTROID_LINE_VARIANTS or 'off'} "
@@ -361,10 +417,15 @@ def main(argv: list[str] | None = None) -> int:
         f"query_prior_shadow={'on' if cfg.QUERY_PRIOR_SHADOW else 'off'} "
         f"query_prior={cfg.QUERY_PRIOR if cfg.QUERY_PRIOR is not None else 'app'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
+        f"head_count_recall_exponent={_recall_knob(cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT)} "
+        f"head_count_recall_z={_recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
+        f"find_corpus={cfg.FIND_CORPUS or 'off'} find_mix={(cfg.FIND_MIX or 'only') if cfg.FIND_CORPUS else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
+    # Which CPU, and which kernels: a cross-node pair is read by these (#4110).
+    common.log(f"kernels: {common.kernel_report()}")
 
     import pandas as pd
 
@@ -383,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.arms_split_rounding import split_rounding
-    from vtscore.eval.live_threshold_rules import head_count_bads, sigma_floor
+    from vtscore.eval.live_threshold_rules import head_count_bads, head_count_recall, labels_chances, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -415,6 +476,26 @@ def main(argv: list[str] | None = None) -> int:
     # The typed query's embedding in the cell's own space: a typed-query detector's head starts from it
     # (#4859, the app's), and #4384's shadow reads it.  None on a paired or non-text cell.
     query_vec = cell_query_vector(ds, emb, cat, seed_mode)
+    find_medias, find_scores = find_corpus_inputs(ds, emb, cat, seed_mode)
+    if find_medias is not None:
+        from vtscore.eval.al_strategies import is_autopilot_strategy  # noqa: PLC0415
+        from vtscore.eval.find_corpus import find_cell  # noqa: PLC0415
+        from vtscore.eval.labels import media_is_positive  # noqa: PLC0415
+
+        f_cell = find_cell(find_medias, cat)
+        common.log(
+            f"find corpus: {cfg.FIND_CORPUS}, {len(find_medias)} medias; its {cat} cell {len(f_cell)} medias, "
+            f"{sum(media_is_positive(m, cat) for m in f_cell.values())} positives; mix={cfg.FIND_MIX or 'only'}; "
+            f"typed-query scores={'yes' if find_scores is not None else 'no'}; "
+            f"flags at {','.join(map(str, cfg.FIND_FLAGS_AT)) or 'no click'}"
+        )
+        if cfg.FIND_FLAGS_AT and cfg.is_patch_embedder(emb):
+            common.log(
+                "find corpus: the training-domain overlap is refused on a patch embedder, as the app refuses it "
+                "(#3329): shift_* are NaN on this cell"
+            )
+        elif cfg.FIND_FLAGS_AT and not is_autopilot_strategy(cfg.STRATEGY):
+            common.log(f"find corpus: strategy {cfg.STRATEGY} builds no coverage atlas: shift_* are NaN on this cell")
     if isinstance(cfg.QUERY_PRIOR, str):
         raise ValueError(f"CALIB_QUERY_PRIOR must be a number >= 0; got {cfg.QUERY_PRIOR!r}")
 
@@ -450,8 +531,10 @@ def main(argv: list[str] | None = None) -> int:
         with (
             sigma_floor(cfg.SIGMA_FLOOR),
             head_count_bads(cfg.HEAD_COUNT_BADS),
+            head_count_recall(cfg.HEAD_COUNT_RECALL_EXPONENT, cfg.HEAD_COUNT_RECALL_Z),  # type: ignore[arg-type]  # preflight refuses a bad value
             split_rounding(cfg.SPLIT_ROUNDING),
             query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
+            labels_chances(cfg.LINE_BAD, cfg.LINE_BOUND_MARGIN),
         ):
             rows = simulate_voting_iterations(
                 medias,
@@ -523,6 +606,8 @@ def main(argv: list[str] | None = None) -> int:
                 **({"weak_phase": cfg.WEAK_PHASE} if cfg.WEAK_PHASE is not None else {}),
                 **({"done_check": cfg.DONE_CHECK} if cfg.DONE_CHECK is not None else {}),
                 **({"early_check": cfg.EARLY_CHECK} if cfg.EARLY_CHECK is not None else {}),
+                **({"labels_scale": cfg.LABELS_SCALE} if cfg.LABELS_SCALE is not None else {}),
+                **({"labels_scale_shadow": cfg.LABELS_SCALE_SHADOW} if cfg.LABELS_SCALE_SHADOW is not None else {}),
                 startup_schedule=cfg.STARTUP_SCHEDULE,
                 opening_diversity=cfg.OPENING_DIVERSITY,
                 more_walk=cfg.MORE_WALK,
@@ -533,6 +618,7 @@ def main(argv: list[str] | None = None) -> int:
                 precision_frame_steps=cfg.PFRAME_STEPS or None,
                 rank_frame_sink=rankframes_local,
                 test_score_sink=testscores_local,
+                fold_scale_steps=cfg.SAVE_TEST_SCORES_AT if cfg.SAVE_FOLD_SCALES else None,
                 line_test_sink=linetest_local,
                 sim_size=cfg.SIM_SIZE,
                 rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
@@ -551,6 +637,16 @@ def main(argv: list[str] | None = None) -> int:
                 query_vector=query_vec,
                 query_tier=cfg.QUERY_TIER,
                 **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
+                **(
+                    {}
+                    if find_medias is None
+                    else {
+                        "find_corpus": find_medias,
+                        "find_corpus_scores": find_scores,
+                        "find_mix": cfg.FIND_MIX,
+                        "find_flag_steps": cfg.FIND_FLAGS_AT or None,
+                    }
+                ),
             )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
@@ -594,6 +690,12 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
             r["split_rounding"] = cfg.SPLIT_ROUNDING
+            r["line_bad"] = cfg.LINE_BAD or _LL.BAD_COMPONENT
+            r["line_bound_margin"] = cfg.LINE_BOUND_MARGIN if cfg.LINE_BOUND_MARGIN is not None else _LL._BOUND_MARGIN
+            r["head_count_recall_exponent"] = _recall_knob(
+                cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT
+            )
+            r["head_count_recall_z"] = _recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
@@ -604,6 +706,9 @@ def main(argv: list[str] | None = None) -> int:
             r["live_cut_rule"] = live_cut_rule
             r["live_threshold"] = live_threshold
             r["standalone_cut"] = cfg.STANDALONE_CUT
+            # #4960: which corpus the find_* columns read, and how it was drawn.
+            r["find_corpus"] = cfg.FIND_CORPUS or ""
+            r["find_mix"] = (cfg.FIND_MIX or "only") if cfg.FIND_CORPUS else ""
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -672,7 +777,8 @@ def main(argv: list[str] | None = None) -> int:
     # a run-level knob, so the only other record of which arm a cell belongs to
     # is the directory it was read out of - and a frame that has been
     # concatenated across arms no longer has one.  `split_rounding` (#4864) is
-    # one too.
+    # one too, and so are #5040's chances (`line_bad`, `line_bound_margin`) and
+    # #4960's Find corpus (`find_corpus`, `find_mix`).
     main_cols = [
         *CALIBRATION_COLUMNS,
         "embedder",
@@ -681,6 +787,8 @@ def main(argv: list[str] | None = None) -> int:
         "seed_embedder",
         "calibration_fraction",
         "split_rounding",
+        "line_bad",
+        "line_bound_margin",
         "sim_fraction",
         "stratify_target",
         "exclusion_arm",
@@ -689,6 +797,8 @@ def main(argv: list[str] | None = None) -> int:
         "live_threshold",
         "standalone_cut",
         "centroid_line",
+        "find_corpus",
+        "find_mix",
     ]
     out = cell_file(outdir / f"task_{idx:04d}.csv")
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)

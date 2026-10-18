@@ -91,6 +91,14 @@ _SHARED_CONFTEST_NAMES = (
     "add_group_markers",
     "print_summary_and_exit",
     "isolate_data_dir",
+    "make_crash_safe_scheduler",
+    "set_worker_timeout_timer",
+    "configure_pass_cache",
+    "deselect_cached_passes",
+    "record_pass_report",
+    "note_worker_reused",
+    "finish_pass_cache",
+    "pass_cache_info",
 )
 
 

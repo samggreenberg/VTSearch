@@ -52,8 +52,8 @@ function sortedItems(rows: Array<Record<string, unknown>> | undefined): SortedIt
  * a *component's*. Hosting these calls on the root-singleton
  * {@link SortStateService} (as issue #3428 originally proposed) would mean
  * either reinventing pair-scoped cancellation inside a singleton or passing a
- * component's scope subject into one; `PairScopeService`'s header records the
- * same trap being declined for `seedBeta` (#3448).
+ * component's scope subject into one; `PairScopeService.seedBeta`'s doc records
+ * the same trap being declined for it (#3448).
  *
  * ## Why these two things are one service
  *
@@ -109,7 +109,7 @@ export class SortRunnerService {
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
-  /** True while a windowed-sort "Load more" page fetch is in flight. */
+  /** True while a windowed-sort "Load More" page fetch is in flight. */
   readonly loadingMoreSort = signal(false);
 
   /**
@@ -440,7 +440,7 @@ export class SortRunnerService {
   }
 
   /**
-   * Page in the next window of a windowed ranking (the media-list "Load more"
+   * Page in the next window of a windowed ranking (the media-list "Load More"
    * trigger). Fetches from the sort token at the current loaded offset and
    * appends. A failed/expired token just stops paging (the user can re-sort).
    */
@@ -977,12 +977,12 @@ export class SortRunnerService {
   }
 
   /**
-   * Re-read the line after a spot check ends (#4273). The server has moved it
-   * to the set where the check's balance peaked, a new count over the ranking
-   * already on screen, so this moves the line without a re-sort. Only a
-   * learned ranking draws the detector's line. *settled* runs once the read
-   * has landed or failed, so a caller can wait for the balance to be this
-   * line's.
+   * Re-read the line and the balance after a spot check ends (#4273). The
+   * check is advisory (#4452): the line stays where the labels put it, and the
+   * read brings the check's result (its likely ranges) beside it, with no
+   * re-sort. Only a learned ranking draws the detector's line. *settled* runs
+   * once the read has landed or failed, so a caller can wait for the balance
+   * to be this line's.
    */
   refreshLine(settled?: () => void): void {
     this.sortingApi

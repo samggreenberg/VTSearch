@@ -71,10 +71,33 @@ case "${SOTA_PASS:-both}" in
     ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops" ;;
   *) echo "SOTA_PASS must be both, trajectory or ceiling" >&2; exit 2 ;;
 esac
+# Prevalence scenarios (#4959): every coco_better cell sits at the bench's own
+# 0.44% (about 100 positives a class and size), so a review that wants other
+# prevalences runs them as session sets of their own, each named by its number.
+#   SOTA_POOL_PREVALENCE=0.01   the user's pool: the simulation half's negatives
+#                               are thinned so positives are 1% of what the user
+#                               clicks through; the withheld half stays at 0.44%
+#                               (CALIB_HAYSTACK_PREVALENCE, #4184), so a cell pairs
+#                               with the same seed's default session.
+#   SOTA_CELL_PREVALENCE=0.001  the whole cell: positives are thinned before the
+#                               split, so both halves sit at it
+#                               (CALIB_TARGET_PREVALENCE, #4222); a cell left with
+#                               fewer than 15 positives is skipped.
+if [[ -n "${SOTA_POOL_PREVALENCE:-}" && -n "${SOTA_CELL_PREVALENCE:-}" ]]; then
+  echo "set one of SOTA_POOL_PREVALENCE and SOTA_CELL_PREVALENCE, not both" >&2; exit 2
+fi
+[[ -n "${SOTA_POOL_PREVALENCE:-}" ]] && export CALIB_HAYSTACK_PREVALENCE="$SOTA_POOL_PREVALENCE"
+[[ -n "${SOTA_CELL_PREVALENCE:-}" ]] && export CALIB_TARGET_PREVALENCE="$SOTA_CELL_PREVALENCE"
 # launch_bands.sh turns an empty value into `all`. That only ADDS per-band FNR
 # columns (BAND_COLUMNS) and moves no headline one, so it is left on: free
 # context for "does this detector miss the other sizes" without it being a study.
-export CALIB_TEST_BANDS=all
+# The whole-cell thinning draws from the split RNG, so the harness refuses the
+# two together; `off` reaches it as unset.
+if [[ -n "${CALIB_TARGET_PREVALENCE:-}" ]]; then
+  export CALIB_TEST_BANDS=off
+else
+  export CALIB_TEST_BANDS=all
+fi
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1

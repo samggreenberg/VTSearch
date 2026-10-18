@@ -19,6 +19,7 @@ design notes below are the check's own.
 from __future__ import annotations
 
 import inspect
+import math
 import os
 import re
 import sys
@@ -76,6 +77,7 @@ def probe(C: Any) -> list[str]:
         simulate_voting_iterations,
     )
     from vtscore.training import thresholds as T
+    from vtscore.training.thresholds import FOLD_SCALES
 
     rows: list[tuple[str, str, str]] = []
     refused: list[tuple[str, str, str]] = []
@@ -289,6 +291,17 @@ def probe(C: Any) -> list[str]:
             rows.append(("early_check", str(C.EARLY_CHECK), "<unset> = the app's own checks, none at a fixed click"))
         else:
             refuse("early_check", "CALIB_EARLY_CHECK", "must be a positive integer, the vote count it checks from")
+    # #4910's fold scale: an arm the app does not take; the shadow draws nothing, but it adds row columns.
+    for name, var, value in (
+        ("labels_scale", "CALIB_LABELS_SCALE", C.LABELS_SCALE),
+        ("labels_scale_shadow", "CALIB_LABELS_SCALE_SHADOW", C.LABELS_SCALE_SHADOW),
+    ):
+        if value is None:
+            continue
+        if value not in FOLD_SCALES:
+            refuse(name, var, "must be one of %s" % ", ".join(FOLD_SCALES))
+        elif name == "labels_scale" and value != "raw":
+            rows.append((name, value, "<unset> = raw, each fold model's held-out scores as it scored them (the app)"))
     # #4699's example opening and stratified split: the app's example sort, but
     # not the opening a dataset with a typed query takes, and an eval protocol
     # rather than an app setting. Declared, so a study cannot take either silently.
@@ -347,6 +360,47 @@ def probe(C: Any) -> list[str]:
         refuse("split_rounding", "CALIB_SPLIT_ROUNDING", "must be one of %s" % ", ".join(SPLIT_ROUNDINGS))
     elif C.SPLIT_ROUNDING != "nearest":
         rows.append(("split_rounding", C.SPLIT_ROUNDING, "<unset> = nearest, the app's split sizes (#4864)"))
+    # #5040's chances: unset is the app's Bad component (the labels') and counted bound (2x).
+    from vtscore.training.thresholds import labels_line as LL  # noqa: PLC0415
+
+    line_bad = getattr(C, "LINE_BAD", None)
+    if line_bad is not None:
+        if line_bad not in LL.BAD_COMPONENTS:
+            refuse("line_bad", "CALIB_LINE_BAD", "must be one of %s" % ", ".join(LL.BAD_COMPONENTS))
+        elif line_bad != LL.BAD_COMPONENT:
+            rows.append(("line_bad", line_bad, "<unset> = %s, the app's Bad component (#5040)" % LL.BAD_COMPONENT))
+    margin = getattr(C, "LINE_BOUND_MARGIN", None)
+    if margin is not None:
+        if not isinstance(margin, float) or not margin >= 1.0:
+            refuse("line_bound_margin", "CALIB_LINE_BOUND_MARGIN", "must be a number >= 1 (inf: no bound)")
+        elif margin != LL._BOUND_MARGIN:
+            rows.append(
+                ("line_bound_margin", "%g" % margin, "<unset> = %g, the app's counted bound (#5040)" % LL._BOUND_MARGIN)
+            )
+    # #5039's head's count line above beta 1: unset is the app's pieces, `off` each piece before #5039.
+    for attr, knob, env_name, what in (
+        (
+            "HEAD_COUNT_RECALL_EXPONENT",
+            "head_count_recall_exponent",
+            "CALIB_HEAD_COUNT_RECALL_EXPONENT",
+            "growth above beta 1",
+        ),
+        ("HEAD_COUNT_RECALL_Z", "head_count_recall_z", "CALIB_HEAD_COUNT_RECALL_Z", "reach down the excess curve"),
+    ):
+        got = getattr(C, attr, None)
+        if got is None:
+            continue
+        app = getattr(LL, attr)
+        if got != "off" and not (isinstance(got, float) and math.isfinite(got)):
+            refuse(knob, env_name, "must be a number or off")
+        elif (None if got == "off" else got) != app:
+            rows.append(
+                (
+                    knob,
+                    got if got == "off" else "%g" % got,
+                    "<unset> = %s, the app's head-count %s (#5039)" % ("off" if app is None else "%g" % app, what),
+                )
+            )
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.
     from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415
@@ -413,7 +467,8 @@ def probe(C: Any) -> list[str]:
     for knob, var, value, param, shipped in (
         ("weak_d", "CALIB_WEAK_D", C.WEAK_D, "weak_separation", T.WEAK_SEPARATION_D),
         ("weak_min_t", "CALIB_WEAK_MIN_T", C.WEAK_MIN_T, "weak_min_t", T.WEAK_CHECK_MIN_VOTES),
-        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_COOLDOWN),
+        # The app's None (once, #4909) is the harness's 0.
+        ("weak_repeat", "CALIB_WEAK_REPEAT", C.WEAK_REPEAT, "weak_repeat", T.WEAK_CHECK_REPEAT or 0),
     ):
         resolved(knob, var, value if value is not None else harness_default(param), shipped)
     # The app has no detector to read separation from during its opening, so it

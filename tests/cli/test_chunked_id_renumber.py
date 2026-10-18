@@ -27,6 +27,10 @@ def _unique_bytes(media_id: int) -> bytes:
     return media_id.to_bytes(4, "little") + b"\x00" * 96
 
 
+#: CLAP's declared embedding width.
+_CLAP_DIM = 512
+
+
 def _make_audio_media(media_id: int) -> dict:
     """Build a minimal audio media dict for a self-contained pickle.
 
@@ -46,8 +50,9 @@ def _make_audio_media(media_id: int) -> dict:
         "duration": 1.0,
         "file_size": len(raw),
         "md5": md5,
-        # Two-dim embedding keeps the trained MLP trivially small.
-        "embedding": [float(media_id), float(media_id) + 0.5],
+        # CLAP's declared width: an import holds a vector filed under an
+        # embedder's name to that embedder's width.
+        "embedding": [float(media_id)] * _CLAP_DIM,
         "embedder": "clap",
         "media_bytes": raw,
         "media_string": None,
@@ -76,7 +81,7 @@ def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
 
 
 def _write_pretrained_detector(name: str, dim: int = 2) -> Path:
-    """Write a detector with a labelset that yields a trainable MLP.
+    """Write a detector with a labelset that yields a trainable head.
 
     The CLI re-resolves the labelset's origins and re-embeds; we stub
     that resolution out at runtime in the test bodies, so the labelset
@@ -126,12 +131,12 @@ def _clean_detectors_dir():
 
 @pytest.fixture
 def _stub_detector_training(monkeypatch):
-    """Bypass labelset-origin resolution and embed a 2-dim toy MLP.
+    """Bypass labelset-origin resolution and return a toy linear head.
 
     The CLI's ``_load_and_train_detectors`` walks the labelset, resolves
     origins, and re-embeds them.  For these tests we only care that
-    *some* trained MLP comes back; we stub the loader to return a
-    fixed (mlp, threshold) pair so the test focuses on chunk-id
+    *some* trained head comes back; we stub the loader to return a
+    fixed (head, threshold) pair so the test focuses on chunk-id
     renumbering, not training mechanics.
     """
     import torch
@@ -141,7 +146,7 @@ def _stub_detector_training(monkeypatch):
 
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None):
         # Tiny linear "MLP" that always returns 0.5 logit → 0.62 sigmoid.
-        linear = nn.Linear(2, 1)
+        linear = nn.Linear(_CLAP_DIM, 1)
         with torch.no_grad():
             linear.weight.data.zero_()
             linear.bias.data.fill_(0.5)

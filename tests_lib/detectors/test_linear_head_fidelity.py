@@ -1,14 +1,17 @@
-"""The two linear heads are what they claim to be, structurally and numerically.
+"""The linear heads are what they claim to be, structurally and numerically.
 
-Both are ``build_model(input_dim, hidden_dim=<sentinel>)`` - a single
+Each is ``build_model(input_dim, hidden_dim=<sentinel>)`` - a single
 ``Linear(d, 1)`` emitting a logit - and they differ only in the objective that
 fits them:
 
-* :data:`~vtscore.training.mlp.LINEAR_SVM_HEAD` is the **production** head.
-  Fitted through :func:`vtscore.training.svm.fit_linear_svm_head` it *is*
-  ``LinearSVC(class_weight="balanced")``, and these tests pin it to the very
+* :data:`~vtscore.training.mlp.LINEAR_SVM_HEAD` is the plain SVM, an eval arm;
+  the **production** head, :data:`~vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD`,
+  fits the same objective started from the Goods' centroid, and
+  :class:`TestProductionPathTrainsTheSVMHead` pins it as what production trains.
+  Fitted through :func:`vtscore.training.svm.fit_linear_svm_head` the plain SVM
+  *is* ``LinearSVC(class_weight="balanced")``, and these tests pin it to the very
   ``svm_linear`` arm the eval harness scores - score for score, not merely in
-  rank - so the shipped detector and the measured arm can't drift apart.
+  rank - so the head and the measured arm can't drift apart.
 * :data:`~vtscore.training.mlp.LINEAR_HEAD` is the logistic head the SVM
   replaced, still reachable as a named eval arm.  Pushed through
   :func:`vtscore.training.mlp.train_model`'s balanced BCE-with-logits loop it
@@ -18,14 +21,14 @@ fits them:
   loss, a dropped class weighting) quietly stops it from being logistic
   regression, the rank agreement drops and that test fails.
 
-**Structure / round-trip** is shared by both: one Linear layer, ``0.weight`` /
+**Structure / round-trip** is shared by all of them: one Linear layer, ``0.weight`` /
 ``0.bias`` as the only state-dict keys, and a clean trip through
 ``build_model_from_weights`` and the portable ONNX exporter (whose 1-layer
 branch only a linear head exercises).
 
 The *logistic* fidelity tests raise ``TRAIN_EPOCHS`` and disable early-stop: the
 claim under test is about the *objective* the loop optimises, so the loop has to
-be run to convergence.  Production's 200-epoch budget (and this suite's 30) stop
+be run to convergence.  The default 200-epoch budget (and this suite's 30) stop
 well short of the optimum - an early-stopped linear model, still linear, but not
 the ``LogisticRegression`` fixed point.  The synthetic features are deliberately
 raw Gaussians rather than the unit-norm vectors a real embedder emits, because
@@ -155,14 +158,14 @@ def _weight_of(model) -> torch.Tensor:
 
 
 class TestSVMFidelity:
-    """The production head *is* the eval harness's ``svm_linear`` arm.
+    """The plain SVM head (``LINEAR_SVM_HEAD``) *is* the eval harness's ``svm_linear`` arm.
 
     Not "ranks like": the same numbers.  ``fit_linear_svm_head`` delegates to
     the very ``train_svm(kernel="linear")`` call the harness scores, and
-    production's ``sigmoid(model(x))`` reproduces that fit's
+    the pipeline's ``sigmoid(model(x))`` reproduces that fit's
     ``decision_sigmoid`` ``predict_proba``.  If the two ever diverge, an
     experiment that says "svm_linear wins" stops being a statement about the
-    shipped detector - which is the whole reason the head was switched.
+    ``linear_svm`` head.
     """
 
     def _svm_linear_arm_scores(self, X_train, y_train, X_score) -> np.ndarray:

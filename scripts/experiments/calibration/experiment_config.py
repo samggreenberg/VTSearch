@@ -8,7 +8,7 @@ registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`)
 which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
-  ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
+  ``siglip`` / ``siglip2_l`` × ``whole_image`` (row-wise conformal), and
   ``dinov3_patch`` × ``max_patch`` (grouped bag calibration).  The raw-patch
   tree geometry ``max_patch_pca_hac`` and its ``topk`` / ``pnorm`` re-pools were
   #2781 arms and are off by default now that both questions are closed; see
@@ -19,9 +19,9 @@ which opens on one space's text sort and learns in another's:
   max-pool at scoring time; the single-vector embedders have neither, so
   :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
   whole-image scoring for them, and they blend under the **binary** schedule.
-  This docstring previously called the whole set "region voting", which is how
-  #2877 came to report a binary-voting environment as a region-voting one.
-* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
+  Calling the whole set "region voting" is how #2877 came to report a
+  binary-voting environment as a region-voting one.
+* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip2_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
 
 Category selection (scale-band on the boxed VG set, prevalence-spread on the
@@ -437,7 +437,7 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # The same crops turned upright by their landmarks (#4777).
     **{
         f"fhibe_faces_{tag}_{size}": os.environ.get("CALIB_FHIBE_FACE_EMBEDDERS", "face").split(",")
-        for tag in ("roll", "sim")
+        for tag in ("roll", "sim", "side")
         for size in (1024, 640)
     },
     # Apptitude (#4356): whole app screens, one genre each, opening on the
@@ -511,7 +511,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_640": True,
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
-    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim") for size in (1024, 640)},
+    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side") for size in (1024, 640)},
     # A screen's genre is the whole screen (#4356).
     "apptitude": False,
 }
@@ -1095,7 +1095,7 @@ WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
 #: When the simulated user checks (#4496): unset is the harness's default, the app's for the cell's medias (``weak``:
 #: the end-of-run check plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate
-#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's
+#: weakly, d' below ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once (the app's since #4909); unset, the app's
 #: constants - but ``end`` on face crops, where the app never prompts, #4799); ``end`` (the end-of-run check only,
 #: the pre-#4496 harness and the face path's), ``weak`` or ``off``.
 SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
@@ -1118,6 +1118,13 @@ DONE_CHECK = None if not _done_check else _done_check not in ("0", "false", "no"
 #: positive integer is kept as given, for preflight to refuse.
 _EARLY_CHECK = os.environ.get("CALIB_EARLY_CHECK", "").strip()
 EARLY_CHECK: "int | str | None" = int(_EARLY_CHECK) if _EARLY_CHECK.isdigit() else (_EARLY_CHECK or None)
+#: Issue #4910's fold scale (``CALIB_LABELS_SCALE``): the scale the labels line's class model reads the calibration
+#: folds' held-out scores on.  Unset (the default) is the app, each fold model's scores as it scored them;
+#: ``quantile`` / ``quantile_tails`` carry each fold's onto the final model's scale through its haystack first.
+#: ``CALIB_LABELS_SCALE_SHADOW`` fits the line on another scale beside it, drawing nothing (the rows' ``shadow_*`` /
+#: ``xfer_*`` columns).  Kept as given, for preflight to refuse a value outside ``FOLD_SCALES``.
+LABELS_SCALE = os.environ.get("CALIB_LABELS_SCALE", "").strip().lower() or None
+LABELS_SCALE_SHADOW = os.environ.get("CALIB_LABELS_SCALE_SHADOW", "").strip().lower() or None
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
@@ -1127,11 +1134,35 @@ SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() 
 SAVE_TEST_SCORES_AT = tuple(
     int(x) for x in os.environ.get("CALIB_SAVE_TEST_SCORES_AT", "").replace(" ", "").split(",") if x
 )
+#: #4936's instrument (``CALIB_SAVE_FOLD_SCALES=1``): the ``t<N>`` snapshots also carry every live calibration fold
+#: model's scores of the withheld half and of the sim set, the sim set's truth and votes, and the vote behind each
+#: held-out score, so the fold models' scale is read against the final model's on images no model has seen.
+#: Needs ``CALIB_SAVE_TEST_SCORES=1`` and ``CALIB_SAVE_TEST_SCORES_AT``; the session is unchanged.
+SAVE_FOLD_SCALES = os.environ.get("CALIB_SAVE_FOLD_SCALES", "").strip().lower() in ("1", "true", "yes")
+if SAVE_FOLD_SCALES and not (SAVE_TEST_SCORES and SAVE_TEST_SCORES_AT):
+    raise ValueError("CALIB_SAVE_FOLD_SCALES=1 needs CALIB_SAVE_TEST_SCORES=1 and CALIB_SAVE_TEST_SCORES_AT")
 #: The Test arm (#4523, ``CALIB_LINE_TEST=1``): after the last ordinary click, run Test mode's autopilot on the
 #: withheld half with every pick answered from the truth, at the app's default budgets, into
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
 LINE_TEST = os.environ.get("CALIB_LINE_TEST", "").strip().lower() in ("1", "true", "yes")
 SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
+#: #4960's second corpus (``CALIB_FIND_CORPUS=o365_better``): a dataset whose pickle holds the cell's embedder, Found on
+#: at every click beside the withheld half; its cell of the same name is the Find corpus (the whole dataset where it
+#: has none).  Each row carries the ``find_*`` columns.  ``CALIB_FIND_MIX`` draws it: unset or ``only`` is that cell
+#: alone, ``equal`` / ``0`` / a share add that many times the withheld half's size of it to the withheld half as
+#: extra haystack.  ``CALIB_FIND_FLAGS_AT`` (default ``CALIB_SAVE_TEST_SCORES_AT``'s list) are the clicks the two
+#: domain-shift flags are read at, against that corpus (``shift_*``, ``evidence_*``).  Eval only: the session is
+#: unchanged.  On a patch embedder the evidence flag floods every Bad's patches, as the app's does, which costs memory.
+FIND_CORPUS = os.environ.get("CALIB_FIND_CORPUS", "").strip() or None
+FIND_MIX = os.environ.get("CALIB_FIND_MIX", "").strip().lower() or None
+_FIND_FLAGS_AT = os.environ.get("CALIB_FIND_FLAGS_AT", "").replace(" ", "")
+FIND_FLAGS_AT = tuple(int(x) for x in _FIND_FLAGS_AT.split(",") if x) if _FIND_FLAGS_AT else SAVE_TEST_SCORES_AT
+if (FIND_MIX is not None or _FIND_FLAGS_AT) and FIND_CORPUS is None:
+    raise ValueError("CALIB_FIND_MIX and CALIB_FIND_FLAGS_AT describe a Find corpus; set CALIB_FIND_CORPUS")
+if FIND_MIX is not None:
+    from vtscore.eval.find_corpus import parse_find_mix as _parse_find_mix
+
+    _parse_find_mix(FIND_MIX)  # refused here, before the array, rather than in every cell
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None
@@ -1297,6 +1328,17 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
+#: Issue #5040's chances: ``CALIB_LINE_BAD=corpus`` fits the labels line's Bad component on the corpus being decided,
+#: the held-out Bads counted as labelled points of it (``corpus_mean``: its mean alone); ``CALIB_LINE_BOUND_MARGIN`` is the factor the 2-part estimate
+#: of the positives may exceed the counted bound by (``inf`` removes it).  Unset (the default) is the app's
+#: (``corpus_mean``, 4, since #5040); ``labels`` and 2 are the line before.  Kept as given, for preflight and the harness to refuse a value outside the set.
+LINE_BAD = os.environ.get("CALIB_LINE_BAD", "").strip().lower() or None
+_LINE_BOUND_MARGIN = os.environ.get("CALIB_LINE_BOUND_MARGIN", "").strip()
+try:
+    LINE_BOUND_MARGIN: "float | str | None" = float(_LINE_BOUND_MARGIN) if _LINE_BOUND_MARGIN else None
+except ValueError:
+    LINE_BOUND_MARGIN = _LINE_BOUND_MARGIN
+
 #: Issue #4864's split rounding: ``dither`` sizes the calibration split the way
 #: the app did before #4864, stochastically, with a coin seeded from the labelset
 #: (``vtscore.eval.arms_split_rounding.split_rounding``).  Unset (the default,
@@ -1313,6 +1355,25 @@ _HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
 HEAD_COUNT_BADS: "int | str | None" = (
     int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
 )
+#: Issue #5039's head's count line above a balance of 1: ``CALIB_HEAD_COUNT_RECALL_EXPONENT`` is how the
+#: count grows (``beta ** e`` times what stands out), ``CALIB_HEAD_COUNT_RECALL_Z`` where the line reaches down
+#: the head's excess curve when a held-out Good ranks below the count
+#: (``vtscore.eval.live_threshold_rules.head_count_recall``).  Unset is the app's; ``off`` is that piece before
+#: #5039.  A value that is neither a number nor ``off`` is kept as given, for the harness and preflight to refuse.
+
+
+def _number_or_off(name: str) -> "float | str | None":
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in ("", "off"):
+        return raw or None
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
+HEAD_COUNT_RECALL_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_RECALL_EXPONENT")
+HEAD_COUNT_RECALL_Z = _number_or_off("CALIB_HEAD_COUNT_RECALL_Z")
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

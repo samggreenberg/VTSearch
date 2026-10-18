@@ -62,50 +62,14 @@ cropping (can eat context the detector needs), audio noise reduction
 
 <!-- item-sep -->
 
-- **Persist the cleanup selection as an import default** — the embedder /
-  clipper / source-spec pickers all remember the user's per-media-type choice
-  via `ImportDefaultsService` (`snapshotImportConfig` →
-  `maybeOfferSaveImportDefaults`), but `defaultCleanerSelection` deliberately
-  ignores saved defaults and always seeds from each cleaner's
-  `default_enabled`. Add `cleaners` to `ImportDefaultsForMediaType` and to the
-  save-offer snapshot/equality checks so a user who always disables a gate
-  isn't re-ticking it on every import.
 
 <!-- item-sep -->
 
-- **Thin imports lose their byte-savings on cleaned items** —
-  `_relazify_reference_clips_stage` skips any item carrying an `original_*`
-  snapshot, because `vtscore/media/lazy_clip.py` has no recipe that reproduces
-  a cleaner's output from the source file; dropping the bytes would silently
-  serve and re-embed the *uncleaned* original. So a reference (thin) import
-  materializes both payloads for exactly the items some cleaner changed. Fix
-  by teaching `lazy_clip` a cleaner recipe (replay the chain's cleaner steps on
-  the source, keyed off the trail) — at which point a cleaned reference item
-  can go back to storing only a recipe, and its "Original" is just the source
-  file. (Metadata-only cleans are already exempt: they snapshot nothing, so a
-  video-cleaned reference item stays lazy.)
+<!-- item-sep -->
+
 
 <!-- item-sep -->
 
-- **A video unit's crop box is invisible in the player** — `clip_box` reaches
-  the frontend on the media payload and the server-rendered grid thumbnail is
-  cropped to it, but `<video>` plays the uncropped file, so a letterbox-cropped
-  item previews cropped and plays padded. Either crop the player's viewport
-  with a CSS transform keyed off `clip_box`, or accept the divergence and say
-  so in the UI (the trim half already shows up for free, since the player loops
-  within `[clip_start, clip_end]`).
-
-<!-- item-sep -->
-
-- **Video labeled-example replay ignores the unit's window and box** —
-  `replay_chain_on_file` writes the final unit to a tempfile and calls
-  `embed_file`, which for video embeds the *whole* container: `clip_start` /
-  `clip_end` / `clip_box` are dropped, so a re-embedded video label lands in a
-  slightly different distribution from the dataset item it was taken from.
-  This predates the cleaners (video tiles already replayed as whole files), but
-  the metadata gates widen it from "the wrong slice" to "the wrong slice at the
-  wrong framing". Fix by threading the media dict — not a bare path — into the
-  video embed path so the sampler sees the window and the box.
 
 <!-- item-sep -->
 

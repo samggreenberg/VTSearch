@@ -112,7 +112,7 @@ the rework below exists.
 
 | Knob | Current default | Notes |
 |------|-----------------|-------|
-| `n_neighbors` | per-embedder (`PROJECTION_DEFAULTS_BY_EMBEDDER`): 10 for `clip`/`siglip`/`siglip_l`, 15 for `clap`; global fallback `15` | Clamped to `N-1`. A `ServerSettings` (`projection_n_neighbors`) still overrides. Resolved by `vtscore/projection/params.py:resolve_projection_params`, which every fit path calls (route, ingest pre-build, positives map). |
+| `n_neighbors` | per-embedder (`PROJECTION_DEFAULTS_BY_EMBEDDER`): 10 for `clip`/`siglip`/`siglip_l`, 15 for `clap` (and `clap_general`, by family rather than measured); global fallback `15` | Clamped to `N-1`. A `ServerSettings` (`projection_n_neighbors`) still overrides. Resolved by `vtscore/projection/params.py:resolve_projection_params`, which every fit path calls (route, ingest pre-build, positives map). |
 | `min_dist` | per-embedder: 0.05 image, 0.10 audio; global fallback `0.1` | A `ServerSettings` (`projection_min_dist`) still overrides. |
 | `compact` | `False` (`PROJECTION_COMPACT_DEFAULT`), including `fit_projection`'s own signature default | Post-fit `compact_layout` rigid-body packing; off since the Part 1 sweep. Stamped on the `Projection`, so a layout packed under the old default fails the freshness check and is refit. |
 | `min_n_for_umap` | `10` | Below this → PCA-2 fallback. Constant for now. |
@@ -140,7 +140,7 @@ function defaults.
 |------|---------------|----------|
 | Target on-screen hex radius (level picker) | `28` px (`DEFAULT_TARGET_RADIUS`), scaled by thumbnail-size buttons (XS–XL → ×0.5–×2.5) | `levelForEffZoom` / `setThumbnailRadius` |
 | Density scale | log (`log(count)/log(maxCount)`) | `drawHex` |
-| Colormap | darkred→yellow, 8-stop LUT (black left free for empty) | `HEATMAP`, `hex-render.util.ts` |
+| Colormap | per-media-type pick (`auto` / `heat` / `ocean` / `gray`); `auto` is Ocean (6 blue stops) in light mode and Heat (8 stops, darkred→yellow, black left free for empty) in dark | `resolveColormap`, `hex-render.util.ts` |
 | Pile cell shape | inscribed disc (rounded); singleton keeps the sharp hex | `traceCellPath`, `hex-render.util.ts` |
 | Minimap overview level | hexes ≈ `5` px | `overviewLevel`, `browse-minimap.component.ts` |
 | Hover debounce | `30` ms | `onCanvasMouseMove` |

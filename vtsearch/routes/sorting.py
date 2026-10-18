@@ -1,6 +1,6 @@
 """Blueprint for sorting and voting routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
@@ -408,7 +408,7 @@ def _learned_sort_done_payload(job) -> dict:
     :func:`windowed_sort_response` in the job target, so the window metadata
     (``sort_token`` / ``total`` / ``above_threshold`` / ``has_more_below``)
     rides straight through to the client, as does the ``acq_threshold`` the
-    Autopilot picks sample around.
+    Autopilot picks sample around and the job's ``query_hold`` (#4736).
     """
     result = job.result or {}
     return {
@@ -422,6 +422,7 @@ def _learned_sort_done_payload(job) -> dict:
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
         "has_more_below": result.get("has_more_below", False),
+        "query_hold": result.get("query_hold", False),
     }
 
 
@@ -444,9 +445,9 @@ def _validate_learned_sort_inputs(labelset, good, bad) -> None:
 def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
-    Training is GIL-bound and ran inline used to stall every other request
+    Training is GIL-bound, so run inline it would stall every other request
     served by the small ``gthread`` pool (votes polls, thumbnails, and even
-    media bytes).  The endpoint now hands the work off to a background daemon
+    media bytes).  The endpoint hands the work off to a background daemon
     thread and returns immediately with a ``job_id``; clients poll
     :func:`learned_sort_result` until ``status == "done"``.
 
@@ -464,6 +465,7 @@ def learned_sort(body: dict):
         resolve_active_labelset,
         run_learned_sort,
     )
+    from vtscore.detectors.query_head import is_quota_head
     from vtscore.detectors.training import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
@@ -514,9 +516,12 @@ def learned_sort(body: dict):
     # A dataset switch drops ``line_ranking`` (media ids are per dataset) while
     # the votes, and so the signature, come back unchanged; reusing the result
     # then would draw a line the detector can no longer re-cut or spot-check,
-    # so train again instead (#4317).
+    # so train again instead (#4317).  Train again, too, when the context holds
+    # a head the label quota gives (a load or a re-embed under the quota): it
+    # keeps a ranking of its own (#5048), but the learned sort never leaves
+    # one behind, so the cached result's head is not the one on the context.
     cached = learned_sort_jobs.cached_for(signature)
-    if cached is not None and det_ctx.line_ranking is not None:
+    if cached is not None and det_ctx.line_ranking is not None and not is_quota_head(det_ctx.model):
         return _learned_sort_done_payload(cached)
 
     # _run closes over the resolved inputs and delegates the train → score →
@@ -539,9 +544,10 @@ def learned_sort(body: dict):
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.  It sits four inclusion steps stricter than the line:
-        # under a balance no inclusion drew that line, so none is passed and it
-        # is derived from the line itself (#4245).
+        # carries one.  Its fallback, when neither a head's own line nor the
+        # target precision (#3546) answers, sits four inclusion steps stricter
+        # than the line: under a balance no inclusion drew that line, so none
+        # is passed and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
         # What the balance says about the line rides with it (#4247, #4413).
@@ -846,7 +852,7 @@ def example_sort():
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
 def label_file_sort():
-    """Train MLP on external media files from a label file, then sort all medias.
+    """Train a head on external media files from a label file, then sort all medias.
 
     On a patch dataset each result also carries the ``best_region`` box of the
     region that drove its score, matching the cosine- and learned-sort paths.

@@ -136,6 +136,8 @@ ENVX="$ENVX CALIB_HANDOVER_SHADOW=${CALIB_HANDOVER_SHADOW:-}"
 ENVX="$ENVX CALIB_LINE_COUNTS=${CALIB_LINE_COUNTS:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# The head's count line above beta 1 (#5039): unset is the app's; `off` is each piece before #5039.
+ENVX="$ENVX CALIB_HEAD_COUNT_RECALL_EXPONENT=${CALIB_HEAD_COUNT_RECALL_EXPONENT:-} CALIB_HEAD_COUNT_RECALL_Z=${CALIB_HEAD_COUNT_RECALL_Z:-}"
 # An eval head (CALIB_HEAD, e.g. linear_svm, the plain SVM before #4785): unset is the shipped head; preflight
 # declares it. CALIB_SPOT_CHECK likewise.
 ENVX="$ENVX CALIB_HEAD=${CALIB_HEAD:-}"
@@ -220,6 +222,8 @@ json.dump(
         "handover_shadow": "${CALIB_HANDOVER_SHADOW:-}",
         "line_counts": "${CALIB_LINE_COUNTS:-}",
         "head_count_bads": "${CALIB_HEAD_COUNT_BADS:-}",
+        "head_count_recall_exponent": "${CALIB_HEAD_COUNT_RECALL_EXPONENT:-}",
+        "head_count_recall_z": "${CALIB_HEAD_COUNT_RECALL_Z:-}",
         "head": "${CALIB_HEAD:-}",
         "spot_check": "${CALIB_SPOT_CHECK:-}",
         "job_name": "$JOB_NAME",
@@ -233,6 +237,8 @@ PYSHAPE
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
   DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
   DIVERGES="$DIVERGES${CALIB_SPOT_CHECK:+,spot_check}"
+  DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_BADS:+,head_count_bads}"
+  DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_RECALL_EXPONENT:+,head_count_recall_exponent}${CALIB_HEAD_COUNT_RECALL_Z:+,head_count_recall_z}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }

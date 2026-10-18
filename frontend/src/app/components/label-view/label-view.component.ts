@@ -64,10 +64,14 @@ const WEAK_CHECK_INTRO =
   'Your Good and Bad labels still overlap, so Autopilot is checking the line: a few picks drawn ' +
   'evenly down the list teach the detector where it falls.';
 
-/** What the Spot Check step says when Autopilot runs it before Done. */
+/**
+ * What the Spot Check step says when Autopilot runs it before Done. True for
+ * each thing that brings Done: every quality light green, the labels line
+ * expecting Done's level, or the click cap (`checkPhaseTransition`).
+ */
 const DONE_CHECK_INTRO =
-  'Every quality light is green. Before Autopilot calls the detector done, a few picks drawn at random ' +
-  'down the list measure how much of what it returns is right.';
+  'Autopilot is about to call the detector done. First, a few picks drawn at random down the list ' +
+  'measure how much of what it returns is right.';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -148,7 +152,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  Drives the center-pane "nothing left to label" message so the pane is
    *  never left blank with a stale item stuck in the metadata strip. */
   readonly autopilotExhausted = signal(false);
-  /** True while a windowed-sort "Load more" page fetch is in flight. Aliased
+  /** True while a windowed-sort "Load More" page fetch is in flight. Aliased
    *  from the runner that owns it, so the template binding is unchanged. */
   readonly loadingMoreSort = this.sortRunner.loadingMoreSort;
   /** True when the manual (non-Autopilot) advance has nothing left to move to:
@@ -1168,10 +1172,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /**
    * A round of the check landed. Its votes are ordinary votes, so the piles
-   * catch up; a finished check has moved the line to the set where its
-   * balance peaked. No re-sort here: the owner's model is that *later* votes
-   * retrain and move the list under a result, and the next ordinary vote does
-   * that as usual.
+   * catch up; a finished check re-reads the balance for its result. The check
+   * is advisory (#4452): it reports on the line and never moves it, so the line
+   * stays where the labels put it. No re-sort here: the owner's model is that
+   * *later* votes retrain and move the list under a result, and the next
+   * ordinary vote does that as usual.
    */
   onSpotCheckVoted(event: SpotCheckVoted): void {
     this.voteState.loadVotes();

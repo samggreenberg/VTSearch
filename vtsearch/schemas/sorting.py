@@ -116,8 +116,9 @@ class BalanceStateSchema(Schema):
     status = fields.String(required=True, validate=validate.OneOf(BALANCE_STATES))
     # How many unvoted items the line keeps.
     count = fields.Integer(required=True)
-    # The walk's likely ranges for the kept set's precision and recall, and
-    # its F-beta estimate; ``null`` while unchecked.
+    # The check's likely ranges for the precision and recall of the set the
+    # line kept when it started (``kept_at_check``, #4483), and the walk's
+    # F-beta estimate; ``null`` while unchecked.
     precision = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
     recall = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
     fbeta = fields.Float(required=True, allow_none=True)
@@ -128,6 +129,10 @@ class BalanceStateSchema(Schema):
     # The set the last check audited (the walk's end); under ``advisory`` not the
     # set the line keeps.  ``null`` while unchecked.
     audited = fields.Integer(required=True, allow_none=True)
+    # How many unvoted items the line kept when the last check started: the set
+    # ``precision`` and ``recall`` describe (#4483).  ``null`` while unchecked,
+    # and where the ranges describe the audited set (a check from before #4483).
+    kept_at_check = fields.Integer(required=True, allow_none=True)
     # Whether a spot check can start on this line (#4489): ``false`` with no
     # ranking to walk - a structural detector, whose line is the verification
     # gate's boundary, or one not yet trained on this dataset - or nothing in it
@@ -142,7 +147,8 @@ class BalanceStateSchema(Schema):
     # (``weak_check_due``, #4496).
     check_due = fields.Boolean()
     # Autopilot's check before Done should run: no check has ended in the last
-    # 25 votes (``done_check_due``).  Read once every quality light is green.
+    # 25 votes (``done_check_due``).  Read once Done is due: every quality
+    # light green, the labels line's level met, or the 200-vote cap.
     done_check_due = fields.Boolean()
 
 

@@ -384,8 +384,9 @@ def _validate_field_keys(
 def run_pipeline_file(path: str | Path) -> None:
     """Load *path* and execute the pipeline it declares.
 
-    Errors are reported through :func:`vtscore.cli_progress.emit_error` (a
-    one-line ``Error: ...`` on stderr, or an ``error`` event under
+    Any error - a bad file, or a failure anywhere in the run it declares - is
+    reported through :func:`vtscore.cli_progress.emit_error` (a one-line
+    ``Error: ...`` on stderr, or an ``error`` event under
     ``--progress-format json``) followed by ``sys.exit(1)`` - same convention
     as the other CLI entry points in :mod:`vtscore.cli`.
     """
@@ -396,7 +397,7 @@ def run_pipeline_file(path: str | Path) -> None:
     try:
         config = load_pipeline_file(path)
         _dispatch(config)
-    except (FileNotFoundError, ValueError) as exc:
+    except Exception as exc:
         cli_progress.emit_error(str(exc))
         sys.exit(1)
 
@@ -462,11 +463,11 @@ def _dispatch(config: dict[str, Any]) -> None:
         if settings_path:
             # Apply the settings path first so detector-dir lookups resolve
             # to the same place the pipeline run will use.  Routed through
-            # CoreConfig so this module stays settings-import-free
-            # (see Phase 2 of docs/architecture.md).
-            from vtscore.config import CoreConfig  # noqa: PLC0415
+            # the library's redirect hook so this module stays
+            # settings-import-free (the Settings seam in vtscore/docs/architecture.md).
+            from vtscore.config import redirect_settings_path  # noqa: PLC0415
 
-            CoreConfig.from_settings(settings_path=settings_path)
+            redirect_settings_path(settings_path)
         _import_labels(config["import_labels"], spec)
 
     # As with ``--import-labels-into``, a label import names the detector the

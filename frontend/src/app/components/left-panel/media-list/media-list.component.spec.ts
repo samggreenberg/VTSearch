@@ -227,7 +227,7 @@ describe('MediaListComponent', () => {
 
     it('names the balance\'s state in the tooltip only', () => {
       expect(drawWith(lineBalance('unchecked')).getAttribute('title')).toContain("Unchecked: the line keeps the top 32 you haven't voted on");
-      // Beta 1 is advisory (#4427): the ranges describe the audited set, the line keeps its own count.
+      // Beta 1 is advisory (#4427): the ranges describe what the line kept when the check started (#4483), the line keeps its own count.
       const checked = drawWith(lineBalance('checked')).getAttribute('title')!;
       expect(checked).toContain(
         "likely 55–100% of them are, with likely 30–70% of all the matches you hadn't voted on among them. The line keeps the top 32",
@@ -308,7 +308,7 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
     expect(prefetchSpy).toHaveBeenCalledTimes(2);
   });
 
-  describe('windowed "Load more"', () => {
+  describe('windowed "Load More"', () => {
     it('appends a trailing load-more grid row when hasMore is set', () => {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.9 },

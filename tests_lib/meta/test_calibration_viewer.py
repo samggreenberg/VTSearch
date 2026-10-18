@@ -26,7 +26,7 @@ _CALIB = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "cali
 
 #: What the self-tests import by bare name; left as they were afterwards so
 #: another test's by-path load is not shadowed.
-_BARE = ("common", "viewer", "curves", "objective")
+_BARE = ("common", "viewer", "curves", "objective", "stopping")
 
 
 def _run_selftest(name: str, capsys) -> None:

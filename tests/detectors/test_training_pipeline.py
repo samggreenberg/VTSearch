@@ -6,7 +6,7 @@ The existing :mod:`tests/io/test_export_options.py` covers
 * :func:`train_detector_from_origins`; the load-time origin → file →
 * :func:`collect_media_origins` - origin extraction from a media snapshot.
 * :func:`train_detector_from_origins` - the load-time origin → file →
-  embedding → MLP pipeline, with file resolution and embedding stubbed.
+  embedding → head pipeline, with file resolution and embedding stubbed.
 * :func:`train_and_score`; the empty-result and single-class branches
   (the happy path is already exercised by the sort routes).
 """
@@ -329,7 +329,7 @@ class TestTrainDetectorFromOrigins:
             seen_embedders.append(embedder_name)
             if path is None:
                 return None
-            # One-hot-ish vector keyed by class so the MLP has something to learn.
+            # One-hot-ish vector keyed by class so the head has something to learn.
             base = np.full(8, 1.0 if "good" in path else -1.0, dtype=np.float32)
             return base
 

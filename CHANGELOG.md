@@ -17,6 +17,107 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server that trusts session cookies no longer signs them with the key printed in the source**
+  (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
+  anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
+  OAuth state. When `--login trivial` or `HF_OAUTH_CLIENT_ID` is in force and the variable is unset,
+  startup now uses a random key for that process and logs a warning: sessions end at a restart, and
+  a deployment with more than one gunicorn worker must set the variable. Single-user mode without
+  HuggingFace sign-in is unchanged.
+
+- **A detector with too few labels for a trained head reports the set it actually keeps** (issue
+  #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
+  typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of
+  1) whatever its line kept, and a headless `--autodetect` run said it "exports its top 32" while it
+  exported everything over the line. Both now count what the line keeps.
+
+- **A "reference files in place" import of PDFs shows the right part of each converted item, and stores
+  less** (issue #5041). When an import converted files (a PDF's text, a PDF's pages as images) and then cut
+  them with a clipper, a reference import showed every sentence as the PDF's whole text and every tile as
+  the whole page. An item a cleanup gate changed also kept both its cleaned copy and its Original inside the
+  dataset. Such items now keep only how they were made, are rebuilt from the source file on demand, and
+  match what a copying import of the same folder shows. If the PDF is edited after import, they show nothing
+  (and the server log names the file) rather than other content. When a detector is trained from labels on
+  such items by re-reading their source files, each label now embeds the item's own text or tile; it used
+  to embed the raw PDF file read as text.
+
+- **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
+  that failed showed a "Failed" row in the datasets table, but the row went the next time the page
+  reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.
+  It now stays until you click **Dismiss**, through reloads, other loads and other tabs (a server
+  restart clears it). The row also says what the import was reading and when it failed, and a copy
+  button puts the error, source, task id and times on the clipboard for a bug report. On a shared
+  server only the user who started the import sees its failure. Reloading the page no longer
+  re-announces failures from before the reload in a toast: their rows already say so. Other
+  failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
+  there.
+
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
+- **Transcribing audio and reading text from images load their model once, not once per file** (issue
+  #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
+  they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
+  `large`) 500 times, and OCR rebuilt its detection and recognition models for every image. Each converter
+  now keeps the model it last loaded and reuses it until a conversion asks for a different model size,
+  language or device. Two dataset loads converting at the same time take turns on the one model.
+
+- **Headless runs and the web server start up the same way where it matters** (issue #4970). A saving
+  `--autodetect` or `--pipeline` run now switches to its `--settings` file before it imports, so the
+  saved dataset follows that file's saved-datasets directory and retention; it used to follow
+  `data/settings.json`. The `VTSEARCH_*` admin-override variables reach a headless run as well as the
+  server, so `VTSEARCH_DATASET_MAX_AGE_DAYS` stamps the datasets a run saves. A run that loads media
+  also gets the server's runtime preparation before its first worker thread starts. `python app.py
+  --settings FILE` now points the web server at `FILE`; before, it ignored the flag. In a Docker image,
+  `python app.py --autodetect` no longer goes through the whole server startup because the image sets
+  `VTSEARCH_SERVER_INIT=1`; that startup used to print its banners ahead of the `--progress-format
+  json` stream. `docs/CLI.md` now has a table of every remaining difference between the two paths.
+
+- **On photos, a typed description's matches really do stay on screen until 30 votes** (issue #4962). Since
+  #4736 a session started from a typed description was meant to keep the description's text ranking behind
+  the item until the 30th vote, but the learned-sort payload never carried the `query_hold` mark that keeps
+  it there, so the detector's ranking took the screen from the 8th vote as before. The payload now carries
+  it. Test, Find, AutoFind and export were unaffected: they apply the hold on the server.
+
+- **A spot check's range is tighter, and about the items the line keeps** (issue #4483). The range after a
+  check was honest but about 0.6 wide: it bounded each band of 5 picks as if they came from an endless list,
+  and split its error allowance over the bands. A band has a known size, and the top bands hold 8 items: 4
+  right of 5 in a band of 8 means 4 to 7 of them are right, which read "34–99%" and now reads "50–88%". The
+  range is now exact for each band's size, with no split, and it describes the items the line kept when the
+  check started instead of the set the check's walk ended on, so the note reads "Checked the 36 kept you
+  hadn't voted on · likely 55–80% right, about half of them found (checked 12) · 30 more kept". Priced on
+  3,568 real checks and simulated checks at clicks 25–100, it held the truth in at least 98.9% of them at
+  every preset, at 0.55–0.76 of the old width (`docs/experiments/2026-10-15-check-range-4483/REPORT.md`).
+
+- **A Good on a document collection is up to twice as fast without a GPU** (issue #4515). After a
+  Good, the server matches the new mark's SIFT points against every point on each shortlisted page,
+  1,000 pages without a GPU, and keeps the pairs whose nearest point is clearly nearer than the
+  next. It now ranks the two nearest points without working out every distance in full, and on a
+  CPU it works through a page at a time so the numbers stay in the processor's cache. On 8 cores of
+  an AMD EPYC 7713 a Good takes ~4.5 s at 5,000 pages (was 9.2 s) and ~5.7 s at 50,000 (was
+  9.7 s). On a V100 it takes ~1.25 s at 5,000 pages (was 1.6 s) and ~1.5 s at 50,000 (was
+  1.75 s). Rankings are unchanged.
+
+- **Autopilot checks for overlapping labels once a session** (issue #4909). When your Good and Bad answers
+  score close together, Autopilot still opens the spot check once it has started learning, but it no longer
+  asks again 25 votes later while they still overlap, and it does not ask after any other check has run. The
+  repeat had cost a quarter of a session's clicks: 50 to 57 of 200 went to checks, against 25 to 33 now.
+  Priced on today's app, asking once did as well or better over 200 clicks (mean F-beta +0.0006 at beta 1,
+  +0.0013 at beta 4), was level after the closing check, and reached Done at the same click with the same
+  result (`docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md`). The check before Done is unchanged.
+
 - **The Threshold's note says it leaves out your votes** (issue #4914). A spot check samples only the items
   you haven't voted on, and its "found" share is of the matches left among them, so the Goods you already
   voted on count in neither range, and the count kept is of unvoted items too. The note said none of this:
@@ -290,6 +391,45 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
+  50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
+  Training-domain overlap check reads, and nothing in the app could build one afterwards. Its **Stats**
+  window now shows **Coverage atlas: Not built** with a **Build** button; the build's progress shows on the
+  dataset's dashboard row, and the line goes once the atlas is built. Clicking **Build** while a build is
+  already running no longer starts a second one, and a finished build's row now clears at once instead of
+  sitting at its last progress for a few seconds.
+
+- **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
+  remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
+  default, tick one that is off, or change a gate's settings, the **Save as default** offer after the import
+  now appears and includes the cleanup choices. The next import of that media type starts from them. A gate
+  installed after you saved starts as its own default, and **Reset** under Settings → Import Defaults clears
+  the saved choices.
+
+- **A warning before you use a detector on data unlike its training data** (issue #4961). The
+  Training-domain overlap check used to appear only under a finished test. It now also runs the moment a
+  detector meets a dataset, and a *likely domain shift* verdict raises a warning ("31% of this dataset
+  looks atypical vs photos: likely domain shift") with a **Test it** button. It warns once per detector
+  and dataset, never blocks anything, and is silent when the check cannot run (training dataset not
+  loaded or without an atlas, another embedder, a patch embedder). VTSearch now works out which dataset a
+  detector was trained on from where its labelled examples live, so the test pane's **Compare against**
+  picker starts on that dataset instead of the first one in the list. `GET /api/find/training-domain`
+  serves both.
+
+- **An audio LabBench image** (issue #4958). `docker/Dockerfile.labbench` takes a `MEDIA_TYPE` build arg,
+  as `docker/Dockerfile.solo` does, so its slim build (only that type's dependencies, the media type and
+  the embedder locked, datasets aged off after 14 days, the demo importer hidden) is no longer images
+  only. `MEDIA_TYPE=audio` builds an audio image searched with CLAP General, whose weights are baked in so
+  it serves on first run with no network; `docker/compose/docker-compose.labbench-audio.yml` builds and
+  runs it. `image` stays the default, so existing build commands make the same SigLIP image as before.
+  Other media types fail the build with the list of supported ones. The requirements are split to
+  match: `requirements/labbench.txt` is now the core every LabBench image shares, and
+  `labbench-image.txt` / `labbench-audio.txt` add each type. The media-type lock is now the
+  `VTSEARCH_SOLO_MEDIA_TYPE` environment variable rather than a seeded setting, so it also holds when the
+  image is redeployed onto an existing volume. The image's embedder lock also works now: the LabBench
+  image seeded it into `data/default/user_settings.json`, which a single-user container never reads, so
+  the importer showed its embedder dropdown all along. It is now seeded where that user's settings live.
+  See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
 - **Auto-export: keep every detector's labels current outside the server** (issue #4913). An admin sets
   `default_labelset_source` in `data/settings.json` (see `docs/DEPLOYMENT.md`), and every detector then has
   its whole labelset pushed to that labelset source as it is labelled - not only when someone remembers to
@@ -900,6 +1040,86 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
+  When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
+  detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
+  as an image. Pulling such labelled items into another dataset skipped them without a word. Training now
+  uses each item's own text or page, and pulling the items in brings in that text or page. If a PDF has
+  changed since the import and the page can no longer be found, the item is left out rather than brought
+  in as the whole PDF.
+
+- **An anamorphic video plays its letterbox crop whole, and previews at its true shape** (issue #5032). A
+  video with non-square pixels, such as a 720×480 DVD rip shown at 16:9, lost about 15% of its picture
+  off the right edge once Letterbox Crop cropped its bars, and its grid thumbnail was squeezed to 3:2. The
+  player now crops only the bars, and the thumbnail has the shape the video plays at. A dataset needs
+  importing again to pick this up: one imported before keeps its old crop and thumbnail.
+
+- **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
+  rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
+  player showed the full padded frame, so an item previewed without its black bars and played with them.
+  The player now shows the same picture, with its controls along the cropped picture's bottom edge. This
+  needs a Chromium-based browser (Chrome, Edge); other browsers play the full frame, as before.
+
+- **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
+  #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
+  of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
+  lists once and raises one toast, "Could not delete 3 of 20 datasets", naming each failed row and the
+  server's reason. The rows that failed stay selected, so trying again is one click.
+
+- **The pulldown's busy spinners no longer blink off while the server is slow to answer** (issue #4986).
+  The top-bar pulldown asks the server every 5 seconds which dataset and detector pairs have work
+  running. A single failed or timed-out answer cleared every spinner until the next one, and a server
+  too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
+  answer and clear only after three in a row, about 15 seconds.
+
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
+- **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
+  original file, but the server labelled every one `audio/wav` and offered it for download as
+  `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
+  `.wav` and a strict client could refuse it. The type and file extension now come from the file itself;
+  clips cut from a sound are WAV and still say so.
+
+- **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
+  Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
+  import did not record them. Whenever a label was rebuilt from its source file (training from a saved
+  label set, or bringing labels into another dataset), the gate ran at its default settings rather than
+  the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
+  are now recorded and reused, and an item's Derived Via line lists them.
+
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
+
+- **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
+  To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between
+  retrains (issue #4469). Without a GPU there was nothing to copy, but the cache still kept each page's
+  descriptors alive after the page's features were dropped. A long session, or a switch to another
+  collection, could leave up to 4 GB of memory held. Without a GPU nothing is cached now, at no cost in
+  speed. With one, the cache is emptied whenever the collection's pages change, on an Apple GPU as well
+  as on CUDA.
+
+- **The server no longer crashes on newer AMD CPUs with numpy 2.5.2 or later** (issue #4938). The server
+  pins OpenBLAS to its Haswell kernels on every x86 machine (issue #4481). The OpenBLAS bundled with numpy
+  2.5.2 and later re-tunes that pin on an AMD Zen 4 or Zen 5 CPU (EPYC 9004/9005, Ryzen 7000/9000). A
+  double-precision matrix product, or any SVD, then overruns the kernel's stack, so the server crashed the
+  first time it fitted a document collection's Stage-1 projection. Single-precision products also came out
+  slightly different from every other CPU's. The server now sets `OPENBLAS_L2_SIZE=2048` with the Haswell
+  pin, which keeps OpenBLAS's Haswell blocking on those CPUs. On any other CPU, or with an older numpy, it
+  changes nothing (`docs/experiments/2026-10-15-openblas-zen4-4938/REPORT.md`).
 
 - **Labels that do not separate start Autopilot's weak-separation check** (issue #4899). When a retrain's
   calibration folds scored the held-out Goods no higher than the held-out Bads, the line fell back to the

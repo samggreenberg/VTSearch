@@ -606,6 +606,17 @@ class TestVideoLetterboxCropCleaner:
         assert out["clip_box"] == [0, 25, 200, 75]
         _assert_payload_untouched(media, out)
 
+    def test_records_the_frame_size_the_box_was_measured_on(self, fake_video, tmp_path):
+        """The player scales the box by this, so it is the *decoded* frame's size.
+
+        Decoded frames are stored pixels; on an anamorphic video the browser
+        reports display pixels instead, and only the recorded frame size lets
+        it bring the box across (#5032).
+        """
+        fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
+        out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path))
+        assert out["clip_box_frame"] == [200, 100]
+
     def test_the_stale_parent_thumbnail_is_not_carried_forward_by_the_runner(self, fake_video, tmp_path):
         """The gate itself copies the dict; the chain runner drops the thumbnail.
 
@@ -681,6 +692,8 @@ class TestVideoLetterboxCropCleaner:
         fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])
         out = get_cleaner("video_letterbox_crop").clean(_video_media(tmp_path, clip_box=[0, 10, 200, 90]))
         assert out["clip_box"] == [0, 25, 200, 75]
+        # The whole frame, not the earlier crop's region: the box is in source-frame pixels.
+        assert out["clip_box_frame"] == [200, 100]
 
     def test_an_already_cropped_unit_is_a_no_op(self, fake_video, tmp_path):
         fake_video([_barred_frame(200, 100, 25, (200, 40, 40)) for _ in range(24)])

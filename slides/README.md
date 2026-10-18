@@ -18,15 +18,11 @@ _out/       rendered decks (gitignored)
 missing fragment or figure — or a headline that has grown to three lines —
 fails the suite rather than rotting quietly.
 
-**Test a deck change with `./run-tests.sh slides`** — about four seconds, versus
-three and a half minutes for the full suite. It is not a shortcut you are
-trading safety for: it runs every gate that can observe a deck (ruff over
-`build.py`, codespell over slide prose, `check-docs.py` over the fragments, and
-the manifest preflight) and skips only checks that provably cannot see one —
-nothing imports `build.py`, pyright does not read it, and no test in either tree
-opens a deck. For a change confined to `slides/` it is the whole gate, and it
-refuses to run once the branch touches anything else, so it cannot quietly
-become one.
+**Test a deck change with `./run-tests.sh slides`** (~8s, against ~3.5 minutes
+for the full suite). For a change confined to `slides/` it is the whole gate,
+not a shortcut, and it refuses to run once the branch touches anything else;
+which gates it keeps and why that is safe is in
+[`docs/TESTING.md`](../docs/TESTING.md#test-groups).
 
 **Read [`STYLE.md`](STYLE.md) before writing or editing a deck.** It holds the
 house rules that apply to every talk — no running footer, real subscripts,
@@ -42,7 +38,8 @@ extra (else `pip install pymupdf`). Run from this directory:
 
 ```bash
 ./render.sh hold-the-line           # -> _out/hold-the-line.pdf
-./render.sh hold-the-line html      # or html / pptx
+./render.sh hold-the-line html      # or pptx / png
+./render.sh hold-the-line --watch   # live-reloading preview while writing
 ./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
 ./render.sh hold-the-line pptx --no-pageno  # -> _out/hold-the-line.unnumbered.pptx
 ./render.sh hold-the-line pptx --editable   # -> _out/hold-the-line.editable.pptx
@@ -91,10 +88,9 @@ soon, say — run the same script the workflow runs, from the repository root:
 ./scripts/publish-slides.sh --dry-run        # render, print the plan, upload nothing
 ```
 
-(Publishing by hand is also the only manual route for now: GitHub offers a
-workflow's "Run workflow" button only on the *default* branch, and ours is
-`main`, so the dispatch trigger stays dark until a release carries the workflow
-there. The push trigger from `dev` is unaffected.)
+(The workflow also has a **Run workflow** button in the repository's Actions
+tab, since its `workflow_dispatch` trigger is on `main`; that renders on
+GitHub's runner rather than yours.)
 
 It needs `gh` authenticated with write access, which a Claude Code on the web
 container does not have — that is the reason the work happens in a workflow
@@ -141,13 +137,11 @@ There's also a `Makefile` (`make`, `make FMT=html`, `make watch DECK=…`) but
 **`make` is not installed on the laptop** — `render.sh` is the working path
 here. The Makefile is for the grid or wherever make exists.
 
-For live preview while writing:
-
-```bash
-./build.py hold-the-line
-npx @marp-team/marp-cli@4 _build/hold-the-line.md \
-    --theme-set themes/ --allow-local-files -w --preview
-```
+For live preview while writing, use `./render.sh <deck> --watch`. Always go
+through `render.sh` (or `make`, which delegates to it) rather than calling Marp
+by hand: it passes `--no-stdin`, without which Marp waits forever for EOF in a
+script or agent shell, and it fails the render when Marp dies or a figure does
+not resolve, which bare Marp reports as success.
 
 If Marp can't find a browser (it drives one to rasterise), point it at one:
 `CHROME_PATH=/path/to/chrome ./render.sh <deck>`.
@@ -274,12 +268,11 @@ characters it is over:
 
 ```
 fragments/train-loop.md: presenter notes overflow the speaker page by about
-2 of 26 lines — trim roughly 336 characters …
+2 of 23 lines — trim roughly 336 characters …
 ```
 
-That is a deliberate wall rather than a convenience. Notes used to spill onto
-continuation pages, and a presenter mid-sentence does not turn over — more
-often they never notice the second page is there. The page is laid out to give
+That is a deliberate wall: a presenter mid-sentence does not turn over to a
+continuation page, and often never notices it is there. The page is laid out to give
 the notes as much room as it can (the pictures float, so a note starts beside
 them and finishes across the full width underneath), and past that the answer
 is a shorter note.
@@ -294,9 +287,10 @@ places it.
 
 ## Numbering
 
-`build.py` draws the page number itself — a deck sets `paginate: false` and
-the theme styles a `.pageno` div — because the two rules these decks want are
-rules about *fragments*, which Marpit cannot see:
+`build.py` draws the page number itself — the front matter it assembles sets
+`paginate: false` (`DEFAULT_FRONTMATTER`) and the theme styles a `.pageno`
+div — because the two rules these decks want are rules about *fragments*,
+which Marpit cannot see:
 
 - **The title slide takes no number, and does not consume one.** It opts out
   with `<!-- _paginate: false -->`, so the first real slide is 1 rather than
@@ -321,8 +315,7 @@ narrates from the complete picture,
 sees what each advance will put on screen, and refers to them by the letters
 the audience deck prints. Markers never leak into presenter notes.
 
-Presenter notes that do not fit are a `--check` failure, not a continuation
-page — see *One slide, one speaker page* above. `build.py` estimates the fit
+`build.py` estimates the notes' fit (see *One slide, one speaker page* above)
 against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
@@ -395,10 +388,10 @@ them changes a pixel of any slide:
   one level under it. One entry per slide, never per reveal: a build's entry
   lands on its first page. Each entry leads with the address the deck uses for
   it — a section its Roman numeral, `III. Inclination`, and a slide its page
-  number, `17. The Cutting Room` — followed by the section's line or the
+  number, `14. The Cutting Room` — followed by the section's line or the
   slide's headline, with the line break taken out.
 - **Page labels.** The viewer's page box reads the address the page prints —
-  `17c`, not `95` — so a reader told to look at 17c can type exactly that. The
+  `17c`, not `83` — so a reader told to look at 17c can type exactly that. The
   title slide reads `title`. The handover cut (`--no-pageno`) carries them too,
   for the reason it keeps the numbering: an address is the same whether or not
   it is printed.
@@ -505,8 +498,9 @@ node ../../slides/figs/src/shoot-ui-figs.mjs
 ```
 
 One of those files is not a screenshot: `figs/ui-find-grid.webp` is a contact
-sheet of the top of the ranking with no app around it, built by
-`figs/src/results_grid.py` from the frames the results panel listed. It is
+sheet with no app around it, built by `figs/src/results_grid.py` from twelve
+named frames of the production pile's `book/` folder (`SHEET`; its docstring
+says why not the top of the live ranking). It is
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
@@ -528,7 +522,7 @@ caption. Nothing is staged through the API that a slide says was done by hand:
 the button `train-loop` clicks is chosen from the served item's own file name,
 so the piles are a real session's.
 
-The **Instruction** figures (`figs/ui-steps-*.webp`, section X) are that same
+The **Instruction** figures (`figs/ui-steps-*.webp`, section XI) are that same
 session photographed a second time at the moments a user has to click, with a
 red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
 with the user guide's screenshots). Where a moment is also an intro frame, the
@@ -552,10 +546,9 @@ used as it is, with its own data, so its first frame shows whatever that app
 already holds.
 
 The corpus and the detector are the **Book example**
-(`scripts/screenshots/book-example.mjs`). The user guide's screenshots were
-shot on it too (#4202), until they moved to generated drawings of their own,
-the Smiley example (`scripts/screenshots/smiley-example.mjs`, #4240), which
-needs no COCO download. The two harnesses still drive one app, so each clears
+(`scripts/screenshots/book-example.mjs`). The user guide's screenshots use the
+Smiley example instead (`scripts/screenshots/smiley-example.mjs`), which needs
+no COCO download. The two harnesses still drive one app, so each clears
 the other's datasets and detectors before it shoots. **A GUI change that moves
 the docs screenshots moves these too**, so queue both: a GUI-changing session
 names the groups it moved as `slides:<group>` in its

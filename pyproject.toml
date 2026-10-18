@@ -433,6 +433,10 @@ markers = [
 #   the main thread, missing hangs blocked in C extensions or socket reads.
 #   The outer wall-clock cap in run-tests.sh is the backstop for the case this
 #   cannot see: a worker that dies outright can no longer fire its own timeout.
+#   Under xdist the timeout ends the worker with os._exit(1). The conftests
+#   (tests_shared/xdist_plumbing.py, #4925) write its stacks to stderr, since a
+#   worker's stdout is /dev/null, and keep --dist loadgroup from hanging on the
+#   dead worker: the test fails as "worker 'gwN' crashed while running <test>".
 addopts = "-m 'not gpu and not slow' --timeout=300 --timeout-method=thread"
 
 [tool.coverage.run]
@@ -459,11 +463,12 @@ exclude_lines = [
 # already skipped for.  A study's viewer.html (scripts/experiments/
 # calibration/viewer.py) is the same class again: a self-contained page
 # carrying the run's per-cell numbers as an encoded payload, which
-# codespell reads as thousands of misspelled two-letter words.
+# codespell reads as thousands of misspelled two-letter words. Its companion
+# pages, viewer_<name>.html beside it (#4959), are the same.
 # slides/_build and slides/_out are gitignored deck-build artifacts; the
 # rendered PDFs there decode as mojibake that codespell "corrects", which
 # used to fail any test run that happened after `slides/render.sh`.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*docs/experiments/*/viewer_*.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # names of the removed integration scaffolds, kept because vtscore/CHANGELOG.md
 # records their removal), legitimate code identifiers (numer/denom in

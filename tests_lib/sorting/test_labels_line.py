@@ -35,9 +35,11 @@ from vtscore.training.thresholds.labels_line import (
     MIN_LOGIT_SIGMA,
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
+    WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
+    _norm_pdf,
     done_check_due,
     weak_check_due,
     weak_check_prompts,
@@ -378,6 +380,30 @@ def test_the_corpus_floor_is_relative_and_bounded():
     assert corpus_sigma_floor(np.array([])) == MIN_LOGIT_SIGMA
 
 
+@pytest.mark.parametrize(("mu", "sigma"), [(0.0, 1.0), (-4.0, 1.2), (2.0, MIN_LOGIT_SIGMA), (0.3, 1e-3), (-1.5, 3.7)])
+def test_the_em_density_is_scipys_bit_for_bit(mu, sigma):
+    """#5072: the EM loops' normal density is ``scipy.stats.norm.pdf``'s, float for float, its underflowed tails too."""
+    from scipy.stats import norm
+
+    rng = np.random.default_rng(42)
+    # Around the component, then out past ~38 spreads, where the density underflows to 0.
+    x = np.r_[rng.normal(mu, 3 * sigma, 2000), mu + sigma * rng.uniform(-60.0, 60.0, 2000)]
+    want = norm.pdf(x, mu, sigma)
+    assert (want == 0).any() and (want > 0).any()
+    assert np.array_equal(_norm_pdf(x, mu, sigma), want)
+
+
+def test_the_em_density_is_scipys_off_the_happy_path():
+    """Non-finite scores and a spread that is not positive give what scipy gives: 0 at ``±inf``, NaN otherwise."""
+    from scipy.stats import norm
+
+    x = np.array([-np.inf, -1.0, 0.0, 2.5, np.inf, np.nan])
+    for sigma in (1.0, 0.0, -1.0, np.nan):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            want = norm.pdf(x, 0.0, sigma)
+        assert np.array_equal(_norm_pdf(x, 0.0, sigma), want, equal_nan=True), sigma
+
+
 def test_separation_is_read_in_the_spread_the_line_was_cut_with():
     """#4496: d' = (Good mean - Bad mean) / spread, the spread the class model's own floored on the corpus."""
     model, scores, _ = _compressed_session(1.0)
@@ -469,15 +495,21 @@ class TestWeakCheckDue:
         assert not weak_check_due(None, 40, None), "no labels line yet"
         assert not weak_check_due(float("nan"), 40, None)
 
-    def test_it_comes_back_a_cooldown_after_the_last_check_ended(self):
-        ended = 30
-        assert not weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN - 1, ended)
-        assert weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN, ended)
-        assert not weak_check_due(3.0, ended + 100, ended), "not while separation is strong"
+    def test_by_default_it_is_due_once_never_after_a_check_has_ended(self):
+        """#4909: once a session; the check before Done ending first counts too."""
+        assert WEAK_CHECK_REPEAT is None
+        assert weak_check_due(1.0, 20, None)
+        assert not weak_check_due(1.0, 21, 20), "a check just ended"
+        assert not weak_check_due(1.0, 500, 20), "nor ever again"
 
-    def test_no_cooldown_makes_it_due_once(self):
-        assert weak_check_due(1.0, 20, None, cooldown=None)
-        assert not weak_check_due(1.0, 500, 20, cooldown=None)
+    def test_a_repeat_comes_back_that_many_votes_after_the_last_check_ended(self):
+        """The arm #4496 shipped and #4909 retired: again 25 votes after a check, while separation stays weak."""
+        ended = 30
+        assert not weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN - 1, ended, cooldown=WEAK_CHECK_COOLDOWN)
+        assert weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN, ended, cooldown=WEAK_CHECK_COOLDOWN)
+        assert not weak_check_due(3.0, ended + 100, ended, cooldown=WEAK_CHECK_COOLDOWN), (
+            "not while separation is strong"
+        )
 
 
 class TestDoneCheckDue:

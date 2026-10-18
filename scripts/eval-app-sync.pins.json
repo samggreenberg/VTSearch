@@ -28,35 +28,47 @@
     "harness": "0e6d44fbdaccc1fce4ca1e9b87cab2f991fe79d457e668bf9e553474e306ea1e"
   },
   "check.bands": {
-    "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
+    "app": "96971bd68102ea4a24e46d3ecacb05d0bfe4a2260baea63a4142d70af88de4e4",
     "harness": "2725f5eb38d9da06479591a698cd278be6e671bbac6a98befa96ee300221c754"
   },
   "check.likely_range": {
-    "app": "688403ef3258c8411d709a2295f8fc8b7c0af7bcff1002927c81c38cb87e362b",
-    "harness": "8df1a1803ff42c2f736d6c100f1086f5827655c2d00563738abaa2f3e675d157"
+    "app": "7cbac7cb48a570ac7e11ffe5bfa8fb03920287c9fb85d287d1feec73412b329d",
+    "harness": "3d8b6d4dec1ca1f5b2a09ba9c4c846e6980c011c4c32ba269b02d08d3aebb108"
   },
   "check.schedule": {
     "app": "362d65a8094ed0219cb1140fc94535cedbc3984c167988a06fd4e5f8a559527d",
     "harness": "b0eab212a2d6ac3ceb4c32dd60f4e9b82d8ba73486b9f4cdf2ff44a45b55cac1"
   },
   "check.walk": {
-    "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
+    "app": "96971bd68102ea4a24e46d3ecacb05d0bfe4a2260baea63a4142d70af88de4e4",
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
   },
   "detectors.label_quota_centroid": {
-    "app": "00995b40502d3ed2ec0ea89bcde0a8a75a8b32dd557315ad2d0db76c94e8a087",
+    "app": "95fcadc095dc1709f1ebf4932db0f8dce5a1310f66b1d242696066b05135f283",
     "harness": "5923b7ff1c978b52472b28e042e60fb42211b4baa933ff4fc9537997fc312740"
   },
   "detectors.label_quota_default": {
-    "app": "2019888512eb23e2e5dbbae03ebc93ffe11f2d51914298003a8d64fd046df61b"
+    "app": "4d14903a40db804b6f13729d7f7ab34107c09094a09741be50badff5bb004f57"
   },
   "detectors.label_quota_query": {
-    "app": "f3d5f0219139ea33b580900c427f0405d0040b371ebac9e5fac35b28f1c138df",
+    "app": "bbf80a6c4b34058e5691919ad93859892487f72f2191e16264fe2436959ccc04",
     "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
+  },
+  "find.evidence_coverage": {
+    "app": "d758f2812b3e1d3964b6176d752cabaf923ca68415cc27173fb31d4c97757100",
+    "harness": "74f8e68002a0501889892ca3d6fd39bd7b255e8b2ee7f4581c745b92fd186d38"
+  },
+  "find.training_domain": {
+    "app": "2cf0948e253d6e7a1563fbf955fc86c7f7556649f6d80a7abd14674ba25046bd",
+    "harness": "2bb424451fd30b60639bf8d2c1c0c69194653c54f5030c7ebd155bd873af49b3"
   },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
+  },
+  "progress.eval_cached_models": {
+    "app": "8edf8f0a3acbd227223f3c737f2299057d38883ff1f142270d8cbf1748cfc00f",
+    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
   },
   "progress.eval_geometry": {
     "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
@@ -67,12 +79,16 @@
     "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
   },
   "progress.span_status": {
-    "app": "b71a2dafe924d31d47cb7bf0e292f900559bb5c1b4329b9318841b176577bd02",
+    "app": "7ceccf38877df003f38958e91e71ebb167fa4831d91dc22cfaa59dbd562e63c9",
     "harness": "943c601eab9f7b60b323015d29c3e3e9da6b54edcc17c0d4ceffee3e287530cd"
   },
   "progress.stable_status": {
     "app": "1c90ae2a074e29f58163986c6da63b5cc7b68588ca574393d13334146cbe1354",
     "harness": "107b8ec9007651c51bec2b4e30649d2013de40510615bf022965aaf66df6ac19"
+  },
+  "progress.step_stability": {
+    "app": "5ad8df5e622e6e7c23d408dbaaeb7dc9a81be35f1ffde40e4db48b3e9d7223e4",
+    "harness": "1574f6f0889a2b5274b75c53e6cd5fa430a2090089c89e4c5a0fcc9c2fccce69"
   },
   "thresholds.balance_default": {
     "app": "15f91c543aa7ddff60f9cd0dfaeb5cb31f4d92be569dc7c111a172fb4f7ef46a",
@@ -108,7 +124,7 @@
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "33d2a307330e428d5fdd90e22dce24d4bb998a1533dd341a08ca578118c0375f",
+    "app": "beb40bacc3292e374f32bb483e15d845d4454c25fff42613cc349de28181f520",
     "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
   },
   "training.typed_query_prior": {

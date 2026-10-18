@@ -5,14 +5,84 @@ This file records what was deleted, when, why it was safe, and how to rebuild
 it, so a later session does not go looking for an input that is gone. Add a
 dated section per cleanup, newest first.
 
-Before deleting a directory, the checks (`GRID-PLAYBOOK.md`, and the
-2026-09-18 lesson that a tool's *default argument* counts as reading a path):
+Before deleting a directory, run these checks (the second is
+[`lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md`](lessons/2026-08-12-a-launcher-default-outlives-the-directory-it-names.md):
+a tool's *default argument* counts as reading a path):
 
 1. the study's issue is closed or `solved`, and its report is merged;
 2. `git grep` over `scripts/` and `vtscore/` finds no tool whose default reads the
    directory. A launcher's default *output* location is fine; an input is not;
 3. no running job writes or reads it;
 4. the owner approves the list.
+
+## 2026-10-18: #5039's runs and #4937's snapshots (12 GB by `du`, owner-approved)
+
+`/expscratch/sgreenberg` was at 100% (8.2 GB free); after these, 15 GB free by `df`. #5039 is `solved` and its
+report and ship merged (#5085); #4937 is `solved` and merged (#5043). No running job read them, and no tool's default
+reads them (`head_count_5039.sh` names its run dirs as output; `head_count_5039_ab.py` reads them only under an
+explicit `--root`).
+
+- **#5039's FHIBE face snapshot runs** `<FHIBE release>-derived/runs/2026-10-18-5039snap-roll-k{1,4}-b{1,4}` (+ `-logs`,
+  `-tasks.txt`; 1.9 GB): the withheld half's scores at votes 20-150, the offline pricing's face input.
+  **Rebuild:** the report's Reproduce block (`sota_face.sh` with `CALIB_SAVE_TEST_SCORES_AT`) at 738219cc7.
+- **#5039's intermediates** in `/expscratch/sgreenberg/head-count-5039/` (`x`, `xbr`, `xf`, `xall`, `priced`,
+  `priced-test`, `grid`; 1.7 GB): the extracted head-count snapshots and the per-snapshot pricing. The report's tables
+  are committed. **Rebuild:** `head_count_5039.py extract` / `extract-faces` / `price` / `grid`.
+- **#5039's closed-loop cells** `state-of-the-app/2026-10-18-headcount5039-{ctl,e13z3,e13z275}-b{025,1,4}` (beta 4
+  only had cells) and `<FHIBE release>-derived/runs/2026-10-18-5039{ctl,e13z3,e13z275}-roll-k{1,4}-b4` (+ `-logs`,
+  `-tasks.txt`; 1.8 GB). The A/B's summary tables are committed. **Rebuild:** `head_count_5039.sh` arms and
+  `sota_face.sh` per arm at 4f5963abf. Kept: the identity smokes `2026-10-18-headcount5039smoke-*` (the report cites
+  them).
+- **#4937's snapshot runs** `state-of-the-app/2026-10-16-fscale4936-early4937-binary-b{025,1,4}` (about 6 GB), kept
+  until now for #5039's and #5040's offline readings, both merged. Kept: `early-line-4937/mall` (the per-snapshot
+  table) and the empty `region-b*` dirs. **Rebuild:** #4937's report's Reproduce block at 73c887c27.
+
+## 2026-10-18: #5040's smoke run (8 MB, owner-approved)
+
+- **`state-of-the-app/2026-10-17-chances5040smoke-{ctl,bssl,bssl4}-b{025,1,4}`** (9 dirs, 2 sessions each): the
+  closed-loop launcher's smoke run before #5040's A/B, read by nothing since (the full run's dirs, without `smoke`,
+  are the A/B and stay). #5040 is `solved` and its report merged (#5080); no tool's default reads them (the
+  launcher's `CHANCES5040_TAG` and the analyzer's `--tag` only name them when asked).
+  **Rebuild:** `CHANCES5040_TAG=smoke bash scripts/experiments/state_of_app/chances_5040.sh cpack <arm> <beta> 3,100`
+  at 4783a51eb.
+
+## 2026-10-16: 55 GB after the volume filled overnight (owner-approved)
+
+`/expscratch/sgreenberg` (1 TB) hit 100% at ~04:40, during #4951's State of the App run. Every job that wrote
+after that failed, and the live app's data dir shares the volume. The owner approved four groups at ~06:30;
+by `df`, the volume went from 256 KB free to 55 GB free.
+
+- **#4951's partial seeds 45–49** (18,856 cell files, a few GB): the cells of the seeds that were still running
+  when the disk filled, in `state-of-the-app/2026-10-16-{b025,b1,b4}/results/cells` and `-b1/ceiling/results/cells`.
+  16 of them were empty, cut short or NUL-filled. The review analyses seeds 0–44, which were complete and checked.
+  **Rebuild:** not needed. More seeds would come from re-running those indices with the review's launcher at its
+  commit (`7b3a3d1e3`).
+- **Three floor-era State of the App run dirs** (13 GB): `state-of-the-app/2026-09-30-walk2` (5.8 GB, the
+  2026-10-01 Binary Photo review's run), `2026-10-04-b1-pframes` (4.2 GB, #4492's precision-frame capture) and
+  `2026-10-04-floor-b4` (3.0 GB). Their reports are committed. No tool on dev names them.
+  **Rebuild:** re-run the review at the commit its report names (`state_of_app/launch.sh`, hours).
+- **The #4778 and #4780 FHIBE study runs** (28 dirs, ~38 GB by `du`):
+  `fhibe/.../runs/2026-10-11-4778{weak,end}-roll-*` and `2026-10-12-4780{arc,fn}-roll-*`, each study's run,
+  `-analysis`, `-baseline` and `-logs` dirs. Both studies
+  are merged (#4796 and #4802; #4806), and their reports and figures are in `docs/experiments/`. No tool on dev
+  names them. **Rebuild:** their launchers in `scripts/experiments/fhibe/`, from the reports' provenance.
+- **23 merged worktrees** (10.7 GB), by `scripts/grid/prune-worktrees.sh --apply`. Each was clean, unused for
+  24 h, on a branch merged into dev (or a detached `-tests` checkout with no job). The branches themselves are
+  kept.
+
+**Why it filled:** a review run's cells are written uncompressed, ~0.6 GB a seed for each preset's directory.
+#4951 took as many seeds as fit by morning, 85 GB by 04:40, on a volume that held ~915 GB before it (by
+subtraction). Check `df` before a run sized by its deadline rather than its seed count.
+
+## 2026-10-15: 6.1 GB, the recorded ratio-test calls from #4515 (owner-approved)
+
+- `/expscratch/sgreenberg/ratio-4515/rec-s/calls/` (8 `call_<k>.npz`): real 1,000-page
+  `ratio_test_matches` calls (template, uint8 candidates, output pairs), recorded on 2026-10-15 to
+  prove #4933's rewrite returns dev's pairs. #4933 is merged and #4515 is `solved`; only the
+  bench scripts beside them read these files.
+- **Rebuild:** `sbatch --export=ALL,W=<a worktree of dev> /expscratch/sgreenberg/ratio-4515/record.sbatch`
+  re-records them from `profile_retrain.py`'s tier-s CPU loop in ~6 min. The rest of `ratio-4515/` is
+  kept: the scripts, `calls.json` (per-call shapes and timings) and the `prof/` step logs.
 
 ## 2026-10-14: 24 GB, the torch-2.6 venv backups from #4838 (owner-approved)
 
@@ -93,6 +163,39 @@ evidence stays: the 60-vote arm (`2026-10-12-hold4736v60-b{025,1,4}`) and the Re
 
 Rebuild: the first is `hold_4736.sh` with `HOLD4736_STEPS=30` (its dirs are then `…hold4736v30-b*`); the
 smoke is `line_4786.sh` with `LINE4786_ARM=smoke4736 LINE4786_SEEDS=1` and `launch.sh pack 5,10,100,120`.
+
+## 2026-10-11: 254 GB (`/expscratch/sgreenberg` was at 100%, 2.8 GB free)
+
+The volume filled while three sessions' runs were writing: #4783's arrays held their pending tasks, and
+#4788's session run could not pass preflight. No cell was truncated. Two owner-approved deletes took it from
+1,022 G used to 794 G (78%, 231 G free).
+
+**#4776's raw cells, 62 GB** (deleted by the #4776 session, owner-approved): the `results/cells` of
+`fhibe/<release>-derived/runs/2026-10-10-4776*` and `2026-10-10-4776prior*`, and of
+`state-of-the-app/2026-10-10-{handover4776,prior4776}-b*`. The report's aggregates are in PR #4787. Its own
+section, below, has the table and the rebuild.
+
+**Closed studies, 192 GB, 11:17** (`/expscratch/sgreenberg/logs/scratch-delete-4788.sh`, job 970903). All four
+checks above passed; the owner approved all three groups proposed:
+
+| path | GB | study | why it is safe |
+|---|---:|---|---|
+| `acq-sweep-4428` | 68 | #4428 | closed; report `docs/experiments/2026-10-02-acquisition-sweep-4428/` |
+| `p-aware-acq-4409` | 27 | #4409 | closed; report `docs/experiments/2026-10-01-acquisition-fbeta-4409/` |
+| `labels-4452` | 50 | #4452 | closed; shipped, and later reports cite it (no report of its own) |
+| `presets-4448` | 21 | #4448 | closed; shipped, and later reports cite it (no report of its own) |
+| `fhibe/<release>-derived/runs/2026-10-09-k{1,4}/results/cells` | 13 | #4699 | report merged (`2026-10-09-fhibe-baseline-4699`) |
+| `.../runs/2026-10-09-4731-{ctl,dry16,dry16q16}-k1/results/cells` | 5.9 | #4731 | report merged |
+| `.../runs/2026-10-10-4732-k{1,4}/results/cells` | 3.3 | #4732 | report merged |
+| `.../runs/2026-10-10-4743-{app,ctl}-k1/results/cells` | 4.3 | #4743 | report merged |
+| `.../runs/2026-10-10-repro-sota-*` | 0.1 | #4777 | its check is recorded in that report |
+
+**Kept on purpose:** in `2026-10-09-k{1,4}`, `identities.txt`, `results/prepare_info.json` and
+`results/crops`, which `fhibe/sota_face.sh` and `sota_face_analyze.sh` read by default (the face review's
+bench and prepared grid). Every FHIBE run dir's `logs/` and `grid_shape.json`, and all analysis dirs.
+
+Rebuild: a FHIBE run's cells come back from `fhibe/launch.sh` (or `sota_face.sh`) at the report's commit, with
+the same identity file. The sweeps' drivers are committed in their report dirs.
 
 ## 2026-10-11: 62 GB (`/expscratch/sgreenberg` was at 100%)
 

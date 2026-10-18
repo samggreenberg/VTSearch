@@ -28,15 +28,14 @@ detector lifecycle, evaluation. It has no Flask, no Angular, no settings
 JSON. `vtsearch` is the **application** that wraps `vtscore` with a
 Flask + Angular UI, a per-user settings system, and authentication.
 
-The two ship from the same git repository today. See
+The two ship from the same git repository. See
 [architecture.md](architecture.md) for the dependency direction
 (`vtsearch` depends on `vtscore`, never the reverse).
 
 ### Can I use `vtscore` without `vtsearch`?
 
-Yes. The whole point of the extraction was to make `vtscore` a standalone
-library. See [integration.md](integration.md) for what installing it in
-your own app looks like.
+Yes; `vtscore` is a standalone library. See [integration.md](integration.md)
+for what installing it in your own app looks like.
 
 ### Why don't I see `vtscore` on PyPI?
 
@@ -177,7 +176,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `siglip_l` | `image` | 1152 |
 | `e5` | `text` (default) | 768 |
 | `bge` | `text` | 768 |
-| `xclip` | `video` (default) | 768 |
+| `xclip` | `video` (default) | 512 |
 | `languagebind` | `video` | 768 |
 | `videomae` | `video` | 768 |
 
@@ -222,11 +221,14 @@ fetching at runtime.
 
 ### How many labels do I need?
 
-The detector works from about 4 labels (2 good, 2 bad) and improves through
-about 50. Above 100 the gains are mostly noise. The production head is linear
-(a single `Linear(D, 1)` fitted as a maximum-margin SVM), which is what makes
-it usable that low: with 3-5 positives an MLP is under-determined and its
-scores wobble from retrain to retrain. See
+A detector gets a trained head from 3 Goods and 4 Bads, or from a Good and
+16 Bads (the label quota, `vtscore/detectors/label_quota.py`); below that the
+app's detector is the Goods' centroid
+([docs/ML.md](../../docs/ML.md#below-the-label-quota-the-goods-centroid-not-a-head)).
+It improves through about 50 labels. Above 100 the gains are mostly noise. The
+production head is linear (a single `Linear(D, 1)` fitted as a maximum-margin
+SVM), which is what makes it usable that low: with 3-5 positives an MLP is
+under-determined and its scores wobble from retrain to retrain. See
 [docs/ML.md](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
 
 ### Is training deterministic?
@@ -242,7 +244,7 @@ It moves the **decision threshold**, not the model. Inclusion never enters
 training: `train_model` is class-balanced regardless, so every item's score
 is identical at every inclusion, and only the cut moves. Range `[-10, +10]`.
 
-Under the shipped cut (`FoldAnchoredCut.threshold_at`, see the next answer),
+Under the fold-anchored cut (`FoldAnchoredCut.threshold_at`, see the next answer),
 `k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
 times a false alarm (or a false alarm at `2**-k` times a miss, below zero).
 The `mid_tilt` rule starts from the fold-anchored midpoint cut at `k = 0`
@@ -263,35 +265,42 @@ Both rules are monotone non-increasing in `k`, so the included sets are
 nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
 
-Inclusion is no longer a user preference (#4269): the app's control is the
-**balance** (#4413), F-beta's beta, where the user says which way to lean
-between precision and recall: the line keeps the top of the ranking where the
-estimated F-beta peaks, and a spot check of random picks measures how much of
-it is right and how much it found
-(`vtscore.training.thresholds.spot_check`, #4272). `k` stays underneath, as
-the unit Autopilot's acquisition offset and the Smart indicator's pricing are
-measured in. The entry points that used to take
-the user's Inclusion (`train_and_score(inclusion_value=...)` and its
-siblings, `vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are
-deprecated: they accept only `0`, with a `DeprecationWarning`. The
-lower-level functions that take `inclusion_value` as a cut position
-(`conformal_threshold`, `threshold_from_folds`, `train_svm`, ...) are
-unchanged.
+Inclusion is not a user setting. The app's control is the **balance**,
+F-beta's beta (`CoreConfig.beta`, `vtscore.state.set_beta`), where the user
+says which way to lean between precision and recall: the line keeps the top
+of the ranking where the estimated F-beta peaks, and a spot check of random
+picks measures how much of it is right and how much it found
+(`vtscore.training.thresholds.spot_check`). `k` stays underneath, as the unit
+Autopilot's acquisition offset and the Smart indicator's pricing are measured
+in. The detector-level entry points that take an inclusion
+(`train_and_score(inclusion_value=...)` and its siblings,
+`vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are deprecated:
+they accept only `0`, with a `DeprecationWarning`. The lower-level functions
+that take `inclusion_value` as a cut position (`conformal_threshold`,
+`threshold_from_folds`, `train_svm`, ...) are unaffected.
 
 ### How is the decision threshold chosen?
 
-By fusing the labels with the haystack's own score distribution rather
-than picking between them. Per calibration fold, a 2-component mixture
-is fitted to that fold model's scores over the whole collection with the
-fold's *held-out* votes clamped to their labeled component; each fold's
-midpoint cut is carried to the final model as a quantile, the folds are
-averaged in quantile space, and a cut at another inclusion shifts that
-quantile by the rate-optimal cut's own displacement from Inclusion 0. See
-`vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
-unconditional - there used to be a `safe_thresholds` toggle, but the
-fused estimator measured better at every label count, so the toggle was
-removed. `calculate_safe_threshold` remains the fallback for label sets
-too small to form calibration folds.
+By reading the labels against the haystack's own score distribution rather
+than picking between them (`_fused_threshold` in
+`vtscore/detectors/training.py`, reached through `train_and_threshold` with a
+haystack to score). Under a balance (the app's case, and `CoreConfig.beta`'s
+default of `1.0`) the line is the **labels' line** (`LabelsLine`, #4452): the
+class model the calibration folds' held-out votes imply, cut where the
+expected F-beta peaks at the prevalence it estimates on the scored haystack.
+
+With no class model (too few votes, one class) or no balance (`beta=None`),
+the line is the fold-anchored cut at Inclusion 0. Per calibration fold, a
+2-component mixture is fitted to that fold model's scores over the whole
+collection with the fold's *held-out* votes clamped to their labeled
+component; each fold's midpoint cut is carried to the final model as a
+quantile, the folds are averaged in quantile space, and a cut at another
+inclusion shifts that quantile by the rate-optimal cut's own displacement
+from Inclusion 0 (`fold_anchored_gmm_threshold` in
+`vtscore/training/thresholds/anchored.py`). No setting selects between these.
+`calculate_safe_threshold` is the fallback for label sets too small to form
+calibration folds, and with no haystack at all (`train_detector_from_origins`)
+the plain cross-calibration cut ships alone.
 
 ## Detectors on disk
 
@@ -306,7 +315,13 @@ contains:
   `{"labels": [...]}`: one entry per `LabeledElement`, each with `md5`,
   `label`, `origin_name`, `origin`, and optional `filename`, `category`,
   `region_box` and `metadata`.
-- Nothing else - **no embeddings, no model weights**.
+- Any top-level keys you pass in `extra=`.
+- **Never embeddings or model weights.**
+
+The app keeps more on the same file as the detector is used - its balance
+(`beta`, `vtscore.detectors.balance`), its input spec, and finished Test-mode
+verdicts (`test_verdicts`, `vtscore.detectors.line_verdicts`) - all ids,
+labels and numbers.
 
 The embedder *name* is not in this file; it is recorded on the detector's
 registry entry (`vtscore.detectors.registry`), stamped the first time
@@ -381,9 +396,11 @@ context. Bind one explicitly with `set_thread_dataset_context(ctx)` /
 ### Why does my background thread see no active context?
 
 Thread-local context doesn't inherit. If you start a thread, you must
-call `set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)`
-inside the thread function - the calling thread's binding doesn't
-follow.
+bind the context inside the thread function - with
+`thread_dataset_context(ctx)` / `thread_detector_context(ctx)` (context
+managers that restore the previous binding) or
+`set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)` - the
+calling thread's binding doesn't follow.
 
 The library's own workers (the dataset-load pipeline and
 `vtscore.concurrency.async_jobs`) bind the context for you; if you're
@@ -406,11 +423,13 @@ argument: they act on the *active* detector context, so bind one first
 
 ### How do plugins get discovered?
 
-Every `PluginRegistry` walks its target package on construction,
-imports every module, and harvests the sentinel attribute (`IMPORTER`,
-`EXPORTER`, `EMBEDDER`, `CLIPPERS`, `CONVERTER`, …). It also scans the
+Every `PluginRegistry` walks its target package on construction, imports
+each sub-package (and, for families built with `discover_modules=True` such
+as converters and media sources, each flat module), and harvests the sentinel
+attribute (`IMPORTER`, `EXPORTER`, `CONVERTER`, …). It also scans the
 matching `importlib.metadata` entry-point group (`vtscore.<family>`)
-and adds any plugins declared there.
+and adds any plugins declared there. Media types, embedders, clippers and
+cleaners are found by `vtscore.media`'s own sub-package scan instead.
 
 Discovery is **eager by default**: by the time
 `vtscore.datasets.importers.__init__` returns, every importer is
@@ -436,7 +455,8 @@ Check, in order:
    clashes; the clashing third-party plugin is skipped with a warning.
 4. Does the entry-point target raise on import? The error is logged as a
    warning and the plugin becomes a tombstone: absent from `list_*()`,
-   re-raising the original error when `get_*()` hands it out. Check
+   while `get_*()` returns a stand-in that raises an `ImportError` carrying
+   the original error as soon as it is used. Check
    `python -W default -c "import vtscore.datasets.importers"` (or the
    family's package) for the warning.
 
@@ -459,15 +479,18 @@ process loads from disk (~5s) and subsequent uses are instant.
 ### How big is the embedding matrix in memory?
 
 `(N * D * 4)` bytes for a float32 matrix. 100,000 audio items × 512
-dimensions × 4 bytes = ~200 MB. The cached matrix on `DatasetContext`
-lives only in process memory; clearing it is `invalidate_embedding_matrix(ctx)`.
+dimensions × 4 bytes = ~200 MB. The cached matrix lives on the
+`DatasetContext` for the process lifetime (for a registered dataset it can
+be a memory map of the `<stem>.embmat.npy` sidecar beside the pickle);
+dropping it is `invalidate_embedding_matrix(ctx)`.
 
 ### My detector training is using only one CPU core. Why?
 
 `VTSEARCH_TORCH_THREADS` defaults to `1` as a memory-saving default (each
 extra thread allocates its own scratch buffers), and
 `vtscore.media.torch_setup.ensure_torch_configured()` applies it with
-`torch.set_num_threads()` when the first embedder loads. Set
+`torch.set_num_threads()` the first time an embedder loads or a head
+trains. Set
 `$VTSEARCH_TORCH_THREADS` before importing `vtscore` to raise it. (The
 VTSearch app additionally exports `OMP_NUM_THREADS` / `MKL_NUM_THREADS`
 from the same value before importing torch; a library script that wants
@@ -476,13 +499,15 @@ the same effect on OpenMP/MKL sets them itself.)
 ### How do I parallelise dataset loading?
 
 The pipeline already does - `vtscore.datasets.load_pipeline` runs
-embedding under a `ConcurrencyGate` capped by
-`CoreConfig.max_concurrent_dataset_embeddings`. Bumping that value lets
+embedding under a `ConcurrencyGate` capped by the
+`max_concurrent_dataset_embeddings` setting. Bumping that value lets
 multiple datasets embed in parallel.
 
-Within a single dataset, embedder fan-out is automatic: each importer's
-`run()` decides the fan-out. The folder importer fans out per-file across
-`min(8, os.cpu_count())` threads for an import of 64 files or more.
+Within a single dataset, the folder loader builds the per-file media dicts
+(disk read, decode, thumbnail) on `min(8, os.cpu_count())` threads for an
+import of 64 files or more. Embedding itself is one bulk call per embedder,
+with forward passes serialised by the shared embed lock (see
+[Is the embedder cache thread-safe?](#is-the-embedder-cache-thread-safe)).
 `cap_workers_by_memory()` sizes the detector-scoring fan-out instead
 (auto-detect and processor scoring), where each worker holds a whole
 `(N, D)` embedding matrix.

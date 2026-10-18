@@ -56,9 +56,11 @@ Each of these has a hook. Install only the ones you need.
 
 ### Hook 1: `register_core_config_builder`
 
-By default, `CoreConfig.from_settings()` raises `RuntimeError` - the
-library refuses to silently fall back to a guess. Install a builder that
-constructs a `CoreConfig` from your config source:
+Library code reads its settings with `vtscore.config.get_setting(name)`,
+and by default a required one (`detectors_dir`, `calibrate_count`, …)
+raises `RuntimeError` - the library refuses to silently fall back to a
+guess. Install a builder that constructs a `CoreConfig` from your config
+source; `get_setting` reads each knob off what it returns:
 
 ```python
 from pathlib import Path
@@ -66,8 +68,8 @@ from vtscore.config import CoreConfig, register_core_config_builder
 
 def _build_core_config(settings_path=None) -> CoreConfig:
     # Your config source - env vars, settings JSON, database row, …
-    # `settings_path` is whatever the caller passed to
-    # `CoreConfig.from_settings(...)`; ignore it if you have nowhere to put it.
+    # `settings_path` is the CLI's `--settings` file when one is redirected,
+    # else None; ignore it if you have nowhere to put it.
     return CoreConfig(
         data_dir=Path("/var/lib/myapp/data"),
         saved_datasets_dir=Path("/var/lib/myapp/data/datasets"),
@@ -85,10 +87,16 @@ def _build_core_config(settings_path=None) -> CoreConfig:
 register_core_config_builder(_build_core_config)
 ```
 
-Call this **once at startup**, before any library code that calls
-`CoreConfig.from_settings()`. The builder is process-wide, and it is called
+Call this **once at startup**, before any library code reads a setting.
+The builder is process-wide and called on every read of a knob, so keep it
+cheap (return a config built once, or cache your source). It is called
 with one positional argument - a builder declared as `def _build()` raises
-`TypeError` the first time someone passes a settings path.
+`TypeError`.
+
+A host whose settings change at runtime, per user or per request, can
+instead register a getter per knob with
+`register_setting_getter(name, fn)`; a knob's getter wins over the
+builder. That is what the VTSearch app does.
 
 ### Hook 2: `register_*_context_resolver`
 
@@ -135,9 +143,14 @@ save-and-restore context-manager forms, `thread_dataset_context()` /
 ### Hook 3: `register_setting_persister`
 
 The `vtscore.state` package exposes setter functions like
-`set_beta(value)` and `set_calibrate_count(value)`. By default,
-those update only the in-memory cache. If you want them to persist to
-your settings store, install a persister per key:
+`set_beta(value)` and `set_calibrate_count(value)`. Each hands the value to
+the persister registered for its key, and nothing installs one by default:
+`set_beta` then moves only the active detector's in-memory balance (plus the
+balance a registered detector keeps on its JSON), and `set_calibrate_count` /
+`set_calibration_fraction` change nothing the library reads back, because
+their getters read `CoreConfig.from_settings()`. To make them reach your
+settings store - the one your Hook 1 builder reads - install a persister per
+key:
 
 ```python
 from vtscore.state import register_setting_persister
@@ -161,8 +174,9 @@ retired as a user preference (#4269): registering it warns and the persister
 never fires.
 
 If you don't install persisters, library code can still call
-`set_beta(2.0)` - the value just won't survive a process restart.
-That's a fine choice for many apps.
+`set_beta(2.0)` - the user's balance just won't survive a process restart
+(a registered detector still keeps its own). That's a fine choice for many
+apps.
 
 ### Putting the seams back in tests
 
@@ -345,8 +359,9 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
 
 Notes on the multi-thread story:
 
-- `train_model` is thread-safe - it uses `torch.random.fork_rng()` to
-  isolate its RNG and a local `torch.Generator` for the model weights.
+- `train_model` is thread-safe: the production linear-SVM head is fitted
+  by liblinear, which touches no global RNG, and the BCE heads use a
+  local `torch.Generator` plus `torch.random.fork_rng()`.
 - The state lock (`_state_lock` in `vtscore/state/core.py`) is an
   `RLock`, so one public function can call another while holding the
   lock without deadlock.
@@ -371,7 +386,7 @@ relative path, but the locations come from two different knobs:
 
 | What | Where | Format |
 |------|-------|--------|
-| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `vtscore.datasets.export_dataset_to_file`. A registered pickle may also get a derived `<stem>.embmat.npy` / `<stem>.embids.npy` matrix sidecar beside it |
+| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Serialised by `vtscore.datasets.export_dataset_to_file`. A registered pickle may also get a derived `<stem>.embmat.npy` / `<stem>.embids.npy` matrix sidecar beside it |
 | Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector` |
 | Dataset / detector registries | `vtscore.config.DATA_DIR / "dataset_registry.json"`, `.../"detector_registry.json"` | JSON manifests maintained by `vtscore.datasets.registry` / `vtscore.detectors.registry` |
 | Embedder model cache | `vtscore.config.MODELS_CACHE_DIR` | HuggingFace / torch cache layout |
@@ -430,8 +445,9 @@ the `Authorization` header. To port the idea to your own app:
   it with `set_login_provider()`. Screen client-supplied usernames with
   `is_safe_username()` - they become path components.
 - Build a per-user `CoreConfig` in your `register_core_config_builder`
-  callback - point `data_dir` / `saved_datasets_dir` / `detectors_dir`
-  at the per-user paths.
+  callback (or register per-user `register_setting_getter` getters) -
+  point `data_dir` / `saved_datasets_dir` / `detectors_dir` at the
+  per-user paths.
 - Build a per-user `DatasetContext` / `DetectorContext` in your
   resolver hooks.
 
@@ -454,9 +470,11 @@ you can ignore all of the above and just import what you need:
   file.
 - `from vtscore.datasets.loader import load_dataset_from_folder` plus
   `vtscore.datasets.stages.embedding.embed_missing` - no config needed.
-  Saving or reloading detectors (`vtscore.detectors.store`) and the load
-  pipeline's concurrency gates do call `CoreConfig.from_settings()`, so
-  install Hook 1 before using those.
+  Saving or reloading detectors (`vtscore.detectors.store`), detector
+  training through `vtscore.detectors.training.train_and_threshold` (it
+  reads the balance and the calibration settings) and the load pipeline's
+  concurrency gates do call `CoreConfig.from_settings()`, so install Hook 1
+  before using those.
 
 The library is designed to scale from "one-line numpy operation" to "a
 full Flask + Angular app" without any code path being mandatory in

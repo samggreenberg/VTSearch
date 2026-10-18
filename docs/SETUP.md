@@ -6,7 +6,7 @@ to [Running the app](#running-the-app) in order, then open the
 and train your first detector. [Docker](#docker) replaces the Python and Node
 steps if you would rather not install them, and the [SLURM](#running-on-a-slurm-gpu-cluster)
 section is for shared GPU clusters. You will need Python 3.11+, Git, and (for the
-frontend build) Node.js 20.19+.
+frontend build) Node.js 20.19+, 22.12+ or 24+.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ frontend build) Node.js 20.19+.
   - [Prerequisites](#prerequisites-1)
   - [CPU (default)](#cpu-default)
   - [GPU](#gpu)
-  - [LabBench (SigLIP-only image search)](#labbench-siglip-only-image-search)
+  - [LabBench (slim, image or audio)](#labbench-slim-image-or-audio)
   - [Single media type (audio-only, video-only)](#single-media-type-audio-only-video-only)
   - [All image embedders](#all-image-embedders)
   - [Data persistence](#data-persistence)
@@ -207,6 +207,7 @@ bash scripts/install.sh gpu          # force the GPU install (auto-detect the CU
 bash scripts/install.sh cu118        # force the GPU install with an explicit tag (CUDA 11.8, older drivers)
 bash scripts/install.sh cu126        # ... CUDA 12.6 (Volta through Hopper)
 bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
+bash scripts/install.sh cu129        # ... CUDA 12.9 (Turing through Blackwell; the only tag that gets cuML)
 ```
 
 Expect several minutes either way; pip goes quiet for tens of seconds at a time
@@ -304,7 +305,7 @@ and everything else works unchanged. See
 
 ## Building the frontend
 
-The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 20.19+** (or 22.12+ / 24+) and **npm**. Angular 21's engine range accepts all three; the shipped Dockerfiles use `node:20-slim`. The install commands below use Node 22 as the LTS default, but a Node 20.19+ install already on your machine works without upgrading.
+The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 20.19+, 22.12+ or 24+** and **npm**: that is Angular 21's engine range (`^20.19 || ^22.12 || >=24`), which leaves out the odd-numbered 21 and 23 (the Angular CLI only warns on them). The shipped Dockerfiles use `node:20-slim`. The install commands below use Node 22 as the LTS default, but a Node 20.19+ install already on your machine works without upgrading.
 
 Check if they're installed:
 
@@ -380,15 +381,12 @@ server flags — login providers, admin restrictions, logging verbosity — are 
 If the first model download or dataset import fails behind a proxy or on an
 offline host, see [DEPLOYMENT.md § Network dependencies](DEPLOYMENT.md#network-dependencies).
 
-`python app.py` uses Flask's built-in dev server (fine for development but **not recommended for production**). For production, run under gunicorn using the bundled config:
-
-```bash
-VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
-```
-
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, embedder preloading) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
-
-The Docker images already use this configuration (see [Docker](#docker) below).
+`python app.py` uses Flask's built-in dev server, which is fine for development
+but **not for production**. For production, run under gunicorn
+(`VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app`); why the
+variable is needed, the single-worker config and tuning are in
+[DEPLOYMENT.md § Running under gunicorn](DEPLOYMENT.md#running-under-gunicorn).
+The Docker images below already run that way.
 
 ## Docker
 
@@ -420,7 +418,11 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 > `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
 > stage that runs `npm ci` and `npm run build:prod` inside the image, so
 > you do **not** need to build the Angular app on the host first; any
-> stale checked-in `static/` is overwritten with the freshly built bundle.
+> stale bundle already in the host's `static/` is overwritten with the
+> freshly built one.
+>
+> Which image to pick, and what each one is for, is tabled in
+> [DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image).
 
 ### GPU
 
@@ -439,24 +441,58 @@ docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
 
-### LabBench (SigLIP-only image search)
+The GPU images ship torch's `cu129` build, so the host driver must accept
+CUDA 12.9 and the GPU must be Turing or newer: a V100 (Volta) host needs a
+local `bash scripts/install.sh cu126` instead. See
+[DEPLOYMENT.md § Choosing an image](DEPLOYMENT.md#choosing-an-image) for the
+accepted driver branches.
 
-For the LabBench deployment (image search with the SigLIP
-embedder), use the streamlined `docker/Dockerfile.labbench` variant. It skips
-audio, video, document, text, and extractor plugin dependencies, and **bakes
-the SigLIP model weights into the image at build time** so the container is
-ready to serve immediately on first run (no Hugging Face download).
+### LabBench (slim, image or audio)
+
+`docker/Dockerfile.labbench` is the streamlined image for the LabBench
+deployment: one media type, searched with that type's default embedder, and
+nothing else installed. Pick the type with the `MEDIA_TYPE` build arg: `image`
+(the default, searched with SigLIP) or `audio` (CLAP General). The build
+installs only that type's dependencies (`requirements/labbench.txt` plus
+`requirements/labbench-<type>.txt`) and **bakes the embedder's weights into the
+image**, so the container is ready to serve immediately on first run (no
+Hugging Face download).
 
 ```bash
-docker compose -f docker/compose/docker-compose.labbench.yml up
+docker compose -f docker/compose/docker-compose.labbench.yml up          # image (SigLIP)
+docker compose -f docker/compose/docker-compose.labbench-audio.yml up    # audio (CLAP General)
 ```
 
 Or with plain Docker:
 
 ```bash
 docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
+docker build -f docker/Dockerfile.labbench --build-arg MEDIA_TYPE=audio -t vtsearch:labbench-audio .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 ```
+
+Any other `MEDIA_TYPE` fails the build with the list of supported ones;
+[`docker/Dockerfile.solo`](#single-media-type-audio-only-video-only) builds the
+full image for any media type. Whichever type it is built for, a LabBench
+container is streamlined the same way:
+
+- **The media type is locked** (`VTSEARCH_SOLO_MEDIA_TYPE`): the importer and
+  new-detector flows hide their mediaType pickers, and converters are limited
+  to ones that output the type. The lock is an environment variable, so it
+  holds when the image is redeployed onto an existing volume.
+- **The embedder is locked to the baked one**: the type's other embedders are
+  not installed, so the importer hides its embedder dropdown.
+- **Datasets age off after 14 days** (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`).
+- **Plugins that cannot work are hidden**: the Downloaded Demo Media importer
+  (it needs outbound network access) and anything the slim dependencies cannot
+  run (for `image`, the Aud2Img spectrogram converter).
+
+The embedder lock and the hidden plugins are seeded into the `/app/data`
+volume (by `scripts/seed_labbench_settings.py`), and Docker only seeds a fresh
+volume, so a volume an earlier LabBench image populated keeps that image's
+values. That is why `docker-compose.labbench-audio.yml` mounts its own
+`vtsearch-labbench-audio-data` volume rather than the `vtsearch-data` the other
+compose files share.
 
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
 so the baked weights are not masked when `/app/data` is mounted as a volume.
@@ -464,7 +500,7 @@ so the baked weights are not masked when `/app/data` is mounted as a volume.
 ### Single media type (audio-only, video-only)
 
 `docker/Dockerfile.solo` is the full CPU image locked to one media type, the
-way LabBench is locked to images. Pick the type with the `MEDIA_TYPE` build arg;
+way a LabBench image is. Pick the type with the `MEDIA_TYPE` build arg;
 the build bakes that type's default embedder weights into the image (CLAP
 General for `audio`, X-CLIP for `video`), so a fresh container serves on first
 run without a Hugging Face download. The importer and new-detector flows hide
@@ -506,9 +542,11 @@ new-detector flow the embedded type (#4891).
 ### All image embedders
 
 `docker/Dockerfile.image-embedders` (CPU) and
-`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that bundle
-every supported image embedder — SigLIP (the default), SigLIP 2, CLIP, DINOv2,
-DINOv3 and EUPE — with their weights baked in. DINOv3 is gated on Hugging Face,
+`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that install
+every image embedder and bake in the weights of SigLIP (the default), SigLIP 2,
+CLIP, DINOv2, DINOv3 and EUPE. The two SO400M embedders (SigLIP-L and
+SigLIP2-L) are installed but not baked: they download into the `/app/data`
+volume the first time someone picks one. DINOv3 is gated on Hugging Face,
 so to bake it, run the cache script once on the host with your own token before
 building; no token enters the build. Without it the build still succeeds and
 DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
@@ -540,7 +578,8 @@ docker compose -f docker/compose/docker-compose.yml build           # CPU
 docker compose \
   -f docker/compose/docker-compose.yml \
   -f docker/compose/docker-compose.gpu.yml build                    # GPU
-docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (SigLIP-only)
+docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (image, SigLIP)
+docker compose -f docker/compose/docker-compose.labbench-audio.yml build  # LabBench (audio, CLAP General)
 docker compose -f docker/compose/docker-compose.audio.yml build     # Audio-only
 docker compose -f docker/compose/docker-compose.video.yml build     # Video-only
 docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml build  # All image embedders (GPU)
@@ -628,7 +667,7 @@ with a shared filesystem.
    > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
    > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
 
-3. **Build the frontend** (needs Node.js 20.19+; see [Building the
+3. **Build the frontend** (needs Node.js 20.19+, 22.12+ or 24+; see [Building the
    frontend](#building-the-frontend)):
 
    ```bash
@@ -702,8 +741,9 @@ with a shared filesystem.
 
 3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
    terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
-   press **Enter** to restart the app. Press **q** then Enter to release the
-   node and quit.
+   press **Enter** to restart the app. Type **i** then Enter first to rerun
+   `scripts/install.sh` when dependencies changed; **q** then Enter releases
+   the node and quits.
 
 > Interactive SLURM jobs don't persist — you re-allocate each session. Only run
 > **one** `app.py` per allocation; VTSearch keeps all model/dataset state in one
@@ -827,13 +867,10 @@ dependencies automatically and supports grouped test subsets:
 ./run-tests.sh sorting api  # multiple groups
 ```
 
-Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
-`downloads`, `integration`, `cli`, `converters`, `projection`, `meta`,
-`frontend`, `slides`, `docs` (plus `gpu` and `vtscore-clean`, which run
-separately). A bare `./run-tests.sh` on a branch that changes only markdown
-narrows itself to the `docs` gate automatically. See
-[`docs/TESTING.md`](TESTING.md#test-groups) for what each group covers and which
-gates a group run skips.
+The group list, what each group covers, and which gates a group run skips
+are in [TESTING.md § Test Groups](TESTING.md#test-groups). A bare
+`./run-tests.sh` on a branch that changes only markdown narrows itself to the
+`docs` gate automatically.
 
 You can also run pytest directly:
 
@@ -885,7 +922,7 @@ The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_
 - **Run tests**: See [Running the tests](#running-the-tests) above.
 - **Learn the codebase**: See [ARCHITECTURE.md](ARCHITECTURE.md#key-concepts)
   for the core vocabulary (media items, votes, media types, processors,
-  origins) and the module-by-module map, and
+  origins) and the package-level map, and
   [FRONTEND.md](FRONTEND.md) for the Angular SPA.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
   exporters from the command line.

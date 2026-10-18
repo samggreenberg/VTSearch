@@ -70,7 +70,10 @@ vec = embed_paragraph_file(Path("doc.txt"))
 Each returns `Optional[np.ndarray]` - `None` when no embedder is
 registered for that media type, or when the embedder fails on the
 input. The vector dimension depends on the default embedder for the
-type (CLAP → 512, SigLIP → 768, X-CLIP → 512, E5 → 768).
+type (today `clap_general` → 512, `siglip` → 768, `xclip` → 768,
+`e5` → 768; the generated roster in
+[`docs/ML.md` § Embedding Models](../../../docs/ML.md#embedding-models)
+is authoritative).
 
 These wrappers exist mainly so older code can keep calling
 `embed_audio_file(p)` without knowing about the embedder registry.
@@ -390,9 +393,10 @@ non-cached matrix is built. Cross-dataset Find takes the fresh path.
   cold load `mmap`s it back instead of restacking the matrix from
   per-item embeddings. Details below.
 - **Thread safety:** every read/write of the in-memory cache goes
-  through `vtscore.state.core._state_lock`. Concurrent callers serialise
-  on the same lock, so the rebuild happens exactly once when the key
-  set changes. The sidecar read/write happens *outside* the lock.
+  through `vtscore.state.core._state_lock`, but the build itself (and
+  the sidecar read/write) runs *outside* the lock, so callers that miss
+  together may each build the matrix; phase 3's revision check keeps a
+  stale one out of the cache.
 
 #### The `.npy` sidecar, and why it isn't a "persisted vector"
 
@@ -494,14 +498,12 @@ already normalises costs nothing), and a **zero or non-finite-norm vector
 is returned unchanged** rather than divided, so it can't mint `inf` /
 `nan` rows that would poison every downstream consumer.
 
-The first property has to hold to the last bit, not to rounding (#4892).
-The pickle loader normalises what ingest stored, and the calibration
-folds' split is seeded from the training vectors' bytes
-(`_split_dither_rng`). When a second pass moved the last bit of a third
-of the vectors, a dataset reloaded after a restart drew other folds than
-the process that imported it, and the same labels gave another line.
-Normalisation itself runs in `float64` and rounds each component to
-`float32` once, so its output sits within about 6e-8 of unit norm.
+The first property has to hold to the last bit, not to rounding (#4892):
+the pickle loader normalises what ingest stored, so a second pass that
+moved a last bit would leave a dataset reloaded after a restart holding
+other bytes than the process that imported it. Normalisation itself runs
+in `float64` and rounds each component to `float32` once, so its output
+sits within about 6e-8 of unit norm.
 
 ---
 
@@ -574,7 +576,7 @@ load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
   maximum, and falls back to 1 when RAM can't be read.
 
 These are *defaults* for the app's settings; the actual limits are read
-through `vtscore.config.CoreConfig` at acquire time.
+with `vtscore.config.get_setting` at acquire time.
 
 ---
 

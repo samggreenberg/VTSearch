@@ -1,20 +1,30 @@
-"""The :class:`CoreConfig` value object and the app-side builder hook.
+"""The :class:`CoreConfig` value object and the setting getters library code reads.
 
-This is the seam that lets library code run with or without the Flask app: a
-frozen bundle of every knob ``vtscore`` reads, constructed directly by
-library-only consumers and snapshotted from ``vtsearch.settings`` by a builder
-the app installs at startup.  :mod:`vtscore.config` never imports the app.
+This is the seam that lets library code run with or without the Flask app.
+Library code reads one knob at a time with :func:`get_setting`, which answers
+from, in order:
 
-**Patch target.** :attr:`_core_config_builder` is module state, so a test that
-stubs it must patch ``vtscore.config.core_config._core_config_builder`` - the
-package re-exports functions and constants, not this mutable global.
+1. the getter a host app registered for that knob with
+   :func:`register_setting_getter` - the VTSearch app registers one per knob at
+   startup, each reading ``vtsearch.settings`` live;
+2. the :class:`CoreConfig` a library-only consumer's builder returns
+   (:func:`register_core_config_builder`);
+3. the knob's :class:`CoreConfig` field default, or :class:`RuntimeError` for a
+   required field, which has none.
+
+:mod:`vtscore.config` never imports the app.
+
+**Patch targets.** :attr:`_core_config_builder`, :attr:`_setting_getters` and
+:attr:`_settings_path_redirect` are module state, so a test that stubs one must
+patch ``vtscore.config.core_config`` - the package re-exports functions and
+constants, not these mutable globals.
 """
 
 from __future__ import annotations
 
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -58,45 +68,23 @@ def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) 
     )
 
 
-# ---------------------------------------------------------------------------
-# CoreConfig: runtime config bundle the (future) ``vtscore`` library consumes
-# ---------------------------------------------------------------------------
-#
-# Today every library-candidate package reaches into ``vtsearch.settings``
-# directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
-# ``calibrate_count``, etc.  That couples the library to the app's settings
-# layer and makes it impossible to vendor the library as ``vtscore`` (see
-# ``docs/architecture.md``, Phase 2).
-#
-# ``CoreConfig`` is the seam: a frozen value object that bundles every knob
-# library code reads.  Follow-up PRs convert each call site to accept (or
-# look up) a ``CoreConfig`` instead of importing ``vtsearch.settings``.
-# Until those land this class is unused at runtime; the scaffold just
-# defines the type so the conversions can happen one file at a time.
-#
-# The app side will build a fresh ``CoreConfig`` at each request boundary
-# via :meth:`CoreConfig.from_settings`; library callers can construct one
-# directly with whatever values they want.
-#
-# The implementation of :meth:`from_settings` is installed by the app via
-# :func:`register_core_config_builder`; see ``vtsearch/shim`` for the
-# concrete builder that snapshots ``vtsearch.settings``.  This keeps the
-# library import-clean: ``vtscore.config`` itself never imports
-# ``vtsearch.settings`` (Phase 8 of ``docs/architecture.md``).
-# Library-only consumers without an app skip ``from_settings()`` entirely
-# and construct ``CoreConfig`` directly.
-
-
 _core_config_builder: Callable[[str | Path | None], CoreConfig] | None = None
+
+#: The host's per-knob getters, keyed by :class:`CoreConfig` field name.
+_setting_getters: dict[str, Callable[[], Any]] = {}
+
+#: The host's hook that points its server-tier settings at another file.
+_settings_path_redirect: Callable[[str | Path], None] | None = None
 
 
 def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) -> None:
-    """Install the app-side builder that reads ``vtsearch.settings``.
+    """Install a builder returning the :class:`CoreConfig` the library reads its knobs from.
 
-    The Flask app wires this at startup via
-    :func:`vtsearch.shim.register_app_config_builder`.  Once registered,
-    :meth:`CoreConfig.from_settings` delegates to *fn*; the library file
-    itself stays settings-import-free.
+    The way a library-only consumer configures ``vtscore``: once registered,
+    :func:`get_setting` answers every knob no host getter covers from *fn*'s
+    result, and :meth:`CoreConfig.from_settings` returns it.  *fn* is called
+    with one positional argument, a settings path or ``None``.  The VTSearch
+    app registers per-knob getters instead (:func:`register_setting_getter`).
     """
     global _core_config_builder
     _core_config_builder = fn
@@ -104,11 +92,14 @@ def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) 
 
 @dataclass(frozen=True)
 class CoreConfig:
-    """Runtime configuration bundle the ``vtscore`` library consumes.
+    """Every knob the ``vtscore`` library reads, as one frozen value.
 
-    Field set is intentionally narrow; only knobs that library code (loaders,
-    detectors, training, embedding) reads.  User-pref concerns like theme or
-    grid-icon size are app-tier and stay in ``vtsearch.settings``.
+    A library-only consumer constructs one and registers a builder returning it
+    (:func:`register_core_config_builder`); library code reads a single knob
+    at a time with :func:`get_setting`, so its field names are the setting
+    names.  Field set is intentionally narrow; only knobs that library code
+    (loaders, detectors, training, embedding) reads.  User-pref concerns like
+    theme or grid-icon size are app-tier and stay in ``vtsearch.settings``.
     """
 
     # Server-tier settings (shared across users, stored in data/settings.json)
@@ -116,6 +107,8 @@ class CoreConfig:
     detectors_dir: Path
     max_concurrent_dataset_downloads: int
     max_concurrent_dataset_embeddings: int
+    # Per-user (the current user's AutoFind detector names), despite sitting
+    # in the server-tier block: moving it would reorder the positional fields.
     autofind_detectors: tuple[str, ...]
 
     dataset_max_age_days: int | None
@@ -131,11 +124,12 @@ class CoreConfig:
     enrich_descriptions: bool
     autopilot_goal_diversity: int
 
-    # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
-    # route every hardcoded ``data/`` path through this field.
+    # Filesystem root for caches, embeddings, model downloads.  The app
+    # snapshots :data:`vtscore.config.DATA_DIR` into it (the Filesystem seam
+    # in ``vtscore/docs/architecture.md``).
     data_dir: Path
 
-    # AutoFind results exporter (server-tier). When an autodetect run has no
+    # AutoFind results exporter (per-user). When an autodetect run has no
     # explicit ``--exporter``, the CLI falls back to this exporter +
     # field-value map. ``""`` means "no configured exporter" (CLI defaults to
     # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions
@@ -220,29 +214,114 @@ class CoreConfig:
 
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
-        """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.
+        """Every knob's current value, bundled into one :class:`CoreConfig`.
 
-        Called by the Flask app at the request boundary (after auth resolves
-        the current user) and by the CLI before kicking off autodetect.  The
-        result is a frozen immutable value safe to hand to background
-        threads; settings changes during a request will not retroactively
-        rewrite a config already in flight.
+        Library code does not call this: it reads the one knob it needs with
+        :func:`get_setting`.  This stays for a caller that wants the whole
+        bundle at once, and delegates.  A builder that is all there is answers
+        it outright, with *settings_path* passed through.  Otherwise
+        *settings_path*, when given, is applied with
+        :func:`redirect_settings_path`, and each field is read with
+        :func:`get_setting`, so the bundle agrees with what library code reads;
+        with nothing registered, the first required field raises
+        :class:`RuntimeError`.
 
-        When *settings_path* is given, the server-tier settings file path is
-        redirected to that location first.  The CLI uses this to point at a
-        run-specific settings JSON without each call site importing
-        :mod:`vtsearch.settings` directly.
-
-        Implementation note: the body of this classmethod lives in
-        ``vtsearch/shim/`` and is installed at app startup via
-        :func:`register_core_config_builder`.  Library-only consumers
-        without the shim should construct :class:`CoreConfig` directly.
+        The deprecated ``hide_ingest_eta`` and ``inclusion`` fields are not
+        settings, so an assembled config leaves them at their defaults.
         """
-        if _core_config_builder is None:
-            raise RuntimeError(
-                "CoreConfig.from_settings() requires the app-side builder to be "
-                "registered.  The Flask app installs it during startup via "
-                "vtsearch.shim.register_app_config_builder().  Library-only "
-                "callers should construct CoreConfig(...) directly instead."
-            )
-        return _core_config_builder(settings_path)
+        if _core_config_builder is not None and not _setting_getters:
+            return _core_config_builder(settings_path)
+        if settings_path is not None:
+            redirect_settings_path(settings_path)
+        return cls(**{name: get_setting(name) for name in sorted(_SETTING_NAMES)})
+
+
+#: Fields kept only so an out-of-tree construction still works; nothing reads them.
+_RETIRED_FIELDS = frozenset({"hide_ingest_eta", "inclusion"})
+
+#: Every knob :func:`get_setting` answers: the :class:`CoreConfig` fields, less the retired ones.
+_SETTING_NAMES = frozenset(f.name for f in fields(CoreConfig)) - _RETIRED_FIELDS
+
+
+def _check_setting_name(name: str) -> None:
+    if name not in _SETTING_NAMES:
+        raise ValueError(f"{name!r} is not a vtscore setting; expected one of {sorted(_SETTING_NAMES)}")
+
+
+def _field_default(name: str) -> Any:
+    """*name*'s :class:`CoreConfig` default (a fresh one for a mutable field), else :data:`MISSING`."""
+    f = CoreConfig.__dataclass_fields__[name]
+    if f.default is not MISSING:
+        return f.default
+    if f.default_factory is not MISSING:
+        return f.default_factory()
+    return MISSING
+
+
+def register_setting_getter(name: str, fn: Callable[[], Any]) -> None:
+    """Install the host's getter for the knob *name*, a :class:`CoreConfig` field.
+
+    :func:`get_setting` calls *fn* with no arguments on every read of *name*,
+    so it should be cheap and answer for whoever is asking (the request's user,
+    in a multi-user host).  It wins over a registered builder.  The VTSearch app
+    registers one per knob at startup
+    (``vtsearch.shim.register_app_setting_getters``).
+
+    Raises :class:`ValueError` for a name that is not a setting.
+    """
+    _check_setting_name(name)
+    _setting_getters[name] = fn
+
+
+def get_setting(name: str) -> Any:
+    """The current value of the knob *name*, one :class:`CoreConfig` field.
+
+    The read library code makes when it needs a knob: the host's getter for
+    *name* if one is registered, else that field of the registered builder's
+    :class:`CoreConfig`, else the field's default.  A required field with
+    none of the three raises :class:`RuntimeError`, rather than guessing
+    where a library-only consumer keeps its detectors.
+
+    Raises :class:`ValueError` for a name that is not a setting.
+    """
+    _check_setting_name(name)
+    getter = _setting_getters.get(name)
+    if getter is not None:
+        return getter()
+    if _core_config_builder is not None:
+        return getattr(_core_config_builder(None), name)
+    default = _field_default(name)
+    if default is MISSING:
+        raise RuntimeError(
+            f"No value for the setting {name!r}: no getter is registered for it "
+            "(register_setting_getter) and no CoreConfig builder is installed "
+            "(register_core_config_builder).  The VTSearch app registers its getters "
+            "at startup; a library-only consumer registers a builder that returns "
+            "its own CoreConfig(...)."
+        )
+    return default
+
+
+def register_settings_path_redirect(fn: Callable[[str | Path], None]) -> None:
+    """Install the host's hook that points its server-tier settings at another file.
+
+    :func:`redirect_settings_path` calls it.  The VTSearch app installs
+    ``vtsearch.settings.set_settings_path``.
+    """
+    global _settings_path_redirect
+    _settings_path_redirect = fn
+
+
+def redirect_settings_path(settings_path: str | Path) -> None:
+    """Read the host's server-tier settings from *settings_path* from now on.
+
+    The CLI calls this for ``--settings``, before anything reads a knob, so
+    every :func:`get_setting` after it answers from that file.  With no
+    redirect hook registered, a registered builder is called with the path
+    instead (the redirect its contract asks of it), and with neither there is
+    no settings file to redirect.
+    """
+    if _settings_path_redirect is not None:
+        _settings_path_redirect(settings_path)
+    elif _core_config_builder is not None:
+        _core_config_builder(settings_path)

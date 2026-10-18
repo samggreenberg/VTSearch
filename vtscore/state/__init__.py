@@ -195,7 +195,8 @@ def clear_all() -> None:
 # installed.  ``vtsearch/shim/register_app_persistence_hooks()`` wires
 # each key here to the matching ``vtsearch.settings.set_*`` function at
 # app startup.  Library-only callers (no app) see in-memory mutation
-# only.  See Phase 2 of ``../docs/architecture.md``.
+# only.  See Hook 3 (``register_setting_persister``) of
+# ``../docs/integration.md``.
 
 #: Settings the library knows how to hand back to a host for persistence.
 #: Only :func:`_persist_setting` calls below can ever fire a persister, so a key
@@ -301,7 +302,6 @@ def detector_beta(ctx: DetectorContext) -> float | None:
     cold detector, the CLI's) is seeded by its caller from the JSON it holds,
     through :func:`seed_detector_beta`.
     """
-    from vtscore.config import CoreConfig
     from vtscore.detectors.balance import detector_stored_beta
 
     with _state_lock:
@@ -311,8 +311,7 @@ def detector_beta(ctx: DetectorContext) -> float | None:
     # Outside the lock: the detector's balance is a read of its JSON.
     val = detector_stored_beta(getattr(ctx, "detector_id", "") or "")
     if val is None:
-        raw = CoreConfig.from_settings().beta
-        val = None if raw is None else float(raw)
+        val = _core.user_beta()
     with _state_lock:
         seeded, own = _core._get_beta(ctx)
         if seeded:
@@ -328,7 +327,6 @@ def seed_detector_beta(ctx: DetectorContext, data: dict[str, Any] | None) -> flo
     otherwise seed with the user's balance alone.  A context already seeded
     keeps its own.
     """
-    from vtscore.config import CoreConfig
     from vtscore.detectors.balance import stored_beta
 
     with _state_lock:
@@ -337,8 +335,7 @@ def seed_detector_beta(ctx: DetectorContext, data: dict[str, Any] | None) -> flo
             return own
         val = stored_beta(data)
         if val is None:
-            raw = CoreConfig.from_settings().beta
-            val = None if raw is None else float(raw)
+            val = _core.user_beta()
         _core._set_beta(val, ctx)
         return val
 
@@ -388,9 +385,9 @@ def set_dataset_display_name(name: str | None) -> None:
 
 def get_calibrate_count() -> int:
     """Return the number of calibration splits."""
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
-    return CoreConfig.from_settings().calibrate_count
+    return get_setting("calibrate_count")
 
 
 def set_calibrate_count(value: int) -> None:
@@ -409,9 +406,9 @@ def get_calibration_fraction() -> float | None:
     single-vector, 0.5 patch (issue #3287; see
     :func:`vtscore.detectors.training.resolve_calibration_fraction`).
     """
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting
 
-    return CoreConfig.from_settings().calibration_fraction
+    return get_setting("calibration_fraction")
 
 
 def set_calibration_fraction(value: float | None) -> None:

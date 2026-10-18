@@ -28,6 +28,8 @@ _EXPECTED_SEAMS = {
     "detector_context_resolver",
     "request_user_resolver",
     "core_config_builder",
+    "setting_getters",
+    "settings_path_redirect",
     "last_embedder_persistence_hook",
     "setting_persisters",
     "achievement_recorders",

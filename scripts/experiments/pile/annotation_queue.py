@@ -7,7 +7,7 @@ how its stratum was counted (2026-09-18, #3983).** The plan it served moved
 stratum -- the **off-COCO positives** -- by hand. That stratum exists only
 because the image pool is Visual Genome's: measured over COCO 2017 train+val
 instead, every cell is supplied with margin and there is no off-COCO half to
-answer. See `docs/plans/coco-better.md` and
+answer. See the `coco_better` section of `scripts/experiments/pile/README.md` and
 `docs/experiments/2026-09-18-coco-only-supply-3983/REPORT.md`. This script goes
 when the rest of the VG inference machinery does.
 
@@ -51,7 +51,7 @@ answer; ``coco_scored`` false means COCO was asked and did not annotate this
 image. The two are only distinguishable by testing for the *key*, which is why
 this checks membership rather than truthiness -- the deep sibling silently
 inherited #3667's cross-class rule with an empty world by making exactly this
-mistake one level down (`vg_scale._emit_medias`).
+mistake one level down (`_emit_medias` in the retired `vg_scale` loader).
 
 **The order is a seeded shuffle, and that is the pilot's doing.** The plan reads
 the first batch of the real queue as the pilot rather than annotating throwaway

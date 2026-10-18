@@ -5,7 +5,8 @@ Scans `frontend/src/**/*.scss` for violations of the rules in
 `docs/style-guide.md`.  Designed to be invoked by the `/style-check`
 skill: prints findings grouped by rule, with file:line and a one-line
 explanation per hit.  Exits 0 even when violations are found - this is
-a report tool, not a CI gate.
+a report tool, not one of the `run-tests.sh` gates; it runs only when
+someone invokes it.
 
 Run from the repo root or via the skill.
 """
@@ -404,6 +405,7 @@ SHARED_CLASSES = [
     "modal-header",
     "modal-body",
     "modal-footer",
+    "form-actions",
     "modal-close",
     "modal-backdrop",
     "back-btn",

@@ -4,8 +4,9 @@ Provides :class:`PluginRegistry`, a reusable registry that scans a package
 directory for sub-packages exposing a sentinel attribute, and
 :class:`PluginField` / :class:`PluginBase`, shared base types that eliminate
 the duplicated field-dataclass and CLI / serialisation boilerplate across the
-four plugin families (dataset importers, exporters, label importers, processor
-importers).
+plugin families (dataset, datasource and seed importers, results exporters,
+label importers, labelset sources, converters, and the app's settings
+importers / exporters / sources).
 
 Usage for creating a registry::
 
@@ -537,7 +538,7 @@ def _autoderive_plugin_metadata(cls: type) -> None:
 
 class PluginBase:
     """Mixin providing the CLI-argument, validation, and serialisation helpers
-    that are identical across all four plugin families.
+    that are identical across every plugin family.
 
     Default metadata
     ----------------
@@ -604,12 +605,12 @@ class PluginBase:
     #: Ordered list of fields the user must fill.
     fields: list[PluginField]
 
-    #: How the frontend should render this plugin's UI.
-    #: ``"form"``: generic form built from :attr:`fields` (default).
-    #: ``"file_upload"``: the frontend should use its native file picker.
-    #: ``"custom"``: the plugin has a dedicated UI section in the frontend.
-    #: ``"none"``: no user-facing UI (e.g. the GUI exporter is handled
-    #:   automatically by the frontend results view).
+    #: A listing filter: ``GET /api/dataset/importers`` lists only importers
+    #: whose value is ``"form"`` (the default; a generic form built from
+    #: :attr:`fields` drives them).  Shipped importers with a bespoke import
+    #: path set ``"custom"`` (demo, local folder / files, combine datasets)
+    #: or ``"file_upload"`` (pickle) to stay out of that list.  The value is
+    #: serialised by :meth:`to_dict`, but no frontend code reads it.
     ui_mode: str = "form"
 
     #: When ``True``, this plugin is excluded from the generic picker list
@@ -692,7 +693,7 @@ class PluginBase:
             detail: Optional second line carrying the specifics.
             items: Optional list of the things the message is about, one
                 entry each (every skipped file, not the first ten).  The app
-                shows them behind a *Details* toggle with a *Copy list*
+                shows them behind a *Details* toggle with a *Copy List*
                 button; see :func:`vtscore.concurrency.notifications.notify`
                 for the caps.
 

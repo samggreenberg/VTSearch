@@ -11,9 +11,16 @@ from typing import Any
 
 import pytest
 
+from .sweep_cache import memoize_sweep
+
+# One worker, so each session below runs once rather than once per worker that
+# draws a test reading it (see sweep_cache.py).
+pytestmark = pytest.mark.xdist_group("early-check")
+
 OPENING = ("good", "bad", "more")
 
 
+@memoize_sweep
 def _run(early_check: Any = None, *, max_steps: int = 60, **kw: Any) -> list[dict[str, Any]]:
     from tests_lib.detectors.test_startup_schedule import _seeded_dataset
     from vtscore.eval.voting_iterations import simulate_voting_iterations
@@ -48,6 +55,7 @@ def _first(picks, kind):
 _NEVER_WEAK: dict[str, Any] = {"weak_separation": -1e9}
 # Labels that always do, so the weak prompt fires at its first chance, once.
 _ALWAYS_WEAK: dict[str, Any] = {"weak_separation": 1e9, "weak_min_t": 1, "weak_repeat": 0}
+_STEP_OVER_PARTS = 5
 
 
 class TestEarlyCheck:
@@ -87,10 +95,15 @@ class TestEarlyCheck:
         assert not _kind_ts(picks, "early")
         assert [p["picked_id"] for p in plain] == [p["picked_id"] for p in picks]
 
-    def test_a_round_that_steps_over_the_vote_count_is_the_sessions_check(self):
+    # Every N from four votes before the weak check to its last vote is a whole
+    # session, ~20 of them: 312 s as one test on a Xeon Silver 4114 under the
+    # suite, past the 300 s per-test timeout (#4925).  Dealt over parts, so no
+    # one test holds them all.
+    @pytest.mark.parametrize("part", range(_STEP_OVER_PARTS))
+    def test_a_round_that_steps_over_the_vote_count_is_the_sessions_check(self, part):
         """A check round casts its picks at once: one that reaches N votes counts, though no step starts at N."""
         weak = _kind_ts(_run(**_ALWAYS_WEAK), "weak")
-        for n in range(weak[0] - 4, weak[-1] + 1):
+        for n in range(weak[0] - 4 + part, weak[-1] + 1, _STEP_OVER_PARTS):
             assert not _kind_ts(_run(n, **_ALWAYS_WEAK), "early"), n
 
     def test_no_cooldown_after_a_check_that_ended(self):

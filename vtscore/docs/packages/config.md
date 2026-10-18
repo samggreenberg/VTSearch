@@ -1,13 +1,14 @@
 # `vtscore.config`
 
-Runtime constants and the `CoreConfig` value object that every other
-`vtscore` package reads when it needs a knob. Two responsibilities live
-here: module-level constants resolved from environment variables at
-import time (filesystem roots, thread caps, model IDs), and the
-`CoreConfig` dataclass that bundles the per-call configuration that
-would otherwise force the library to import `vtsearch.settings`. The
-package is import-clean - it never reaches into the app - and is the only
-place library code is allowed to read environment variables directly.
+Runtime constants and the settings seam that every other `vtscore`
+package reads when it needs a knob. Two responsibilities live here:
+module-level constants resolved from environment variables at import
+time (filesystem roots, thread caps, model IDs), and `get_setting()`,
+the one read library code makes for a settings knob - each knob a field
+of the `CoreConfig` dataclass - which a host answers without the library
+importing `vtsearch.settings`. The package is import-clean - it never
+reaches into the app - and is the only place library code is allowed to
+read environment variables directly.
 
 **Source:** `vtscore/config/` - a package of six submodules, listed under
 [Contents](#contents) below. Everything public is re-exported
@@ -26,7 +27,7 @@ The submodules are layered: each reads only from ones above it.
 | `models` | every embedder's Hugging Face id and per-checkpoint constants | - |
 | `device` | `DEVICE` / `resolve_device()` (with the CUDA smoke-test), `EMBED_PRECISION` / `embed_precision()` and the dtype resolvers | - |
 | `processor_backend` | which `transformers` image-processor implementation runs, and on what device | `device` |
-| `core_config` | `CoreConfig` and `register_core_config_builder()` | `runtime` |
+| `core_config` | `CoreConfig`, `get_setting()` and the hooks that answer it (`register_setting_getter()`, `register_core_config_builder()`, `register_settings_path_redirect()`) | `runtime` |
 
 Two consequences matter to test authors, and only to test authors:
 
@@ -45,22 +46,42 @@ Two consequences matter to test authors, and only to test authors:
   vars are not re-read. `_reload_all()` reloads them in dependency order and
   then the package.
 
-## Two ways to get a `CoreConfig`
+## Reading a setting: `get_setting()`
 
-- **Library-only consumers** construct a `CoreConfig(...)` directly and
-  hand it to the API they call. This is the supported public path.
-- **A host app** registers a builder via `register_core_config_builder()`
-  at startup; library code then calls `CoreConfig.from_settings()` and
-  gets a value object back without knowing the app exists.
+Library code reads one knob at a time, when it needs it:
+`get_setting("detectors_dir")`, where the name is a `CoreConfig` field.
+It answers from, in order:
+
+1. **the host's getter** for that knob, registered with
+   `register_setting_getter(name, fn)`. The VTSearch app registers one
+   per knob at startup, each reading `vtsearch.settings` live for the
+   current user, so a read costs that one setting and nothing else;
+2. **the library consumer's `CoreConfig`** - that field of whatever the
+   builder registered with `register_core_config_builder()` returns;
+3. **the field's `CoreConfig` default**. A required field has none, so
+   with neither of the above it raises `RuntimeError` rather than guess
+   where you keep your detectors.
+
+So there are two ways to configure the library:
+
+- **Library-only consumers** construct a `CoreConfig(...)` and register a
+  builder that returns it. This is the supported public path.
+- **A host app** registers a getter per knob, which reads its own
+  settings store on every call.
+
+A host registers one or the other; if both are registered, a knob's
+getter wins over the builder. `get_setting()` raises `ValueError` for a
+name that is not a setting, and so does `register_setting_getter()`, so a
+typo fails at once. The deprecated `hide_ingest_eta` and `inclusion`
+fields are not settings.
 
 The rationale for the seam is in
-[`architecture.md`](../architecture.md#the-coreconfig-bridge). The
-dataclass is `frozen=True`, so a config handed to a background thread
-cannot be mutated underneath it.
+[`architecture.md`](../architecture.md#the-coreconfig-bridge).
 
 ## The `CoreConfig` dataclass
 
-Defined in `vtscore/config/core_config.py`. The twelve fields below are **required** -
+Defined in `vtscore/config/core_config.py`. Its field names are the
+setting names `get_setting()` takes. The eleven fields below are **required** -
 they have no defaults, so a consumer can never accidentally inherit stale
 state from a previous run. (The handful of newer optional fields listed
 after the table do have defaults, precisely so a library-only
@@ -72,7 +93,7 @@ after the table do have defaults, precisely so a library-only
 | `detectors_dir`                   | `Path`         | server      | Where detector JSON files are read from / written to.                                            |
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
-| `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
+| `autofind_detectors`               | `tuple[str, ...]` | per-user | The AutoFind list: detector names a `vtscore.cli` run trains + scores when no override is given. |
 | `dataset_max_age_days`            | `int \| None`  | server      | Age-off horizon stamped into saved datasets. `None` = never expire.                              |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float \| None` | per-user    | Explicit fraction of labels held out per calibration fold. `None` = per-embedder default (0.3 single-vector / 0.5 patch). |
@@ -87,7 +108,11 @@ whether a saving CLI run deletes the dataset it imported once its detectors
 have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
-`signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
+`signpost_vocab` (`dict[str, list[str]]`, `{}`), `default_labelset_source`
+(`dict[str, Any] | None`, `None` - the deployment-wide labelset source every
+detector syncs its labels to unless it has a binding of its own),
+`labelset_source_push_interval` (`float`, `60.0` seconds - the shortest gap
+between two pushes of one detector's labels to its source), `hide_ingest_eta`
 (`bool`, `False` - **deprecated and ignored** (#4667): ingest progress bars
 never publish an ETA now; see [concurrency.md](concurrency.md#progresstracker)),
 and `beta` (`float`,
@@ -125,28 +150,17 @@ config = CoreConfig(
 )
 ```
 
-### `from_settings()` and the app-builder hook
+### The builder hook
+
+`register_core_config_builder(fn)` installs a function
+`(settings_path: str | Path | None) -> CoreConfig`. `get_setting()` calls
+it with `None` for every knob no host getter covers, so it should be
+cheap - returning a config built once is the usual shape. It is always
+called with that one positional argument, so a zero-argument builder
+raises `TypeError`.
 
 ```python
-@classmethod
-def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
-    """Snapshot the current user's vtsearch.settings into a CoreConfig."""
-```
-
-This classmethod has no library-side implementation. It calls a builder
-that the app installs at startup via
-`register_core_config_builder(fn)`. The builder is a function
-`(settings_path: str | Path | None) -> CoreConfig` - it is always called
-with that one positional argument, so a zero-argument builder raises
-`TypeError`.
-
-If `from_settings()` is called and no builder is registered, it raises
-`RuntimeError` with a message pointing the caller at the library-only
-path (construct `CoreConfig(...)` directly). Library-only consumers
-without the app shim should never reach this method.
-
-```python
-from vtscore.config import register_core_config_builder, CoreConfig
+from vtscore.config import CoreConfig, get_setting, register_core_config_builder
 
 def _build(settings_path):
     # Example: read your own JSON or YAML config here, return a CoreConfig.
@@ -156,13 +170,35 @@ def _build(settings_path):
 register_core_config_builder(_build)
 
 # Now this works:
-config = CoreConfig.from_settings()
+detectors_dir = get_setting("detectors_dir")
 ```
 
-When `settings_path` is supplied, the builder is expected to redirect
-its server-tier settings file lookup to that path first. The CLI uses
-this so a `--settings my-run.json` invocation doesn't have to touch
-the app's default settings file.
+### Redirecting the settings file
+
+`redirect_settings_path(path)` points the host's server-tier settings at
+another file before anything reads them; the CLI calls it for
+`--settings my-run.json`, so a run doesn't have to touch the app's default
+settings file. It calls the hook a host installed with
+`register_settings_path_redirect(fn)` (the app installs
+`vtsearch.settings.set_settings_path`). With no hook, a registered
+builder is called with the path instead, and is expected to redirect its
+own settings lookup to it; with neither, there is nothing to redirect.
+
+### `CoreConfig.from_settings()`
+
+```python
+@classmethod
+def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
+    """Every knob's current value, bundled into one CoreConfig."""
+```
+
+Library code no longer calls this; it is for a caller that wants the
+whole bundle at once. When a builder is all that is registered, the
+builder answers it outright, with `settings_path` passed through.
+Otherwise it applies `settings_path` with `redirect_settings_path()` and
+reads each field with `get_setting()`, so the bundle always agrees with
+what library code reads. With nothing registered, the first required
+field raises `RuntimeError`.
 
 ## Module-level filesystem constants
 
@@ -188,7 +224,7 @@ when one is in scope). Tests rely on this: they override
 
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
+| `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs; the app's `app.py` sets the variable to the process's CPU allocation when it is unset (`vtsearch.torch_threads`). |
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB), for a host app to enforce. `0` = unlimited. |
@@ -201,7 +237,7 @@ when one is in scope). Tests rely on this: they override
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear SVM head.                                            |
 | `MLP_LABEL_SMOOTHING`    | `0.05`  | -                             | Label-smoothing epsilon for MLP targets (keeps calibration scores distinct for the conformal threshold).          |
-| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the production linear SVM head (`fit_linear_svm_head`). Lower regularises harder on few votes. |
+| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the linear SVM heads: the production head (`fit_linear_svm_prior_head`) and the plain SVM arm (`fit_linear_svm_head`). Lower regularises harder on few votes. |
 | `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |
@@ -359,31 +395,28 @@ see [Contents](#contents).)
 The end-to-end picture for a library + app deployment:
 
 1. Process starts; `vtscore.config` imports and reads env vars.
-2. The host app calls `register_core_config_builder(builder_fn)`, where
-   `builder_fn` snapshots its settings store into a `CoreConfig` for
-   the current user.
-3. Library code calls `CoreConfig.from_settings()`, which delegates to
-   `builder_fn` and returns a frozen `CoreConfig` for this call.
-4. Background threads spawned from that call keep using the same
-   frozen object.
+2. The host app calls `register_setting_getter(name, fn)` for every
+   knob, each `fn` reading its settings store for the current user.
+3. Library code calls `get_setting(name)` where it needs a knob, which
+   calls that one getter.
 
-For library-only consumers, steps 2–3 collapse: the consumer builds
-`CoreConfig(...)` directly and passes it down. `from_settings()` is
-never called. The library is identical in both cases - it does not
-care which path produced the config.
+For library-only consumers, step 2 is `register_core_config_builder()`
+with a builder returning the consumer's `CoreConfig(...)`. The library is
+identical in both cases - it does not care what answered the read.
 
 ## Invariants
 
 - `vtscore.config` does **not** import `vtsearch.settings`. Ever.
-  Adding such an import is the bug `register_core_config_builder`
-  exists to prevent.
+  Adding such an import is the bug `register_setting_getter` and
+  `register_core_config_builder` exist to prevent.
 - No code under `vtscore/` should hardcode `./data` or `data/` -
   always derive from `DATA_DIR` or `CoreConfig.data_dir`.
 - Module-level constants are resolved at import time. They are
   effectively `Final`; don't reassign them.
-- `CoreConfig` is `frozen=True`. Background threads can safely hold
-  a reference; in-flight reconfiguration requires building a new
-  `CoreConfig` and routing it explicitly.
+- A setting is read when it is needed, never snapshotted ahead: no
+  library code holds a `CoreConfig` across calls, so a setting changed
+  mid-run reaches the next read. (`CoreConfig` itself is `frozen=True`,
+  so one a caller builds cannot be mutated underneath it.)
 - No persisted embeddings, no persisted model weights. This config
   module does not introduce a place to cache them.
 
@@ -392,6 +425,6 @@ care which path produced the config.
 ## Cross-references
 
 - [`architecture.md`](../architecture.md#the-coreconfig-bridge) - why the `CoreConfig` seam exists.
-- [`cli.md`](cli.md) - the CLI entry points that build a `CoreConfig` before running.
+- [`cli.md`](cli.md) - the CLI entry points, which read their settings with `get_setting()`.
 - [`embedding.md`](embedding.md) - `get_torch_device()` and the concurrency defaults built on `resolve_device()`.
 - [`security.md`](security.md) - server-path access rules.

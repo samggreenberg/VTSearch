@@ -221,7 +221,7 @@ TASKS: dict[str, TaskSpec] = {
         loads_encoder=True,
     ),
     # Loading a saved detector: read its labelset, pull the label examples back
-    # into the active dataset, retrain the MLP. Training dominates; the other
+    # into the active dataset, retrain the head. Training dominates; the other
     # two are quick I/O.
     "detector_load": _linear(
         "detector_load",
@@ -251,7 +251,7 @@ TASKS: dict[str, TaskSpec] = {
         loads_encoder=True,
     ),
     # Train-and-score against the active dataset: resolve the detector, train
-    # its MLP, score every media, apply the resulting labels. Train + score
+    # its head, score every media, apply the resulting labels. Train + score
     # carry the cost; resolve/apply are quick.
     "train_and_score": _linear(
         "train_and_score",

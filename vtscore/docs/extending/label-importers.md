@@ -73,17 +73,21 @@ Expose `LABEL_IMPORTER = YourImporter()` at module level.
 ]
 ```
 
-Labels must be `"good"` or `"bad"`; any other value is silently
-skipped by the route handler. The route looks up media by MD5 hash in
-the active dataset, so labels for media not present in the loaded
-dataset are dropped - that's by design. A label-importer's job is to
+Labels must be `"good"` or `"bad"`; any other value is counted as
+skipped by the route handler. The route matches each entry against the
+active dataset by `origin` + `origin_name` and by `md5` (the union of
+both), falling back to `origin_name` or `filename` alone only when the
+entry carries neither (`vtscore.state.media_lookup.resolve_media_ids`).
+An entry that matches nothing but carries an `origin` is pulled in from
+that origin by a background task and labelled once it lands
+([`vtscore/datasets/ingest.py`](../../datasets/ingest.py)); one without
+an `origin` is reported as unresolved. A label-importer's job is to
 hand the route a list; the route's job is to apply what fits.
 
-The dict may carry extra keys (`filename`, `category`,
-`custom_metadata`, …) and they're preserved through the new
-labelset-import path which builds `LabeledElement`s
-([`vtscore/datasets/labelset.py`](../../datasets/labelset.py)).
-Keep them - they round-trip cleanly through labelset export.
+So return `origin` / `origin_name` alongside `md5` when your backend
+knows them. A `metadata` dict is read for the vote's provenance
+(`vtscore.datasets.vote_provenance.read_provenance`); the route ignores
+any other key.
 
 ## Entry-point registration
 
@@ -187,7 +191,7 @@ class RedisStreamLabelImporter(LabelImporter):
                 continue
             row: dict[str, str] = {"md5": md5, "label": label}
             if "annotator" in parsed:
-                row["annotator"] = parsed["annotator"]  # surfaced as custom_metadata
+                row["annotator"] = parsed["annotator"]  # carried along; the import route ignores it
             labels.append(row)
         return labels
 

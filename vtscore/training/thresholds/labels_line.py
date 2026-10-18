@@ -54,9 +54,15 @@ component cannot place the corpus's positives: past 32 Bads the 3-part chances
 collapse while the 2-part total stays several times the positives, and a beta-4 cut
 ran to the corpus's end on faces (2.5% of clicks, up to 704 kept for 4 withheld)
 in a way no fix to the total could tell from a hard target's sound deep cut.  That count is ``beta ** 0.708`` times
-what stands out, so the line keeps more as the balance leans to recall.  Like the
-centroid's it is a count on the corpus being decided, not a cut the labels imply;
-the class model takes over once it has the labels to stand on.  The Goods half
+what stands out up to a balance of 1, so the line keeps more as the balance leans to recall.  Above 1 it
+grows as ``beta ** 0.189`` (#5039): 1.3x what stands out at beta 4, not 2.67x, since a person's few faces
+stand above a light-tailed bulk and 2.67x kept two to three other faces each.  A weak head's positives
+sit deeper than what stands out, and the labels say when: where a held-out Good ranks below the count
+at beta 1, the line keeps at least as deep as the head's excess over a Gaussian bulk is expected to
+score best at the balance (:func:`_excess_depth`, from :data:`HEAD_COUNT_RECALL_Z` bulk spreads up).
+The scores alone cannot tell such a tail from a bulk heavier than a Gaussian, which a fifth to a half
+of face sessions have.  Like the centroid's it is a count on the corpus being decided, not a cut the
+labels imply; the class model takes over once it has the labels to stand on.  The Goods half
 matters for a broad target: with many Goods its labels line is sound, while a count
 of what stands out keeps several times the positives (COCO Better's Binary opening
 lost F-beta there).
@@ -105,10 +111,16 @@ WEAK_SEPARATION_D = 1.5
 #: The fewest votes before weak separation makes a spot check due (#4496): the
 #: first few labels separate noisily, and a check needs a line to walk.
 WEAK_CHECK_MIN_VOTES = 10
-#: Votes after a check ends before weak separation makes another due (#4496).
-#: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
-#: to +0.010, for 28-35% of a prompted session's clicks spent checking.
+#: Votes after a check ends before the check before Done runs (:func:`done_check_due`, #4496): a check that ended
+#: moments ago has already measured this line.  It was also the weak check's repeat until #4909.
 WEAK_CHECK_COOLDOWN = 25
+#: Votes after a check ends before weak separation makes another due; ``None``: never, so the weak check prompts at
+#: most once a session, and only before any other check has ended (#4909, the owner's choice of 2026-10-15).  #4496
+#: had chosen again after 25 votes, on an app where a check's picks were worth far more than Autopilot's.  At
+#: today's head prompting once matched or beat it: +0.0006 (beta 1) and +0.0013 (beta 4) in mean F-beta over clicks
+#: 0-200, level after the closing check, Done at the same click and F-beta, and 24-25 fewer of 200 clicks spent
+#: checking (``docs/experiments/2026-10-15-weak-repeat-4909/REPORT.md``).
+WEAK_CHECK_REPEAT: int | None = None
 #: Media types whose sessions never get a prompted weak check (#4778, #4799).  A
 #: face search's opening finds the person's few photos before the check could
 #: start (a median of 4 Goods at vote 11), so a check's votes find nothing and
@@ -152,6 +164,19 @@ HEAD_COUNT_BADS: float = math.inf
 #: many positives need where the head's count, a count of what stands out, keeps several
 #: times too many.
 HEAD_COUNT_GOODS = 6
+#: How the head's count grows above a balance of 1 (#5039): ``beta ** HEAD_COUNT_RECALL_EXPONENT``
+#: times what stands out, in place of #4603's ``beta ** 0.708`` (:func:`head_count_cut`): 1.3x at beta 4
+#: (``log 1.3 / log 4``), what faces and Region Photo's heads want there.  ``None`` keeps #4603's, the
+#: count before #5039.
+HEAD_COUNT_RECALL_EXPONENT: float | None = 0.18925
+#: Where the head's count line reaches down at a balance above 1 (#5039): when a held-out Good ranks
+#: below the count of what stands out, the line keeps at least as deep as the head's excess curve's
+#: expected F-beta peaks, read from this many bulk spreads up (:func:`_excess_depth`).  Closed loop at
+#: beta 4 with the exponent above: Find's mean F-beta +0.0035 over a Binary Photo session's 200 clicks
+#: and +0.015 to +0.017 over a face session's 150 votes; 3 spreads gave faces more (+0.022 to +0.023)
+#: and Binary half (``docs/experiments/2026-10-18-head-count-5039``).  ``None`` never reaches, the line
+#: before #5039.
+HEAD_COUNT_RECALL_Z: float | None = 2.75
 #: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
 #: the labels line expects at least this F-beta at the session's balance over the corpus it was
 #: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
@@ -175,6 +200,28 @@ def _finite_unit(scores: Any) -> np.ndarray:
     return a[np.isfinite(a) & (a >= 0.0) & (a <= 1.0)]
 
 
+#: The normal density's constant, computed as scipy's ``_norm_pdf_C`` is.
+_SQRT_2PI = np.sqrt(2 * np.pi)
+
+
+def _norm_pdf(x: np.ndarray, mu: float, sigma: float) -> np.ndarray:
+    """The normal density at *x*: ``scipy.stats.norm.pdf(x, mu, sigma)`` bit for bit, without its per-call cost (#5072).
+
+    scipy's own arithmetic in scipy's order - standardise, ``exp(-z**2 / 2) /
+    sqrt(2 pi)``, then divide by *sigma* - so every value is the same float.
+    scipy's argument handling around it was ~44% of a simulated session in the
+    EM loops below, and the one case it decides is a spread that is not
+    positive, which gets scipy's NaN here too (every caller floors its spread
+    above 0).  Non-finite *x* agree without it: ``±inf`` gives 0, NaN gives NaN.
+    Typed, unlike scipy's: pyright re-infers an unannotated call's type around
+    a loop until it settles (#5070).
+    """
+    if not sigma > 0:
+        return np.full(np.shape(x), np.nan)
+    z = (x - mu) / sigma
+    return np.exp(-(z**2) / 2.0) / _SQRT_2PI / sigma
+
+
 @dataclass(frozen=True)
 class ClassScoreModel:
     """The head's held-out scores of the Goods and the Bads: two normals of one spread on the logit scale."""
@@ -192,6 +239,14 @@ class ClassScoreModel:
     #: sample of Bads from a selected one, and the shape it then gives the negatives.
     #: ``None`` with fewer, and on a model built by hand.  Not in :meth:`as_dict`.
     neg_logits: np.ndarray | None = field(default=None, compare=False, repr=False)
+    #: The Bads' own spread of their held-out logit scores (``ddof=1``), not pooled with the Goods: what a 3-part fit
+    #: that places the Bad component on the corpus pools them with (:data:`BAD_COMPONENT`, #5040).  ``None`` with one
+    #: Bad, and on a model built by hand.  Not in :meth:`as_dict`.
+    neg_sd: float | None = field(default=None, compare=False, repr=False)
+    #: The Goods' held-out logit scores, sorted: where the head's count line looks for a Good ranked
+    #: below what stands out (:data:`HEAD_COUNT_RECALL_Z`, #5039).  ``None`` on a model built by hand,
+    #: and on the in-sample stand-in, whose Goods the head trained on.  Not in :meth:`as_dict`.
+    pos_logits: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def floored(self, floor: float) -> "ClassScoreModel":
         """This model with its spread held to *floor* (a corpus's own, #4492) rather than the absolute one."""
@@ -271,7 +326,113 @@ def _pooled_class_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassSco
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
     raw = math.sqrt(var)
     neg = np.sort(xn) if xn.size >= RANDOM_BADS_MIN else None
-    return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg)
+    neg_sd = float(np.std(xn, ddof=1)) if xn.size > 1 else None
+    return ClassScoreModel(
+        mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw, neg, neg_sd, np.sort(xp)
+    )
+
+
+#: How the calibration folds' held-out scores reach the class model (#4910).  ``"raw"`` pools
+#: them as each fold model scored them: the shipped line, which mixes the fold models' scales
+#: with the final model's, whose corpus scores the line is cut on.  ``"quantile"`` first carries
+#: each fold's scores onto the final model's scale by their quantile in that fold model's own
+#: haystack (:func:`~vtscore.training.thresholds.anchored.rank_transfer`, which saturates at the
+#: haystack's ends); ``"quantile_tails"`` does the same inside the haystack's range and, past
+#: either end, keeps the score's logit distance from that end.  Eval arms only: the app pools raw.
+FOLD_SCALES: tuple[str, ...] = ("raw", "quantile", "quantile_tails")
+
+
+def transfer_fold_orderings(
+    orderings: Sequence[tuple[Any, Any]],
+    fold_haystacks: Sequence[Any],
+    final_haystack: Any,
+    *,
+    tails: bool = False,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """The folds' held-out scores carried onto the final model's scale, fold by fold (#4910).
+
+    Fold *k*'s held-out score ``s`` becomes the final haystack's quantile at the
+    share of fold *k*'s haystack scoring strictly below ``s``: what
+    :func:`~vtscore.training.thresholds.anchored.rank_transfer` does to one cut,
+    done to every held-out score.  *fold_haystacks[k]* must be fold *k*'s model's
+    scores of the same population *final_haystack* holds the final model's
+    scores of (both with the voted media dropped, or both with them kept), so a
+    quantile means the same item in both.  Unscorable entries (outside
+    ``[0, 1]``, non-finite) are dropped from the haystacks and left as they are
+    in the orderings, which :func:`class_score_model` drops anyway.
+
+    The quantile saturates: a held-out Good above every item of its fold's
+    haystack lands on the final haystack's top score, however far above it
+    sat.  With *tails*, a score past either end of its fold's haystack keeps
+    its logit distance from that end instead, measured from the final
+    haystack's same end.
+
+    A fold with no haystack (fewer haystacks than orderings) or an empty one,
+    or an empty *final_haystack*, keeps its scores as they are.  Labels pass
+    through unchanged, in order.
+    """
+    tgt = np.sort(_finite_unit(final_haystack))
+    out: list[tuple[np.ndarray, np.ndarray]] = []
+    for k, (scores, labels) in enumerate(orderings):
+        s = np.asarray(scores, dtype=np.float64).ravel().copy()
+        y = np.asarray(labels, dtype=np.float64).ravel()
+        src = np.sort(_finite_unit(fold_haystacks[k])) if k < len(fold_haystacks) else np.empty(0)
+        ok = np.isfinite(s) & (s >= 0.0) & (s <= 1.0)
+        if src.size and tgt.size and ok.any():
+            v = s[ok]
+            q = np.searchsorted(src, v, side="left") / float(src.size)
+            mapped = np.asarray(np.quantile(tgt, np.clip(q, 0.0, 1.0)), dtype=np.float64)
+            if tails:
+                x = _logit(v)
+                for past, s_end, t_end in ((v > src[-1], src[-1], tgt[-1]), (v < src[0], src[0], tgt[0])):
+                    if past.any():
+                        shift = float(_logit([t_end])[0] - _logit([s_end])[0])
+                        mapped[past] = 1.0 / (1.0 + np.exp(-(x[past] + shift)))
+            s[ok] = mapped
+        out.append((s, y))
+    return out
+
+
+def fold_transfer_shift(orderings: Sequence[tuple[Any, Any]], transferred: Sequence[tuple[Any, Any]]) -> np.ndarray:
+    """``|logit(transferred) - logit(raw)|`` for every scorable held-out score, folds pooled (#4910's gate)."""
+    parts: list[np.ndarray] = [np.empty(0)]
+    for (raw, _), (moved, _) in zip(orderings, transferred, strict=True):
+        a = np.asarray(raw, dtype=np.float64).ravel()
+        b = np.asarray(moved, dtype=np.float64).ravel()
+        n = min(a.size, b.size)
+        a, b = a[:n], b[:n]
+        ok = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
+        parts.append(np.abs(_logit(b[ok]) - _logit(a[ok])))
+    return np.concatenate(parts)
+
+
+def fold_transfer_clipped(
+    orderings: Sequence[tuple[Any, Any]], fold_haystacks: Sequence[Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(side, good)`` per scorable held-out score, folds pooled (#4910's gate).
+
+    *side* is ``1`` above the score's fold's whole haystack, ``-1`` below it and
+    ``0`` inside: where :func:`transfer_fold_orderings` saturates without
+    *tails*.  A fold with no haystack reads ``0`` throughout, its scores not
+    moved.  *good* is whether the score is a Good's.
+    """
+    sides: list[np.ndarray] = [np.empty(0, dtype=np.int8)]
+    goods: list[np.ndarray] = [np.empty(0, dtype=bool)]
+    for k, (scores, labels) in enumerate(orderings):
+        a = np.asarray(scores, dtype=np.float64).ravel()
+        y = np.asarray(labels, dtype=np.float64).ravel()
+        n = min(a.size, y.size)
+        a, y = a[:n], y[:n]
+        ok = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
+        a, y = a[ok], y[ok]
+        src = _finite_unit(fold_haystacks[k]) if k < len(fold_haystacks) else np.empty(0)
+        side = np.zeros(a.size, dtype=np.int8)
+        if src.size:
+            side[a > src.max()] = 1
+            side[a < src.min()] = -1
+        sides.append(side)
+        goods.append(y >= 0.5)
+    return np.concatenate(sides), np.concatenate(goods)
 
 
 def corpus_sigma_floor(scores: Any) -> float:
@@ -415,8 +576,6 @@ def fit_corpus(
     cells).  Fitting the bulk on the corpus keeps a corpus with no positives
     at a share near zero.
     """
-    from scipy.stats import norm  # noqa: PLC0415
-
     x = _logit(_finite_unit(unvoted_scores))
     if x.size == 0:
         return float(n_good), CorpusNegatives(model.mu_neg, model.sigma)
@@ -425,8 +584,8 @@ def fit_corpus(
     pi = 0.01
     r = np.zeros_like(x)
     for _ in range(iterations):
-        f1 = pi * norm.pdf(x, model.mu_pos, model.sigma)
-        f0 = (1.0 - pi) * norm.pdf(x, mu0, s0)
+        f1 = pi * _norm_pdf(x, model.mu_pos, model.sigma)
+        f0 = (1.0 - pi) * _norm_pdf(x, mu0, s0)
         with np.errstate(invalid="ignore", divide="ignore"):
             r = np.nan_to_num(f1 / (f1 + f0), nan=0.0)
         new_pi = min(max(float(r.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
@@ -443,32 +602,64 @@ def fit_corpus(
     return float(n_good) + float(r.sum()), CorpusNegatives(mu0, s0)
 
 
+#: Where the 3-part fit places the labels' Bad component (#5040).  ``"corpus_mean"``, the app's since #5040: its mean
+#: fitted on the corpus being decided, the held-out Bads counted as labelled points of it (each M-step pools them with
+#: the corpus's soft members of the component), its spread the class model's; so it sits where the corpus's own
+#: negatives near the line are rather than where the Bads acquisition picked are.  ``"corpus"`` fits its spread too
+#: (on Region Photo that overrated the positives near the line, 0.87 against a true 0.37); ``"labels"``, the line
+#: before #5040, pins it at the held-out Bads' mean.  Priced on #4937's heads and end to end: the mean alone, with
+#: :data:`_BOUND_MARGIN` at 4, gained +0.023 / +0.016 / +0.005 mean F-beta over clicks 0-200 at beta 1/4 / 1 / 4
+#: (``docs/experiments/2026-10-17-chances-5040/REPORT.md``).  The eval harness can set another
+#: (``vtscore.eval.live_threshold_rules.labels_chances``).
+BAD_COMPONENTS: tuple[str, ...] = ("labels", "corpus", "corpus_mean")
+BAD_COMPONENT = "corpus_mean"
+
+
 def corpus_posteriors(
-    model: ClassScoreModel, unvoted_scores: Any, *, iterations: int = 300, floor: float = MIN_LOGIT_SIGMA
+    model: ClassScoreModel,
+    unvoted_scores: Any,
+    *,
+    iterations: int = 300,
+    floor: float = MIN_LOGIT_SIGMA,
+    bad: str | None = None,
 ) -> np.ndarray:
     """Each unvoted item's chance of being a positive, under a 3-part fit of the corpus (#4452).
 
-    The labels' Good component and the labels' Bad component keep their
-    shapes (what the labels know: the Bads sit near the line, exactly where
-    the cut is decided); a normal for the corpus's bulk below them is fitted
-    with all three shares.  Modelling the negatives near the line by the
+    The labels' Good component keeps its shape, and the labels' Bad component
+    stands for the negatives near the line (the Bads sit there, exactly where
+    the cut is decided), placed by *bad* (below); a normal for the corpus's
+    bulk below them is fitted with all three shares.  Modelling the negatives near the line by the
     Bads is what makes the precision near the top honest: with the bulk
     alone, the top of a ranking read as all positive and beta barely moved
     the cut.  In the order of *unvoted_scores*.
-    """
-    from scipy.stats import norm  # noqa: PLC0415
 
+    *bad* (default :data:`BAD_COMPONENT`, ``"corpus_mean"``) fits the Bad
+    component's mean on the corpus, the held-out Bads counted as *n_neg*
+    labelled points of it: each M-step's Bad mean pools them with the
+    corpus's soft Bad members, and the bulk's mean is held below the Bad mean
+    the step ends with.  ``"corpus"`` fits its spread the same way (pooling
+    :attr:`ClassScoreModel.neg_sd`, floored at *floor*); ``"labels"`` keeps it
+    at the held-out Bads' mean and the model's spread, the fit before #5040.
+    """
+    bad = BAD_COMPONENT if bad is None else bad
+    if bad not in BAD_COMPONENTS:
+        raise ValueError(f"bad must be one of {BAD_COMPONENTS}; got {bad!r}")
     x = _logit(_finite_unit(unvoted_scores))
     if x.size == 0:
         return np.zeros(0)
     mu0 = float(np.median(x))
     s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), floor)
     w1, wb = 0.01, 0.05
+    b_mu, b_sd = model.mu_neg, model.sigma
+    fit_bad = bad in ("corpus", "corpus_mean")
+    # The held-out Bads as labelled points: their count, mean and sum of squares about that mean.
+    n_b = float(model.n_neg)
+    m2_b = (n_b - 1.0) * model.neg_sd**2 if model.neg_sd is not None else 0.0
     r1 = np.zeros_like(x)
     for _ in range(iterations):
-        a1 = w1 * norm.pdf(x, model.mu_pos, model.sigma)
-        ab = wb * norm.pdf(x, model.mu_neg, model.sigma)
-        a0 = max(1.0 - w1 - wb, 1e-9) * norm.pdf(x, mu0, s0)
+        a1 = w1 * _norm_pdf(x, model.mu_pos, model.sigma)
+        ab = wb * _norm_pdf(x, b_mu, b_sd)
+        a0 = max(1.0 - w1 - wb, 1e-9) * _norm_pdf(x, mu0, s0)
         tot = a1 + ab + a0
         with np.errstate(invalid="ignore", divide="ignore"):
             r1 = np.nan_to_num(a1 / tot, nan=0.0)
@@ -476,11 +667,22 @@ def corpus_posteriors(
         r0 = np.clip(1.0 - r1 - rb, 0.0, 1.0)  # rounding can push the remainder a hair below 0
         nw1 = min(max(float(r1.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
         nwb = min(max(float(rb.mean()), PREVALENCE_MIN), 0.9)
+        moved = 0.0
+        if fit_bad:
+            n = n_b + float(rb.sum())
+            nm = (n_b * model.mu_neg + float((rb * x).sum())) / n
+            if bad == "corpus":
+                ss = m2_b + n_b * (model.mu_neg - nm) ** 2 + float((rb * (x - nm) ** 2).sum())
+                ns = max(math.sqrt(ss / n), floor)
+            else:
+                ns = b_sd
+            moved = max(abs(nm - b_mu), abs(ns - b_sd))
+            b_mu, b_sd = nm, ns
         s_r0 = float(r0.sum())
         if s_r0 > 1e-12:
-            mu0 = min(float((r0 * x).sum()) / s_r0, model.mu_neg)
+            mu0 = min(float((r0 * x).sum()) / s_r0, b_mu)
             s0 = max(math.sqrt(max(float((r0 * (x - mu0) ** 2).sum()) / s_r0, 0.0)), floor)
-        done = abs(nw1 - w1) < 1e-8 and abs(nwb - wb) < 1e-7
+        done = abs(nw1 - w1) < 1e-8 and abs(nwb - wb) < 1e-7 and moved < 1e-7
         w1, wb = nw1, nwb
         if done:
             break
@@ -569,7 +771,7 @@ class LabelsLine:
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
             if head_count_serves(self.model):
-                return head_count_cut(self.unvoted_scores, beta)
+                return head_count_cut(self.unvoted_scores, beta, held_out_goods=self.model.pos_logits)
             total = self.unvoted_share * self.unvoted_scores.size
             return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
@@ -633,7 +835,7 @@ def head_count_serves(model: ClassScoreModel) -> bool:
     return model.n_neg < HEAD_COUNT_BADS and model.n_pos < HEAD_COUNT_GOODS
 
 
-def head_count_cut(scores_desc: Any, beta: float) -> float:
+def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) -> float:
     """The cut that keeps what stands out in the head's own scores at *beta* (#4786).
 
     *scores_desc* are a corpus's unvoted scores, best first.  On their logits the
@@ -643,17 +845,74 @@ def head_count_cut(scores_desc: Any, beta: float) -> float:
     fewer than that drop) counts what stands out; the cut keeps exactly those items,
     placed between the last kept and the first dropped as :func:`corpus_cut` places
     its own.  An empty corpus keeps nothing.
+
+    Above a balance of 1 (#5039) the count grows as ``beta **``
+    :data:`HEAD_COUNT_RECALL_EXPONENT` instead, and where one of
+    *held_out_goods* (the class model's held-out Goods, logits) ranks below the
+    count at a balance of 1 - a positive the count of what stands out misses - the
+    line keeps at least as deep as the head's excess curve's expected F-beta
+    peaks (:func:`_excess_depth`, from :data:`HEAD_COUNT_RECALL_Z` bulk spreads
+    up).  Either constant at ``None`` is that piece before #5039.
     """
     from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT  # noqa: PLC0415
 
     s = np.asarray(scores_desc, dtype=np.float64)
     if s.size == 0:
         return 1.0 + 1e-9
     x = _logit(s)
-    k = int(np.count_nonzero(x >= centroid_cut(x, beta=float(beta))))
+    b = float(beta)
+    above = b > 1.0
+    # The count's own beta: the one whose #4603 multiplier is beta ** HEAD_COUNT_RECALL_EXPONENT.
+    b_count = (
+        b ** (HEAD_COUNT_RECALL_EXPONENT / TEXT_SORT_COUNT_EXPONENT)
+        if above and HEAD_COUNT_RECALL_EXPONENT is not None
+        else b
+    )
+    k = int(np.count_nonzero(x >= centroid_cut(x, beta=b_count)))
+    goods = None if held_out_goods is None else np.asarray(held_out_goods, dtype=np.float64)
+    if above and HEAD_COUNT_RECALL_Z is not None and goods is not None and goods.size:
+        standouts = int(np.count_nonzero(x >= centroid_cut(x, beta=1.0)))
+        if int(np.count_nonzero(x >= float(goods.min()))) > standouts:
+            k = max(k, _excess_depth(x, b, float(HEAD_COUNT_RECALL_Z)))
     if k <= 0:
         return 1.0 + 1e-9
     return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
+
+
+def _excess_depth(x_desc: np.ndarray, beta: float, z_min: float) -> int:
+    """How many of the best logits *x_desc* keep the head's excess curve at its expected F-*beta* peak (#5039).
+
+    The excess at the *k*-th best is *k* less what a Gaussian bulk puts above its
+    score, the bulk's centre and spread the median and ``1.4826`` x the MAD of
+    *x_desc*, as #4603's count reads them; the positives' total is the largest
+    excess from *z_min* bulk spreads up.  The cut at *k* is expected to score
+    ``(1 + beta**2) * excess_k / (beta**2 * total + k)``, the excess held to
+    ``[0, total]``; the depth is where that peaks among the cuts at or above
+    *z_min*.  ``0`` below #4603's fewest scores, with no spread, or with no score
+    that high.
+    """
+    from scipy.special import ndtr  # noqa: PLC0415
+
+    from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_MIN_SCORES  # noqa: PLC0415
+
+    n = int(x_desc.size)
+    if n < TEXT_SORT_COUNT_MIN_SCORES:
+        return 0
+    med = float(np.median(x_desc))
+    sigma = 1.4826 * float(np.median(np.abs(x_desc - med)))
+    if not sigma > 0.0:
+        return 0
+    z = (x_desc - med) / sigma
+    up = z >= z_min
+    if not up.any():
+        return 0
+    k = np.arange(1, n + 1, dtype=np.float64)
+    excess = k - n * ndtr(-z)
+    total = max(float(excess[up].max()), 1.0)
+    b2 = beta * beta
+    f = np.where(up, (1.0 + b2) * np.clip(excess, 0.0, total) / (b2 * total + k), -1.0)
+    return int(np.argmax(f)) + 1
 
 
 def weak_check_prompts(media_type: str | None) -> bool:
@@ -674,7 +933,7 @@ def weak_check_due(
     *,
     threshold: float = WEAK_SEPARATION_D,
     min_votes: int = WEAK_CHECK_MIN_VOTES,
-    cooldown: int | None = WEAK_CHECK_COOLDOWN,
+    cooldown: int | None = WEAK_CHECK_REPEAT,
 ) -> bool:
     """Whether the labels separate weakly enough that a spot check is due (#4496, the owner's ruling of 2026-10-05).
 
@@ -682,7 +941,8 @@ def weak_check_due(
     *threshold*, at least *min_votes* votes have been cast, and either no
     check has ended yet or *cooldown* votes have been cast since the last one
     ended (*votes_at_last_check*, the vote count when it ended; ``None``
-    before any).  ``cooldown=None`` makes a check due once at most.
+    before any).  ``cooldown=None``, the default (:data:`WEAK_CHECK_REPEAT`,
+    #4909), makes a check due once at most: never after any check has ended.
 
     The app's Autopilot runs the check when it is due; the eval harness's
     default arm (``spot_check="weak"``) runs it where this says, so both read
@@ -723,8 +983,11 @@ _BOUND_MIN_S1 = 0.05
 #: The counted bound guards against a runaway estimate rather than replacing
 #: it: the Goods a session found are its easiest positives, so ``S1`` reads
 #: high and the bound reads low (0.24% for a 0.43% target on a clean corpus).
-#: The mixture's estimate stands unless it exceeds the bound by this factor.
-_BOUND_MARGIN = 2.0
+#: The mixture's estimate stands unless it exceeds the bound by this factor: 4 since #5040 (2 before), which reads
+#: the prevalence at 0.87 to 0.93 of the truth early rather than half of it, while a corpus with no positives keeps no
+#: more than it did (removing the bound kept 84 to 148 wrong images at beta 4 there).  The eval harness can set another
+#: (``vtscore.eval.live_threshold_rules.labels_chances``).
+_BOUND_MARGIN = 4.0
 
 
 def _counted_share_bound(model: ClassScoreModel, unvoted: np.ndarray) -> float:
@@ -946,8 +1209,9 @@ def fit_labels_line(
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
         if model is not None:
             # In-sample scores are not held out: the head saw these Bads, so they
-            # cannot stand for the negatives' shape (#4490).
-            model = replace(model, neg_logits=None)
+            # cannot stand for the negatives' shape (#4490), nor its Goods for how deep
+            # the positives reach (#5039).
+            model = replace(model, neg_logits=None, pos_logits=None)
     if model is None:
         return None
     return _line_on(model, corpus_scores, corpus_ids, labels, held_out=wrong_way)
@@ -963,6 +1227,7 @@ __all__ = [
     "RANDOM_BADS_TOP_SHARE",
     "WEAK_CHECK_COOLDOWN",
     "WEAK_CHECK_MIN_VOTES",
+    "WEAK_CHECK_REPEAT",
     "WEAK_SEPARATION_D",
     "WEAK_CHECK_OFF_MEDIA_TYPES",
     "done_check_due",
@@ -981,6 +1246,10 @@ __all__ = [
     "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
+    "FOLD_SCALES",
+    "fold_transfer_clipped",
+    "fold_transfer_shift",
+    "transfer_fold_orderings",
     "head_count_cut",
     "head_count_serves",
     "labels_line_threshold",

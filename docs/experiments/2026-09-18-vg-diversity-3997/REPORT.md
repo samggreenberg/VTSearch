@@ -2,8 +2,8 @@
 
 **2026-09-18.** `anchor_to_coco` says that dropping Visual Genome's non-COCO half
 loses "VG's non-COCO diversity for nothing". The
-[`coco_better` plan](../../plans/coco-better.md) names settling that claim as the
-item that runs **first**, because it is the only live argument for keeping VG and
+`coco_better` migration plan (since folded into [the pile README](../../../scripts/experiments/pile/README.md#coco_better-the-method-bench-3983))
+named settling that claim as the item that runs **first**, because it is the only live argument for keeping VG and
 the only one that could still change the migration decision.
 
 **It does not survive.** Off-COCO images are *distinguishable* from COCO ones at

@@ -137,7 +137,7 @@ export interface ServerNotification {
   timestamp?: number;
   /**
    * The specific things the message is about (skipped files, dropped items),
-   * one per entry. Shown behind the toast's Details toggle, with Copy list.
+   * one per entry. Shown behind the toast's Details toggle, with Copy List.
    */
   items?: string[] | null;
 }
@@ -165,6 +165,14 @@ export interface LoadingTask extends ProgressEvent {
   embedder?: string;
   /** Present on a background AutoFind's row (task ids starting `_autofind_`). */
   autofind?: AutoFindTaskInfo;
+  /** User the task runs for. A kept failure is only streamed to them (#4973). */
+  created_by?: string;
+  /** Set on imports: a failure stays on the channel until dismissed (#4973). */
+  keep_failure?: boolean;
+  /** What the task reads, as a person would name it (an import's origin). */
+  source?: string;
+  /** Epoch seconds the task finished at; absent while it runs. */
+  finished_at?: number;
 }
 
 /** One row of a multi-media import specification.  See
@@ -176,11 +184,20 @@ export interface SourceSpec {
   params: Record<string, string | number | null>;
 }
 
+/** One cleaner's saved cleanup choice inside an import default. */
+export interface SavedCleanerChoice {
+  enabled: boolean;
+  /** Parameter overrides; only present on an enabled cleaner that has any. */
+  params?: Record<string, number | string>;
+}
+
 /** Saved per-mediaType defaults for the Add Dataset advanced panel:
- *  the embedder, clipper (+ params), and converter rows the user wants
- *  applied automatically every time they import a dataset whose output
- *  is the matching mediaType. Edited from Settings > Import Defaults;
- *  silently auto-filled into the importer form on importer selection. */
+ *  the embedder, clipper (+ params), converter rows and cleanup gates the
+ *  user wants applied automatically every time they import a dataset whose
+ *  output is the matching mediaType. Edited from Settings > Import Defaults
+ *  (all but the cleanup gates, which only the post-import "Save as default"
+ *  offer writes); silently auto-filled into the importer form on importer
+ *  selection. */
 export interface ImportDefaultsForMediaType {
   embedder?: string;
   clipper?: string;
@@ -189,6 +206,11 @@ export interface ImportDefaultsForMediaType {
    *  May omit the native "include directly" row; the importer adds it
    *  implicitly so the form is never empty. */
   source_specs?: SourceSpec[];
+  /** Cleanup choice per cleaner name, covering every cleaner registered when
+   *  the default was saved - the disabled ones too, so a gate the user turned
+   *  off stays off rather than falling back to its ``default_enabled``.
+   *  Absent when the saved selection was the registry's own. */
+  cleaners?: Record<string, SavedCleanerChoice>;
 }
 export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
 

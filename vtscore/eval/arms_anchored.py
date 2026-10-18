@@ -28,9 +28,10 @@ from vtscore.training.thresholds import (
 
 #: Default sweep grid for the anchored-mixture eval arms (issue #2852).  Each
 #: (anchor_weight, cut rule[, fold combine]) combination is one paired
-#: within-step variant; the GRID run overrides these via
-#: ``simulate_voting_iterations``'s ``anchored_*`` parameters to exhaust the
-#: grid registered in ``docs/plans/population-anchored-calibration.md``.
+#: within-step variant; a GRID run overrides these via
+#: ``simulate_voting_iterations``'s ``anchored_*`` parameters to sweep a wider
+#: grid (the 2026-08-05/06 runs' grids are in
+#: ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``).
 #:
 #: **Every grid leads with the shipped value** (:data:`FOLD_ANCHOR_WEIGHT`,
 #: :data:`FOLD_ANCHOR_CUT_RULE`, :data:`FOLD_ANCHOR_COMBINE`).  A sweep whose

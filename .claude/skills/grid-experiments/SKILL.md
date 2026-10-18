@@ -22,9 +22,8 @@ Three companions, each with a different job:
 
 Every session on the GRID shares one `.git`, one Slurm QOS and two checkouts
 that must stay clean. Work that ignores this strands other sessions' work
-without anyone noticing: on 2026-09-23 the shared checkout held 17 files staged
-and forgotten for five days, the deploy clone held 137, and 57 worktrees sat on
-disk, 27 of them already merged (#4133).
+without anyone noticing (#4133: staged files forgotten in both checkouts for
+days, and 27 merged worktrees still on disk).
 
 **The two checkouts nobody works in:**
 
@@ -123,14 +122,13 @@ already using**, which silently breaks the per-name completion waiter below.
 
 **Size the array against the cluster's job records, too.** Slurm's `MaxJobCount`
 (10,000 on the GRID) is one table shared by every user, and each array task is a
-record from the moment it is queued. A `%N` throttle limits running tasks, not
-records. #4668's sixteen 720-task arrays filled 85% of the table, and its last
-four were refused (#4701). `calibration/launch_cells.sh` now refuses an array
-that would take the cluster past half the table, or you past a quarter, before
-`sbatch` sees it, and prints how many tasks fit. A launcher that submits its own
-array passes `--array-tasks N` to preflight (bundled: cells / bundle, not
-`--print-cells`). Thousands of tasks across a launch loop means chunk the arrays
-or pack cells per task.
+record from the moment it is queued, whatever its `%N` throttle (GRID-PLAYBOOK.md
+§3; #4701). `calibration/launch_cells.sh` refuses an array that would take the
+cluster past half the table, or you past a quarter, before `sbatch` sees it, and
+prints how many tasks fit. A launcher that submits its own array passes
+`--array-tasks N` to preflight (bundled: cells / bundle, not `--print-cells`).
+Thousands of tasks across a launch loop means chunk the arrays
+(`calibration/drive_chunks.sh` is the shared driver) or pack cells per task.
 
 Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
 reusing a finished study's output. It checks that every `crops/` entry still
@@ -139,7 +137,8 @@ recreates them happily after that study is archived (#2881) — and it is where 
 grid-vs-prepare check reads from when the run has not copied `prepare_info.json`
 in yet.
 
-**Declare the opening.** `export CALIB_REQUIRE_OPENING=text` (or `known_good`, or
+**Declare the opening.** `export CALIB_REQUIRE_OPENING=text` (or `known_good`,
+`example` for the example-photo opening `CALIB_SEED_EXAMPLES` selects (#4699), or
 `mixed`) in the launcher. Autopilot has two real starts and which one a cell takes
 is decided silently, by whether its category has a typed query and whether its
 embedder has a text tower — so a grid holding a SigLIP arm and a bare
@@ -252,6 +251,12 @@ What goes with it:
   pair to the next.
 - **Pair only grids from the same commit.** Eleven days of `dev` alone give a
   per-cell σ of ~0.01. Reuse a same-commit baseline grid instead of an old one.
+- **…and the same kernel pins.** Since #4110, `run_cells.py` pins the CPU kernels
+  of OpenBLAS, numpy, torch's MKL and ATen (`_expcommon.cpu_kernel_pins`; numpy's
+  pin is chosen by numpy's version, #4930), so a cell is bit-identical on an Intel
+  and an AMD cpu node, and there is no vendor to pin. A grid run before the pins differs from a pinned one in its last bits on
+  every node, so re-run it rather than pair against it. The pins do not reach a
+  GPU (cuBLAS still differs by device, #3160).
 - σ is this environment set's. On another, read it off the first seeds and
   re-size (#3796 saw 0.056 on `vg_scale_any` at 150 votes).
 
@@ -386,8 +391,10 @@ a relative-path image link and a caption that says how to read the figure and wh
 **Any study that simulates a VTSearch user clicking owes two figures showing how
 good that user's detector is as they click more.** Not positives mined — that is
 what the *acquisition* did; an arm can mine well and rank badly. The metric is
-the one the ship decision reads (`cost`, and `average_precision` beside it),
-plotted against the axis the user actually spends:
+the one the ship decision reads (the objective, `fbeta`, on a run with a
+balance, and `cost` only on a `CALIB_BETA=off` run, as `curves.resolve_metric`
+picks it; `average_precision` beside it), plotted against the axis the user
+actually spends:
 
 - **the averages** — one panel **per dataset**, one line **per arm**, averaged
   over every seed and category on that dataset, with an inter-quartile band.
@@ -425,9 +432,10 @@ Three things it enforces, each of which is how one of these figures lies:
   click when it holds at one. Bridge the un-measured stretch between click 0 and
   a series' first trained click with the dashed line — that is exactly what the
   dash is for — and leave the crossing to the number.
-- **The denominator, drawn.** The metric frame starts at the first *trainable*
-  step, so a cell that never found both classes contributes no rows and silently
-  leaves the average. An arm starving on a third of its grid then gets its mean
+- **The denominator, drawn.** The metric frame starts at a run's first
+  detector (its first Good, or the first vote of a typed-query opening), so a
+  cell that never gets one contributes no rows and silently leaves the average.
+  An arm starving on a third of its grid then gets its mean
   computed over the two thirds that worked — and looks *better* for it. Pass the
   cell list as `denominator`, and the figure carries a coverage strip plus a
   dashed-where-partial rule so no level is quoted off a subset by accident.
@@ -448,27 +456,30 @@ directory, linked from the first section of the report. It carries every slice:
 | Control | Choices |
 |---|---|
 | dataset | one, **all** (averaged), or **each** (a line/panel per dataset) |
+| target size | one (a filter on the categories), **all**, or **each** |
 | category | one, **all** (averaged), or **each** |
-| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| embedder | any **non-empty** subset — **never averaged** |
 | arms | any **non-empty** subset |
+| show | the whole curve, or **where the app said stop**, one dot a run (#4939) |
 | seeds | averaged, or every seed its own line |
 | metric | every metric the run emitted |
 
-Four rules it enforces, none of which is optional:
+Five rules it enforces, none of which is optional:
 
-- **Hue means whatever the reader is comparing, and it is stated.** Three
-  dimensions can vary — arm, category, dataset. The first varying one (in that
-  order) with at most 8 values takes hue; every other varying one becomes a
-  panel. A ninth hue is never invented: a dimension with more values than the
-  palette has validated slots folds into small multiples instead. The legend
-  says *"Colour = arm · one panel per embedder × category"* in as many words,
-  because a legend that only lists values leaves the reader guessing which
-  dimension they are looking at. Colour follows the value's position in the
-  **study**, never in the current selection, so deselecting a series does not
-  repaint the survivors.
+- **Hue means whatever the reader is comparing, and it is stated.** Five
+  dimensions can vary: embedder, arm, target size, category and dataset. With
+  **overlay** on, every varying one takes hue, on one chart; with it off, each
+  gets its own chart and colour carries no meaning. Past the palette's 8
+  validated slots, hues are generated on the golden angle and the legend warns
+  that they are not validated. The legend says *"Colour = arm × category, all on
+  one chart"* (or *"One chart per …"*) in as many words, because a legend that
+  only lists values leaves the reader guessing which dimension they are looking
+  at. Colour follows the value's position in the **study**, never in the current
+  selection, so deselecting a series does not repaint the survivors.
 - **Embedders are never averaged.** Two embedders are two representations of the
-  haystack and their mean describes no system anyone could run. Faceting makes
-  that structural rather than a rule someone has to remember.
+  haystack and their mean describes no system anyone could run. Each selected
+  embedder is always its own series (its own chart, or its own hue under
+  overlay), so that is structural rather than a rule someone has to remember.
 - **Pooling is weighted by the cells that contributed**, not a mean of means —
   the payload stores `n` beside the moments so "all categories" is exact. The
   two differ exactly when one category trained on fewer cells, which is the
@@ -497,12 +508,10 @@ the viewer's behaviour and the payload carries only the study's numbers, so
 `python viewer.py --reskin docs/experiments/*/viewer.html` pushes a template
 improvement onto every committed report, even one whose results directory is
 long gone. It cannot add data the payload never carried, so a new *series* still
-needs a rebuild from the cell CSVs. Both series added in #3325 were backfilled
-that way in #3326. The oracle cut was free to recover, because its inputs are on
-every base row ever emitted. The skyline is vote-independent, so it was measured
-by a second, cheaper pass over the same cells and merged in with
-`--skyline-results`; re-running the loop for it would have replaced the
-performance rows the reports' tables were read off.
+needs a rebuild from the cell CSVs. A vote-independent series (the skyline) can
+be measured by a second, cheaper pass over the same cells and merged in with
+`--skyline-results`; re-running the loop for it would replace the performance
+rows the report's tables were read off.
 
 Which metric a page **opens on** is the study's to choose, and so is which ones
 it offers at all: `--default-metric` and `--hide-metrics` write a `view` block
@@ -516,15 +525,13 @@ stay in the payload.
 
 **A run inside a spot check stays in the mean.** A prompted check (#4496)
 answers its picks in rounds of about five, so a run inside one is scored once
-per round and has no row at the clicks between. Both the viewer's averaged
-line and `curves.py`'s PNG mean used to be taken over "the runs with a row at
-this click", which skipped exactly those runs, and a check prompts where the
-labels separate weakly, so what it skipped was the weak sessions: a survivor's
-mean that fell at the end of every review as the checks ran out of budget and
-the weak runs came back (#4624). Both now carry each run's last scored row
-through the clicks it has none for (`curves.fill_gaps`): inside the run's span
-only, never before its first row or after its last, and a metric undefined on
-a scored row stays undefined. The page says so in its reading note
+per round and has no row at the clicks between. A mean over "the runs with a
+row at this click" skips exactly those runs, and a check prompts where the
+labels separate weakly, so what it skips is the weak sessions (#4624). Both the
+viewer's averaged line and `curves.py`'s PNG mean carry each run's last scored
+row through the clicks it has none for (`curves.fill_gaps`): inside the run's
+span only, never before its first row or after its last, and a metric undefined
+on a scored row stays undefined. The page says so in its reading note
 (`gaps_filled`). A committed page built before the carry gets it from its own
 per-seed lines with `python viewer.py --reskin <page> --fill-gaps`, which
 refuses a page whose per-seed lines were thinned to fit the budget (rebuild
@@ -551,7 +558,7 @@ reading note (`empty_sets_scored`). This needs each run's prevalence, which a
 built page does not carry, so a committed page built before it is **rebuilt**
 from its results, not reskinned.
 
-**From the first Good on, both draw the harness's detector, Autopilot's
+**From a run's first row on, both draw the harness's detector, Autopilot's
 opening included** (owner, 2026-10-07, #4640). The session stays on the text
 sort until the Hard phase (`app_trained`, #4605), but the user can export the
 labels and run Test at any click, and either builds a detector from the
@@ -580,11 +587,12 @@ click with no detector, and that a Goods'-centroid row is drawn like any other;
 the PNGs'. Both run in the suite (`tests_lib/meta/test_calibration_viewer.py`).
 
 **The metrics come from the harness, not from the viewer.** `cost`, `precision`,
-`recall`, `f1`, `fpr`, `fnr`, `average_precision` and `auroc` are emitted by
-every run through `vtscore.eval.calibration_metrics.detection_metrics` and
-`DETECTION_METRICS`, which also carries each metric's label and *direction*. A
-report or viewer that decides for itself which way is "better" is how "lower is
-better" gets attached to recall. If you add a metric, add it there.
+`recall`, `f1`, the F-beta family (`fbeta`, `fbeta_b025`, `fbeta_b4`), `fpr`,
+`fnr`, `average_precision` and `auroc` are emitted by every run through
+`vtscore.eval.calibration_metrics` (`detection_metrics`, `fbeta_metrics`) and
+listed in its `DETECTION_METRICS`, which also carries each metric's label and
+*direction*. A report or viewer that decides for itself which way is "better" is
+how "lower is better" gets attached to recall. If you add a metric, add it there.
 
 **Show the errors themselves, not just the error rate.** Any claim about a
 *kind* of mistake ("it over-includes on scene categories") owes literal

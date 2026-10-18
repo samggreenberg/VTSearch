@@ -36,7 +36,12 @@ import pandas as pd  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sota_face_figures import BETA, INK2, GRID, SIZE, _end_labels, _style, photos  # noqa: E402
 
-ARMS = {"faces": ("#2a78d6", "plain crop"), "faces_roll": ("#eb6834", "roll"), "faces_sim": ("#1baf7a", "similarity")}
+ARMS = {
+    "faces": ("#2a78d6", "plain crop"),
+    "faces_roll": ("#eb6834", "roll"),
+    "faces_sim": ("#1baf7a", "similarity"),
+    "faces_side": ("#1baf7a", "roll + sideways"),
+}
 BANDS = ["0-10", "10-20", "20-45", "45-90"]
 BAND_LABELS = ["0–10°", "10–20°", "20–45°", "45–90°"]
 
@@ -74,7 +79,9 @@ def fig_screen(screen: Path, out: Path) -> None:
     plt.close(fig)
 
 
-def fig_sessions(plain: Path, plain_base: Path, arm: str, arm_dir: Path, arm_base: Path, out: Path) -> None:
+def fig_sessions(
+    plain: Path, plain_base: Path, arm: str, arm_dir: Path, arm_base: Path, out: Path, plain_tag: str = ""
+) -> None:
     from align_compare_4777 import BETAS  # noqa: PLC0415
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "state_of_app"))
@@ -93,7 +100,7 @@ def fig_sessions(plain: Path, plain_base: Path, arm: str, arm_dir: Path, arm_bas
         ends = []
         for beta, (color, blabel) in BETA.items():
             for size, ls in SIZE.items():
-                p = wide(plain, plain_base, k, size, beta, "fhibe_faces")
+                p = wide(plain, plain_base, k, size, beta, f"fhibe_faces_{plain_tag}" if plain_tag else "fhibe_faces")
                 a = wide(arm_dir, arm_base, k, size, beta, f"fhibe_faces_{arm}")
                 d = (a - p.reindex(a.index)).dropna(how="all")
                 m = d.mean(axis=0)
@@ -109,7 +116,8 @@ def fig_sessions(plain: Path, plain_base: Path, arm: str, arm_dir: Path, arm_bas
         ax.set_title(photos(k), color=INK2, fontsize=10)
         ax.set_xlabel("click")
         ax.set_xlim(0, 165)
-    axes[0].set_ylabel(f"objective: {ARMS['faces_' + arm][1]} minus plain crop")
+    control = ARMS[f"faces_{plain_tag}" if plain_tag else "faces"][1]
+    axes[0].set_ylabel(f"objective: {ARMS['faces_' + arm][1]} minus {control}")
     fig.text(0.99, 0.01, "solid 1024 px (±1 SE band), dashed 640 px", ha="right", fontsize=8, color=INK2)
     fig.tight_layout()
     fig.savefig(out / "fig_session_gain.png", dpi=150)
@@ -123,6 +131,7 @@ def main() -> int:
     ap.add_argument("--plain", type=Path)
     ap.add_argument("--plain-baseline", type=Path)
     ap.add_argument("--arm", help="tag=<analysis dir>,<baseline dir>")
+    ap.add_argument("--plain-tag", default="", help="the control's arm tag, empty for the plain crop")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
     _style()
@@ -132,7 +141,7 @@ def main() -> int:
     else:
         tag, dirs = args.arm.split("=", 1)
         a, b = dirs.split(",", 1)
-        fig_sessions(args.plain, args.plain_baseline, tag, Path(a), Path(b), args.out)
+        fig_sessions(args.plain, args.plain_baseline, tag, Path(a), Path(b), args.out, args.plain_tag)
     print(f"-> {args.out}")
     return 0
 

@@ -2,18 +2,21 @@
 
 To add a new media type:
 
-1. Create a subdirectory under ``vtsearch/media/`` (e.g. ``vtsearch/media/code/``).
+1. Create a sub-package under ``vtscore/media/`` (e.g. ``vtscore/media/code/``).
 2. Add any new pip packages your embedder needs to
    ``[project.dependencies]`` in the repo's ``pyproject.toml``, then
    re-run ``bash scripts/install.sh`` (or your editable install of
    choice) to pick them up.
 3. Implement a subclass of :class:`MediaType` in ``media_type.py``.
-4. Register it in ``vtsearch/media/__init__.py``::
+4. Expose an instance as the ``MEDIA_TYPE`` sentinel in the sub-package's
+   ``__init__.py``::
 
        from vtscore.media.code.media_type import CodeMediaType
-       register(CodeMediaType())
 
-That is all.  The rest of the application (routing, dataset loading, model
+       MEDIA_TYPE = CodeMediaType()
+
+That is all.  The import-time scan in :mod:`vtscore.media` registers the
+sentinel, and the rest of the application (routing, dataset loading, model
 initialisation, demo listing) picks up your new type automatically through
 the registry.
 """
@@ -70,8 +73,8 @@ def _fetch_media_url(url: str) -> bytes | None:
     routable ``http(s)`` URLs, with every redirect hop re-checked.  That is what
     keeps a ``file:///etc/passwd`` or ``http://169.254.169.254/…`` media_url
     from turning a media fetch into an arbitrary file read or an internal
-    network probe — ``urllib.request.urlopen``, which this used to call, services
-    ``file://`` and ``ftp://`` out of the box and would have obliged.
+    network probe (a bare ``urllib.request.urlopen`` services ``file://`` and
+    ``ftp://`` out of the box).
     """
     from vtscore.security.url_validation import fetch_validated_url  # noqa: PLC0415
 
@@ -286,9 +289,8 @@ class MediaType(ABC):
     has_thumbnail: bool = False
 
     #: Embeddable ``type_id``s a **non-embeddable** type can convert into
-    #: (first entry = default).  This is one of the two orthogonal
-    #: capabilities that ``MediaType`` used to conflate — see
-    #: :attr:`importable` / :attr:`embeddable`.  ``document`` sets
+    #: (first entry = default).  It complements the two orthogonal
+    #: capabilities :attr:`importable` / :attr:`embeddable`.  ``document`` sets
     #: ``["image", "text"]`` (a PDF page → image, or its extracted text);
     #: a directly-embeddable type leaves this empty.  A *convert-out* "half
     #: type" is precisely ``embeddable is False and converts_to != []`` — a
@@ -361,8 +363,7 @@ class MediaType(ABC):
 
         This is the ``media_type`` value the ``server_folder`` / ``server_files``
         importers accept and :func:`~vtscore.media.get_by_folder_name` resolves.
-        Defaults to :attr:`type_id`.  Legacy plural names (e.g. ``"sounds"``,
-        ``"videos"``) are accepted via the alias map in ``vtscore.media``.
+        Defaults to :attr:`type_id`.
         """
         return self.type_id
 
@@ -384,7 +385,7 @@ class MediaType(ABC):
         """Extra field names to preserve when loading media from pickle files.
 
         When a pickle stores type-specific metadata beyond the standard
-        fields (id, type, duration, file_size, md5, embedding, etc.),
+        fields (id, media_type, duration, file_size, md5, embeddings, etc.),
         list the field names here so the loader copies them automatically.
 
         For example, the image type returns ``["width", "height"]`` and
@@ -520,13 +521,10 @@ class MediaType(ABC):
         the audio type handles ESC-50, the image type handles CIFAR-10 /
         Caltech-101/256, etc.).
 
-        Every parameter below the callback used to hide inside ``**kwargs``,
-        even though :mod:`vtscore.datasets.loader_demo` passes all four on
-        every call and all five shipped types spell them out — so an author
-        reading this signature could not see what their override would be
-        handed.  They are declared now; the trailing ``**kwargs`` stays so an
-        override that predates the change (or one that accepts only the
-        parameters it uses) keeps working.
+        :mod:`vtscore.datasets.loader_demo` passes every parameter below by
+        keyword on every call.  Keep a trailing ``**kwargs`` on an override,
+        as every shipped type does: it absorbs any keyword the override does
+        not name, so an override may spell out only the parameters it uses.
 
         Args:
             source: The ``source`` identifier from the :class:`DemoDataset`.
@@ -572,7 +570,7 @@ class MediaType(ABC):
         """Load and return media-specific fields for a media dict.
 
         The returned dict is merged into the *base* media dict (which already
-        contains ``id``, ``media_type``, ``file_size``, ``md5``, ``embedding``,
+        contains ``id``, ``media_type``, ``file_size``, ``md5``, ``embeddings``,
         ``filename``, and ``category``).  You must include at minimum a
         ``"duration"`` key.
 
@@ -601,10 +599,10 @@ class MediaType(ABC):
 
         A thin load (the "Reference files in place" importer option, and every
         CLI ``--thin`` workflow) deliberately keeps a media's bytes out of
-        memory.  It used to skip :meth:`load_media_data` wholesale, which also
-        skipped the ingest-time ``thumbnail_bytes`` — so every grid / VTSBrowse
-        tile fell back to decoding the full-resolution original on each cold
-        request (~200 ms for a 12 MP photo, paid again after any reload).
+        memory, but not its ingest-time ``thumbnail_bytes``: without one, every
+        grid / VTSBrowse tile falls back to decoding the full-resolution
+        original on each cold request (~200 ms for a 12 MP photo, paid again
+        after any reload).
 
         This hook produces the same display artifacts the full path does
         (``thumbnail_bytes``, ``width`` / ``height``, ``duration``) while
@@ -662,19 +660,25 @@ class MediaType(ABC):
         2. *lazy clip* - a derived sub-media that carries a clip recipe in
            ``origin.params`` instead of materialized bytes; its bytes are
            sliced/cropped from the source on demand (see
-           :mod:`vtscore.media.lazy_clip`).
-        3. ``media_path`` - local file on disk (thin mode).
-        4. ``media_url`` - remote URL (URL-backed media),
+           :mod:`vtscore.media.lazy_clip`).  A cleaned unit's recipe is
+           exclusive: if its replay fails, nothing is served.
+        3. *archive member* - a ``local_archive_member`` media's bytes,
+           streamed out of its tar/zip shard on demand (see
+           :func:`_resolve_archive_member_bytes`).
+        4. ``media_path`` - local file on disk (thin mode).
+        5. ``media_url`` - remote URL (URL-backed media),
            fetched only through the SSRF guard in :func:`_fetch_media_url`.
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:
             return media_bytes
-        from vtscore.media.lazy_clip import lazy_clip_bytes  # noqa: PLC0415
+        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
 
         clipped = lazy_clip_bytes(media)
         if clipped is not None:
             return clipped
+        if recipe_is_exclusive(media):
+            return None
         archive_bytes = _resolve_archive_member_bytes(media)
         if archive_bytes is not None:
             return archive_bytes
@@ -692,12 +696,25 @@ class MediaType(ABC):
     def _resolve_media_string(self, media: dict) -> str:
         """Return text content, lazy-loading from path or URL.
 
-        Same resolution order as :meth:`_resolve_media_bytes` but for text
-        media types that store ``media_string`` instead of ``media_bytes``.
+        For text media types, which store ``media_string`` instead of
+        ``media_bytes``.  Resolution order: ``media_string`` (already in
+        memory), then a lazy recipe (a cleaned unit, a ``document2text`` page;
+        exclusive, so a failed replay serves ``""``), then ``media_path`` (thin
+        mode) - after the recipe, since ``media_path`` names its *source* -
+        then ``media_url`` (through the SSRF guard in :func:`_fetch_media_url`).
+        Unlike :meth:`_resolve_media_bytes` there is no archive-member step.
+        Returns ``""`` when nothing resolves.
         """
         media_string = media.get("media_string")
         if media_string is not None:
             return media_string
+        from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+
+        derived = lazy_clip_bytes(media)
+        if derived is not None:
+            return derived.decode("utf-8", errors="replace")
+        if recipe_is_exclusive(media):
+            return ""
         media_path = media.get("media_path")
         if media_path:
             path = resolve_media_file_path(media_path)

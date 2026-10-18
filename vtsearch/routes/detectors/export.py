@@ -4,7 +4,7 @@ Streams a standalone, transferable scoring bundle (ONNX model + manifest +
 README) for a saved detector.  See :mod:`vtscore.detectors.portable_bundle`.
 
 This is the sanctioned exception to the "No Persisted Vectors or MLPs" rule
-(``CLAUDE.md``): the bundle persists the trained MLP - never embeddings or raw
+(``CLAUDE.md``): the bundle persists the trained head - never embeddings or raw
 media - so other parties can score their own media without VTSearch.
 
 Structural (SIFT/VLAD) detectors are rejected outright (409): their stage-2
@@ -14,7 +14,7 @@ scoring mode, flagged in the manifest/README.  See
 :func:`vtscore.detectors.portable_bundle.check_exportable` /
 :func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`.
 
-Migrated to ``flask_smorest`` so the route is described in
+Built on ``flask_smorest`` so the route is described in
 ``/api/openapi.json``.  The success body is a raw ``application/zip`` download,
 so (like the dataset-export route) it is left undescribed in the spec and only
 the error responses carry schemas.
@@ -55,7 +55,7 @@ detectors_export_bp = Blueprint(
 def export_portable_bundle(detector_id: str):
     """Train the detector against the active dataset and stream its portable bundle.
 
-    The detector's MLP is (re)trained from its on-disk labelset in the active
+    The detector's head is (re)trained from its on-disk labelset in the active
     dataset's embedder space - exactly as Find does - then serialised to an ONNX
     scorer and zipped with a manifest and README.  No embeddings or raw media
     are written; only the trained classifier, the embedder name, and the

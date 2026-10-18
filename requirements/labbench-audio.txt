@@ -1,0 +1,23 @@
+# VTSearch: LabBench audio dependencies (audio search with CLAP General)
+#
+# requirements/labbench.txt (the core every LabBench image shares) plus what
+# the audio media type and its default embedder, CLAP General, need. CLAP
+# itself is a transformers model, so the core already carries it.
+#
+# Used by docker/Dockerfile.labbench with MEDIA_TYPE=audio.
+
+-r labbench.txt
+
+# ── Audio media type ─────────────────────────────────────────────────
+# vtscore.media.audio.decode: soundfile reads WAV/FLAC/OGG/MP3 (its wheel
+# bundles libsndfile, so no system package is needed) and soxr resamples.
+soundfile
+soxr
+# Everything soundfile cannot read (m4a, aac, ...) is decoded by an ffmpeg
+# subprocess. vtscore.media.audio.ffmpeg falls back to the static binary this
+# package bundles, so the image needs no apt-installed ffmpeg.
+imageio-ffmpeg
+# The silence-trim cleaner and the silence clipper (vtscore.media.audio.silence)
+# return "leave the media alone" when librosa is missing, so without it both
+# plugins are offered and quietly do nothing.
+librosa

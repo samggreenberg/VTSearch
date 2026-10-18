@@ -8,9 +8,9 @@
 # MEDIA_TYPE is required: a registered media-type id. The build fails, listing
 # the valid ids, for a missing or unknown one. What gets baked today:
 #
-#   audio     CLAP General
+#   audio     CLAP General (docker/Dockerfile.labbench builds a slimmer one)
 #   video     X-CLIP
-#   image     SigLIP (docker/Dockerfile.labbench is the slimmer image-only build)
+#   image     SigLIP (docker/Dockerfile.labbench builds a slimmer one)
 #   text      E5
 #   document  SigLIP: a half type, meaning document input converted to page
 #             images (document2image), so it bakes what the pages embed with

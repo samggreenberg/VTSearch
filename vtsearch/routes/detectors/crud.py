@@ -27,7 +27,7 @@ PUT  /api/detectors/<name>/examples
 POST /api/detectors/combine
     Combine the labelsets of two or more detectors into a new detector.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 """
 
@@ -426,7 +426,7 @@ def combine_detectors(body: dict):  # noqa: C901
 
     The combined detector is *purely a labelset entry*; no source's
     labelset-source binding carries over (it follows the deployment default,
-    if any), and the threshold/MLP
+    if any), and the threshold/head
     are computed later when the detector is activated against a dataset.
     """
     names = body["names"]

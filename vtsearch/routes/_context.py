@@ -17,8 +17,9 @@ from flask_smorest import abort
 def _has_context_id(header_name: str, query_param: str) -> bool:
     """Return True iff *header_name* or *query_param* identifies a context.
 
-    Matches the precedence applied by ``before_request`` in ``app.py``:
-    header first, then query-param fallback for browser-native requests
+    Matches the precedence applied by the ``_set_request_context``
+    ``before_request`` hook in ``vtsearch/hooks.py``: header first, then
+    query-param fallback for browser-native requests
     (``<img src>`` / ``<audio src>`` / ``<video src>``) that bypass
     Angular's HttpClient interceptor.
     """
@@ -28,9 +29,9 @@ def _has_context_id(header_name: str, query_param: str) -> bool:
 def require_detector_header(fn: Callable) -> Callable:
     """Route decorator: reject 400 if no ``X-Detector-Id`` is identified.
 
-    Closes logical-bug-audit H34: vote-mutating endpoints used to silently
-    write to whatever ``get_active_detector_context()`` resolved to when
-    the client dropped the header. The frozen ``_request_missing_detector_context``
+    Without it, a vote-mutating endpoint whose client dropped the header
+    would silently write to whatever ``get_active_detector_context()``
+    resolves to (logical-bug-audit H34). The frozen ``_request_missing_detector_context
     sentinel catches the case where both the header *and* the thread-local
     are absent, but if any future code path sets the thread-local on a
     Flask request thread, a header-absent request would land on a stale

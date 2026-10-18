@@ -1,6 +1,6 @@
 """Flask routes for the Settings Import/Export API.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Endpoints
@@ -13,7 +13,9 @@ POST /api/settings-importers/field-options/<importer_name>
     the importer's ``get_field_options(field_key, current_values)``.
 
 POST /api/settings-importers/import/<importer_name>
-    Run the named settings importer and apply the imported settings.
+    Run the named settings importer and apply the imported settings that
+    are the user's own (per-user keys, checked as ``PUT /api/settings``
+    checks them); server-tier keys and invalid values are skipped.
     The request body shape depends on the importer plugin and isn't
     described in the OpenAPI spec; runtime validation goes through
     :func:`validate_plugin_args` (per-plugin schema built from the
@@ -159,14 +161,20 @@ def run_settings_import(importer_name: str):
     if not isinstance(imported_settings, dict):
         return error_response("Importer did not return a valid settings dict", 500)
 
-    # Apply imported settings through the settings API
-    _apply_settings(imported_settings)
+    # Per-user keys only, each through the checks PUT /api/settings runs: the
+    # file is the user's choice, so it may not set a server-tier key (#4965).
+    applied = settings.apply_imported_settings(imported_settings)
+    skipped = [key for key in imported_settings if key not in applied.keys]
 
+    message = f"Imported {len(applied.keys)} setting(s) via {importer.display_name}."
+    if skipped:
+        message += f" Skipped {len(skipped)} that are not per-user settings or had invalid values: {', '.join(map(str, skipped))}."
     return jsonify(
         {
             "success": True,
-            "message": f"Imported {len(imported_settings)} setting(s) via {importer.display_name}.",
-            "keys": list(imported_settings.keys()),
+            "message": message,
+            "keys": list(applied.keys),
+            "skipped": skipped,
         }
     )
 
@@ -251,11 +259,3 @@ def run_settings_export(body: dict):
         abort(500, message=f"Export failed: {exc}")
 
     return {"success": True, **(outcome or {})}
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-# Re-export from settings module for backward compatibility and local use.
-from vtsearch.settings import _apply_settings  # noqa: F401, E402

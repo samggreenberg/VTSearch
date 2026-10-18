@@ -11,7 +11,7 @@ Inclusion budget under grouped calibration. Design: `docs/plans/calibration-expe
 
 <!-- BEGIN INDEX -->
 
-**This directory is flat on purpose.** ~120 scripts, ~20 concluded studies, one
+**This directory is flat on purpose.** Every concluded study's scripts share one
 namespace. #3409 proposed `git mv`-ing each concluded study into a subdirectory;
 that was declined, because the cost is real and the benefit is not. These are
 archival cluster scripts: the launcher `cd`s here and every file reaches its
@@ -44,8 +44,8 @@ a report's committed-figure requirement points at.
 |---|---|
 | `common.py`, `experiment_config.py` | Env/`sys.path` setup (call `setup_env()` before importing anything under `vtscore`) and the pre-registered grid. |
 | `_cells_paths.py` | Which files in a `cells/` directory are a cell's **main** frame (`main_frame_files`, `side_frame_files`, `SIDE_FRAME_SUFFIXES`). Import-free on purpose — no pandas — so the csv-and-stdlib figure scripts share the rule with the pandas analyzers instead of each re-typing it. |
-| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). `load_arm` sets a floor-era run's spot-check rows (`phase == "check"`, past `max_steps`) apart unless called with `keep_check=True` (#4364). Re-exports `_cells_paths`' discovery functions. |
-| `_rank_metrics.py` | A precision floor's line read off where the positives sit in a ranking (#4357): the top-*K* set each floor keeps, its precision, shortfall and recall, the best cut's recall at the floor, and AP. The one definition the click-0 text baseline and the State of the App analyzer both read with, over a cell's rank frames (`task_NNNN__rankframes.csv`, `CALIB_RANK_FRAME_STEPS`) or a text sort's scores. |
+| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader the analyzers share (`analyze_spikes.py` re-exports the name). `load_arm` sets a run's end-of-run spot-check rows (`phase == "check"`, past `max_steps`) apart unless called with `keep_check=True` (#4364). Re-exports `_cells_paths`' discovery functions. |
+| `_rank_metrics.py` | A line read off where the positives sit in a ranking (#4357): the top-*K* set each precision floor keeps, its precision, shortfall and recall, the best cut's recall at the floor, and AP; and the balance's line at each preset with its F-beta against the best cut's (`frame_beta_k`, `balance_metrics`, #4471). The one definition the click-0 text baseline and the State of the App analyzer both read with, over a cell's rank frames (`task_NNNN__rankframes.csv`, `CALIB_RANK_FRAME_STEPS`) or a text sort's scores. |
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
 | `study_paths.py` | `require_study_dir` — the check an **analyzer** owes its `--exp` (#4001). The finished study output dirs were deleted on 2026-09-18, so a stale default now dies on whatever file it opens first; this names the directory and the record instead. Readers only: a launcher `mkdir -p`s its study dir, and requiring one would break the re-run that made the delete acceptable. |
@@ -54,7 +54,7 @@ a report's committed-figure requirement points at.
 | `stopping.py`, `selftest_stopping.py` | **Stopping point and stopping cost** (#3560): where the app's own stopping rules fired on each trajectory, and what the detector cost there — the number a user actually leaves with, as against the "final cost" at a click budget nobody chose. Reads the `phase` column every run since 2026-07-31 already emits, so it enriches finished studies without a re-run. Handles the three things that make a naive average wrong: the rules **flap**, they **often never fire**, and the runs excluded by "average over the ones that stopped" are exactly the slow ones. Holds each stop against the run's own best, reads through a mid-session prompted check, and is what the State of the App analyzer's stopping block calls; `tests_lib/meta/test_calibration_stopping.py` runs the self-test in the suite. |
 | `preflight_knobs.py` | **Check 12 of the launch preflight** (`../preflight.sh`): every knob this run pins - the detector's and the session's (the opening, the preference, the spot check and its walk, acquisition) - against what the app ships, so a divergence passes only when declared with `--diverges <knob>`, and a value the harness would refuse fails outright (#4549). Imported under the run's own environment, from the worktree the jobs import. |
 | `harvest_headroom.py` | **Sizing a deep grid from its DEEPEST arm** (#3611): the positives-per-class that keep the most aggressive arm's harvest under a study's pre-registered compression bar at its planned horizon, read off a short pilot wave. Runs as check 16c of the launch preflight (`../preflight.sh --require-harvest-headroom`), and standalone (`--pilot <study>/bin`) to size the next pile. The per-arm harvest of a study that has already RUN is a different question, and a per-study script (`harvest_3547.py`) answers it. |
-| `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. `--default-metric` / `--hide-metrics` set the metric a page opens on and take retired ones off its menu, at build time or on a reskin. `--title` / `--subtitle` with `--reskin` rewrite a committed page's heading (#4654), and `--embedder-label` names an embedder by what it is rather than its key, at build time or on a reskin (#4655). |
+| `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. `--default-metric` / `--hide-metrics` set the metric a page opens on and take retired ones off its menu, at build time or on a reskin. `--title` / `--subtitle` with `--reskin` rewrite a committed page's heading (#4654), and `--embedder-label` names an embedder by what it is rather than its key, at build time or on a reskin (#4655). Each run's stopped point rides in the payload, so a page can show where the app said stop instead of the whole curve (#4939). `--category-map` shows categories as strata, and each recorded category is still a run of its own: its stop, its carried gaps, its clicks before a first detector, and a cell in the count (#4944). `--default-dataset each` opens a page of several datasets on one line each, at build time or on a reskin (#4959). |
 | `make_bench_html.py` | A study's `report.html` reading copy, generated from its own `REPORT.md`. |
 | `bench_cells.py` | Pure-pandas reading and pairing of overview-benchmark cells, shared by the bench analyzers. |
 
@@ -96,7 +96,6 @@ produced.
 | **#3551 Tuning the retired `rare` / `corridor` blend schedules** — [plan](../../../docs/experiments/2026-09-22-blend-endpoints-3551/PLAN.md) | `launch_blend_3551.sh`, `analyze_blend_3551.py`, `selftest_analyze_blend_3551.py`, `analyze_blend_ab_3551.py`. The schedule is now only the fused cut's fold fallback, so the screen splits every schedule row by `shipped_provenance` into Q1 (the fallback it would ship) and Q2 (a replacement for the fused cut), and gates on the shipped fallback reproducing the live threshold; `ab` runs promoted arms per voting mode (`AB_MODE`) |
 | **#4184 The calibration ladder on COCO Better** (one cost curve per rung of the *Hold The Line* deck, for its slide) — [plan](../../../docs/experiments/2026-09-25-progression-4184/PLAN.md), [report](../../../docs/experiments/2026-09-25-progression-4184/REPORT.md) | `launch_progression_4184.sh`, `analyze_progression_4184.py`, `selftest_analyze_progression_4184.py`, and for the #4201 prevalence arm (`CALIB_HAYSTACK_PREVALENCE`) `compare_prevalence_4201.py` (the rungs at two prevalences, paired per cell) and `figure_prevalence_4201.py` (the report's two figures). Seven run-level arms, one per rung; the four retired thresholds are `CALIB_LIVE_THRESHOLD` (`vtscore/eval/live_threshold_rules.py`), because a rung's line picks its own questions and a re-cut of another rung's trajectory would not. The 1% re-run (#4519) and today's app at each preset (#4548, rungs `r8_labels_b025` and `r8_labels_b4`) feed the deck's slide 32, `slides/figs/src/make-follow-suit-fig.py`, from `docs/experiments/2026-10-05-ladder-fbeta-4519/presets/progression_curve.csv` |
 | **#4114 The converged logistic head in the loop, on COCO Better** — [report](../../../docs/experiments/2026-09-27-logreg-head-4114/REPORT.md) (analyzers, examples and figures live in [`../svm_vs_logistic/`](../svm_vs_logistic/)) | `launch_logreg_4114.sh`. Arms `svm` / `lrconv` (head `linear_logreg`) / `linear` |
-
 | **#4220 Can a precision-floor promise be kept from the app's votes?** (the #4223 ruling's objective, priced offline) — [report](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md) | `analyze_pframes_4220.py`, `selftest_analyze_pframes_4220.py`, `figure_pframes_4220.py`. Reads the per-cell precision frames `task_NNNN__pframes.npz` that `CALIB_PFRAME_STEPS` makes the cell runner record (test truth, pool, votes, fold held-out votes and haystacks); prices P(y\|score) estimators (in-sample, fold-rank, fold-raw × logistic/isotonic × point/bootstrap lower bound, ± EM prior shift) on recall at a precision floor X and the violation rate, in the same-prevalence and shifted-corpus scenarios |
 | **#4222 Stay in TextTop until G Goods, in the low-prevalence world** (does a deeper text opening mine the positives a precision promise needs?) — [report](../../../docs/experiments/2026-09-28-textgood-4222/REPORT.md) | `launch_textgood_4222.sh`, `analyze_textgood_4222.py`, `selftest_analyze_textgood_4222.py`, `figure_textgood_4222.py`. Today's app with the opening's Good round at G = 3 (production) / 6 / 10 / 20, at COCO Better's default 0.44% and positives thinned to 0.1% (`CALIB_TARGET_PREVALENCE`); precision frames on. Reports harvest, calibration positives against the #4220 gate, the #4220 estimator's promises, and AP paired against the G = 3 control, then applies the decision rule fixed in #4222 |
 | **#4224 Rank frames for precision-floor studies off the GRID** — [data and schema](../../../docs/experiments/2026-09-28-rank-frames/README.md) | `export_rank_frames.py`. Cuts the #4220/#4222 precision frames down to the ranks of each test corpus's positives, plus the shipped estimator's cuts (as shipped, and with a consistent reference pool) at X = 25/50/75%, so random-verification and audit-sampling studies can run from CSVs in the repo |
@@ -140,9 +139,14 @@ produced.
 
 | Dataset | Embedder | Style(s) | Calibration |
 |---|---|---|---|
-| `visual_genome_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+| `visual_genome_m` | `siglip`, `siglip2_l` | `whole_image` | row-wise |
 | `visual_genome_m` | `dinov3_patch` | `max_patch` | grouped (bag max-pool) |
-| `caltech101_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+| `caltech101_m` | `siglip`, `siglip2_l`, `dinov3_patch` | `whole_image` | row-wise |
+
+These are the defaults of `CALIB_DATASETS` and `experiment_config.DATASET_EMBEDDERS`
+(`CALIB_VG_EMBEDDERS` / `CALIB_CALTECH_EMBEDDERS`); a patch embedder runs its patch
+styles only on a boxed dataset (`styles_for`). Study launchers re-point both, usually
+at a pile dataset such as `coco_better`.
 
 Two #2781 arms are **off by default** now that their questions are closed, and a
 study that wants either adds it back explicitly (and declares the divergence to
@@ -162,9 +166,9 @@ study that wants either adds it back explicitly (and declares the divergence to
 ## Stages
 
 1. **`prepare_data.py`** — ensures a per-`(dataset, embedder)` pickle + exemplar
-   crops for every arm. Reuses the Max-Patch pickles/crops where the pair
-   coincides (VG×{siglip,dinov3_patch}, Caltech×siglip); only embeds the missing
-   `siglip_l` pairs.
+   crops for every arm. Reads a pickle in place where one already exists (the
+   Max-Patch datadir under `launch_all.sh`, the pile under `pile_env.sh`) and
+   embeds only the missing pairs.
 2. **`run_cells.py`** — one SLURM-array task per `(dataset, embedder, category,
    seed)` cell; runs every style for the embedder, emitting the calibration
    metrics (`CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
@@ -199,7 +203,7 @@ bash launch_cut.sh          # the #2836 cut-rule study: theory bench + analyze_c
 bash launch_anchored.sh     # the #2852 anchored-mixture study, analyze_anchored.py
 ```
 
-Both study launchers are thin wrappers over `launch_all.sh` that flip the
+The three study launchers are thin wrappers over `launch_all.sh` that flip the
 pre-registered knobs and point `CALIB_EXP` somewhere the other studies' outputs
 are not.
 
@@ -225,18 +229,17 @@ to what `run_cells.py` actually writes, and holds every script in this directory
 to going through `_cells_io`.
 
 `load_cells(cells_dir)` returns `(frame, provenance)` and is the only reader.
-Eight analyzers used to have their own, diverging on the three guards a grid run
-needs and nothing else — zero-byte skip, unreadable catch, header-only count —
-with four of the eight having none of them. The provenance names all three
-separately, because they are different facts: a zero-byte or unreadable cell is
-data loss, while a header-only cell is a *starved* cell (the simulator emits no
-row before one Good and one Bad vote coexist), which is a legitimate result and
-the extreme of the regime several of these studies are about. `describe_load`
+It applies the three guards a grid run needs — zero-byte skip, unreadable catch,
+header-only count — and the provenance names all three separately, because they
+are different facts: a zero-byte or unreadable cell is data loss, while a
+header-only cell is a *starved* cell (the simulator emits no row before the run
+has a detector), which is a legitimate result and the extreme of the regime
+several of these studies are about. `describe_load`
 formats them into one line so two reports mean the same thing by "N of M cells".
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
-embeddings pickles and demo data are read in place (the `siglip_l` pickles land
-alongside them harmlessly), and writes all study output under
+embeddings pickles and demo data are read in place (newly embedded pickles land
+alongside them), and writes all study output under
 `/expscratch/$USER/calibration`.
 
 ## Fixed config (pre-registered)
@@ -249,7 +252,10 @@ prefix.
 head. Both now follow the app instead: the head is the shipped linear SVM
 (`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
 fraction resolves per space through `production_split_for` (0.3 single-vector,
-0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it.
+0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it. The line follows the app
+too: an unset `CALIB_BETA` draws it at the app's default balance (beta 1), so
+`inclusion=0` and cost apply only to `CALIB_BETA=off`, the Inclusion arm (#4413,
+#4584).
 
 `safe_thresholds` was pre-registered `False` here and is **`True` now** (#3400):
 #2781 pre-registered the unfused control while it was still a shipped path, and
@@ -425,9 +431,10 @@ arm per cell**, not one per click. Both arms emit a single `t = 0` row tagged in
 (`skyline_oracle_cost{,_honest}`, `training_regret{,_honest}`) are filled on
 every row of the run so the identity holds within a row.
 
-Scoped to the **whole-image** column in v1: a patch column's skyline needs a
-supervision decision (GT boxes vs. a multiple-instance problem) that is still
-open on #3321, so the harness warns and skips there rather than improvising one.
+A patch column gets `skyline_train_full` only under region voting, supervised with
+each positive's ground-truth box (the owner's ruling on #3321, #4159);
+`skyline_test_xfit` stays whole-image only. The harness warns and skips an arm a
+column cannot run rather than improvising one.
 See [`docs/EVAL.md`](../../../docs/EVAL.md) for the full read, and
 `tests_lib/detectors/test_skyline_arm.py` for the telescope, vote-independence
 and cross-fitting checks.
@@ -492,11 +499,11 @@ Analyzer: `analyze_exclusion.py`. Design and pre-registered decision rules:
 ## Good Mining: sweeping the Autopilot **opening** (issue #3267)
 
 Getting enough Goods looks like what separates a VTSearch run that works from
-one that fails, and the *opening* is where Goods come from. Today it is fixed:
-the top of the seed sort until 3 positives, that sort's cutoff until 4
-negatives, then the learned Hard sort ever after. (Since #4282 it adds a third
-round, the top of the sort again until 20 positives or 16 misses in a row;
-this section describes the study as it ran.)
+one that fails, and the *opening* is where Goods come from. On photos it is
+fixed: the top of the seed sort until 3 positives, that sort's cutoff until 4
+negatives, then the learned Hard sort ever after. (The More walk #4282 added
+after those, the top of the sort again until 20 positives, is off on photos
+since #4740.)
 
 Both of those phases are the **same operation** — a rank-space `hard` select
 against a cut drawn on the seed sort — at two different cuts. The Good phase's
@@ -533,9 +540,10 @@ stays until 3 goods exist, `b4` until 4 bads, `n8` for 8 clicks; `+dry1/8` also
 ends a `g` or `n` round once its last 8 picks held fewer than 1 good (#4222's
 adaptive stop, e.g. `g20+dry1/8@top`); `@top` cuts above every score,
 `@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
-`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid,g20+dry1/16@top` is today's
-opening (#4282; `g3@top,b4@mid` before it) and is *required* to reproduce a
-default run click for click.
+`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's
+opening (`PRODUCTION_STARTUP`; `g3@top,b4@mid,g20+dry1/16@top` from #4282 to
+#4740) and is *required* to reproduce a default run click for click, except
+where the Good walk runs dry (#4731), which the grammar cannot spell.
 
 **Two arms are load-bearing.**
 
@@ -603,12 +611,14 @@ their own without a re-run.
 | Control | Choices |
 |---|---|
 | dataset | one, all (averaged), or each (its own line or panel) |
+| target size | one (a filter on the categories), all, or each |
 | category | one, all (averaged), or each |
-| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| embedder | any **non-empty** subset — **never averaged** (one panel each unless overlaid) |
 | arms | any **non-empty** subset |
-| seeds | averaged, or every seed its own line |
-| metric | cost, precision, recall, F1, the objective (F-beta at the run's balance; the page opens on it when the run drew its line at one, #4584), FPR, FNR, average precision, AUROC |
-| draw › best cut / cost-optimal cut | off (default), or the cheating-threshold line dotted beside the solid performance line: the **best cut** on a run that carries `oracle_fbeta*` (an F metric's best value over every cut, so never below the line; precision, recall and the rates at the cut the run's objective draws), the **cost-optimal cut** on an older run, which on a rare class sits below the line on precision and F (#4654). Click 0 carries the text sort's own |
+| show | the whole curve (default), or only **where the app said stop** (#4939): each run one dot at the click Autopilot first reached Done, hollow at its last click when it never did; averaged, one marker a series at the Kaplan–Meier median stop and the mean value there, ±1 SD. Read off the rows' `phase`, so a page whose runs carry none offers the curve alone |
+| seeds | averaged, or every seed its own line (its own dot, where the app said stop) |
+| metric | cost, precision, recall, F1/4, F1, F4, the objective (F-beta at the run's balance, #4584), FPR, FNR, average precision, AUROC; the page opens on F1 (#4635) unless the study names another (`--default-metric`) |
+| draw › best cut / cost-optimal cut | off (default), or the cheating-threshold line dotted beside the solid performance line: the **best cut** on a run that carries `oracle_fbeta*` (an F metric's best value over every cut, so never below the line; precision, recall and the rates at the cut the run's objective draws), the **cost-optimal cut** on an older run, which on a rare class sits below the line on precision and F (#4654). Click 0 carries the text sort's own. A page that hides cost (`--hide-metrics cost`) has retired the cost objective and never offers the cost cut (#4939): built from runs before the best cut, it has no dotted line |
 | draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
 **Overlay is the shadow/comparison trade, made explicit.** Off, every varying
@@ -633,11 +643,25 @@ would claim it holds at every x — which for the skyline would read as "the
 learnability floor was reachable at click 3".
 
 The oracle is offered on every metric that is a statement about **one cut**.
-The harness emits only the oracle cut's cost and its FPR/FNR, so precision,
-recall and F1 there are reconstructed from those rates and the split's class
-counts — the same confusion matrix in a different unit. `average_precision` and
+The harness emits the oracle cut's two rates (and, on a run from #4654 on, the
+best F-beta any cut reaches), never the confusion-matrix metrics at it, so
+precision and recall there are reconstructed from those rates and the split's
+class counts — the same confusion matrix in a different unit. `average_precision` and
 `auroc` integrate over every threshold, so re-cutting cannot move them; the box
 disables itself and says so rather than drawing one line twice.
+
+**Where the app said stop** (#4939) turns the pile of per-seed curves into a
+scatter: one dot a run, at the click the phase machine first read `done` (the
+app announces Done once there, as `stopping.stopping_points`' `t_stop` reads it)
+and its value at that click. A run never told to stop is a hollow dot at its
+last click, so the runs that never trained are on the chart as the empty set
+they returned. The series' marker is the Kaplan–Meier median stop, the runs
+never told censored at their last click, at the mean value over the runs that
+stopped; there is no marker where fewer than half stopped, since the median is
+then unknown. Each chart's heading leads with the share told to stop. The points
+are one click and one value a run, so the builder keeps them when it drops the
+per-seed lines (`--runs-budget-mb 0`, #4651); a page built before them has the
+control disabled and is rebuilt, not reskinned, to get them.
 
 Both chip controls are non-empty by construction — the last remaining chip is
 locked, with a tooltip, rather than snapping silently back — because an empty
@@ -659,7 +683,7 @@ python selftest_viewer.py     # planted-answer check on the codec and the poolin
 The skyline notch needs skyline rows, so it appears only for a run launched with
 `CALIB_SKYLINE_ARMS` (see [Supervised skyline / training regret](#supervised-skyline--training-regret-issue-3322)
 above). `viewer.py` reads them straight out of the cell CSVs, because
-`analyze_spikes.load_arm` — which every analyzer goes through — filters
+`_cells_io.load_arm` — which every analyzer goes through — filters
 `gmm_variant`-tagged rows out by design, and a skyline reads ground-truth labels
 the app can never see. A run without them still builds; the page just has no
 floor, and the builder says so. `--no-skyline` skips the pass.
@@ -699,11 +723,11 @@ python curves.py --results "$CALIB_EXP/results" \
 `CALIB_EMIT_PICKS=1` (the default) writes `task_*__picks.csv`: **one row per
 click**, carrying what was picked, whether it turned out to be a positive, and
 where on the seed sort it came from. The main frame cannot answer this study's
-questions — it starts at the first *trainable* step, so the opening, which is
-the whole subject, is exactly the part it does not record. A cell whose opening
-never found both classes emits no main row at all; that is a result about that
-arm (the starvation regime), and the analyzer counts those cells rather than
-dropping them.
+questions — it scores a detector, not where the picks came from, and in this
+study's runs it started at the first *trainable* step, after the opening that is
+the whole subject. A cell that never gets a detector emits no main row at all;
+that is a result about that arm (the starvation regime), and the analyzer counts
+those cells rather than dropping them.
 
 ### Sizing
 

@@ -117,8 +117,10 @@ OBJECT_GAP_PT = 16.0
 #: whose ink merely grazed the reserve's lower half.
 TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
 
-#: A figure may pass its *own* rectangle to `save(notch=...)`, and exactly one
-#: does. The x, y and width are not negotiable — that is the standard, and a
+#: A figure may pass its *own* rectangle to `save(notch=...)`, and a few do:
+#: `vote-boundary` and the atlas figures that share its rectangle, two
+#: calibration figures, and the "Data, Set" cards. The x, y and width are not
+#: negotiable — that is the standard, and a
 #: headline that moved would stop being a headline — but the *height* is a
 #: reserve for a **two-line** headline, and a figure whose slide carries a
 #: one-line one is holding back 42px it will never use. On a schematic that

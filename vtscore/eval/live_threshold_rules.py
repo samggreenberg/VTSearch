@@ -9,8 +9,9 @@ is today.  A paired re-cut riding the shipped trajectory (the ``schedule`` and
 ``gmm_variant`` rows) cannot stand in for that, because the line decides what
 gets asked next, and a rung that never chose its own questions is not the rung.
 
-Each rule here *replaces* the shipped live cut after
-:func:`vtscore.eval.voting_iterations._safe_threshold_for_step` has fitted it,
+Each rule here *replaces* the live line
+:func:`vtscore.eval.voting_iterations._safe_threshold_for_step` drew for the
+step (the labels' line under a balance, #4452, else the fold-anchored cut),
 reading only what that step already computed - the fold orderings, the final
 model's haystack scores, the fitted :class:`FoldAnchoredCut` - so a rung costs
 no extra training and cannot move the fold models, the splits or the head.
@@ -36,11 +37,12 @@ The rules, in the deck's order:
 * ``anchored_rawmean`` - **iteration 4's strawman**, the ``b`` build of "No
   Mean Feat": each fold's anchored mixture cut at its own midpoint, and the
   per-fold cuts averaged *as raw scores* on the final model.  The slide's point
-  is that this is wrong - three models, three scales - and the shipped
-  quantile transfer is the fix.
+  is that this is wrong - three models, three scales - and the
+  fold-anchored cut's quantile transfer is the fix.
 
-An unset rule (``None``) is the shipped fold-anchored cut, untouched, so the
-harness's default arm cannot drift from the app through this module.
+An unset rule (``None``) leaves the step's own line untouched - the labels'
+line under a balance, else the fold-anchored cut - so the harness's default arm
+cannot drift from the app through this module.
 
 One retired piece of the labels line lives here too, for #4668's build-up of
 the F-beta era: :func:`sigma_floor` ``("absolute")`` holds the line's spread
@@ -49,6 +51,7 @@ floor at the absolute ``MIN_LOGIT_SIGMA``, the floor before #4492.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -152,17 +155,19 @@ def live_threshold(
     a pooled conformal cut, or the fold rule's sentinel when the folds could not
     form - and *details* carries the fold orderings and ``fold_fallback``.
     *haystack_scores* are the final model's scores over the simulation set.
-    *fitted_cut* is the shipped estimator's fit (``None`` on its blend fallback)
-    and *shipped_threshold* / *shipped_provenance* are what it returned.
+    *fitted_cut* is the fold-anchored estimator's fit (``None`` with no usable
+    folds), and *shipped_threshold* / *shipped_provenance* are the line the step
+    drew and its provenance: the labels' line under a balance (#4452), else
+    that fit's cut, else the blend.
 
     Where a rule has nothing to cut on it falls back the way the app of its era
     did: ``xcal_mincost`` to the fold rule's sentinel (the too-few-labels
     ``0.5`` / ``NO_GOOD_THRESHOLD`` the fold computation has always returned),
     ``blend`` to blending ``NO_GOOD_THRESHOLD`` in place of the missing x-cal
     cut (production's substitution, see ``_blend_xcal_input``), and
-    ``anchored_rawmean`` to the shipped estimator's own fallback, which is the
-    blend.  The provenance names the fallback, so a reader can count how many
-    steps a rung really cut.
+    ``anchored_rawmean`` to the step's own line, which with no fold-anchored
+    fit is the labels' line under a balance, else the blend.  The provenance
+    names the fallback, so a reader can count how many steps a rung really cut.
     """
     from vtscore.training.thresholds import calculate_safe_threshold  # noqa: PLC0415
 
@@ -229,6 +234,42 @@ def sigma_floor(mode: str) -> Iterator[None]:
 
 
 @contextmanager
+def labels_chances(bad: "str | None" = None, bound_margin: "float | None" = None) -> Iterator[None]:
+    """Hold the labels line's chances at an arm's pieces while the block runs (#5040).
+
+    *bad* places the 3-part fit's Bad component
+    (:data:`~vtscore.training.thresholds.labels_line.BAD_COMPONENT`): ``"corpus"``
+    fits it on the corpus being decided, the held-out Bads counted as labelled
+    points of it, ``"corpus_mean"`` its mean alone (the app's since #5040),
+    ``"labels"`` pins it at the held-out Bads' mean (the line before).
+    *bound_margin* is the factor the 2-part estimate of the positives may
+    exceed the counted bound by (``_BOUND_MARGIN``, the app's 4; 2 before
+    #5040); ``math.inf`` removes the bound.  ``None``
+    leaves a piece as the app ships it.  Every line, Train's and Find's alike,
+    reads both constants when it is drawn, so the swap reaches both, and through
+    the chances Autopilot's acquisition and its stop too.  Process-wide, as
+    :func:`sigma_floor`'s swap is, and undone on the way out.
+    """
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    if bad is not None and bad not in labels_line.BAD_COMPONENTS:
+        raise ValueError(f"labels_chances bad must be one of {labels_line.BAD_COMPONENTS} or None; got {bad!r}")
+    if bound_margin is not None and (
+        isinstance(bound_margin, bool) or not isinstance(bound_margin, (int, float)) or not bound_margin >= 1.0
+    ):
+        raise ValueError(f"labels_chances bound_margin must be a number >= 1 or None (the app's); got {bound_margin!r}")
+    shipped = labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN
+    if bad is not None:
+        labels_line.BAD_COMPONENT = bad
+    if bound_margin is not None:
+        labels_line._BOUND_MARGIN = float(bound_margin)
+    try:
+        yield
+    finally:
+        labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN = shipped
+
+
+@contextmanager
 def head_count_bads(bads: "int | str | None") -> Iterator[None]:
     """Hold the Bads half of the labels line's head-count gate at *bads* while the block runs (#4786).
 
@@ -254,3 +295,34 @@ def head_count_bads(bads: "int | str | None") -> Iterator[None]:
         yield
     finally:
         labels_line.HEAD_COUNT_BADS = shipped
+
+
+@contextmanager
+def head_count_recall(exponent: "float | str | None" = None, z: "float | str | None" = None) -> Iterator[None]:
+    """Hold the head's count line above a balance of 1 at an arm's pieces while the block runs (#5039).
+
+    *exponent* is how the count grows above beta 1
+    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_EXPONENT`), *z* where
+    the line reaches down the head's excess curve when a held-out Good ranks below the count
+    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_RECALL_Z`).  ``"off"`` is that
+    piece before #5039 (#4603's ``beta ** 0.708``; no reach), and ``None`` leaves it as the app
+    ships it.  Every line reads the module's constants when it cuts, Train's and Find's alike, so
+    the swap reaches both; it is process-wide, as :func:`head_count_bads`'s is, and undone on the
+    way out.
+    """
+    for name, v in (("exponent", exponent), ("z", z)):
+        if v is None or v == "off":
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError(f"head_count_recall {name} must be a finite number, 'off' or None (the app's); got {v!r}")
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    shipped = labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z
+    if exponent is not None:
+        labels_line.HEAD_COUNT_RECALL_EXPONENT = None if exponent == "off" else float(exponent)
+    if z is not None:
+        labels_line.HEAD_COUNT_RECALL_Z = None if z == "off" else float(z)
+    try:
+        yield
+    finally:
+        labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z = shipped

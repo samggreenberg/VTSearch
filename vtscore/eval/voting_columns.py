@@ -234,7 +234,11 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: retrained the model, so the range describes the list as it was), 0
     #: while it holds, -1 with no finished check.
     "check_stale",
+    #: The set the walk ended on (#4427), and the set the ranges describe: how
+    #: many unvoted items the line kept when the check started (#4483), -1
+    #: where the ranges describe the audited set (a forced ``trim`` arm).
     "check_audited",
+    "check_kept",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
@@ -337,6 +341,50 @@ ORACLE_FBETA_COLUMNS: tuple[str, ...] = tuple(f"oracle_{c}" for c in FBETA_COLUM
 FBETA_ORACLE_CUT_COLUMNS: tuple[str, ...] = ("fbeta_oracle_threshold", "fbeta_oracle_fpr", "fbeta_oracle_fnr")
 
 
+#: Find on a **second corpus** at every click (#4960, ``find_corpus``): what the
+#: detector Test gives at the click (its ``detector_tier``) returns there, with
+#: the line's corpus side refitted on that corpus as a Find there draws it.  The
+#: in-corpus columns beside them read the withheld half; these read the Find
+#: corpus (:mod:`vtscore.eval.find_corpus`), click for click, in the same
+#: definitions: ``find_fbeta`` and its presets are :data:`FBETA_COLUMNS`',
+#: ``find_n_pos`` / ``find_n_neg`` the corpus's ``n_test_pos`` / ``n_test_neg``.
+#: A corpus with no positive scores NaN F-beta, recall and AP and still counts
+#: ``find_n_flagged``: the foreign medias it returns are the read there.  NaN on
+#: every row of a run without the knob.  Not to be confused with
+#: ``find_prevalence`` / ``find_efbeta``, which describe the Find the in-corpus
+#: columns already model, on the withheld half (#4452).
+FIND_CORPUS_COLUMNS: tuple[str, ...] = (
+    *(f"find_{c}" for c in FBETA_COLUMNS),
+    "find_precision",
+    "find_recall",
+    "find_n_flagged",
+    "find_average_precision",
+    "find_n_pos",
+    "find_n_neg",
+)
+
+#: The app's two domain-shift flags against the Find corpus (#4960), at the
+#: snapshot clicks only (``find_flag_steps``): ``flags_at`` names the listed
+#: click a row answers (the first click at or past it).  ``shift_*`` is the
+#: Training-domain overlap chip, :func:`~vtscore.coverage.atlas.domain_shift_report`
+#: against the coverage atlas built over the sim pool - NaN on a patch
+#: embedder, which the app refuses (#3329), and with no atlas (a non-Autopilot
+#: strategy).  ``evidence_*`` is the Evidence coverage chip,
+#: :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` from the
+#: votes' vectors and the Find cut.  ``shift_shifted`` / ``evidence_unsupported``
+#: are the reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
+FIND_FLAG_COLUMNS: tuple[str, ...] = (
+    "flags_at",
+    "shift_frac_atypical",
+    "shift_z",
+    "shift_shifted",
+    "evidence_frac_unsupported",
+    "evidence_z",
+    "evidence_unsupported",
+    "evidence_frac_low_trust",
+)
+
+
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
     "cost",
@@ -358,6 +406,9 @@ VOTING_COLUMNS: tuple[str, ...] = (
     "auroc",
     "average_precision",
     *BAND_COLUMNS,
+    #: Find on a second corpus, and the two domain-shift flags against it (#4960).
+    *FIND_CORPUS_COLUMNS,
+    *FIND_FLAG_COLUMNS,
     #: The fold count the STEP lived at (#3314).  Equal to the run's
     #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
     #: is what the schedule resolved for this step's vote count.  On the plain
@@ -383,10 +434,12 @@ VOTING_COLUMNS: tuple[str, ...] = (
 #: vote the simulated user casts, emitted only when the caller passes a
 #: ``pick_sink``.
 #:
-#: The main frame cannot answer the questions this study asks.  It starts at the
-#: first *trainable* step - before one Good and one Bad vote coexist there is no
-#: model, no threshold and no metrics row - so the opening, which is the whole
-#: subject here, is exactly the part it does not record.  This frame records
+#: The main frame cannot answer the questions this study asks.  Under the app's
+#: label quota it starts at the first Good (#4643: Test gives the Goods'
+#: centroid from there; a typed-query run starts at the first vote, #4758), and
+#: its Train side - the line, the pool scores - only once a Good and a Bad
+#: coexist, so the opening, which is the whole subject here, is the part it
+#: records least: the votes before the first Good not at all.  This frame records
 #: every click instead: what was picked, whether it turned out to be a positive,
 #: and **where on the seed sort it came from**, which is what makes "why was this
 #: arm better" answerable rather than merely visible in the totals.
@@ -423,7 +476,8 @@ PICK_COLUMNS: tuple[str, ...] = (
     #: Ground truth for the click: 1 if the item was a positive.
     "picked_label",
     #: Where the picked item sat in the seed sort - as a 0-based rank over the
-    #: whole sort and as a percentile (0 = top).  Together with ``picked_label``
+    #: whole sort of the voting half (#5004: the withheld half is not on the
+    #: user's screen) and as a percentile (0 = top).  Together with ``picked_label``
     #: this is the mining record: how deep the arm had to reach for each
     #: positive it found.
     "picked_seed_rank",
@@ -662,12 +716,30 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "line_separation",
     "line_head_count",
     "find_efbeta",
+    # #4910: the labels line on another fold scale (``labels_scale_shadow``), on the same head and drawing
+    # nothing: its Train cut, its Find line on the withheld half (threshold, set size, F-beta at the row's beta)
+    # and its d'.  ``xfer_*`` say how far the quantile transfer moved the folds' held-out scores (median and 90th
+    # percentile of |transferred - raw| logit), the share of held-out Goods above their fold's whole haystack
+    # (where the plain quantile saturates), and the class model (transferred minus raw, logit units).  NaN / -1
+    # with no shadow and off the base row.
+    "shadow_train_threshold",
+    "shadow_threshold",
+    "shadow_n_flagged",
+    "shadow_fbeta",
+    "shadow_separation",
+    "xfer_dlogit_med",
+    "xfer_dlogit_p90",
+    "xfer_clip_good",
+    "xfer_dmu_pos",
+    "xfer_dmu_neg",
+    "xfer_dsigma",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base
     # row's `threshold_provenance`) and the fold sentinel behind a fallback, so
-    # a schedule row on a fallback step is never pooled with a replacement
-    # counterfactual on a fused one.  Blank on every row that is not a schedule row.
+    # a schedule row on a blend-fallback step is never pooled with a replacement
+    # counterfactual on a step the labels' line or the fused cut drew.  Blank on
+    # every row that is not a schedule row.
     "shipped_provenance",
     "fold_fallback",
     "cut_fallback",
@@ -689,6 +761,8 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "auroc",
     "average_precision",
     *BAND_COLUMNS,
+    *FIND_CORPUS_COLUMNS,
+    *FIND_FLAG_COLUMNS,
     "oracle_threshold",
     "oracle_cost",
     "oracle_fpr",
@@ -831,7 +905,7 @@ CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
 )
 
 #: Column order for the **goodness-of-fit** side frame (issue #3329): one row per
-#: (step, scope), where *scope* is either a calibration fold of the **shipped**
+#: (step, scope), where *scope* is either a calibration fold of the **live**
 #: fold-anchored cut or the labelled sim set under one pooling geometry.
 #:
 #: This frame exists because every other diagnostic in this module is
@@ -845,10 +919,10 @@ CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
 #: conflating them would silently compare a fold model's haystack with the final
 #: model's sim set:
 #:
-#: * ``fold<i>`` - fold *i* of the shipped :class:`FoldAnchoredCut`, scored
+#: * ``fold<i>`` - fold *i* of the step's :class:`FoldAnchoredCut`, scored
 #:   against **its own** haystack.  Label-free, so it carries the distance and
 #:   anchoring columns only.  Nothing in the eval tier has ever read
-#:   ``FoldAnchoredCut.fits``; these are the shipped mixture's first observations.
+#:   ``FoldAnchoredCut.fits``; these are the fold-anchored mixture's first observations.
 #: * ``sim:<geometry>`` - the unanchored mixture on the labelled sim scores.
 #:   Carries the class-shape and identification columns, which need labels.
 FIT_QUALITY_ROW_COLUMNS: tuple[str, ...] = (

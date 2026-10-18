@@ -1,10 +1,17 @@
-# VTSearch: LabBench dependencies (image search with SigLIP only)
+# VTSearch: LabBench core dependencies (every LabBench media type)
 #
-# Pared-down requirements for the LabBench deployment: browsing/voting
-# on an image dataset with the SigLIP embedder. Skips audio, video,
-# document, text, and extractor deps to keep the image small.
+# Pared-down requirements for the LabBench deployment: browsing/voting on a
+# dataset of one media type with that type's default embedder. This file is
+# the part every LabBench image shares; it is not installable on its own as a
+# working image. Each supported media type adds its own deps in
+# labbench-<type>.txt, which pulls this file in with `-r labbench.txt`:
 #
-# Used by docker/Dockerfile.labbench.
+#   labbench-image.txt   image search with SigLIP
+#   labbench-audio.txt   audio search with CLAP General
+#
+# docker/Dockerfile.labbench installs this file first, as a layer every
+# MEDIA_TYPE build shares, then requirements/labbench-$MEDIA_TYPE.txt. Video,
+# document, text, face and extractor deps are skipped to keep the images small.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
@@ -37,21 +44,8 @@ umap-learn
 # Floor: transformers >= 5.18 cannot import a model class on torch 2.6 when no
 # GPU is visible (#4838); kept equal to pyproject.toml's.
 torch>=2.7
-# SigLIP's image processor is requested by backend name rather than
-# inheriting a default (#3173), and the name we ask for is `torchvision`
-# — so torchvision is a hard requirement of the preprocessing path, not
-# an optional accelerator. `torch` does not pull it in and neither does
-# `transformers`, so without this line the processor import raises
-# ImportError the first time an image is embedded. Listed under `torch`
-# so it resolves against the CPU wheel index above.
-torchvision
-
-# ── Image media type ─────────────────────────────────────────────────
-Pillow
-
-# ── SigLIP embedder ──────────────────────────────────────────────────
-sentencepiece
-protobuf
+# The CPU wheel index above applies to the whole pip invocation, so a
+# labbench-<type>.txt that adds torchvision resolves it against that index.
 
 # ── VTSBrowse signpost naming (toponymy) ─────────────────────────────
 # `toponymy` letters the Browse map (vtscore.projection.signpost_build).

@@ -58,6 +58,7 @@ import ast
 import hashlib
 import io
 import json
+import keyword
 import re
 import sys
 import textwrap
@@ -80,14 +81,18 @@ class Mirror:
     Attributes:
         id: Stable key into the pins file.  Renaming one re-pins from scratch.
         app: The app-side source. ``py:<dotted.path.to.symbol>`` for Python,
+            or ``py:<dotted.module>.<symbol>,<symbol>`` when the original is
+            spread over more than one top-level name in one module;
             ``ts:<repo-relative file>::<anchor>`` for a TypeScript block (the
             anchor is matched literally, then brace-matched from the first
             ``{`` after it).
         harness: Where the reproduction lives, as ``<repo-relative file>::<symbol>``,
             or ``::<symbol>,<symbol>`` when the reproduction is spread over
-            more than one top-level name.  Each is resolved by parsing, so a
-            name surviving only inside a comment does not count as present, and
-            deleting or renaming the harness side trips the gate.
+            more than one name.  A name is top-level, or ``Class.method`` for
+            a reproduction that lives on a method.  Each is resolved by
+            parsing, so a name surviving only inside a comment does not count
+            as present, and deleting or renaming the harness side trips the
+            gate.
         kind: ``ported`` or ``default`` - see the module docstring.
         note: What is reproduced, and what to re-check when either side moves.
         divergence: A *declared, intentional* difference from the app.  Not an
@@ -272,26 +277,24 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="check.likely_range",
         app="py:vtscore.training.thresholds.spot_check.likely_range",
-        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
+        harness="scripts/experiments/state_of_app/check_range_4483.py::hg_bounds",
         kind="ported",
         note=(
-            "The interval one band of a checked set carries (#4272, #4388): Clopper-Pearson "
-            "from the picks inside the band, each tail at alpha / bands (range_tail, split "
-            "over the bands in the set so the set's size-weighted range holds by the union "
-            "bound), exact (s / K) once the picks cover the band. The walk decides on the "
-            "band-weighted point estimate, not on this range, which says how close the "
-            "estimate is; a balance reports it for the set's precision and, over the walk's "
-            "count of positives, its recall (#4413). The reference's coverage numbers "
-            "(99% of sessions) hold only for this tail; a plain 90% range showed above the "
-            "truth 11% of the time after a first pass. If the tail or the census rule moves on "
-            "either side, move the other."
+            "The bound one part of a checked set carries (#4483, the owner's ruling of 2026-10-15; "
+            "before it #4272's Clopper-Pearson with the tail split over the bands): the exact "
+            "hypergeometric bound for a part of known size from the picks inside it, each tail at "
+            "alpha (range_tail no longer splits), exact (s / K) once the picks cover the part, 0-100% "
+            "with none. The parts are summed size-weighted over the set the line kept when the check "
+            "started (SpotCheck.range_over). #4483 priced it on 3,568 real closing checks and simulated "
+            "checks at clicks 25-100: it held the truth in at least 98.9% of checks in every regime, "
+            "at 0.55-0.76 of the Clopper-Pearson width. If the bound, the tail or the census rule "
+            "moves on either side, move the other."
         ),
         divergence=(
-            "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
-            "table); the library bounds one set at a time through scipy's beta quantile, "
-            "clopper_pearson_lower / clopper_pearson_upper, and returns a LikelyRange record. "
-            "range_tail is a separate one-liner on both sides; it is named here because the "
-            "tail is half of what this mirror is about."
+            "INTENTIONAL: the reference returns a band's (lo, hi) share for the pricing's own sums and "
+            "takes a zero-pick band as 0-100% before scipy; the library returns a LikelyRange record "
+            "through hypergeometric_lower / hypergeometric_upper, which search only the counts the "
+            "picks leave possible (the same bound)."
         ),
     ),
     Mirror(
@@ -313,7 +316,10 @@ MIRRORS: list[Mirror] = [
             "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
             "carries a fingerprint for the stale flag, reports its state to a client, and draws "
             "one band at a time as the walk reaches it; the reference draws every band's picks "
-            "up front from planted labels (the same picks the walk would touch) and asks no user."
+            "up front from planted labels (the same picks the walk would touch) and asks no user. "
+            "Since #4483 the app's check also records the count the line kept when it started "
+            "(kept) and bounds that set from its picks (parts_over / range_over), which the "
+            "reference, an estimate of the walk's own set, does not model."
         ),
     ),
     Mirror(
@@ -357,7 +363,10 @@ MIRRORS: list[Mirror] = [
             "the harness too. The per-detector balance of #4665 is not such a default: it is the "
             "user's own pick, asked for when the detector is created, and the form starts on the "
             "user's setting - DEFAULT_BETA when unset - so a detector nobody chose a balance for "
-            "still resolves to the harness's default."
+            "still resolves to the harness's default. Every harness entry point that draws a line "
+            "reaches the default through it - voting_iterations, al_benchmark, and since #4971 "
+            "runner.eval_learned_sort (python -m vtscore.eval --mode learned) - so a caller that "
+            "skips it is caught by that caller's tests, not by this digest."
         ),
         divergence=(
             "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "
@@ -508,6 +517,45 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="progress.eval_cached_models",
+        app=(
+            "py:vtscore.detectors.labeling_progress."
+            "_eval_cached_models,_model_step_indices,_build_eval_rows,_smart_status_uncached"
+        ),
+        harness="vtscore/eval/step_trainers.py::_labelset_error_costs",
+        kind="ported",
+        note=(
+            "Which models the Smart indicator re-scores, against which eval set, and what each "
+            "cost is priced at: the input plumbing progress.smart_status declares and "
+            "progress.eval_geometry sits inside (#5005). The app windows its last SMART_WINDOW "
+            "model-bearing steps (`_model_step_indices`, sliced in `_smart_status_uncached`), builds "
+            "one eval set from the current votes' scoring rows (`_build_eval_rows`), and prices every "
+            "model at `inclusion_cost_weights(SMART_INCLUSION)` (`_eval_cached_models`, #4243). "
+            "`_labelset_error_costs` re-scores the window its caller hands it against the current "
+            "votes at the inclusion it is passed. This is the plumbing that drifted once (#2923): "
+            "re-scoring the whole window against the *current* labelset is the statistic, and a "
+            "cost priced at the user's inclusion rather than SMART_INCLUSION moves every point of "
+            "the slope. If either side changes which models are in the window, what they are scored "
+            "against, or how a cost is priced, change the other. How a model is scored is "
+            "progress.eval_geometry's."
+        ),
+        divergence=(
+            "The harness's window is sliced, and its inclusion chosen, by its caller: "
+            "`voting_iterations` keeps `del recent_steps[:-SMART_WINDOW]` and passes "
+            "`SMART_INCLUSION`, inline in a function too large to digest, so a change to either is "
+            "caught by tests_lib/detectors/test_smart_pricing.py, not here. It trains a "
+            "model every step, so its last SMART_WINDOW steps are the app's last SMART_WINDOW models "
+            "(progress.smart_status, consequence (1)). Three smaller differences: the app rounds "
+            "each cost to four places (`_score_step`, which also feeds the chart) and regresses on "
+            "the rounded value, where the harness keeps the float, which can move the light only on "
+            "a window within a rounding step of one of the rule's thresholds; the app returns its "
+            "own yellow, with its own reason, while fewer than SMART_MIN_POINTS steps carry a model, "
+            "where the harness leaves that test to `smart_status_from_costs`, whose answer is the "
+            "same yellow; and the harness returns [] for a labelset missing either class, which the "
+            "app never scores because `_smart_status_uncached` stops at MIN_PER_CLASS first."
+        ),
+    ),
+    Mirror(
         id="progress.stable_status",
         app="py:vtscore.detectors.labeling_progress._compute_stable_status",
         harness="vtscore/eval/autopilot_flow.py::stable_status,stable_detail",
@@ -525,7 +573,42 @@ MIRRORS: list[Mirror] = [
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
-            "in rather than read from a `_ProgressCache`'s `steps`."
+            "in rather than read from a `_ProgressCache`'s `steps`. That plumbing is "
+            "progress.step_stability's."
+        ),
+    ),
+    Mirror(
+        id="progress.step_stability",
+        app="py:vtscore.detectors.labeling_progress._compute_step_stability",
+        harness="vtscore/eval/autopilot_flow.py::AutopilotFlow.record_step",
+        kind="ported",
+        note=(
+            "The Stable indicator's inputs: one `stability_entry` per retraining (#5005). The app "
+            "scores the pool in serving geometry, drops the ids labeled so far, cuts at the served "
+            "line, and counts flips against the previous model's snapshot with the whole pool as "
+            "the denominator; `record_step` takes the still-unlabeled pool's scores, the cut and "
+            "`num_pool` from its caller and counts the same way. The counting itself is "
+            "`vtscore.detectors.stability.stability_entry`, shared, so what this pins is what each "
+            "side hands it: which items, at which cut, against which baseline, over which "
+            "denominator. If either side changes one of those, change the other. `record_step` also "
+            "replaces the Smart window with the costs it is handed; that half is the harness end of "
+            "progress.eval_cached_models, pinned here because it is one method."
+        ),
+        divergence=(
+            "The app rebases its baseline when the balance changes (#4745): a snapshot drawn at "
+            "another beta becomes the new baseline instead of being compared against. "
+            "`record_step` has no balance argument, because a harness run draws every step's line "
+            "at the run's one balance, so the rebase could never fire. Its scores are handed in: "
+            "`voting_iterations` scores the remaining pool in the arm's geometry "
+            "(`step_trainers._score_pool`) and passes `num_pool=len(sim_ids)`, the haystack with "
+            "labeled items included, as the app divides by its whole scored pool. The app records "
+            "an entry only for a label set a sort trained a model on, and keeps its baseline across "
+            "the steps between (`_resolve_step_model`); the harness trains every step, so it has no "
+            "such gap. At the edges: the app drops its baseline when a model arrives with no pool "
+            "to score (a sort racing the caller's decision to skip the pool), where "
+            "`record_step(scores=None)` keeps it, and no caller passes None; and once the pool is "
+            "exhausted the app records a zero-flip entry even with no baseline, where the harness "
+            "records one only once it has a baseline."
         ),
     ),
     Mirror(
@@ -543,7 +626,8 @@ MIRRORS: list[Mirror] = [
             "it on both sides."
         ),
         divergence=(
-            "The app reads its green target from `CoreConfig.autopilot_goal_diversity`; the "
+            "The app reads its green target from the `autopilot_goal_diversity` setting "
+            "(`get_setting`); the "
             "harness takes it per-run so a sweep can vary it, defaulting to the same value. "
             "Both sides *report* the resolved bar: the harness as `span_target` on every "
             "emitted row, the app as the indicator's `target` key, which the autopilot panel "
@@ -646,7 +730,10 @@ MIRRORS: list[Mirror] = [
             "is the labels' line (_labels_line over fit_labels_line, cut at `beta`) when the retrain fitted "
             "a class model, and the fallbacks otherwise; the harness's default arm passes DEFAULT_BETA and "
             "draws the same line in _preference_line_for_step. The count line (balance_line over "
-            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm."
+            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm. The "
+            "harness's labels_scale (#4910) carries each fold's held-out scores onto the final model's scale "
+            "through that fold's haystack before the class model is fitted, an arm the app does not take; "
+            "its default, None, pools them as scored, as _labels_line does."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
@@ -936,6 +1023,55 @@ MIRRORS: list[Mirror] = [
             "study) and the study's report prices."
         ),
     ),
+    Mirror(
+        id="find.training_domain",
+        app="py:vtsearch.training_domain.domain_shift_against",
+        harness="vtscore/eval/find_corpus.py::training_domain_flags,FindCorpus.matrix",
+        kind="ported",
+        note=(
+            "The Training-domain overlap chip (#4961) read against #4960's Find corpus at the snapshot "
+            "clicks. The report itself is delegated - both sides call vtscore.coverage.atlas."
+            "domain_shift_report - so what is ported is how the app's route calls it: at the report's "
+            "default alpha, against the reference dataset's coverage atlas, over media_embedding of every "
+            "media of the dataset searched (FindCorpus.matrix), and refused (NaN here) with no atlas, no "
+            "vectors, or on a patch embedder (#3329). If the route changes its alpha, the vectors it "
+            "stacks or a refusal, follow it; the harness reads shifted / frac_atypical / z_score off the "
+            "report, so a renamed key surfaces as a KeyError in the tests."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness's reference is the sim pool and its atlas the one "
+            "step_trainers._build_eval_atlas builds there for the New phase, which the app's dataset atlas "
+            "models. The route's embedder-mismatch refusal is the harness's same-embedder rule, enforced when "
+            "the corpus is built (build_find_corpus refuses another vector width or patch grids on one side) "
+            "and by the runner reading the Find corpus out of the cell's own embedder's pickle; the patch "
+            "refusal reads the run's region_aware, the harness's spelling of a patch embedder. The route's "
+            "same-dataset refusal has no harness case: a Find corpus never holds the sim pool, and a share-0 "
+            "corpus (the withheld half) is read on purpose, as the no-shift baseline."
+        ),
+    ),
+    Mirror(
+        id="find.evidence_coverage",
+        app="py:vtsearch.routes.detectors.scoring.find_evidence_coverage",
+        harness="vtscore/eval/find_corpus.py::evidence_flags,vote_vectors,FindCorpus.matrix",
+        kind="ported",
+        note=(
+            "The Evidence coverage chip read against #4960's Find corpus at the snapshot clicks. The report "
+            "is delegated - both sides call vtscore.detectors.evidence_coverage.evidence_coverage_report at "
+            "its defaults - so what is ported is its inputs: the labelset's rows split Good / Bad (the app's "
+            "build_xy_from_labelset: a Good's one vector, a Bad's flooded image-level + patch negatives on a "
+            "patch dataset; vote_vectors assembles the trainers' same rows), the whole-image vector of every "
+            "scored media (FindCorpus.matrix), and each predicted positive where its Find score clears the "
+            "Find threshold (the caller, _find_corpus_columns, passes score >= the line's cut on that "
+            "corpus). The route reports nothing with no labelled rows or no scored media; so does "
+            "evidence_flags. If the route changes which rows it reads, the threshold or a default, follow it."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's labelset vectors are the label embeddings re-derived at detector load; "
+            "the harness reads the same media's vectors straight off the run's medias, and a Good's is the "
+            "row its trainers fit (the ground-truth box pooled under region voting), which is what the app's "
+            "region vote stores."
+        ),
+    ),
 ]
 
 
@@ -1022,11 +1158,17 @@ def _normalize_python(source: str) -> str:
 
     Magic trailing commas are dropped as well, so that `ruff format` wrapping a
     call across lines - which it will do for a change as innocent as a longer
-    variable name - doesn't read as a logic change.
+    variable name - doesn't read as a logic change.  The exception is a comma
+    that is the only one in a parenthesized expression or a subscript: there it
+    is what makes `(x,)` a tuple rather than `x`, and `x[0,]` a tuple index
+    rather than `x[0]`, so it is kept.
     """
     skip = (tokenize.COMMENT, tokenize.NL, tokenize.ENCODING, tokenize.ENDMARKER)
     out: list[str] = []
     prev_meaningful: int | None = None
+    prev_tok: tokenize.TokenInfo | None = None
+    # One entry per open bracket: (does a lone trailing comma matter, commas so far).
+    groups: list[tuple[bool, int]] = []
     text = textwrap.dedent(source) + "\n"
     tokens = _collapse_fstrings(
         list(tokenize.generate_tokens(io.StringIO(text).readline)),
@@ -1036,15 +1178,43 @@ def _normalize_python(source: str) -> str:
         if tok.type in skip:
             continue
         nxt = next((t for t in tokens[i + 1 :] if t.type not in skip), None)
+        prev, prev_tok = prev_tok, tok
         if tok.type == tokenize.STRING and prev_meaningful in (None, tokenize.NEWLINE, tokenize.INDENT):
             # A string that is an entire statement: a docstring.
             if nxt is not None and nxt.type == tokenize.NEWLINE:
                 continue
-        if tok.string == "," and nxt is not None and nxt.string in (")", "]", "}"):
-            continue
+        # After an expression, `(` is a call (or a `def` parameter list) and `[`
+        # a subscript; anywhere else they open a parenthesized expression and a list.
+        if tok.string == "(":
+            groups.append((not _ends_expression(prev), 0))
+        elif tok.string == "[":
+            groups.append((_ends_expression(prev), 0))
+        elif tok.string == "{":
+            groups.append((False, 0))
+        elif tok.string in (")", "]", "}") and groups:
+            groups.pop()
+        elif tok.string == "," and groups:
+            sensitive, commas = groups[-1]
+            if nxt is not None and nxt.string in (")", "]", "}") and not (sensitive and commas == 0):
+                continue
+            groups[-1] = (sensitive, commas + 1)
         out.append(tok.string.strip() if tok.type == tokenize.NEWLINE else tok.string)
         prev_meaningful = tok.type
     return "\n".join(s for s in out if s)
+
+
+def _ends_expression(tok: tokenize.TokenInfo | None) -> bool:
+    """Whether *tok* can end an expression, so a `(` after it calls and a `[` subscripts.
+
+    Keywords are excluded so `return (x,)` and `in [a,]` read as a tuple and a
+    list.  Soft keywords (`match`, `case`) are not: `case (x,):` digests as if
+    it were a call, which only loses sensitivity there, never adds any.
+    """
+    if tok is None:
+        return False
+    if tok.type == tokenize.NAME:
+        return not keyword.iskeyword(tok.string)
+    return tok.type in (tokenize.NUMBER, tokenize.STRING) or tok.string in (")", "]", "}")
 
 
 _TS_LINE_COMMENT = re.compile(r"//[^\n]*")
@@ -1086,35 +1256,46 @@ def _ts_block(path: Path, anchor: str) -> str:
 
 
 def _py_symbol_source(path: Path, symbol: str) -> str:
-    """The source of top-level *symbol* in *path*, found by parsing not importing.
+    """The source of *symbol* in *path*, found by parsing not importing.
+
+    *symbol* is a top-level name, or ``Class.method`` for a member of a
+    top-level class, so a reproduction that lives on a method can be pinned
+    as it stands rather than lifted out of its class first (#5005).
 
     Parsing keeps the gate fast and dependency-free: it runs before the test
     suite has installed torch, and reading a module for its text should never
     execute it.
     """
     text = path.read_text(encoding="utf-8")
-    tree = ast.parse(text)
+    body = ast.parse(text).body
     lines = text.splitlines()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == symbol:
+    *classes, name = symbol.split(".")
+    for cls in classes:
+        node = next((n for n in body if isinstance(n, ast.ClassDef) and n.name == cls), None)
+        if node is None:
+            raise MirrorError(f"{_rel(path)} has no class {cls!r} - did it move or get renamed?")
+        body = node.body
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name:
             start = min([node.lineno, *[d.lineno for d in node.decorator_list]]) - 1
             return "\n".join(lines[start : node.end_lineno])
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if any(isinstance(t, ast.Name) and t.id == symbol for t in targets):
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets):
                 return "\n".join(lines[node.lineno - 1 : node.end_lineno])
-    raise MirrorError(f"{_rel(path)} has no top-level {symbol!r} - did it move or get renamed?")
+    where = "member" if classes else "top-level"
+    raise MirrorError(f"{_rel(path)} has no {where} {symbol!r} - did it move or get renamed?")
 
 
 def _app_source(mirror: Mirror) -> str:
     """The normalized app-side source *mirror* is pinned against."""
     kind, _, ref = mirror.app.partition(":")
     if kind == "py":
-        module_path, _, symbol = ref.rpartition(".")
+        module_path, _, symbols = ref.rpartition(".")
         path = REPO_ROOT / (module_path.replace(".", "/") + ".py")
         if not path.exists():
             raise MirrorError(f"module {module_path} ({_rel(path)}) does not exist")
-        return _normalize_python(_py_symbol_source(path, symbol))
+        return "\n".join(_normalize_python(_py_symbol_source(path, s.strip())) for s in symbols.split(","))
     if kind == "ts":
         rel, _, anchor = ref.partition("::")
         path = REPO_ROOT / rel

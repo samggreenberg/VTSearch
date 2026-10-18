@@ -18,8 +18,9 @@ withheld half (the corpus Test cuts):
   beta, the set Test returns today);
 * what the Goods' centroid's line keeps there (``k_centroid``: the app's rule at the
   run's beta, #4732/#4759/#4783), and the centroid's own Test at that line;
-* what that count rule keeps when it reads the head's own logit scores instead of the
-  centroid's cosines (``k_head_count``), a count of what stands out with no class model;
+* what the head's count line keeps (``k_head_count``): that count rule on the head's own
+  logit scores instead of the centroid's cosines, a count of what stands out (above beta 1
+  with #5039's growth and its reach where a held-out Good ranks below the count);
 * the labels line's class model and the positives it estimates in the corpus, which
   say why a line keeps what it keeps;
 * what the class model's own cut keeps under each of #4798's candidate fixes to its
@@ -65,7 +66,8 @@ LINE_COUNT_COLUMNS = [
     "k_centroid",
     "centroid_fbeta",
     "centroid_ap",
-    # The centroid's count rule (the app's, at the run's beta) drawn on the head's own logit scores.
+    # The head's count line (the app's, at the run's beta): the centroid's count rule on the head's own logit
+    # scores, with #5039's growth and reach above beta 1.
     "k_head_count",
     # The labels line's class model (held-out Goods / Bads, d') and the positives it estimates
     # among the withheld half: NaN with no class model this click (the fallback cut).
@@ -104,7 +106,7 @@ def line_count_row(
     *centroid_scores* are the Goods' centroid head's scores of the same media, in the
     same order, cut at *centroid_threshold* where its line falls.
     """
-    from vtscore.detectors.centroid_head import centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds.labels_line import head_count_cut  # noqa: PLC0415
     from vtscore.eval.calibration_metrics import fbeta_metrics  # noqa: PLC0415
     from vtscore.eval.voting_iterations import _labels_line_counts, _rank_frame  # noqa: PLC0415
 
@@ -115,9 +117,12 @@ def line_count_row(
     counts = _labels_line_counts(s, find_on_test, None if find_on_test is not None else test_threshold)
     c = np.asarray(centroid_scores, dtype=np.float64)
     ok = np.isfinite(s) & (s > 0.0) & (s < 1.0)
-    logits = np.log(s[ok]) - np.log1p(-s[ok])
-    k_head = int(np.count_nonzero(logits >= centroid_cut(logits, beta=beta))) if logits.size else -1
     model = find_on_test.model if find_on_test is not None else None
+    # The head's count line as the app draws it (#4786; above beta 1 with #5039's growth and reach, which reads
+    # the class model's held-out Goods).
+    s_ok = np.sort(s[ok])[::-1]
+    held = None if model is None else model.pos_logits
+    k_head = int(np.count_nonzero(s_ok >= head_count_cut(s_ok, beta, held))) if s_ok.size else -1
     est = nan
     if find_on_test is not None and find_on_test.unvoted_share is not None and find_on_test.unvoted_scores is not None:
         est = float(find_on_test.unvoted_share) * int(find_on_test.unvoted_scores.size)

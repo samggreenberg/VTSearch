@@ -25,7 +25,9 @@
  * rather than only a CSS selector, and `photos` is a prefix of both of the
  * deck's piles, so a substring match can box the wrong row. Forms a target can take:
  *
- *   '.btn-good'                                  first visible match
+ *   '.btn-good'                                  first match with a box (one
+ *                                                scrolled out of a list's view
+ *                                                has one too)
  *   { selector, hasText }                        …whose text contains hasText
  *   { selector, name }                           …whose `.name-cell` reads exactly name
  *   { x, y, w, h }                               a viewport box, as is

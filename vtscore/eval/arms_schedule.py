@@ -34,21 +34,22 @@ def _schedule_variant_rows(
     same per-step model against the same held-out test scores, so the rows are
     paired within a step by construction and differ only in the mix-in rule.
 
-    **What these rows are on today's stack (#3551).**  The shipped threshold is
-    the fold-anchored fused cut; the schedule blend is only its *fallback*, for
-    steps with no usable calibration folds.  So a schedule row means two
-    different things depending on the step, and each row carries the shipped
-    path's own ``shipped_provenance`` and ``fold_fallback`` so the two are never
-    pooled by accident:
+    **What these rows are on today's stack (#3551, #4452).**  The shipped line
+    is the labels' line under a balance, and the fold-anchored fused cut with no
+    balance or with labels that support no class model; the schedule blend is
+    only the last *fallback*, for steps where neither forms.  So a schedule row
+    means two different things depending on the step, and each row carries the
+    shipped path's own ``shipped_provenance`` and ``fold_fallback`` so the two
+    are never pooled by accident:
 
     * on a **fallback** step (``shipped_provenance == "gmm_blend"``) the x-cal
       side is production's ``NO_GOOD_THRESHOLD`` substitution and the row is
       exactly what the app would ship under that schedule - the shipped
       schedule's row reproduces the base row bit-for-bit, which is the fidelity
       check;
-    * on a **fused** step it is a *replacement* counterfactual: the retired
-      blend of the raw x-cal cut and the GMM midpoint, scored against the fused
-      cut the base row carries.
+    * on any other step it is a *replacement* counterfactual: the retired
+      blend of the raw x-cal cut and the GMM midpoint, scored against the line
+      the base row carries (the labels' line or the fused cut).
 
     The GMM is fitted on the scored population only, as
     :func:`~vtscore.training.thresholds.calculate_safe_threshold` fits it, so the

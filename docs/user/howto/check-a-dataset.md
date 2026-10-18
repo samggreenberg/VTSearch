@@ -31,6 +31,13 @@ When **Duplicate groups** is more than 0, a **View** button beside it lists
 them: each set of copies, numbered, with where each copy came from. **Copy**
 puts the list on the clipboard, and **← Back** returns to the stats.
 
+A dataset of more than 50,000 items loads without its *coverage atlas*, the
+map of the dataset that **Select: New** picks from, because building it takes
+minutes. Its stats then show **Coverage atlas: Not built** under **Duplicate
+groups**, with a **Build** button. Click it to build the atlas now: the
+progress shows on the dataset's row on the dashboard, and the line leaves the
+stats once the atlas is built.
+
 On a server where people log in, an **Access** section also shows who made
 the dataset and who else can see it.
 

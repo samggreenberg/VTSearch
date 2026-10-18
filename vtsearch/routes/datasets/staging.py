@@ -1,6 +1,6 @@
 """Dataset staging, importer dispatch, and the combine-datasets endpoint.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 JSON-shaped routes (available-files, combine, stage-demo, clear-staging,
@@ -291,12 +291,18 @@ def _promote_in_background(
     from vtscore import timing
 
     task_id = f"_promote_{uuid4().hex[:8]}"
+    source_name = source.get("params", {}).get("source_name", "")
     tracker = loading_tasks.create_task(
         task_id,
         name,
         media_type=media_type,
         embedder=embedder,
         step_weights=timing.step_weights(_PROMOTE_TASK, media_type=media_type),
+        created_by=created_by,
+        # Like an import, a failed promote leaves no dataset row behind, so its
+        # row stays until dismissed (#4973).
+        source=f"selection from {source_name}" if source_name else "selection",
+        keep_failure=True,
     )
     tracker.update("loading", "Preparing promoted dataset…", 0, 0, step=1, total_steps=_PROMOTE_TOTAL_STEPS)
 
@@ -744,7 +750,10 @@ def import_dataset(importer_name: str):
     _abort_if_outputs_semantic_only(outputs)
 
     if outputs:
-        if not getattr(importer, "multi_output", True):
+        from vtscore.datasets.importers.base.core import _supports_multi_output  # noqa: PLC0415
+
+        # The importer listing's ``supports_multi_output``.
+        if not _supports_multi_output(importer):
             abort(400, message=f"Importer {importer_name!r} produces one dataset per run; 'outputs' is not accepted.")
         task_ids = _run_multi_output_load_in_background(
             importer,

@@ -14,7 +14,7 @@ Usage::
     python build_pile.py --list                      # what exists / what's missing
     python build_pile.py                             # build every missing cell
     python build_pile.py --datasets coco_val         # just COCO's cells
-    python build_pile.py --embedders siglip2,siglip2_l
+    python build_pile.py --embedders siglip,siglip2_l  # names from pile_config.EMBEDDERS
     python build_pile.py --verify                    # load every cell, check geometry
     python build_pile.py --rebuildable               # can every cell still be REBUILT?
     python build_pile.py --manifest                  # (re)write MANIFEST.{json,md}

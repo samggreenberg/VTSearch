@@ -65,8 +65,8 @@ they define the library's interface boundary.
 | 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
-| 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | Audit confirmed `safe_pickle_load`'s allowlist already prevents app-class references in any saved artefact. No shim needed. |
-| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook that refuses `flask` / `werkzeug` / `flask_smorest`. The hook (`tests_lib/flask_blocker.py`) is re-installed at the top of `tests_lib/conftest.py` in every xdist worker, since `sys.meta_path` is per-process and the workers are what import the code under test. |
+| 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | `safe_pickle_load`'s allowlist admits only plain Python containers and numpy arrays, so no saved artefact can reference an app class. |
+| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook (`tests_lib/flask_blocker.py`) that refuses `flask` / `werkzeug` / `flask_smorest`. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
 The one-way dependency is enforced by a test; see
@@ -146,7 +146,7 @@ shows the wiring with a `ContextVar`.
 library actually reads:
 
 - ML knobs: `calibrate_count`, `calibration_fraction`,
-  `enrich_descriptions`, `beta`, `autopilot_goal_diversity`.
+  `enrich_descriptions`, `autopilot_goal_diversity`.
 - Filesystem knobs: `data_dir`, `saved_datasets_dir`, `detectors_dir`.
 - Concurrency knobs: `max_concurrent_dataset_downloads`,
   `max_concurrent_dataset_embeddings`.
@@ -155,26 +155,35 @@ library actually reads:
   `autofind_exporter_field_values`, `autofind_cli_delete_dataset`,
   `projection_n_neighbors`,
   `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
-  `hide_ingest_eta` (deprecated, ignored).
+  `default_labelset_source`, `labelset_source_push_interval`, `beta`
+  (the balance new detectors are seeded with), and the deprecated
+  `hide_ingest_eta` (ignored) and `inclusion` (only `0` is accepted).
 
 Every field without a default is required, so constructing one by hand
-means passing all twelve (as below).
+means passing all eleven (as below).
 
-Library code calls `CoreConfig.from_settings()` to get a populated config
-for the current request / thread. That classmethod is a thin wrapper that
-delegates to whatever builder the app installed via
-`register_core_config_builder()`. In the VTSearch app that builder is
-`build_core_config` in `vtsearch/shim/__init__.py`, which reads
-`vtsearch.settings`. The builder is called with one positional
-`settings_path` argument, so declare it even if you ignore it.
+Library code reads one knob at a time, where it needs it, with
+`vtscore.config.get_setting(name)` - the field names are the setting
+names. It answers from the getter a host registered for that knob with
+`register_setting_getter()`, else that field of the `CoreConfig` a
+builder registered with `register_core_config_builder()` returns, else
+the field's default. In the VTSearch app the getters are installed by
+`register_app_setting_getters` in `vtsearch/shim/__init__.py`, one per
+knob, each reading `vtsearch.settings` live for the current user - so a
+read costs the one setting it asks about, not a snapshot of all of them.
 
-**Library-only consumers don't need a builder.** They construct `CoreConfig`
-directly and pass it where it's needed:
+**Library-only consumers install a builder** if they use anything that
+reads configuration internally - detector storage
+(`vtscore.detectors.store`), the dataset registry, the load pipeline and
+the balance accessors (`vtscore.state.get_beta`) all call `get_setting()`
+themselves. The builder is called with one positional `settings_path`
+argument, so declare it even if you ignore it, and can simply return a
+fixed value built once:
 
 ```python
 from pathlib import Path
 
-from vtscore.config import CoreConfig
+from vtscore.config import CoreConfig, register_core_config_builder
 
 config = CoreConfig(
     data_dir=Path("/var/lib/myapp/data"),
@@ -189,19 +198,28 @@ config = CoreConfig(
     enrich_descriptions=False,
     autopilot_goal_diversity=8,
 )
+register_core_config_builder(lambda _settings_path=None: config)
 ```
 
-If a library consumer calls `CoreConfig.from_settings()` without first
-installing a builder, the method raises a clear `RuntimeError`. That's
-intentional - silent fallback to "some default" would mask integration
-bugs.
+Pure functions that take their inputs as arguments (`train_model`,
+`load_dataset_from_folder`, `embed_missing`, …) need no builder at all.
+With no builder and no getters, a knob that has a `CoreConfig` default
+reads it, but a required one - `detectors_dir`, `calibrate_count`, … -
+raises a clear `RuntimeError`. That's intentional - silent fallback to
+"some default" for where your detectors live would mask integration bugs.
+
+`CoreConfig.from_settings()` still returns the whole bundle for a caller
+that wants it (the builder's config, or one assembled from
+`get_setting()`), but library code no longer calls it: it was meant to be
+built once per request and passed down, and instead every caller built
+one to read a field or two (#4997).
 
 ## Plugin discovery
 
 Every plugin family in `vtscore` follows the same shape:
 
-1. A base ABC (`DatasetImporter`, `ResultsExporter`, `MediaEmbedder`, …)
-2. A sentinel attribute name (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …)
+1. A base ABC (`DatasetImporter`, `ResultsExporter`, `MediaConverter`, …)
+2. A sentinel attribute name (`IMPORTER`, `EXPORTER`, `CONVERTER`, …)
 3. A `PluginRegistry[T]` constructed with that sentinel, eager by default
 4. An optional `importlib.metadata` entry-point group (`vtscore.<family>`)
    that third-party packages can register under
@@ -230,8 +248,8 @@ ground rules:
 - **All mutable state is RLock-protected.** The single `_state_lock` in
   `vtscore/state/core.py` covers `DatasetContext` and `DetectorContext`
   mutation. Using an RLock (not a plain Lock) lets one public function
-  call another safely - for example `clear_all()` calls `clear_medias()`
-  and `clear_votes()` while holding the lock.
+  call another safely - for example `apply_label()` calls
+  `add_label_to_history()` while holding the lock.
 - **Registry *lookups* are deliberately outside it.** `get_context` /
   `get_detector_context` take a separate `_context_registry_lock`, held
   only across a dict operation, so asking "is this ID loaded?" never
@@ -287,14 +305,15 @@ They round-trip through `pickle.dump` / `safe_pickle_load`, with the
 unpickler's allowlist preventing any non-numpy class reference. Caches
 derived purely from a registered pickle's own contents - the
 `<stem>.embmat.npy` / `<stem>.embids.npy` embedding-matrix sidecar written
-beside it (`vtscore/embedding/matrix.py`) - fall under the same exception:
+beside it (`vtscore/embedding/matrix.py`), and the coverage atlas cached
+inside the pickle itself - fall under the same exception:
 they hold nothing the pickle doesn't, are validated against the live id set
 on read, and cost only time to lose.
 
 ## Directory map
 
 Top level only, plus the sub-directories a plugin author touches. Every
-entry has a guide in [`packages/`](README.md#package-reference).
+package has a guide in [`packages/`](README.md#package-reference).
 
 ```
 vtscore/
@@ -317,7 +336,7 @@ vtscore/
 │   ├── document/               # convert-out half type (must be converted to image/text)
 │   └── face/                   # convert-in half type (produced by image2face, never imported)
 ├── embedding/                  # embed helpers, loader/preload, cached (N, D) matrix
-├── training/                   # heads (linear SVM / linear / MLP), thresholds, SVM, region similarity
+├── training/                   # heads (centroid-started linear SVM; arms), thresholds, SVM, region similarity
 ├── detectors/                  # detector lifecycle: registry, store, training, workflow, resolver, sync
 ├── eval/                       # offline evaluation runners + metrics
 ├── converters/                 # MediaConverter family (CONVERTER sentinel, one flat module each)
@@ -326,8 +345,8 @@ vtscore/
 ├── plugins/                    # PluginRegistry, PluginField, normalisation, inventory
 ├── state/                      # DatasetContext, DetectorContext, vote / click ops, current user
 ├── coverage/                   # Coverage Atlas
-├── projection/                 # VTSBrowse UMAP layout + hex-tile pyramid
-├── timing/                     # per-step cost model behind progress bars
+├── projection/                 # VTSBrowse UMAP layout, tile pyramid, signposts
+├── timing/                     # per-step weights behind progress bars
 ├── sync/                       # SyncSource[L, S] ABC
 ├── concurrency/                # namespace package: async jobs, memory budget, progress
 ├── security/                   # namespace package: path / URL validation, safe pickle, login
@@ -397,13 +416,19 @@ never the reverse.
 └─────────────────────────────────────────────┘
 ```
 
-The app uses five categories of hooks to inject app-side behaviour into
-the library without the library knowing:
+The app uses six categories of hooks to inject app-side behaviour into
+the library without the library knowing (`vtscore/host_seams.py` keeps the
+complete list):
 
 1. **Context resolvers** - `register_dataset_context_resolver`,
-   `register_detector_context_resolver`. Wired in `vtsearch/shim/`.
-2. **`CoreConfig` builder** - `register_core_config_builder`. Maps
-   `vtsearch.settings` to `CoreConfig`. Wired in `vtsearch/shim/`.
+   `register_detector_context_resolver`, plus
+   `register_request_context_predicate` (the "inside a request?" test the
+   request-missing sentinel needs). Wired in `vtsearch/shim/`.
+2. **Setting getters** - `register_setting_getter`, one per knob, plus
+   `register_settings_path_redirect` for the CLI's `--settings`. Map
+   `vtsearch.settings` to the knobs `get_setting()` reads. Wired in
+   `vtsearch/shim/`. (A library-only consumer answers the same reads
+   with a `register_core_config_builder` builder instead.)
 3. **Plugin families** - `register_plugin_family(provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
@@ -426,21 +451,24 @@ the library without the library knowing:
    library raises. The counters are per-user settings state, so the
    recording itself lives in `vtsearch.achievements`. Wired in
    `vtsearch/shim/`.
+6. **Setting persisters** - `vtscore.state.register_setting_persister(key, fn)`
+   (the balance and the calibration knobs) and
+   `vtscore.datasets.load_pipeline.register_last_embedder_persistence_hook(fn)`
+   hand a preference the library changed back to the host to save. Wired in
+   `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
 install your own variants of the first two and the fourth -
 [integration.md](integration.md) shows how. None of them is required -
-the library has working defaults for all five (no context, no
+the library has working defaults for all six (no context, no
 `from_settings()` builder, no app-side plugin families, every user is
-`"default"`, and achievement events that no-op).
+`"default"`, achievement events that no-op, and preference changes that stay
+in memory).
 
 **The dependency direction is enforced by a test.**
 `tests_lib/meta/test_library_layering.py` walks the AST of every
 `vtscore` module and fails on any `import vtsearch`, at any nesting
-depth. Lazy function-level imports were how the rule kept breaking: the
-module still imported cleanly and the inverted dependency only bit at
-call time, in exactly the Flask-free deployment the tier exists for. A
-short allowlist there carries the remaining imports with their rationale
-(two optional `try`/`except`-guarded ones, both wrapped so the library
-still works when the app package is absent); add a hook rather than a
-sixth category.
+depth - including lazy function-level imports, which import cleanly and
+only break at call time in a Flask-free deployment. A short allowlist
+there carries the two remaining optional `try`/`except`-guarded imports
+with their rationale; add a hook rather than another exemption.

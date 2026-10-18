@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from collections.abc import Container, Iterable
-from typing import TYPE_CHECKING, Annotated, Any, cast
+from collections.abc import Callable, Container, Iterable
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -37,7 +37,7 @@ from vtsearch.settings_models import (
     UserSettings,
     partition_docs_links,
 )
-from vtsearch.settings_store import UserSettingsStore, UserSyncState as _UserSyncState
+from vtsearch.settings_store import AppliedSettings, UserSettingsStore, UserSyncState as _UserSyncState
 
 if TYPE_CHECKING:
     # The accessors below are generated at import time by the
@@ -277,7 +277,14 @@ def __getattr__(name: str) -> Any:
 
 #: Set of keys that belong to the server tier (everything else is per-user).
 #: Reading ``model_fields`` doesn't instantiate the model, so this stays eager.
+#: No per-user write path sets one of these - not ``PUT /api/settings``, not a
+#: settings import, not a settings-source sync (see :func:`plan_user_write`):
+#: they are the operator's, set through the settings file, a CLI flag or an
+#: env var.
 _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
+
+#: The per-user tier's keys: the only ones a user's own write may set.
+_USER_KEYS: frozenset[str] = frozenset(UserSettings.model_fields.keys())
 
 #: Per-user keys for which the built-in "default" user reads through to the
 #: *server* settings file when the key is absent from its own per-user file.
@@ -338,9 +345,8 @@ _EXCLUDE_FROM_SOURCE_EXPORT = {
 # Per-user caches keyed by username.
 _user_caches: dict[str, dict[str, Any]] = {}
 
-# Per-user sync bookkeeping.  Replaces the old ``_synced_users: set[str]``,
-# which couldn't distinguish "never synced" from "synced ages ago" or
-# "tried once and failed."
+# Per-user sync bookkeeping, which tells "never synced" from "synced ages
+# ago" from "tried once and failed."
 _sync_state: dict[str, _UserSyncState] = {}
 
 # Reentrant lock covering both tiers' caches, the syncing flag, and
@@ -590,7 +596,7 @@ def get_user_settings() -> dict[str, Any]:
     Used by the settings-export route and the per-user sync source so an
     export only carries this user's preferences - not the shared
     server-tier infrastructure keys (``saved_datasets_dir``,
-    ``autoload_media_embedders`` etc.) and not other users' files.
+    ``hidden_plugins`` etc.) and not other users' files.
     """
     from vtsearch.auth import get_current_user
 
@@ -730,9 +736,9 @@ def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
       before it became a per-media-type dict - or simply a hand-edit that
       is out of range. Dropping it makes the field read as unset, so the
       pydantic default applies (per the "break persisted data freely"
-      policy in ``CLAUDE.md``); keeping it used to leak the stale value
-      straight out of ``GET /api/settings``, which the frontend then echoed
-      back into a ``PUT`` that 422'd.
+      policy in ``CLAUDE.md``); keeping it would leak the stale value
+      straight out of ``GET /api/settings``, and the frontend would echo it
+      back into a ``PUT`` that 422s.
     * **Server-tier keys stranded in a per-user file**, left behind when a
       key moved tiers (``browse_signpost_vocab`` did). ``get_all`` layers
       the user cache over the server one, so a stale copy would shadow the
@@ -1019,10 +1025,9 @@ def validate_setting(key: str, value: Any) -> Any:
     :class:`ValueError` / :class:`TypeError` on bad input.
 
     ``PUT /api/settings`` uses this to validate a whole multi-key body up
-    front, so a bad key can no longer 400 the request *after* earlier keys
-    in the same body have already been committed. Keys with no dedicated
-    validator (the directory paths, which are validated at the route layer
-    against the file-access base dir) pass through unchanged.
+    front, so a bad key 400s the request *before* any key in the same body
+    is committed. Keys with no dedicated validator (the server-tier directory
+    paths, which no API writes) pass through unchanged.
     """
     validator = globals().get(f"validate_{key}")
     if validator is None:
@@ -1333,7 +1338,7 @@ def get_autofind_detectors() -> list[str]:
     """Return the current user's list of detector names flagged for AutoFind.
 
     Each name maps to a JSON file under ``data/detectors/``; scoring resolves
-    the labelset's origins, re-embeds, trains an MLP, and applies it to the
+    the labelset's origins, re-embeds, trains a head, and applies it to the
     loaded dataset. Per-user (with a read-through to the server file for the
     built-in "default" user; see :func:`_read_value`).
     """
@@ -1678,61 +1683,291 @@ _SETTER_MAP: dict[str, Any] | None = None
 
 
 def _get_setter_map() -> dict:
-    """Build a map of setting-key → setter-function by introspecting this module.
+    """Build a map of per-user setting-key → setter-function by introspecting this module.
 
-    Restricted to actual settings-schema keys (the server + user tier
-    pydantic fields).  The module also exposes process-level ``set_*``
-    helpers - ``set_settings_path``, ``set_user_data_dir_override``, the
-    CLI knobs - and an unrestricted scan would let an imported or synced
-    settings dict (file content, not trusted code) invoke them, e.g.
-    repointing the server settings file or every user's data dir for the
-    rest of the process lifetime.
+    Restricted to the per-user tier's pydantic fields.  The module also
+    exposes process-level ``set_*`` helpers - ``set_settings_path``,
+    ``set_user_data_dir_override``, the CLI knobs - and an unrestricted scan
+    would let an imported or synced settings dict (file content, not trusted
+    code) invoke them, e.g. repointing the server settings file or every
+    user's data dir for the rest of the process lifetime.  The server tier's
+    own setters are left out for the same reason (#4965): ``detectors_dir``,
+    ``solo_media_type`` or ``default_settings_source`` belong to the
+    operator, not to whoever imports a settings file.
     """
     global _SETTER_MAP
     if _SETTER_MAP is not None:
         return _SETTER_MAP
     import vtsearch.settings as _self
 
-    schema_keys = set(_all_defaults())
     _SETTER_MAP = {}
     for attr_name in dir(_self):
         key = attr_name[4:]
-        if attr_name.startswith("set_") and key in schema_keys and callable(getattr(_self, attr_name)):
+        if attr_name.startswith("set_") and key in _USER_KEYS and callable(getattr(_self, attr_name)):
             _SETTER_MAP[key] = getattr(_self, attr_name)
     return _SETTER_MAP
 
 
-def _apply_settings(imported: dict, skip_keys: Container[str] | None = None) -> None:
-    """Apply a dict of settings via this module's ``set_*`` functions.
+# -------------------------------------------------------------------
+# Per-user write dispatch
+#
+# One rule for every path that writes a user's settings - ``PUT
+# /api/settings``, a settings import, a settings-source sync - so the three
+# can't drift apart on which keys a user may set (the per-user tier only) or
+# on how a key with bespoke validation is checked (#4965).
+# -------------------------------------------------------------------
 
-    Unknown keys or values that fail validation are silently skipped.
-    Keys in *skip_keys* are also skipped - used by the auto re-sync
-    path so an upstream value doesn't silently overwrite a key the
-    user has just edited locally.  Used by :func:`sync_from_settings_source`
-    and by the settings-import route in ``routes/settings/io.py``.
+
+class _UserWrite(NamedTuple):
+    """A key whose write needs more than its field validator, split from the write.
+
+    *validate* returns the cleaned value or raises :class:`ValueError`;
+    *apply* persists an already-cleaned value. Keeping the halves apart is
+    what lets ``PUT /api/settings`` check a whole body before committing any
+    of it.
+    """
+
+    validate: Callable[[Any], Any]
+    apply: Callable[[Any], None]
+
+
+def _validate_solo_embedder_entries(value: Any) -> dict[str, str] | None:
+    """Validate the ``{media_type: embedder}`` map and return it cleaned.
+
+    ``None`` (which clears every per-type lock) passes through. Otherwise
+    *value* must be a dict mapping registered media-type ids to embedder
+    names that exist for that type (per
+    :func:`vtscore.media.embedders_for_type`). An empty string value is
+    preserved as a **per-type opt-out sentinel**; it overrides the
+    ``--solo-embedder`` CLI fallback for that type. Any other invalid
+    pairing raises :class:`ValueError`.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("solo_embedder_per_media_type must be a dict or null")
+
+    from vtscore.media import all_type_ids, embedders_for_type
+
+    valid_types = set(all_type_ids())
+    cleaned: dict[str, str] = {}
+    for raw_type, raw_emb in value.items():
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            raise ValueError("solo_embedder_per_media_type keys must be non-empty media-type ids")
+        mt = raw_type.strip()
+        if mt not in valid_types:
+            raise ValueError(f"Unknown media type: {mt!r}. Valid: {sorted(valid_types)}")
+        if raw_emb is None or (isinstance(raw_emb, str) and not raw_emb.strip()):
+            # Per-type opt-out sentinel: preserve so it overrides the
+            # CLI fallback. ``None`` is normalised to "" here.
+            cleaned[mt] = ""
+            continue
+        if not isinstance(raw_emb, str):
+            raise ValueError(f"solo_embedder_per_media_type[{mt!r}] must be a string")
+        emb_name = raw_emb.strip()
+        valid_embedders = {e.name for e in embedders_for_type(mt)}
+        if emb_name not in valid_embedders:
+            raise ValueError(f"Unknown embedder {emb_name!r} for media type {mt!r}. Valid: {sorted(valid_embedders)}")
+        cleaned[mt] = emb_name
+    return cleaned
+
+
+def _validate_autofind_exporter_name(value: Any) -> str:
+    """Validate the AutoFind results exporter name and return it.
+
+    ``""``/``None`` (which clears auto-export) normalises to ``""``. Any
+    other value must name a registered (pickable) exporter; an unknown
+    name raises :class:`ValueError`. Field values are validated lazily at
+    export time against the chosen plugin's schema, not here.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("autofind_exporter must be a string")
+    from vtscore.exporters import list_exporters
+
+    name = value.strip()
+    valid = {exp.name for exp in list_exporters() if not getattr(exp, "hidden_from_picker", False)}
+    if name not in valid:
+        raise ValueError(f"Unknown exporter {name!r}. Available: {sorted(valid)}")
+    return name
+
+
+def _clean_autofind_exporter_field_values(value: Any) -> dict[str, dict[str, str]]:
+    """Validate the per-exporter ``{name: {key: value}}`` map and clean it.
+
+    ``None`` (which clears every exporter's stored config) normalises to
+    ``{}``. Otherwise the value must be a dict whose entries are
+    themselves ``{str: str}`` dicts; non-string values are coerced to
+    strings so the persisted shape stays flat (exporter fields are always
+    rendered/sent as strings).
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("autofind_exporter_field_values must be a dict")
+    cleaned: dict[str, dict[str, str]] = {}
+    for exp_name, fvals in value.items():
+        if not isinstance(exp_name, str) or not isinstance(fvals, dict):
+            raise ValueError("autofind_exporter_field_values must map exporter names to field dicts")
+        cleaned[exp_name] = {str(k): "" if v is None else str(v) for k, v in fvals.items()}
+    return cleaned
+
+
+def _apply_enable_achievements(value: bool) -> None:
+    """Persist the toggle and wipe stored counters when flipping it off.
+
+    The user-visible promise is that turning the feature off zeroes the
+    achievement counters and keeps them there. Wiping on the True→False
+    transition (rather than every set) makes the on→off→on cycle
+    deterministic: counters reset on opt-out and start fresh if the user
+    ever opts back in.
+    """
+    prev = bool(get_enable_achievements())
+    set_enable_achievements(value)
+    if prev and not value:
+        from vtsearch import achievements
+
+        achievements.wipe_state()
+
+
+#: Per-user keys whose write needs more than the field's own validator: a check
+#: against a live registry, a cleaning pass, or a side effect beside the write.
+#: ``PUT /api/settings`` dispatches through this same table (its
+#: ``_CUSTOM_SETTERS``), so an import can't store what a ``PUT`` would refuse.
+CUSTOM_USER_WRITES: dict[str, _UserWrite] = {
+    "enable_achievements": _UserWrite(lambda v: validate_setting("enable_achievements", v), _apply_enable_achievements),
+    "solo_embedder_per_media_type": _UserWrite(
+        _validate_solo_embedder_entries, apply_user_solo_embedder_per_media_type
+    ),
+    "autofind_exporter": _UserWrite(_validate_autofind_exporter_name, set_autofind_exporter),
+    "autofind_exporter_field_values": _UserWrite(
+        _clean_autofind_exporter_field_values, set_autofind_exporter_field_values
+    ),
+}
+
+
+def plan_user_write(key: str, value: Any) -> tuple[Callable[[Any], Any], Any] | None:
+    """Validate one per-user setting write into a ``(writer, cleaned value)`` pair.
+
+    Returns ``None`` when *key* is not something a user may write: an
+    unknown key, or a server-tier one (:data:`_SERVER_KEYS`). Raises
+    :class:`ValueError` / :class:`TypeError` on a bad value, **without
+    persisting anything**, so a caller can check every key before writing
+    any.
+
+    This is the rule ``PUT /api/settings``, a settings import and a
+    settings-source sync share: the route reaches the same
+    :data:`CUSTOM_USER_WRITES` table and the same plain setters (it only
+    swaps in the ``vtsearch.state`` setters for :data:`_DETECTOR_KEYS`).
+    """
+    custom = CUSTOM_USER_WRITES.get(key)
+    if custom is not None:
+        return custom.apply, custom.validate(value)
+    setter = _get_setter_map().get(key)
+    if setter is None:
+        return None
+    return setter, validate_setting(key, value)
+
+
+#: Per-user settings whose change has to reach every loaded detector, not just
+#: the settings file. ``PUT /api/settings`` sends these to the
+#: ``vtsearch.state`` setters; an import or a sync writes them like any other
+#: key and then carries the change to loaded detectors through
+#: :func:`_refresh_loaded_detectors`.
+_DETECTOR_KEYS: tuple[str, ...] = ("beta", "calibrate_count", "calibration_fraction")
+
+
+def _read_setting(key: str) -> Any:
+    """Return *key*'s current value through its ``get_<key>`` accessor."""
+    return globals()[f"get_{key}"]()
+
+
+def _apply_settings(imported: dict, skip_keys: Container[str] | None = None) -> AppliedSettings:
+    """Apply a dict of settings through :func:`plan_user_write`.
+
+    Only per-user settings are written. A server-tier key, an unknown key or
+    a value that fails validation is silently skipped, so a settings file
+    can neither repoint a server directory nor flip an operator lock
+    (#4965). Keys in *skip_keys* are skipped too - used by the auto re-sync
+    path so an upstream value doesn't silently overwrite a key the user has
+    just edited locally.  Used by :func:`sync_from_settings_source` (through
+    the store) and by :func:`apply_imported_settings`.
 
     *skip_keys* is any container; the auto re-sync passes a **live** view of
     the user's ``dirty_keys`` rather than a snapshot, so a key edited while
     the source load was in flight is still honored.
+
+    Returns what was written. Its ``changed`` names the :data:`_DETECTOR_KEYS`
+    whose value moved; the caller hands it to :func:`_refresh_loaded_detectors`
+    itself, because this runs under the per-user sync lock on the auto
+    re-sync path.
     """
-    setter_map = _get_setter_map()
     skip: Container[str] = skip_keys if skip_keys is not None else frozenset()
+    watched = {key: _read_setting(key) for key in _DETECTOR_KEYS if key in imported and key not in skip}
+    applied: list[str] = []
     for key, value in imported.items():
         if key in skip:
             continue
-        setter = setter_map.get(key)
-        if setter is not None:
-            try:
-                setter(value)
-            except (TypeError, ValueError):
-                pass  # Skip invalid values silently
+        try:
+            plan = plan_user_write(key, value)
+            if plan is None:
+                continue
+            write, cleaned = plan
+            write(cleaned)
+        except (TypeError, ValueError):
+            continue  # Skip invalid values silently
+        applied.append(key)
+    changed = frozenset(key for key, before in watched.items() if _read_setting(key) != before)
+    return AppliedSettings(keys=tuple(applied), changed=changed)
+
+
+def _refresh_loaded_detectors(applied: AppliedSettings) -> None:
+    """Carry an import's or a sync's training-setting changes to loaded detectors.
+
+    This is the part of what the ``vtsearch.state`` setters do for ``PUT
+    /api/settings`` that is about the setting rather than one detector. A new
+    ``calibrate_count`` or ``calibration_fraction`` changes what a retrain
+    produces, so every cached head is dropped; a new ``beta`` re-cuts, at it,
+    the detectors that still take the user's balance (one that keeps its own
+    keeps its cut). Unlike :func:`vtscore.state.set_beta` it does not make the
+    value the *active* detector's own balance: that is a balance pick, and an
+    import or a sync, which re-applies the user's whole settings dict, is not
+    one.
+
+    Runs with no settings lock held - the store calls it once the per-user
+    sync lock is released - because the detector state takes its own lock,
+    which :func:`vtscore.state.set_beta` holds while it persists the setting.
+    """
+    if not applied.changed:
+        return
+    from vtscore.state import core as state_core
+
+    if "beta" in applied.changed:
+        state_core.recompute_detector_thresholds(get_beta())
+    if applied.changed & {"calibrate_count", "calibration_fraction"}:
+        state_core.invalidate_loaded_detector_models()
+
+
+def apply_imported_settings(imported: dict[str, Any]) -> AppliedSettings:
+    """Apply a settings dict the current user chose to import; return what was applied.
+
+    The ``POST /api/settings-importers/import/<name>`` path: per-user keys
+    only, each through :func:`plan_user_write` (the checks ``PUT
+    /api/settings`` runs), then the training-setting changes carried to
+    loaded detectors.
+    """
+    applied = _apply_settings(imported)
+    _refresh_loaded_detectors(applied)
+    return applied
 
 
 def sync_from_settings_source() -> dict[str, Any] | None:
     """Pull settings from the active user's source and apply them.
 
-    Returns the imported settings dict, or ``None`` if no source is
-    configured or the source file doesn't exist yet.
+    Returns the part of the source's settings dict that was applied (per-user
+    keys only, as for an import; see :func:`_apply_settings`), or ``None`` if
+    no source is configured or the source file doesn't exist yet.
 
     Triggered:
 
@@ -1770,7 +2005,8 @@ def _sync_to_source(username: str, data: dict[str, Any]) -> None:
 # The persistence engine
 #
 # Instantiated last so every injected dependency (path resolvers, the
-# ``_apply_settings`` callback, the tier key sets) is already defined. The
+# ``_apply_settings`` callback and its ``_refresh_loaded_detectors`` follow-up,
+# the tier key sets) is already defined. The
 # shared mutable containers (``_settings_lock`` / ``_user_caches`` /
 # ``_sync_state`` / ``_syncing``) are passed by reference so the store and
 # the module-level names mutate one set of objects; the delegators above
@@ -1786,6 +2022,7 @@ _store = UserSettingsStore(
     server_path=_server_settings_path,
     user_path=_user_settings_path,
     apply_settings=_apply_settings,
+    after_apply=_refresh_loaded_detectors,
     server_default_source=_server_default_settings_source,
     sanitize=_sanitize_tier,
     exclude_from_source_export=_EXCLUDE_FROM_SOURCE_EXPORT,

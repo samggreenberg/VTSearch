@@ -24,7 +24,11 @@ from vtscore.eval.voting_iterations import (
 from vtscore.training.thresholds import ACQUISITION_TARGET_PRECISION, target_precision_threshold
 from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine
 
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# One worker, so an arm two tests read runs once (see sweep_cache.py).
+pytestmark = pytest.mark.xdist_group("acq-arms-3546")
 
 
 def _line(n_pos: int = 30, n_neg: int = 970, seed: int = 0) -> LabelsLine:
@@ -112,50 +116,52 @@ class TestTheDefaultIsTheApps:
         assert resolve_acquisition_target(0.25, 1.0) == 0.25
 
 
+@memoize_sweep
+def _acq(**kwargs) -> list[tuple[int, float]]:
+    # The planted fixture test_acq_inclusion.py uses: big enough for the
+    # fold-anchored scale to resolve offsets (a toy pool saturates it, and
+    # every origin then cuts in the same place).
+    medias, _ = _planted_dataset(n_per_cat=40, seed=0)
+    rows = simulate_voting_iterations(
+        medias,
+        target_category="cat0",
+        seed=3,
+        dataset_name="synthetic",
+        max_steps=30,
+        head="linear",
+        style="whole_image",
+        emit_calibration_metrics=True,
+        beta=1.0,
+        **kwargs,
+    )
+    # Acquisition is the Train side: a row with no Bad yet (the Goods'
+    # centroid's, #4643) has no head and so no acquisition cut.
+    base = [
+        r
+        for r in rows
+        if not str(r.get("gmm_variant") or "").strip()
+        and str(r.get("pool_variant") or "") in ("", "max")
+        and not str(r.get("schedule") or "").strip()
+        and r["n_bad"] > 0
+    ]
+    assert base and all("acq_threshold" in r for r in base)
+    return [(int(r["t"]), float(r["acq_threshold"])) for r in base]
+
+
 class TestTheArmsRun:
     """Each arm runs end to end under the balance and moves the selector's cut."""
 
-    def _acq(self, **kwargs) -> list[tuple[int, float]]:
-        # The planted fixture test_acq_inclusion.py uses: big enough for the
-        # fold-anchored scale to resolve offsets (a toy pool saturates it, and
-        # every origin then cuts in the same place).
-        medias, _ = _planted_dataset(n_per_cat=40, seed=0)
-        rows = simulate_voting_iterations(
-            medias,
-            target_category="cat0",
-            seed=3,
-            dataset_name="synthetic",
-            max_steps=30,
-            head="linear",
-            style="whole_image",
-            emit_calibration_metrics=True,
-            beta=1.0,
-            **kwargs,
-        )
-        # Acquisition is the Train side: a row with no Bad yet (the Goods'
-        # centroid's, #4643) has no head and so no acquisition cut.
-        base = [
-            r
-            for r in rows
-            if not str(r.get("gmm_variant") or "").strip()
-            and str(r.get("pool_variant") or "") in ("", "max")
-            and not str(r.get("schedule") or "").strip()
-            and r["n_bad"] > 0
-        ]
-        assert base and all("acq_threshold" in r for r in base)
-        return [(int(r["t"]), float(r["acq_threshold"])) for r in base]
-
     def test_the_default_arm_samples_at_the_target(self):
-        default = self._acq()
-        offset = self._acq(acq_target_p="off")
+        default = _acq()
+        offset = _acq(acq_target_p="off")
         assert default and offset
         assert all(math.isfinite(a) for _t, a in default)
         assert [a for _t, a in default] != [a for _t, a in offset]
 
     def test_naming_the_shipped_target_is_the_default(self):
-        assert self._acq() == self._acq(acq_target_p=ACQUISITION_TARGET_PRECISION)
+        assert _acq() == _acq(acq_target_p=ACQUISITION_TARGET_PRECISION)
 
     def test_the_inclusion_origin_moves_the_offset_cut(self):
-        line = self._acq(acq_target_p="off")
-        old = self._acq(acq_target_p="off", acq_origin="inclusion")
+        line = _acq(acq_target_p="off")
+        old = _acq(acq_target_p="off", acq_origin="inclusion")
         assert [a for _t, a in old] != [a for _t, a in line]

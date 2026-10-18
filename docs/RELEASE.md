@@ -20,7 +20,7 @@ Run:
 python scripts/vulture-audit.py
 ```
 
-The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
+The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `tests_shared/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
 
 The **findings** are intentionally **not** a `run-tests.sh` gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
 
@@ -68,7 +68,7 @@ GUI-changing sessions don't re-render the app's screenshots; they queue the shot
 - **Slide figures** (any entry naming `slides:<group>`): run `node slides/figs/src/shoot-ui-figs.mjs <group>...` with the queued groups, per [`slides/README.md`](../slides/README.md) (it downloads COCO val2017 on its first run, and needs `cd scripts/screenshots && npm install` once for playwright).
 - **Review the diff like any other.** Look at every changed image, not only the queued ones: a frame showing an error toast, a spinner or an empty panel is a harness failure rather than a GUI change, so leave that shot's old image in place and file an issue for the harness. A queued shot that didn't move is fine; its change may have been reverted, or its session listed it to be safe.
 - **Commit the images and delete the drained entry files in the same commit**, leaving `README.md`. Entries whose shots could not be rendered stay queued for the next release; say which in chat.
-- **Commit the images once.** PRs merge without squashing, so every commit that carries an image keeps it in the repository's history for good: one drain on 2026-10-08 left three full renders of the docs set there, a WIP checkpoint and two re-renders. Render and review in the working tree and commit when the set is final; keep images out of a pre-test WIP checkpoint (a crash costs a re-render, not work). If a render has to be redone before the push, `--amend` the image commit rather than adding another.
+- **Commit the images once.** PRs merge without squashing, so every commit that carries an image keeps it in the repository's history for good, a WIP checkpoint's and each re-render's included. Render and review in the working tree and commit when the set is final; keep images out of a pre-test WIP checkpoint (a crash costs a re-render, not work). If a render has to be redone before the push, `--amend` the image commit rather than adding another.
 
 A harness that won't run at all doesn't block the release: stale screenshots are a docs defect, not a reason to hold shipped fixes back. Leave the queue as it is, file an issue for the harness failure, and carry on with step 5.
 
@@ -89,17 +89,17 @@ Now that the release PR is open, close the GitHub issues whose fixes are include
 
 **Find the candidate issues** from this release's PRs:
 
-- List the pull requests merged into `dev` within this release range with `python scripts/release-prs.py` — the same `origin/main..origin/dev` window used for the summary in step 3. It prints `<pr>|<sha>|<subject>` per PR, so `| cut -d'|' -f1` gives the numbers; anything it could not attribute to a PR goes to stderr for a glance rather than being dropped. **PRs here are still merged and never squashed** (CLAUDE.md, "Merging a PR") — this walk no longer depends on that, but the rule's other reasons are untouched by it.
+- List the pull requests merged into `dev` within this release range with `python scripts/release-prs.py` — the same `origin/main..origin/dev` window used for the summary in step 3. It prints `<pr>|<sha>|<subject>` per PR, so `| cut -d'|' -f1` gives the numbers; anything it could not attribute to a PR goes to stderr for a glance rather than being dropped. **PRs here are merged, never squashed** (CLAUDE.md, "Merging a PR") — this walk does not depend on that, but the rule's other reasons stand.
 - For each such PR, read its body and collect **every** issue it references, keeping track of which keyword introduced each reference. Sort them into two buckets:
   - **Closing** — `Closes #N`, `Fixes #N`, `Resolves #N` (case-insensitive).
   - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
 - Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to the PR that carried it (step 6b's `NEEDS REVIEW` notes give the recipe, including the case where the SHA is not on `dev` at all), then reconcile it like any other orphan.
 
-**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and four squashes are already on `dev` (#3671, #3672, #3682, #3685). `scripts/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
+**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and `dev` already holds a few. `scripts/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
 
-Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
+Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main` (#2930, #2940 and #2951 did exactly this). So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
-**The hardest orphan is a duplicate.** #2911 shipped to `main` in the 2026-08-11 release and stayed open until 2026-08-17. It was a duplicate of #3025, the fix PR wrote `Closes #3025` only, and at release time #2911 had no comments and no PR references at all — so all three buckets were blind to it by construction, not by a keyword slip. No sweep rule recovers an issue that nothing on GitHub links to; that one is prevented upstream, by CLAUDE.md's duplicate rule. What this step *can* do is catch the late pointer: the resolving comment landed a day after the release, so an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
+**The hardest orphan is a duplicate** (#2911, a duplicate of #3025 whose fix PR named only #3025). An issue that nothing on GitHub links to is invisible to all three buckets by construction, not by a keyword slip; CLAUDE.md's duplicate rule prevents that upstream. What this step *can* do is catch the late pointer: an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
 
 **Reconcile each issue in the non-closing and orphan buckets.** Read the issue (body *and* comments) alongside the PR, then close it only when **both** hold:
 
@@ -172,7 +172,7 @@ Add `--check` to make it exit non-zero when anything needs attention, and `--jso
 
 ## 6c. Sweep the experiment queue for questions answered sideways
 
-Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely. On 2026-09-30, 10 of 41 open experiment issues were already answered or moot; the #4267 ruling alone had mooted five. The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
+Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely (a quarter of the queue, the first time this was checked). The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
 
 1. List the open issues labelled `experiment`, and keep the ones with **no activity in the last 14 days**. A fresh issue is being worked on; answers go unnoticed in the stale ones.
 2. For each one, read its body and comments, then look at what has landed since its last update that bears on it: newer directories in `docs/experiments/` on the same knob or study, `git log origin/main..origin/dev --grep '#<n>'` and the same for the numbers its body names, and the plan file that points at it.
@@ -203,22 +203,24 @@ This is what makes issue-dismissal trickle back automatically: because plans hol
 grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .
 ```
 
-Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule; issue #2982 is the incident that motivated it — 94 source files had gone dangling this way across 13 deleted plans before anyone grepped for them.
+Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule (#2982 is the incident). `scripts/check-docs.py` fails on a dangling citation, so the full `./run-tests.sh` in step 8 catches any you miss.
 
 ## 8. Merge the release PR
 
-The release merges itself (owner, 2026-10-06). It used to wait for a human, and
-the wait was easy to forget: the 2026-10-05 release PR (#4501) was still open a
-day later, so nothing in it had reached `main` while step 6 had already closed
-its issues as shipped. Merging here makes "closed" mean "on `main`".
+The release merges itself (owner, 2026-10-06), so that step 6's "closed as
+shipped" is true: an unmerged release PR leaves closed issues whose fixes never
+reached `main`.
 
 1. **Land everything first.** This step comes last so that every commit this run
    made reaches `dev` before the merge: step 2's triage, step 4's punch card,
    step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
    commit left on a branch misses this release.
 2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
-   full `./run-tests.sh` on it, unless this run already ran one on exactly that
-   SHA. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
+   full `VTSEARCH_FRESH=1 ./run-tests.sh` on it, unless this run already ran one on
+   exactly that SHA. `VTSEARCH_FRESH=1` makes the run stand on its own — the full
+   pyright check rather than the incremental one, every test rather than the ones
+   an earlier run on the same tree recorded — because the release gate is the one
+   run that should owe nothing to any other. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
    All Errors") and gate again. If it cannot be fixed in this run, leave the
    release PR open, comment on it naming the failing gates, and file an issue.
 3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A

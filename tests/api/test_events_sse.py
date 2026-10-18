@@ -275,6 +275,30 @@ def _drain_connect_and_snapshot(gen) -> None:
     assert seen_channels == expected, f"snapshot missing channels: {sorted(expected - seen_channels)}"
 
 
+def _next_frame_on(gen, channel: str) -> str:
+    """Return the next frame on *channel*, skipping strays from other channels.
+
+    The stream subscribes to the process-wide trackers, so it hears whatever
+    the process publishes, not only what the test does: a worker an earlier
+    test left behind can call ``mark_finished`` after the reset dropped its
+    task, queueing an empty ``loading-tasks`` frame between the snapshot drain
+    and the test's own publish (#4926). That frame says nothing about whether
+    the test's update arrived, so skip it. An idle wakeup is never skipped: a
+    heartbeat or a ``: ka`` comment means the update did not arrive, which is
+    the regression these tests catch, so it is returned for the caller's
+    assertion to reject.
+    """
+    deadline = time.monotonic() + 10.0
+    frame = next(gen)
+    while (
+        frame.startswith("event: ")
+        and not frame.startswith((f"event: {channel}\n", "event: heartbeat\n"))
+        and time.monotonic() < deadline
+    ):
+        frame = next(gen)
+    return frame
+
+
 class TestEventsRoute:
     def test_initial_snapshot_includes_every_channel(self):
         frames = initial_snapshot()
@@ -315,7 +339,7 @@ class TestEventsRoute:
         the thread past the 1s keepalive (#3075).
 
         Idle wakeups are pushed out of reach so nothing but the real update
-        can be the next frame.
+        (or a stray from another channel, skipped) can be the next frame.
         """
         gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=60.0)
         try:
@@ -323,7 +347,7 @@ class TestEventsRoute:
 
             sort_progress.update("running", "tick", 1, 10)
 
-            frame = next(gen)
+            frame = _next_frame_on(gen, "sort")
             assert frame.startswith("event: sort\n"), f"expected the published sort update, got {frame!r}"
             data_line = [ln for ln in frame.splitlines() if ln.startswith("data: ")][0]
             payload = json.loads(data_line.removeprefix("data: "))
@@ -351,7 +375,7 @@ class TestEventsRoute:
             t = threading.Thread(target=lambda: sort_progress.update("running", "tick", 2, 10), daemon=True)
             t.start()
             try:
-                frame = next(gen)
+                frame = _next_frame_on(gen, "sort")
             finally:
                 t.join(timeout=10.0)
             assert frame.startswith("event: sort\n"), f"parked reader was not woken by the update; got {frame!r}"
@@ -466,11 +490,16 @@ class TestEventsRoute:
             sort_progress.update("running", "Scoring", 97, 100)
             sort_progress.update("idle", "Done", 100, 100)  # dropped: queue full
 
-            # The only queued frame is the stale `running` one.
+            # The single slot holds whichever frame was queued first: the stale
+            # `running` one, or a stray from another channel that beat it
+            # (#4926). Either way the terminal `idle` frame was dropped, which
+            # is the loss the heartbeat has to repair.
             frame = next(gen)
-            assert frame.startswith("event: sort\n")
-            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
-            assert payload["status"] == "running"
+            if frame.startswith("event: sort\n"):
+                payload = json.loads(
+                    [ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: ")
+                )
+                assert payload["status"] == "running"
 
             # The heartbeat repairs it without any further tracker update.
             repaired = None
@@ -689,7 +718,7 @@ class TestNotificationChannel:
 
             notify("Skipped 3 files", level="warning", detail="a, b, c", source="Server Folder")
 
-            frame = next(gen)
+            frame = _next_frame_on(gen, NOTIFICATION_CHANNEL)
             assert frame.startswith(f"event: {NOTIFICATION_CHANNEL}\n"), f"unexpected frame {frame!r}"
             payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
             assert payload["level"] == "warning"
@@ -713,11 +742,15 @@ class TestNotificationChannel:
             _drain_connect_and_snapshot(gen)
 
             notify("Told you once")
-            assert next(gen).startswith(f"event: {NOTIFICATION_CHANNEL}\n")
+            assert _next_frame_on(gen, NOTIFICATION_CHANNEL).startswith(f"event: {NOTIFICATION_CHANNEL}\n")
 
             # One full heartbeat burst: the ping plus one snapshot per channel.
-            burst = [next(gen) for _ in range(1 + len(_TRACKER_CHANNELS) + len(_TASK_CHANNELS))]
-            assert burst[0].startswith("event: heartbeat\n")
+            # A stray from another channel can reach the queue ahead of the
+            # ping (#4926); a second notification cannot. The burst itself is
+            # yielded in one piece, so nothing from the queue lands inside it.
+            ping = _next_frame_on(gen, NOTIFICATION_CHANNEL)
+            assert ping.startswith("event: heartbeat\n"), f"expected the heartbeat, got {ping!r}"
+            burst = [next(gen) for _ in range(len(_TRACKER_CHANNELS) + len(_TASK_CHANNELS))]
             assert not any(f.startswith(f"event: {NOTIFICATION_CHANNEL}\n") for f in burst)
         finally:
             gen.close()
@@ -745,7 +778,8 @@ class TestNotificationChannel:
             _drain_connect_and_snapshot(gen)
             notify("But they hear this")
 
-            frame = next(gen)
+            frame = _next_frame_on(gen, NOTIFICATION_CHANNEL)
+            assert frame.startswith(f"event: {NOTIFICATION_CHANNEL}\n"), f"unexpected frame {frame!r}"
             payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
             assert payload["message"] == "But they hear this"
         finally:

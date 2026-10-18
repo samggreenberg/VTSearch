@@ -100,7 +100,9 @@ class TestOneRound:
     def test_a_partial_round_waits_and_a_full_round_ends_the_walk(self, client):
         _run_find(client)
         ctx = get_active_detector_context()
-        picks = _start(client)["check"]["picks"]
+        started = _start(client)
+        picks = started["check"]["picks"]
+        kept = started["balance"]["count"]
 
         data = client.post("/api/precision-check/votes", json=_votes(picks[:2], True)).get_json()
         assert data["check"]["status"] == "running" and data["check"]["picks"] == picks[2:]
@@ -109,7 +111,11 @@ class TestOneRound:
         data = client.post("/api/precision-check/votes", json=_votes(picks[2:], True)).get_json()
         assert data["check"]["status"] == BALANCE_CHECKED and data["check"]["picks"] == []
         assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["audited"] == 8
-        assert data["balance"]["precision"]["labelled"] == 5 and data["balance"]["precision"]["right"] == 5
+        # The ranges describe the set the line kept when the check started (#4483): the picks among its top.
+        ranked = ctx.precision_check.ranking_ids
+        inside = [cid for cid in picks if ranked.index(cid) < kept]
+        assert data["balance"]["kept_at_check"] == kept >= 1
+        assert data["balance"]["precision"]["labelled"] == data["balance"]["precision"]["right"] == len(inside)
         assert data["balance"]["precision"]["stale"] is False
 
         # The votes are ordinary labels: cast, verified in Find mode, tagged as the check's.

@@ -384,12 +384,24 @@ def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:
     return _resolve_with_stack(stack, parent_origin, origin_name=source_file)
 
 
-def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.ndarray | None:
+def embed_file(
+    file_path: Path,
+    media_type: str,
+    embedder_name: str = "",
+    *,
+    extra_fields: dict[str, Any] | None = None,
+) -> np.ndarray | None:
     """Embed a media file using the appropriate embedder for the media type.
 
     If *embedder_name* is given, that specific embedder is used (matching by
     name); if it is not found or not given, the first registered embedder for
     the media type is used as a fallback.
+
+    *extra_fields* are merged into the media dict the embedder receives, on top
+    of :func:`~vtscore.media.embedder.media_from_path`'s.  A video unit needs
+    this: it is the whole parent file plus a ``clip_start`` / ``clip_end`` /
+    ``clip_box`` that the frame sampler honours, so the path alone embeds the
+    wrong slice.
     """
     from vtscore.media import embedders_for_type, get_embedder
 
@@ -418,8 +430,11 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
         embedder = avail[0]
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
+    media = media_from_path(file_path)
+    if extra_fields:
+        media.update(extra_fields)
     try:
-        result = embedder.embed_media(media_from_path(file_path))
+        result = embedder.embed_media(media)
     except Exception:
         log.warning(
             "embed_file: %s.embed_media(%s) raised an exception",
@@ -525,33 +540,34 @@ def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> 
 
 
 def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] | None:
-    """Normalize a flat ``run_converters_on_folder`` origin into a one-step chain.
+    """Normalize a flat ``run_converters_on_folder`` origin into a converter-led chain.
 
     The importer-level converter path stamps a *flat* origin -
     ``converter`` / ``converter_param_<key>`` plus the Phase 2b sub-output
     disambiguators ``converter_out_index`` / ``converter_n_out`` /
     ``converter_content_hash`` - rather than the ``clipper_chain`` trail the
-    chain stage records.  Reshaping it into a single :class:`ChainStep` lets
-    the resolver reuse the one replay code path
+    chain stage records.  Reshaping it into a :class:`ChainStep` lets the
+    resolver reuse the one replay code path
     (:func:`~vtscore.datasets.clipper_chain.replay_chain_on_file`) and the
     shared sub-output selector, so a reference-converted label re-embeds from
-    the source file + recipe exactly like a chain-converted one.
+    the source file + recipe exactly like a chain-converted one.  Any
+    ``clipper_chain`` the origin also carries ran on the converter's *output*
+    (a tiling of the rendered page, a whitespace pass over the text), so it
+    follows the converter step rather than running on the file.
 
-    The dialect is decoded by
-    :func:`~vtscore.media.clip_recipe.parse_converter_recipe`, the same parser
-    the lazy-clip byte route reads it with, so the two replay paths cannot
-    disagree about what a given origin records.
+    The dialect and the composition both come from
+    :func:`~vtscore.media.clip_recipe.converter_trail`, which the lazy-clip
+    byte route reads them with too, so the two replay paths cannot disagree
+    about what a given origin records.
 
-    Returns ``None`` when no ``converter`` is recorded, or when the recipe
+    Returns ``None`` when no ``converter`` is recorded, when the recipe
     carries no sub-output disambiguator - the selector would refuse to guess
-    anyway, so there is nothing to gain from running the converter first.
+    anyway, so there is nothing to gain from running the converter first - or
+    when the recorded chain is malformed.
     """
-    from vtscore.media.clip_recipe import parse_converter_recipe
+    from vtscore.media.clip_recipe import converter_trail
 
-    recipe = parse_converter_recipe(params)
-    if recipe is None or not recipe.is_replayable:
-        return None
-    return [recipe.chain_step()]
+    return converter_trail(params)
 
 
 def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[np.ndarray, bytes | None] | None:
@@ -575,6 +591,33 @@ def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[
         return None
 
 
+def _embed_uncut(
+    file_path: Path, media_type: str, embedder_name: str, **kwargs: Any
+) -> tuple[np.ndarray, bytes | None] | None:
+    """Embed *file_path* whole: ``(embedding, None)``, or ``None`` when the embed fails.
+
+    The ``None`` clip bytes tell the caller nothing was cut out of the file.
+    *kwargs* go to :func:`embed_file`.
+    """
+    embedding = embed_file(file_path, media_type, embedder_name, **kwargs)
+    if embedding is None:
+        return None
+    return embedding, None
+
+
+def _needs_clip_replay(params: dict[str, Any]) -> bool:
+    """True when *params* record a unit derived from the resolved file, not the file itself.
+
+    A clipper (``clipper`` / ``clipper_chain``) cut the unit out of the file, or
+    a converter (``converter``) rendered it from the file, so embedding the file
+    whole embeds the wrong content: the PDF instead of its page, the recording
+    instead of its window.  Every caller that resolves an origin to a file and
+    embeds it sends these origins to :func:`_apply_clip_and_embed`, and asks
+    here so the callers cannot disagree about which origins those are (#5058).
+    """
+    return bool(params.get("clipper") or params.get("clipper_chain") or params.get("converter"))
+
+
 def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
@@ -585,9 +628,11 @@ def _apply_clip_and_embed(
 
     If the origin contains clip parameters (``clip_start``/``clip_end`` for
     audio, ``clip_box`` for images, or a text sentence clipper), the file is
-    clipped first and the clipped content is embedded.  Falls back to
-    :func:`embed_file` when no clip params apply (e.g. video, or an
-    unrecognised clipper) or when the clip step raises.
+    clipped first and the clipped content is embedded.  Video is clipped by
+    metadata, not bytes, so a video origin's ``clip_start`` / ``clip_end`` /
+    ``clip_box`` go to the embedder alongside the whole file.  Falls back to
+    :func:`embed_file` when no clip params apply (e.g. an unrecognised
+    clipper) or when the clip step raises.
 
     Returns ``(embedding, clip_bytes)`` where ``clip_bytes`` is the bytes
     that were actually embedded, i.e. the sliced/cropped content for
@@ -598,8 +643,23 @@ def _apply_clip_and_embed(
     presence/absence of ``clip_bytes`` to decide whether to MD5-hash the
     clip or fall back to a parent-bytes + boundary-tag scheme. Returns
     ``None`` when embedding fails entirely.
+
+    A flat converter origin is replayed converter first
+    (:func:`_converter_origin_to_chain`): *file_path* is then the converter's
+    source (the PDF, the video), and whatever ``clipper_chain`` or legacy
+    clipper keys the origin carries describe steps that ran on the
+    converter's output, not on that file.
     """
     params = origin.get("params", {})
+
+    if params.get("converter"):
+        chain = _converter_origin_to_chain(params)
+        result = _replay_chain(file_path, chain, embedder_name) if chain is not None else None
+        if result is not None:
+            return result
+        # Replay failed (converter gone, no output matched): fall through to a
+        # whole-file embed rather than dropping the label entirely.
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     chain_raw = params.get("clipper_chain")
     if chain_raw:
@@ -609,25 +669,25 @@ def _apply_clip_and_embed(
         # Fall through to legacy/full-file embed.
 
     if not params.get("clipper"):
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
+
+    if media_type == "video":
+        # Reached when a trail failed to replay, or the origin has none: the
+        # legacy keys still name the last clipper's window, which beats the
+        # whole file.  Cleaner steps stamp no legacy keys, so a cleaner's
+        # narrowing or box is not among them.
+        from vtscore.datasets.clipper_chain import _video_unit_fields  # noqa: PLC0415
+
+        return _embed_uncut(file_path, media_type, embedder_name, extra_fields=_video_unit_fields(params))
 
     try:
         clipped = _clip_to_bytes(file_path, media_type, params)
     except Exception:
         log.debug("_apply_clip_and_embed: %s clip failed, falling back", media_type, exc_info=True)
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     if clipped is None:
-        embedding = embed_file(file_path, media_type, embedder_name)
-        if embedding is None:
-            return None
-        return embedding, None
+        return _embed_uncut(file_path, media_type, embedder_name)
 
     data, suffix = clipped
     embedding = _embed_via_tempfile(data, suffix, media_type, embedder_name)
@@ -698,25 +758,17 @@ def _embed_resolved_label(
     default embedder.
     """
     params = origin.get("params", {}) if origin is not None else {}
-    if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
+    # A flat converter origin (run_converters_on_folder) goes the same way: the
+    # converter is re-run on the resolved source file and the recorded
+    # sub-output re-selected, so a reference-converted label embeds the
+    # rendered page/frame (or its tile, or its cleaned text), not the raw
+    # source file.
+    if origin is not None and _needs_clip_replay(params):
         result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
         if result is None:
             return None
         embedding, _clip_bytes = result
         return embedding
-    # Flat converter origin (run_converters_on_folder): re-run the converter on
-    # the resolved source file and re-select the recorded sub-output, so a
-    # reference-converted label embeds the rendered page/frame, not the raw
-    # source file.  Normalized into a one-step chain to reuse the chain replay.
-    if origin is not None and params.get("converter"):
-        chain = _converter_origin_to_chain(params)
-        if chain is not None:
-            result = _replay_chain(file_path, chain, embedder_name)
-            if result is not None:
-                embedding, _clip_bytes = result
-                return embedding
-        # Replay failed (converter gone, no output matched): fall through to a
-        # whole-file embed rather than dropping the label entirely.
     return embed_file(file_path, media_type, embedder_name)
 
 
@@ -824,7 +876,7 @@ def resolve_label_embeddings(
             Callers that will mix these vectors with a dataset's stored
             embeddings (e.g. find-label training) must pass the dataset's
             embedder so all training vectors share one space; mixing
-            output from two embedders into a single MLP produces garbage.
+            output from two embedders into a single head produces garbage.
             Empty ``""`` falls back to the media type's first registered
             embedder.
 

@@ -1,30 +1,43 @@
 #!/usr/bin/env python3
 """Decide whether `run-tests.sh` may skip the frontend gates, or must block.
 
-The gates (the production build, `npm audit`, the Vitest suite) all need
-`frontend/node_modules`, which a fresh worktree does not have -- 354 MB is not
-worth installing for a backend-only change. So the script skipped them and
-carried on, and that is the bug (#4019): a frontend PR run from a fresh
-worktree printed `RUN PASSED (all gates green)` from a run that never compiled
-the change. PR #4018 hit exactly that; copying `node_modules` in made the same
-commit exercise the build and 2,446 Vitest specs.
+The gates (the production build, `npm audit`, the Vitest suite) can only judge
+a change under `frontend/`, and they all need `frontend/node_modules`, which a
+fresh worktree does not have -- 354 MB is not worth installing for a
+backend-only change. So the script used to skip them when the directory was
+missing and carry on, and that is the bug (#4019): a frontend PR run from a
+fresh worktree printed `RUN PASSED (all gates green)` from a run that never
+compiled the change. PR #4018 hit exactly that; copying `node_modules` in made
+the same commit exercise the build and 2,446 Vitest specs.
 
 A skip is sound when nothing the gates can see has changed, and that is a claim
-about the *diff*, not about intent -- the same reasoning the `slides` and
-markdown-only fast paths already apply to themselves. So this asks the diff:
+about the *diff*, not about intent or about what happens to be installed -- the
+same reasoning the `slides` and markdown-only fast paths already apply to
+themselves. So this asks the diff:
 
-* ``run``    -- `node_modules` is present; nothing to decide, run them.
-* ``skip``   -- absent, and the branch changes no frontend path. The gates
-                could not have judged anything; skipping loses nothing.
-* ``block``  -- absent, and either the branch changes a frontend path, or there
-                is no ``origin/dev`` to diff against so the premise cannot be
-                established at all. Declining to narrow when the diff is
-                unreadable is what the other fast paths do.
+* ``skip``   -- the branch changes no frontend path. The gates could not have
+                judged anything, whether or not `node_modules` is present;
+                skipping loses nothing. (With `node_modules` present this used
+                to run them anyway, which spent the build and the Vitest suite
+                on every backend-only run to re-check `origin/dev`'s frontend.)
+* ``run``    -- the branch changes a frontend path and `node_modules` is
+                present; or there is no ``origin/dev`` to diff against but
+                `node_modules` is present, so running costs only time.
+* ``block``  -- `node_modules` is absent, and either the branch changes a
+                frontend path, or there is no ``origin/dev`` to diff against so
+                the premise cannot be established at all. Declining to narrow
+                when the diff is unreadable is what the other fast paths do.
 
 "Frontend path" is `frontend/` and nothing else, deliberately. The bundle also
 embeds `docs/user/*.md` through a symlink, but the build only *copies* those
-and cannot fail on their contents -- which is why the markdown-only path
-already skips these gates by design.
+and cannot fail on its contents -- which is why the markdown-only path
+already skips these gates by design. `frontend/openapi.json` is inside it: a
+route change regenerates that snapshot and the generated client compiled from
+it, so such a branch counts as a frontend change.
+
+The runner still builds the bundle on a ``skip`` when `static/` has none and
+`node_modules` is present, so the tests that serve it do not build inside a
+pytest worker; that is a convenience, not a gate, and is decided there.
 
 Prints the decision on stdout and the reasoning on stderr. Exits 0 on a
 readable answer; a crash leaves stdout empty, which the caller treats as
@@ -93,11 +106,12 @@ def touches_frontend(paths: list[str]) -> list[str]:
 
 def decide(repo: Path) -> tuple[str, list[str]]:
     """Return ``(decision, explanation lines)``."""
-    if (repo / "frontend" / "node_modules").is_dir():
-        return RUN, []
+    has_modules = (repo / "frontend" / "node_modules").is_dir()
 
     paths = changed_paths(repo)
     if paths is None:
+        if has_modules:
+            return RUN, []
         return BLOCK, [
             "frontend/node_modules is missing and there is no origin/dev to diff against,",
             "so this run cannot establish that the change is backend-only.",
@@ -105,6 +119,8 @@ def decide(repo: Path) -> tuple[str, list[str]]:
 
     hits = touches_frontend(paths)
     if hits:
+        if has_modules:
+            return RUN, []
         return BLOCK, [
             "frontend/node_modules is missing, but this branch changes frontend files:",
             "",
@@ -112,8 +128,9 @@ def decide(repo: Path) -> tuple[str, list[str]]:
             *((f"  … and {len(hits) - 20} more",) if len(hits) > 20 else ()),
         ]
     return SKIP, [
-        "frontend/node_modules is missing, and this branch changes no frontend/ path,",
-        "so the frontend gates had nothing to judge.",
+        "this branch changes no frontend/ path, so the frontend build, npm audit and",
+        "the Vitest suite have nothing to judge"
+        + (" (frontend/node_modules is missing too)." if not has_modules else "."),
     ]
 
 

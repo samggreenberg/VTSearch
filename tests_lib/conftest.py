@@ -12,7 +12,7 @@ library-only ``CoreConfig`` builder.  The app-tier fixtures (``client``,
 ``isolated_settings``, ``_set_login_provider``, autorun-processor reset) are
 deliberately absent.
 
-Phase 7 of ``../vtscore/docs/architecture.md``.
+Seam 7 ("Test suite") of ``../vtscore/docs/architecture.md``.
 """
 
 from __future__ import annotations
@@ -64,7 +64,15 @@ from tests_shared.embedding_stubs import (  # noqa: E402
     fake_embed_audio as _fake_embed_audio,
     make_stub_embedding_models_fixture,
 )
+from tests_shared.pass_cache import (  # noqa: E402
+    configure_pass_cache,
+    deselect_cached_passes,
+    finish_pass_cache,
+    note_worker_reused,
+    record_pass_report,
+)
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit  # noqa: E402
+from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer  # noqa: E402
 from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
@@ -78,9 +86,15 @@ from tests_shared.state_reset import (  # noqa: E402
 )
 
 
+def pytest_configure(config):
+    """Derive the pass-cache tree key (controller) or read it (xdist worker); see ``tests_shared``."""
+    configure_pass_cache(config)
+
+
 def pytest_collection_modifyitems(items, config):
-    """Auto-assign group markers based on the test file's parent directory."""
+    """Auto-assign group markers based on the test file's parent directory, then drop recorded passes."""
     add_group_markers(items, root_dir_name="tests_lib")
+    deselect_cached_passes(config, items)
 
 
 def pytest_collection_finish(session):
@@ -94,12 +108,13 @@ pin_training_budget()
 # ---------------------------------------------------------------------------
 # Library-only CoreConfig builder.
 #
-# Library code that goes through ``CoreConfig.from_settings()`` (e.g.
-# ``vtsearch/datasets/registry.py:get_saved_datasets_dir()``) needs *some*
-# builder installed or it raises RuntimeError.  Outside the Flask app we
+# Library code reads its knobs with ``vtscore.config.get_setting()`` (e.g.
+# ``vtscore/datasets/registry.py:get_saved_datasets_dir()``), and a required
+# knob with nothing behind it raises RuntimeError.  Outside the Flask app we
 # install a stable default that points at the repo's ``data/`` tree and
-# uses sensible literals for every knob.  Tests that need a different
-# value can monkey-patch ``vtscore.config._core_config_builder`` or call
+# uses sensible literals for every knob, the way a library-only consumer
+# would.  Tests that need a different value can monkey-patch
+# ``vtscore.config.core_config._core_config_builder`` or call
 # :func:`register_core_config_builder` themselves.
 # ---------------------------------------------------------------------------
 
@@ -121,7 +136,22 @@ def _lib_default_core_config(_settings_path=None):
     )
 
 
-config.register_core_config_builder(_lib_default_core_config)
+def _install_library_settings() -> None:
+    """Answer every setting from the default builder alone, as a library-only consumer.
+
+    When both trees collect in one process, ``app.py`` has already registered
+    the app's per-knob getters, and a getter wins over a builder - so they are
+    cleared, or library tests would read the app's settings and the CLI's
+    ``--settings`` redirect would repoint them.
+    """
+    from vtscore.config import core_config
+
+    core_config._setting_getters.clear()
+    core_config._settings_path_redirect = None
+    config.register_core_config_builder(_lib_default_core_config)
+
+
+_install_library_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -225,10 +255,11 @@ def reset_contexts(tmp_path, monkeypatch):
     # at import time.  That file restores its own snapshot now (issue #3101),
     # but re-assert the builder defensively, so any future reload - or any test
     # that writes to ``vtscore.config`` and forgets to restore - cannot silently
-    # leave ``CoreConfig.from_settings()`` raising for the rest of the session.
-    # (``reset_shared_state`` re-asserts the training budget for the same
-    # reason.)
-    config.register_core_config_builder(_lib_default_core_config)
+    # leave ``get_setting()`` raising for the rest of the session.  (The host
+    # seam restore above also puts back any app getters captured at startup in a
+    # combined run, so they are cleared again; ``reset_shared_state``
+    # re-asserts the training budget for the same reason.)
+    _install_library_settings()
 
 
 @pytest.fixture
@@ -284,6 +315,35 @@ def pytest_unconfigure(config):
     print_summary_and_exit(config, getattr(config, "_vtsearch_lib_exitstatus", 0))
 
 
+def pytest_runtest_logreport(report):
+    """Record a passing phase for the pass cache (controller only; see ``tests_shared``)."""
+    record_pass_report(report)
+
+
 def pytest_sessionfinish(session, exitstatus):
-    """Stash the exit status so pytest_unconfigure can use it."""
-    session.config._vtsearch_lib_exitstatus = exitstatus
+    """Write the pass cache, then stash the exit status so pytest_unconfigure can use it.
+
+    ``session.exitstatus`` rather than the hook's argument: the pass cache turns
+    a "no tests collected" exit into 0 when every selected test was already
+    recorded, and pytest reads the attribute back after this hook.
+    """
+    finish_pass_cache(session)
+    session.config._vtsearch_lib_exitstatus = session.exitstatus
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_make_scheduler(config, log):
+    """Loadgroup that survives a dead worker (#4925; see ``tests_shared``)."""
+    return make_crash_safe_scheduler(config, log)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error):
+    """Take a finished xdist worker's pass-cache count (see ``tests_shared``)."""
+    note_worker_reused(node)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_timeout_set_timer(item, settings):
+    """In an xdist worker, the per-test timeout reports on stderr (#4925; see ``tests_shared``)."""
+    return set_worker_timeout_timer(item, settings)

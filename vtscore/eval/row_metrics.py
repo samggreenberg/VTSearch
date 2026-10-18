@@ -237,6 +237,23 @@ def operating_metrics(
         "line_separation": nan,
         "line_head_count": -1,
         "find_efbeta": nan,
+        # #4910: the shadow scale's line and the transfer's size; the base row fills them under a shadow.
+        "shadow_train_threshold": nan,
+        "shadow_threshold": nan,
+        "shadow_n_flagged": -1,
+        "shadow_fbeta": nan,
+        "shadow_separation": nan,
+        **{
+            k: nan
+            for k in (
+                "xfer_dlogit_med",
+                "xfer_dlogit_p90",
+                "xfer_clip_good",
+                "xfer_dmu_pos",
+                "xfer_dmu_neg",
+                "xfer_dsigma",
+            )
+        },
         "gmm_cut": nan,
         "blend_weight": nan,
         "shipped_provenance": "",

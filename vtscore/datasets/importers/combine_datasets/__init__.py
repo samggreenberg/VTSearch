@@ -84,7 +84,7 @@ def _apply_keep_embedders(
 
     # Re-point the primary at the routed score marker (structural ▸ patch ▸
     # text); a slot-less single-vector keep set has no role slots, so fall back
-    # to any kept name (its own primary vector drives cosine sort / the MLP).
+    # to any kept name (its own primary vector drives cosine sort / the head).
     kept_text = derive_binding_from_names(sorted(keep))[0]
     score = kept_structural or kept_patch or kept_text
     media["embedder"] = score or (next(iter(sorted(keep))) if keep else media.get("embedder", ""))

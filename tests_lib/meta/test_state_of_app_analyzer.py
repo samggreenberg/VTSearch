@@ -53,6 +53,11 @@ _SOTA = _ROOT / "scripts" / "experiments" / "state_of_app"
 MAX_STEPS = 20
 CATS = ("cat0@small", "cat1@large")
 
+# The ``run`` fixture (two sessions and an analyzer pass) is module-scoped, and
+# xdist builds one on every worker that draws a test reading it: one worker
+# builds it once.
+pytestmark = pytest.mark.xdist_group("state-of-app-analyzer")
+
 
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)

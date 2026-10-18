@@ -58,10 +58,10 @@ Label endpoints (``vtsearch/routes/detectors/labels.py``):
   not described in the spec.
 
 The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
-``POST /api/detectors/registry/from-labelset/<importer>`` routes stay on the
-legacy flask pattern: their request shape depends on the chosen label
-importer's plugin fields, which don't fit a static marshmallow schema (see
-"Routes absent from the spec" in ``docs/API.md``).
+``POST /api/detectors/registry/from-labelset/<importer>`` routes declare no
+request schema: their request shape depends on the chosen label importer's
+plugin fields, which don't fit a static marshmallow schema (see "Routes with
+no typed schema" in ``docs/API.md``).
 
 The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 """
@@ -71,6 +71,7 @@ from __future__ import annotations
 from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
+from vtsearch.schemas.datasets import DatasetDomainShiftResponseSchema
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
@@ -116,7 +117,7 @@ class _DetectorSummarySchema(Schema):
     # The detector's locked embedder type (the *kind* of vector space it
     # trains/scores in): "semantic" / "patch_semantic" / "structural".  Chosen at
     # create time, immutable.  Empty for a legacy detector that has neither a
-    # type nor a (migratable) primary name.  See patch-embedder.md →
+    # type nor a (migratable) primary name.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
 
@@ -296,7 +297,7 @@ class DetectorRegistryEntrySchema(Schema):
     embedder = fields.String()
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural"), chosen at create time.  Drives the dashboard's
-    # type-based detector/dataset compatibility gate.  See patch-embedder.md →
+    # type-based detector/dataset compatibility gate.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
     # The newest test verdict the detector keeps (#4526), which the AutoFind
@@ -334,12 +335,11 @@ class DetectorRegistryCreateRequestSchema(Schema):
     media_type = fields.String(required=True, validate=validate.Length(min=1))
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
-    trainable = fields.Boolean(load_default=False)
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural").  Empty lets the server pick (sole type a single-type
     # dataset supplies, else 400 on a multi-type dataset).  A concrete embedder
-    # name is also accepted and classified.  See patch-embedder.md →
+    # name is also accepted and classified.  See docs/ARCHITECTURE.md →
     # "Per-detector embedder type".
     embedder_type = fields.String(load_default="")
     # The detector's balance, F-beta's beta (#4665): which way its line leans
@@ -462,7 +462,7 @@ class DetectorRegistryReadersResponseSchema(Schema):
 class DetectorRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/detectors/registry/<id>/stats``.
 
-    Counts and metadata only — never embeddings or MLP weights (see the
+    Counts and metadata only — never embeddings or head weights (see the
     "No Persisted Vectors" rule). ``num_positive_resolved`` is how many of
     the detector's positive labels currently resolve into the active
     dataset (the set the Browse button would project), with
@@ -1129,6 +1129,29 @@ class FindEvidenceCoverageResponseSchema(Schema):
     # Headline: the vacuum excess is both statistically clear and practically
     # large (z > 3 and frac_unsupported >= 2*alpha).
     unsupported = fields.Boolean(required=True)
+
+
+class FindTrainingDomainResponseSchema(Schema):
+    """Response for ``GET /api/find/training-domain``.
+
+    The training-domain overlap check for the active detector on the active
+    dataset, against the dataset it was trained on: the loaded dataset holding
+    the most of its Good / Bad examples.  ``domain_shift`` is null when there
+    is nothing to compare, and ``reason`` says why.
+    """
+
+    # The inferred training dataset; empty when no loaded dataset holds any of
+    # the detector's labelled examples.
+    reference_dataset_id = fields.String(required=True)
+    reference_dataset_name = fields.String(required=True)
+    # What the inference rests on: the detector's Good / Bad examples, and how
+    # many of them name a media in the reference and in the active dataset.
+    labels_total = fields.Integer(required=True)
+    labels_in_reference = fields.Integer(required=True)
+    labels_in_active = fields.Integer(required=True)
+    domain_shift = fields.Nested(DatasetDomainShiftResponseSchema, required=True, allow_none=True)
+    # Why ``domain_shift`` is null; empty when it is not.
+    reason = fields.String(required=True)
 
 
 class FindCorrectionsToDetectorResponseSchema(Schema):

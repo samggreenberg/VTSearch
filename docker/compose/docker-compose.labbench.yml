@@ -3,6 +3,8 @@
 # Streamlined for the LabBench environment: browsing/voting on images
 # with the SigLIP embedder. The SigLIP weights are baked into the image
 # at build time, so the container is ready to serve on first run.
+# docker/Dockerfile.labbench's MEDIA_TYPE build arg defaults to image;
+# docker-compose.labbench-audio.yml is the audio build.
 #
 #   docker compose -f docker/compose/docker-compose.labbench.yml up
 #   docker compose -f docker/compose/docker-compose.labbench.yml up -d
@@ -13,6 +15,8 @@ services:
     build:
       context: ../..
       dockerfile: docker/Dockerfile.labbench
+      args:
+        MEDIA_TYPE: image
     image: vtsearch:labbench
     ports:
       - "5000:5000"

@@ -1,145 +1,52 @@
+/* The Browse (VTSBrowse) projection payloads.
+ *
+ * The wire shapes are the generated ones (`vtsearch/schemas/projection.py`),
+ * re-exported here so the Browse code imports them from one place. What stays
+ * hand-written is what the spec cannot say:
+ *
+ * - **`ProjectionLayout`**: one schema, `ProjectionMeta`, answers both a build
+ *   in flight (status and progress only) and a ready layout, so the spec marks
+ *   every layout field optional. A ready meta always carries them;
+ *   {@link readyLayout} narrows a meta to the shape the canvas draws from.
+ * - **`BinShape`**: the spec types `bin_shape` as a plain string.
+ * - **`ViewTransform`**: the canvas's own pan/zoom state; no endpoint returns it.
+ */
+
+import type { LevelMeta } from '../generated/api-client/models/level-meta';
+import type { ProjectionMeta } from '../generated/api-client/models/projection-meta';
+
+export type { HexCell } from '../generated/api-client/models/hex-cell';
+export type { LevelMeta } from '../generated/api-client/models/level-meta';
+export type { ProjectionBuildResponse } from '../generated/api-client/models/projection-build-response';
+export type { ProjectionLabelsResponse } from '../generated/api-client/models/projection-labels-response';
+export type { ProjectionMeta } from '../generated/api-client/models/projection-meta';
+export type { RegionLabel } from '../generated/api-client/models/region-label';
+export type { TileResponse } from '../generated/api-client/models/tile-response';
+
 /** How the projection pyramid tiles the 2-D layout. */
 export type BinShape = 'hex' | 'square';
 
-export interface HexCellPayload {
-  q: number;
-  r: number;
-  cx: number;
-  cy: number;
-  count: number;
-  rep_id: number;
-  /**
-   * All media ids aggregated in this cell. The canvas uses it to render the
-   * cell's selection state (none / partial / full) and to toggle the whole
-   * bin's contents. Re-derived server-side from the frozen layout, so it may be
-   * absent on a degenerate response; callers fall back to ``[rep_id]``.
-   */
-  member_ids?: number[];
-}
-
-export interface TilePayload {
-  level: number;
-  tx: number;
-  ty: number;
-  cells: HexCellPayload[];
-}
-
-export interface LevelMeta {
-  level: number;
-  radius: number;
-  n_cells: number;
-}
-
 /**
- * One region signpost — a named place on the projection map (see
- * `docs/plans/vtsbrowse-toponymy.md`). The canvas draws it as a text pill
- * anchored at `(x, y)` when the view's zoom is near the sign's `level`.
+ * A built projection's meta: the pyramid fields a `ready` meta always carries,
+ * made required. The canvas, the minimap and the view geometry draw from this.
  */
-export interface RegionLabelPayload {
-  /**
-   * Pyramid zoom level the sign belongs to: 0 = the coarsest layer (continent
-   * names), deeper = finer (countries, then states). May be fractional — the
-   * canvas interpolates visibility/size on a continuous level axis.
-   */
-  level: number;
-  /** Anchor in projection space (the frozen 2-D layout's coordinates). */
-  x: number;
-  y: number;
-  text: string;
-  /** Naming confidence, used as the de-clutter tiebreak (higher wins). */
-  score?: number;
-  /** Which namer produced the sign (e.g. "keyphrase", "llm"). */
-  source?: string;
-  /**
-   * Whether a coarser sign names this region one zoom band out (a parent in the
-   * topic tree). `false` marks a **root** region: the canvas skips the coarse-
-   * edge fade-in and keeps the sign visible when zoomed out, so the region
-   * isn't left nameless with nothing coarser covering it. Absent ⇒ `true`
-   * (treated as having a parent — the pre-flag fading behaviour).
-   */
-  has_coarser?: boolean;
-  /**
-   * Whether a finer sign names this region one zoom band in (a child in the
-   * topic tree). `false` marks a **leaf** region: the canvas skips the fine-
-   * edge fade-out and keeps the sign visible as you zoom in, so an on-screen
-   * island's only name doesn't expire with nothing finer to hand off to.
-   * Absent ⇒ `true`.
-   */
-  has_finer?: boolean;
-}
-
-/** Response of ``GET /api/projection/labels``. */
-export interface ProjectionLabelsResponse {
-  /** "ready" when a projection exists (labels may still be empty), "idle" otherwise. */
-  status: string;
-  projection_id?: string;
-  labels: RegionLabelPayload[];
-}
-
-export interface ProjectionMeta {
+export interface ProjectionLayout extends ProjectionMeta {
   projection_id: string;
-  /** Which lattice this metadata's pyramid was binned with. */
-  bin_shape?: BinShape;
+  /** `[xmin, ymin, xmax, ymax]` of the frozen 2-D layout. */
   bounds: [number, number, number, number];
   base_radius: number;
   tile_span: number;
   point_count: number;
   levels: LevelMeta[];
-  media_type?: string;
-  /**
-   * Whether region signpost labels exist for this projection (see
-   * ``GET /api/projection/labels``). Absent/false until a labeler has run,
-   * so the client can skip the labels fetch entirely.
-   */
-  has_labels?: boolean;
-  /**
-   * Membership version of this projection. 0 for full-dataset layouts; bumped
-   * when items are removed from a subset browse in place. Combined with
-   * ``projection_id`` to form the tile cache token, so an in-place edit busts
-   * the immutable tile cache without changing the layout identity (which would
-   * make the canvas re-frame the viewport).
-   */
-  content_version?: number;
-  // Build lifecycle (idle | building | ready | error) and progress, populated
-  // by GET /api/projection/meta while a build is in flight.
-  status?: 'idle' | 'building' | 'ready' | 'error';
-  current?: number;
-  total?: number;
-  message?: string;
-  /**
-   * Which coarse build phase is running, and how many the build has in total
-   * (arranging → tiling → naming regions). The UMAP fit reports no fraction of
-   * its own, so phase position is the only honest "how far along" signal for
-   * the longest stretch of the build.
-   */
-  step?: number | null;
-  total_steps?: number | null;
-  /**
-   * Whole-job completion fraction (0..1) stitched from {@link step} and the
-   * within-phase counts, so one bar fills across the entire build instead of
-   * restarting at each phase. Mirrors ``ProgressEvent.overall``.
-   */
-  overall?: number | null;
-  /**
-   * Whole-job fraction (0..1) at which the running phase's slice ends. With
-   * {@link overall} parked at the slice floor during the count-less UMAP fit,
-   * the pair brackets the build's true position so the bar can shade the span
-   * as a bounded indeterminate zone. Mirrors ``ProgressEvent.overall_step_end``.
-   */
-  overall_step_end?: number | null;
-  /**
-   * Estimated seconds remaining for the whole build, or `null` until the
-   * backend's tracker has enough signal to extrapolate. Already smoothed and
-   * snapped to a coarse ladder server-side — render it, don't re-round it.
-   * Mirrors ``ProgressEvent.eta_seconds``.
-   */
-  eta_seconds?: number | null;
-  error?: string;
 }
 
-export interface ProjectionBuildResponse {
-  status: string;
-  projection_id?: string;
+/** The meta as a {@link ProjectionLayout}, or null while no layout is built (idle, building, error). */
+export function readyLayout(meta: ProjectionMeta | null | undefined): ProjectionLayout | null {
+  if (!meta || meta.status !== 'ready') return null;
+  const { projection_id, bounds, base_radius, tile_span, point_count, levels } = meta;
+  if (projection_id == null || bounds?.length !== 4) return null;
+  if (base_radius == null || tile_span == null || point_count == null || levels == null) return null;
+  return meta as ProjectionLayout;
 }
 
 export interface ViewTransform {

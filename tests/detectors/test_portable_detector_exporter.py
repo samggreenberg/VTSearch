@@ -1,8 +1,9 @@
 """Tests for the ``portable_detector`` results exporter (issue #2391).
 
-The exporter is the CLI / CI counterpart to the GUI's portable-export modal:
-run ``--autodetect --exporter portable_detector`` and, instead of the scored
-hits, it writes one standalone ONNX scoring bundle per trained detector.  These
+The exporter is the CLI / CI counterpart to the single-detector
+``POST /api/detectors/<id>/portable-bundle`` route: run ``--autodetect
+--exporter portable_detector`` and, instead of the scored hits, it writes one
+standalone ONNX scoring bundle per trained detector.  These
 tests drive both the end-to-end CLI pipeline path and the exporter's own
 :meth:`export_cli_detectors` (skip rules, multi-detector disambiguation).
 """
@@ -249,8 +250,8 @@ class TestExportCliDetectors:
     def test_skips_structural_detector(self, tmp_path):
         """A real (well-formed) structural detector is blocked, not silently mis-exported.
 
-        Structural detectors' stage-1 VLAD-space MLP is a normal 2-layer weight
-        dict indistinguishable in shape from any other detector's, so the
+        Structural detectors' stage-1 VLAD-space head is a normal weight dict,
+        indistinguishable in shape from any other detector's, so the
         weight-shape check alone can't catch it - the exporter must gate on
         ``embedder_type`` explicitly.
         """
@@ -296,6 +297,22 @@ class TestExportCliDetectors:
         manifest = _assert_valid_bundle(tmp_path / "patchy.zip", detector_name="patchy")
         assert len(manifest["caveats"]) == 1
         assert "WHOLE item" in manifest["caveats"][0]
+
+    def test_default_path_is_anchored_on_data_dir(self, tmp_path, monkeypatch):
+        """The default bundle path lands under ``DATA_DIR`` whatever the CWD is."""
+        from vtscore.config import DATA_DIR
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("portable_detector")
+        (filepath_field,) = exp.fields
+        default = filepath_field.default
+        assert Path(default).is_absolute()
+        assert Path(default).parent == Path(DATA_DIR)
+
+        # Resolving the template from an unrelated CWD still targets DATA_DIR.
+        monkeypatch.chdir(tmp_path)
+        resolved = exp._resolve_path(default, "cats", disambiguate=False)
+        assert resolved == (Path(DATA_DIR) / "cats-detector.zip").resolve()
 
     def test_sanitizes_detector_name_in_path(self, tmp_path):
         """A detector name with path separators can't escape the target dir."""

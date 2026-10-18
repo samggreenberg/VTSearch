@@ -20,6 +20,11 @@ from tests.helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.hashing import content_md5
 
+#: The width the registered ``clap`` embedder declares.  The importer below
+#: files its vectors under ``content_embedder_name="clap"``, and a named
+#: pre-computed vector is width-checked against its embedder at ingest.
+_CLAP_DIM = 512
+
 
 def _write_wav(path: Path) -> None:
     path.write_bytes(_make_wav_bytes())
@@ -101,7 +106,7 @@ class TestImporterProvidedVectors:
 
     def test_importer_vector_used_instead_of_model(self, tmp_path):
         rng = np.random.default_rng(42)
-        pre_vec = rng.standard_normal(8).astype(np.float32)
+        pre_vec = rng.standard_normal(_CLAP_DIM).astype(np.float32)
 
         _write_wav(tmp_path / "tone.wav")
         mt, emb = _make_mock_media_type()
@@ -121,8 +126,8 @@ class TestImporterProvidedVectors:
 
     def test_importer_vector_multiple_files(self, tmp_path):
         rng = np.random.default_rng(123)
-        vec_a = rng.standard_normal(8).astype(np.float32)
-        vec_b = rng.standard_normal(8).astype(np.float32)
+        vec_a = rng.standard_normal(_CLAP_DIM).astype(np.float32)
+        vec_b = rng.standard_normal(_CLAP_DIM).astype(np.float32)
 
         _write_wav(tmp_path / "a.wav")
         _write_wav(tmp_path / "b.wav")
@@ -145,9 +150,9 @@ class TestImporterProvidedVectors:
 
     def test_mixed_importer_vectors_and_no_vector(self, tmp_path):
         """Importer-supplied vectors land on the matching files; the rest leave
-        with ``embedding=None`` for the framework embed stage to fill in."""
+        with no vector for the framework embed stage to fill in."""
         rng = np.random.default_rng(7)
-        pre_vec = rng.standard_normal(8).astype(np.float32)
+        pre_vec = rng.standard_normal(_CLAP_DIM).astype(np.float32)
 
         _write_wav(tmp_path / "pre.wav")
         _write_wav(tmp_path / "model.wav")
@@ -169,7 +174,7 @@ class TestImporterProvidedVectors:
 
     def test_importer_vector_in_thin_mode(self, tmp_path):
         rng = np.random.default_rng(99)
-        pre_vec = rng.standard_normal(8).astype(np.float32)
+        pre_vec = rng.standard_normal(_CLAP_DIM).astype(np.float32)
 
         _write_wav(tmp_path / "thin.wav")
         mt, emb = _make_mock_media_type()
@@ -275,7 +280,7 @@ class TestImporterProvidedBoth:
 
     def test_both_vector_and_md5_from_importer(self, tmp_path):
         rng = np.random.default_rng(55)
-        pre_vec = rng.standard_normal(8).astype(np.float32)
+        pre_vec = rng.standard_normal(_CLAP_DIM).astype(np.float32)
         pre_md5 = "d" * 32
 
         _write_wav(tmp_path / "both.wav")
@@ -302,7 +307,7 @@ class TestImporterProvidedBoth:
         md5s = {}
         for name in names:
             _write_wav(tmp_path / name)
-            vectors[name] = rng.standard_normal(8).astype(np.float32)
+            vectors[name] = rng.standard_normal(_CLAP_DIM).astype(np.float32)
             md5s[name] = name[0] * 32
 
         mt, emb = _make_mock_media_type()
@@ -737,7 +742,7 @@ class TestFolderImporterPassthrough:
 class TestImporterMediasInSorting:
     """Verify that importer-provided embeddings work in cosine sort and train_and_score."""
 
-    def _load_importer_medias_into_app(self, tmp_path, num_files=6, embed_dim=8):
+    def _load_importer_medias_into_app(self, tmp_path, num_files=6, embed_dim=_CLAP_DIM):
         """Create WAV files, import them with pre-computed vectors, and load into app state."""
         rng = np.random.default_rng(42)
         vectors = {}
@@ -762,7 +767,7 @@ class TestImporterMediasInSorting:
 
         # Build a query vector and compute expected similarities manually
         rng = np.random.default_rng(99)
-        query_vec = rng.standard_normal(8).astype(np.float32)
+        query_vec = rng.standard_normal(_CLAP_DIM).astype(np.float32)
 
         all_ids = list(medias.keys())
         all_embs = np.array([media_embedding(medias[cid]) for cid in all_ids])

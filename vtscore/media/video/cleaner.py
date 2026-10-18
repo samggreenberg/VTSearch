@@ -234,6 +234,13 @@ class VideoBlankTrimCleaner(MediaCleaner):
             step=float(params.get("step", self._step)),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["blank_ratio"] = self._blank_ratio
+        d["max_trim"] = self._max_trim
+        d["step"] = self._step
+        return d
+
     def _scan_in(
         self,
         path: Path,
@@ -327,7 +334,8 @@ class VideoLetterboxCropCleaner(MediaCleaner):
     same detector the image gate uses
     (:func:`~vtscore.media.image.edge_trim.solid_edge_box`) where the content
     starts in each, and records the **union** of those content boxes as the
-    unit's ``clip_box``.
+    unit's ``clip_box``, with the size of the frames it was measured on as
+    ``clip_box_frame`` (see :mod:`vtscore.media.video.crop`).
 
     Taking the union rather than the intersection is what makes the crop safe
     on moving pictures: a margin is removed only when *every* sampled frame
@@ -471,6 +479,14 @@ class VideoLetterboxCropCleaner(MediaCleaner):
             min_edge_trim=float(params.get("min_edge_trim", self._min_edge_trim)),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["samples"] = self._samples
+        d["edge_tol"] = self._edge_tol
+        d["max_edge_trim"] = self._max_edge_trim
+        d["min_edge_trim"] = self._min_edge_trim
+        return d
+
     def _sample_times(self, t0: float, t1: float, info: decode.VideoInfo) -> list[float]:
         """Return the timestamps to analyse, spread across ``[t0, t1]``."""
         last = max(t0, t1 - info.frame_seconds)
@@ -552,4 +568,5 @@ class VideoLetterboxCropCleaner(MediaCleaner):
         dx, dy = (base[0], base[1]) if base is not None else (0, 0)
         cleaned = dict(media)
         cleaned["clip_box"] = [union[0] + dx, union[1] + dy, union[2] + dx, union[3] + dy]
+        cleaned["clip_box_frame"] = [full_width, full_height]
         return cleaned

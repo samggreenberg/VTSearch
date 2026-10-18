@@ -1,14 +1,15 @@
 """Portable-detector exporter – write standalone ONNX scoring bundles headlessly.
 
-The GUI has a dedicated modal that exports a saved detector as a portable,
-scoring-only zip (an ONNX MLP + ``manifest.json`` + ``README.md``; see
-:mod:`vtscore.detectors.portable_bundle`).  This exporter is the CLI / CI
-counterpart: run ``--autodetect`` (or a ``--pipeline`` YAML) with
+A portable bundle is a scoring-only zip (an ONNX head + ``manifest.json`` +
+``README.md``; see :mod:`vtscore.detectors.portable_bundle`).  For one saved
+detector, the app serves it from ``POST /api/detectors/<id>/portable-bundle``,
+an API-only expert affordance with no GUI menu item.  This exporter is the
+CLI / CI path: run ``--autodetect`` (or a ``--pipeline`` YAML) with
 ``--exporter portable_detector`` and, instead of exporting the scored hits, it
 writes one bundle per detector the run trained.
 
 It is the sanctioned exception to the "No Persisted Vectors or MLPs" rule
-(``CLAUDE.md``): the bundle persists the trained MLP - never embeddings or raw
+(``CLAUDE.md``): the bundle persists the trained head - never embeddings or raw
 media - so a third party can score their own media without VTSearch.
 
 Unlike every other exporter, this one consumes the *trained classifiers*, not
@@ -27,29 +28,32 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter
 from vtscore.io import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BUNDLE_PATH = "data/{detector_name}-detector.zip"
+# Anchored on ``DATA_DIR`` like the ``server_json_file`` / ``server_csv_file``
+# defaults, so where a bundle lands does not depend on the process CWD.
+_DEFAULT_BUNDLE_PATH = f"{DATA_DIR}/{{detector_name}}-detector.zip"
 
 
 class PortableDetectorResultsExporter(ResultsExporter):
     """Write each trained detector as a standalone, portable scoring bundle.
 
-    CLI-only: it needs the trained MLP, which only the ``--autodetect`` /
-    ``--pipeline`` path produces, so it is hidden from the GUI picker (the GUI
-    has its own portable-export modal).  One zip is written per detector; use
-    ``{detector_name}`` in the path to disambiguate a multi-detector run.
+    CLI-only: it needs the trained head, which only the ``--autodetect`` /
+    ``--pipeline`` path produces, so it is hidden from the GUI picker.  One zip
+    is written per detector; use ``{detector_name}`` in the path to
+    disambiguate a multi-detector run.
     """
 
     name = "portable_detector"
     display_name = "Portable Detector Bundle"
     description = "Write each trained detector as a standalone ONNX scoring bundle (zip)."
     icon = "\U0001f4e6"  # package
-    # Needs the trained MLP, only available on the CLI/pipeline path; the GUI
-    # has its own dedicated portable-export modal, so keep it out of the picker.
+    # Needs the trained head, only available on the CLI/pipeline path, so keep
+    # it out of the picker.
     hidden_from_picker = True
     fields = [
         PluginField(
@@ -82,14 +86,15 @@ class PortableDetectorResultsExporter(ResultsExporter):
         """Not supported: this exporter needs the trained classifier, not hits.
 
         The results-only path (the GUI AutoFind auto-export) can't build a
-        bundle because it never sees the trained MLP.  Use the CLI/pipeline
+        bundle because it never sees the trained head.  Use the CLI/pipeline
         path (``--exporter portable_detector`` with ``--autodetect``) instead;
-        for interactive one-off exports, the GUI's portable-export modal.
+        for a one-off export of a saved detector,
+        ``POST /api/detectors/<id>/portable-bundle``.
         """
         raise NotImplementedError(
             "The portable_detector exporter needs the trained classifier, which is only produced by "
-            "the CLI autodetect/pipeline path. Run `--autodetect --exporter portable_detector`, or use "
-            "the GUI's portable-export modal for a single saved detector."
+            "the CLI autodetect/pipeline path. Run `--autodetect --exporter portable_detector`, or "
+            "POST /api/detectors/<id>/portable-bundle for a single saved detector."
         )
 
     def export_cli_detectors(

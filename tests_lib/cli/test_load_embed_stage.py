@@ -206,3 +206,18 @@ class TestNothingIsDropped:
 
         events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
         assert [e for e in events if e["event"] == "medias_unembedded"] == []
+
+
+class TestImportedNamedVectorsAreWidthChecked:
+    def test_a_named_vector_of_the_wrong_width_stops_the_import(self, monkeypatch, registry):
+        """The CLI holds an importer's own ``{name: vector}`` to the embedder's width, as the GUI's load does."""
+        from vtscore.embedding.precomputed import MismatchedVectorError
+
+        registry["audio"].embedding_dim = DIM
+        media = _media("wrong.wav")
+        media["embeddings"] = {"fake_audio": np.ones(DIM + 1, dtype=np.float32)}
+        _install(monkeypatch, _StubImporter([media]))
+
+        with pytest.raises(MismatchedVectorError, match="wrong.wav"):
+            list(_load_importer_whole("stub", {}))
+        assert registry["audio"].seen == []

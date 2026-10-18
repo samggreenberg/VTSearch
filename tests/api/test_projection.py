@@ -20,7 +20,7 @@ import pytest
 
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.projection import Projection, build_pyramid
-from vtscore.state.core import get_active_context
+from vtscore.state.core import DatasetContext, get_active_context, register_context
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +121,9 @@ class TestProjectionMeta:
             release.wait(timeout=30)
 
         # Occupy the single runner with an unrelated job (a different dataset id
-        # so the build we fire next can't coalesce into it).
+        # so the build we fire next can't coalesce into it).  That dataset must
+        # be loaded, or the blocker fails without running (#4976).
+        register_context(DatasetContext("__other__"))
         projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
         assert started.wait(timeout=5)
 
@@ -169,6 +171,7 @@ class TestProjectionMeta:
 
         # Park the build in the pending slot so its job is inspectable and
         # nothing races with the phase we stamp on it below.
+        register_context(DatasetContext("__other__"))
         projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
         assert started.wait(timeout=5)
 
@@ -594,9 +597,12 @@ class TestProjectionSubset:
         resp = client.post("/api/projection/build", json={"ids": []})
         assert resp.status_code == 409
 
-    def test_subset_bad_ids_returns_400(self, client):
-        assert client.post("/api/projection/build", json={"ids": "nope"}).status_code == 400
-        assert client.post("/api/projection/build", json={"ids": ["a", "b"]}).status_code == 400
+    def test_subset_bad_ids_returns_422(self, client):
+        assert client.post("/api/projection/build", json={"ids": "nope"}).status_code == 422
+        assert client.post("/api/projection/build", json={"ids": ["a", "b"]}).status_code == 422
+
+    def test_an_unknown_subset_flag_is_refused(self, client):
+        assert client.get("/api/projection/meta?subset=maybe").status_code == 422
 
     def test_subset_unknown_ids_returns_409(self, client):
         """Ids that aren't in the dataset yield nothing to project."""

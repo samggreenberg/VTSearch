@@ -66,8 +66,10 @@ Discovery is **eager** - by the time `from vtscore.exporters import
 list_exporters` returns, every sub-package under
 `vtscore/exporters/` exposing an `EXPORTER` attribute is registered,
 and the `vtscore.exporters` entry-point group has been scanned. Failed
-imports emit a `UserWarning` and are skipped; broken third-party entry
-points warn and are skipped; built-ins win on name clash. See
+imports emit a `UserWarning` and are skipped; a third-party entry point
+whose own import raises warns and becomes a tombstone (left out of
+`list_exporters()`, re-raising its error once `get_exporter()` hands it
+out and it is used); built-ins win on name clash. See
 [`plugins.md`](plugins.md) for the underlying mechanics.
 
 ```python
@@ -191,7 +193,7 @@ wherever it renders an exporter's fields.
 | `open_url` | `find_results`, `labelset` | Formats the labelset into a URL and returns it as `open_url` for the browser to open in a new tab | `opens_url = True`. No network call server-side; substitutes `{ids}` / `{count}` into a user-supplied template, URL-encoding the joined identifiers. Truncates to `max_items` (reported in the message) and refuses a URL over ~2000 characters. The one results-carrying built-in that does not stream |
 | `email_smtp` | `find_results`, `labelset` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | `find_results`, `labelset` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
-| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle (zip) per trained detector | `hidden_from_picker = True`, CLI-only. Default path `data/{detector_name}-detector.zip`. See below - it is the one exporter that consumes detectors rather than results |
+| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle (zip) per trained detector | `hidden_from_picker = True`, CLI-only. Default path `{DATA_DIR}/{detector_name}-detector.zip`. See below - it is the one exporter that consumes detectors rather than results |
 
 The Payloads column is not a declaration anywhere in the source: each
 exporter's `supported_payloads` is derived from the methods it overrides,
@@ -199,8 +201,10 @@ so the column is a reading of the code rather than a second copy of it.
 
 `hidden_from_picker = True` keeps an exporter out of the generic
 picker UI. The `gui` exporter is special-cased by the frontend; the
-`portable_detector` exporter is hidden because the GUI has its own
-dedicated portable-export modal.
+`portable_detector` exporter is hidden because it needs the trained
+head that only the CLI produces (a single saved detector's bundle comes
+from `POST /api/detectors/<id>/portable-bundle`, which has no GUI menu
+item).
 
 ### `portable_detector` is shaped differently
 

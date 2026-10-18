@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-10-15 | [Four libraries pick kernels by CPU, so a cell differed by node](lessons/2026-10-15-four-libraries-pick-kernels-by-cpu.md) | #4110 |
+| 2026-10-15 | [numpy 2.4 renamed its dispatch targets, so the numpy pin did nothing on a new numpy](lessons/2026-10-15-numpy-renamed-its-dispatch-targets.md) | #4930 |
 | 2026-10-14 | [Variant rows say a detector is on screen 25 votes early](lessons/2026-10-14-variant-rows-say-trained-early.md) | #4864 |
 | 2026-10-13 | [QOS caps copied into scripts went stale, twice](lessons/2026-10-13-qos-caps-copied-into-scripts-go-stale.md) | #4837 |
 | 2026-10-12 | [An arm cut short of the full session picks differently near its end](lessons/2026-10-12-short-arm-changes-picks.md) | #4736 |

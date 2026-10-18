@@ -5,8 +5,10 @@ The balance is F-beta's *beta*, a weighing of precision against recall.  A
 (#4388): the user votes on uniform random picks from each band (the top 8,
 the next 8, then 16, 32, ...), the walk goes deeper while the F-beta estimate
 rises and shallower while it does not, and the peak is the set it ends on.
-Whether that set moves the line follows the preset (``advisory`` at beta 1
-and below, ``trim`` above; #4427).  The rule lives in
+The check is advisory at every preset (#4452): the line comes from the
+labels, so the set the walk ends on never moves it.  The check reports how
+right the set the line keeps is, and its picks are ordinary votes the next
+retrain learns from.  The rule lives in
 :mod:`vtscore.training.thresholds.spot_check`; this blueprint is its lifecycle
 for the active detector:
 
@@ -20,12 +22,11 @@ for the active detector:
 * ``GET /api/precision-check`` reports the running check, or the last finished
   one, beside the balance's state.
 
-A finished check is kept on the detector and its result informs where the line
-sits until a new check replaces it.  Later votes
-retrain the model and the line follows the new ranking at the same count; the
-result's range then reports ``stale``.  Starting a new check needs a changed
-ranking: there is no redraw on the same list (any vote, the check's own
-included, changes it).
+A finished check is kept on the detector until a new check replaces it; its
+ranges describe the set the line kept when it started (#4483).  Once later
+votes or a retrain move the ranking under that set, the result's ranges
+report ``stale``.  Starting a new check needs a changed ranking: there is no
+redraw on the same list (any vote, the check's own included, changes it).
 """
 
 from __future__ import annotations
@@ -82,7 +83,12 @@ def start_precision_check():
     last finished result stays in force until this check ends.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
-    from vtscore.state.core import detector_walk_positives, get_active_detector_context, human_voted_ids  # noqa: PLC0415
+    from vtscore.state.core import (  # noqa: PLC0415
+        detector_balance_state,
+        detector_walk_positives,
+        get_active_detector_context,
+        human_voted_ids,
+    )
     from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
@@ -105,7 +111,10 @@ def start_precision_check():
     # only the screenshot harness does, so a refresh frames the same picks
     # (#4330).
     n_pos = detector_walk_positives(det_ctx, beta)
-    det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
+    # The finished check's ranges describe the set the line keeps now (#4483):
+    # the top of this same unvoted ranking.
+    kept = detector_balance_state(det_ctx, beta)["count"]
+    det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED, kept=kept)
     return _payload()
 
 
@@ -123,8 +132,8 @@ def vote_precision_check(body: dict):
     item.  Once every pick of the band is labelled the walk moves on: the next
     band the set under test still owes is dealt, or the set is decided and the
     walk goes deeper (a new band is dealt), shallower, or ends.  The response
-    carries the check's new state and the balance's, whose line a finished
-    check re-draws (to the set it ended on under ``trim``).
+    carries the check's new state and the balance's.  A finished check never
+    moves the line: its ranges say how right the set the line keeps is.
     """
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
@@ -152,7 +161,7 @@ def vote_precision_check(body: dict):
     if finished and check.finished:
         # The set the line keeps from now on, as it stands with the check's
         # own votes cast: what a later vote or retrain is compared against.
-        check.fingerprint = det_ctx.line_ranking.fingerprint(check.k, human_voted_ids(det_ctx))
+        check.fingerprint = det_ctx.line_ranking.fingerprint(check.range_count, human_voted_ids(det_ctx))
         det_ctx.precision_check = check
         det_ctx.precision_check_run = None
         # The weak-separation prompt's cooldown counts from here (#4496).
@@ -190,7 +199,12 @@ def _persist_votes() -> None:
 
 
 def _move_line(det_ctx) -> None:
-    """Re-draw the line now the check has finished, and in Find mode re-split the unverified items."""
+    """Re-cut the line at the balance now the check's votes are in, and in Find mode re-split the unverified items.
+
+    The check's result never moves the line (#4452).  Only a line drawn by the
+    count rule, which keeps a count of the unvoted remainder, can land
+    elsewhere once the picks are voted.
+    """
     from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
     from vtscore.state.votes import rethreshold_unverified_find_items  # noqa: PLC0415
 

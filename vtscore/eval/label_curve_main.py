@@ -8,7 +8,7 @@ Usage::
 
     # Full sweep, writing a tidy CSV
     python -m vtscore.eval.label_curve_main \
-        --datasets esc50_s flowers102_s \
+        --datasets esc50_s caltech101_s \
         --trainers mlp svm_linear svm_rbf \
         --label-counts 5 10 20 50 100 200 \
         --seeds 0 1 2 3 4 \
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="+",
         required=True,
         metavar="DEMO_ID",
-        help="Demo dataset IDs to load (e.g. esc50_s, flowers102_s).",
+        help="Demo dataset IDs to load (e.g. esc50_s, caltech101_s).",
     )
     parser.add_argument(
         "--trainers",

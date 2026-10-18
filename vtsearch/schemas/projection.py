@@ -102,6 +102,44 @@ class ProjectionBuildResponseSchema(Schema):
     projection_id = fields.String(load_default=None)
 
 
+class ProjectionBuildRequestSchema(Schema):
+    """Body for ``POST /api/projection/build``; every field is optional."""
+
+    ids = fields.List(
+        fields.Integer(),
+        load_default=None,
+        allow_none=True,
+        metadata={"description": "Project only these media, into the ephemeral subset layout."},
+    )
+    force = fields.Boolean(
+        load_default=False,
+        metadata={"description": "Discard the existing layout and re-fit UMAP (the Browser's Re-project)."},
+    )
+
+
+class ProjectionSubsetQuerySchema(Schema):
+    """Query for the projection reads: which of the two layouts to read."""
+
+    subset = fields.Boolean(
+        load_default=False,
+        metadata={"description": "Read the ephemeral subset layout rather than the full-dataset one."},
+    )
+
+
+class TileQuerySchema(ProjectionSubsetQuerySchema):
+    """Query for ``GET /api/projection/tiles/...``."""
+
+    v = fields.String(
+        load_default=None,
+        metadata={
+            "description": (
+                "Cache token (``<projection_id>:<content_version>``) the client appends so each "
+                "layout's immutable tiles get their own URL. The server ignores it."
+            )
+        },
+    )
+
+
 class SubsetRemoveRequestSchema(Schema):
     """Body for ``POST /api/projection/subset/remove``."""
 

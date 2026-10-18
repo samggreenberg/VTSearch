@@ -174,6 +174,16 @@ class MediaEntrySchema(Schema):
     clip_end = fields.Float()
     clip_index = fields.Integer()
     clip_box = fields.List(fields.Float())
+    clip_box_frame = fields.List(
+        fields.Integer(),
+        metadata={
+            "description": (
+                "``[width, height]`` of the frame ``clip_box`` was measured on, in stored pixels. "
+                "On an anamorphic video the player reports display pixels, so it scales the box by "
+                "this before cropping. Absent on a box recorded without one, which is used as is."
+            )
+        },
+    )
     has_original = fields.Boolean(
         metadata={
             "description": (
@@ -288,7 +298,7 @@ class MediaVoteRequestSchema(Schema):
     media and the server alternated ADD/REMOVE on every click.
 
     ``region_box`` is a 4-tuple of normalised image coords (``[x0, y0,
-    x1, y1]`` in ``[0, 1]``). Per the patch-embedder v2 design, only
+    x1, y1]`` in ``[0, 1]``). By design (``docs/ARCHITECTURE.md``), only
     good votes may carry a region; the handler rejects ``"bad"`` /
     ``"none"`` targets that carry a region_box.
 

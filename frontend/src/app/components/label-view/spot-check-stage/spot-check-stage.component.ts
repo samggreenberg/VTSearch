@@ -27,26 +27,24 @@ import type { Media } from '../../../models/api.models';
 import type { PrecisionCheckResponse } from '../../../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckState } from '../../../generated/api-client/models/precision-check-state';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { foundWords, lineBalanceFrom, rangePercent, type LineBalance } from '../../../utils/line-balance';
+import { foundWords, lineBalanceFrom, rangedSetWords, rangePercent, type LineBalance } from '../../../utils/line-balance';
 
 /** Where the step is: drawing the first round, voting on a round, sending it, on the result, or refused. */
 type Phase = 'starting' | 'voting' | 'sending' | 'done' | 'error';
 
-/** What a host needs after a round's votes land: they are ordinary votes, and a finished check moves the line. */
+/** What a host needs after a round's votes land: they are ordinary votes, and a finished check has a result. */
 export interface SpotCheckVoted {
-  /** True when this round ended the check: the line now keeps the set where the balance peaked. */
+  /** True when this round ended the check: the balance now carries its result. The line stays where the labels put it (#4452). */
   finished: boolean;
   response: PrecisionCheckResponse;
 }
 
 /**
  * Autopilot's Spot Check step in the Train view's centre pane (#4413; the
- * step is #4273's, walking the ranking in bands since #4388). It used to be a
- * modal the Threshold's "Check 5 picks" opened; now only Autopilot starts a
- * check, as one of its steps (`AutopilotStateService` phase `spot`): once
- * every quality light is green, before Done, and earlier while the labels
- * separate weakly (#4496). The host renders it in place of the centre panel
- * while the step runs.
+ * step is #4273's, walking the ranking in bands since #4388). Only Autopilot
+ * starts a check, as one of its steps (`AutopilotStateService` phase `spot`):
+ * before Done, and earlier while the labels separate weakly (#4496). The host
+ * renders it in place of the centre panel while the step runs.
  *
  * The server cuts the unvoted ranking into bands (the top 8, the next 8, then
  * 16, 32, ...) and draws each band's 5 picks uniformly at random; the user
@@ -54,8 +52,10 @@ export interface SpotCheckVoted {
  * its estimate of the balance (F-beta) does not fall ("Better so far: checking
  * the next 32"), and back to a shorter list once it does ("Past the peak:
  * checking a shorter list"), ending on the set where the estimate peaked. The
- * result is what the picks say about that set: a likely share right, and how
- * many of all the matches it holds. Nothing is met or fallen short of.
+ * result is what the picks say about the set the line kept when the check
+ * started (#4483): a likely share right, and how many of all the matches it
+ * holds. Nothing is met or fallen short of, and the check is advisory: the line
+ * stays where the labels put it (#4452).
  *
  * - **The picks are a check, not the ranking** (owner, 2026-09-29). They show
  *   one at a time in the order they were drawn, which is random, with no rank
@@ -171,15 +171,16 @@ export class SpotCheckStageComponent implements OnInit {
   });
 
   /**
-   * The result's headline: what the picks found on the set the walk ended on, named, since under
-   * `advisory` the line keeps another, and since it holds only what the user had not voted on (#4914).
+   * The result's headline: what the picks found on the set the ranges describe, named - since #4483
+   * the ones the line kept when the check started, which its votes have since moved - and holding
+   * only what the user had not voted on (#4914).
    */
   readonly resultHeadline = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const p = b.precision;
     const r = b.recall;
-    const what = `Checked the top ${(b.audited ?? b.count).toLocaleString()} you hadn't voted on`;
+    const what = `Checked ${rangedSetWords(b)}`;
     return p && r ? `${what}: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : `${what}.`;
   });
 
@@ -194,10 +195,13 @@ export class SpotCheckStageComponent implements OnInit {
     const kept = b.count.toLocaleString();
     const before = 'the Goods you had already voted on count in neither.';
     if (b.shape === 'advisory') {
-      const audited = (b.audited ?? b.count).toLocaleString();
+      const ranged =
+        b.keptAtCheck !== null
+          ? `the ${b.keptAtCheck.toLocaleString()} it kept when the check started`
+          : `the top ${(b.audited ?? b.count).toLocaleString()} you hadn't voted on`;
       return (
         `The line keeps the top ${kept} you haven't voted on, where your labels put it: the check informs the line and does not move it. ` +
-        `The ranges are what the picks say about the top ${audited} you hadn't voted on; ${before}`
+        `The ranges are what the picks say about ${ranged}; ${before}`
       );
     }
     return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them; ${before}`;

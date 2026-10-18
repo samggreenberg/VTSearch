@@ -69,9 +69,10 @@ weak separation, and once before Done) are clicks, ``phase == "prompt"``.  "Fina
 there, and no check pick is credited as a click.  The check's truth is the
 share right of the set its range describes: the top ``check_k`` of the pool's
 unvoted ranking at the last ordinary step (the ``last`` rank frame), which is
-the candidate the check drew its picks from.  Under the advisory check that is
-the set it audited (``check_audited``, #4427), not the set the line keeps.  What the check *should* certify
-is #4358's ruling; until then this reports what it does certify.
+the candidate the check drew its picks from.  Since #4483 ``check_k`` is the
+set the line kept when the check started (``check_kept``); on runs before it,
+the set the walk audited (``check_audited``, #4427), which under the advisory
+check is not the set the line keeps.
 
 **Every attempted run is in every average (owner, 2026-10-07, #4631).**  A run
 that never trains a detector (150 clicks and no Good) writes no metric row, and
@@ -89,9 +90,9 @@ split as Test would at each click: until the labels meet the label quota (3
 Goods and 4 Bads, or a Good and 16 Bads) the typed query's own set from the first
 vote (#4758; the Goods' centroid from the first Good in a run before it), the
 trained head from there (``detector_tier``).  The session shows the trained head
-only from the Hard phase (``app_trained``, #4605): Autopilot's opening is the
+only once Autopilot's opening ends (``app_trained``, #4605): the opening is the
 text sort, so Test and the session agree before the quota and differ between the
-quota and the Hard phase.  This report follows the
+quota and the end of the opening.  This report follows the
 session there (:func:`_shown_from`): every user-facing number before the hand-off
 is the typed query's set.  The viewer draws what Test gives instead
 (``calibration/viewer.py``), so the two differ through the opening on purpose.
@@ -455,13 +456,20 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
     if check is None or check.empty:
         return {"check_status": "", "check_votes": 0}
     end = check.sort_values("t").iloc[-1]
-    # The range describes the set the walk audited (#4427): under the advisory
-    # check (every balance since #4452) that is not the set the line keeps, so
-    # the truth is read on ``check_audited`` when the row records one. A floor
-    # walk records none; its end is the kept set (``floor_count``).
+    # The set the range describes: since #4483 the set the line kept when the
+    # check started (``check_kept``); before it the set the walk audited
+    # (#4427), which under the advisory check (every balance since #4452) is
+    # not the set the line keeps. A floor walk records neither; its end is the
+    # kept set (``floor_count``).
+    ranged = _f(end.get("check_kept"))
     audited = _f(end.get("check_audited"))
     kept = _f(end.get("floor_count"))
-    k = int(audited) if np.isfinite(audited) and audited >= 1 else (int(kept) if np.isfinite(kept) else -1)
+    if np.isfinite(ranged) and ranged >= 0:
+        k = int(ranged)
+    elif np.isfinite(audited) and audited >= 1:
+        k = int(audited)
+    else:
+        k = int(kept) if np.isfinite(kept) else -1
     lo, hi = _f(end.get("range_lo")), _f(end.get("range_hi"))
     truth = nan
     if last_frame is not None and k > 0 and int(last_frame["n_pool"]) > 0:
@@ -581,8 +589,10 @@ def _run_frames(frames: pd.DataFrame) -> dict[tuple, dict[str, pd.DataFrame]]:
 def _shown_from(ordinary: pd.DataFrame) -> dict[tuple, float]:
     """Per run key, the first click at which the app shows a detector (#4605); ``inf`` when it never does.
 
-    The app stays on the text sort through Autopilot's opening (Good, Bad, More) and sorts by the
-    detector only from the Hard phase on. The harness marks the steps the app shows as
+    The app stays on the text sort through Autopilot's opening (the Good, Bad and More phases,
+    ``autopilot_flow.OPENING_PHASES``) and shows the detector only once the run leaves it: into Hard,
+    or straight to the spot check or Done when the level or the vote cap is met first
+    (``autopilot_flow.TRAINED_PHASES``). The harness marks the steps the app shows as
     ``app_trained == 1`` (:func:`vtscore.eval.autopilot_flow.app_has_detector`): a detector it scores
     earlier - the Goods' centroid under the label quota, or a trained head inside the opening
     (#4643) - is what Test would give there, but not what the session shows. So every user-facing

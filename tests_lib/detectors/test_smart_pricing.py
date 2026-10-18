@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 import vtscore.detectors.labeling_progress as lp
-from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
+from vtscore.detectors.cost_trend import SMART_INCLUSION, SMART_WINDOW, smart_cut
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtscore.training.thresholds import NO_GOOD_THRESHOLD, inclusion_cost_weights
 
@@ -176,6 +176,10 @@ def test_harness_window_is_priced_and_cut_like_the_app(monkeypatch):
     assert windows
     assert len(windows) == len(cuts)
     assert all(inclusion == SMART_INCLUSION for inclusion, _ in windows)
+    # The last SMART_WINDOW steps, which are the app's last SMART_WINDOW models
+    # because every step trains one. The sync gate cannot see this slice (#5005).
+    assert len(windows) > SMART_WINDOW
+    assert [len(window) for _, window in windows] == [min(i + 1, SMART_WINDOW) for i in range(len(windows))]
     assert all(served_inclusion == 3 for _, served_inclusion, _ in cuts)
     # Each step's window ends with the cut ``smart_cut`` chose for that step.
     assert [window[-1] for _, window in windows] == [out for *_, out in cuts]

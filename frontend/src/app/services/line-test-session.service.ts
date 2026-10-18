@@ -54,7 +54,7 @@ export class LineTestSessionService {
     const phase = this.phase();
     return (phase === 'matches' || phase === 'misses') && this.roundPicks().length > 0;
   });
-  /** The balance is frozen within a phase (#4524): changing it would move the line and the bands under the picks. */
+  /** The balance is frozen while the test runs, through both phases (#4524): changing it would move the line and the bands under the picks. */
   readonly locked = computed(() => {
     const phase = this.phase();
     return phase === 'matches' || phase === 'misses';

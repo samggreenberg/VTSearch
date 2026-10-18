@@ -187,6 +187,21 @@ class TestTheLine:
         bare = DetectorContext("det-bare-balance")
         assert detector_balance_state(bare, 2.0)["count"] == 128
 
+    def test_a_trained_head_with_no_class_model_counts_what_its_fallback_cut_keeps(self):
+        """With no labels line a trained head's line is the retrain's fallback cut (#4452): the state counts it."""
+        import torch
+
+        ctx = _ctx("det-fallback-cut")
+        ctx.model = torch.nn.Sequential(torch.nn.Linear(2, 1))  # a trained head, not one the quota gives
+        voted = human_voted_ids(ctx)
+        scores = sorted((ctx.line_ranking.score_of(int(c)) for c in ctx.line_ranking.unvoted_ids(voted)), reverse=True)
+        ctx.threshold = scores[39]
+        kept = sum(1 for s in scores if s >= ctx.threshold)
+        assert kept >= 40 > balance_count(1.0, None, detector_balance_proposal(ctx, 1.0)), "the count rule keeps fewer"
+        assert recut_detector_threshold(ctx, beta=1.0) is None, "no class model: the balance leaves the line alone"
+        state = detector_balance_state(ctx, 1.0)
+        assert state["status"] == BALANCE_UNCHECKED and state["count"] == kept
+
     def test_each_detector_is_recut_at_its_own_balance(self):
         mine = _ctx("det-own-beta")
         mine.beta, mine.beta_seeded = 2.0, True
@@ -284,13 +299,16 @@ class TestTheWeakCheckPrompt:
             state = detector_balance_state(ctx, 1.0)
             assert state["checkable"] is False and state["check_due"] is False
 
-    def test_it_waits_a_cooldown_after_the_last_check_ended(self):
-        ctx = self._weak(_ctx("det-weak-cooldown"))
+    def test_it_prompts_once_never_after_a_check_has_ended(self):
+        """#4909: once a session, however long ago the check ended."""
+        ctx = self._weak(_ctx("det-weak-once"))
         n = len(human_voted_ids(ctx))
+        assert ctx.check_ended_votes is None
+        assert detector_balance_state(ctx, 1.0)["check_due"] is True
         ctx.check_ended_votes = n
         assert detector_balance_state(ctx, 1.0)["check_due"] is False
-        ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
-        assert detector_balance_state(ctx, 1.0)["check_due"] is True
+        ctx.check_ended_votes = n - 10 * WEAK_CHECK_COOLDOWN
+        assert detector_balance_state(ctx, 1.0)["check_due"] is False
 
     def test_never_due_on_face_crops_but_separation_still_reported(self):
         """#4799: a face detector never prompts (#4778 priced it a loss); its d' is still shown."""

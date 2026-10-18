@@ -1,7 +1,7 @@
 """SSE endpoint streaming all progress channels to connected clients.
 
-Replaces per-tracker REST polling (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel.
+Clients read every progress channel (dataset loading, sort, find, eval, …)
+from this one push stream rather than polling a REST endpoint per tracker.
 """
 
 from __future__ import annotations
@@ -44,7 +44,15 @@ def progress_events() -> Response:
     *global* progress trackers, and gating it on the very lock a long
     Find/load contends would stop progress events reaching the client
     during exactly the operations the progress bar exists to report.
+
+    The stream is per user: a failed import stays listed until the user who
+    started it dismisses it (``POST /api/dataset/dismiss/<task_id>``), and
+    only that user sees it.
     """
+    from vtsearch.auth import get_current_user
+
+    # Resolved once, up front: a stream belongs to one user for its whole life.
+    viewer = get_current_user()
     if not acquire_sse_slot():
         response = jsonify({"message": "Too many live event streams open; retry shortly."})
         response.status_code = 503
@@ -53,7 +61,7 @@ def progress_events() -> Response:
 
     def generate() -> Generator[str, None, None]:
         try:
-            yield from stream_progress_events()
+            yield from stream_progress_events(viewer=viewer)
         finally:
             release_sse_slot()
 

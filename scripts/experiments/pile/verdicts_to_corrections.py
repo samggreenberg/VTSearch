@@ -97,8 +97,9 @@ fill -- 6 of the first 13 redrawn boxes did (#3616). The move is a *correction*,
 not a defect: VG is not exhaustive, so an image holding a small annotated bowl
 and a large unannotated one was mis-banded from the start, and the reviewer is
 the first person to have seen it. What was wrong is that it happened silently,
-so the run now prints every band-changing rebox. `audit_band_drift.py` measures
-how much of the same error the un-reviewed half is still hiding.
+so the run now prints every band-changing rebox. `audit_band_drift.py` (retired
+with Visual Genome, #4038) measured how much of the same error the un-reviewed
+half was still hiding.
 
 **A rejection is not a deletion in the small band -- unless it is definitional.**
 Boxed review confirms only ~2/3 of sub-patch positives even when the box is drawn
@@ -187,7 +188,7 @@ def _box_band(box: list[float]) -> str:
     A band is a fraction of the frame and a normalised box's area already *is*
     that fraction, so this needs no image dimensions -- which is the whole reason
     the drift can be reported here rather than only at build time. The builder's
-    banding (``pilebuild.loaders.vg_scale.band_for``) additionally rejects a
+    banding (``pilebuild.scale_core.band_for``) additionally rejects a
     scattered *union* of several boxes; a correction carries exactly one box, so
     there is no scatter to reject and the two agree by construction.
     """
@@ -501,8 +502,7 @@ def _report_moves(moves: list[tuple[str, int, str, str]], stats: Counter) -> Non
     print("   Kept, not refused: VG is not exhaustive, so an image holding an unannotated")
     print("   larger instance was mis-banded before the reviewer ever saw it. Printed")
     print("   because it rebalances the cells, and the small band is the binding")
-    print("   constraint on supply (#3603). `audit_band_drift.py` measures the same")
-    print("   error on the images nobody has reviewed.\n")
+    print("   constraint on supply (#3603).\n")
     print("   %-14s %-10s %-8s    %s" % ("class", "image_id", "sampled", "redrawn"))
     for cls, iid, was, now in sorted(moves):
         print("   %-14s %-10d %-8s -> %s" % (cls, iid, was, now))

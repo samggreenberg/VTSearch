@@ -29,7 +29,9 @@ export type Theme = 'light' | 'dark';
  * What a callout or a clip points at. Resolved with Playwright locators by
  * `scripts/screenshots/callouts.mjs`:
  *
- *   '.btn-good'                    first visible match of a CSS selector
+ *   '.btn-good'                    first match of a CSS selector with a box (a
+ *                                  row scrolled out of a list's view has one
+ *                                  too, so name a list item by its state)
  *   { selector, hasText }          …whose text contains hasText
  *   { selector, name }             …whose `.name-cell` reads exactly name (a
  *                                  dashboard row — `drawings` is a prefix of
@@ -1189,8 +1191,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'settings-appearance',
-    embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
+    embeddedIn: `${GUIDE}#settings-tabs`,
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls',
     themes: BOTH,
     async recipe(_page, h) {
       await openAppearance(h);
@@ -1612,16 +1614,21 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${HOWTO}/start-from-an-example.md#or-start-from-a-picture-already-in-the-dataset`,
     caption: 'From the dataset: (1) the Manual tab, (2) right-click a picture, (3) Use as detector seed',
     themes: BOTH,
+    // Step 2 and the right-click both name the served picture, so the outline,
+    // the menu and the viewer agree. "The first thumbnail" is no such thing: a
+    // long list is virtualized, and when it opens scrolled (Autopilot left it on
+    // Select: New) the first one mounted is a buffer row clipped out of view
+    // above it, which `:visible` still matches, and its box lies over the tabs.
     annotations: [
       { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
-      { target: '.thumbnail-wrap', kind: 'step', step: 2 },
+      { target: '.media-item.active .thumbnail-wrap', kind: 'step', step: 2 },
       { target: { selector: '.context-menu .menu-item', hasText: 'Use as detector seed' }, kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
       await h.enterLabelView();
       await h.leftTab('Manual');
       await h.serveItem();
-      await page.locator('.thumbnail-wrap:visible').first().click({ button: 'right' });
+      await page.locator('.media-item.active .thumbnail-wrap').first().click({ button: 'right' });
       await page.waitForSelector('.context-menu', { timeout: 10000 });
       await h.wait(500);
     },

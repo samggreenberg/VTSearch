@@ -39,7 +39,7 @@ Imports only :mod:`numpy`, so it stays a leaf alongside
 embedding package façade.  In particular it does **not** reach into the embedder
 registry: callers that know an embedder's declared width pass it in as
 *expected_dim* (see
-:func:`vtscore.datasets.importers._npz_vectors.expected_dim_for_embedder`).
+:func:`vtscore.embedding.binding.expected_dim_for_embedder`).
 """
 
 from __future__ import annotations

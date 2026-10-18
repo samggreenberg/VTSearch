@@ -2,9 +2,9 @@
 
 Holds the argparse definition, the early-exit informational flags
 (``--list-plugins`` and family shortcuts), the ``--pipeline`` and
-``--autodetect`` dispatch, and the dev-server launch path. Extracted from
-``app.py`` so the WSGI ``app`` object gunicorn imports is not weighed down by
-~650 lines of CLI plumbing that only runs under ``python app.py``.
+``--autodetect`` dispatch, and the dev-server launch path. It lives apart
+from ``app.py`` so the WSGI ``app`` object gunicorn imports is not weighed
+down by CLI plumbing that only runs under ``python app.py``.
 
 The Flask ``app`` object and ``initialize_server`` callable are passed in by
 ``app.py``'s ``__main__`` block rather than imported here: importing ``app``
@@ -170,14 +170,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--settings",
         type=str,
         help=(
-            "Path to a settings JSON file containing autorun processors. "
-            "Used with --autodetect. Defaults to data/settings.json."
+            "Path to the server-tier settings JSON file, in place of the default "
+            "data/settings.json. The web server reads and writes it; --autodetect "
+            "reads its autofind_detectors and the rest of the run's settings from it "
+            "(a --pipeline file names it as settings: instead)."
         ),
     )
     parser.add_argument(
         "--importer",
         type=str,
-        help="Name of the data importer to use (e.g. folder, pickle, http_archive). Used with --autodetect.",
+        help="Name of the data importer to use (e.g. server_folder, pickle, http_archive). Used with --autodetect.",
     )
     parser.add_argument(
         "--outputs",
@@ -197,7 +199,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--exporter",
         type=str,
-        help="Name of the results exporter to use (e.g. file, email_smtp, gui). Used with --autodetect.",
+        help="Name of the results exporter to use (e.g. server_json_file, email_smtp, gui). Used with --autodetect.",
     )
     parser.add_argument(
         "--chunk-size",
@@ -207,7 +209,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Process the dataset in chunks of N medias at a time to limit "
             "memory usage. Used with --autodetect. When omitted the entire "
-            "dataset is loaded at once (original behaviour)."
+            "dataset is loaded at once."
         ),
     )
     parser.add_argument(
@@ -216,9 +218,10 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="stream_results",
         help=(
             "Stream each chunk's hits straight to the exporter instead of "
-            "accumulating them all in memory. Requires --chunk-size and a "
-            "streaming-capable exporter (server_json_file → NDJSON, "
-            "server_csv_file, gui). Output is ordered by chunk, not globally "
+            "accumulating them all in memory. Requires --tempimport, "
+            "--chunk-size and a streaming-capable exporter (server_json_file "
+            "→ NDJSON, server_csv_file, gui, webhook, email_smtp; the last two "
+            "deliver in --batch-size groups). Output is ordered by chunk, not globally "
             "sorted by score. Lets --autodetect run against a media source "
             "with more items (and more hits) than fit in RAM."
         ),
@@ -503,12 +506,11 @@ def _apply_verbosity(args) -> None:
 def _apply_admin_overrides(args, parser) -> None:
     """Validate and stash every process-level admin override the flags carried.
 
-    One loop over :data:`vtsearch.admin_overrides.OVERRIDES` replaces what used
-    to be six near-identical ``_apply_X`` helpers. Each descriptor owns its own
-    validator, so ``--solo-media-type`` still checks the media-type registry
-    and ``--solo-embedder`` still checks that the embedder is registered *for
-    that type* -- but the same validator now runs for the env-var form, so the
-    two entry paths can no longer disagree.
+    Loops over :data:`vtsearch.admin_overrides.OVERRIDES`. Each descriptor
+    owns its own validator (``--solo-media-type`` checks the media-type
+    registry, ``--solo-embedder`` checks that the embedder is registered *for
+    that type*), and the env-var form runs the same validator, so the two
+    entry paths accept and reject the same values.
 
     Runs for the pipeline, autodetect and server paths alike, before any
     media is loaded or any listing endpoint is served: a typo here would
@@ -702,8 +704,9 @@ def _importer_outputs(args, parser, importer) -> list | None:
     malformed list fails here, before any media is loaded, with that
     validator's message.  The flag needs an ``--importer`` that makes several
     datasets per run, and it replaces the importer's ``--media-type`` /
-    ``--source-specs``: each output names its own, so setting one beside the
-    list is refused rather than silently ignored.
+    ``--source-specs``: each output names its own, so passing one beside the
+    list - even with the importer's default value - is refused rather than
+    silently ignored.
     """
     raw = getattr(args, "outputs", None)
     if not raw:
@@ -720,14 +723,33 @@ def _importer_outputs(args, parser, importer) -> list | None:
         parser.error(f"--outputs: {exc}")
     if not outputs:
         parser.error("--outputs must list at least one dataset to make")
-    for f in importer.fields:
-        if f.key not in ("media_type", "source_specs"):
-            continue
-        value = getattr(args, f.key, f.default)
-        if value and value != f.default:
-            flag = f"--{f.key.replace('_', '-')}"
-            parser.error(f"--outputs and {flag} both set; with --outputs each dataset names its own {f.key}")
+    replaced = [f.key for f in importer.fields if f.key in ("media_type", "source_specs")]
+    for key in _given_on_command_line(parser, replaced):
+        flag = f"--{key.replace('_', '-')}"
+        parser.error(f"--outputs and {flag} both set; with --outputs each dataset names its own {key}")
     return outputs
+
+
+#: Stand-in default that tells "the flag was typed" from "argparse filled in its default".
+_NOT_GIVEN = object()
+
+
+def _given_on_command_line(parser, dests: list[str]) -> list[str]:
+    """Which of *dests* the command line set, including to the value of its default.
+
+    A parsed namespace cannot say this on its own: ``--media-type audio`` and no
+    flag at all both read ``"audio"`` when that is the importer's default.  So
+    the argv is parsed again with every one of *dests* defaulting to a sentinel,
+    and the defaults are put back afterwards.  The main parse has already
+    succeeded by the time this runs, so the second one cannot fail.
+    """
+    saved = {dest: parser.get_default(dest) for dest in dests}
+    parser.set_defaults(**dict.fromkeys(dests, _NOT_GIVEN))
+    try:
+        given, _ = parser.parse_known_args()
+    finally:
+        parser.set_defaults(**saved)
+    return [dest for dest in dests if getattr(given, dest, _NOT_GIVEN) is not _NOT_GIVEN]
 
 
 def _label_importer_field_values(args, parser) -> dict[str, str]:
@@ -813,10 +835,24 @@ def _dispatch_autodetect(
     )
 
 
+def _apply_env_overrides_headless() -> None:
+    """Apply the ``VTSEARCH_*`` admin overrides no flag set, as the server's startup does.
+
+    Only one of them changes a headless run today: the retention stamp a
+    saved dataset gets (``VTSEARCH_DATASET_MAX_AGE_DAYS``, which every LabBench
+    image pins). The rest restrict the web UI and are inert here, but applying
+    the whole registry keeps the two paths from drifting apart again (#4970).
+    A malformed value is warned about on stderr, never on stdout, which may be
+    the ``--progress-format json`` stream.
+    """
+    admin_overrides.apply_env_overrides(warn=lambda msg: print(msg, file=sys.stderr, flush=True))
+
+
 def _start_headless_run(args, parser) -> None:
-    """Wire progress output and authenticate ``--user``: the setup a headless
-    run needs before it produces any output, shared by ``--autodetect`` and
-    ``--pipeline`` so the two honour the same flags."""
+    """Wire progress output, apply the env-var admin overrides, and authenticate
+    ``--user``: the setup a headless run needs before it produces any output,
+    shared by ``--autodetect`` and ``--pipeline`` so the two honour the same
+    flags."""
     # Wire the CLI progress format (text/json) before any pipeline call
     # produces output. In JSON mode we also re-route the process-wide media
     # progress callback from update_progress (which resolves per-thread, so
@@ -833,6 +869,7 @@ def _start_headless_run(args, parser) -> None:
     # half of its promise.
     notifications.subscribe(cli_progress.notification_subscriber)
 
+    _apply_env_overrides_headless()
     _authenticate_cli_user(args, parser)
 
 
@@ -885,7 +922,17 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
 
 def _run_server(args, app, initialize_server) -> None:
-    """Activate the chosen login provider, run the port preflight, and serve."""
+    """Point at ``--settings``, activate the chosen login provider, run the port preflight, and serve."""
+    # Before anything reads a setting: the startup banner and the embedder
+    # preload in initialize_server both do. The same flag points a headless
+    # run at its settings file, so it means one thing on both paths (#4970).
+    settings_path = getattr(args, "settings", None)
+    if settings_path:
+        from vtsearch.settings import set_settings_path
+
+        set_settings_path(settings_path)
+        print(f"\U0001f4c4 Server settings file: {settings_path}", flush=True)
+
     # Activate the chosen login provider before starting the server.
     login_choice = getattr(args, "login", None)
     if login_choice == "trivial":

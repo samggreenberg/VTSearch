@@ -158,6 +158,113 @@ class TestRegisterDetectorExamples:
         assert listed[detector_id]["examples"] == self._EXAMPLES
 
 
+class TestRegistryListingBackfill:
+    """The listing's detector-JSON fallback runs once, then lives in the registry (#5001)."""
+
+    _EXAMPLES = [{"type": "media", "value": "a1b2.wav"}]
+
+    @staticmethod
+    def _count_reads(monkeypatch) -> list:
+        """Spy on the listing's detector-JSON reads; returns the list of paths read."""
+        from vtsearch.routes.detectors import registry as route_module
+
+        reads: list = []
+        real = route_module._read_detector
+
+        def spy(path):
+            reads.append(path)
+            return real(path)
+
+        monkeypatch.setattr(route_module, "_read_detector", spy)
+        return reads
+
+    @staticmethod
+    def _write_json(name: str, **fields) -> None:
+        from vtscore.detectors.store import _detector_path, _write_detector
+
+        _write_detector(
+            _detector_path(name),
+            {"name": name, "media_type": "audio", "labelset": {"labels": []}, **fields},
+        )
+
+    @staticmethod
+    def _entry(detector_id: str) -> dict:
+        from vtscore.detectors.registry import get_detector
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        return entry
+
+    def _list(self, client, ids) -> dict:
+        res = client.get("/api/detectors/registry")
+        assert res.status_code == 200
+        return {d["id"]: d for d in res.get_json()["detectors"] if d["id"] in ids}
+
+    def test_second_listing_reads_no_detector_json(self, client, monkeypatch):
+        from vtscore.detectors import registry as reg_module
+        from vtscore.detectors.store import _detector_path
+
+        # Created with no dataset loaded: the entry's type is "", but the JSON
+        # has one (here, a legacy ``primary_embedder`` name it migrates from).
+        self._write_json("Typeless", primary_embedder="dinov3_patch", examples=self._EXAMPLES)
+        typeless = reg_module.register_detector(name="Typeless", media_type="audio", examples=self._EXAMPLES)
+        # Registered before ``examples`` existed on the entry.
+        self._write_json("NoExamples", embedder_type="structural", examples=self._EXAMPLES)
+        legacy = reg_module.register_detector(name="NoExamples", media_type="audio", embedder_type="structural")
+
+        def drop_examples(entries):
+            for e in entries:
+                if e["id"] == legacy["id"]:
+                    e.pop("examples", None)
+
+        reg_module._read_modify_write(drop_examples)
+
+        ids = {typeless["id"], legacy["id"]}
+        paths = {_detector_path("Typeless"), _detector_path("NoExamples")}
+        reads = self._count_reads(monkeypatch)
+
+        first = self._list(client, ids)
+        assert sorted(p.name for p in reads if p in paths) == sorted(p.name for p in paths)
+        assert first[typeless["id"]]["embedder_type"] == "patch_semantic"
+        assert first[legacy["id"]]["examples"] == self._EXAMPLES
+
+        reads.clear()
+        second = self._list(client, ids)
+        assert [p for p in reads if p in paths] == []
+        assert second == first
+
+        assert self._entry(typeless["id"])["embedder_type"] == "patch_semantic"
+        assert self._entry(legacy["id"])["examples"] == self._EXAMPLES
+
+    def test_nothing_to_learn_persists_nothing(self, client, monkeypatch):
+        from vtscore.detectors import registry as reg_module
+        from vtscore.detectors.store import _detector_path
+
+        # A JSON with no type either: still typeless until first train.
+        self._write_json("StillTypeless", examples=self._EXAMPLES)
+        typeless = reg_module.register_detector(name="StillTypeless", media_type="audio", examples=self._EXAMPLES)
+        # No JSON at all, and no examples on the entry.
+        orphan = reg_module.register_detector(name="Orphan", media_type="audio", embedder_type="semantic")
+
+        def drop_examples(entries):
+            for e in entries:
+                if e["id"] == orphan["id"]:
+                    e.pop("examples", None)
+
+        reg_module._read_modify_write(drop_examples)
+
+        ids = {typeless["id"], orphan["id"]}
+        reads = self._count_reads(monkeypatch)
+        listed = self._list(client, ids)
+        assert listed[typeless["id"]]["embedder_type"] == ""
+        assert listed[orphan["id"]]["examples"] == []
+        # One read per entry per listing, and nothing written back.
+        assert reads.count(_detector_path("StillTypeless")) == 1
+        assert reads.count(_detector_path("Orphan")) == 1
+        assert self._entry(typeless["id"])["embedder_type"] == ""
+        assert "examples" not in self._entry(orphan["id"])
+
+
 class TestExamplesBecomeLabels:
     """Media exemplars supplied at create time are labels, not just hints (issue #3045)."""
 
@@ -1542,10 +1649,10 @@ class TestLoadModelEndpoint:
 
 
 class TestEmbedderMismatchInvalidatesStaleModel:
-    """H5: a detector's cached MLP is trained against a specific embedder
+    """H5: a detector's cached head is trained against a specific embedder
     space (``DetectorContext.embedder``).  When the active dataset uses a
-    different embedder, the cached MLP must be invalidated; otherwise
-    scoring with a cross-space MLP either crashes (different dim) or
+    different embedder, the cached head must be invalidated; otherwise
+    scoring with a cross-space head either crashes (different dim) or
     silently produces garbage labels (same dim).
     """
 
@@ -1618,7 +1725,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
 
     def test_before_request_hook_invalidates_active_detector(self, client):
         """End-to-end: switching the active dataset to one with a different
-        embedder triggers invalidation of the active detector's MLP via
+        embedder triggers invalidation of the active detector's head via
         ``ensure_detector_model_matches_active_embedder``.
         """
         from unittest.mock import MagicMock
@@ -1652,8 +1759,8 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         client.post(f"/api/medias/{a_ids[1]}/vote", json={"target": "bad"})
 
         det_ctx = get_active_detector_context()
-        # Pin a fake MLP + embedder marker to simulate a trained model.
-        det_ctx.model = MagicMock(name="stale-mlp")
+        # Pin a fake head + embedder marker to simulate a trained model.
+        det_ctx.model = MagicMock(name="stale-head")
         det_ctx.threshold = 0.42
         det_ctx.embedder = "ye-olde-embedder"
         det_ctx.label_embeddings["seed"] = "vec"  # type: ignore[assignment]
@@ -1677,10 +1784,10 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         set_thread_dataset_context(ctx_b)
 
         # Fire a no-op request; the before_request hook should run and
-        # invalidate the stale MLP because the embedders no longer match.
+        # invalidate the stale head because the embedders no longer match.
         client.get("/healthz", headers={"X-Dataset-Id": "ds_b_for_h5", "X-Detector-Id": mid})
 
-        assert det_ctx.model is None, "stale MLP must be cleared on embedder mismatch"
+        assert det_ctx.model is None, "stale head must be cleared on embedder mismatch"
         assert det_ctx.threshold == 0.5
         # The embedder marker stays at the old value so the load endpoint
         # can still detect the mismatch and schedule a progress-tracked
@@ -2638,7 +2745,7 @@ class TestRegisterModelFromLabelset:
     a label importer in a single call: the importer runs, the trainable
     model JSON is written with the full labelset, and a registry entry is
     created.  The frontend then calls the load endpoint to resolve origins
-    and train the MLP.
+    and train the head.
 
     Media type is inferred from the labels' origins; no ``media_type``
     request field is accepted.

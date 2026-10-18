@@ -32,12 +32,33 @@ def _seek_time(info: decode.VideoInfo, time_seconds: float | None) -> float:
     return max(0.0, min(time_seconds, max(0.0, info.duration - info.frame_seconds)))
 
 
-def _encode_thumbnail(frame_rgb: "np.ndarray", size: int) -> bytes | None:
-    """Shrink an RGB frame to fit *size* and encode it as PNG bytes."""
+def _frame_sar(info: decode.VideoInfo, frame_rgb: "np.ndarray") -> float:
+    """Return the sample aspect ratio of a frame :func:`decode.frame_at` returned.
+
+    ``info.sar`` describes the stored frame.  ``frame_at`` autorotates, and a
+    quarter turn swaps a pixel's width and height along with the frame's, so a
+    frame that came back transposed takes the reciprocal.
+    """
+    height, width = frame_rgb.shape[:2]
+    if info.sar > 0 and width != height and (width, height) == (info.height, info.width):
+        return 1.0 / info.sar
+    return info.sar
+
+
+def _encode_thumbnail(frame_rgb: "np.ndarray", size: int, sar: float = 1.0) -> bytes | None:
+    """Shrink an RGB frame to fit *size* and encode it as PNG bytes.
+
+    *sar* is the frame's sample aspect ratio.  Decoded frames are stored
+    pixels, so an anamorphic video's frame is stretched to its display aspect
+    first: a 720x480 DVD rip with SAR 32:27 previews at 16:9, as the player
+    shows it, rather than squeezed to 3:2.
+    """
     try:
         from PIL import Image  # noqa: PLC0415
 
         img = Image.fromarray(frame_rgb)
+        if sar > 0 and abs(sar - 1.0) > 1e-3:
+            img = img.resize((max(1, round(img.width * sar)), img.height))
         img.thumbnail((size, size))
         buf = io.BytesIO()
         img.save(buf, format="PNG", optimize=True)
@@ -58,7 +79,8 @@ def _thumbnail_from_path(
     *info* lets a caller that already probed the container hand the result in
     rather than paying for a second probe.  *crop_box* is a unit's ``clip_box``
     (see :mod:`vtscore.media.video.crop`); passing it keeps a cropped unit's
-    preview framed like the frames its embedder sees.
+    preview framed like the frames its embedder sees.  The preview takes the
+    video's display aspect (see :func:`_encode_thumbnail`).
     """
     if info is None:
         info = decode.probe(file_path)
@@ -67,7 +89,7 @@ def _thumbnail_from_path(
     frame = decode.frame_at(file_path, _seek_time(info, time_seconds))
     if frame is None:
         return None
-    return _encode_thumbnail(crop_frame(frame, crop_box), size)
+    return _encode_thumbnail(crop_frame(frame, crop_box), size, _frame_sar(info, frame))
 
 
 def _thumbnail_from_bytes(

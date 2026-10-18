@@ -38,8 +38,12 @@ importing `vtscore`; they are read at import time.
 
 ## 1. Set up `CoreConfig`
 
-Library-only consumers construct `CoreConfig` directly. The app installs a
-builder that reads from `vtsearch.settings`; you don't need one.
+Library-only consumers construct `CoreConfig` directly and register a
+builder that returns it, because library code reads its configuration one
+knob at a time with `vtscore.config.get_setting()` (the detector store finds
+`detectors_dir` that way), which answers from your builder's `CoreConfig`.
+The app answers those reads from `vtsearch.settings` instead; you don't need
+it.
 
 ```python
 from pathlib import Path
@@ -66,18 +70,18 @@ def _build(settings_path=None) -> CoreConfig:
 register_core_config_builder(_build)
 ```
 
-Now `CoreConfig.from_settings()` works anywhere in the library. Two details
-that bite:
+Now `get_setting()` - and `CoreConfig.from_settings()`, the whole bundle -
+works anywhere in the library. Two details that bite:
 
-- **The builder takes an argument.** `CoreConfig.from_settings(settings_path)`
-  passes it straight through, so a zero-argument builder raises `TypeError`
-  the first time a caller supplies a path. Accept it and ignore it if you
-  have nowhere to put it.
+- **The builder takes an argument.** It is called with a settings path, or
+  `None`, so a zero-argument builder raises `TypeError`. Accept it and
+  ignore it if you have nowhere to put it.
 - **Every field listed above is required.** `CoreConfig` is a frozen
   dataclass with defaults only for its optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
   `autofind_cli_delete_dataset`, `projection_n_neighbors`,
-  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`, `beta`,
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
+  `default_labelset_source`, `labelset_source_push_interval`, `beta`,
   `hide_ingest_eta` and `inclusion` (both deprecated)) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
@@ -168,7 +172,7 @@ import numpy as np
 import torch
 
 from vtscore.training import train_model, calculate_cross_calibration_threshold
-from vtscore.training.mlp import LINEAR_SVM_HEAD
+from vtscore.training.mlp import LINEAR_SVM_PRIOR_HEAD
 
 # Map filenames to labels.
 labels = {
@@ -192,12 +196,13 @@ for m in medias.values():
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# LINEAR_SVM_HEAD is the production head: a single Linear(D, 1) fitted to the
-# maximum-margin boundary. Omitting hidden_dim auto-sizes an MLP - see docs/ML.md.
-model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
+# LINEAR_SVM_PRIOR_HEAD is the production head: a single Linear(D, 1) fitted to
+# the maximum-margin boundary, starting from the Goods' centroid. Omitting
+# hidden_dim auto-sizes an MLP - see docs/ML.md.
+model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_PRIOR_HEAD)
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
-    hidden_dim=LINEAR_SVM_HEAD,
+    hidden_dim=LINEAR_SVM_PRIOR_HEAD,
 )
 print(f"Trained detector; calibrated threshold = {threshold:.3f}")
 # Trained detector; calibrated threshold = 0.412

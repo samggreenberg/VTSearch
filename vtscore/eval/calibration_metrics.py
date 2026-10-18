@@ -257,8 +257,10 @@ def oracle_cut(
     tp = cum_pos
     fp = k - cum_pos
     fn = total_pos - tp
-    fpr = np.where(total_neg > 0, fp / total_neg, 0.0)
-    fnr = np.where(total_pos > 0, fn / total_pos, 0.0)
+    # Divided only where the class exists: np.where evaluates both branches, so
+    # an empty class used to warn on 0/0 for a value it then threw away.
+    fpr = fp / total_neg if total_neg > 0 else np.zeros(n)
+    fnr = fn / total_pos if total_pos > 0 else np.zeros(n)
     cost = fpr_weight * fpr + fnr_weight * fnr
 
     # A cut after the k-th highest score is achievable only if it does not split

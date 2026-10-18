@@ -35,7 +35,15 @@ screen, so both are checked against values that are known by construction:
   harness's detector, what an export of the labels gives there, not at the
   text sort the session shows: the page does not read the flag (#4640).  Under
   the label quota that detector is the Goods' centroid (``detector_tier``,
-  #4643): its rows are drawn like any other, and the reading note says so.
+  #4643): its rows are drawn like any other, and the reading note says so;
+* each run's **stopped point** (#4939) must be the click the app *first* said
+  stop, at the value the curve has there, with a run never told to stop at its
+  last click and a run that never trained kept as the empty set, agreeing with
+  ``stopping.stopping_points`` and kept when the per-seed lines are dropped;
+* on a page that pools categories into **strata** (``--category-map``, #4762),
+  each recorded category must stay a run of its own (#4944): its stop, its
+  carried gaps, its clicks before a first detector, and a cell in the count,
+  rather than a dozen people at one seed read as one run.
 
 Run: ``python selftest_viewer.py``
 """
@@ -340,6 +348,251 @@ def _best_cut_checks(tmp: Path) -> bool:
         "...and none on the rates where no balance says which cut that is",
         not np.isfinite(at("off", "precision", z)) and abs(at("off", "f1", z) - 0.40) <= 2 * step,
         f"{at('off', 'precision', z)} {at('off', 'f1', z)}",
+    )
+    return ok
+
+
+#: Where each planted run's stop is (#4939): ``seed -> (phases, first fire)``.
+#: Seed 0 enters ``done``, falls back to ``hard`` and comes back, so its stop is
+#: the first fire (8), not the sustained one (11).  Seed 1 is never told to
+#: stop.  Seed 2 runs a prompted check (``prompt`` rows) before Done at 12.
+#: Seed 3 never trains, so it has no row at all.
+STOP_T = 20
+STOP_RUNS: dict[int, tuple[dict[int, str], float]] = {
+    0: (
+        {
+            **dict.fromkeys(range(1, 4), "good"),
+            **dict.fromkeys(range(4, 8), "hard"),
+            8: "done",
+            9: "hard",
+            10: "hard",
+            **dict.fromkeys(range(11, STOP_T + 1), "done"),
+        },
+        8,
+    ),
+    1: ({**dict.fromkeys(range(1, 4), "good"), **dict.fromkeys(range(4, STOP_T + 1), "hard")}, np.nan),
+    2: (
+        {
+            **dict.fromkeys(range(1, 6), "good"),
+            **dict.fromkeys(range(6, 9), "hard"),
+            9: "prompt",
+            10: "prompt",
+            11: "hard",
+            **dict.fromkeys(range(12, STOP_T + 1), "done"),
+        },
+        12,
+    ),
+}
+
+
+def _stop_checks(tmp: Path) -> bool:  # noqa: C901
+    """Each run's stopped point (#4939): the first fire, a run never told to stop at its last click, every run kept."""
+    import stopping  # noqa: PLC0415
+
+    rows, cells, base = [], [], []
+    for seed in range(4):
+        cells.append({"arm": "ctl", "dataset": "dsA", "embedder": "embA", "category": "rich", "seed": seed})
+        base.append(
+            {
+                "dataset": "dsA",
+                "embedder": "embA",
+                "category": "rich",
+                "seed": seed,
+                "supports_text": 1,
+                "text_precision": 0.4,
+                "text_recall": 0.3,
+                "text_f1": 0.34,
+                "text_AP": 0.5,
+            }
+        )
+        if seed not in STOP_RUNS:
+            continue  # never trained
+        phases, _ = STOP_RUNS[seed]
+        for t, phase in phases.items():
+            # f1 is t/100, so a stop's value names the click it was read at.
+            rows.append(
+                {
+                    "arm": "ctl",
+                    "dataset": "dsA",
+                    "embedder": "embA",
+                    "category": "rich",
+                    "seed": seed,
+                    "t": t,
+                    "phase": phase,
+                    "precision": 0.7,
+                    "recall": 0.6,
+                    "f1": t / 100.0 + 0.1 * seed,
+                    "average_precision": 0.8,
+                }
+            )
+    frame = pd.DataFrame(rows)
+    ok = True
+    for label, budget in (("with per-seed lines", 0.25), ("with the per-seed lines left out (#4651)", 0.0)):
+        P = _payload(
+            V.build_viewer(
+                frame,
+                tmp / "stops.html",
+                arms=["ctl"],
+                denominator=pd.DataFrame(cells),
+                baseline=pd.DataFrame(base),
+                runs_budget_mb=budget,
+            )
+        )
+        stops = P.get("stops")
+        ok &= _check(f"the page carries each run's stopped point, {label}", bool(stops), str(P.get("stops_note")))
+        if not stops:
+            return False
+        ints = _decode(stops["ints"])
+        vals = _decode(stops["values"])
+        col = {c: i for i, c in enumerate(stops["cols"])}
+        fi = [m["key"] for m in P["metrics"]].index("f1")
+        step = 1.0 / stops["values"]["scale"]
+        got = {
+            int(P["seeds"][int(ints[col["seed"], i])]): (
+                int(ints[col["t"], i]),
+                int(ints[col["fired"], i]),
+                float(vals[i, fi]),
+            )
+            for i in range(ints.shape[1])
+        }
+        ok &= _check("every attempted run is a point, the one that never trained included", sorted(got) == [0, 1, 2, 3])
+        ok &= _check(
+            "the stop is the first fire, not the sustained one, at the value the curve has there",
+            got.get(0, (0, 0, 0))[:2] == (8, 1) and abs(got[0][2] - 0.08) <= step,
+            str(got.get(0)),
+        )
+        ok &= _check(
+            "a run never told to stop sits at its last click, unfired",
+            got.get(1, (0, 1, 0))[:2] == (STOP_T, 0) and abs(got[1][2] - (0.20 + 0.1)) <= step,
+            str(got.get(1)),
+        )
+        ok &= _check(
+            "a prompted check's rounds before Done do not move the stop",
+            got.get(2, (0, 0, 0))[:2] == (12, 1) and abs(got[2][2] - (0.12 + 0.2)) <= step,
+            str(got.get(2)),
+        )
+        ok &= _check(
+            "a run that never trained is at the last click, as the empty set it returned",
+            got.get(3, (0, 1, 1))[:2] == (STOP_T, 0) and abs(got[3][2]) <= step,
+            str(got.get(3)),
+        )
+        ok &= _check(
+            "the note gives the share told to stop",
+            P.get("stops_note") == "The app said stop in 2 of 4 runs.",
+            str(P.get("stops_note")),
+        )
+    pts = stopping.stopping_points(frame, keys=("arm", "dataset", "embedder", "category", "seed"), metrics=("f1",))
+    want = {int(r.seed): r.t_stop for r in pts.itertuples()}
+    ok &= _check(
+        "...and agrees with stopping.stopping_points, which a review's stopping table reads",
+        all((np.isnan(want[s]) and not got[s][1]) or (got[s][1] and got[s][0] == want[s]) for s in want),
+        f"{want} vs {got}",
+    )
+    bare = _payload(
+        V.build_viewer(frame.drop(columns="phase"), tmp / "nophase.html", arms=["ctl"], runs_budget_mb=0.25)
+    )
+    ok &= _check(
+        "a page whose runs carry no phase has no stops, and says why",
+        bare.get("stops") is None and "phase" in str(bare.get("stops_note")),
+        str(bare.get("stops_note")),
+    )
+    shell = re.sub(
+        r'<script id="payload".*?</script>', "", (tmp / "stops.html").read_text(encoding="utf-8"), flags=re.S
+    )
+    ok &= _check(
+        "the template offers the stop view and reads the block the builder writes",
+        'value="stop"' in shell and "P.stops.cols" in shell and "P.stops_note" in shell,
+    )
+    return ok
+
+
+#: A page of strata (#4762, #4944): four people at seed 0, pooled into one
+#: stratum by ``--category-map``.  ``p0`` stops at 8 (STOP_RUNS[0]), ``p1``
+#: has its first row at click 5 and is never told to stop, ``p2`` sits out a
+#: spot check at clicks 11..14 and stops at 16, and ``p3`` never trains.  Each
+#: person's f1 is t/100 plus 0.1 a person, so a value names whose row it is.
+POOL_T = 20
+POOL_GAP = range(11, 15)
+
+
+def _pooled_checks(tmp: Path) -> bool:
+    """A stratum pools people, and each person stays a run: the stops, the carry, the empty sets, the cells."""
+    phases = {
+        "p0": STOP_RUNS[0][0],
+        "p1": dict.fromkeys(range(5, POOL_T + 1), "hard"),
+        "p2": {
+            **{t: "hard" for t in range(1, POOL_T + 1) if t not in POOL_GAP and t < 16},
+            **dict.fromkeys(range(16, POOL_T + 1), "done"),
+        },
+    }
+    rows, base = [], []
+    for k, person in enumerate(("p0", "p1", "p2", "p3")):
+        key = {"dataset": "dsA", "embedder": "embA", "category": person, "seed": 0}
+        base.append(
+            {**key, "supports_text": 1, "text_precision": 0.4, "text_recall": 0.3, "text_f1": 0.34, "text_AP": 0.5}
+        )
+        for t, phase in phases.get(person, {}).items():
+            rows.append(
+                {
+                    **key,
+                    "arm": "ctl",
+                    "t": t,
+                    "phase": phase,
+                    "precision": 0.7,
+                    "recall": 0.6,
+                    "f1": t / 100.0 + 0.1 * k,
+                    "average_precision": 0.8,
+                }
+            )
+    strata = dict.fromkeys(("p0", "p1", "p2", "p3"), "s")
+    # As the CLI does it: the map goes onto the rows and the baseline, and the
+    # cell list comes off the baseline.
+    page = V.build_viewer(
+        V.apply_category_map(pd.DataFrame(rows), strata),
+        tmp / "strata.html",
+        arms=["ctl"],
+        baseline=V.apply_category_map(pd.DataFrame(base), strata),
+        runs_budget_mb=0.25,
+    )
+    P = _payload(page)
+    ok = _check("the page shows the stratum, not the people", P["categories"] == ["s"], str(P["categories"]))
+    gi = [g[2] for g in P["groups"]].index("s")
+    cells = _decode(P["agg"]["cells"])
+    ok &= _check(
+        "a stratum's cells are its people, each a run at seed 0",
+        int(cells[gi, 0, 0]) == 4,
+        f"{cells[gi, 0, 0]:g}",
+    )
+    fi = [m["key"] for m in P["metrics"]].index("f1")
+    n = _decode(P["agg"]["n"])[gi, 0, fi]
+    mean = _decode(P["agg"]["mean"])[gi, 0, fi]
+    tz = P["t"].index(12)
+    ok &= _check(
+        "every person is in the mean at every click: a late start, a spot check and a run that never trained",
+        all(int(n[P["t"].index(t)]) == 4 for t in range(1, POOL_T + 1)),
+        str([int(n[P["t"].index(t)]) for t in range(1, POOL_T + 1)]),
+    )
+    want = (0.12 + (0.12 + 0.1) + (0.10 + 0.2) + 0.0) / 4  # p2 carried from click 10; p3 the empty set
+    ok &= _check(
+        "...at the person's own value: the carry is p2's last row, not a neighbour's",
+        abs(mean[tz] - want) <= 2.0 / P["agg"]["mean"]["scale"],
+        f"{mean[tz]:.4f} vs {want:.4f}",
+    )
+    stops = P.get("stops")
+    if not stops:
+        return _check("the page carries the people's stops", False, str(P.get("stops_note")))
+    ints = _decode(stops["ints"]).astype(int)
+    col = {c: i for i, c in enumerate(stops["cols"])}
+    got = sorted((int(ints[col["t"], i]), int(ints[col["fired"], i])) for i in range(ints.shape[1]))
+    ok &= _check(
+        "a stratum has a stop per person, not the earliest of them",
+        got == sorted([(8, 1), (POOL_T, 0), (16, 1), (POOL_T, 0)]),
+        str(got),
+    )
+    ok &= _check(
+        "the note counts people",
+        P.get("stops_note") == "The app said stop in 2 of 4 runs.",
+        str(P.get("stops_note")),
     )
     return ok
 
@@ -1141,7 +1394,34 @@ def main() -> int:  # noqa: C901
             V.opening_view(["cost", "precision"], hide=["auroc"]) == {"hide": ["auroc"]},
         )
 
+        # A page whose datasets mean nothing pooled opens on each of them (#4959).
+        ok &= refuses("opening its datasets any way but each or all", default_dataset="some")
+        ok &= _check(
+            "a page of several datasets can open on each, and the pool, the default, is not written",
+            V.opening_view(["f1"], dataset="each") == {"dataset": "each"}
+            and V.opening_view(["f1"], dataset="all") == {},
+        )
+        each = tmp / "each.html"
+        V.build_viewer(main_df, each, arms=ARMS, runs_budget_mb=0.25, default_dataset="each")
+        ok &= _check(
+            "...at build time", _payload(each).get("view", {}).get("dataset") == "each", str(_payload(each).get("view"))
+        )
+        reskinned = tmp / "each_reskin.html"
+        shutil.copyfile(out, reskinned)
+        V.reskin(reskinned, default_dataset="each")
+        V.reskin(reskinned)
+        ok &= _check(
+            "...and by a reskin, which a plain reskin then keeps",
+            _payload(reskinned).get("view", {}).get("dataset") == "each",
+            str(_payload(reskinned).get("view")),
+        )
+        V.reskin(reskinned, default_dataset="")
+        ok &= _check("'' drops it, restoring the original payload", blob(reskinned) == blob(out))
+        ok &= _check("the template opens on each dataset when the view says so", 'VIEW.dataset === "each"' in shell)
+
         ok &= _beta_checks(tmp)
+        ok &= _stop_checks(tmp)
+        ok &= _pooled_checks(tmp)
 
         print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))
         return 0 if ok else 1

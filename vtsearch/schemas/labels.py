@@ -21,9 +21,9 @@ The per-plugin shape of ``field_values`` on ``POST /api/exporters/export``
 is intentionally declared as ``fields.Dict()``: the inner keys vary per
 exporter and ``field_values`` is validated inside the handler against the
 selected plugin's :attr:`fields` declaration. The multipart-or-JSON
-``POST /api/label-importers/import/<importer_name>`` route stays on the
-legacy plain-Flask path (no decorator) for the same reason; see
-"Routes absent from the spec" in ``docs/API.md``.
+``POST /api/label-importers/import/<importer_name>`` route declares no
+request schema for the same reason; see "Routes with no typed schema" in
+``docs/API.md``.
 """
 
 from __future__ import annotations
@@ -337,8 +337,8 @@ class IngestMissingResponseSchema(Schema):
     """Response for ``POST /api/label-importers/ingest-missing``.
 
     ``failed`` lists per-entry failures from the label-application
-    pass; see logical-bug-audit H31.  A single entry that raises during
-    ``apply_label`` no longer aborts the rest of the batch.
+    pass: a single entry that raises during ``apply_label`` is recorded
+    there and the rest of the batch still applies (logical-bug-audit H31).
     """
 
     ingested = fields.Integer(required=True)

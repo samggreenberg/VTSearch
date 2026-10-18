@@ -66,6 +66,8 @@ export CALIB_CATEGORY_MODE=all
 
 # THE STUDY. Every other export on this page exists to hold something still.
 export CALIB_TEST_BANDS="${CALIB_TEST_BANDS:-all}"
+# `off` runs without the per-band columns: a whole-cell prevalence arm refuses them (#4959).
+[[ "$CALIB_TEST_BANDS" == off ]] && export CALIB_TEST_BANDS=""
 
 # Sized to make a PER-CELL rate readable, because the off-diagonal is where the
 # interesting variance is and it is measured on a held-out fraction of a band.
@@ -151,6 +153,10 @@ ENVX="$ENVX CALIB_WALK_GUARD=${CALIB_WALK_GUARD:-} CALIB_WALK_SHAPE=${CALIB_WALK
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES=${CALIB_SAVE_TEST_SCORES:-} CALIB_SIM_SIZE=${CALIB_SIM_SIZE:-}"
 # #4490: extra snapshot clicks (comma list) beside the last and final ones.
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES_AT=${CALIB_SAVE_TEST_SCORES_AT:-}"
+# #4936: those snapshots also carry every fold model's scores of the withheld half and the sim set; record only.
+ENVX="$ENVX CALIB_SAVE_FOLD_SCALES=${CALIB_SAVE_FOLD_SCALES:-}"
+# #4960: Find on a second corpus at every click, and the two domain-shift flags against it; record only.
+ENVX="$ENVX CALIB_FIND_CORPUS=${CALIB_FIND_CORPUS:-} CALIB_FIND_MIX=${CALIB_FIND_MIX:-} CALIB_FIND_FLAGS_AT=${CALIB_FIND_FLAGS_AT:-}"
 # The Test arm (#4523): Test mode's autopilot on the withheld half after the last click; off unless a study asks.
 ENVX="$ENVX CALIB_LINE_TEST=${CALIB_LINE_TEST:-}"
 # When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.
@@ -168,6 +174,10 @@ ENVX="$ENVX CALIB_SET_OVERLAP=${CALIB_SET_OVERLAP:-}"
 ENVX="$ENVX CALIB_QUERY_PRIOR_SHADOW=${CALIB_QUERY_PRIOR_SHADOW:-} CALIB_QUERY_PRIOR=${CALIB_QUERY_PRIOR:-}"
 # The head-count gate (#4786): unset is the app's; 0 is the line before #4786.
 ENVX="$ENVX CALIB_HEAD_COUNT_BADS=${CALIB_HEAD_COUNT_BADS:-}"
+# The head's count line above beta 1 (#5039): unset is the app's; `off` is each piece before #5039.
+ENVX="$ENVX CALIB_HEAD_COUNT_RECALL_EXPONENT=${CALIB_HEAD_COUNT_RECALL_EXPONENT:-} CALIB_HEAD_COUNT_RECALL_Z=${CALIB_HEAD_COUNT_RECALL_Z:-}"
+# The labels line's chances (#5040): unset is the app's; `corpus` fits the Bad component on the corpus, the margin loosens the bound.
+ENVX="$ENVX CALIB_LINE_BAD=${CALIB_LINE_BAD:-} CALIB_LINE_BOUND_MARGIN=${CALIB_LINE_BOUND_MARGIN:-}"
 # The typed query's hold (#4736): unset is the app's; 0 is the hand-over at the quota, before #4736.
 ENVX="$ENVX CALIB_QUERY_HOLD=${CALIB_QUERY_HOLD:-}"
 # An eval head (CALIB_HEAD): unset is the shipped linear SVM; a set head is declared to preflight (PREFLIGHT_DIVERGES=head).

@@ -4,7 +4,7 @@
 # Reuses the Max-Patch prepare pickles + crops for the (dataset, embedder) pairs
 # that coincide (visual_genome_m x {siglip, dinov3_patch}, caltech101_m x siglip)
 # by pointing VTSEARCH_DATA_DIR at the Max-Patch datadir and symlinking its crops;
-# prepare then only embeds the missing siglip_l pairs.  Chains:
+# prepare then only embeds the missing siglip2_l pairs.  Chains:
 #   prepare (GPU) -> cells array (afterok) -> analyze (afterany)
 #
 # Usage: bash launch_all.sh
@@ -46,7 +46,7 @@ export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
 # that die one at a time deep inside the array.
 export CALIB_REQUIRE_SEED_QUERY="${CALIB_REQUIRE_SEED_QUERY:-1}"
 # Reuse the Max-Patch datadir (demo data + embeddings pickles + models) directly;
-# siglip_l pickles land alongside them, harmlessly.
+# siglip2_l pickles land alongside them, harmlessly.
 export VTSEARCH_DATA_DIR="${VTSEARCH_DATA_DIR:-$MAXPATCH/datadir}"
 export VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$MAXPATCH/models}"
 export HF_HOME="${HF_HOME:-/exp/$USER/.cache/huggingface}"
@@ -82,7 +82,7 @@ require_jobid() {
   fi
 }
 
-# --- Stage 0: prepare (embeds siglip_l; reuses the rest). GPU for the ViT-L. ---
+# --- Stage 0: prepare (embeds siglip2_l; reuses the rest). GPU for the ViT-L. ---
 # Honour CALIB_PARTITION / CALIB_GRES the same way launch_cells.sh does.  A run
 # whose pickles are all cached needs no GPU, and passing `--gres=none` through
 # literally is not a no-op: this cluster's submit filter rewrites it and then

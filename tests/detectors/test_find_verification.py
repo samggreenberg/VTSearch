@@ -234,6 +234,7 @@ class TestFindStats:
             "audited": None,
             # No ranking behind this fixture's line, so nothing a check could walk (#4489, #4496).
             "checkable": False,
+            "kept_at_check": None,
             "separation": None,
             "check_due": False,
             "done_check_due": False,
@@ -365,7 +366,7 @@ class TestCorrectionsToDetector:
 
     def test_session_frozen_and_marked_stale(self, client):
         """The Find session is NOT reset: votes / verified / find baseline hold,
-        the cached MLP is invalidated for the next scoring pass, and the
+        the cached head is invalidated for the next scoring pass, and the
         evaluation is flagged stale."""
         self._setup_find(client)
         good_item, bad_item = self._make_two_corrections(client)
@@ -383,7 +384,7 @@ class TestCorrectionsToDetector:
         assert bad_item in ctx.verified_ids
         assert good_item in ctx.bad_votes  # the human vote held
         assert bad_item in ctx.good_votes
-        # The cached MLP is dropped so the next scoring pass retrains.
+        # The cached head is dropped so the next scoring pass retrains.
         assert ctx.model is None
         assert ctx.find_eval_stale is True
 
