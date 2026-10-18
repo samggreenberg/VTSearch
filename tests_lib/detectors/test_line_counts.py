@@ -63,7 +63,10 @@ class TestInTheHarness:
             assert s["k_test"] == row["n_flagged"]
             assert s["k_labels_b4"] == s["k_test"]  # the run's beta is 4
             assert s["n_test_pos"] == row["n_test_pos"]
-            assert _fbeta_at(s["k_test"], s["test_pos_ranks"], s["n_test_pos"], 4.0) == pytest.approx(row["fbeta"])
+            # The row keeps F-beta to 6 decimals.
+            assert _fbeta_at(s["k_test"], s["test_pos_ranks"], s["n_test_pos"], 4.0) == pytest.approx(
+                row["fbeta"], abs=1e-6
+            )
             assert s["n_good"] + s["n_bad"] >= 1
             assert 0 <= s["k_head_count"] <= s["n_test"]
 

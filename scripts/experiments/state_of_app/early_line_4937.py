@@ -518,7 +518,7 @@ def _cell_rows(args) -> list[dict]:
     except Exception as exc:  # a truncated file: report, do not stop the pool
         return [{**ident, "error": f"{type(exc).__name__}: {exc}"}]
     rows = []
-    from vtscore.eval.live_threshold_rules import labels_chances
+    from vtscore.eval.live_threshold_rules import head_count_recall, labels_chances
 
     for prefix, path in PATHS.items():
         mine = {k: v for k, v in snaps.items() if k.startswith(prefix + "/")}
@@ -528,8 +528,9 @@ def _cell_rows(args) -> list[dict]:
             by_step.setdefault(int(snap["t"]), snap)
         for t, snap in sorted(by_step.items()):
             try:
-                # The line this study measured: the one before #5040 changed the chances and the bound.
-                with labels_chances("labels", 2.0):
+                # The line this study measured: the one before #5040 changed the chances and the bound, and
+                # before #5039 changed the head's count above beta 1.
+                with labels_chances("labels", 2.0), head_count_recall("off", "off"):
                     measure_row = measure(snap, path == "region")
                 rows.append({**ident, "path": path, "click": click_of(t, listed), **measure_row})
             except Exception as exc:
@@ -584,9 +585,12 @@ def main(argv=None) -> int:
     e.add_argument("--docs")
     e.add_argument("--figs")
     a = ap.parse_args(argv)
-    from vtscore.eval.live_threshold_rules import labels_chances
+    from vtscore.eval.live_threshold_rules import head_count_recall, labels_chances
 
-    with labels_chances("labels", 2.0):  # the line this study measured, before #5040
+    with (
+        labels_chances("labels", 2.0),
+        head_count_recall("off", "off"),
+    ):  # the line this study measured: before #5040, #5039
         {"measure": cmd_measure, "report": cmd_report, "examples": cmd_examples}[a.cmd](a)
     return 0
 

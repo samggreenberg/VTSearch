@@ -1355,6 +1355,25 @@ _HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
 HEAD_COUNT_BADS: "int | str | None" = (
     int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
 )
+#: Issue #5039's head's count line above a balance of 1: ``CALIB_HEAD_COUNT_RECALL_EXPONENT`` is how the
+#: count grows (``beta ** e`` times what stands out), ``CALIB_HEAD_COUNT_RECALL_Z`` where the line reaches down
+#: the head's excess curve when a held-out Good ranks below the count
+#: (``vtscore.eval.live_threshold_rules.head_count_recall``).  Unset is the app's; ``off`` is that piece before
+#: #5039.  A value that is neither a number nor ``off`` is kept as given, for the harness and preflight to refuse.
+
+
+def _number_or_off(name: str) -> "float | str | None":
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in ("", "off"):
+        return raw or None
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
+HEAD_COUNT_RECALL_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_RECALL_EXPONENT")
+HEAD_COUNT_RECALL_Z = _number_or_off("CALIB_HEAD_COUNT_RECALL_Z")
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

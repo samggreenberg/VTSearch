@@ -1907,8 +1907,8 @@ def _skyline_fit_and_score(
 
 
 def _model_meta(model: Any) -> dict[str, Any]:
-    """The class model's scalars at full precision, for a snapshot's JSON; its Bads' scores travel in the folds."""
-    return {k: v for k, v in asdict(model).items() if k != "neg_logits"}
+    """The class model's scalars at full precision, for a snapshot's JSON; its Goods' and Bads' scores travel in the folds."""
+    return {k: v for k, v in asdict(model).items() if k not in ("neg_logits", "pos_logits")}
 
 
 def _fold_arrays(orderings: Any) -> dict[str, Any]:

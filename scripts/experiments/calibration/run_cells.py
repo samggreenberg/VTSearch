@@ -336,6 +336,12 @@ def cell_progress(idx: int, n_launched: int, results: Path | None = None) -> str
     return f"{plain} launched (grid_shape.json: {n_shape} — {verdict})"
 
 
+def _recall_knob(run: "float | str | None", app: "float | None") -> "float | str":
+    """A #5039 head-count knob as a row records it: the run's value, else the app's; ``off`` for the piece before #5039."""
+    v = app if run is None else run
+    return "off" if v is None or v == "off" else float(v)
+
+
 def cell_file(path: Path) -> Path:
     """*path*, gzipped when ``CALIB_CELLS_GZIP=1`` (#4184).  pandas picks the codec off the suffix."""
     return path.with_name(path.name + ".gz") if cfg.CELLS_GZIP else path
@@ -411,6 +417,8 @@ def main(argv: list[str] | None = None) -> int:
         f"query_prior_shadow={'on' if cfg.QUERY_PRIOR_SHADOW else 'off'} "
         f"query_prior={cfg.QUERY_PRIOR if cfg.QUERY_PRIOR is not None else 'app'} "
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
+        f"head_count_recall_exponent={_recall_knob(cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT)} "
+        f"head_count_recall_z={_recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"find_corpus={cfg.FIND_CORPUS or 'off'} find_mix={(cfg.FIND_MIX or 'only') if cfg.FIND_CORPUS else 'off'} "
@@ -436,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.arms_split_rounding import split_rounding
-    from vtscore.eval.live_threshold_rules import head_count_bads, labels_chances, sigma_floor
+    from vtscore.eval.live_threshold_rules import head_count_bads, head_count_recall, labels_chances, sigma_floor
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -523,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
         with (
             sigma_floor(cfg.SIGMA_FLOOR),
             head_count_bads(cfg.HEAD_COUNT_BADS),
+            head_count_recall(cfg.HEAD_COUNT_RECALL_EXPONENT, cfg.HEAD_COUNT_RECALL_Z),  # type: ignore[arg-type]  # preflight refuses a bad value
             split_rounding(cfg.SPLIT_ROUNDING),
             query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
             labels_chances(cfg.LINE_BAD, cfg.LINE_BOUND_MARGIN),
@@ -683,6 +692,10 @@ def main(argv: list[str] | None = None) -> int:
             r["split_rounding"] = cfg.SPLIT_ROUNDING
             r["line_bad"] = cfg.LINE_BAD or _LL.BAD_COMPONENT
             r["line_bound_margin"] = cfg.LINE_BOUND_MARGIN if cfg.LINE_BOUND_MARGIN is not None else _LL._BOUND_MARGIN
+            r["head_count_recall_exponent"] = _recall_knob(
+                cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT
+            )
+            r["head_count_recall_z"] = _recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""
