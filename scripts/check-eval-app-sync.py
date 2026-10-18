@@ -1023,6 +1023,55 @@ MIRRORS: list[Mirror] = [
             "study) and the study's report prices."
         ),
     ),
+    Mirror(
+        id="find.training_domain",
+        app="py:vtsearch.training_domain.domain_shift_against",
+        harness="vtscore/eval/find_corpus.py::training_domain_flags,FindCorpus.matrix",
+        kind="ported",
+        note=(
+            "The Training-domain overlap chip (#4961) read against #4960's Find corpus at the snapshot "
+            "clicks. The report itself is delegated - both sides call vtscore.coverage.atlas."
+            "domain_shift_report - so what is ported is how the app's route calls it: at the report's "
+            "default alpha, against the reference dataset's coverage atlas, over media_embedding of every "
+            "media of the dataset searched (FindCorpus.matrix), and refused (NaN here) with no atlas, no "
+            "vectors, or on a patch embedder (#3329). If the route changes its alpha, the vectors it "
+            "stacks or a refusal, follow it; the harness reads shifted / frac_atypical / z_score off the "
+            "report, so a renamed key surfaces as a KeyError in the tests."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness's reference is the sim pool and its atlas the one "
+            "step_trainers._build_eval_atlas builds there for the New phase, which the app's dataset atlas "
+            "models. The route's embedder-mismatch refusal is the harness's same-embedder rule, enforced when "
+            "the corpus is built (build_find_corpus refuses another vector width or patch grids on one side) "
+            "and by the runner reading the Find corpus out of the cell's own embedder's pickle; the patch "
+            "refusal reads the run's region_aware, the harness's spelling of a patch embedder. The route's "
+            "same-dataset refusal has no harness case: a Find corpus never holds the sim pool, and a share-0 "
+            "corpus (the withheld half) is read on purpose, as the no-shift baseline."
+        ),
+    ),
+    Mirror(
+        id="find.evidence_coverage",
+        app="py:vtsearch.routes.detectors.scoring.find_evidence_coverage",
+        harness="vtscore/eval/find_corpus.py::evidence_flags,vote_vectors,FindCorpus.matrix",
+        kind="ported",
+        note=(
+            "The Evidence coverage chip read against #4960's Find corpus at the snapshot clicks. The report "
+            "is delegated - both sides call vtscore.detectors.evidence_coverage.evidence_coverage_report at "
+            "its defaults - so what is ported is its inputs: the labelset's rows split Good / Bad (the app's "
+            "build_xy_from_labelset: a Good's one vector, a Bad's flooded image-level + patch negatives on a "
+            "patch dataset; vote_vectors assembles the trainers' same rows), the whole-image vector of every "
+            "scored media (FindCorpus.matrix), and each predicted positive where its Find score clears the "
+            "Find threshold (the caller, _find_corpus_columns, passes score >= the line's cut on that "
+            "corpus). The route reports nothing with no labelled rows or no scored media; so does "
+            "evidence_flags. If the route changes which rows it reads, the threshold or a default, follow it."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's labelset vectors are the label embeddings re-derived at detector load; "
+            "the harness reads the same media's vectors straight off the run's medias, and a Good's is the "
+            "row its trainers fit (the ground-truth box pooled under region voting), which is what the app's "
+            "region vote stores."
+        ),
+    ),
 ]
 
 
