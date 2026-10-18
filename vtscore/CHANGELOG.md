@@ -416,6 +416,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
+  (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:
+  another dataset's medias in the run's embedder, whose cell of the same name is scored at every click by the
+  detector the click's Test gives, its line's corpus side refitted there, into the new
+  `voting_columns.FIND_CORPUS_COLUMNS` (`find_fbeta` and its presets, `find_precision`, `find_recall`,
+  `find_n_flagged`, `find_average_precision`, `find_n_pos`, `find_n_neg`). `find_mix` (`"only"`, the default;
+  `"equal"`, `0` or a share) mixes it into the withheld half as extra haystack. At `find_flag_steps` the row also
+  carries `FIND_FLAG_COLUMNS`: `domain_shift_report` against the sim pool's coverage atlas (NaN on a patch
+  embedder) and `evidence_coverage_report` from the votes' vectors and the Find cut. New module
+  `vtscore.eval.find_corpus` (`build_find_corpus`, `parse_find_mix`, `find_cell`, the two flag readers). Both
+  frames gain the columns, NaN without the knob; every other column is unchanged.
+
 - **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
   `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
   pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.

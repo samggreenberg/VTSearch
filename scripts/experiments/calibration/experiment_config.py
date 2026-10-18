@@ -1146,6 +1146,23 @@ if SAVE_FOLD_SCALES and not (SAVE_TEST_SCORES and SAVE_TEST_SCORES_AT):
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
 LINE_TEST = os.environ.get("CALIB_LINE_TEST", "").strip().lower() in ("1", "true", "yes")
 SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
+#: #4960's second corpus (``CALIB_FIND_CORPUS=o365_better``): a dataset whose pickle holds the cell's embedder, Found on
+#: at every click beside the withheld half; its cell of the same name is the Find corpus (the whole dataset where it
+#: has none).  Each row carries the ``find_*`` columns.  ``CALIB_FIND_MIX`` draws it: unset or ``only`` is that cell
+#: alone, ``equal`` / ``0`` / a share add that many times the withheld half's size of it to the withheld half as
+#: extra haystack.  ``CALIB_FIND_FLAGS_AT`` (default ``CALIB_SAVE_TEST_SCORES_AT``'s list) are the clicks the two
+#: domain-shift flags are read at, against that corpus (``shift_*``, ``evidence_*``).  Eval only: the session is
+#: unchanged.  On a patch embedder the evidence flag floods every Bad's patches, as the app's does, which costs memory.
+FIND_CORPUS = os.environ.get("CALIB_FIND_CORPUS", "").strip() or None
+FIND_MIX = os.environ.get("CALIB_FIND_MIX", "").strip().lower() or None
+_FIND_FLAGS_AT = os.environ.get("CALIB_FIND_FLAGS_AT", "").replace(" ", "")
+FIND_FLAGS_AT = tuple(int(x) for x in _FIND_FLAGS_AT.split(",") if x) if _FIND_FLAGS_AT else SAVE_TEST_SCORES_AT
+if (FIND_MIX is not None or _FIND_FLAGS_AT) and FIND_CORPUS is None:
+    raise ValueError("CALIB_FIND_MIX and CALIB_FIND_FLAGS_AT describe a Find corpus; set CALIB_FIND_CORPUS")
+if FIND_MIX is not None:
+    from vtscore.eval.find_corpus import parse_find_mix as _parse_find_mix
+
+    _parse_find_mix(FIND_MIX)  # refused here, before the array, rather than in every cell
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None

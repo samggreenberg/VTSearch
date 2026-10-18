@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+    from vtscore.eval.find_corpus import FindCorpus
     from vtscore.training.thresholds import FoldAnchoredCut, LineBudgets
 
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
@@ -97,6 +98,7 @@ from vtscore.eval.step_trainers import (
 )
 from vtscore.eval import scale_bands
 from vtscore.eval.labels import evaluable_pool, media_is_positive
+from vtscore.eval.find_corpus import blank_find_columns, build_find_corpus, parse_find_mix
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
     FBETA_COLUMNS,
@@ -1274,6 +1276,7 @@ def _evaluate_on_test(
     find_line: Any = None,
     beta: float | None = None,
     out: "dict[str, Any] | None" = None,
+    dump_suffix: str = "__eval",
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -1298,6 +1301,8 @@ def _evaluate_on_test(
 
     *scored_sink*, when given, receives the ``(scores, labels)`` arrays so a
     caller can derive more metrics from the same pass (issue #3959).
+    *dump_suffix* names the prediction dump (``VTS_DUMP_TEST_SCORES``) the pass
+    writes, so a second corpus scored the same click (#4960) keeps its own.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1324,7 +1329,7 @@ def _evaluate_on_test(
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
-    maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix="__eval")
+    maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix=dump_suffix)
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
@@ -1593,6 +1598,7 @@ def _centroid_test(
     line_rule: str | None = None,
     line_beta: float | None = None,
     line_ids: "list[int] | None" = None,
+    dump_suffix: str = "__eval",
 ) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
     """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
 
@@ -1651,6 +1657,7 @@ def _centroid_test(
         region_aware=region_aware,
         style_obj=style_obj,
         beta=beta,
+        dump_suffix=dump_suffix,
     )
     return step, [metrics], None
 
@@ -1665,6 +1672,7 @@ def _query_test(
     beta: float | None,
     calibration_rows: bool,
     line_beta: float | None = None,
+    dump_suffix: str = "__eval",
 ) -> tuple[StepModel, list[dict[str, Any]]]:
     """What a Test on the withheld half gives a typed-query run until the quota (#4758): the typed query's own set.
 
@@ -1690,6 +1698,7 @@ def _query_test(
         inclusion,
         scored_sink=scored,
         beta=beta,
+        dump_suffix=dump_suffix,
     )
     if calibration_rows and scored:
         metrics = {
@@ -1697,6 +1706,132 @@ def _query_test(
             **_standalone_calibration_row(CENTROID_THRESHOLD, {"provenance": "query", "beta": beta}, scored, inclusion),
         }
     return step, [metrics]
+
+
+def _find_corpus_columns(
+    find: "FindCorpus",
+    tier: str,
+    *,
+    step: "StepModel | None",
+    threshold: float,
+    details: dict[str, Any],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    target_category: str,
+    inclusion: int,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    line_beta: float | None,
+    centroid_line: str | None,
+    flags_at: int | None,
+    atlas: Any,
+) -> dict[str, Any]:
+    """A click's Find on the second corpus (#4960): what the click's Test gives, cut where a Find there draws it.
+
+    *tier* is the row's ``detector_tier``, and the corpus is scored by the same
+    function the in-corpus columns came from: the trained head through
+    :func:`_evaluate_on_test` with the labels line's corpus side refitted on
+    the Find corpus (*details*' ``find_line`` at its ``beta``; the Train side's
+    *threshold* with no class model), the Goods' centroid through
+    :func:`_centroid_test` and the typed query's set through :func:`_query_test`,
+    each with its line drawn on the Find corpus.  *beta* weights the F-beta
+    columns and *line_beta* draws those two lines, as the in-corpus call does.
+    At a snapshot click (*flags_at*, the listed click it answers) the two
+    domain-shift flags are read against the corpus too.  Nothing here touches
+    the session: the corpus is scored and nothing else.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+    from vtscore.eval.find_corpus import (  # noqa: PLC0415
+        blank_find_columns,
+        evidence_flags,
+        find_columns,
+        training_domain_flags,
+        vote_vectors,
+    )
+
+    scored: list[Any] = []
+    if tier == "query":
+        assert find.query_scores is not None  # build_find_corpus refuses a query run without them
+        f_step, (metrics,) = _query_test(
+            find.query_scores,
+            find.clips,
+            find.ids,
+            target_category,
+            inclusion,
+            beta=beta,
+            calibration_rows=False,
+            line_beta=line_beta,
+            dump_suffix="__find",
+        )
+        cut = CENTROID_THRESHOLD
+    elif tier == "centroid":
+        f_step, (metrics,), _ = _centroid_test(
+            good_votes,
+            find.clips,
+            find.ids,
+            target_category,
+            inclusion,
+            region_voting=region_voting,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            beta=beta,
+            calibration_rows=False,
+            line_rule=centroid_line,
+            line_beta=line_beta,
+            dump_suffix="__find",
+        )
+        cut = CENTROID_THRESHOLD
+    else:
+        assert step is not None
+        out: dict[str, Any] = {}
+        metrics = _evaluate_on_test(
+            step,
+            threshold,
+            find.clips,
+            find.ids,
+            target_category,
+            inclusion,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            scored_sink=scored,
+            find_line=details.get("find_line"),
+            beta=details.get("beta"),
+            out=out,
+            dump_suffix="__find",
+        )
+        f_step, cut = step, float(out.get("find_threshold", threshold))
+    cols: dict[str, Any] = {**blank_find_columns(), **find_columns(metrics)}
+    if flags_at is None:
+        return cols
+    import numpy as np  # noqa: PLC0415
+
+    scores = (
+        scored[0]
+        if scored
+        else np.asarray(
+            _score_media_ids(f_step, find.clips, find.ids, region_aware=region_aware, style_obj=style_obj),
+            dtype=np.float64,
+        )
+    )
+    matrix = find.matrix()
+    pos, neg = vote_vectors(
+        list(good_votes),
+        list(bad_votes),
+        find.clips,
+        target_category,
+        region_voting=region_voting,
+        style_obj=style_obj,
+        dim=int(matrix.shape[1]),
+    )
+    return {
+        **cols,
+        "flags_at": int(flags_at),
+        **training_domain_flags(atlas, matrix, patch_space=region_aware),
+        # Predicted as the metric columns flag: a score at or above the Find cut.
+        **evidence_flags(pos, neg, matrix, scores >= cut),
+    }
 
 
 # ------------------------------------------------------------------
@@ -2964,6 +3099,10 @@ def simulate_voting_iterations(  # noqa: C901
     query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
+    find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
+    find_corpus_scores: Optional[Mapping[int, float]] = None,
+    find_mix: "float | str | None" = None,
+    find_flag_steps: Optional[Sequence[int]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -3185,6 +3324,36 @@ def simulate_voting_iterations(  # noqa: C901
             untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
             priced on the same session.  Picks never change: the head is
             trained and asks either way.  Inert where *query_tier* is.
+        find_corpus: A second corpus to Find on at every click (#4960,
+            :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
+            run's embedder, whose cell of the same name as *target_category*
+            (the whole dataset when it has none) is the Find corpus, as
+            *find_mix* draws it.  Each row then also carries
+            :data:`~vtscore.eval.voting_columns.FIND_CORPUS_COLUMNS`: the
+            detector the click's Test gives, scored there and cut where a Find
+            there draws its line (:func:`_find_corpus_columns`).  The corpus is
+            only scored, so the in-corpus columns are byte-identical with and
+            without it, and it never enters the pool, the votes, the atlas or
+            the folds.  ``None`` (the default) leaves those columns NaN.
+        find_corpus_scores: The typed query's cosine over *find_corpus*'s
+            medias, as *seed_scores* holds it over this cell's: what a
+            typed-query run's Test returns there (#4758).  Needed on such a
+            run whenever the Find corpus holds foreign medias.
+        find_mix: How the Find corpus is drawn
+            (:func:`~vtscore.eval.find_corpus.parse_find_mix`): ``"only"``
+            (the default) is the foreign cell alone; a share adds that many
+            times the withheld half's size of foreign medias to the withheld
+            half as extra haystack (``"equal"`` is 1, ``0`` the withheld half
+            alone), a draw seeded off *seed*.
+        find_flag_steps: The snapshot clicks: at the first click at or past
+            each, the row also reads the app's two domain-shift flags against
+            the Find corpus (:data:`~vtscore.eval.voting_columns.FIND_FLAG_COLUMNS`):
+            the Training-domain overlap against the sim pool's coverage atlas
+            (NaN on a patch embedder, which the app refuses, and on a
+            non-Autopilot strategy, which builds no atlas) and the Evidence
+            coverage from the votes' vectors and the Find cut.  Off every
+            other click, because routing a whole corpus through the atlas is
+            the costly step.  Needs *find_corpus*.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -3644,6 +3813,10 @@ def simulate_voting_iterations(  # noqa: C901
     if target_prevalence is not None and haystack_prevalence is not None:
         raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
+    # #4960's Find corpus: its knobs are read here, the corpus is built once the split exists.
+    find_share = parse_find_mix(find_mix)
+    if find_corpus is None and (find_corpus_scores is not None or find_flag_steps or find_mix is not None):
+        raise ValueError("find_corpus_scores, find_mix and find_flag_steps describe a Find corpus; pass find_corpus")
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
     # they have to be taken off the unfiltered pool (#4044).
@@ -3847,6 +4020,24 @@ def simulate_voting_iterations(  # noqa: C901
             RuntimeWarning,
             stacklevel=2,
         )
+
+    # The second corpus a Find reads beside the withheld half (#4960), drawn
+    # off its own generator: no draw here can move the trajectory's.
+    find: "FindCorpus | None" = None
+    if find_corpus is not None:
+        find = build_find_corpus(
+            clips_dict,
+            test_ids,
+            find_corpus,
+            target_category,
+            mix=find_share,
+            seed=seed,
+            region_aware=region_aware,
+            query_scores=query_scores,
+            foreign_query_scores=find_corpus_scores,
+        )
+    find_flag_pending = sorted({int(s) for s in find_flag_steps}) if find is not None and find_flag_steps else []
+    blank_find = blank_find_columns()
 
     # **The default arm must be the app's default.**  On a patch dataset the
     # live detector floods a Bad vote over the image's whole score-row stack
@@ -4465,6 +4656,46 @@ def simulate_voting_iterations(  # noqa: C901
 
         return score
 
+    def _find_flags_due(t: int, is_click: bool) -> int | None:
+        """The listed snapshot click this click answers, if it is the first click at or past it (#4960)."""
+        if not find_flag_pending or not is_click or t < find_flag_pending[0]:
+            return None
+        hit = find_flag_pending[0]
+        while find_flag_pending and find_flag_pending[0] <= t:
+            find_flag_pending.pop(0)
+        return hit
+
+    def _find_row(
+        tier: str,
+        st: StepModel | None,
+        cut: float,
+        step_details: dict[str, Any],
+        row_beta: float | None,
+        flags_at: int | None,
+    ) -> dict[str, Any]:
+        """This click's Find on the second corpus (#4960); NaN with none."""
+        if find is None:
+            return blank_find
+        return _find_corpus_columns(
+            find,
+            tier,
+            step=st,
+            threshold=cut,
+            details=step_details,
+            good_votes=good_votes,
+            bad_votes=bad_votes,
+            target_category=target_category,
+            inclusion=inclusion,
+            region_voting=region_voting,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            beta=row_beta,
+            line_beta=beta,
+            centroid_line=centroid_line,
+            flags_at=flags_at,
+            atlas=atlas,
+        )
+
     while True:
         # The vote count before this step's votes: a frame is due at every
         # requested click this step reaches, which a check round can jump past.
@@ -4636,8 +4867,16 @@ def simulate_voting_iterations(  # noqa: C901
                     "device": c_step.device,
                     "elapsed_seconds": round(time.monotonic() - start_time, 3),
                 }
+                c_find = _find_row(
+                    "query" if query_on else "centroid",
+                    None,
+                    float("nan"),
+                    {"beta": row_beta},
+                    row_beta,
+                    _find_flags_due(t, True),
+                )
                 for mr in c_rows:
-                    rows.append({**c_ident, **mr, **c_bands, **c_timing})
+                    rows.append({**c_ident, **mr, **c_bands, **c_find, **c_timing})
                 if query_on:
                     # The centroid is not what Test gives here, so its lines are not priced.
                     continue
@@ -4984,6 +5223,19 @@ def simulate_voting_iterations(  # noqa: C901
             neg_ids=band_neg_ids,
             target_category=target_category,
         )
+        # The second corpus a Find reads (#4960), scored by the detector this
+        # click's Test gives; the flags at a snapshot click.  On a held click
+        # the typed query's row is the untagged one, so the flags ride there.
+        find_flags_at = _find_flags_due(t, picks is None or checks.phase == "prompt")
+        find_hold = held and query_scores is not None
+        find_cols = _find_row(
+            "query" if query else "centroid" if centroid else "trained",
+            step,
+            threshold,
+            details,
+            details.get("beta"),
+            None if find_hold else find_flags_at,
+        )
 
         # Score the remaining pool with the fresh model so the next step's
         # autopilot Hard pick can rank it - in the geometry the cut it will be
@@ -5132,7 +5384,7 @@ def simulate_voting_iterations(  # noqa: C901
                     "fallback_threshold": CENTROID_THRESHOLD,
                 }
             for mr in metric_rows:
-                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+                rows.append({**base_row, **mr, **band_metrics, **find_cols, **timing_cols})
         elif calibration is not None:
             metric_rows, base_scores, base_labels, base_ids = calibration
             # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
@@ -5314,7 +5566,7 @@ def simulate_voting_iterations(  # noqa: C901
                     )
                 )
             for mr in metric_rows:
-                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+                rows.append({**base_row, **mr, **band_metrics, **find_cols, **timing_cols})
             # The near-free inclusion-budget sweep, into the side sink.
             if inclusion_sweep_ks and sweep_sink is not None:
                 for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
@@ -5341,7 +5593,7 @@ def simulate_voting_iterations(  # noqa: C901
                 ):
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
-            rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+            rows.append({**base_row, **metrics, **band_metrics, **find_cols, **timing_cols})
         if held and query_scores is not None:
             # #4736: the typed query's set is what Test gives at this click, so it is the
             # untagged row; the head's, which the step drew all the same, stay as tagged rows.
@@ -5368,7 +5620,18 @@ def simulate_voting_iterations(  # noqa: C901
                 neg_ids=band_neg_ids,
                 target_category=target_category,
             )
-            rows.append({**base_row, "detector_tier": "query", "app_trained": 0, **q_rows[0], **q_bands, **timing_cols})
+            q_find = _find_row("query", None, float("nan"), details, details.get("beta"), find_flags_at)
+            rows.append(
+                {
+                    **base_row,
+                    "detector_tier": "query",
+                    "app_trained": 0,
+                    **q_rows[0],
+                    **q_bands,
+                    **q_find,
+                    **timing_cols,
+                }
+            )
         if centroid and line_variants and not query:
             rows.extend(
                 _centroid_line_variant_rows(
@@ -5557,6 +5820,8 @@ def simulate_voting_iterations(  # noqa: C901
             **_line_columns({}),
             # The skyline is fitted to every label; no Test gives it (#4643).
             "detector_tier": "",
+            # No click, so no Find on the second corpus (#4960).
+            **blank_find,
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
