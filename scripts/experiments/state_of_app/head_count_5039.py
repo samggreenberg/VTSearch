@@ -618,11 +618,38 @@ def report_figures(pr: pd.DataFrame, grid: "pd.DataFrame | None", figs: str) -> 
     plt.close(fig)
 
 
+def faces_ab_figure(curves: pd.DataFrame, figs: str) -> None:
+    """The closed loop on faces: each arm's paired F-beta gain over the control per vote (``prior_4776.py`` curves)."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    names = {"e13z3": "1.3x + reach from z 3", "e13z275": "1.3x + reach from z 2.75"}
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.2), sharey=True)
+    for ax, k, title in zip(axes, ("k1", "k4"), ("sessions from 1 photo", "sessions from 4 photos")):
+        _style(ax)
+        for arm, col in (("e13z3", SLOT[0]), ("e13z275", SLOT[1])):
+            h = curves[(curves["set"] == f"{k}-{arm}") & (curves["metric"] == "F")].sort_values("vote")
+            ax.plot(h["vote"], h["diff"], color=col, lw=2, label=names[arm])
+            ax.fill_between(h["vote"], h["diff"] - h["diff_se"], h["diff"] + h["diff_se"], color=col, alpha=0.15, lw=0)
+        ax.axhline(0, color=MUTED_INK, lw=0.8)
+        ax.set_title(f"FHIBE faces, beta 4: {title}", fontsize=9, color=INK)
+        ax.set_xlabel("vote", fontsize=8, color="#52514e")
+    axes[0].set_ylabel("paired F-beta gain over the app (± 1 SE)", fontsize=8, color="#52514e")
+    axes[0].legend(fontsize=7, frameon=False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(figs, "faces_ab_over_votes.png"), dpi=130)
+    plt.close(fig)
+
+
 def cmd_report(a) -> None:
     pr = pd.read_csv(os.path.join(a.priced, "priced.csv.gz"), low_memory=False)
     grid = pd.read_csv(os.path.join(a.grid, "grid.csv.gz"), low_memory=False) if a.grid else None
     out = report_tables(pr, grid, a.docs)
     report_figures(pr, grid, a.figs)
+    if a.faces_ab:
+        faces_ab_figure(pd.read_csv(os.path.join(a.faces_ab, "prior_curves.csv")), a.figs)
     with pd.option_context("display.width", 250, "display.max_columns", 60):
         for name, df in out.items():
             print(f"\n== {name}")
@@ -734,6 +761,7 @@ def main(argv=None) -> int:
     rp.add_argument("--grid", default=None)
     rp.add_argument("--docs", required=True)
     rp.add_argument("--figs", required=True)
+    rp.add_argument("--faces-ab", default=None, help="prior_4776.py --pair's output on the face arms")
     ex = sub.add_parser("examples")
     ex.add_argument("--x", required=True)
     ex.add_argument("--priced", required=True)

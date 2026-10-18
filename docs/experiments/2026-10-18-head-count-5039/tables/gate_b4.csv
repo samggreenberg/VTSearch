@@ -1,0 +1,13 @@
+bench,scenario,snapshots,gate open,standouts (median),deepest held-out Good's rank (median),held-out Goods (median),e13z3 moves the line,e13z275 moves the line
+Region Photo,as it is,201,0.3831,127.0000,221.5000,4.0000,0.3831,0.3831
+Region Photo,positives / 4,201,0.3781,108.0000,192.5000,4.0000,0.3781,0.3781
+Region Photo,negatives x 0.44,201,0.3881,71.0000,118.0000,4.0000,0.3682,0.3881
+Region Photo,no positives,201,0.3781,100.0000,184.5000,4.0000,0.3781,0.3781
+Binary Photo,as it is,3624,0.4614,27.0000,68.0000,2.0000,0.4426,0.4440
+Binary Photo,positives / 4,3624,0.4589,23.0000,60.0000,2.0000,0.4343,0.4368
+Binary Photo,negatives x 0.44,3624,0.4611,14.0000,40.0000,2.0000,0.4404,0.4443
+Binary Photo,no positives,3624,0.4572,21.0000,59.0000,2.0000,0.4313,0.4329
+FHIBE faces,as it is,15736,0.2225,3.0000,3.0000,2.0000,0.0958,0.1071
+FHIBE faces,positives / 4,15736,0.1749,2.0000,1.0000,2.0000,0.0632,0.0748
+FHIBE faces,negatives x 0.44,15736,0.1840,3.0000,3.0000,2.0000,0.0806,0.0931
+FHIBE faces,no positives,15736,0.1317,3.0000,0.0000,2.0000,0.0372,0.0487
