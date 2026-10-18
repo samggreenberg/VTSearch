@@ -1,34 +1,47 @@
-# Fitting the 3-part fit's Bad component on the corpus recovers about half of the chances' shortfall at beta 1/4 and 1 (issue #5040)
+# Fitting the labels line's Bad component on the corpus gains +0.016 to +0.023 mean F-beta at beta 1/4 and 1, end to end (issue #5040)
 
-**Status (2026-10-17): priced offline on #4937's snapshots (Binary Photo, 702 sessions at each of the three presets,
+**Status (2026-10-18): priced offline on #4937's snapshots (Binary Photo, 702 sessions at each of the three presets,
 nine clicks from vote 10 to 150; Region Photo seed 0 at beta 1), every candidate the issue names and their
-combinations, on the withheld half and on three corpora cut from it. The best two are in a closed-loop A/B at all
-three presets: CLOSED-LOOP PENDING.**
+combinations, on the withheld half and on three corpora cut from it; the best three then A/B'd in closed loop at all
+three presets (720 sessions each, 200 clicks, paired with the app's). Recommended to ship: the Bad component's mean
+fitted on the corpus, with the counted bound at 4x. Not yet the app's: the library carries it as an eval arm, off by
+default.**
 
-**The labels line's chances (#4937) can be moved most of the way the truth moves them on the negatives' side, and
-almost none of the way on the Good side.**
+**On the negatives' side the labels line's chances (#4937) can be moved a good part of the way the truth moves them,
+and on the Good side almost none of the way.**
 
-1. **The Bad component, fitted on the corpus.** Today the 3-part fit's Bad component is a normal fixed at the
-   held-out Bads' mean with the Goods' spread. Fitting its mean and spread on the corpus being decided, the held-out
-   Bads counted as labelled points of it, gains +0.056, +0.048 and +0.017 F-beta at beta 1/4 (votes 40, 100 and 150)
-   and +0.025, +0.022 and +0.007 at beta 1, on the same heads and on the class model's cut. That is about 45% and
-   30% of the true chances' ceiling, and 55% to 60% of what the negatives' own (true) shape gains. At beta 4 it loses
-   0.009 to 0.011. On a corpus with no positives it keeps fewer images than today at every preset.
-2. **With the counted bound loosened from 2x to 4x** the same fit gains +0.061, +0.056 and +0.020 at beta 1/4,
-   +0.033, +0.033 and +0.012 at beta 1, and +0.004, +0.003 and -0.001 at beta 4 (+0.017 at vote 50). It still keeps
-   fewer images than today on a corpus with no positives (25 against 32 at beta 4, vote 40). Removing the bound gains
-   a little more on a full corpus, but at beta 4 an empty one then keeps 84 and 148 wrong images at votes 40 and 100
-   (54 and 87 with the fitted Bad component) where today keeps 32 and 47, so it fails #4452.
-3. **No Good-side candidate pays.** The Goods' own spread gains at beta 1/4 and 1 (+0.03 and +0.02 at vote 40) and
-   loses 0.02 at beta 4. Fitting the Good component on the corpus runs away: the prevalence estimate reads 13 to 14
-   times the truth and an empty corpus keeps up to 1,600 images. The spot check's Goods lose 0.03 at beta 4. The
-   held-out Goods are selected, and nothing the app holds tells the corpus's hard positives from its negatives near
-   the line.
-4. **Region overshoots.** On Region Photo the fitted Bad component puts a chance of 0.87 at the best set's edge,
-   where the truth is 0.37 (today 0.23), and the set runs 1.3 times the best early. F-beta is flat at votes 25 to 50
-   (-0.006, -0.007) and +0.031 at vote 100. Region's line was not short to begin with (#4937).
+1. **Fit the 3-part fit's Bad component on the corpus.** Today it is a normal pinned at the held-out Bads' mean with
+   the Goods' spread, and the Bads are the ones Autopilot picked near the line and from the top. Fitted on the corpus
+   being decided, the held-out Bads counted as labelled points of it, it moves to where the corpus's own negatives
+   near the line are, and the chances' sum moves to the true count of positives. On the same heads it gains +0.054
+   to +0.061 F-beta at beta 1/4 and +0.033 to +0.036 at beta 1 (vote 40), about 45% and 40% of the true chances'
+   ceiling, with the counted bound loosened from 2x to 4x; on a corpus with no positives it keeps about as many
+   images as today, or fewer.
+2. **Its mean alone is the arm to ship.** On Binary it prices with the full fit (mean and spread); on Region Photo,
+   where the line was not short, the full fit overrates the positives near the line (a chance of 0.87 at the best
+   set's edge against a true 0.37) and the mean alone does not (0.42 to 0.49), gaining +0.007 to +0.040 at every
+   click there.
+3. **End to end it holds.** In closed loop the mean alone, with the bound at 4x, gains +0.023 (± 0.004) mean F-beta
+   over clicks 0-200 at beta 1/4, +0.016 (± 0.003) at beta 1 and +0.005 (± 0.001) at beta 4; +0.013, +0.010 and
+   +0.003 over clicks 0-50. It is the only arm still ahead of the app at click 200 and after the closing check at
+   every preset (+0.007, +0.004, +0.003), and it helps 57% to 67% of sessions against 27% to 38% it hurts. Done comes
+   1 to 2 clicks sooner, at a line 0.010 to 0.033 better.
+4. **The counted bound at 4x, not removed.** Loosened it reads the prevalence at 0.87 to 0.93 of the truth early
+   (today 0.50 to 0.57) and gains alone at every preset; removed, a corpus with no positives keeps 84 and 148 wrong
+   images at beta 4 (votes 40 and 100) where today keeps 32 and 47, which fails #4452.
+5. **No Good-side candidate pays.** The Goods' own spread gains at beta 1/4 and 1 and loses 0.02 at beta 4; fitting
+   the Good component on the corpus runs away (the prevalence at 13 to 14 times the truth, up to 1,600 images kept on
+   an empty corpus); the spot check's Goods lose 0.03 at beta 4. The held-out Goods are selected, and nothing the app
+   holds tells the corpus's hard positives from its negatives near the line. Beta 4's shortfall stays.
 
-| class model's cut, F-beta gain over today (vote 40 / 100 / 150) | beta 1/4 | beta 1 | beta 4 |
+| closed loop, paired gain over the app (± SE over classes) | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| **the Bad component's mean fitted, the bound at 4x**: mean F-beta over clicks 0-50 / 0-200 | **+0.013 / +0.023** (± 0.002 / 0.004) | **+0.010 / +0.016** (± 0.001 / 0.003) | **+0.003 / +0.005** (± 0.001 / 0.001) |
+| … after the closing check | +0.007 (± 0.004) | +0.004 (± 0.002) | +0.003 (± 0.001) |
+| the Bad component fitted (mean and spread), the bound at 4x: 0-50 / 0-200 / after the check | +0.017 / +0.023 / -0.002 | +0.014 / +0.015 / +0.005 | +0.004 / +0.005 / +0.001 |
+| the Bad component fitted, the bound at 2x: 0-50 / 0-200 / after the check | +0.017 / +0.019 / -0.003 | +0.013 / +0.012 / +0.002 | +0.003 / +0.001 / -0.003 |
+
+| offline, class model's cut, F-beta gain over today (vote 40 / 100 / 150) | beta 1/4 | beta 1 | beta 4 |
 |---|---|---|---|
 | the true chances (ceiling, #4937) | +0.127 / +0.124 / +0.084 | +0.086 / +0.073 / +0.045 | +0.070 / +0.052 / +0.037 |
 | the negatives' own shape (truth, #4937) | +0.098 / +0.087 / +0.048 | +0.041 / +0.041 / +0.017 | -0.006 / -0.002 / -0.005 |
@@ -58,7 +71,7 @@ no positives still keeping close to nothing (#4452).
 | pricer | `scripts/experiments/state_of_app/chances_5040.py`: Find's line on the withheld half (`fit_labels_line(...).on_corpus(scores)`) redrawn with one candidate swapped in. Today's replay matches the library's threshold and prevalence to the last bit on all 14,253 Binary and 926 Region snapshots |
 | corpora | the withheld half (~10,900 images); its negatives alone (`empty`, ~10,850, no positive); 200 of its negatives (`empty200`, #4452's case); 1,000 of its images at their own prevalence (`small1k`) |
 | library arm | `corpus_posteriors(bad="corpus")`, set for a run by `labels_chances()` (`CALIB_LINE_BAD`, `CALIB_LINE_BOUND_MARGIN`). Drawn through the library on every snapshot it keeps the pricer's set exactly (`chances_5040.py verify`) |
-| closed loop | `chances_5040.sh`: arms `ctl` (the app), `bssl` (the Bad component fitted on the corpus) and `bssl4` (the same, the bound at 4x), Binary Photo, beta 1/4, 1 and 4, 5 seeds x 144 cells, 200 clicks and the closing check, paired by cell and seed, from a frozen worktree at 4783a51eb |
+| closed loop | `chances_5040.sh`: arms `ctl` (the app), `bssl` (the Bad component fitted on the corpus), `bssl4` (the same, the bound at 4x) and `bmean4` (its mean alone fitted, the bound at 4x), Binary Photo, beta 1/4, 1 and 4, 5 seeds x 144 cells, 200 clicks and the closing check, paired by cell and seed |
 
 Every gain is on the same heads, at the session's own preset; every ± is one SE over classes (a class's bands and
 seeds averaged first). "The class model's cut" is the snapshots where the class model draws the line (60% at vote
@@ -215,7 +228,9 @@ arm's, and the truth's (isotonic).*
 - `keyboard@medium` seed 3 (beta 1/4) is the same collapse the other way: today's chances are 0 everywhere and it
   keeps 7 by the cut's floor; the fitted chances overshoot (a sum of 96 for 48 positives) and keep 53 where the best
   is 18.
-- The same panels at beta 1 and 4: `figures/binary/examples_bad_ssl_bound_x4_b1_vote50.png`, `…_b4_vote50.png`.
+- The same panels at beta 1 and 4: `figures/binary/examples_bad_ssl_bound_x4_b1_vote50.png`, `…_b4_vote50.png`;
+  picked the same way for the mean alone, `figures/binary/examples_bad_ssl_mean_bound_x4_b{025,1,4}_vote50.png`
+  (`mouse@medium` seed 3 again helps most at beta 1/4: 1 kept today, 12 with the mean alone, 23 in the best set).
 
 ## Region Photo
 
@@ -231,7 +246,7 @@ arm's, and the truth's (isotonic).*
 Region's line was not short (#4937: 1.06 of the best set at vote 25), so chances that rise everywhere overshoot: the
 fitted component reads 0.87 at the edge where the truth is 0.37. F-beta holds early only because the overshoot sits
 in the set's tail. On 1,000-image Region corpora it loses 0.013 to 0.032 (vote 25 to 150). Fitting the Bad
-component's mean alone overshoots far less (0.42 to 0.49 at the edge early) and gains at every click, +0.014 to
+component's mean alone overshoots far less (0.42 to 0.49 at the edge early) and gains at every click, +0.007 to
 +0.040 with the bound at 4x; on 1,000-image Region corpora it loses up to 0.026 too (vote 50).
 
 ![Region Photo, beta 1, vote 25: the Bad component's mean fitted, the bound at 4x](figures/region/examples_bad_ssl_mean_bound_x4_b1_vote25.png)
@@ -242,20 +257,88 @@ set is 50; the full fit keeps 261 (`figures/region/examples_bad_ssl_bound_x4_b1_
 
 ## The closed loop
 
-CLOSED-LOOP PENDING.
+The chances do more than draw Find's line. Autopilot's acquisition reads them (its hard picks sample where they put
+the line) and its stop reads their expected F-beta (#4878), so every session runs differently from vote 7 or 8 on,
+before the detector is even shown. Each arm is the app with one change, 720 sessions per preset (144 class@band cells
+x 5 seeds, Binary Photo, 200 clicks and the closing check), paired by cell and seed with the app's own sessions.
+
+![F-beta over clicks, each arm against the app, at each preset](figures/ab_over_clicks.png)
+
+*Top: the mean F-beta of the set the app shows on the withheld half at each click (the typed query's set until the
+detector is shown, about click 30); circles, after the closing check. Bottom: each arm's paired gain over the app,
+± 1 SE over classes.*
+
+| paired gain over the app (± SE over classes) | beta 1/4 | beta 1 | beta 4 |
+|---|---|---|---|
+| **the Bad component's mean fitted, the bound at 4x**: mean F-beta over clicks 0-50 | **+0.013 (± 0.002)** | **+0.010 (± 0.001)** | **+0.003 (± 0.001)** |
+| … 0-100 | +0.024 (± 0.004) | +0.018 (± 0.003) | +0.007 (± 0.001) |
+| … 0-200 | **+0.023 (± 0.004)** | **+0.016 (± 0.003)** | **+0.005 (± 0.001)** |
+| … at click 200 | +0.006 (± 0.004) | +0.006 (± 0.003) | +0.002 (± 0.001) |
+| … after the closing check | +0.007 (± 0.004) | +0.004 (± 0.002) | +0.003 (± 0.001) |
+| … Done, clicks (the app: 53 / 57 / 63) | -2.0 (± 0.4) | -1.2 (± 0.4) | -1.2 (± 0.5) |
+| … F-beta where the user stops (Done, or click 200) | +0.033 (± 0.006) | +0.025 (± 0.004) | +0.010 (± 0.003) |
+| the Bad component fitted (mean and spread), the bound at 4x: 0-50 / 0-200 / at 200 / after the check | +0.017 / +0.023 / -0.002 / -0.002 | +0.014 / +0.015 / +0.002 / +0.005 | +0.004 / +0.005 / +0.000 / +0.001 |
+| … Done, clicks / F-beta where the user stops | -3.3 (± 0.6) / +0.033 (± 0.007) | -2.8 (± 0.7) / +0.026 (± 0.005) | -2.6 (± 0.7) / +0.013 (± 0.003) |
+| the Bad component fitted, the bound at 2x: 0-50 / 0-200 / at 200 / after the check | +0.017 / +0.019 / -0.003 / -0.003 | +0.013 / +0.012 / +0.000 / +0.002 | +0.003 / +0.001 / -0.004 / -0.003 |
+
+- **The offline gain survives the loop.** The arms' line is better from the first click that shows the detector.
+  With the full fit and the bound at 4x: +0.04 to +0.05 at beta 1/4 to click 75 and +0.03 to +0.04 to click 100,
+  +0.03 to +0.05 at beta 1 to click 60, +0.01 to +0.02 at beta 4 to click 75; with the mean alone +0.03 to +0.04,
+  +0.02 to +0.03 and about +0.01 over the same clicks. The gain fades as the app's own line catches up: by click 175
+  the full fit is level with the app, the mean alone still +0.002 to +0.013 ahead.
+- **Done comes sooner, at a better line.** The fitted chances read the line's own expected F-beta closer to the
+  truth, and the stop (#4878) reads it, so Autopilot reports Done 1 to 2 clicks sooner with the mean alone fitted and
+  3 with the full fit (medians 52, 56 and 63 against the app's 53, 57 and 63), with F-beta higher there by 0.010 to
+  0.033.
+- **The bound at 4x is what holds beta 4.** Without it the fitted Bad component drifts below the app from click 100
+  (-0.004 ± 0.002 at click 200); with it every click is level or better. At beta 1/4 and 1 it adds +0.003 to +0.004
+  over clicks 0-200.
+- **Where the full fit gains.** Large and medium bands (+0.019 to +0.031 over clicks 0-200 at beta 1/4 and 1, +0.007 at beta
+  4) and sessions that end at F-beta 0.5 or more (+0.023 to +0.031, +0.008); small bands +0.002 to +0.011, and
+  sessions that end below 0.2 nothing either way. It helps 56% to 61% of sessions over clicks 0-200 and hurts 33% to
+  38% (`tables/ab_splits.csv`).
+- **The labels.** The full fit's sessions label about 3.4 fewer Goods by click 200 (27 against 30), the mean
+  alone's about 2 fewer (28): the hard picks sample where the fitted chances put the line, lower in the ranking. Average precision at click 200 is unchanged
+  (-0.001), and the shown set is better at every click up to 175.
+- **Its mean alone gains less early and holds late.** Fitting only the Bad component's mean moves the chances less,
+  so over clicks 0-50 it gains 0.004 less than the full fit at beta 1/4 and 1; over clicks 0-200 the two tie
+  (+0.023 and +0.023, +0.016 and +0.015, +0.005 and +0.005), and from click 150 on the mean alone is the better line
+  at every preset: +0.006, +0.006 and +0.002 at click 200 and +0.007, +0.004 and +0.003 after the closing check,
+  where the full fit is level. It helps more sessions (62%, 67% and 57% over clicks 0-200, against 32%, 27% and
+  38% it hurts), costs fewer labelled Goods (28 by click 200 against the app's 30 and the full fit's 27), and leaves
+  Done closer to the app's (1 to 2 clicks sooner rather than 3). Its gains sit where the full fit's do: large and
+  medium bands (+0.019 to +0.031 at beta 1/4 and 1, +0.007 at beta 4) and sessions that end at 0.5 or more.
+- **Pairing.** 646 of 720 sessions per preset leave the app's picks under the full fit (604 to 619 under its mean
+  alone), all at a hard pick whose acquisition threshold moved (a median of 7 votes in), or a few (1 to 10, at beta 1
+  and 4) at a pick in another phase; the shown F-beta matches the app's exactly until the detector is first shown in every
+  session. The rest never leave it. The mean-only arm ran from a second frozen worktree whose default path is the
+  first's (a new branch behind the knob, a docstring, the Test arm's model rebuild, which is off here).
 
 ## What this leaves
 
-CLOSED-LOOP PENDING.
+- **Ship the Bad component's mean fitted on the corpus, with the counted bound at 4x**, as the app's line, Train's
+  and Find's alike: `BAD_COMPONENT = "corpus_mean"` and `_BOUND_MARGIN = 4.0` in `labels_line.py`. It gains on
+  Binary at every preset end to end, holds at click 200 and after the closing check, holds on Region offline, and
+  keeps about as many images as today on a corpus with no positives. The library change is in this branch, off by default; the ship is a
+  two-constant change with the docs and the eval arm's defaults.
+- **Region Photo was priced offline only** (one seed, beta 1). A Region closed loop is memory-bound: about 8 hours
+  for two arms of 144 sessions on the shared cap.
+- **The Good side is still open.** None of the deployable Good components pays, and at beta 4 the line keeps 0.73 to
+  0.86 of the best set through vote 100 on the class model's cut. #5039 (the head's count line) is the other half of
+  beta 4's early shortfall.
+- **The expected F-beta** (the stop's reading, #4878) moves with the chances: its error at vote 50 goes from -0.11
+  to -0.05 at beta 1/4 with the mean alone fitted (+0.02 with the full fit), so Done comes sooner. The closed loop
+  shows that is a better stop, not an early one: F-beta where the user stops is higher at every preset.
 
 ## Provenance
 
 | | |
 |---|---|
 | snapshots | #4937's runs (dev 73c887c27): `/expscratch/sgreenberg/state-of-the-app/2026-10-16-fscale4936-early4937-binary-b{025,1,4}`; Region `/expscratch/sgreenberg/state-of-the-app/2026-10-15-fscale4936-region-b1` |
-| pricing | `chances_5040.py measure` passes 1 and 2 on branch `claude/chances-5040` (9331d6c42), per-snapshot tables in `/expscratch/sgreenberg/chances-5040/m{1,2}-{b025,b1,b4,region}/snapshots.csv.gz`; jobs of 32 to 96 CPUs, 10 to 25 minutes each |
-| verify | `chances_5040.py verify`: the library's arm drawn on every snapshot, the same set as the pricer's on 5,044 of 5,044 snapshot rows per preset and 971 of 973 on Region (the 2 others have no line) |
-| closed loop | `chances_5040.sh` from frozen worktree `vts-5040-run` at 4783a51eb; 45 cpu packs of 8 cells (AMD), 2026-10-17 21:59; dirs `/expscratch/sgreenberg/state-of-the-app/2026-10-17-chances5040-{ctl,bssl,bssl4}-b{025,1,4}` |
+| pricing | `chances_5040.py measure` passes 1, 2 and 3 on branch `claude/chances-5040`, per-snapshot tables in `/expscratch/sgreenberg/chances-5040/m{1,2,3}-{b025,b1,b4,region}/snapshots.csv.gz`; jobs of 32 to 96 CPUs, 10 to 25 minutes each. Pass 3 (the mean alone) was added after pass 2's Region reading |
+| verify | `chances_5040.py verify`: each library arm (`corpus`, `corpus` with the bound at 4x, `corpus_mean` with it) drawn on every snapshot keeps the pricer's set, on the withheld half and the empty corpus: 4,751 of 4,751 snapshots per preset and 924 of 924 on Region (2 Region snapshots have no comparable line) |
+| closed loop | `chances_5040.sh`: `ctl`, `bssl` and `bssl4` from frozen worktree `vts-5040-run` at 4783a51eb, 45 cpu packs of 8 sessions (AMD) from 2026-10-17 21:59 to 02:55; `bmean4` from `vts-5040-run2` at 44831a916 (same default path), 15 packs from 02:00, cancelled at 02:53 with 479 sessions done and the other 1,681 relaunched as 45 packs, done 04:10. Dirs `/expscratch/sgreenberg/state-of-the-app/2026-10-17-chances5040-{ctl,bssl,bssl4,bmean4}-b{025,1,4}` |
+| tests | the GRID suite on aba00b645: 17,253 passed, pyright, ruff and the docs gates clean |
 | analysis | `chances_5040.py report` / `examples`; `chances_5040_ab.py` (the closed loop) |
 
 ## Reproduce
@@ -267,14 +350,15 @@ S=/expscratch/$USER/state-of-the-app/2026-10-16-fscale4936-early4937-binary
 for b in b025 b1 b4; do
   python $P measure --results ${S}-$b/results --out <dir>/m1-$b --procs 96 --pass 1
   python $P measure --results ${S}-$b/results --out <dir>/m2-$b --procs 96 --pass 2
-  python $P verify --results ${S}-$b/results --priced <dir>/m2-$b/snapshots.csv.gz --procs 64
+  python $P measure --results ${S}-$b/results --out <dir>/m3-$b --procs 96 --pass 3
+  python $P verify --results ${S}-$b/results --priced <dir>/m2-$b/snapshots.csv.gz --procs 64   # and m3-$b
 done
 D=docs/experiments/2026-10-17-chances-5040
 python $P report --out <dir>/m1-b025/snapshots.csv.gz ... --out <dir>/m2-b4/snapshots.csv.gz --docs $D/tables --figs $D/figures
 # closed loop, from a frozen worktree
 L=scripts/experiments/state_of_app/chances_5040.sh
 bash $L dirs
-for arm in ctl bssl4 bssl; do for b in 0.25 1 4; do
+for arm in ctl bssl4 bssl bmean4; do for b in 0.25 1 4; do
   CALIB_PACK_JOBS=5 CALIB_PACK_PAR=8 CALIB_PACK_MEM=12G SBATCH_CONSTRAINT=amd bash $L cpack $arm $b
 done; done
 python scripts/experiments/state_of_app/chances_5040_ab.py --root /expscratch/$USER/state-of-the-app --seeds 5 \
