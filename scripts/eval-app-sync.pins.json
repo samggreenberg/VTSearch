@@ -54,6 +54,14 @@
     "app": "bbf80a6c4b34058e5691919ad93859892487f72f2191e16264fe2436959ccc04",
     "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
   },
+  "find.evidence_coverage": {
+    "app": "d758f2812b3e1d3964b6176d752cabaf923ca68415cc27173fb31d4c97757100",
+    "harness": "74f8e68002a0501889892ca3d6fd39bd7b255e8b2ee7f4581c745b92fd186d38"
+  },
+  "find.training_domain": {
+    "app": "2cf0948e253d6e7a1563fbf955fc86c7f7556649f6d80a7abd14674ba25046bd",
+    "harness": "2bb424451fd30b60639bf8d2c1c0c69194653c54f5030c7ebd155bd873af49b3"
+  },
   "line_test.budgets_default": {
     "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"

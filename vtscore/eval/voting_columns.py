@@ -341,6 +341,50 @@ ORACLE_FBETA_COLUMNS: tuple[str, ...] = tuple(f"oracle_{c}" for c in FBETA_COLUM
 FBETA_ORACLE_CUT_COLUMNS: tuple[str, ...] = ("fbeta_oracle_threshold", "fbeta_oracle_fpr", "fbeta_oracle_fnr")
 
 
+#: Find on a **second corpus** at every click (#4960, ``find_corpus``): what the
+#: detector Test gives at the click (its ``detector_tier``) returns there, with
+#: the line's corpus side refitted on that corpus as a Find there draws it.  The
+#: in-corpus columns beside them read the withheld half; these read the Find
+#: corpus (:mod:`vtscore.eval.find_corpus`), click for click, in the same
+#: definitions: ``find_fbeta`` and its presets are :data:`FBETA_COLUMNS`',
+#: ``find_n_pos`` / ``find_n_neg`` the corpus's ``n_test_pos`` / ``n_test_neg``.
+#: A corpus with no positive scores NaN F-beta, recall and AP and still counts
+#: ``find_n_flagged``: the foreign medias it returns are the read there.  NaN on
+#: every row of a run without the knob.  Not to be confused with
+#: ``find_prevalence`` / ``find_efbeta``, which describe the Find the in-corpus
+#: columns already model, on the withheld half (#4452).
+FIND_CORPUS_COLUMNS: tuple[str, ...] = (
+    *(f"find_{c}" for c in FBETA_COLUMNS),
+    "find_precision",
+    "find_recall",
+    "find_n_flagged",
+    "find_average_precision",
+    "find_n_pos",
+    "find_n_neg",
+)
+
+#: The app's two domain-shift flags against the Find corpus (#4960), at the
+#: snapshot clicks only (``find_flag_steps``): ``flags_at`` names the listed
+#: click a row answers (the first click at or past it).  ``shift_*`` is the
+#: Training-domain overlap chip, :func:`~vtscore.coverage.atlas.domain_shift_report`
+#: against the coverage atlas built over the sim pool - NaN on a patch
+#: embedder, which the app refuses (#3329), and with no atlas (a non-Autopilot
+#: strategy).  ``evidence_*`` is the Evidence coverage chip,
+#: :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` from the
+#: votes' vectors and the Find cut.  ``shift_shifted`` / ``evidence_unsupported``
+#: are the reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
+FIND_FLAG_COLUMNS: tuple[str, ...] = (
+    "flags_at",
+    "shift_frac_atypical",
+    "shift_z",
+    "shift_shifted",
+    "evidence_frac_unsupported",
+    "evidence_z",
+    "evidence_unsupported",
+    "evidence_frac_low_trust",
+)
+
+
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
     "cost",
@@ -362,6 +406,9 @@ VOTING_COLUMNS: tuple[str, ...] = (
     "auroc",
     "average_precision",
     *BAND_COLUMNS,
+    #: Find on a second corpus, and the two domain-shift flags against it (#4960).
+    *FIND_CORPUS_COLUMNS,
+    *FIND_FLAG_COLUMNS,
     #: The fold count the STEP lived at (#3314).  Equal to the run's
     #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
     #: is what the schedule resolved for this step's vote count.  On the plain
@@ -714,6 +761,8 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "auroc",
     "average_precision",
     *BAND_COLUMNS,
+    *FIND_CORPUS_COLUMNS,
+    *FIND_FLAG_COLUMNS,
     "oracle_threshold",
     "oracle_cost",
     "oracle_fpr",

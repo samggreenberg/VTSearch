@@ -155,6 +155,8 @@ ENVX="$ENVX CALIB_SAVE_TEST_SCORES=${CALIB_SAVE_TEST_SCORES:-} CALIB_SIM_SIZE=${
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES_AT=${CALIB_SAVE_TEST_SCORES_AT:-}"
 # #4936: those snapshots also carry every fold model's scores of the withheld half and the sim set; record only.
 ENVX="$ENVX CALIB_SAVE_FOLD_SCALES=${CALIB_SAVE_FOLD_SCALES:-}"
+# #4960: Find on a second corpus at every click, and the two domain-shift flags against it; record only.
+ENVX="$ENVX CALIB_FIND_CORPUS=${CALIB_FIND_CORPUS:-} CALIB_FIND_MIX=${CALIB_FIND_MIX:-} CALIB_FIND_FLAGS_AT=${CALIB_FIND_FLAGS_AT:-}"
 # The Test arm (#4523): Test mode's autopilot on the withheld half after the last click; off unless a study asks.
 ENVX="$ENVX CALIB_LINE_TEST=${CALIB_LINE_TEST:-}"
 # When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.

@@ -516,6 +516,65 @@ class TestTheSmartAndStablePlumbingIsPinned:
         assert drift.reason == f"{side}-changed"
 
 
+class TestTheFindCorpusFlagsArePinned:
+    """#4960: how the two domain-shift chips' routes call their reports trips the gate on either side.
+
+    The reports are delegated, so what the harness ports is the call: which
+    vectors, which threshold, which refusals.  Each probe makes a throwaway
+    logic edit to one pinned symbol in a copy of the files and asserts the gate
+    names the side that moved.
+    """
+
+    HARNESS = "vtscore/eval/find_corpus.py"
+    APPS = {
+        "find.training_domain": "vtsearch/training_domain.py",
+        "find.evidence_coverage": "vtsearch/routes/detectors/scoring.py",
+    }
+    PROBES = [
+        ("find.training_domain", "app", "vtsearch/training_domain.py", "domain_shift_against"),
+        ("find.training_domain", "harness", HARNESS, "training_domain_flags"),
+        ("find.training_domain", "harness", HARNESS, "FindCorpus.matrix"),
+        ("find.evidence_coverage", "app", "vtsearch/routes/detectors/scoring.py", "find_evidence_coverage"),
+        ("find.evidence_coverage", "harness", HARNESS, "evidence_flags"),
+        ("find.evidence_coverage", "harness", HARNESS, "vote_vectors"),
+        ("find.evidence_coverage", "harness", HARNESS, "FindCorpus.matrix"),
+    ]
+
+    @staticmethod
+    def _mirror(mirror_id):
+        return next(m for m in gate.MIRRORS if m.id == mirror_id)
+
+    def _copy_tree(self, tmp_path, mirror_id):
+        for rel in (self.APPS[mirror_id], self.HARNESS):
+            dst = tmp_path / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text((gate.REPO_ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
+
+    @pytest.mark.parametrize("mirror_id", sorted(APPS))
+    def test_registered_with_every_symbol_probed(self, mirror_id):
+        mirror = self._mirror(mirror_id)
+        assert mirror.kind == "ported"
+        assert set(gate._digests(mirror)) == {"app", "harness"}
+        assert set(gate._load_pins()[mirror_id]) == {"app", "harness"}
+        named = {("app", n) for n in mirror.app.rpartition(".")[2].split(",")}
+        named |= {("harness", n) for n in mirror.harness.partition("::")[2].split(",")}
+        assert named == {(side, sym) for mid, side, _, sym in self.PROBES if mid == mirror_id}
+
+    @pytest.mark.parametrize("mirror_id", sorted(APPS))
+    def test_an_untouched_copy_is_clean(self, monkeypatch, tmp_path, mirror_id):
+        mirror = self._mirror(mirror_id)
+        self._copy_tree(tmp_path, mirror_id)
+        assert not TestTheSmartAndStablePlumbingIsPinned()._check_in(monkeypatch, tmp_path, mirror)
+
+    @pytest.mark.parametrize(("mirror_id", "side", "rel", "symbol"), PROBES)
+    def test_an_edit_trips_the_side_it_was_made_on(self, monkeypatch, tmp_path, mirror_id, side, rel, symbol):
+        mirror = self._mirror(mirror_id)
+        self._copy_tree(tmp_path, mirror_id)
+        TestTheSmartAndStablePlumbingIsPinned._edit(tmp_path / rel, symbol)
+        (drift,) = TestTheSmartAndStablePlumbingIsPinned()._check_in(monkeypatch, tmp_path, mirror)
+        assert drift.reason == f"{side}-changed"
+
+
 class TestThePinsFile:
     """Its shape is part of the contract - `--update` and `check()` must agree."""
 
