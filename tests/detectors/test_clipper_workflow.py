@@ -528,7 +528,9 @@ class TestCrossDatasetClipEmbedding:
         again = _apply_clip_and_embed(wav_path, "audio", origin)
         assert again is not None
         np.testing.assert_array_equal(embedding, again[0])
-        assert not np.array_equal(embedding, embed_file(wav_path, "audio"))
+        whole = embed_file(wav_path, "audio")
+        assert whole is not None
+        assert not np.array_equal(embedding, whole)
 
     def test_apply_clip_and_embed_image(self, tmp_path):
         """Image clip params cause the resolver to crop before embedding."""
@@ -566,7 +568,9 @@ class TestCrossDatasetClipEmbedding:
         again = _apply_clip_and_embed(img_path, "image", origin)
         assert again is not None
         np.testing.assert_array_equal(embedding, again[0])
-        assert not np.array_equal(embedding, embed_file(img_path, "image"))
+        whole = embed_file(img_path, "image")
+        assert whole is not None
+        assert not np.array_equal(embedding, whole)
 
     def test_apply_clip_and_embed_text(self, tmp_path):
         """Text clip params cause the resolver to extract the sentence before embedding."""
@@ -594,7 +598,9 @@ class TestCrossDatasetClipEmbedding:
         again = _apply_clip_and_embed(text_path, "text", origin)
         assert again is not None
         np.testing.assert_array_equal(embedding, again[0])
-        assert not np.array_equal(embedding, embed_file(text_path, "text"))
+        whole = embed_file(text_path, "text")
+        assert whole is not None
+        assert not np.array_equal(embedding, whole)
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
         """Without clipper params, behaves like normal embed_file."""

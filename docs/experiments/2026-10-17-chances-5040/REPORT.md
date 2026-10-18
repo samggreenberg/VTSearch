@@ -34,10 +34,11 @@ almost none of the way on the Good side.**
 | the negatives' own shape (truth, #4937) | +0.098 / +0.087 / +0.048 | +0.041 / +0.041 / +0.017 | -0.006 / -0.002 / -0.005 |
 | **Bad component fitted on the corpus** | **+0.056 / +0.048 / +0.017** | **+0.025 / +0.022 / +0.007** | **-0.010 / -0.009 / -0.011** |
 | **… and the bound at 4x** | **+0.061 / +0.056 / +0.020** | **+0.033 / +0.033 / +0.012** | **+0.004 / +0.003 / -0.001** |
+| **its mean alone fitted, the bound at 4x** | **+0.054 / +0.052 / +0.024** | **+0.036 / +0.031 / +0.012** | **+0.008 / +0.005 / -0.000** |
 | the bound at 4x alone | +0.017 / +0.033 / +0.012 | +0.017 / +0.019 / +0.005 | +0.014 / +0.013 / +0.005 |
 | no counted bound | +0.029 / +0.051 / +0.018 | +0.031 / +0.026 / +0.005 | +0.015 / +0.013 / +0.006 |
 | the Goods' own spread | +0.031 / +0.044 / +0.007 | +0.019 / +0.025 / +0.007 | -0.021 / -0.001 / -0.002 |
-| images kept on the corpus with no positives (vote 40): today / fitted / fitted, 4x / no bound | 3.5 / 1.8 / 2.1 / 6.3 | 8.1 / 4.3 / 5.5 / 25 | 32 / 19 / 25 / 84 |
+| images kept on the corpus with no positives (vote 40): today / fitted / fitted, 4x / mean, 4x / no bound | 3.5 / 1.8 / 2.1 / 2.5 / 6.3 | 8.1 / 4.3 / 5.5 / 6.1 / 25 | 32 / 19 / 25 / 29 / 84 |
 
 ## The question
 
@@ -116,6 +117,14 @@ vote 50 and 42 to 51 at vote 100, against about 51). At the best set's edge the 
 - **What Find returns** (every snapshot, the head's count line where it serves): +0.034 to +0.038 at beta 1/4 (votes
   35 to 100), +0.012 to +0.026 at beta 1, -0.009 to +0.007 at beta 4.
 
+**Its mean alone.** Fitting only the Bad component's mean, its spread kept at the class model's, moves the chances
+less: at the best set's edge 0.80, 0.69 and 0.57 at votes 40, 50 and 100 (beta 1/4; the full fit 0.76, 0.81, 0.71,
+the truth 0.79, 0.79, 0.75). With the bound at 4x it prices with the full fit on Binary: +0.054 / +0.052 / +0.024 at
+beta 1/4 (votes 40 / 100 / 150), +0.036 / +0.031 / +0.012 at beta 1 and +0.008 / +0.005 / -0.000 at beta 4; on what
+Find returns +0.031 to +0.041, +0.021 to +0.028 and +0.004 to +0.012 (votes 35 to 100). It leaves more of the
+expected F-beta's error (-0.05 and -0.11 at votes 50 and 100, beta 1/4), so the stop moves less. It is the arm that
+holds on Region (below), and it was priced, and added to the closed loop, because of that.
+
 ## The counted bound
 
 The bound caps the 2-part estimate of the positives at twice the fewest any cut could hold (#4452), and #4937 found
@@ -129,12 +138,14 @@ the total is larger than the chances' own sum.
 | … the bound at 4x | 3.7; 8 / 2.3; 5 | 10; 24 / 13; 33 | 43; 100 / 69; 168 |
 | … no bound | 6.3; 17 / 6.0; 17 | 25; 57 / 38; 118 | 84; 230 / 148; 412 |
 | … the Bad component fitted, the bound at 4x | 2.1; 4 / 1.9; 4 | 5.5; 11 / 6.7; 15 | 25; 47 / 33; 76 |
+| … its mean alone fitted, the bound at 4x | 2.5; 5 / 1.8; 3 | 6.1; 11 / 7.8; 18 | 29; 56 / 43; 110 |
 
 - **At 4x the estimate reads 0.87 to 0.93 of the truth early** and 1.05 to 1.09 at vote 100; uncapped it reads 1.2 to
   1.5. The bound at 4x alone gains +0.013 to +0.033 at every preset.
 - **On a corpus with no positives the bound is what keeps the line small**, and that is the price of loosening it:
   removing it multiplies what an empty corpus keeps by three to four at beta 1 and 4. The fitted Bad component pays
-  for the 4x bound: together they keep fewer than today at every preset, at both clicks.
+  for the 4x bound: together they keep fewer than today at every preset, at both clicks; with its mean alone fitted,
+  about as many as today (fewer at beta 1 and 4, 2.5 against 3.5 and 1.8 against 1.7 at beta 1/4).
 - **#4452's own case, 200 images with no positives**, is unchanged by every Bad-side and bound candidate: 1.0 to 2.8
   images on average, the same as today.
 
@@ -214,13 +225,20 @@ arm's, and the truth's (isotonic).*
 | the Bad component fitted | -0.003 / -0.001 / +0.031 / +0.001 | 1.30 / 1.32 / 1.17 / 1.12 | 0.87 / 0.80 / 0.62 / 0.56 | 26 / 26 / 18 / 13 |
 | … and the bound at 4x | -0.011 / -0.005 / +0.034 / +0.003 | 1.36 / 1.33 / 1.22 / 1.18 | 0.87 / 0.80 / 0.62 / 0.56 | 27 / 29 / 21 / 17 |
 | its mean only | +0.019 / +0.018 / +0.031 / +0.002 | 1.06 / 1.05 / 0.97 / 1.04 | 0.49 / 0.42 / 0.23 / 0.33 | 20 / 19 / 15 / 13 |
+| … with the bound at 4x | +0.014 / +0.017 / +0.040 / +0.007 | 1.12 / 1.09 / 1.00 / 1.07 | 0.49 / 0.42 / 0.23 / 0.33 | 22 / 23 / 20 / 18 |
 | the bound at 4x alone | +0.004 / +0.014 / +0.027 / +0.010 | 1.04 / 0.98 / 0.94 / 1.03 | 0.23 / 0.18 / 0.08 / 0.14 | 21 / 22 / 27 / 26 |
 
 Region's line was not short (#4937: 1.06 of the best set at vote 25), so chances that rise everywhere overshoot: the
 fitted component reads 0.87 at the edge where the truth is 0.37. F-beta holds early only because the overshoot sits
 in the set's tail. On 1,000-image Region corpora it loses 0.013 to 0.032 (vote 25 to 150). Fitting the Bad
-component's mean only is the better Region arm (+0.02 to +0.03 early), and on Binary it gains +0.046 / +0.025 /
--0.003 at vote 40 (beta 1/4 / 1 / 4), close to the full fit.
+component's mean alone overshoots far less (0.42 to 0.49 at the edge early) and gains at every click, +0.014 to
++0.040 with the bound at 4x; on 1,000-image Region corpora it loses up to 0.026 too (vote 50).
+
+![Region Photo, beta 1, vote 25: the Bad component's mean fitted, the bound at 4x](figures/region/examples_bad_ssl_mean_bound_x4_b1_vote25.png)
+
+*Region sessions at vote 25 picked by rule, as the Binary panels are. `toothbrush@large` keeps 98 today where the best
+set is 50; the full fit keeps 261 (`figures/region/examples_bad_ssl_bound_x4_b1_vote25.png`), its mean alone 163.
+`mouse@large` keeps 9 today where the best is 43; its mean alone keeps 36 at F 0.86 against the best cut's 0.91.*
 
 ## The closed loop
 
