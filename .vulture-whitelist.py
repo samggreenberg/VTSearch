@@ -353,3 +353,36 @@ only_phases  # noqa: F821 - same
 # ---------------------------------------------------------------------------
 remove_node  # noqa: F821
 cancel_timeout  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``vtscore.config.CoreConfig`` fields that library code reads only by name,
+# through ``get_setting("<field>")`` (a ``getattr`` on the installed config).
+# ---------------------------------------------------------------------------
+saved_datasets_dir  # noqa: F821
+max_concurrent_dataset_downloads  # noqa: F821
+max_concurrent_dataset_embeddings  # noqa: F821
+autofind_exporter  # noqa: F821
+autofind_exporter_field_values  # noqa: F821
+autofind_cli_delete_dataset  # noqa: F821
+projection_n_neighbors  # noqa: F821
+projection_min_dist  # noqa: F821
+signpost_captioner  # noqa: F821
+signpost_vocab  # noqa: F821
+default_labelset_source  # noqa: F821
+labelset_source_push_interval  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests_lib/meta/test_cpu_kernel_pins.py``'s ``x86`` fixture is requested by
+# parameter name, which pytest resolves reflectively.
+# ---------------------------------------------------------------------------
+x86  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests_lib/meta/test_xdist_plumbing.py`` stand-ins for xdist's scheduler
+# state: ``CrashSafeLoadGroupScheduling``'s xdist base class reads
+# ``numnodes`` and each node's ``shutting_down``, and calls
+# ``send_runtest_some`` on the node it schedules.
+# ---------------------------------------------------------------------------
+shutting_down  # noqa: F821
+send_runtest_some  # noqa: F821
+numnodes  # noqa: F821

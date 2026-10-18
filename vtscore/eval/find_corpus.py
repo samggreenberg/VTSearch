@@ -46,7 +46,7 @@ from typing import Any
 import numpy as np
 
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.eval.labels import evaluable_pool, media_is_positive, region_box_for_category
+from vtscore.eval.labels import evaluable_pool, region_box_for_category
 from vtscore.eval.step_model import good_training_vec
 from vtscore.eval.voting_columns import FBETA_COLUMNS, FIND_CORPUS_COLUMNS, FIND_FLAG_COLUMNS
 
@@ -230,14 +230,6 @@ def build_find_corpus(
         query_scores=corpus_query,
         n_withheld=len(withheld),
         n_foreign=len(taken),
-    )
-
-
-def corpus_labels(corpus: FindCorpus, target_category: str) -> "np.ndarray":
-    """The corpus's truth, in :attr:`FindCorpus.ids` order: 1 for a positive of the target."""
-    return np.asarray(
-        [1.0 if media_is_positive(corpus.clips[cid], target_category) else 0.0 for cid in corpus.ids],
-        dtype=np.float64,
     )
 
 
