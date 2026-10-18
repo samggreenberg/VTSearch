@@ -15,6 +15,15 @@ a tool's *default argument* counts as reading a path):
 3. no running job writes or reads it;
 4. the owner approves the list.
 
+## 2026-10-18: #5040's smoke run (8 MB, owner-approved)
+
+- **`state-of-the-app/2026-10-17-chances5040smoke-{ctl,bssl,bssl4}-b{025,1,4}`** (9 dirs, 2 sessions each): the
+  closed-loop launcher's smoke run before #5040's A/B, read by nothing since (the full run's dirs, without `smoke`,
+  are the A/B and stay). #5040 is `solved` and its report merged (#5080); no tool's default reads them (the
+  launcher's `CHANCES5040_TAG` and the analyzer's `--tag` only name them when asked).
+  **Rebuild:** `CHANCES5040_TAG=smoke bash scripts/experiments/state_of_app/chances_5040.sh cpack <arm> <beta> 3,100`
+  at 4783a51eb.
+
 ## 2026-10-16: 55 GB after the volume filled overnight (owner-approved)
 
 `/expscratch/sgreenberg` (1 TB) hit 100% at ~04:40, during #4951's State of the App run. Every job that wrote
