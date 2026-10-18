@@ -3,9 +3,8 @@
 **Status (2026-10-18): priced offline on #4937's snapshots (Binary Photo, 702 sessions at each of the three presets,
 nine clicks from vote 10 to 150; Region Photo seed 0 at beta 1), every candidate the issue names and their
 combinations, on the withheld half and on three corpora cut from it; the best three then A/B'd in closed loop at all
-three presets (720 sessions each, 200 clicks, paired with the app's). Recommended to ship: the Bad component's mean
-fitted on the corpus, with the counted bound at 4x. Not yet the app's: the library carries it as an eval arm, off by
-default.**
+three presets (720 sessions each, 200 clicks, paired with the app's). Shipped (the owner's choice, 2026-10-18): the
+Bad component's mean fitted on the corpus, with the counted bound at 4x, is the app's line in Train and Find alike.**
 
 **On the negatives' side the labels line's chances (#4937) can be moved a good part of the way the truth moves them,
 and on the Good side almost none of the way.**
@@ -17,7 +16,7 @@ and on the Good side almost none of the way.**
    to +0.061 F-beta at beta 1/4 and +0.033 to +0.036 at beta 1 (vote 40), about 45% and 40% of the true chances'
    ceiling, with the counted bound loosened from 2x to 4x; on a corpus with no positives it keeps about as many
    images as today, or fewer.
-2. **Its mean alone is the arm to ship.** On Binary it prices with the full fit (mean and spread); on Region Photo,
+2. **Its mean alone is the arm that shipped.** On Binary it prices with the full fit (mean and spread); on Region Photo,
    where the line was not short, the full fit overrates the positives near the line (a chance of 0.87 at the best
    set's edge against a true 0.37) and the mean alone does not (0.42 to 0.49), gaining +0.007 to +0.040 at every
    click there.
@@ -316,11 +315,11 @@ detector is shown, about click 30); circles, after the closing check. Bottom: ea
 
 ## What this leaves
 
-- **Ship the Bad component's mean fitted on the corpus, with the counted bound at 4x**, as the app's line, Train's
-  and Find's alike: `BAD_COMPONENT = "corpus_mean"` and `_BOUND_MARGIN = 4.0` in `labels_line.py`. It gains on
+- **Shipped: the Bad component's mean fitted on the corpus, with the counted bound at 4x**, as the app's line,
+  Train's and Find's alike: `BAD_COMPONENT = "corpus_mean"` and `_BOUND_MARGIN = 4.0` in `labels_line.py` (the line
+  before is `CALIB_LINE_BAD=labels CALIB_LINE_BOUND_MARGIN=2`, which the launcher's control now pins). It gains on
   Binary at every preset end to end, holds at click 200 and after the closing check, holds on Region offline, and
-  keeps about as many images as today on a corpus with no positives. The library change is in this branch, off by default; the ship is a
-  two-constant change with the docs and the eval arm's defaults.
+  keeps about as many images as before on a corpus with no positives.
 - **Region Photo was priced offline only** (one seed, beta 1). A Region closed loop is memory-bound: about 8 hours
   for two arms of 144 sessions on the shared cap.
 - **The Good side is still open.** None of the deployable Good components pays, and at beta 4 the line keeps 0.73 to
@@ -338,7 +337,7 @@ detector is shown, about click 30); circles, after the closing check. Bottom: ea
 | pricing | `chances_5040.py measure` passes 1, 2 and 3 on branch `claude/chances-5040`, per-snapshot tables in `/expscratch/sgreenberg/chances-5040/m{1,2,3}-{b025,b1,b4,region}/snapshots.csv.gz`; jobs of 32 to 96 CPUs, 10 to 25 minutes each. Pass 3 (the mean alone) was added after pass 2's Region reading |
 | verify | `chances_5040.py verify`: each library arm (`corpus`, `corpus` with the bound at 4x, `corpus_mean` with it) drawn on every snapshot keeps the pricer's set, on the withheld half and the empty corpus: 4,751 of 4,751 snapshots per preset and 924 of 924 on Region (2 Region snapshots have no comparable line) |
 | closed loop | `chances_5040.sh`: `ctl`, `bssl` and `bssl4` from frozen worktree `vts-5040-run` at 4783a51eb, 45 cpu packs of 8 sessions (AMD) from 2026-10-17 21:59 to 02:55; `bmean4` from `vts-5040-run2` at 44831a916 (same default path), 15 packs from 02:00, cancelled at 02:53 with 479 sessions done and the other 1,681 relaunched as 45 packs, done 04:10. Dirs `/expscratch/sgreenberg/state-of-the-app/2026-10-17-chances5040-{ctl,bssl,bssl4,bmean4}-b{025,1,4}` |
-| tests | the GRID suite on aba00b645: 17,253 passed, pyright, ruff and the docs gates clean |
+| tests | the GRID suite on aba00b645 (the arm off by default): 17,253 passed; on 92a6c6b45 (shipped): 17,255 passed; pyright, ruff and the docs gates clean |
 | analysis | `chances_5040.py report` / `examples`; `chances_5040_ab.py` (the closed loop) |
 
 ## Reproduce
