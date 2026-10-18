@@ -310,7 +310,6 @@ embedder. Shares the S11 approach.
 
 <!-- item-sep -->
 
-- [ ] #4995 — Add a "Build coverage atlas" control to the dataset Stats window (Sonnet)
 
 <!-- item-sep -->
 

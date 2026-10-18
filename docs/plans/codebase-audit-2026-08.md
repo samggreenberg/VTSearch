@@ -31,11 +31,9 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #5001 — Detector registry listing re-parses detector JSON on every request for entries whose embedder type or examples were never stored (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #5000 — Readers endpoints pick 403 vs 404 by searching the error message for "creator" (Sonnet)
 
 <!-- item-sep -->
 
@@ -65,15 +63,12 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4976 — A queued job whose dataset or detector was unloaded runs against the empty context and is marked done (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #4977 — build_coverage_atlas holds the global state lock across the whole k-means fit (Opus)
 
 <!-- item-sep -->
 
-- [ ] #4978 — SortResultsCache bounds entry count but not size, so large re-sorts pin gigabytes (Sonnet)
 
 <!-- item-sep -->
 
@@ -89,15 +84,12 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4979 — Whisper and PaddleOCR converters reload their model for every media item (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #4980 — Audio import decodes every file twice and ignores the bytes it was given (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #4981 — Audio responses always claim audio/wav and a .wav filename whatever the codec (Sonnet)
 
 <!-- item-sep -->
 
@@ -111,19 +103,15 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #5005 — check-eval-app-sync does not pin the Smart window and Stable-input plumbing the harness ports (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #5006 — check-eval-app-sync normalizer makes (x,) and (x) hash the same (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #5003 — eval_learned_sort fits its threshold on the very items it then evaluates (Opus)
 
 <!-- item-sep -->
 
-- [ ] #5004 — Autopilot simulation's text-sort cut and rank geometry include the held-out test half (Opus)
 
 <!-- item-sep -->
 
@@ -133,7 +121,6 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4982 — Pyramid recomputes the level-independent Hilbert permutation for every level (Sonnet)
 
 <!-- item-sep -->
 
@@ -157,7 +144,6 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4984 — Dashboard bulk delete refreshes the registry once per item and never reports which deletes failed (Sonnet)
 
 <!-- item-sep -->
 
@@ -165,7 +151,6 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4985 — LabelsetStateService can apply an older labels-detail read over a newer one (Sonnet)
 
 <!-- item-sep -->
 
@@ -177,7 +162,6 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4986 — RunningJobsService clears every busy-pair spinner when a single poll fails or times out (Sonnet)
 
 <!-- item-sep -->
 
@@ -185,23 +169,19 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #4987 — Global .importer-picker / .exporter-picker grid rule is overridden by every consumer (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #4990 — .form-actions is redeclared in six component stylesheets and the copies have already diverged (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #4989 — Toast and Load more button labels are in sentence case, not Title Case (Haiku)
 
 <!-- item-sep -->
 
-- [ ] #4988 — Raw disabled-state opacities bypass --opacity-disabled, including one in the shared picker stylesheet (Haiku)
 
 <!-- item-sep -->
 
@@ -217,7 +197,6 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #5002 — Flask secret_key defaults to a public constant and nothing warns when signed session cookies are in use (Sonnet)
 
 <!-- item-sep -->
 
@@ -225,11 +204,9 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-- [ ] #5007 — Cross-dataset clip re-embedding tests call _apply_clip_and_embed and assert nothing (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #5008 — check-dockerfiles.py does not match python3, and tests_lib/ ships in every image (Sonnet)
 
 <!-- item-sep -->
 

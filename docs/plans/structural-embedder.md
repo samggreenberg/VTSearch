@@ -162,7 +162,6 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- [ ] #4996 — Detect SIFT once per image when loading a structural dataset (Sonnet)
 
 <!-- item-sep -->
 

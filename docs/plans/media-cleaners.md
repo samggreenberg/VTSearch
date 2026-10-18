@@ -62,17 +62,14 @@ cropping (can eat context the detector needs), audio noise reduction
 
 <!-- item-sep -->
 
-- [ ] #4991 — Remember the cleanup selection as an import default (Sonnet)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #4993 — Show a video unit's letterbox crop in the player (Sonnet)
 
 <!-- item-sep -->
 
-- [ ] #4994 — Embed a replayed video label with its clip window and crop box (Sonnet)
 
 <!-- item-sep -->
 
