@@ -233,6 +233,40 @@ def sigma_floor(mode: str) -> Iterator[None]:
 
 
 @contextmanager
+def labels_chances(bad: "str | None" = None, bound_margin: "float | None" = None) -> Iterator[None]:
+    """Hold the labels line's chances at an arm's pieces while the block runs (#5040).
+
+    *bad* places the 3-part fit's Bad component
+    (:data:`~vtscore.training.thresholds.labels_line.BAD_COMPONENT`): ``"corpus"``
+    fits it on the corpus being decided, the held-out Bads counted as labelled
+    points of it; ``"labels"`` is the app's.  *bound_margin* is the factor the
+    2-part estimate of the positives may exceed the counted bound by
+    (``_BOUND_MARGIN``, the app's 2); ``math.inf`` removes the bound.  ``None``
+    leaves a piece as the app ships it.  Every line, Train's and Find's alike,
+    reads both constants when it is drawn, so the swap reaches both, and through
+    the chances Autopilot's acquisition and its stop too.  Process-wide, as
+    :func:`sigma_floor`'s swap is, and undone on the way out.
+    """
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    if bad is not None and bad not in labels_line.BAD_COMPONENTS:
+        raise ValueError(f"labels_chances bad must be one of {labels_line.BAD_COMPONENTS} or None; got {bad!r}")
+    if bound_margin is not None and (
+        isinstance(bound_margin, bool) or not isinstance(bound_margin, (int, float)) or not bound_margin >= 1.0
+    ):
+        raise ValueError(f"labels_chances bound_margin must be a number >= 1 or None (the app's); got {bound_margin!r}")
+    shipped = labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN
+    if bad is not None:
+        labels_line.BAD_COMPONENT = bad
+    if bound_margin is not None:
+        labels_line._BOUND_MARGIN = float(bound_margin)
+    try:
+        yield
+    finally:
+        labels_line.BAD_COMPONENT, labels_line._BOUND_MARGIN = shipped
+
+
+@contextmanager
 def head_count_bads(bads: "int | str | None") -> Iterator[None]:
     """Hold the Bads half of the labels line's head-count gate at *bads* while the block runs (#4786).
 

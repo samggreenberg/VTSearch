@@ -1311,6 +1311,17 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
+#: Issue #5040's chances: ``CALIB_LINE_BAD=corpus`` fits the labels line's Bad component on the corpus being decided,
+#: the held-out Bads counted as labelled points of it; ``CALIB_LINE_BOUND_MARGIN`` is the factor the 2-part estimate
+#: of the positives may exceed the counted bound by (``inf`` removes it).  Unset (the default) is the app's (``labels``,
+#: 2).  Kept as given, for preflight and the harness to refuse a value outside the set.
+LINE_BAD = os.environ.get("CALIB_LINE_BAD", "").strip().lower() or None
+_LINE_BOUND_MARGIN = os.environ.get("CALIB_LINE_BOUND_MARGIN", "").strip()
+try:
+    LINE_BOUND_MARGIN: "float | str | None" = float(_LINE_BOUND_MARGIN) if _LINE_BOUND_MARGIN else None
+except ValueError:
+    LINE_BOUND_MARGIN = _LINE_BOUND_MARGIN
+
 #: Issue #4864's split rounding: ``dither`` sizes the calibration split the way
 #: the app did before #4864, stochastically, with a coin seeded from the labelset
 #: (``vtscore.eval.arms_split_rounding.split_rounding``).  Unset (the default,
