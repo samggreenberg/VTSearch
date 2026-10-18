@@ -577,15 +577,17 @@ def fit_corpus(
     return float(n_good) + float(r.sum()), CorpusNegatives(mu0, s0)
 
 
-#: Where the 3-part fit places the labels' Bad component (#5040).  ``"labels"`` (the app's): a normal at the held-out
-#: Bads' mean with the class model's pooled spread, fixed.  ``"corpus"``: its mean and spread fitted on the corpus being
-#: decided, the held-out Bads counted as labelled points of it (each M-step pools them with the corpus's soft members
-#: of the component), so it describes the corpus's own negatives near the line rather than the Bads acquisition
-#: picked.  ``"corpus_mean"``: its mean alone fitted so, its spread the class model's (on Region Photo the full fit
-#: overrated the positives near the line, 0.87 against a true 0.37, and the mean alone did not).  An eval arm: the
-#: harness sets it (``vtscore.eval.live_threshold_rules.labels_chances``); the app's is ``"labels"``.
+#: Where the 3-part fit places the labels' Bad component (#5040).  ``"corpus_mean"``, the app's since #5040: its mean
+#: fitted on the corpus being decided, the held-out Bads counted as labelled points of it (each M-step pools them with
+#: the corpus's soft members of the component), its spread the class model's; so it sits where the corpus's own
+#: negatives near the line are rather than where the Bads acquisition picked are.  ``"corpus"`` fits its spread too
+#: (on Region Photo that overrated the positives near the line, 0.87 against a true 0.37); ``"labels"``, the line
+#: before #5040, pins it at the held-out Bads' mean.  Priced on #4937's heads and end to end: the mean alone, with
+#: :data:`_BOUND_MARGIN` at 4, gained +0.023 / +0.016 / +0.005 mean F-beta over clicks 0-200 at beta 1/4 / 1 / 4
+#: (``docs/experiments/2026-10-17-chances-5040/REPORT.md``).  The eval harness can set another
+#: (``vtscore.eval.live_threshold_rules.labels_chances``).
 BAD_COMPONENTS: tuple[str, ...] = ("labels", "corpus", "corpus_mean")
-BAD_COMPONENT = "labels"
+BAD_COMPONENT = "corpus_mean"
 
 
 def corpus_posteriors(
@@ -598,21 +600,21 @@ def corpus_posteriors(
 ) -> np.ndarray:
     """Each unvoted item's chance of being a positive, under a 3-part fit of the corpus (#4452).
 
-    The labels' Good component and the labels' Bad component keep their
-    shapes (what the labels know: the Bads sit near the line, exactly where
-    the cut is decided); a normal for the corpus's bulk below them is fitted
-    with all three shares.  Modelling the negatives near the line by the
+    The labels' Good component keeps its shape, and the labels' Bad component
+    stands for the negatives near the line (the Bads sit there, exactly where
+    the cut is decided), placed by *bad* (below); a normal for the corpus's
+    bulk below them is fitted with all three shares.  Modelling the negatives near the line by the
     Bads is what makes the precision near the top honest: with the bulk
     alone, the top of a ranking read as all positive and beta barely moved
     the cut.  In the order of *unvoted_scores*.
 
-    *bad* (default :data:`BAD_COMPONENT`) is ``"corpus"`` to fit the Bad
-    component on the corpus instead, the held-out Bads counted as *n_neg*
-    labelled points of it (their mean and :attr:`ClassScoreModel.neg_sd`):
-    each M-step's Bad mean and spread pool those points with the corpus's soft
-    Bad members, the spread floored at *floor*, and the bulk's mean is held
-    below the Bad mean the step ends with.  ``"corpus_mean"`` fits its mean
-    alone, the spread kept at the model's.
+    *bad* (default :data:`BAD_COMPONENT`, ``"corpus_mean"``) fits the Bad
+    component's mean on the corpus, the held-out Bads counted as *n_neg*
+    labelled points of it: each M-step's Bad mean pools them with the
+    corpus's soft Bad members, and the bulk's mean is held below the Bad mean
+    the step ends with.  ``"corpus"`` fits its spread the same way (pooling
+    :attr:`ClassScoreModel.neg_sd`, floored at *floor*); ``"labels"`` keeps it
+    at the held-out Bads' mean and the model's spread, the fit before #5040.
     """
     bad = BAD_COMPONENT if bad is None else bad
     if bad not in BAD_COMPONENTS:
@@ -899,9 +901,11 @@ _BOUND_MIN_S1 = 0.05
 #: The counted bound guards against a runaway estimate rather than replacing
 #: it: the Goods a session found are its easiest positives, so ``S1`` reads
 #: high and the bound reads low (0.24% for a 0.43% target on a clean corpus).
-#: The mixture's estimate stands unless it exceeds the bound by this factor.
-#: An eval arm may loosen it (``vtscore.eval.live_threshold_rules.labels_chances``, #5040).
-_BOUND_MARGIN = 2.0
+#: The mixture's estimate stands unless it exceeds the bound by this factor: 4 since #5040 (2 before), which reads
+#: the prevalence at 0.87 to 0.93 of the truth early rather than half of it, while a corpus with no positives keeps no
+#: more than it did (removing the bound kept 84 to 148 wrong images at beta 4 there).  The eval harness can set another
+#: (``vtscore.eval.live_threshold_rules.labels_chances``).
+_BOUND_MARGIN = 4.0
 
 
 def _counted_share_bound(model: ClassScoreModel, unvoted: np.ndarray) -> float:

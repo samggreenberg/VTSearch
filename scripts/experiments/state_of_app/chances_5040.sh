@@ -5,11 +5,13 @@
 # acquisition reads them, its stop reads their expected F-beta), so the sessions themselves change: this prices them
 # end to end. Every arm is today's app to 200 clicks, closing with the end-of-run check, and differs only in the chances:
 #
-#   ctl    the app: the labels' Bad component, the counted bound at 2x
+#   ctl    the app before #5040: the labels' Bad component, the counted bound at 2x (CALIB_LINE_BAD=labels
+#          CALIB_LINE_BOUND_MARGIN=2; the study ran at 4783a51eb, where that was the app and set nothing)
 #   bssl   the Bad component fitted on the corpus, the held-out Bads counted as labelled points of it (CALIB_LINE_BAD=corpus)
 #   bssl4  the same, the counted bound at 4x (CALIB_LINE_BOUND_MARGIN=4)
 #   bmean4 the Bad component's mean alone fitted on the corpus, the bound at 4x (CALIB_LINE_BAD=corpus_mean), added
-#          after the offline Region reading: the full fit overrates the positives near the line there, the mean does not
+#          after the offline Region reading: the full fit overrates the positives near the line there, the mean does
+#          not. The app since #5040: its knobs are the app's values, so the arm sets none.
 #
 # The Binary Photo path at beta 1/4, 1 and 4, 5 seeds x 144 cells, on the grid #4743 priced (2026-10-08-b1), paired by
 # cell and seed: an arm's run is identical to ctl's until the first click whose labels line the class model draws.
@@ -30,9 +32,9 @@ S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${CHANCES5040_DATE:-2026-10-17}"
 SEEDS="${CHANCES5040_SEEDS:-5}"
 ARMS=(ctl bssl bssl4 bmean4)
-declare -A KNOBS=([ctl]="" [bssl]="CALIB_LINE_BAD=corpus" [bssl4]="CALIB_LINE_BAD=corpus CALIB_LINE_BOUND_MARGIN=4"
-  [bmean4]="CALIB_LINE_BAD=corpus_mean CALIB_LINE_BOUND_MARGIN=4")
-declare -A DIVERGES=([ctl]="" [bssl]="line_bad" [bssl4]="line_bad,line_bound_margin" [bmean4]="line_bad,line_bound_margin")
+declare -A KNOBS=([ctl]="CALIB_LINE_BAD=labels CALIB_LINE_BOUND_MARGIN=2" [bssl]="CALIB_LINE_BAD=corpus CALIB_LINE_BOUND_MARGIN=2"
+  [bssl4]="CALIB_LINE_BAD=corpus" [bmean4]="")
+declare -A DIVERGES=([ctl]="line_bad,line_bound_margin" [bssl]="line_bad,line_bound_margin" [bssl4]="line_bad" [bmean4]="")
 GRID_SRC="${CHANCES5040_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since (one docstring edit)
 
 btag() { case "$1" in 0.25) echo 025 ;; 1) echo 1 ;; 4) echo 4 ;; *) echo "beta must be 0.25, 1 or 4" >&2; exit 2 ;; esac; }

@@ -2,8 +2,8 @@
 
 #4937 found the line's chances (the 3-part fit) underrate the positives at the line, partly because the labels' Bad
 component - a normal at the held-out Bads' mean with the Goods' spread, fixed - puts too much negative weight there.
-The eval arm fits that component on the corpus being decided, the held-out Bads counted as labelled points of it.
-The app's line is unchanged unless an arm asks.
+Since #5040 the app fits that component's mean on the corpus being decided, the held-out Bads counted as labelled
+points of it, and holds the 2-part estimate to 4x the counted bound; ``labels`` and 2 are the line before.
 """
 
 from __future__ import annotations
@@ -95,17 +95,21 @@ class TestTheClassModel:
 
 
 class TestTheAppsChances:
-    def test_the_default_is_the_shipped_fit_bit_for_bit(self):
+    def test_the_app_fits_the_bad_components_mean_and_holds_the_bound_at_4x(self):
+        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
+
+    def test_the_labels_arm_is_the_fit_before_5040_bit_for_bit(self):
         orderings, corpus, _ = _session()
         line = fit_labels_line(orderings, corpus, None, {})
         assert line is not None and line.spread is not None
         fitted = line.model.floored(line.spread)
         for floor in (LL.MIN_LOGIT_SIGMA, line.spread):
             np.testing.assert_array_equal(
-                corpus_posteriors(fitted, corpus, floor=floor), _shipped_posteriors(fitted, corpus, floor=floor)
+                corpus_posteriors(fitted, corpus, floor=floor, bad="labels"),
+                _shipped_posteriors(fitted, corpus, floor=floor),
             )
             np.testing.assert_array_equal(
-                corpus_posteriors(fitted, corpus, floor=floor, bad="labels"),
+                corpus_posteriors(fitted, corpus, floor=floor, bad="corpus_mean"),
                 corpus_posteriors(fitted, corpus, floor=floor),
             )
 
@@ -123,7 +127,7 @@ class TestTheCorpusFittedBadComponent:
         line = fit_labels_line(orderings, corpus, None, {})
         assert line is not None and line.spread is not None
         fitted = line.model.floored(line.spread)
-        labels = corpus_posteriors(fitted, corpus, floor=line.spread)
+        labels = corpus_posteriors(fitted, corpus, floor=line.spread, bad="labels")
         fitted_bad = corpus_posteriors(fitted, corpus, floor=line.spread, bad="corpus")
         assert fitted_bad[truth == 1].sum() > labels[truth == 1].sum()
         assert fitted_bad.sum() < truth.sum(), "still no more chance than there are positives"
@@ -134,15 +138,16 @@ class TestTheCorpusFittedBadComponent:
         assert line is not None and line.spread is not None
         fitted = line.model.floored(line.spread)
         mean = corpus_posteriors(fitted, corpus, floor=line.spread, bad="corpus_mean")
-        labels = corpus_posteriors(fitted, corpus, floor=line.spread)
+        labels = corpus_posteriors(fitted, corpus, floor=line.spread, bad="labels")
         assert mean[truth == 1].sum() > labels[truth == 1].sum()
         assert not np.array_equal(mean, corpus_posteriors(fitted, corpus, floor=line.spread, bad="corpus"))
 
     @pytest.mark.parametrize("beta", [0.25, 1.0, 4.0])
     def test_the_line_keeps_more_positives_at_every_preset(self, beta):
         orderings, corpus, truth = _session()
-        shipped = fit_labels_line(orderings, corpus, None, {})
-        with labels_chances("corpus"):
+        with labels_chances("labels", 2.0):
+            shipped = fit_labels_line(orderings, corpus, None, {})
+        with labels_chances("corpus", 2.0):
             arm = fit_labels_line(orderings, corpus, None, {})
         assert shipped is not None and arm is not None
         assert _fbeta(corpus, truth, arm.threshold(beta), beta) >= _fbeta(corpus, truth, shipped.threshold(beta), beta)
@@ -152,7 +157,7 @@ class TestTheCorpusFittedBadComponent:
         """#4452's requirement, at the margin the arm loosens the bound to as well."""
         orderings, _, _ = _session()
         empty = _sig(np.random.default_rng(3).normal(-3.0, 1.0, 2000))
-        for bad, margin in (("corpus", None), ("corpus", 4.0), ("corpus_mean", 4.0)):
+        for bad, margin in (("corpus", 2.0), ("corpus", 4.0), (None, None)):
             with labels_chances(bad, margin):
                 line = fit_labels_line(orderings, _session()[1], None, {})
                 assert line is not None
@@ -162,22 +167,23 @@ class TestTheCorpusFittedBadComponent:
 
 class TestTheArmKnob:
     def test_it_swaps_both_pieces_and_puts_them_back(self):
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
-        with labels_chances("corpus", 4.0):
-            assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus", 4.0)
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
-        with labels_chances():
+        app = ("corpus_mean", 4.0)
+        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
+        with labels_chances("labels", 2.0):
             assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
+        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
+        with labels_chances():
+            assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == app
 
     def test_it_puts_them_back_after_an_error(self):
         with pytest.raises(RuntimeError), labels_chances("corpus", math.inf):
             raise RuntimeError
-        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("labels", 2.0)
+        assert (LL.BAD_COMPONENT, LL._BOUND_MARGIN) == ("corpus_mean", 4.0)
 
     def test_a_looser_bound_estimates_at_least_as_many_positives(self):
         orderings, corpus, _ = _session()
         shares = []
-        for margin in (None, 4.0, math.inf):
+        for margin in (2.0, 4.0, math.inf):
             with labels_chances(bound_margin=margin):
                 line = fit_labels_line(orderings, corpus, None, {})
                 assert line is not None and line.unvoted_share is not None

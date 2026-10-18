@@ -60,6 +60,8 @@ from early_line_4937 import (  # noqa: E402
 )
 from fold_scale_4936 import PATHS, Snapshot, _ident, _logit, click_of, load_snapshots  # noqa: E402
 
+from vtscore.eval.live_threshold_rules import labels_chances  # noqa: E402
+
 #: The fewest held-out Goods from a spot check that ``good_check`` reads; with fewer the Good component is today's.
 CHECK_GOODS_MIN = 3
 #: Each candidate as its pieces (see the module docstring); ``today`` is the shipped line.
@@ -513,7 +515,8 @@ def _cell_rows(args) -> list[dict]:
         for t, snap in sorted(by_step.items()):
             key = int(ident["idx"]) * 10_000 + t
             try:
-                row = measure(snap, checks.get(EMBEDDER[path], frozenset()), key, path == "region", cands)
+                with labels_chances(*BEFORE_5040):
+                    row = measure(snap, checks.get(EMBEDDER[path], frozenset()), key, path == "region", cands)
             except Exception as exc:
                 rows.append({**ident, "path": path, "t": t, "error": f"{type(exc).__name__}: {exc}"})
                 continue
@@ -556,10 +559,13 @@ def cmd_measure(a) -> None:
 
 #: The arms the library carries (``labels_chances``), each with the pricer's candidate it must reproduce.
 LIBRARY_ARMS = {
-    "bad_ssl": ("corpus", None),
+    "bad_ssl": ("corpus", 2.0),
     "bad_ssl_bound_x4": ("corpus", 4.0),
     "bad_ssl_mean_bound_x4": ("corpus_mean", 4.0),
 }
+#: The line before #5040, which "today" names throughout: the pricer draws every snapshot under it, so its replay and
+#: its candidates (each a change to this line) read as they did when they were priced, whatever the app ships.
+BEFORE_5040 = ("labels", 2.0)
 
 
 def _verify_rows(args) -> list[dict]:
@@ -855,7 +861,7 @@ def cmd_examples(a) -> None:
         s = Snapshot(_find_snapshot(a.results, r["run"], int(r["idx"]), int(r["t"]), a.path))
         y = s.y.astype(np.int64)
         lines = {}
-        for name, (b_, m_) in (("today", (None, None)), (arm, (bad, margin))):
+        for name, (b_, m_) in (("today", BEFORE_5040), (arm, (bad, margin))):
             with labels_chances(b_, m_):
                 line = fit_labels_line(s.orderings() or None, s.sim_scores, s.sim_ids.tolist(), s.labels_dict())
                 assert line is not None

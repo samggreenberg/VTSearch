@@ -1313,8 +1313,8 @@ SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
 
 #: Issue #5040's chances: ``CALIB_LINE_BAD=corpus`` fits the labels line's Bad component on the corpus being decided,
 #: the held-out Bads counted as labelled points of it (``corpus_mean``: its mean alone); ``CALIB_LINE_BOUND_MARGIN`` is the factor the 2-part estimate
-#: of the positives may exceed the counted bound by (``inf`` removes it).  Unset (the default) is the app's (``labels``,
-#: 2).  Kept as given, for preflight and the harness to refuse a value outside the set.
+#: of the positives may exceed the counted bound by (``inf`` removes it).  Unset (the default) is the app's
+#: (``corpus_mean``, 4, since #5040); ``labels`` and 2 are the line before.  Kept as given, for preflight and the harness to refuse a value outside the set.
 LINE_BAD = os.environ.get("CALIB_LINE_BAD", "").strip().lower() or None
 _LINE_BOUND_MARGIN = os.environ.get("CALIB_LINE_BOUND_MARGIN", "").strip()
 try:
