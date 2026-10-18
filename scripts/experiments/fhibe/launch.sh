@@ -237,6 +237,8 @@ PYSHAPE
   DIVERGES="$DIVERGES${CALIB_CENTROID_LINE:+,centroid_line}"
   DIVERGES="$DIVERGES${CALIB_HEAD:+,head}"
   DIVERGES="$DIVERGES${CALIB_SPOT_CHECK:+,spot_check}"
+  DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_BADS:+,head_count_bads}"
+  DIVERGES="$DIVERGES${CALIB_HEAD_COUNT_RECALL_EXPONENT:+,head_count_recall_exponent}${CALIB_HEAD_COUNT_RECALL_Z:+,head_count_recall_z}"
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" --diverges "$DIVERGES" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
