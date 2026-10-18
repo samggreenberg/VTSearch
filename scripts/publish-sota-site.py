@@ -35,7 +35,10 @@ expect, so a review with a mistyped title cannot silently fall off the links.
 
 The viewer is ``viewer.html`` beside ``REPORT.md``. When the newest report of a
 kind has none, its ``viewer.html`` link serves a short page saying so, rather
-than an older report's viewer under a URL that promises the newest.
+than an older report's viewer under a URL that promises the newest. A report may
+also carry companion pages, ``viewer_<name>.html`` (the 2026-10-16 review's
+prevalence pages, one per preset, #4959): each is copied beside ``viewer.html``
+and linked from the index under its name.
 
 .github/workflows/publish-sota.yml runs this on every push to ``dev`` that
 touches a report, and deploys the result. To look at the site locally::
@@ -76,6 +79,7 @@ class Report:
     directory: str  # name of the report's directory under docs/experiments/
     title: str  # the H1, without the leading '# '
     has_viewer: bool
+    companions: tuple[str, ...] = ()  # file names of its viewer_<name>.html pages
 
 
 @dataclass
@@ -133,6 +137,7 @@ def discover(experiments: Path) -> tuple[list[Series], list[str]]:
                 directory=directory,
                 title=first_line.lstrip("#").strip(),
                 has_viewer=(report_md.parent / "viewer.html").is_file(),
+                companions=tuple(sorted(p.name for p in report_md.parent.glob("viewer_*.html"))),
             )
         )
     series = [
@@ -214,6 +219,9 @@ def _index_page(series: list[Series], repo: str, ref: str, sha: str, built: str)
         viewer = '<a href="{0}/viewer.html">Viewer</a>'.format(s.slug)
         if not latest.has_viewer:
             viewer = '<span class="muted">no viewer</span>'
+        for name in latest.companions:
+            label = name.removeprefix("viewer_").removesuffix(".html").replace("_", " ")
+            viewer += f'<a href="{s.slug}/{html.escape(name, quote=True)}">{html.escape(label)}</a>'
         parts += [
             f"<h2>{html.escape(s.kind)}</h2>",
             f'<p class="muted">{html.escape(latest.date)} · <code>{html.escape(latest.directory)}</code></p>',
@@ -256,6 +264,8 @@ def build(out: Path, *, experiments: Path, repo: str, ref: str, sha: str) -> tup
             shutil.copyfile(experiments / s.latest.directory / "viewer.html", d / "viewer.html")
         else:
             (d / "viewer.html").write_text(_no_viewer_page(s, repo, ref))
+        for name in s.latest.companions:
+            shutil.copyfile(experiments / s.latest.directory / name, d / name)
     return series, skipped
 
 

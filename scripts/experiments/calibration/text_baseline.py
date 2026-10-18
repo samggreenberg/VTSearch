@@ -66,7 +66,7 @@ def main() -> int:
     from vtscore.eval.labels import evaluable_pool, media_is_positive
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
-    from vtscore.eval.voting_iterations import thin_haystack
+    from vtscore.eval.voting_iterations import _downsample_to_prevalence, _split_media_ids, thin_haystack
     from vtscore.eval.calibration_metrics import detection_metrics, oracle_fbeta_cut
     from vtscore.training.thresholds import inclusion_cost_weights, text_sort_threshold
 
@@ -161,7 +161,23 @@ def main() -> int:
                 line_cut = {b: float(text_sort_threshold([float(s) for s in scores], beta=b)) for b in BETAS}
 
                 for seed in cfg.SEEDS:
-                    sim_ids, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
+                    if cfg.TARGET_PREVALENCE is not None:
+                        # The whole-cell arm (#4222, #4959): the harness thins this
+                        # cell's positives to the target before it splits, as the
+                        # first draw of the run's RandomState(seed), and splits what
+                        # is left on the same stream.  Do the same, so click 0 is
+                        # scored on the session's own test half, and cut the text
+                        # sort on the thinned cell, which is all the app holds.
+                        rng = np.random.RandomState(seed)
+                        kept = _downsample_to_prevalence(medias_cat, cat, cfg.TARGET_PREVALENCE, rng)
+                        if kept is None:
+                            continue  # too few positives survive: the harness skips the cell too
+                        sim_ids, test_ids = _split_media_ids(kept, cfg.SIM_FRACTION, rng)
+                        kept_scores = [float(s) for i, s in zip(ids, scores) if i in kept]
+                        gmm_cut = float(text_sort_threshold(kept_scores))
+                        line_cut = {b: float(text_sort_threshold(kept_scores, beta=b)) for b in BETAS}
+                    else:
+                        sim_ids, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
                     if cfg.HAYSTACK_PREVALENCE is not None:
                         # The thinned arm (#4184/#4201): the text route cuts a pool at
                         # the arm's prevalence, so both halves are thinned for the

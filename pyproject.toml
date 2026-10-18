@@ -463,11 +463,12 @@ exclude_lines = [
 # already skipped for.  A study's viewer.html (scripts/experiments/
 # calibration/viewer.py) is the same class again: a self-contained page
 # carrying the run's per-cell numbers as an encoded payload, which
-# codespell reads as thousands of misspelled two-letter words.
+# codespell reads as thousands of misspelled two-letter words. Its companion
+# pages, viewer_<name>.html beside it (#4959), are the same.
 # slides/_build and slides/_out are gitignored deck-build artifacts; the
 # rendered PDFs there decode as mojibake that codespell "corrects", which
 # used to fail any test run that happened after `slides/render.sh`.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*docs/experiments/*/viewer_*.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # names of the removed integration scaffolds, kept because vtscore/CHANGELOG.md
 # records their removal), legitimate code identifiers (numer/denom in
