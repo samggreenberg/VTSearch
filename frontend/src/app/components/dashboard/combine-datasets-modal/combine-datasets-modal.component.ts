@@ -7,6 +7,7 @@ import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.serv
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetRegistryEntry, MediaTypeInfo } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { allSoloMediaType } from '../../../utils/solo-media-type';
 
 interface CombineRow {
   id: string;
@@ -77,6 +78,9 @@ export class CombineDatasetsModalComponent implements OnInit {
 
   /** Datasets pre-selected on the dashboard when the modal was opened. */
   readonly datasets = input<DatasetRegistryEntry[]>([]);
+  /** The server's one media type when it is locked to one, from the
+   *  Dashboard; see {@link showTypeColumn}. */
+  readonly soloMediaType = input<string | null>(null);
 
   readonly closed = output<void>();
   readonly combineStarted = output<CombineStartedInfo>();
@@ -235,6 +239,12 @@ export class CombineDatasetsModalComponent implements OnInit {
       return 'At least one embedder must be kept — you cannot drop them all.';
     }
     return '';
+  }
+
+  /** Whether the table has a Type column: not when every row is of the type
+   *  the server is locked to, where it could say nothing else (#5106). */
+  get showTypeColumn(): boolean {
+    return !allSoloMediaType(this.soloMediaType(), this.rows.map((r) => r.media_type));
   }
 
   mediaTypeLabel(typeId: string): string {

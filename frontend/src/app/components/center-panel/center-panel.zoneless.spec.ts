@@ -374,6 +374,38 @@ describe('CenterPanelComponent', () => {
     expect(text).toContain('abc123');
   });
 
+  describe('the Media Type row (#5106)', () => {
+    const labels = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.metadata-label') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+
+    /** Show the metadata grid for the audio item on a server with `settings`. */
+    async function showWith(settings: object): Promise<void> {
+      fixture.componentRef.setInput('media', mockMedia);
+      component.showMetadata.set(true);
+      await settleZoneless(fixture);
+      for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush(settings);
+      await settleZoneless(fixture);
+    }
+
+    it('shows on a server open to every type', async () => {
+      await showWith({});
+      expect(labels()).toContain('Media Type');
+    });
+
+    it("drops out on a server locked to the item's type, where it could be nothing else", async () => {
+      await showWith({ solo_media_type: 'audio' });
+      expect(labels()).not.toContain('Media Type');
+      expect(labels()).toContain('MD5');
+    });
+
+    it('stays for an item of a type the lock does not account for', async () => {
+      await showWith({ solo_media_type: 'image' });
+      expect(labels()).toContain('Media Type');
+    });
+  });
+
   it('should send vote request on castVote', () => {
     fixture.componentRef.setInput('media', mockMedia);
     component.showAnimations.set(false);

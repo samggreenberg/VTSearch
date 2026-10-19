@@ -138,13 +138,13 @@
             </div>
           </div>
 
-          @if (mediaTypes().length > 0) {
+          @if (tabMediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->
-            @if (mediaTypes().length > 1) {
+            @if (tabMediaTypes().length > 1) {
               <div class="view-tabs">
-                @for (mt of mediaTypes(); track mt.type_id) {
+                @for (mt of tabMediaTypes(); track mt.type_id) {
                   <button
                     class="view-tab"
                     [class.view-tab--active]="activeViewTab() === mt.type_id"
@@ -289,12 +289,12 @@
               <option value="reduced">Reduced</option>
             </select>
           </div>
-          @if (mediaTypes().length > 0) {
+          @if (tabMediaTypes().length > 0) {
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->
-            @if (mediaTypes().length > 1) {
+            @if (tabMediaTypes().length > 1) {
               <div class="view-tabs">
-                @for (mt of mediaTypes(); track mt.type_id) {
+                @for (mt of tabMediaTypes(); track mt.type_id) {
                   <button
                     class="view-tab"
                     [class.view-tab--active]="activeBrowseTab() === mt.type_id"

@@ -8,7 +8,9 @@
     @if (data().dataset_name) {
       <span><strong>Dataset:</strong> {{ data().dataset_name }}</span>
     }
-    <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+    @if (showMediaType) {
+      <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+    }
     <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
     @if (exportSides === 'good') {
       <span><strong>Good Results:</strong> {{ goodCount }}</span>
