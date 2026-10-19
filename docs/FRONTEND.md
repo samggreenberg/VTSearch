@@ -446,9 +446,10 @@ Browser, and clears it with the pair state.
 effect warms the next two images of whichever queue the tab votes through:
 the round's unvoted picks after the one on screen
 (`LineTestSessionService.upcoming`) on Autopilot, the boundary walk on
-Review. The vote piles (`/api/votes`) are read when the view opens, after a
-scoring pass, a balance change or a pair switch, and polled only while
-Review is up (`syncPiles`): no vote on either tab re-reads them. In Find
+Review. The vote piles (`/api/votes`) are read when the view opens, when
+Review opens, and after a scoring pass, a balance change or a pair switch,
+and polled only while Review is up (`syncPiles`): no vote on either tab
+re-reads them. In Find
 that read carries every item's presumed label, megabytes on a large
 dataset, and a re-read per vote held up the next image.
 
