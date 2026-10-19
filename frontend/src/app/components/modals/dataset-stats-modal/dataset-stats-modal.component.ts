@@ -9,6 +9,7 @@ import type { LoadingTask } from '../../../models/api.models';
 import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +34,9 @@ export class DatasetStatsModalComponent implements OnInit {
    *  Age-Off row the same way the grid gates its Age-Off column — except
    *  a dataset that already carries an expiry always shows it. */
   readonly serverSetsAgeOff = input(false);
+  /** The server's one media type when it is locked to one. Gates the Type row
+   *  as the grid gates its Type column; see {@link showMediaType}. */
+  readonly soloMediaType = input<string | null>(null);
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
@@ -150,6 +154,12 @@ export class DatasetStatsModalComponent implements OnInit {
    *  "(unknown)" and not ".(unknown)". */
   private fileTypeLabel(ext: string): string {
     return ext.startsWith('(') ? ext : `.${ext}`;
+  }
+
+  /** Whether the Type row shows: not on a server locked to the dataset's
+   *  type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
   /** Media type as the grid renders it: capitalized, `-` when unset. */

@@ -28,6 +28,7 @@ import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-but
 import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
+import { isSoloMediaType } from '../../utils/solo-media-type';
 
 /** The viewers the pane can show an item in. */
 export type CenterViewer = 'audio' | 'image' | 'video' | 'text' | 'document';
@@ -377,6 +378,12 @@ export class CenterPanelComponent implements OnDestroy {
 
   get mediaType(): string {
     return this.media()?.media_type || 'audio';
+  }
+
+  /** Whether the metadata grid has a Media Type row: not on a server locked to
+   *  the item's type, where it could be nothing else (#5106). */
+  get showMediaTypeField(): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.mediaType);
   }
 
   /**

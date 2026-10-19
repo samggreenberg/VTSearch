@@ -1582,6 +1582,13 @@ Settings modal's **Server** tab. Once set:
 - Converter offerings filter to those that produce your type
   (so picking "image" still lets you import videos-as-frames and
   documents-as-pages, just not raw audio).
+- Fields that could only ever name your type drop out: the **Media Type**
+  in Find Results and in the metadata panes, the Dashboard's **Type**
+  columns, the type rows in the Stats windows and the combine dialogs, the
+  type tags in the top-bar pulldowns, and the per-type tab bars under
+  Settings' Scroll Style and Browser. A dataset or detector of another
+  type, kept from before the restriction, still shows its type, and brings
+  its table's Type column back.
 - The chosen type's default embedder is warmed at startup so the
   first detector run is fast.
 

@@ -227,12 +227,14 @@ The full taxonomy is `.btn` plus optional variant + optional size. Always start 
 <button class="btn btn--toolbar">Import Labels</button>
 <button class="btn btn--sm">Compact</button>
 <button class="btn btn--primary btn--sm">Compact primary</button>
+<button class="btn btn--primary btn--lg">Lead action</button>
 ```
 
 Rules:
 
 - **Default size** for prominent actions (modal footers, top-of-panel actions).
 - **`.btn--sm`** for inline actions inside cards and rows.
+- **`.btn--lg`** for the one action a dialog leads with, set apart in its body rather than among the footer's buttons (the Find Results dialog's **Browse**): `--space-md` / `--space-2xl` padding and `--font-xl`, the size of the Dashboard's Train / Test / Find. At most one per dialog.
 - **`.btn--cancel`** for low-weight cancel/close affordances next to progress bars.
 - **`.btn--toolbar`** for compact outline buttons in toolbars and panel action rows (the right-panel Import Labels / Add Corrections / Export cluster, the image-view-controls strip): tighter padding, `--font-xs`, a muted resting color, `white-space: nowrap`, and a hover that promotes the border to `--accent`.
 - **This list is the whole taxonomy.** There is no `--xs`, `--ghost`, or `--icon-square`; if you need a size or treatment that isn't here, add it to `_components.scss` (and to this list) rather than inventing a class name that no rule matches.

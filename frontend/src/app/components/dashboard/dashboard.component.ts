@@ -62,6 +62,7 @@ import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { topOpenModal } from '../modal/modal.component';
 import { HintId, HintsService } from '../../services/hints.service';
 import { datasetMediaWords } from '../../utils/media-words';
+import { allSoloMediaType } from '../../utils/solo-media-type';
 import { typedQuery } from '../../utils/label-quota';
 import { apiErrorMessage } from '../../utils/api-error';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
@@ -200,6 +201,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // `visibleDatasetColumns` getter, so a signal so the column set repaints.
   readonly serverSetsAgeOff = signal(false);
 
+  /** The server's one media type when it is locked to one (`solo_media_type`),
+   *  else `null`. Wherever it is the only type on show, the Type columns and
+   *  the stats and combine dialogs' type fields drop out (#5106). */
+  get soloMediaType(): string | null {
+    return this.settingsState.settingsSignal()?.solo_media_type || null;
+  }
+
   get visibleDatasetColumns(): DatasetColumn[] {
     let cols = this.datasetCols.columnOrder;
     if (this.isDefaultLogin()) {
@@ -208,6 +216,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.serverSetsAgeOff()) {
       cols = cols.filter((c) => c !== 'expires_at');
     }
+    // On a server locked to one media type the Type column would say that
+    // type on every row; one row of another type brings it back.
+    if (allSoloMediaType(this.soloMediaType, this.datasets.map((d) => d.media_type))) {
+      cols = cols.filter((c) => c !== 'media_type');
+    }
     return cols;
   }
 
@@ -215,6 +228,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let cols = this.detectorCols.columnOrder;
     if (this.isDefaultLogin()) {
       cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    // Both tabs judged together, so the column doesn't come and go on a switch.
+    if (allSoloMediaType(this.soloMediaType, this.detectors.map((d) => d.media_type))) {
+      cols = cols.filter((c) => c !== 'media_type');
     }
     return cols;
   }

@@ -35,6 +35,12 @@ export const TRAIN_DATASET = 'photos-train';
 export const TEST_DATASET = 'photos-prod';
 /** A small pile embedded with DINOv2 patch, for region voting. */
 export const REGION_DATASET = 'photo-regions';
+/**
+ * The pile the Vision section browses: all of COCO val2017 that `photos-train`
+ * does not hold, about 4,700 photographs (`coco_fixture.WHOLE`). The Book
+ * detector runs Find over it, and Browse maps its results and then the pile.
+ */
+export const BROWSE_DATASET = 'photos-all';
 
 /**
  * The detector the whole example builds, under the name the New Detector

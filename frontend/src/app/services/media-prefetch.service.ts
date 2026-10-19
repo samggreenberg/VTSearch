@@ -84,6 +84,9 @@ export class MediaPrefetchService implements OnDestroy {
   private targets: string[] = [];
   /** {@link targets} plus the caller's `keep`: what eviction spares first. */
   private wanted = new Set<string>();
+  /** Wanted urls whose fetch failed, which {@link pump} does not try again
+   *  until a retarget drops them (#5099). */
+  private readonly failed = new Set<string>();
 
   /** True when this environment can hold bytes for us (jsdom, by default,
    *  cannot). Read once per call rather than cached, so a test that stubs
@@ -123,6 +126,7 @@ export class MediaPrefetchService implements OnDestroy {
     }
     this.wanted = wanted;
     this.targets = targets.filter(Boolean);
+    for (const url of this.failed) if (!wanted.has(url)) this.failed.delete(url);
     this.evict();
     this.pump();
   }
@@ -139,6 +143,7 @@ export class MediaPrefetchService implements OnDestroy {
   warm(url: string): void {
     if (!url || !this.canStore) return;
     if (this.ready.has(url) || this.inFlight.has(url)) return;
+    this.failed.delete(url);
     const controller = new AbortController();
     const entry: InFlight = { controller, claimed: false, done: Promise.resolve(null) };
     this.inFlight.set(url, entry);
@@ -154,7 +159,10 @@ export class MediaPrefetchService implements OnDestroy {
         // failure path leaves the url permanently "in flight" and silently
         // unprefetchable for the rest of the session.
         this.inFlight.delete(url);
-        if (!blob) return null;
+        if (!blob) {
+          this.failed.add(url);
+          return null;
+        }
         const objectUrl = URL.createObjectURL(blob);
         if (entry.claimed) return objectUrl;
         this.ready.set(url, objectUrl);
@@ -163,7 +171,11 @@ export class MediaPrefetchService implements OnDestroy {
         return objectUrl;
       })
       .catch(() => {
-        if (this.inFlight.get(url) === entry) this.inFlight.delete(url);
+        // Ours still, so not an abort from a retarget or a clear: a failure.
+        if (this.inFlight.get(url) === entry) {
+          this.inFlight.delete(url);
+          this.failed.add(url);
+        }
         return null;
       })
       .finally(() => this.pump());
@@ -227,6 +239,7 @@ export class MediaPrefetchService implements OnDestroy {
   clear(): void {
     this.targets = [];
     this.wanted = new Set();
+    this.failed.clear();
     for (const entry of this.inFlight.values()) {
       entry.claimed = false;
       entry.controller.abort();
@@ -244,10 +257,17 @@ export class MediaPrefetchService implements OnDestroy {
   /**
    * Start the first wanted target that is neither held nor in flight, if
    * nothing is in flight. One fetch at a time; see {@link prefetch}.
+   *
+   * A target whose fetch failed is skipped while it stays wanted (#5099).
+   * Picking it again, as this did, refetched a url that 404s or errors back
+   * to back for as long as the prediction held it: a request storm in the
+   * browser, and under jsdom, where the fetch rejects at once, a microtask
+   * loop that starved every timer. The viewer still fetches it itself when it
+   * comes on screen.
    */
   private pump(): void {
     if (this.inFlight.size > 0) return;
-    const next = this.targets.find((url) => !this.ready.has(url));
+    const next = this.targets.find((url) => !this.ready.has(url) && !this.failed.has(url));
     if (next) this.warm(next);
   }
 

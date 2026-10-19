@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server locked to one media type stops naming it everywhere** (issue #5106). With
+  `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
+  the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
+  every item. Those fields now drop out, as do Settings' per-type tab bars under Scroll Style and
+  Browser. A dataset or detector of another type, kept from before the lock, still shows its type, and
+  brings its table's Type column back.
+
 - **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
   Test view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
   reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
@@ -1047,6 +1054,13 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Voting in Test keeps up with you, as it does in Train** (issue #5099). The Test autopilot now loads
+  the next two picks' images while you look at the current one, so a vote shows the next pick at once
+  rather than waiting for its download. No vote on either Test tab re-downloads the full vote list any
+  more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
+  refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
+  that fails to load is no longer requested again and again.
 
 - **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
   When an import converted PDFs (their text, or their pages as images) and did not clip the result, a

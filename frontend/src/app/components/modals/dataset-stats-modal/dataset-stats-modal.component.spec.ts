@@ -155,6 +155,28 @@ describe('DatasetStatsModalComponent', () => {
     expect(text).not.toContain('Never');
   });
 
+  describe('the Type row on a server locked to one media type (#5106)', () => {
+    async function statLabelsWith(solo: string): Promise<(string | undefined)[]> {
+      fixture.componentRef.setInput('soloMediaType', solo);
+      await fixture.whenStable();
+      httpMock.expectOne('/api/datasets/registry/ds1/stats').flush(mockStats);
+      await settleZoneless(fixture);
+      return Array.from(fixture.nativeElement.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+    }
+
+    it("hides it for a dataset of the locked type, as the grid hides its Type column", async () => {
+      const labels = await statLabelsWith('audio');
+      expect(labels).not.toContain('Type');
+      expect(labels).toContain('Media items');
+    });
+
+    it('keeps it for a dataset of a type the lock does not account for', async () => {
+      expect(await statLabelsWith('image')).toContain('Type');
+    });
+  });
+
   it('dots real file types but passes the unknown sentinel through verbatim', async () => {
     await fixture.whenStable();
     httpMock

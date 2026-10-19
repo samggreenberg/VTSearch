@@ -32,6 +32,7 @@ import { DetectorsFindApiService } from '../../../services/detectors-find-api.se
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   AutoDetectDetectorResult,
   AutoDetectHit,
@@ -44,6 +45,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { labelsOwed } from '../../../utils/label-quota';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
@@ -69,6 +71,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private contextSwitch = inject(ContextSwitchService);
   private findApi = inject(DetectorsFindApiService);
   private router = inject(Router);
+  private settingsState = inject(SettingsStateService);
   /** Builds the Browse map while the dialog shows its progress. */
   readonly browsePrep = inject(BrowseSubsetPrepService);
   /** Browse was clicked and the run's dataset is being made active (and
@@ -204,6 +207,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
       lines.push(owed ? `${result.detector_name || name} (${owed})` : result.detector_name || name);
     }
     return lines;
+  }
+
+  /** Whether the summary names the run's media type: not on a server locked
+   *  to that one type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.data().media_type);
   }
 
   get allHits(): AutoDetectHit[] {
