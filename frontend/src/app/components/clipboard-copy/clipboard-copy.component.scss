@@ -1,6 +1,7 @@
 .clipboard-copy {
   display: flex;
   gap: var(--space-md);
-  align-items: center;
+  // Bottom-align so the button sits level with the selects, not their labels.
+  align-items: flex-end;
   flex-wrap: wrap;
 }
