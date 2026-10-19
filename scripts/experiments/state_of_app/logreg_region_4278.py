@@ -54,10 +54,12 @@ CLICKS = (10, 25, 50, 75, 100, 125, 150)
 STEP_COLS = [
     "category", "seed", "embedder", "t", "phase", "app_trained", "precision", "recall", "average_precision",
     "acq_threshold", "acq_pool_percentile", "gmm_variant", "schedule", "pool_variant",
+    "n_flagged", "n_test_pos", "n_test_neg", "train_prevalence",
 ]  # fmt: skip
 PICK_COLS = ["category", "seed", "embedder", "t", "phase", "check_kind", "picked_id", "picked_label"]
 PHASES = ("hard", "done", "new")
 OPENING = ("good", "bad")
+LINE_READS = ("flag_ratio", "line_prec", "line_rec", "prev_ratio")
 
 
 def btag(beta: float) -> str:
@@ -100,6 +102,20 @@ def _on_grid(t: np.ndarray, v: np.ndarray) -> np.ndarray:
     return pd.Series(out).ffill().to_numpy()
 
 
+def _line_reads(rows: pd.DataFrame, t: np.ndarray) -> dict[str, np.ndarray]:
+    """The served line, read only where a detector is on screen: how many it flags per withheld positive, its precision
+    and recall, and the class model's prevalence against the withheld half's own."""
+    shown = rows["app_trained"].to_numpy() == 1
+    true_prev = rows["n_test_pos"] / (rows["n_test_pos"] + rows["n_test_neg"])
+    reads = {
+        "flag_ratio": rows["n_flagged"] / rows["n_test_pos"],
+        "line_prec": rows["precision"],
+        "line_rec": rows["recall"],
+        "prev_ratio": rows["train_prevalence"] / true_prev,
+    }
+    return {k: _on_grid(t, np.where(shown, v.to_numpy(dtype=float), np.nan)) for k, v in reads.items()}
+
+
 def per_run(steps: pd.DataFrame, picks: pd.DataFrame, tq: dict, beta: float, ocol: str) -> dict[str, dict]:
     """Per run: F shown, AP, the oracle's F, the acquisition cut's pool fraction, Goods found and acquisition picks."""
     out: dict[str, dict] = {}
@@ -116,6 +132,7 @@ def per_run(steps: pd.DataFrame, picks: pd.DataFrame, tq: dict, beta: float, oco
             "ap": _on_grid(t, ordinary["average_precision"].to_numpy(dtype=float)),
             "oracle": _on_grid(t, ordinary[ocol].to_numpy(dtype=float)) if ocol in ordinary else np.full(T + 1, np.nan),
             "pct": _on_grid(t, ordinary["acq_pool_percentile"].to_numpy(dtype=float)),
+            **_line_reads(ordinary, t),
             "tq": q,
             "trained_at": shown,
         }
@@ -174,6 +191,7 @@ def analyse(runs: dict[str, dict], strata: dict[str, str], beta: float) -> dict[
     ORC = {a: stack(a, "oracle") for a in ARMS}
     P = {a: stack(a, "pct") for a in ARMS}
     G = {a: stack(a, "goods") for a in ARMS}
+    LINE = {n: {a: stack(a, n) for a in ARMS} for n in LINE_READS}
 
     # Pairing: the opening (3 Goods off the typed query's top, then the Bad phase on its sort) reads no head, so it
     # must be the same pick for pick in both arms; the arms may part only from the first trained pick.
@@ -215,6 +233,14 @@ def analyse(runs: dict[str, dict], strata: dict[str, str], beta: float) -> dict[
                 r[f"{p}_picks_{a}"] = n / sel.sum()
                 r[f"{p}_good_{a}"] = g / n if n else np.nan
             r[f"admit100_mean_{a}"] = float(np.nanmean(1.0 - P[a][sel, 100]))
+            for n, M in LINE.items():
+                for t in (50, 100, 150):
+                    r[f"{n}{t}_{a}"] = float(np.nanmedian(M[a][sel, t]))
+        # The line's share of the loss: F at the line falls short of the oracle's F (the best cut on the same ranking)
+        # by the regret; the arm's F gain is its oracle gain (ranking) minus its regret gain (the line).
+        for t in (50, 150):
+            r[f"regret{t}_ctl"] = r[f"oracle{t}_ctl"] - r[f"F{t}_ctl"]
+            r[f"regret{t}_lr"] = r[f"oracle{t}_lr"] - r[f"F{t}_lr"]
         rows.append(r)
         if name in STRATA:
             for t in GRID_T[1:]:
@@ -327,6 +353,8 @@ def main() -> int:
             [f"admit{t}_{a}" for t in (25, 50, 100, 150) for a in ARMS],
             [f"acq_{k}_{lo}_{hi}_{a}" for k in ("picks", "good") for lo, hi in WINDOWS for a in ARMS],
             [f"{p}_{k}_{a}" for p in PHASES for k in ("picks", "good") for a in ARMS] + ["opening_mismatch"],
+            [f"{n}{t}_{a}" for n in LINE_READS for t in (50, 150) for a in ARMS],
+            [f"regret{t}_{a}" for t in (50, 150) for a in ARMS],
         ):
             print(s[["stratum", "runs", *cols]].round(4).to_string(index=False))
     return 0
