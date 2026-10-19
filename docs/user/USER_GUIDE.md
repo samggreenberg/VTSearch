@@ -1455,6 +1455,11 @@ keeps the numbers behind it.
   keeps the call *you* made. See
   [Check and correct a detector's calls](howto/check-and-correct.md).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/test-verdict.dark.webp" />
+  <img src="assets/test-verdict.light.webp" alt="The verdict at Done, in the middle of the Test view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table" width="560" />
+</picture>
+
 **The verdict is kept on the detector.** Reaching Done saves it with the
 detector, one verdict per collection it was tested on (testing the same
 collection again replaces it): the ranges, the balance, the date, and the

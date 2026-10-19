@@ -1317,6 +1317,22 @@ export const SHOTS: Shot[] = [
     after: async (_page, h) => resetFind(h),
   },
   {
+    id: 'test-verdict',
+    embeddedIn: `${GUIDE}#the-result`,
+    caption:
+      'The verdict at Done, in the middle of the Test view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
+    themes: BOTH,
+    clip: { target: '.verdict-card', pad: 8 },
+    async recipe(page, h) {
+      await openTest(page, h);
+      await testUntilDone(page, h);
+      await page.waitForSelector('.line-test-stage .verdict-card .exits', { timeout: 60000 });
+      await page.mouse.move(5, 5);
+      await h.wait(1200);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+  {
     id: 'floor-check',
     embeddedIn: `${GUIDE}#how-close-the-line-got`,
     caption:
