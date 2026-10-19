@@ -1041,6 +1041,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Voting in Test keeps up with you, as it does in Train** (issue #5099). The Test autopilot now loads
+  the next two picks' images while you look at the current one, so a vote shows the next pick at once
+  rather than waiting for its download. No vote on either Test tab re-downloads the full vote list any
+  more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
+  refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
+  that fails to load is no longer requested again and again.
+
 - **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
   When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
   detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
