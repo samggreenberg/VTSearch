@@ -382,6 +382,22 @@ FIND_FLAG_COLUMNS: tuple[str, ...] = (
     "evidence_z",
     "evidence_unsupported",
     "evidence_frac_low_trust",
+    #: The counts behind the Evidence share, by predicted class, and the same
+    #: counts over the unvoted sim pool found as a Find there draws it: the
+    #: haystack the votes came from, an in-domain baseline (#5089).
+    "evidence_n",
+    "evidence_n_pred_pos",
+    "evidence_n_pos_unsupported",
+    "evidence_n_neg_unsupported",
+    "evidence_pool_n",
+    "evidence_pool_n_pred_pos",
+    "evidence_pool_n_pos_unsupported",
+    "evidence_pool_n_neg_unsupported",
+    #: The Find corpus's predicted positives / negatives farther from their
+    #: class's votes than 95% of the unvoted pool's media called that class:
+    #: the support p-value calibrated on the training haystack (#5089).
+    "evidence_n_pos_beyond_pool",
+    "evidence_n_neg_beyond_pool",
 )
 
 

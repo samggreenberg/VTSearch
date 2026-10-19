@@ -307,6 +307,23 @@ class TestTheFlags:
         rest = [r for r in on if math.isnan(r["flags_at"])]
         assert rest and all(all(math.isnan(r[c]) for c in FIND_FLAG_COLUMNS) for r in rest)
 
+    def test_the_evidence_counts_split_the_share_and_read_the_unvoted_pool(self, paired):
+        # #5089: the counts behind the Evidence share, by predicted class, and the
+        # same counts over the haystack the votes came from.
+        _, on, _, _ = paired
+        at = [r for r in on if not math.isnan(r["flags_at"])]
+        assert at
+        for r in at:
+            assert r["evidence_n"] == len(_foreign())
+            unsupported = r["evidence_n_pos_unsupported"] + r["evidence_n_neg_unsupported"]
+            assert unsupported / r["evidence_n"] == pytest.approx(r["evidence_frac_unsupported"])
+            assert r["evidence_n_pos_unsupported"] <= r["evidence_n_pred_pos"] <= r["evidence_n"]
+            # The pool's unvoted media: the voting half less this click's votes.
+            assert r["evidence_pool_n"] == r["n_haystack"] - r["n_good"] - r["n_bad"]
+            assert r["evidence_pool_n_pos_unsupported"] <= r["evidence_pool_n_pred_pos"] <= r["evidence_pool_n"]
+            assert r["evidence_n_pos_beyond_pool"] <= r["evidence_n_pred_pos"]
+            assert r["evidence_n_neg_beyond_pool"] <= r["evidence_n"] - r["evidence_n_pred_pos"]
+
     def test_the_blank_row_names_every_column(self):
         blank = blank_find_columns()
         assert set(blank) == _FIND and all(math.isnan(v) for v in blank.values())

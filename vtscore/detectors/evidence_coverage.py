@@ -158,6 +158,79 @@ def predicted_support_pvalues(
     return np.where(predicted_positive, p_pos, p_neg).astype(np.float32)
 
 
+def unsupported_counts(
+    pos_vectors: np.ndarray,
+    neg_vectors: np.ndarray,
+    query_matrix: np.ndarray,
+    predicted_positive: np.ndarray,
+    k: int = DEFAULT_K,
+    alpha: float = DEFAULT_ALPHA,
+) -> dict[str, int]:
+    """How many of *query_matrix*'s items sit in an evidence vacuum (``D < alpha``), by predicted class (#5089).
+
+    The counts behind :func:`evidence_coverage_report`'s ``frac_unsupported``,
+    split by the class each item is routed to: ``n_items``, ``n_pred_pos``,
+    ``n_pos_unsupported`` (predicted positives with ``D < alpha``) and
+    ``n_neg_unsupported`` (predicted negatives with ``D < alpha``).  Inputs need
+    not be normalized.
+    """
+    queries = _normalize(query_matrix)
+    predicted_positive = np.asarray(predicted_positive, dtype=bool)
+    n = int(queries.shape[0])
+    if n == 0:
+        return {"n_items": 0, "n_pred_pos": 0, "n_pos_unsupported": 0, "n_neg_unsupported": 0}
+    d = predicted_support_pvalues(queries, _normalize(pos_vectors), _normalize(neg_vectors), predicted_positive, k)
+    vacuum = d < alpha
+    return {
+        "n_items": n,
+        "n_pred_pos": int(predicted_positive.sum()),
+        "n_pos_unsupported": int((vacuum & predicted_positive).sum()),
+        "n_neg_unsupported": int((vacuum & ~predicted_positive).sum()),
+    }
+
+
+def reference_vacuum_counts(
+    pos_vectors: np.ndarray,
+    neg_vectors: np.ndarray,
+    query_matrix: np.ndarray,
+    predicted_positive: np.ndarray,
+    reference_matrix: np.ndarray,
+    reference_positive: np.ndarray,
+    k: int = DEFAULT_K,
+    alpha: float = DEFAULT_ALPHA,
+) -> dict[str, int]:
+    """How many queries sit farther from their predicted class's evidence than a reference corpus's items do (#5089).
+
+    The support p-value of :func:`support_pvalues` with the calibration set
+    swapped: each query's k-th NN distance to its predicted class's labelled
+    evidence is ranked against the same distance of every *reference_matrix*
+    item called that class (*reference_positive*), ``p = (1 + #{ref >= a(x)}) /
+    (n_ref + 1)``.  With the haystack the votes came from as the reference, the
+    null is "drawn as the training haystack's items were", which the votes'
+    own leave-one-out spread is not: active learning picks the votes, so they
+    are no sample of the class.  Returns ``n_pos_beyond`` and ``n_neg_beyond``,
+    the predicted positives and negatives with ``p < alpha``.  A class the
+    reference never calls has no spread to rank against, and reads ``p = 1``.
+    """
+    pos = _normalize(pos_vectors)
+    neg = _normalize(neg_vectors)
+    queries = _normalize(query_matrix)
+    refs = _normalize(reference_matrix)
+    q_pos = np.asarray(predicted_positive, dtype=bool)
+    r_pos = np.asarray(reference_positive, dtype=bool)
+    out = {"n_pos_beyond": 0, "n_neg_beyond": 0}
+    if queries.shape[0] == 0:
+        return out
+    for name, evidence, q_mask, r_mask in (("n_pos_beyond", pos, q_pos, r_pos), ("n_neg_beyond", neg, ~q_pos, ~r_pos)):
+        if not q_mask.any() or not r_mask.any():
+            continue
+        a_query = _kth_nn_distance(queries[q_mask], evidence, k)
+        a_ref = np.sort(_kth_nn_distance(refs[r_mask], evidence, k))
+        ge = a_ref.shape[0] - np.searchsorted(a_ref, a_query, side="left")
+        out[name] = int(np.sum((1 + ge) / (a_ref.shape[0] + 1) < alpha))
+    return out
+
+
 def trust_scores(
     queries: np.ndarray,
     pos: np.ndarray,

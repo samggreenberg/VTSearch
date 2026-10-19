@@ -7,14 +7,17 @@ the library tier.  See docs/plans/coverage-atlas.md §6.1 (phase v0).
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.detectors.evidence_coverage import (
     _kth_nn_distance,
     _loo_kth_nn_distances,
     evidence_coverage_report,
     predicted_support_pvalues,
+    reference_vacuum_counts,
     support_pvalues,
     trust_scores,
+    unsupported_counts,
 )
 
 
@@ -199,3 +202,64 @@ class TestEvidenceCoverageReport:
         a = evidence_coverage_report(pos, neg, queries, pred)
         b = evidence_coverage_report(pos, neg, queries, pred)
         assert a == b
+
+
+class TestUnsupportedCounts:
+    """#5089: the counts behind the report's share, split by the class each item is routed to."""
+
+    def test_the_counts_are_the_share_split_by_class(self):
+        rng = np.random.default_rng(11)
+        d = 16
+        pos = _cluster(rng, _basis(d, 0), 30)
+        neg = _cluster(rng, _basis(d, 1), 30)
+        # Ten in-domain positives, twenty in-domain negatives, and ten from a region nobody labelled, called positive.
+        queries = np.vstack(
+            [_cluster(rng, _basis(d, 0), 10), _cluster(rng, _basis(d, 1), 20), _cluster(rng, _basis(d, 9), 10)]
+        )
+        pred = np.array([True] * 10 + [False] * 20 + [True] * 10)
+        counts = unsupported_counts(pos, neg, queries, pred)
+        rep = evidence_coverage_report(pos, neg, queries, pred)
+        assert counts["n_items"] == 40 and counts["n_pred_pos"] == 20
+        assert (counts["n_pos_unsupported"] + counts["n_neg_unsupported"]) / 40 == pytest.approx(
+            rep["frac_unsupported"]
+        )
+        # The unlabelled region is all predicted positive, so the vacuum sits on that side.
+        assert counts["n_pos_unsupported"] >= 10 > counts["n_neg_unsupported"]
+
+    def test_empty_query(self):
+        counts = unsupported_counts(
+            np.ones((3, 8), dtype=np.float32),
+            np.ones((3, 8), dtype=np.float32),
+            np.zeros((0, 8)),
+            np.zeros(0, dtype=bool),
+        )
+        assert counts == {"n_items": 0, "n_pred_pos": 0, "n_pos_unsupported": 0, "n_neg_unsupported": 0}
+
+
+class TestReferenceVacuumCounts:
+    """#5089: the support p-value ranked against a reference corpus's own distances, not the votes'."""
+
+    def test_a_draw_like_the_reference_sits_near_alpha_and_a_shifted_one_far_past_it(self):
+        rng = np.random.default_rng(12)
+        d = 16
+        pos = _cluster(rng, _basis(d, 0), 5)
+        neg = _cluster(rng, _basis(d, 1), 5)
+        # Five votes a class, ranked against a haystack of 2,000 called the same way: a fresh draw of it reads near alpha.
+        ref = np.vstack([_cluster(rng, _basis(d, 0), 400), _cluster(rng, _basis(d, 1), 1600)])
+        ref_pred = np.array([True] * 400 + [False] * 1600)
+        same = np.vstack([_cluster(rng, _basis(d, 0), 400), _cluster(rng, _basis(d, 1), 1600)])
+        counts = reference_vacuum_counts(pos, neg, same, ref_pred, ref, ref_pred)
+        assert (counts["n_pos_beyond"] + counts["n_neg_beyond"]) / 2000 < 0.08
+        shifted = _cluster(rng, _basis(d, 9), 200)
+        counts = reference_vacuum_counts(pos, neg, shifted, np.zeros(200, dtype=bool), ref, ref_pred)
+        assert counts["n_pos_beyond"] == 0 and counts["n_neg_beyond"] > 150
+
+    def test_a_class_the_reference_never_calls_reads_supported(self):
+        rng = np.random.default_rng(13)
+        d = 8
+        pos = _cluster(rng, _basis(d, 0), 5)
+        neg = _cluster(rng, _basis(d, 1), 5)
+        ref = _cluster(rng, _basis(d, 1), 50)
+        queries = _cluster(rng, _basis(d, 7), 20)
+        counts = reference_vacuum_counts(pos, neg, queries, np.ones(20, dtype=bool), ref, np.zeros(50, dtype=bool))
+        assert counts == {"n_pos_beyond": 0, "n_neg_beyond": 0}
