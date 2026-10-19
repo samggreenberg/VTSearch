@@ -243,6 +243,124 @@ class TestRunAutoFindRoute:
         assert out.exists()
 
 
+class _FakeTracker:
+    """Records what a :class:`~vtsearch.autofind.RunProgress` publishes."""
+
+    def __init__(self) -> None:
+        self.frames: list[dict] = []
+
+    def update(self, status: str, message: str = "", current: int = 0, total: int = 0, **kwargs) -> None:
+        self.frames.append({"status": status, "message": message, "current": current, "total": total, **kwargs})
+
+
+class TestRunProgress:
+    """A run's bar moves through each detector's train and passes, not per detector (#5101)."""
+
+    @pytest.fixture(autouse=True)
+    def _two_folds(self, monkeypatch):
+        # A train scores the dataset with its final head and then each of 2
+        # fold models: 3 calibration passes.
+        import vtscore.state
+
+        monkeypatch.setattr(vtscore.state, "get_calibrate_count", lambda: 2)
+
+    def test_one_detector_fills_the_bar_as_it_trains_calibrates_and_scores(self):
+        tracker = _FakeTracker()
+        progress = autofind_mod.RunProgress(tracker, 1, "Running 1 detector…")
+        det = progress.detector(0)
+
+        def last() -> tuple[str, int, int, float]:
+            frame = tracker.frames[-1]
+            assert frame["step"] == 1 and frame["total_steps"] == 1
+            return frame["message"], frame["current"], frame["total"], round(frame["within"], 4)
+
+        assert last() == ("Running 1 detector…", 0, 0, 0.0)
+        det.train("running", "Training detector from labels…", current=0, total=0)
+        assert last() == ("Training detector from labels…", 0, 0, 0.0)
+        det.train("running", "Resolving 4 label origins…", current=2, total=4)
+        assert last() == ("Resolving 4 label origins…", 2, 4, 0.15)
+        # The last label hands over to the fits, which have no count of their own.
+        det.train("running", "Cross-calibrating threshold…", current=4, total=4)
+        assert last() == ("Cross-calibrating threshold…", 0, 0, 0.3)
+        det.scoring_pass(0, 10)
+        assert last() == ("Calibrating the threshold…", 0, 10, 0.3)
+        det.scoring_pass(10, 10)
+        assert last() == ("Calibrating the threshold…", 10, 10, round(0.3 + 0.5 / 3, 4))
+        det.scoring_pass(0, 10)
+        det.scoring_pass(5, 10)
+        assert last() == ("Calibrating the threshold…", 5, 10, 0.55)
+        det.begin_scoring()
+        assert last() == ("Scoring every item…", 0, 0, 0.8)
+        det.scoring_pass(0, 10)
+        det.scoring_pass(5, 10)
+        assert last() == ("Scoring every item…", 5, 10, 0.9)
+        det.finish()
+        assert last()[3] == 1.0
+
+    def test_more_passes_than_expected_hold_at_the_calibration_slices_end(self):
+        tracker = _FakeTracker()
+        det = autofind_mod.RunProgress(tracker, 1, "").detector(0)
+        for _ in range(5):
+            det.scoring_pass(0, 10)
+            det.scoring_pass(10, 10)
+        assert tracker.frames[-1]["within"] == pytest.approx(0.8)
+
+    def test_two_detectors_average_and_show_the_first_unfinished(self):
+        tracker = _FakeTracker()
+        progress = autofind_mod.RunProgress(tracker, 2, "Running 2 detectors…")
+        first, second = progress.detector(0), progress.detector(1)
+
+        second.begin_scoring()
+        second.scoring_pass(0, 10)
+        second.scoring_pass(10, 10)
+        frame = tracker.frames[-1]
+        assert frame["within"] == pytest.approx(0.5)
+        # The first detector has said nothing yet, so the line is the run's own.
+        assert (frame["message"], frame["current"], frame["total"]) == ("Running 2 detectors…", 0, 0)
+
+        first.train("running", "Resolving 4 label origins…", current=1, total=4)
+        frame = tracker.frames[-1]
+        assert (frame["message"], frame["current"], frame["total"]) == ("Resolving 4 label origins…", 1, 4)
+
+        second.finish()
+        assert tracker.frames[-1]["current"] == 1, "a finished detector does not take the line from a running one"
+        first.finish()
+        assert tracker.frames[-1]["within"] == pytest.approx(1.0)
+
+    def test_late_train_reports_do_not_rewind_a_detector(self):
+        tracker = _FakeTracker()
+        det = autofind_mod.RunProgress(tracker, 1, "").detector(0)
+        det.begin_scoring()
+        n_frames = len(tracker.frames)
+        det.train("running", "Training detector from labels…", current=0, total=0)
+        assert len(tracker.frames) == n_frames
+
+    def test_a_real_run_counts_labels_then_media(self, client):
+        entry, ctx = _registered_copy("Progress run")
+        _autofind_detector("ar-progress")
+        frames: list[dict] = []
+
+        def record(tasks: list[dict]) -> None:
+            frames.extend(dict(t) for t in tasks if t["task_id"].startswith(TASK_PREFIX))
+
+        loading_tasks.subscribe(record)
+        try:
+            task_id = _start(client, entry["id"])
+            assert wait_for_loading_task(task_id)["error"] is None
+        finally:
+            loading_tasks.unsubscribe(record)
+
+        running = [f for f in frames if f["task_id"] == task_id and f["status"] == "loading"]
+        overall = [f["overall"] for f in running]
+        assert overall == sorted(overall), "the bar never moves back"
+        assert any(0.0 < o < 1.0 for o in overall), "the bar moved before the run ended"
+        n_labels = len(GOOD) + len(BAD)
+        assert any("label origins" in f["message"] and f["total"] == n_labels for f in running)
+        scoring = [f for f in running if f["message"] == "Scoring every item…" and f["total"]]
+        assert scoring and all(f["total"] == len(ctx.medias) for f in scoring)
+        assert scoring[-1]["current"] == len(ctx.medias)
+
+
 class TestRunPickedDetectors:
     """``detector_ids``: the Dashboard's big Find button runs the ticked detectors (#4529)."""
 

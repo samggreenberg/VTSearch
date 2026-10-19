@@ -1,4 +1,5 @@
 import { ProgressEvent } from '../models/api.models';
+import { MEDIA_PLURALS } from './media-words';
 
 /**
  * Format a current/total progress fraction for display.
@@ -229,6 +230,13 @@ function stripActionVerb(msg: string): string {
   return msg.replace(/^(?:re-?)?[a-z]+ing\s+/i, '');
 }
 
+/** What a Find or AutoFind run's count is of in *phase*: labels while they
+ *  resolve, else the dataset's media (``images``, ``audio clips``, …). */
+function runCountUnit(phase: string, mediaType: unknown): string {
+  if (phase === 'resolving labels') return 'labels';
+  return (typeof mediaType === 'string' && MEDIA_PLURALS[mediaType]) || 'items';
+}
+
 /** Capitalize the first character of a string (leaving the rest untouched). */
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -273,7 +281,8 @@ export function formatProgressHeader(
       subtitle = "Fetching each detector's labeled examples so it can be trained.";
     } else if (/calibrat/i.test(message)) {
       phase = 'calibrating';
-      subtitle = 'Choosing where each detector draws its line between a match and not.';
+      // Its count runs over the dataset once per pass, so say there are several.
+      subtitle = 'Scoring every item a few times over to choose where each detector draws its line between a match and not.';
     } else if (/training/i.test(message)) {
       phase = 'training detectors';
       subtitle = `Training each ${detectors} from its labels.`;
@@ -369,8 +378,9 @@ export function formatProgressHeader(
   const total = prog.total;
   const counts =
     current != null && total != null && total > 0 ? formatProgressFraction(current, total) : '';
-  // A run's counts are detectors, and its message is already the phase.
-  const item = kind === 'autofind' || kind === 'find' ? (counts ? 'detectors done' : '') : stripActionVerb(message);
+  // A run counts the labels its detector resolves, then the items each scoring
+  // pass gets through (#5101); its message is already the phase.
+  const item = kind === 'autofind' || kind === 'find' ? (counts ? runCountUnit(phase, prog.media_type) : '') : stripActionVerb(message);
   const detail = [counts, item].filter(Boolean).join(' ');
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };
