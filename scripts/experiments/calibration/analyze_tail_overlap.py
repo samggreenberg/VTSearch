@@ -42,7 +42,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_paths import main_frame_files
+from _cells_paths import main_frame_files, open_frame
 from figures_overview import band_of, class_of
 
 from study_paths import require_study_dir
@@ -56,7 +56,7 @@ def final_values(exp: str, metric: str, step: int) -> dict[str, dict[tuple[str, 
     best: dict[str, dict[tuple[str, str], tuple[int, float]]] = defaultdict(dict)
     for path in main_frame_files(Path(exp) / "results" / "cells"):
         try:
-            with open(path, newline="") as fh:
+            with open_frame(path) as fh:
                 for r in csv.DictReader(fh):
                     try:
                         t, v = int(r["t"]), float(r[metric])
@@ -69,7 +69,7 @@ def final_values(exp: str, metric: str, step: int) -> dict[str, dict[tuple[str, 
                     prev = best[mode].get(key)
                     if prev is None or prev[0] < t:
                         best[mode][key] = (t, v)
-        except (OSError, csv.Error):
+        except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz
             continue
     return {m: {k: v for k, (_, v) in d.items()} for m, d in best.items()}
 

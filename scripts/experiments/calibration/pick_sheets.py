@@ -48,7 +48,7 @@ common.setup_env()
 
 import pile_config as pc  # noqa: E402
 
-from _cells_paths import side_frame_files  # noqa: E402
+from _cells_paths import open_frame, side_frame_files  # noqa: E402
 
 VG_DIRS = [pc.DEMO_CACHE / "visual_genome" / "VG_100K", pc.DEMO_CACHE / "visual_genome" / "VG_100K_2"]
 
@@ -58,9 +58,9 @@ def load_picks(exp: str, category: str, seed: str) -> dict[str, list[dict]]:
     by_mode: dict[str, list[dict]] = {}
     for path in side_frame_files(Path(exp) / "results" / "cells", "__picks"):
         try:
-            with open(path, newline="") as fh:
+            with open_frame(path) as fh:
                 rows = [r for r in csv.DictReader(fh) if r.get("category") == category and r.get("seed") == seed]
-        except (OSError, csv.Error):
+        except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz
             continue
         for r in rows:
             mode = f"{r.get('embedder', '')}/{r.get('style', '')}".strip("/")

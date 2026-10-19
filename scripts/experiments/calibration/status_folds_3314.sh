@@ -22,7 +22,7 @@ PREP="$BASE/prepare/results"
 cells_in() {
   # task_NNNN.csv only: `__sweep`, `__cutdiag`, `__cutincl` and `__picks` are
   # sidecars of the same cell, so a loose glob quintuples the count.
-  find "$1" -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l
+  find "$1" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l
 }
 
 render() {
@@ -57,9 +57,9 @@ render() {
       # Zero-byte and header-only both count as "done" to resume, and only one
       # of them is visible to `find -size 0`.
       local z h
-      z=$(find "$res/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | wc -l)
-      h=$(find "$res/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null \
-            -exec sh -c '[ "$(wc -l < "$1")" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
+      z=$(find "$res/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | wc -l)
+      h=$(find "$res/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null \
+            -exec sh -c '[ "$(zcat -f "$1" | wc -l)" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
       echo "  ZERO-BYTE: $z   HEADER-ONLY: $h   <- delete the first before any resume; count the second in the report"
       echo "  bytes: $(du -sh "$res/cells" 2>/dev/null | cut -f1)"
       for f in "$res/summary_folds3314.json" "$res/REPORT_folds3314.md"; do

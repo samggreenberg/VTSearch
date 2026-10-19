@@ -117,7 +117,8 @@ tasks)
       for k in "${KS[@]}"; do
         for b in "${BETAS[@]}"; do
           idx=$((size * N_PEOPLE + i))
-          if [[ -s "$RUNS/$SET-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")" ]]; then
+          cell="$RUNS/$SET-k$k-b$(btag "$b")/results/cells/$(printf 'task_%04d.csv' "$idx")"
+          if [[ -s "$cell" || -s "$cell.gz" ]]; then  # either spelling (CALIB_CELLS_GZIP)
             skipped=$((skipped + 1))
           else
             echo "$k $b $idx" >>"$TASKS"
@@ -188,7 +189,7 @@ status)
   for k in "${KS[@]}"; do
     for b in "${BETAS[@]}"; do
       dir="$RUNS/$SET-k$k-b$(btag "$b")"
-      echo "k$k b$(btag "$b"): $(ls "$dir/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$' || true) cells"
+      echo "k$k b$(btag "$b"): $(ls "$dir/results/cells" 2>/dev/null | grep -cE '^task_[0-9]+\.csv(\.gz)?$' || true) cells"
     done
   done
   ;;

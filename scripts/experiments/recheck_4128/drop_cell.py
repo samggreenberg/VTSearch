@@ -212,7 +212,7 @@ def overview_3129() -> None:
     def load(root: Path, tag: str) -> pd.DataFrame:
         want = {"seed", "dataset", "category", "style", "embedder", "t", "n_good", "cost", "rule_inefficiency"}
         out = []
-        for f in sorted(glob.glob(str(root / "cells/task_*.csv"))):
+        for f in sorted(glob.glob(str(root / "cells/task_*.csv*"))):
             if "__" in os.path.basename(f):
                 continue
             try:

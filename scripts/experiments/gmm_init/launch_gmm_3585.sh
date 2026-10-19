@@ -328,13 +328,13 @@ bench)
 status)
   echo "exp:     $CALIB_EXP"
   echo "queue:   $(squeue -u "$USER" -h -n "$JOB_NAME" -o %i | wc -l) tasks named $JOB_NAME"
-  echo "cells:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) main frames"
+  echo "cells:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l) main frames"
   echo "corpus:  $(find "$CORPUS" -name 'cell_*.npz' 2>/dev/null | wc -l) captures"
   echo "empty:   $(find "$CORPUS" -name 'cell_*.npz' -size 0 2>/dev/null | wc -l) zero-byte (delete before any resume)"
   echo "sorts:   $(ls -1 "$CORPUS"/sorts*.npz 2>/dev/null | wc -l) sort captures"
   echo "gate:    $(ls -1 "$ANALYSIS"/gate_*.csv 2>/dev/null | wc -l) frames"
   for arm in native baseline; do
-    echo "ab/$arm: $(find "$CALIB_EXP/ab_$arm/results/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) cells"
+    echo "ab/$arm: $(find "$CALIB_EXP/ab_$arm/results/cells" -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l) cells"
   done
   ;;
 

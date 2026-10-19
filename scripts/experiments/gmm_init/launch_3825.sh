@@ -200,7 +200,7 @@ status)
   echo "gate:    $(ls -1 "$ANALYSIS"/gate3825_*.csv 2>/dev/null | wc -l) frames"
   echo "bench:   $([[ -f "$ANALYSIS/bench3825.csv" ]] && echo yes || echo no)"
   for arm in $AB_ARMS; do
-    echo "ab/$arm: $(find "$CALIB_EXP/ab_$arm/results/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) cells, $(squeue -u "$USER" -h -n "$JOB_NAME-ab-$arm" -o %i | wc -l) queued"
+    echo "ab/$arm: $(find "$CALIB_EXP/ab_$arm/results/cells" -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l) cells, $(squeue -u "$USER" -h -n "$JOB_NAME-ab-$arm" -o %i | wc -l) queued"
   done
   ;;
 

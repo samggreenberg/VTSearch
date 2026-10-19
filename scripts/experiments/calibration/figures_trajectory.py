@@ -40,7 +40,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_paths import main_frame_files
+from _cells_paths import main_frame_files, open_frame
 
 from figures_overview import BANDS, MODE_COLORS, band_of, mean_se
 
@@ -69,7 +69,7 @@ def load_runs(exp: str, metric: str) -> dict[tuple, list[tuple[int, float]]]:
     runs: dict[tuple, list[tuple[int, float]]] = defaultdict(list)
     for path in main_frame_files(Path(exp) / "results" / "cells"):
         try:
-            with open(path, newline="") as fh:
+            with open_frame(path) as fh:
                 for r in csv.DictReader(fh):
                     try:
                         t, v = int(r["t"]), float(r[metric])
@@ -77,7 +77,7 @@ def load_runs(exp: str, metric: str) -> dict[tuple, list[tuple[int, float]]]:
                         continue
                     mode = f"{r.get('embedder', '')}/{r.get('style', '')}".strip("/")
                     runs[(mode, r["category"], r["seed"])].append((t, v))
-        except (OSError, csv.Error):
+        except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz
             continue
     for v in runs.values():
         v.sort()

@@ -30,15 +30,17 @@ def main() -> int:
     ap.add_argument("--rerun", required=True, type=Path)
     ap.add_argument("--run", required=True, type=Path)
     args = ap.parse_args()
-    files = sorted(args.rerun.glob("task_*.csv"))
+    files = sorted(args.rerun.glob("task_*.csv*"))
     if not files:
         print(f"no task files under {args.rerun}")
         return 2
     bad = 0
     tasks = set()
     for f in files:
-        tasks.add(f.name.split("__")[0].removesuffix(".csv"))
-        twin = args.run / f.name
+        plain = f.name.removesuffix(".gz")
+        tasks.add(plain.split("__")[0].removesuffix(".csv"))
+        # The twin in either spelling: a CALIB_CELLS_GZIP re-run of a plain run, or the reverse.
+        twin = next((t for t in (args.run / plain, args.run / f"{plain}.gz") if t.exists()), args.run / f.name)
         if not twin.exists():
             print(f"MISSING {f.name}: no file of that name in the run")
             bad += 1

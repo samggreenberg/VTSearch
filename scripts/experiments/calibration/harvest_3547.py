@@ -8,9 +8,10 @@ arm biases every deep contrast toward "no move". Point `--base` at a study's
 
 import argparse
 import csv
-import glob
 import os
 import statistics
+
+from _cells_paths import main_frame_files, open_frame
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("--base", default="/expscratch/sgreenberg/acq-3547/bin")
@@ -23,10 +24,10 @@ for arm in a.arms.split(","):
     if not os.path.isdir(d):
         print("%-8s (no cells dir -- skipped)" % arm)
         continue
-    files = [f for f in sorted(glob.glob(d + "/task_*.csv")) if "__" not in os.path.basename(f)]
+    files = main_frame_files(d)
     best = {}  # (seed, cat) -> (t, n_good, sim_pos)
     for f in files:
-        with open(f) as fh:
+        with open_frame(f) as fh:
             for row in csv.DictReader(fh):
                 key = (row["seed"], row["category"])
                 t = int(row["t"])
