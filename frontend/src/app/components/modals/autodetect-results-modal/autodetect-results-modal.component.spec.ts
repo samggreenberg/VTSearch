@@ -10,13 +10,17 @@ import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
 import { ContextSwitchService } from '../../../services/context-switch.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
+import { makeSettingsStateStub } from '../../../testing/mocks';
+import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 
 describe('AutoDetectResultsModalComponent', () => {
   let component: AutoDetectResultsModalComponent;
   let fixture: ComponentFixture<AutoDetectResultsModalComponent>;
   let httpMock: HttpTestingController;
   let toast: { success: ReturnType<typeof vi.fn> };
+  let settings: WritableSignal<AppSettings | null>;
 
   const mockData = {
     media_type: 'audio',
@@ -35,12 +39,15 @@ describe('AutoDetectResultsModalComponent', () => {
   };
 
   beforeEach(async () => {
+    const settingsState = makeSettingsStateStub();
+    settings = settingsState.settings;
     await TestBed.configureTestingModule({
       imports: [AutoDetectResultsModalComponent],
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
         { provide: ToastService, useFactory: () => (toast = { success: vi.fn() }) },
+        { provide: SettingsStateService, useValue: settingsState.stub },
       ],
     }).compileComponents();
 
@@ -79,6 +86,28 @@ describe('AutoDetectResultsModalComponent', () => {
     await flushInit();
     expect(component.goodCount).toBe(2);
     expect(component.badCount).toBe(1);
+  });
+
+  describe('the summary\'s Media Type (#5106)', () => {
+    const summary = () => (fixture.nativeElement.querySelector('.results-summary') as HTMLElement).textContent ?? '';
+
+    it('names the run\'s media type on a server open to every type', async () => {
+      await flushInit();
+      expect(summary()).toContain('Media Type: audio');
+    });
+
+    it('leaves it out on a server locked to that type, where it could be nothing else', async () => {
+      settings.set({ solo_media_type: 'audio' } as AppSettings);
+      await flushInit();
+      expect(summary()).not.toContain('Media Type');
+      expect(summary()).toContain('Detectors Run: 2');
+    });
+
+    it('still names a type the lock does not account for', async () => {
+      settings.set({ solo_media_type: 'image' } as AppSettings);
+      await flushInit();
+      expect(summary()).toContain('Media Type: audio');
+    });
   });
 
   it('should display good hits by default', async () => {
@@ -441,6 +470,22 @@ describe('AutoDetectResultsModalComponent Browse', () => {
     browsePrep.preparing.set(true);
     component.close();
     expect(browsePrep.cancel).toHaveBeenCalled();
+  });
+
+  // #5102: the way in to the results, not one small button among the footer's.
+  it('leads with a large Browse over the list, not in the footer', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const el: HTMLElement = fixture.nativeElement;
+    const lead = el.querySelector('.browse-lead button') as HTMLButtonElement;
+    expect(lead.textContent?.trim()).toBe('Browse');
+    expect(lead.classList).toContain('btn--lg');
+    expect(lead.disabled).toBe(false);
+    const footer = Array.from(el.querySelectorAll('.form-actions button')).map((b) => b.textContent?.trim());
+    expect(footer).not.toContain('Browse');
+
+    lead.click();
+    expect(contextSwitch.applyActivePair).toHaveBeenCalledWith('ds1', '');
   });
 });
 
