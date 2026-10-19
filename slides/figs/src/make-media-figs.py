@@ -345,18 +345,20 @@ CLEAN_ROWS = (
 )
 
 
-def _check_registries() -> None:
-    """What the media slides draw is what the registries hold (module docstring)."""
-    types = {t.type_id for t in all_types()}
-    if types != set(MEDIA):
-        raise SystemExit(f"media slides: the app's media types are {sorted(types)}, the slides draw {sorted(MEDIA)}")
-    # A type's default is the one it marks, or its only embedder (as the docs' media-types table reads it).
+def _default_embedders(types: set[str]) -> dict:
+    """Each type's default embedder: the one it marks, or its only one (as the docs' media-types table reads it)."""
     defaults = {}
     for type_id in types:
         of_type = [e for e in all_embedders() if e.media_type_id == type_id]
         marked = [e for e in of_type if e.is_default]
         if marked or len(of_type) == 1:
             defaults[type_id] = (marked or of_type)[0]
+    return defaults
+
+
+def _check_embedders(types: set[str]) -> None:
+    """Mixed Media's second and third lines: each type's model, and whether it takes a typed phrase."""
+    defaults = _default_embedders(types)
     for type_id, spec in MEDIA.items():
         e = defaults.get(type_id)
         if spec["embedder"] is None:
@@ -364,9 +366,18 @@ def _check_registries() -> None:
                 raise SystemExit(f"media slides: {type_id} now embeds with {e.name}; the slide says convert first")
             continue
         if e is None or e.name != EMBEDDER_IDS[spec["embedder"]]:
-            raise SystemExit(f"media slides: {type_id}'s embedder is {getattr(e, 'name', None)}, not {spec['embedder']}")
+            got = getattr(e, "name", None)
+            raise SystemExit(f"media slides: {type_id}'s embedder is {got}, not {spec['embedder']}")
         if e.supports_text != ("phrase" in spec):
             raise SystemExit(f"media slides: {type_id}'s embedder supports_text={e.supports_text}; the slide disagrees")
+
+
+def _check_registries() -> None:
+    """What the media slides draw is what the registries hold (module docstring)."""
+    types = {t.type_id for t in all_types()}
+    if types != set(MEDIA):
+        raise SystemExit(f"media slides: the app's media types are {sorted(types)}, the slides draw {sorted(MEDIA)}")
+    _check_embedders(types)
     shipped = sorted((c.source_type, c.target_type) for c in list_converters())
     drawn = sorted((s, t) for s, t, _w in CONVERTERS)
     if shipped != drawn:

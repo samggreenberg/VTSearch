@@ -346,7 +346,11 @@ def face_data(curves: Path = FACE_CURVES, ab: Path = FACE_AB) -> dict[float, dic
             if int(row["K"]) == FACE_K:
                 ends[float(row["beta"])] = row
     votes = list(range(1, FACE_VOTES + 1))
-    if set(by_vote) != {0.25, 1.0, 4.0} or set(ends) != set(by_vote) or any(sorted(v) != votes for v in by_vote.values()):
+    if (
+        set(by_vote) != {0.25, 1.0, 4.0}
+        or set(ends) != set(by_vote)
+        or any(sorted(v) != votes for v in by_vote.values())
+    ):
         raise SystemExit(f"make-sota-figs: {curves} and {ab} do not carry every radio at every vote")
     out = {}
     for beta, curve in by_vote.items():
