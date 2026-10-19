@@ -322,7 +322,9 @@ def _plan_signs(ax, to_px, region: dict, nearby: list[dict], coarse: dict, fines
     def fits(b: tuple[float, float, float, float]) -> bool:
         left, right, top, bottom = b
         inside = left >= x0 - 10 and right <= W - 20 and top >= y0 and bottom <= y1
-        return inside and all(right + 8 < l or left - 8 > r or bottom + 4 < t or top - 4 > bo for l, r, t, bo in taken)
+        return inside and all(
+            right + 8 < lo or left - 8 > hi or bottom + 4 < up or top - 4 > down for lo, hi, up, down in taken
+        )
 
     plan = []
     rx, ry = (float(v) for v in to_px(region["sign"].x, region["sign"].y))
@@ -417,8 +419,12 @@ def main() -> None:
     )
     finest_level = max(r["level"] for r in regions)
     assert TITLE_NOTCH_PX[0] + TITLE_NOTCH_PX[2] <= MAP_BOX[0] and TITLE_NOTCH_PX[1] + TITLE_NOTCH_PX[3] <= COLUMN_TOP
-    for stage, name in ((1, "vision-names.build1.webp"), (2, "vision-names.build2.webp"),
-                        (3, "vision-names.build3.webp"), (4, "vision-names.webp")):
+    for stage, name in (
+        (1, "vision-names.build1.webp"),
+        (2, "vision-names.build2.webp"),
+        (3, "vision-names.build3.webp"),
+        (4, "vision-names.webp"),
+    ):
         save(draw(stage, d, region, nearby, coarse, finest_level), OUT, name, FULL_BLEED, tight=False, photo=True)
 
 
