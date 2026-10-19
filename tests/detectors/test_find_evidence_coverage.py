@@ -9,9 +9,14 @@ docs/plans/coverage-atlas.md §6.1 (phase v0).
 
 from __future__ import annotations
 
+import pytest
+
 from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
-from vtscore.state.core import get_active_detector_context
+from vtscore.detectors.evidence_baseline import EVIDENCE_BASELINE_KEY
+from vtscore.detectors.registry import get_detector
+from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+from vtscore.state.core import get_active_context, get_active_detector_context
 from vtsearch.state import snapshot_medias
 
 
@@ -71,3 +76,60 @@ class TestFindEvidenceCoverage:
         a = client.get("/api/find/evidence-coverage").get_json()
         b = client.get("/api/find/evidence-coverage").get_json()
         assert a == b
+
+
+class TestTheTrainingBaseline:
+    """#5089: the verdict ranks against the training dataset's own media, recorded on the detector there."""
+
+    @pytest.fixture
+    def detector_path(self, client):
+        detector_id = TestFindEvidenceCoverage()._setup_find(client)
+        return _detector_path(get_detector(detector_id)["name"])
+
+    @staticmethod
+    def _away(monkeypatch):
+        """Make the training dataset another one, as on a dataset the detector meets after a handoff."""
+        import vtsearch.training_domain as training_domain
+
+        monkeypatch.setattr(training_domain, "infer_training_reference", lambda _labelset, _active: ("elsewhere", {}))
+
+    def test_on_its_training_dataset_the_baseline_is_drawn_and_recorded(self, client, detector_path):
+        data = client.get("/api/find/evidence-coverage").get_json()
+        assert data["baseline"] == "training"
+        assert data["baseline_dataset_id"] == get_active_context().dataset_id
+        # Drawn on the scored media less the six labelled ones.
+        assert data["n_baseline"] == data["n_items"] - 6
+        assert 0.0 <= data["frac_beyond"] <= 1.0
+        # Ranked against itself, the training dataset reads its own spread: no verdict fires.
+        assert data["unsupported"] is False
+        stored = _read_detector(detector_path)[EVIDENCE_BASELINE_KEY]
+        assert stored["dataset_id"] == data["baseline_dataset_id"]
+        assert stored["n_pos"] + stored["n_neg"] == data["n_baseline"]
+        assert stored["k"] == data["k"] and stored["alpha"] == data["alpha"]
+
+    def test_elsewhere_the_recorded_baseline_is_read(self, client, detector_path, monkeypatch):
+        home = client.get("/api/find/evidence-coverage").get_json()
+        self._away(monkeypatch)
+        away = client.get("/api/find/evidence-coverage").get_json()
+        assert away["baseline"] == "training"
+        assert away["baseline_dataset_id"] == home["baseline_dataset_id"]
+        assert away["frac_beyond"] == home["frac_beyond"]
+
+    def test_a_stale_baseline_draws_no_verdict(self, client, detector_path, monkeypatch):
+        client.get("/api/find/evidence-coverage")
+        data = _read_detector(detector_path)
+        data[EVIDENCE_BASELINE_KEY]["labels"] = "0" * 32  # as after a vote since
+        _write_detector(detector_path, data)
+        self._away(monkeypatch)
+        away = client.get("/api/find/evidence-coverage").get_json()
+        assert away["available"] is True
+        assert away["baseline"] == "none" and away["n_baseline"] == 0
+        assert away["frac_beyond"] is None and away["z_beyond"] is None
+        assert away["baseline_dataset_id"] == ""
+        assert away["unsupported"] is False
+
+    def test_no_test_on_the_training_dataset_yet_draws_no_verdict(self, client, detector_path, monkeypatch):
+        self._away(monkeypatch)
+        away = client.get("/api/find/evidence-coverage").get_json()
+        assert away["baseline"] == "none" and away["unsupported"] is False
+        assert EVIDENCE_BASELINE_KEY not in (_read_detector(detector_path) or {})

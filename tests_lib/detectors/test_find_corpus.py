@@ -324,6 +324,16 @@ class TestTheFlags:
             assert r["evidence_n_pos_beyond_pool"] <= r["evidence_n_pred_pos"]
             assert r["evidence_n_neg_beyond_pool"] <= r["evidence_n"] - r["evidence_n_pred_pos"]
 
+    def test_the_evidence_verdict_reads_the_share_beyond_the_pool(self, paired):
+        # #5089: the verdict ranks against the sim pool's unvoted media, the
+        # harness's training haystack, as the app's ranks against the training dataset's.
+        _, on, _, _ = paired
+        for r in (r for r in on if not math.isnan(r["flags_at"])):
+            beyond = (r["evidence_n_pos_beyond_pool"] + r["evidence_n_neg_beyond_pool"]) / r["evidence_n"]
+            assert r["evidence_frac_beyond"] == pytest.approx(beyond)
+            z = (beyond - 0.05) / math.sqrt(0.05 * 0.95 / r["evidence_n"])
+            assert r["evidence_unsupported"] == (1.0 if z > 3.0 and beyond >= 0.1 else 0.0)
+
     def test_the_blank_row_names_every_column(self):
         blank = blank_find_columns()
         assert set(blank) == _FIND and all(math.isnan(v) for v in blank.values())

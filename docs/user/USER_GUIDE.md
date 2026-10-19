@@ -1522,11 +1522,14 @@ verdict and a line of supporting numbers:
   section is hidden entirely when there is no such candidate. A high
   atypical share means domain shift: the detector is scoring media unlike
   anything it ever saw, and that share is the part to check yourself.
-- **Evidence coverage** - how much of the dataset the detector is calling
-  with no labeled example like it behind the call. This one is measured
-  from the detector's own votes, so it works even when the training data
-  isn't loaded at all. Items in that "evidence vacuum" are where a
-  handed-over detector is least reliable.
+- **Evidence coverage** - how much of the dataset sits farther from the
+  detector's labelled examples than 95% of its training data does. The
+  detector records that yardstick when you test it on the dataset it was
+  trained on, so afterwards it works even when the training data isn't
+  loaded at all. About 5% is in-domain; well above it, the items past the
+  yardstick are where a handed-over detector is least reliable. Before
+  that first test (or after a new vote) the chip shows the share in an
+  "evidence vacuum" and draws no verdict.
 
 If either share is large, the fastest fix is usually to label a few items
 from the flagged region and retrain, rather than to move the Threshold.

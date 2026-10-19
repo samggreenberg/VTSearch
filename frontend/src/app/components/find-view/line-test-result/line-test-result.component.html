@@ -215,19 +215,32 @@
       }
 
       @if (evidence(); as ev) {
-        <h3 class="section-title" title="How much of this dataset the detector is calling with no labeled example like it behind the call. Measured from the detector's own votes, so it works even when the training data isn't loaded.">Evidence coverage</h3>
+        <h3 class="section-title" title="How much of this dataset sits farther from the detector's labelled examples than its training data does. Read from the detector's own votes and a baseline it records when tested on its training data, so it works even when the training data isn't loaded.">Evidence coverage</h3>
         <div class="domain-overlap">
-          <div class="domain-chip" [class.shifted]="evidenceUnsupported" role="status">
-            <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
-            <span class="domain-chip-text">
-              of this dataset sits in an evidence vacuum —
-              {{ evidenceUnsupported ? 'the detector is often calling without support' : 'mostly backed by labeled evidence' }}
-            </span>
-          </div>
-          <p class="domain-detail muted">
-            {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
-            median support p = {{ ev.median_support | number: '1.2-2' }}.
-          </p>
+          @if (evidenceHasBaseline) {
+            <div class="domain-chip evidence-chip" [class.shifted]="evidenceUnsupported" role="status">
+              <span class="domain-chip-pct">{{ beyondPct }}%</span>
+              <span class="domain-chip-text">
+                of this dataset sits farther from the detector's examples than {{ baselineCoveredPct }}% of <strong>{{ evidenceBaselineName }}</strong> —
+                {{ evidenceUnsupported ? 'the detector is often calling without support' : 'as well covered as its training data' }}
+              </span>
+            </div>
+            <p class="domain-detail muted">
+              {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
+              {{ ev.n_baseline | number }} training items behind the baseline · z = {{ ev.z_beyond | number: '1.1-1' }}.
+            </p>
+          } @else {
+            <div class="domain-chip evidence-chip" role="status">
+              <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
+              <span class="domain-chip-text">
+                of this dataset sits in an evidence vacuum — no verdict until the detector is tested on the dataset it was trained on
+              </span>
+            </div>
+            <p class="domain-detail muted">
+              {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
+              median support p = {{ ev.median_support | number: '1.2-2' }}.
+            </p>
+          }
         </div>
       }
 

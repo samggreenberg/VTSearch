@@ -371,8 +371,9 @@ FIND_CORPUS_COLUMNS: tuple[str, ...] = (
 #: embedder, which the app refuses (#3329), and with no atlas (a non-Autopilot
 #: strategy).  ``evidence_*`` is the Evidence coverage chip,
 #: :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` from the
-#: votes' vectors and the Find cut.  ``shift_shifted`` / ``evidence_unsupported``
-#: are the reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
+#: votes' vectors and the Find cut, its verdict ranked against the sim pool's
+#: unvoted media (#5089).  ``shift_shifted`` / ``evidence_unsupported`` are the
+#: reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
 FIND_FLAG_COLUMNS: tuple[str, ...] = (
     "flags_at",
     "shift_frac_atypical",
@@ -382,6 +383,9 @@ FIND_FLAG_COLUMNS: tuple[str, ...] = (
     "evidence_z",
     "evidence_unsupported",
     "evidence_frac_low_trust",
+    #: The share the Evidence verdict reads: farther from its class's votes
+    #: than 95% of the training haystack's media called that class (#5089).
+    "evidence_frac_beyond",
     #: The counts behind the Evidence share, by predicted class, and the same
     #: counts over the unvoted sim pool found as a Find there draws it: the
     #: haystack the votes came from, an in-domain baseline (#5089).

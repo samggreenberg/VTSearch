@@ -1752,6 +1752,7 @@ def _find_corpus_columns(
         evidence_class_counts,
         evidence_flags,
         find_columns,
+        pool_baseline,
         training_domain_flags,
         vote_vectors,
     )
@@ -1842,9 +1843,9 @@ def _find_corpus_columns(
     )
     # Predicted as the metric columns flag: a score at or above the Find cut.
     predicted = scores >= cut
-    # #5089: the same reading of the haystack the votes came from, its unvoted
-    # media found as a Find there draws it, so a rule can be priced against an
-    # in-domain baseline rather than alpha.
+    # #5089: the haystack the votes came from, its unvoted media found as a Find
+    # there draws it: the Evidence verdict's training baseline, as the app draws
+    # it on the training dataset.
     voted = set(good_votes) | set(bad_votes)
     base_ids = [cid for cid in find.pool_ids if cid not in voted]
     if base_ids:
@@ -1853,17 +1854,16 @@ def _find_corpus_columns(
         base_matrix, base_predicted = find.pool_matrix(base_ids), base_scores >= base_cut
     else:
         base_matrix, base_predicted = matrix[:0], predicted[:0]
-    baseline = {
-        **evidence_class_counts(pos, neg, base_matrix, base_predicted, prefix="evidence_pool"),
-        **evidence_beyond_pool(pos, neg, matrix, predicted, base_matrix, base_predicted),
-    }
     return {
         **cols,
         "flags_at": int(flags_at),
         **training_domain_flags(atlas, matrix, patch_space=region_aware),
-        **evidence_flags(pos, neg, matrix, predicted),
+        **evidence_flags(
+            pos, neg, matrix, predicted, pool_baseline(pos, neg, base_matrix, base_predicted) if base_ids else None
+        ),
         **evidence_class_counts(pos, neg, matrix, predicted, prefix="evidence"),
-        **baseline,
+        **evidence_class_counts(pos, neg, base_matrix, base_predicted, prefix="evidence_pool"),
+        **evidence_beyond_pool(pos, neg, matrix, predicted, base_matrix, base_predicted),
     }
 
 

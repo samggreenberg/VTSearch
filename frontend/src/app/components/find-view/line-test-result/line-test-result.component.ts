@@ -404,6 +404,26 @@ export class LineTestResultComponent {
     return this.evidence()?.unsupported ?? false;
   }
 
+  /** Whether the Evidence verdict had a training baseline to rank against (#5089); without one it draws none. */
+  get evidenceHasBaseline(): boolean {
+    return this.evidence()?.baseline === 'training';
+  }
+
+  /** The share the verdict reads: farther from the detector's examples than most of its training data. */
+  get beyondPct(): number {
+    const beyond = this.evidence()?.frac_beyond;
+    return beyond == null ? 0 : Math.round(beyond * 100);
+  }
+
+  /** The share of the training data the baseline leaves inside its cut (95% at the default alpha). */
+  get baselineCoveredPct(): number {
+    return Math.round((1 - (this.evidence()?.alpha ?? 0.05)) * 100);
+  }
+
+  get evidenceBaselineName(): string {
+    return this.evidence()?.baseline_dataset_name || 'its training data';
+  }
+
   get agreementPct(): string {
     const s = this.stats();
     return s ? `${Math.round(s.agreement_rate * 100)}%` : '-';

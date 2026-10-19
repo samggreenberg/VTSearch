@@ -351,7 +351,11 @@ def vote_vectors(
 
 
 def evidence_flags(
-    pos: "np.ndarray", neg: "np.ndarray", matrix: "np.ndarray", predicted_positive: "np.ndarray"
+    pos: "np.ndarray",
+    neg: "np.ndarray",
+    matrix: "np.ndarray",
+    predicted_positive: "np.ndarray",
+    baseline: "Mapping[str, Any] | None" = None,
 ) -> dict[str, float]:
     """The Evidence coverage chip's reading of *matrix* under the votes, NaN where the app has none.
 
@@ -359,8 +363,11 @@ def evidence_flags(
     :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` at its
     defaults over the whole-image vector of every scored media, each predicted
     positive where its Find score clears the Find threshold; *pos* / *neg* are
-    the labelset's rows (:func:`vote_vectors`).  It reports nothing without
-    labelled rows or scored media.
+    the labelset's rows (:func:`vote_vectors`).  Its verdict ranks against the
+    training haystack's baseline (#5089), the app's training dataset and here
+    the sim pool's unvoted media (:func:`pool_baseline`); with *baseline*
+    ``None`` the verdict is 0 and ``evidence_frac_beyond`` NaN, as the app draws
+    none.  It reports nothing without labelled rows or scored media.
     """
     nan = math.nan
     if pos.shape[0] + neg.shape[0] == 0 or matrix.shape[0] == 0:
@@ -369,16 +376,34 @@ def evidence_flags(
             "evidence_z": nan,
             "evidence_unsupported": nan,
             "evidence_frac_low_trust": nan,
+            "evidence_frac_beyond": nan,
         }
     from vtscore.detectors.evidence_coverage import evidence_coverage_report  # noqa: PLC0415
 
-    report = evidence_coverage_report(pos, neg, matrix, np.asarray(predicted_positive, dtype=bool))
+    report = evidence_coverage_report(pos, neg, matrix, np.asarray(predicted_positive, dtype=bool), baseline=baseline)
     return {
         "evidence_frac_unsupported": float(report["frac_unsupported"]),
         "evidence_z": float(report["z_score"]),
         "evidence_unsupported": 1.0 if report["unsupported"] else 0.0,
         "evidence_frac_low_trust": float(report["frac_low_trust"]),
+        "evidence_frac_beyond": nan if report["frac_beyond"] is None else float(report["frac_beyond"]),
     }
+
+
+def pool_baseline(
+    pos: "np.ndarray", neg: "np.ndarray", pool_matrix: "np.ndarray", pool_positive: "np.ndarray"
+) -> "dict[str, Any] | None":
+    """The Evidence verdict's training baseline over the sim pool's unvoted media (#5089); ``None`` without votes.
+
+    The app draws it on the training dataset's scored, unlabelled media as a
+    Find there calls them; the harness's training haystack is the sim pool, so
+    the caller passes its unvoted media found as a Find there draws it.
+    """
+    if pos.shape[0] + neg.shape[0] == 0:
+        return None
+    from vtscore.detectors.evidence_coverage import reference_cutoffs  # noqa: PLC0415
+
+    return reference_cutoffs(pos, neg, pool_matrix, np.asarray(pool_positive, dtype=bool))
 
 
 def evidence_class_counts(

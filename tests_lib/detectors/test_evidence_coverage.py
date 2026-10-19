@@ -10,10 +10,14 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.evidence_coverage import (
+    BASELINE_NONE,
+    BASELINE_TRAINING,
     _kth_nn_distance,
     _loo_kth_nn_distances,
     evidence_coverage_report,
+    beyond_reference,
     predicted_support_pvalues,
+    reference_cutoffs,
     reference_vacuum_counts,
     support_pvalues,
     trust_scores,
@@ -178,19 +182,48 @@ class TestEvidenceCoverageReport:
         assert rep["unsupported"] is False
         assert rep["median_trust"] > 1.0
 
-    def test_domain_shift_reads_unsupported(self):
-        rng = np.random.default_rng(9)
+    @staticmethod
+    def _bench(seed: int):
+        """Votes on two clusters, and a training haystack drawn from them, called as their own class."""
+        rng = np.random.default_rng(seed)
         d = 16
         pos = _cluster(rng, _basis(d, 0), 40)
         neg = _cluster(rng, _basis(d, 1), 40)
+        haystack = np.vstack([_cluster(rng, _basis(d, 0), 200), _cluster(rng, _basis(d, 1), 800)])
+        called = np.array([True] * 200 + [False] * 800)
+        return rng, d, pos, neg, reference_cutoffs(pos, neg, haystack, called)
+
+    def test_domain_shift_reads_unsupported(self):
+        rng, d, pos, neg, baseline = self._bench(9)
         # Every query sits in a *third* region the labelset never covered, all
         # predicted positive → an evidence vacuum for the positive class.
         queries = _cluster(rng, _basis(d, 9), 80)
         pred = np.ones(80, dtype=bool)
-        rep = evidence_coverage_report(pos, neg, queries, pred)
+        rep = evidence_coverage_report(pos, neg, queries, pred, baseline=baseline)
         assert rep["frac_unsupported"] > 0.5
         assert rep["z_score"] > 3.0
+        assert rep["baseline"] == BASELINE_TRAINING and rep["n_baseline"] == 1000
+        assert rep["frac_beyond"] == 1.0 and rep["z_beyond"] > 3.0
         assert rep["unsupported"] is True
+
+    def test_a_fresh_draw_of_the_training_haystack_reads_alpha(self):
+        # #5089: the verdict's null is the training haystack's own spread, so a
+        # second draw from it sits near alpha, never at the 2 alpha bar.
+        rng, d, pos, neg, baseline = self._bench(14)
+        queries = np.vstack([_cluster(rng, _basis(d, 0), 400), _cluster(rng, _basis(d, 1), 1600)])
+        pred = np.array([True] * 400 + [False] * 1600)
+        rep = evidence_coverage_report(pos, neg, queries, pred, baseline=baseline)
+        assert rep["frac_beyond"] < 2 * rep["alpha"]
+        assert rep["unsupported"] is False
+
+    def test_without_a_baseline_the_share_is_read_and_no_verdict_drawn(self):
+        rng, d, pos, neg, _ = self._bench(15)
+        queries = _cluster(rng, _basis(d, 9), 80)
+        rep = evidence_coverage_report(pos, neg, queries, np.ones(80, dtype=bool))
+        assert rep["frac_unsupported"] > 0.5 and rep["z_score"] > 3.0
+        assert rep["baseline"] == BASELINE_NONE and rep["n_baseline"] == 0
+        assert rep["frac_beyond"] is None and rep["z_beyond"] is None
+        assert rep["unsupported"] is False
 
     def test_deterministic(self):
         rng = np.random.default_rng(10)
@@ -263,3 +296,39 @@ class TestReferenceVacuumCounts:
         queries = _cluster(rng, _basis(d, 7), 20)
         counts = reference_vacuum_counts(pos, neg, queries, np.ones(20, dtype=bool), ref, np.zeros(50, dtype=bool))
         assert counts == {"n_pos_beyond": 0, "n_neg_beyond": 0}
+
+    @pytest.mark.parametrize("n_ref", [0, 1, 5, 18, 19, 20, 21, 39, 40, 41, 100, 257])
+    def test_the_cut_is_the_rank_against_the_reference(self, n_ref):
+        # One distance per class stands in for the reference: past it exactly
+        # when (1 + #{ref >= a}) / (n_ref + 1) < alpha, ties included.
+        rng = np.random.default_rng(100 + n_ref)
+        d = 8
+        pos = _cluster(rng, _basis(d, 0), 6, spread=0.3)
+        neg = _cluster(rng, _basis(d, 1), 6, spread=0.3)
+        ref = _cluster(rng, _basis(d, 0), n_ref, spread=0.3) if n_ref else np.zeros((0, d), dtype=np.float32)
+        # Queries include the references themselves, so every tie is exercised.
+        queries = np.vstack([_cluster(rng, _basis(d, 0), 300, spread=0.4), ref])
+        cutoffs = reference_cutoffs(pos, neg, ref, np.ones(n_ref, dtype=bool))
+        got = beyond_reference(pos, neg, queries, np.ones(len(queries), dtype=bool), cutoffs)
+        a_ref = _kth_nn_distance(_unit(ref), _unit(pos), 1) if n_ref else np.zeros(0, dtype=np.float32)
+        a_q = _kth_nn_distance(_unit(queries), _unit(pos), 1)
+        want = np.array([(1 + int(np.sum(a_ref >= a))) / (n_ref + 1) < 0.05 for a in a_q])
+        assert np.array_equal(got, want)
+        assert cutoffs["n_pos"] == n_ref and cutoffs["n_neg"] == 0 and cutoffs["cut_neg"] is None
+        assert (cutoffs["cut_pos"] is None) == (n_ref < 20)
+
+    def test_the_cuts_survive_a_json_round_trip(self):
+        import json
+
+        rng = np.random.default_rng(16)
+        d = 8
+        pos = _cluster(rng, _basis(d, 0), 6, spread=0.3)
+        neg = _cluster(rng, _basis(d, 1), 6, spread=0.3)
+        ref = np.vstack([_cluster(rng, _basis(d, 0), 60, spread=0.3), _cluster(rng, _basis(d, 1), 90, spread=0.3)])
+        called = np.array([True] * 60 + [False] * 90)
+        cutoffs = reference_cutoffs(pos, neg, ref, called)
+        assert json.loads(json.dumps(cutoffs)) == cutoffs
+        assert np.array_equal(
+            beyond_reference(pos, neg, ref, called, cutoffs),
+            beyond_reference(pos, neg, ref, called, json.loads(json.dumps(cutoffs))),
+        )

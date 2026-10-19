@@ -33,14 +33,20 @@ With the verdict up, two checks below it say how far the result carries:
 2. **Training-domain overlap** says how much of *this* dataset looks unlike
    the one you picked: here "**3%** of this dataset looks atypical vs
    **drawings** — largely in-domain".
-3. **Evidence coverage** says how much of the dataset the detector is calling
-   with no labelled example anything like it behind the call: here "**0%** of
-   this dataset sits in an evidence vacuum — mostly backed by labeled
-   evidence".
+3. **Evidence coverage** says how much of the dataset sits farther from the
+   detector's labelled examples than 95% of the dataset it was trained on
+   does: "**5%** of this dataset sits farther from the detector's examples
+   than 95% of **drawings** — as well covered as its training data". About
+   5% is what the training data itself reads, so 5% means the detector
+   knows these pictures as well as the ones it learned from. Until the
+   detector has been tested on the dataset it was trained on, there is
+   nothing to measure against: the chip shows the share of the dataset in
+   an evidence vacuum, "no verdict until the detector is tested on the
+   dataset it was trained on".
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />
-  <img src="../assets/trust-stats.light.webp" alt="Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="400" />
+  <img src="../assets/trust-stats.light.webp" alt="Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector's examples than its training data does" width="400" />
 </picture>
 
 The two checks answer the same question from different ends:
@@ -51,8 +57,13 @@ The two checks answer the same question from different ends:
   the detector is being asked about a different kind of picture from the
   ones it was trained on (domain shift).
 - **Evidence coverage** compares the *detector's own examples* with this
-  dataset, so it works even when you don't have the training data. A large
-  share means many calls are guesses.
+  dataset. Its yardstick is how far the training data sat from those
+  examples, which the detector records the first time you test it on the
+  dataset it was trained on, so it works afterwards even when you don't
+  have the training data, as with a detector someone sends you. A share
+  well above 5% means many calls are guesses. A new vote changes the
+  examples, so the yardstick is measured again at the next test on the
+  training data; until then the chip gives its share without a verdict.
 
 The first check also runs earlier, on its own: the moment you pick a detector
 and a dataset, before you test anything. When its verdict is *likely domain
@@ -62,7 +73,7 @@ pane. It warns once for each detector and dataset, and only when the dataset
 the detector learned from is loaded.
 
 The verdict after each figure (*largely in-domain* or *likely domain shift*;
-*mostly backed by labeled evidence* or *often calling without support*) is
+*as well covered as its training data* or *often calling without support*) is
 VTSearch's reading of it. The line under each gives the numbers behind it.
 
 ## Step 3: Read what the picks said

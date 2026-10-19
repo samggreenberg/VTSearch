@@ -82,6 +82,39 @@ def domain_shift_against(reference_id: str, active_ctx: Any) -> dict[str, Any]:
     return {"reference_dataset_id": reference_id, **domain_shift_report(atlas, np.stack(vectors))}
 
 
+def infer_training_reference(labelset: Any, active_dataset_id: str) -> tuple[str, dict[str, int]]:
+    """The loaded dataset the caller can read that holds most of *labelset*'s labels, and every count.
+
+    :func:`~vtscore.detectors.training_domain.infer_training_dataset` over the
+    loaded, readable datasets, the active one winning a tie; ``""`` when none
+    holds any.  Both trust checks read their reference from here: the overlap
+    check compares against it, and the evidence check draws its baseline on it
+    (#5089).  The active dataset is always counted: the caller has it open.
+    """
+    from vtscore.datasets.registry import can_user_access, get_dataset, get_loaded_ids
+    from vtscore.detectors.training_domain import infer_training_dataset, labels_held_by_dataset
+    from vtscore.state.core import get_active_context, get_context
+    from vtsearch.auth import get_current_user
+
+    user = get_current_user()
+    contexts = [
+        ctx
+        for dataset_id in sorted(get_loaded_ids())
+        if get_dataset(dataset_id) is not None
+        and can_user_access(dataset_id, user)
+        and (ctx := get_context(dataset_id)) is not None
+    ]
+    active_ctx = get_active_context()
+    if (
+        active_dataset_id
+        and active_ctx.dataset_id == active_dataset_id
+        and all(ctx.dataset_id != active_dataset_id for ctx in contexts)
+    ):
+        contexts.append(active_ctx)
+    counts = labels_held_by_dataset(labelset, contexts)
+    return infer_training_dataset(counts, prefer=active_dataset_id), counts
+
+
 def training_domain_check() -> dict[str, Any]:
     """The overlap check for the active detector on the active dataset, against the dataset it was trained on.
 
@@ -94,17 +127,14 @@ def training_domain_check() -> dict[str, Any]:
     counts ride along either way, so the caller can say what the reference
     rests on.
     """
-    from vtscore.datasets.registry import can_user_access, get_dataset, get_loaded_ids
+    from vtscore.datasets.registry import get_dataset
     from vtscore.detectors.learned_sort import resolve_active_labelset
-    from vtscore.detectors.training_domain import infer_training_dataset, labels_held_by_dataset
     from vtscore.state.core import (
         get_active_context,
         get_active_detector_context,
-        get_context,
         is_request_missing_dataset_context,
         is_request_missing_detector_context,
     )
-    from vtsearch.auth import get_current_user
 
     result: dict[str, Any] = {
         "reference_dataset_id": "",
@@ -132,16 +162,7 @@ def training_domain_check() -> dict[str, Any]:
         return unavailable("The detector has no labelled examples")
     result["labels_total"] = labels_total
 
-    user = get_current_user()
-    contexts = [
-        ctx
-        for dataset_id in sorted(get_loaded_ids())
-        if get_dataset(dataset_id) is not None
-        and can_user_access(dataset_id, user)
-        and (ctx := get_context(dataset_id)) is not None
-    ]
-    counts = labels_held_by_dataset(labelset, contexts)
-    reference_id = infer_training_dataset(counts, prefer=active_ctx.dataset_id)
+    reference_id, counts = infer_training_reference(labelset, active_ctx.dataset_id)
     result["labels_in_active"] = counts.get(active_ctx.dataset_id, 0)
     if not reference_id:
         return unavailable("None of the loaded datasets holds the detector's labelled examples")

@@ -32,8 +32,17 @@ For each active-dataset item ``x`` with predicted class ``ŷ``, two signals:
   ``TS < 1`` means ``x`` is closer to what userA labeled as the opposite class
   than to its own predicted class — a suspect call even inside a dense region.
 
+The **verdict** reads neither against ``alpha`` directly (#5089).  ``D``'s null
+assumes ``x`` is exchangeable with the labelled evidence, and active learning
+picks the votes, so it is not: on #4739's bench the share with ``D < alpha``
+fired on 81% of in-domain runs by vote 150.  The verdict ranks the same
+distances against the training haystack's own instead
+(:func:`reference_cutoffs`, :func:`beyond_reference`), whose null is "drawn as
+the training haystack was"; with no haystack to rank against it draws none.
+
 Both are pure geometry over unit-normalized embeddings; nothing here is
-persisted and nothing needs a GPU.  §3 of the plan argues decision support is
+persisted (the two cuts :func:`reference_cutoffs` returns are recorded by
+:mod:`vtscore.detectors.evidence_baseline`) and nothing needs a GPU.  §3 of the plan argues decision support is
 the *primary* signal and typicality secondary, so this v0 buys the more
 important half of the quadrant picture with zero new infrastructure.
 """
@@ -41,6 +50,8 @@ important half of the quadrant picture with zero new infrastructure.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 
@@ -189,6 +200,96 @@ def unsupported_counts(
     }
 
 
+def _beyond_rank(n_ref: int, alpha: float) -> int:
+    """How many of *n_ref* reference distances may sit at or past a query's for it still to read ``p < alpha``.
+
+    The largest ``r`` with ``(1 + r) / (n_ref + 1) < alpha``, the support
+    p-value's own expression, so a cutoff drawn from it agrees with ranking the
+    query among the references; ``-1`` when no ``r`` qualifies (fewer than
+    ``1 / alpha - 1`` references: nothing can read beyond them).
+    """
+    r = max(int(math.floor(alpha * (n_ref + 1))) - 1, -1)
+    while r >= 0 and (1 + r) / (n_ref + 1) >= alpha:
+        r -= 1
+    while r + 1 <= n_ref and (2 + r) / (n_ref + 1) < alpha:
+        r += 1
+    return r
+
+
+def reference_cutoffs(
+    pos_vectors: np.ndarray,
+    neg_vectors: np.ndarray,
+    reference_matrix: np.ndarray,
+    reference_positive: np.ndarray,
+    k: int = DEFAULT_K,
+    alpha: float = DEFAULT_ALPHA,
+) -> dict[str, float | int | None]:
+    """The distance past which an item reads farther from its class's votes than a reference corpus does (#5089).
+
+    The support p-value of :func:`support_pvalues` with the calibration set
+    swapped: an item's k-th NN distance to its predicted class's labelled
+    evidence is ranked against the same distance of every *reference_matrix*
+    item called that class (*reference_positive*), ``p = (1 + #{ref >= a(x)}) /
+    (n_ref + 1)``.  With the haystack the votes came from as the reference, the
+    null is "drawn as the training haystack's items were", which the votes' own
+    leave-one-out spread is not: active learning picks the votes, so they are no
+    sample of the class, and the leave-one-out reading fires on most in-domain
+    datasets once the votes are many (#5089).
+
+    ``p < alpha`` holds exactly when ``a(x)`` exceeds one reference distance per
+    class, so the reference reduces to that distance: ``cut_pos`` / ``cut_neg``,
+    with the counts it was drawn from (``n_pos`` / ``n_neg``).  A class the
+    reference calls too rarely to reach *alpha* (fewer than ``1 / alpha - 1``
+    items) has ``None``: nothing of it reads beyond.  Plain floats, so the cut
+    survives a JSON round trip unchanged.
+    """
+    pos = _normalize(pos_vectors)
+    neg = _normalize(neg_vectors)
+    refs = _normalize(reference_matrix)
+    r_pos = np.asarray(reference_positive, dtype=bool)
+    out: dict[str, float | int | None] = {"n_pos": 0, "n_neg": 0, "cut_pos": None, "cut_neg": None}
+    if refs.shape[0] == 0:
+        return out
+    for side, evidence, mask in (("pos", pos, r_pos), ("neg", neg, ~r_pos)):
+        n_ref = int(mask.sum())
+        out[f"n_{side}"] = n_ref
+        rank = _beyond_rank(n_ref, alpha)
+        if rank < 0:
+            continue
+        a_desc = np.sort(_kth_nn_distance(refs[mask], evidence, k))[::-1]
+        out[f"cut_{side}"] = float(a_desc[rank])
+    return out
+
+
+def beyond_reference(
+    pos_vectors: np.ndarray,
+    neg_vectors: np.ndarray,
+    query_matrix: np.ndarray,
+    predicted_positive: np.ndarray,
+    cutoffs: Mapping[str, Any],
+    k: int = DEFAULT_K,
+) -> np.ndarray:
+    """Per query, whether it sits farther from its predicted class's votes than the reference's cut (#5089).
+
+    *cutoffs* is :func:`reference_cutoffs`' result (or the stored copy of it);
+    a class without a cut reads ``False`` throughout.
+    """
+    queries = _normalize(query_matrix)
+    predicted_positive = np.asarray(predicted_positive, dtype=bool)
+    out = np.zeros(queries.shape[0], dtype=bool)
+    if queries.shape[0] == 0:
+        return out
+    for side, evidence, mask in (
+        ("pos", _normalize(pos_vectors), predicted_positive),
+        ("neg", _normalize(neg_vectors), ~predicted_positive),
+    ):
+        cut = cutoffs.get(f"cut_{side}")
+        if cut is None or not mask.any():
+            continue
+        out[mask] = _kth_nn_distance(queries[mask], evidence, k) > np.float32(cut)
+    return out
+
+
 def reference_vacuum_counts(
     pos_vectors: np.ndarray,
     neg_vectors: np.ndarray,
@@ -199,36 +300,17 @@ def reference_vacuum_counts(
     k: int = DEFAULT_K,
     alpha: float = DEFAULT_ALPHA,
 ) -> dict[str, int]:
-    """How many queries sit farther from their predicted class's evidence than a reference corpus's items do (#5089).
+    """How many queries of each predicted class read beyond *reference_matrix* (:func:`reference_cutoffs`).
 
-    The support p-value of :func:`support_pvalues` with the calibration set
-    swapped: each query's k-th NN distance to its predicted class's labelled
-    evidence is ranked against the same distance of every *reference_matrix*
-    item called that class (*reference_positive*), ``p = (1 + #{ref >= a(x)}) /
-    (n_ref + 1)``.  With the haystack the votes came from as the reference, the
-    null is "drawn as the training haystack's items were", which the votes'
-    own leave-one-out spread is not: active learning picks the votes, so they
-    are no sample of the class.  Returns ``n_pos_beyond`` and ``n_neg_beyond``,
-    the predicted positives and negatives with ``p < alpha``.  A class the
-    reference never calls has no spread to rank against, and reads ``p = 1``.
+    Returns ``n_pos_beyond`` and ``n_neg_beyond``.
     """
-    pos = _normalize(pos_vectors)
-    neg = _normalize(neg_vectors)
-    queries = _normalize(query_matrix)
-    refs = _normalize(reference_matrix)
-    q_pos = np.asarray(predicted_positive, dtype=bool)
-    r_pos = np.asarray(reference_positive, dtype=bool)
-    out = {"n_pos_beyond": 0, "n_neg_beyond": 0}
-    if queries.shape[0] == 0:
-        return out
-    for name, evidence, q_mask, r_mask in (("n_pos_beyond", pos, q_pos, r_pos), ("n_neg_beyond", neg, ~q_pos, ~r_pos)):
-        if not q_mask.any() or not r_mask.any():
-            continue
-        a_query = _kth_nn_distance(queries[q_mask], evidence, k)
-        a_ref = np.sort(_kth_nn_distance(refs[r_mask], evidence, k))
-        ge = a_ref.shape[0] - np.searchsorted(a_ref, a_query, side="left")
-        out[name] = int(np.sum((1 + ge) / (a_ref.shape[0] + 1) < alpha))
-    return out
+    cutoffs = reference_cutoffs(pos_vectors, neg_vectors, reference_matrix, reference_positive, k, alpha)
+    predicted_positive = np.asarray(predicted_positive, dtype=bool)
+    beyond = beyond_reference(pos_vectors, neg_vectors, query_matrix, predicted_positive, cutoffs, k)
+    return {
+        "n_pos_beyond": int((beyond & predicted_positive).sum()),
+        "n_neg_beyond": int((beyond & ~predicted_positive).sum()),
+    }
 
 
 def trust_scores(
@@ -254,6 +336,18 @@ def trust_scores(
     return (d_other / np.maximum(d_pred, _EPS)).astype(np.float32)
 
 
+#: :func:`evidence_coverage_report`'s ``baseline``: the verdict ranked against the training haystack's own distances.
+BASELINE_TRAINING = "training"
+#: ... and with no training baseline to rank against: the share is reported, no verdict is drawn.
+BASELINE_NONE = "none"
+
+
+def _excess_z(frac: float, n: int, alpha: float) -> float:
+    """Binomial z of a share *frac* of *n* items over its expectation *alpha*."""
+    se = math.sqrt(alpha * (1.0 - alpha) / n) if n > 0 else 0.0
+    return (frac - alpha) / se if se > 0 else 0.0
+
+
 def evidence_coverage_report(
     pos_vectors: np.ndarray,
     neg_vectors: np.ndarray,
@@ -261,24 +355,41 @@ def evidence_coverage_report(
     predicted_positive: np.ndarray,
     k: int = DEFAULT_K,
     alpha: float = DEFAULT_ALPHA,
+    baseline: Mapping[str, Any] | None = None,
 ) -> dict:
     """Summarise evidence coverage of *query_matrix* under a detector's labelset.
 
     *pos_vectors* / *neg_vectors* are the detector's labeled Good / Bad
     embeddings (from ``DetectorContext.label_embeddings``); *query_matrix* holds
     one embedding per scored active-dataset item and *predicted_positive* its
-    per-item predicted class (``find_score >= threshold``).
+    per-item predicted class (``find_score >= threshold``).  *baseline* is the
+    training haystack's :func:`reference_cutoffs`, or ``None`` when there is none
+    to rank against.
 
     Returns a dict with ``n_items``, ``k``, ``alpha``, ``n_pos_labels``,
     ``n_neg_labels``, ``frac_unsupported`` (share with support p-value ``D <
-    alpha`` — an evidence vacuum for the predicted class), ``expected_unsupported``
-    (``= alpha``), ``z_score`` (binomial z of the excess), ``median_support``
-    (median ``D``), ``frac_low_trust`` (share with ``TS < 1`` — closer to the
-    other class's evidence), ``median_trust`` (median ``TS``), and
-    ``unsupported`` (headline: the excess of vacuum items is both statistically
-    clear, ``z > 3``, and practically large, at least ``2 * alpha``).  Mirrors
-    :func:`~vtscore.coverage.atlas.domain_shift_report` so the two read on
-    one scale.
+    alpha`` — an evidence vacuum for the predicted class, calibrated on the
+    votes' own spread), ``expected_unsupported`` (``= alpha``), ``z_score``
+    (binomial z of its excess), ``median_support`` (median ``D``),
+    ``frac_low_trust`` (share with ``TS < 1`` — closer to the other class's
+    evidence), ``median_trust`` (median ``TS``), and the verdict's reading:
+    ``baseline`` (:data:`BASELINE_TRAINING` or :data:`BASELINE_NONE`),
+    ``n_baseline`` (the training items the cuts were drawn from),
+    ``frac_beyond`` (share farther from its predicted class's votes than 95% of
+    the training haystack's items called that class, :func:`beyond_reference`;
+    ``None`` without a baseline), ``z_beyond`` (its binomial z) and
+    ``unsupported`` (headline: that excess is both statistically clear, ``z >
+    3``, and practically large, at least ``2 * alpha``).
+
+    **Why the verdict needs the baseline (#5089).**  The votes are picked by
+    active learning, so they are no sample of their class, and their
+    leave-one-out spread is no null for a haystack item's distance: on #4739's
+    bench the ``frac_unsupported`` reading fired on 81% of in-domain runs by
+    vote 150.  Ranked against the training haystack's own items it reads
+    ``alpha`` in-domain, and on a foreign corpus fires from vote 10.  Without a
+    baseline ``unsupported`` is ``False``: the share is reported, no verdict is
+    drawn from it.  Mirrors :func:`~vtscore.coverage.atlas.domain_shift_report`
+    so the two read on one scale.
     """
     pos = _normalize(pos_vectors)
     neg = _normalize(neg_vectors)
@@ -287,6 +398,12 @@ def evidence_coverage_report(
     n_pos = int(pos.shape[0])
     n_neg = int(neg.shape[0])
     n = int(queries.shape[0])
+    has_baseline = baseline is not None
+    n_baseline = int(baseline.get("n_pos", 0)) + int(baseline.get("n_neg", 0)) if baseline is not None else 0
+    reading = {
+        "baseline": BASELINE_TRAINING if has_baseline else BASELINE_NONE,
+        "n_baseline": n_baseline,
+    }
 
     if n == 0:
         return {
@@ -301,6 +418,9 @@ def evidence_coverage_report(
             "median_support": 1.0,
             "frac_low_trust": 0.0,
             "median_trust": 1.0,
+            **reading,
+            "frac_beyond": 0.0 if has_baseline else None,
+            "z_beyond": 0.0 if has_baseline else None,
             "unsupported": False,
         }
 
@@ -308,8 +428,13 @@ def evidence_coverage_report(
     ts = trust_scores(queries, pos, neg, predicted_positive, k)
 
     frac_unsupported = float(np.mean(d < alpha))
-    se = math.sqrt(alpha * (1.0 - alpha) / n)
-    z = (frac_unsupported - alpha) / se if se > 0 else 0.0
+    frac_beyond: float | None = None
+    z_beyond: float | None = None
+    unsupported = False
+    if baseline is not None:
+        frac_beyond = float(np.mean(beyond_reference(pos, neg, queries, predicted_positive, baseline, k)))
+        z_beyond = _excess_z(frac_beyond, n, alpha)
+        unsupported = bool(z_beyond > 3.0 and frac_beyond >= 2.0 * alpha)
     return {
         "n_items": n,
         "k": k,
@@ -318,9 +443,12 @@ def evidence_coverage_report(
         "n_neg_labels": n_neg,
         "frac_unsupported": frac_unsupported,
         "expected_unsupported": alpha,
-        "z_score": z,
+        "z_score": _excess_z(frac_unsupported, n, alpha),
         "median_support": float(np.median(d)),
         "frac_low_trust": float(np.mean(ts < 1.0)),
         "median_trust": float(np.median(ts)),
-        "unsupported": bool(z > 3.0 and frac_unsupported >= 2.0 * alpha),
+        **reading,
+        "frac_beyond": frac_beyond,
+        "z_beyond": z_beyond,
+        "unsupported": unsupported,
     }
