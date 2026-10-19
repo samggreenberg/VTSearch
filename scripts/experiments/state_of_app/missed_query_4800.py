@@ -3,7 +3,8 @@
 
 Since #4758 a typed-query detector's Find gives the typed query's own set until the label quota. On the Region path
 #4758 read the Goods' centroid, built from a Good's own box, as the better set on the votes where the typed query
-has **missed**: the Bads quota met before the Goods quota (``n_good < GOOD_QUOTA`` and ``n_bad >= BAD_QUOTA``).
+has missed: the Bads quota met before the Goods quota. What shipped calls the query **missed** at its first Bad
+before the Goods quota (``n_good < GOOD_QUOTA`` and ``n_bad >= QUERY_MISS_BADS``, :func:`_missed`).
 ``missed_query_4800.sh`` runs Region's sessions at beta 1 with every candidate set as tagged rows at every vote under
 the quota (``CALIB_CENTROID_LINE_VARIANTS``): the typed query's set at each balance (``query@<beta>``) and the
 centroid at the app's rule over the withheld half and over the unvoted media (``<rule>~unvoted@<beta>``).
@@ -16,8 +17,8 @@ from a run cut at H votes once no vote past H could be named (``checks.json`` sa
 vote under the quota with a Good and fewer than 3 Goods holds at most 2 Goods and 15 Bads, so every design but
 ``centroid`` and ``oracle`` is exact from H = 17.
 
-Designs (``DESIGNS``): ``missed`` is #4800's rule; ``missed_1good`` takes the centroid only with 1 Good;
-``bads3`` / ``bads2`` / ``bads1`` fall back earlier (3, 2 or 1 Bads before the Goods quota); ``centroid`` is the centroid at every
+Designs (``DESIGNS``): ``missed`` is the shipped rule (the first Bad); ``bads4`` waits for the Bads quota, the rule
+#4800 named, and ``bads3`` / ``bads2`` fall in between; ``missed_1good`` takes the centroid only with 1 Good; ``centroid`` is the centroid at every
 vote with a Good (the design before #4758, inexact past H when a run still waits for its 4th Bad there); ``oracle``
 takes the better set at every such vote (the headroom, not a rule).
 
@@ -53,7 +54,13 @@ from analyze_centroid_line_4732 import _carry, _mean_se  # noqa: E402
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULE  # noqa: E402
-from vtscore.detectors.label_quota import BAD_QUOTA, GOOD_QUOTA, TIER_CENTROID, label_quota  # noqa: E402
+from vtscore.detectors.label_quota import (  # noqa: E402
+    BAD_QUOTA,
+    GOOD_QUOTA,
+    QUERY_MISS_BADS,
+    TIER_CENTROID,
+    label_quota,
+)
 from vtscore.eval.voting_iterations import QUERY_LINE_VARIANT, centroid_line_tag  # noqa: E402
 
 BETAS = (0.25, 1.0, 4.0)
@@ -64,7 +71,7 @@ COLS = ["t", "beta", "fbeta", "precision", "recall", "n_flagged", "detector_tier
 PICK_COLS = ["seed", "dataset", "category", "embedder", "t", "phase", "picked_id", "picked_label", "n_good", "n_bad"]
 
 
-def _missed(g: np.ndarray, b: np.ndarray, bads: int = BAD_QUOTA) -> np.ndarray:
+def _missed(g: np.ndarray, b: np.ndarray, bads: int = QUERY_MISS_BADS) -> np.ndarray:
     return (g < GOOD_QUOTA) & (b >= bads)
 
 
@@ -72,9 +79,9 @@ def _missed(g: np.ndarray, b: np.ndarray, bads: int = BAD_QUOTA) -> np.ndarray:
 DESIGNS = {
     "missed": lambda g, b: _missed(g, b),
     "missed_1good": lambda g, b: _missed(g, b) & (g == 1),
-    "bads3": lambda g, b: _missed(g, b, 3),
     "bads2": lambda g, b: _missed(g, b, 2),
-    "bads1": lambda g, b: _missed(g, b, 1),
+    "bads3": lambda g, b: _missed(g, b, 3),
+    "bads4": lambda g, b: _missed(g, b, BAD_QUOTA),
     "centroid": lambda g, b: np.ones_like(g, dtype=bool),
 }
 ORACLE = "oracle"
@@ -288,7 +295,7 @@ def breakdown(votes: pd.DataFrame) -> list[str]:
     ]
     m = v[v["missed"]]
     for (corpus, beta, nb), h in m.groupby(
-        ["corpus", "beta", pd.cut(m["n_bad"], [3, 5, 8, 11, 15], right=True)], observed=True
+        ["corpus", "beta", pd.cut(m["n_bad"], [0, 1, 3, 5, 8, 11, 15], right=True)], observed=True
     ):
         if len(h):
             out.append(
@@ -443,8 +450,9 @@ def main() -> None:
         f"# #4800: the region centroid once the typed query has missed (H = {args.horizon} votes)",
         "",
         "Each design minus today (the typed query's set at every vote under the quota), paired per run, session mean "
-        "over each span; SE clusters on the category. `missed` gives the centroid once the Bads quota is met before "
-        "the Goods quota; `oracle` takes the better set at every vote under the quota with a Good.",
+        "over each span; SE clusters on the category. `missed` gives the centroid from the first Bad before the Goods "
+        "quota (shipped); `bads4` once the Bads quota is met first; `oracle` takes the better set at every vote under "
+        "the quota with a Good.",
         "",
         "| corpus | beta | design | runs | runs with missed votes | 1-10 | 1-50 | 1-150 |",
         "|---|---|---|---|---|---|---|---|",

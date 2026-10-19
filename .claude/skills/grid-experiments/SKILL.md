@@ -570,7 +570,7 @@ quota instead, from its first vote (`detector_tier` `query`; `CALIB_QUERY_TIER=0
 is the arm before), and since #4736 on a single-vector space past the quota
 until 30 votes (`app_trained` 0 there, the head's rows tagged `hold:head`;
 `CALIB_QUERY_HOLD=0` is the arm before), and on a patch space once the query has
-missed (4 Bads before 3 Goods) the Goods' centroid until the quota (#4800;
+missed (a Bad before its third Good) the Goods' centroid until the quota (#4800;
 `CALIB_QUERY_MISS=0` is the arm before). The harness
 writes each row as that detector and names it in `detector_tier`, which
 neither module reads either. A report that scores the *session* filters on

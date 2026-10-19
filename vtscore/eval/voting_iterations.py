@@ -3408,8 +3408,8 @@ def simulate_voting_iterations(  # noqa: C901
             place of the typed query's set once the query has missed on a
             patch space, as the app's does (#4800,
             :func:`~vtscore.detectors.label_quota.query_missed`): under the
-            quota, a Good in hand and the Bads quota met before the Goods
-            quota, on a run whose media carry a patch grid (*region_aware*).
+            quota, a Good in hand and a Bad before the Goods quota, on a run
+            whose media carry a patch grid (*region_aware*).
             ``True`` - the default - is the app; ``False`` is the arm before
             (the typed query's set until the quota).  The click's untagged row
             is then the centroid's (``detector_tier = "centroid"``).  Picks

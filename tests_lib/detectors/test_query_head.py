@@ -460,23 +460,30 @@ def patch_space(monkeypatch):
     monkeypatch.setattr(training, "_patch_space_for", lambda name: True if name == EMBEDDER else None)
 
 
-MISSED = ([1], [40, 41, 42, 43])  # a Good, and the Bads quota met before the Goods quota
+MISSED = ([1], [40])  # a Good, and a Bad before the Goods quota
 
 
 class TestTheQueryMiss:
     """On a patch space, once the typed query has missed, the Goods' centroid answers until the quota."""
 
     def test_the_rule_reads_the_counts_and_the_space_only(self):
-        from vtscore.detectors.label_quota import BAD_QUOTA, DRY_BAD_QUOTA, GOOD_QUOTA, query_missed
+        from vtscore.detectors.label_quota import (
+            BAD_QUOTA,
+            DRY_BAD_QUOTA,
+            GOOD_QUOTA,
+            QUERY_MISS_BADS,
+            query_missed,
+        )
 
-        assert query_missed(1, BAD_QUOTA, patch_space=True)
+        assert QUERY_MISS_BADS == 1, "the first Bad, the owner's choice over the Bads quota"
+        assert query_missed(1, QUERY_MISS_BADS, patch_space=True)
         assert query_missed(GOOD_QUOTA - 1, DRY_BAD_QUOTA - 1, patch_space=True)
-        assert not query_missed(1, BAD_QUOTA - 1, patch_space=True), "the Bads quota is not met yet"
+        assert not query_missed(1, 0, patch_space=True), "no Bad yet: the query is the better set"
         assert not query_missed(0, BAD_QUOTA, patch_space=True), "no Good to centre on"
         assert not query_missed(GOOD_QUOTA, BAD_QUOTA - 1, patch_space=True), "the Goods quota came first"
         assert not query_missed(1, DRY_BAD_QUOTA, patch_space=True), "the second quota's trained head"
-        assert not query_missed(1, BAD_QUOTA, patch_space=False), "a single-vector space keeps the query"
-        assert not query_missed(1, BAD_QUOTA, patch_space=None), "so does an unknown one"
+        assert not query_missed(1, QUERY_MISS_BADS, patch_space=False), "a single-vector space keeps the query"
+        assert not query_missed(1, QUERY_MISS_BADS, patch_space=None), "so does an unknown one"
 
     @pytest.mark.usefixtures("patch_space")
     def test_once_the_query_has_missed_the_detector_is_the_centroid(self, world):
@@ -489,7 +496,7 @@ class TestTheQueryMiss:
         assert cached_head_is_current(ctx, ls, QUERY), "the centroid is what this detector gives now"
 
     @pytest.mark.usefixtures("patch_space")
-    @pytest.mark.parametrize(("goods", "bads"), [([], [40, 41, 42, 43]), ([1], [40, 41, 42]), ([1, 2, 3], [40])])
+    @pytest.mark.parametrize(("goods", "bads"), [([], [40, 41, 42, 43]), ([1], []), ([1, 2], []), ([1, 2, 3], [40])])
     def test_before_the_miss_the_detector_is_its_query(self, world, goods, bads):
         snap, _proto, make, _embedded = world
         ctx = _ctx()

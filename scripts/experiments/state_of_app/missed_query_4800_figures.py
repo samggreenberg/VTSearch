@@ -2,11 +2,12 @@
 """#4800's figure: on the Region path, the region centroid against the typed query once the query has missed.
 
 Reads ``curves.csv`` from ``missed_query_4800.py`` and writes ``fig_missed_query.png``: one row per balance (beta
-1/4, 1, 4). The left column is F-beta at each vote over the runs whose typed query has missed there (the Bads quota
-met before 3 Goods): the typed query's own set, which Find gives today, and the centroid built from the Goods' own
+1/4, 1, 4). The left column is F-beta at each vote over the runs whose typed query has missed there (a Bad before 3
+Goods): the typed query's own set, which Find gives today, and the centroid built from the Goods' own
 boxes, on the same runs, with the share of runs in that state as grey bars. The right column is each design minus
-today over every run (zero wherever the designs agree): the centroid once the query has missed, and the better of the
-two sets at every vote under the quota (the headroom, which no rule reads).
+today over every run (zero wherever the designs agree): the centroid from the first Bad (shipped), the centroid once
+the Bads quota is met first (the rule #4800 named), and the better of the two sets at every vote under the quota (the
+headroom, which no rule reads).
 
 Usage::
 
@@ -56,7 +57,8 @@ def figure(curves: pd.DataFrame, corpus: str, out: Path, max_t: int, name: str) 
         ax.set_ylim(0, 0.5)
         ax.set_ylabel(f"{bname}: F-beta", fontsize=9)
         bx.plot(c["t"], c["d_oracle"], color=ORACLE, lw=1.4, ls="--", label="the better set at every vote (headroom)")
-        bx.plot(c["t"], c["d_missed"], color=CENTROID, lw=2.2, label="the centroid once the query has missed")
+        bx.plot(c["t"], c["d_bads4"], color=CENTROID, lw=1.2, ls=":", label="... once the Bads quota is met first")
+        bx.plot(c["t"], c["d_missed"], color=CENTROID, lw=2.2, label="the centroid from the first Bad (shipped)")
         bx.axhline(0, color=INK2, lw=0.8)
         bx.grid(axis="y", color=GRID, lw=0.8)
         bx.set_ylabel(f"{bname}: minus today", fontsize=9)

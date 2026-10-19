@@ -587,8 +587,8 @@ payload reports it as `query_hold`, so the Train view keeps the text sort on
 screen while Autopilot asks from the head.
 `query_missed(n_good, n_bad, *, patch_space)` is the typed query's miss
 (#4800): on a known patch space (`patch_space` `True`), under the quota with a
-Good but fewer than `GOOD_QUOTA` and at least `BAD_QUOTA` Bads (the Bads quota
-met first), a typed-query detector gives the Goods' centroid in place of its
+Good but fewer than `GOOD_QUOTA` and at least `QUERY_MISS_BADS` (1) Bads (a Bad
+before the Goods quota), a typed-query detector gives the Goods' centroid in place of its
 query. `_query_tier` reads it (the centroid only where a Good resolved), and
 `cached_head_is_current` takes a cached centroid there and refuses a cached
 query head. `served_quota` reports such a detector's tier as `centroid`.

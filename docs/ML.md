@@ -62,7 +62,7 @@ counts (#4643, `vtscore/detectors/label_quota.py`):
 | Labels | Detector | Detector made from a typed query (#4758) |
 |---|---|---|
 | no Good | none: Test is refused, there is nothing to sort toward | **the typed query's own set** |
-| a Good, but under both quotas below | **the Goods' centroid** | **the typed query's own set**; on a patch space, once the query has missed (the Bads quota before the Goods quota), the Goods' centroid (#4800) |
+| a Good, but under both quotas below | **the Goods' centroid** | **the typed query's own set**; on a patch space, once the query has missed (a Bad before the third Good), the Goods' centroid (#4800) |
 | 3 Goods and 4 Bads | the trained head above | the trained head above; on a single-vector space the typed query's own set until 30 labels (#4736) |
 | a Good and 16 Bads | the trained head above (#4731) | the same as at 3 Goods and 4 Bads |
 
@@ -168,17 +168,21 @@ votes 1-25, so a patch space, or an embedder the registry does not know
 (`training._patch_space_for`), hands over at the quota.
 
 **On a patch space the Goods' centroid answers once the typed query has missed
-(#4800).** A typed query that turned up 4 Bads before its third Good has
-visibly missed, and on the Region path the centroid of the Goods' own boxes is
-then the better set: on those votes it scored 0.18 to 0.38 F-beta against the
-query's 0.08 to 0.29 (864 sessions, beta 1/4, 1 and 4). Before the miss the query's
-set is the better one (0.41 to 0.72 against the centroid's 0.33 to 0.62), so a typed-query detector on a patch space
-gives the centroid only from the miss to the quota (`label_quota.query_missed`:
-a Good but fewer than 3, and 4 to 15 Bads). That gains +0.009 / +0.006 / +0.008
-over votes 1-10 and +0.005 / +0.003 / +0.004 over 1-50 at beta 1/4, 1 and 4, all
-in the fifth of sessions whose query misses (`docs/experiments/2026-10-19-region-missed-query-4800`). A single-vector space keeps
-the query: on COCO Better's Binary opening the same rule was worth under 0.003
-either way (#4758). Like the hold, it changes what Test, Find, AutoFind, a
+(#4800).** A typed query that turned up a Bad before its third Good has
+missed, and on the Region path the centroid of the Goods' own boxes is then
+the better set: on those votes it scored 0.22 to 0.37 F-beta against the
+query's 0.14 to 0.26 (864 sessions, beta 1/4, 1 and 4). Before any Bad, and
+once the query has given 3 Goods, the query's set is the better one (0.52 to
+0.72 against the centroid's 0.37 to 0.62). So a typed-query detector on a patch
+space gives the centroid only from that Bad to the quota
+(`label_quota.query_missed`: a Good but fewer than 3, and 1 to 15 Bads,
+`QUERY_MISS_BADS`). That gains +0.011 / +0.009 / +0.012 over votes 1-10 and
++0.005 / +0.004 / +0.005 over 1-50 at beta 1/4, 1 and 4, all in the third of
+sessions whose query misses
+(`docs/experiments/2026-10-19-region-missed-query-4800`). Waiting for the Bads
+quota (4) instead gained 0.0005-0.0009 less over votes 1-50. A single-vector
+space keeps the query: on COCO Better's Binary opening the 4-Bad rule was
+worth under 0.003 either way (#4758). Like the hold, it changes what Test, Find, AutoFind, a
 load, an export and the CLI give, never what Autopilot asks.
 
 ## Training Configuration

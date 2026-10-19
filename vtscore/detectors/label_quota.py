@@ -72,12 +72,12 @@ learned sort is the head either way: the hold changes what is shown, never
 what Autopilot asks.
 
 **The typed query's miss (#4800).**  On a patch space, once the typed query has
-missed - the Bads quota met before the Goods quota, :func:`query_missed` - a
-typed-query detector gives the Goods' centroid in place of its query, until the
-quota.  The query's top turned up Bads first, and the centroid of the Goods'
-own boxes is then the better set; before the miss the query's is.  On the
-Region path (864 sessions) that gains +0.006 F-beta over votes 1-10 and +0.003
-over 1-50 at beta 1, and more at 1/4 and 4
+missed - a Bad before the Goods quota, :func:`query_missed` - a typed-query
+detector gives the Goods' centroid in place of its query, until the quota.  The
+query's top turned up a Bad before its third Good, and the centroid of the
+Goods' own boxes is then the better set; before the miss the query's is.  On
+the Region path (864 sessions) that gains +0.009 F-beta over votes 1-10 and
++0.004 over 1-50 at beta 1, and more at 1/4 and 4
 (``docs/experiments/2026-10-19-region-missed-query-4800``).  A single-vector
 space keeps the query: there the same rule is worth nothing (#4758).  Like the hold, it changes what Find, Test and AutoFind give, never
 what Autopilot asks.
@@ -104,6 +104,11 @@ DRY_BAD_QUOTA = 16
 #: Labels through which a typed-query detector on a single-vector space keeps giving its
 #: query's own set past the quota (#4736): :func:`query_holds`.
 QUERY_HOLD_LABELS = 30
+
+#: Bads before the Goods quota at which a typed query on a patch space has missed (#4800):
+#: :func:`query_missed`.  The first Bad: the owner's choice over the Bads quota (4), which
+#: gained 0.0005-0.0009 less over votes 1-50 on the same sessions.
+QUERY_MISS_BADS = 1
 
 #: No Goods: there is nothing to sort toward, so Test is refused.
 TIER_NONE = "none"
@@ -192,15 +197,15 @@ def query_missed(n_good: int, n_bad: int, *, patch_space: bool | None) -> bool:
 
     True on a known patch space (*patch_space* ``True``) under the quota once
     the typed query has missed: a Good in hand but fewer than
-    :data:`GOOD_QUOTA`, and at least :data:`BAD_QUOTA` Bads, the Bads quota met
-    first (and fewer than :data:`DRY_BAD_QUOTA`, from which the trained head
-    answers).  A single-vector space, or one the registry does not know
-    (``None``), keeps the query.  It reads the counts only, as the quota does,
-    and says nothing about a detector without a typed query: the caller asks
-    only for one that has.
+    :data:`GOOD_QUOTA`, and at least :data:`QUERY_MISS_BADS` Bads, a Bad before
+    the Goods quota (and fewer than :data:`DRY_BAD_QUOTA`, from which the
+    trained head answers).  A single-vector space, or one the registry does not
+    know (``None``), keeps the query.  It reads the counts only, as the quota
+    does, and says nothing about a detector without a typed query: the caller
+    asks only for one that has.
     """
     n_good, n_bad = int(n_good), int(n_bad)
-    return patch_space is True and 1 <= n_good < GOOD_QUOTA and BAD_QUOTA <= n_bad < DRY_BAD_QUOTA
+    return patch_space is True and 1 <= n_good < GOOD_QUOTA and QUERY_MISS_BADS <= n_bad < DRY_BAD_QUOTA
 
 
 def labelset_quota(labelset: "LabelSet | None") -> LabelQuota:
