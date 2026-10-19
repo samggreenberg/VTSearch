@@ -122,9 +122,9 @@ same whether you checked near the line or not.
 
 Point at the chart to read the curve at any band edge; with the pointer off
 it, the line under the chart reads it at the Line. **Lean the Threshold**,
-under the verdict, puts the same reading in a table: what each balance would
-keep, the share right and the share found, and a click on one moves the
-Threshold there.
+under the verdict in the middle of the screen, puts the same reading in a
+table: what each balance would keep, the share right and the share found, and
+a click on one moves the Threshold there.
 
 ## Where the setting goes
 

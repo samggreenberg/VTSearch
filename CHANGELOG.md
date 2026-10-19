@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
+  Test view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
+  reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
+  Threshold** table, with a note over them when the result is out of date or the line has moved.
+  They used to sit part-way down the narrow result pane on the right, which now keeps the numbers
+  behind the verdict and can be folded away without hiding it.
+
 - **A server that trusts session cookies no longer signs them with the key printed in the source**
   (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
   anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's

@@ -276,9 +276,10 @@ tab, which tests the detector's line: it shows you pictures picked at random
 from either side of the line, you answer each with **Good** or **Bad**, and
 the result on the right says how much of what the detector would ship is
 likely right and how many of the real matches it likely found. Click until
-**Done!**; a few dozen answers is usual. The result panel opens on its own
-then, if you have not opened it already. Then open the **Review** tab for the
-results in full:
+**Done!**; a few dozen answers is usual. The verdict then takes the middle of
+the screen, with **Move to AutoFind** under it, and the result panel opens on
+its own, if you have not opened it already. Then open the **Review** tab for
+the results in full:
 
 1. The pictures, best match first. How many the detector calls a match (the
    pictures above its line), and how many it doesn't, is counted on the right
@@ -1414,7 +1415,7 @@ this one's.
 
 ### The result
 
-The right pane shows the result as it forms, and the verdict at Done:
+The right pane shows the result as it forms:
 
 - **Balance (F-beta)** - the one number that weighs the two kinds of mistake
   the way the Threshold does, with its likely range.
@@ -1434,12 +1435,15 @@ The right pane shows the result as it forms, and the verdict at Done:
   long tail.
 - **Picks by band** - where the picks came from and what each band said.
 
-At **Done!** the verdict reads the ranges in a sentence, and offers three
-ways out, as Toasty does when Autopilot finishes in Train:
+At **Done!** the verdict takes the middle of the screen, where the picks
+were: it reads the ranges in a sentence, and offers three ways out, as Toasty
+does when Autopilot finishes in Train. If the result is out of date, or the
+line has moved since the test, a note over the verdict says so. The right pane
+keeps the numbers behind it.
 
 - **Move to AutoFind** - the reason the test exists. The detector joins your
   AutoFind list, and you land on the Dashboard. It is offered whatever the
-  ranges say; the verdict sits beside the button.
+  ranges say; the verdict sits over the button.
 - **Lean the Threshold** - the same picks read at the line each balance would
   draw on this collection: how many each keeps, the likely share right, and
   the share found. Pick one to move the Threshold there; nothing is re-scored,
@@ -1465,7 +1469,7 @@ picks up where it left off: the kept picks come back, already in the Review
 tab's piles, and the result says when you took them, so there is nothing to
 vote again.
 
-Under the verdict, **Your checks** sets the detector's calls against the
+Under the result, **Your checks** sets the detector's calls against the
 answers the collection has now (the test's picks and anything you verified in
 Review): matches you both agree on, wrong matches you took out, matches the
 detector missed and you rescued, and the agreement rate over the whole
@@ -1473,7 +1477,7 @@ collection.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="400" />
+  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the Precision by Number Returned chart, and the picks by band" width="400" />
 </picture>
 
 ### Review
@@ -1510,7 +1514,7 @@ The action buttons let you act on the result:
 
 The result pane also answers a question the ranges can't: *which of these
 calls is the detector actually qualified to make, and will the next
-collection look like this one?* Two trust checks under the verdict flag the
+collection look like this one?* Two trust checks under the result flag the
 items to verify by hand, each reported as a percentage chip with a one-line
 verdict and a line of supporting numbers:
 

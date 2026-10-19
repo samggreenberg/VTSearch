@@ -629,7 +629,7 @@ async function openTest(page: Page, h: Helpers): Promise<void> {
 async function openFind(page: Page, h: Helpers): Promise<void> {
   await openTest(page, h);
   await testUntilDone(page, h);
-  await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+  await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
   await page.locator('.left-tab[title^="Review"]').first().click();
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await h.wait(1500);
@@ -1302,13 +1302,15 @@ export const SHOTS: Shot[] = [
     id: 'find-stats',
     embeddedIn: `${GUIDE}#testing-a-detector`,
     caption:
-      "The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart",
+      "The Test view's result pane at Done: the balance headline, the Right and Found ranges, the Precision by Number Returned chart, and the picks by band",
     themes: BOTH,
     clip: { target: '.line-test-result' },
     async recipe(page, h) {
       await openTest(page, h);
       await testUntilDone(page, h);
-      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+      // The verdict lands in the centre pane (#5100); the result pane beside it.
+      await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
+      await page.waitForSelector('.line-test-result .chart-wrap', { timeout: 60000 });
       await page.locator('.line-test-result').first().evaluate((el) => el.scrollTo(0, 0));
       await h.wait(1200);
     },
@@ -1468,7 +1470,7 @@ export const SHOTS: Shot[] = [
     id: 'trust-stats',
     embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
     caption:
-      'Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
     themes: BOTH,
     clip: { target: '.line-test-result' },
     annotations: [
@@ -1481,7 +1483,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await openTest(page, h);
       await testUntilDone(page, h);
-      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+      await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
       // The overlap check picks the first candidate itself; make sure it is
       // the training pile, and wait for both verdicts to come back.
       const select = page.locator('.domain-ref-select').first();
