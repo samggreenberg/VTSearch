@@ -35,6 +35,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import FuncFormatter  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from early_check_4664 import INK, MUTED, _axes_style, _headline, area, fbeta, se_over_classes  # noqa: E402
@@ -252,8 +253,9 @@ def analyse(runs: dict[str, dict], strata: dict[str, str], beta: float) -> dict[
                     "F_gain": float(np.nanmean(d)), "F_se": se_over_classes(d[ok], c[ok]),
                     "goods_ctl": float(G[CONTROL][sel, t].mean()), "goods_lr": float(G[ARM][sel, t].mean()),
                     "AP_ctl": float(np.nanmean(AP[CONTROL][sel, t])), "AP_lr": float(np.nanmean(AP[ARM][sel, t])),
-                    "admit_ctl": float(np.nanmedian(1.0 - P[CONTROL][sel, t])),
-                    "admit_lr": float(np.nanmedian(1.0 - P[ARM][sel, t])),
+                    "admit_ctl": float(np.nanmean(1.0 - P[CONTROL][sel, t])),
+                    "admit_lr": float(np.nanmean(1.0 - P[ARM][sel, t])),
+                    **{f"{n}_{a}": float(np.nanmedian(LINE[n][a][sel, t])) for n in LINE_READS for a in ARMS},
                 })  # fmt: skip
     per = pd.DataFrame({
         "category": cat, "seed": [int(k.split("|")[1]) for k in keys], "stratum": stratum,
@@ -267,16 +269,17 @@ def figure(res: dict[str, pd.DataFrame], path: Path) -> None:
     cv = res["curves"]
     fig, axes = plt.subplots(2, 2, figsize=(11, 7.5))
     ax = axes[0, 0]
-    for s, ls in (("easy", "-"), ("hard", "--"), ("all", ":")):
+    for s, ls in (("all", "-"), ("easy", "--"), ("hard", ":")):
         d = cv[cv["stratum"] == s]
         ax.plot(d["t"], d["F_gain"], color=INK, ls=ls, lw=1.6, label=s)
-        ax.fill_between(d["t"], d["F_gain"] - 2 * d["F_se"], d["F_gain"] + 2 * d["F_se"], color=INK, alpha=0.08)
+        if s == "all":
+            ax.fill_between(d["t"], d["F_gain"] - 2 * d["F_se"], d["F_gain"] + 2 * d["F_se"], color=INK, alpha=0.1)
     ax.axhline(0, color=MUTED, lw=0.8)
-    ax.set_title("F-beta shown, logistic minus shipped (±2 SE)", fontsize=10, loc="left")
+    ax.set_title("F-beta shown, logistic minus shipped (±2 SE on all)", fontsize=10, loc="left")
     ax.legend(frameon=False, fontsize=8)
     for ax, col, title in (
         (axes[0, 1], "goods", "Goods found"),
-        (axes[1, 0], "admit", "Share of the pool the acquisition cut admits (median)"),
+        (axes[1, 0], "admit", "Share of the pool the acquisition cut admits (mean)"),
     ):
         for s, ls in (("easy", "-"), ("hard", "--")):
             d = cv[cv["stratum"] == s]
@@ -299,6 +302,30 @@ def figure(res: dict[str, pd.DataFrame], path: Path) -> None:
     ax.legend(frameon=False, fontsize=8)
     for ax in axes.flat:
         _axes_style(ax)
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def figure_line(res: dict[str, pd.DataFrame], path: Path) -> None:
+    """The served line over clicks, every cell: images flagged per withheld positive, and the class model's prevalence
+    against the withheld half's (medians; 1 is right on both)."""
+    d = res["curves"][res["curves"]["stratum"] == "all"]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+    for ax, n, title in (
+        (axes[0], "flag_ratio", "Images the line flags per withheld positive (median)"),
+        (axes[1], "prev_ratio", "Class model's prevalence / the withheld half's (median)"),
+    ):
+        for a in ARMS:
+            ax.plot(d["t"], d[f"{n}_{a}"], color=COLOR[a], lw=1.8, label=NAME[a])
+        ax.axhline(1.0, color=MUTED, lw=0.8)
+        ax.set_yscale("log")
+        for axis in (ax.yaxis.set_major_formatter, ax.yaxis.set_minor_formatter):
+            axis(FuncFormatter(lambda v, _: f"{v:g}"))
+        ax.set_title(title, fontsize=10, loc="left")
+        ax.set_xlabel("votes", color=MUTED, fontsize=9)
+        _axes_style(ax)
+    axes[0].legend(frameon=False, fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -344,6 +371,7 @@ def main() -> int:
     for o in [a.out] + ([a.docs.parent / "figures"] if a.docs else []):
         o.mkdir(parents=True, exist_ok=True)
         figure(res, o / "lr4278_over_clicks.png")
+        figure_line(res, o / "lr4278_line.png")
     s = res["summary"]
     with pd.option_context("display.width", 250, "display.max_columns", 80):
         for cols in (
