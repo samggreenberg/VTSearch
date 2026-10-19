@@ -57,7 +57,31 @@ describe('LineTestSessionService (#4524)', () => {
     // The dealt round stays: the server's pending picks only say the vote landed.
     expect(service.roundPicks()).toEqual([51, 36, 41, 44, 48]);
     expect(service.roundVotes().get(51)).toBe('good');
-    expect(TestBed.inject(VoteStateService).loadVotes).toHaveBeenCalled();
+  });
+
+  it('a vote or an unvote never re-reads the vote piles: Review reads them when it opens (#5099)', () => {
+    const loadVotes = TestBed.inject(VoteStateService).loadVotes;
+    start();
+    service.vote('good');
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [36, 41, 44, 48], labelled: 1 })));
+    service.navigate('back');
+    httpMock.expectOne('/api/line-test/unvote').flush(wireLineTest(wireTest()));
+    expect(loadVotes).not.toHaveBeenCalled();
+  });
+
+  it('names the next picks a vote brings on screen, in order, skipping the voted and wrapping round (#5099)', () => {
+    expect(service.upcoming(2)).toEqual([]);
+    start();
+    expect(service.upcoming(2)).toEqual([36, 41]);
+    service.vote('good');
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [36, 41, 44, 48], labelled: 1 })));
+    expect(service.currentId()).toBe(36);
+    expect(service.upcoming(2)).toEqual([41, 44]);
+    // From the last pick the walk wraps to the first unvoted one, past 51.
+    service.show(4);
+    expect(service.upcoming(2)).toEqual([36, 41]);
+    // Never more than the round has left, and never the pick on screen.
+    expect(service.upcoming(10)).toEqual([36, 41, 44]);
   });
 
   it('the round\'s last vote brings the next round, dealt afresh', () => {
@@ -94,14 +118,11 @@ describe('LineTestSessionService (#4524)', () => {
     httpMock.expectNone('/api/line-test/unvote');
   });
 
-  it('a start that resumed from kept picks re-reads the votes; a fresh one does not (#4526)', () => {
-    const loadVotes = TestBed.inject(VoteStateService).loadVotes;
-    start();
-    expect(loadVotes).not.toHaveBeenCalled();
+  it('a start that resumed from kept picks leaves the piles to the Review tab (#4526, #5099)', () => {
     service.start();
     httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireDone({ kept_at: 1790000000 })));
     expect(service.phase()).toBe('done');
-    expect(loadVotes).toHaveBeenCalledTimes(1);
+    expect(TestBed.inject(VoteStateService).loadVotes).not.toHaveBeenCalled();
   });
 
   it('done clears the table and frees the balance', () => {
