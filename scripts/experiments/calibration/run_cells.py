@@ -421,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         f"head_count_recall_z={_recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
+        f"query_miss={'on' if cfg.QUERY_MISS else 'off'} "
         f"find_corpus={cfg.FIND_CORPUS or 'off'} find_mix={(cfg.FIND_MIX or 'only') if cfg.FIND_CORPUS else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
@@ -637,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
                 query_vector=query_vec,
                 query_tier=cfg.QUERY_TIER,
                 **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
+                query_miss=cfg.QUERY_MISS,
                 **(
                     {}
                     if find_medias is None

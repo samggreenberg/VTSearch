@@ -1315,6 +1315,11 @@ QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", 
 #: is the arm before (the head from the quota), any other count an arm.
 _QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
 QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
+#: Issue #4800: under the quota on a patch space, once the typed query has missed (a Good,
+#: and a Bad before the Goods quota), such a run's Test gives the Goods'
+#: centroid in place of the query's set, as the app's does.  On (the default) is the app;
+#: ``CALIB_QUERY_MISS=0`` is the arm before (the typed query's set until the quota).
+QUERY_MISS: bool = os.environ.get("CALIB_QUERY_MISS", "1").strip() not in ("0", "off", "false")
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check

@@ -445,3 +445,86 @@ class TestTheQueryHold:
         monkeypatch.setattr(training, "_patch_space_for", lambda name: False)
         assert not cached_head_is_current(ctx, ls, QUERY), "a Find there gives the query's set"
         assert cached_head_is_current(ctx, ls, ""), "a detector with no query takes the head at the quota"
+
+
+# ---------------------------------------------------------------------------
+# The miss under the quota (#4800)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def patch_space(monkeypatch):
+    """The test embedder as a known patch space (the Region path's DINOv3 patches)."""
+    import vtscore.detectors.training as training
+
+    monkeypatch.setattr(training, "_patch_space_for", lambda name: True if name == EMBEDDER else None)
+
+
+MISSED = ([1], [40])  # a Good, and a Bad before the Goods quota
+
+
+class TestTheQueryMiss:
+    """On a patch space, once the typed query has missed, the Goods' centroid answers until the quota."""
+
+    def test_the_rule_reads_the_counts_and_the_space_only(self):
+        from vtscore.detectors.label_quota import (
+            BAD_QUOTA,
+            DRY_BAD_QUOTA,
+            GOOD_QUOTA,
+            QUERY_MISS_BADS,
+            query_missed,
+        )
+
+        assert QUERY_MISS_BADS == 1, "the first Bad, the owner's choice over the Bads quota"
+        assert query_missed(1, QUERY_MISS_BADS, patch_space=True)
+        assert query_missed(GOOD_QUOTA - 1, DRY_BAD_QUOTA - 1, patch_space=True)
+        assert not query_missed(1, 0, patch_space=True), "no Bad yet: the query is the better set"
+        assert not query_missed(0, BAD_QUOTA, patch_space=True), "no Good to centre on"
+        assert not query_missed(GOOD_QUOTA, BAD_QUOTA - 1, patch_space=True), "the Goods quota came first"
+        assert not query_missed(1, DRY_BAD_QUOTA, patch_space=True), "the second quota's trained head"
+        assert not query_missed(1, QUERY_MISS_BADS, patch_space=False), "a single-vector space keeps the query"
+        assert not query_missed(1, QUERY_MISS_BADS, patch_space=None), "so does an unknown one"
+
+    @pytest.mark.usefixtures("patch_space")
+    def test_once_the_query_has_missed_the_detector_is_the_centroid(self, world):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make(*MISSED)
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY) is True
+        assert is_centroid_head(ctx.model)
+        assert served_quota(ctx.model, ls)["tier"] == "centroid"
+        assert cached_head_is_current(ctx, ls, QUERY), "the centroid is what this detector gives now"
+
+    @pytest.mark.usefixtures("patch_space")
+    @pytest.mark.parametrize(("goods", "bads"), [([], [40, 41, 42, 43]), ([1], []), ([1, 2], []), ([1, 2, 3], [40])])
+    def test_before_the_miss_the_detector_is_its_query(self, world, goods, bads):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        assert lt.train_from_labelset(ctx, make(goods, bads), media_type="image", snap=snap, text_query=QUERY)
+        assert is_query_head(ctx.model)
+
+    @pytest.mark.usefixtures("single_vector")
+    def test_a_single_vector_space_keeps_the_query(self, world):
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        assert lt.train_from_labelset(ctx, make(*MISSED), media_type="image", snap=snap, text_query=QUERY)
+        assert is_query_head(ctx.model)
+
+    @pytest.mark.usefixtures("patch_space")
+    def test_a_cold_find_gives_the_centroid_too(self, world):
+        snap, _proto, make, _embedded = world
+        _r, threshold, model = lt.labelset_train_and_score(
+            _ctx(), make(*MISSED), media_type="image", clips_dict=snap, label_quota=True, text_query=QUERY
+        )
+        assert is_centroid_head(model) and threshold == CENTROID_THRESHOLD
+
+    def test_a_query_head_cached_before_the_miss_counted_is_not_handed_out(self, world, monkeypatch):
+        import vtscore.detectors.training as training
+
+        snap, _proto, make, _embedded = world
+        ctx = _ctx()
+        ls = make(*MISSED)
+        assert lt.train_from_labelset(ctx, ls, media_type="image", snap=snap, text_query=QUERY)
+        assert is_query_head(ctx.model) and cached_head_is_current(ctx, ls, QUERY), "an unknown space keeps it"
+        monkeypatch.setattr(training, "_patch_space_for", lambda name: True)
+        assert not cached_head_is_current(ctx, ls, QUERY)

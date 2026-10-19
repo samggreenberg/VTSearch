@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-10-19 | [A run cut at 20 votes parted from today's 150-vote session in half its cells](lessons/2026-10-19-a-cut-run-parts-where-a-check-prompts.md) | #4800 |
 | 2026-10-19 | [DGX packs ran Region cells at half speed, so the lane split was wrong](lessons/2026-10-19-dgx-packs-run-region-cells-at-half-speed.md) | #4278 |
 | 2026-10-19 | [`export -p` copied tokens into a world-readable file](lessons/2026-10-19-export-p-captured-tokens.md) | #4278 |
 | 2026-10-19 | [Nice 1000 did not yield the memory cap to a peer's suite](lessons/2026-10-19-nice-does-not-yield-at-flat-priority.md) | #4278 |

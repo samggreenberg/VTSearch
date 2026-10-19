@@ -76,7 +76,7 @@ from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -90,7 +90,10 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_cut_step,
+    _centroid_goods,
     _centroid_step,
+    _head_step,
     _labelset_error_costs,
     _query_step,
     _score_pool,
@@ -2785,6 +2788,11 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+#: How many media a priced centroid's probe scores at a time (#4800): a region run's
+#: every box at once is several GB over the pool, and each media scores alone.
+PROBE_CHUNK = 2048
+
+
 def _centroid_line_variant_rows(
     variants: list[tuple[str, float]],
     ident: dict[str, Any],
@@ -2798,6 +2806,7 @@ def _centroid_line_variant_rows(
     region_aware: bool,
     style_obj: Any,
     voted: "set[int] | None" = None,
+    query_scores: "dict[int, float] | None" = None,
 ) -> list[dict[str, Any]]:
     """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
 
@@ -2809,31 +2818,89 @@ def _centroid_line_variant_rows(
     (:data:`CENTROID_LINE_CORPORA`, #4779): ``pool`` is every media of the cell,
     the voted ones included, as the app's labelled collection holds them;
     ``unvoted`` leaves out *voted*.
+
+    In a typed-query run (*query_scores*, #4800) the rule
+    :data:`QUERY_LINE_VARIANT` is the typed query's own set with its line at
+    *beta* (:func:`_query_test`), so both of the sets a Find could give under
+    the quota are priced at every balance.  A centroid rule needs a Good and
+    the query rule a typed query: a click without one has no such row.
+
+    Every centroid variant of a click is the same head cut at another line, so
+    the click scores its media once, with the unit probe
+    :func:`~vtscore.detectors.centroid_head.fit_centroid` draws every line from
+    (:data:`PROBE_CHUNK` media at a time), and each variant draws its line off
+    those scores and reads its withheld half's off them too
+    (:func:`~vtscore.eval.step_trainers._centroid_cut_step`, #4800).  It is the
+    same set :func:`_centroid_test` gives, without its two passes a variant
+    over a region run's every box.
     """
+    from vtscore.detectors.centroid_head import centroid_head, fit_centroid, goods_centroid  # noqa: PLC0415
+
     out: list[dict[str, Any]] = []
+    goods: list[Any] = []
+    probe: dict[int, float] = {}
+
+    def probe_scores(ids: list[int]) -> list[float]:
+        """The unit probe's score of each of *ids*, scoring only the media no earlier variant has."""
+        todo = [cid for cid in dict.fromkeys(ids) if cid not in probe]
+        step = _head_step(centroid_head(goods_centroid(goods), 0.0, scale=1.0))
+        for i in range(0, len(todo), PROBE_CHUNK):
+            chunk = todo[i : i + PROBE_CHUNK]
+            got = _score_media_ids(step, clips_dict, chunk, region_aware=region_aware, style_obj=style_obj)
+            probe.update(zip(chunk, (float(s) for s in got)))
+        return [probe[cid] for cid in ids]
+
     for spec, beta in variants:
+        if spec == QUERY_LINE_VARIANT:
+            if query_scores is None:
+                continue
+            _qstep, q_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=beta,
+            )
+            out.extend(
+                {**ident, **mr, "beta": beta, "detector_tier": "query", "gmm_variant": centroid_line_tag(spec, beta)}
+                for mr in q_rows
+            )
+            continue
+        if not good_votes:
+            continue
+        if not goods:
+            goods = _centroid_goods(
+                good_votes, clips_dict, target_category, region_voting=region_voting, style_obj=style_obj
+            )
         rule, _, corpus = spec.partition("~")
-        line_ids = None
+        line_ids = list(test_ids)
         if corpus == "pool":
             line_ids = list(clips_dict)
         elif corpus == "unvoted":
             line_ids = [i for i in clips_dict if i not in (voted or set())]
-        _step, metric_rows, _cal = _centroid_test(
-            good_votes,
+        _head, _thr, line = fit_centroid(goods, lambda _probe, ids=line_ids: probe_scores(ids), rule=rule, beta=beta)
+        test_scores = dict(zip(test_ids, probe_scores(list(test_ids)), strict=True))
+        metrics = _evaluate_on_test(
+            _centroid_cut_step(test_scores, line.cut),
+            CENTROID_THRESHOLD,
             clips_dict,
             test_ids,
             target_category,
             inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
             beta=beta,
-            calibration_rows=False,
-            line_rule=rule,
-            line_beta=beta,
-            line_ids=line_ids,
         )
-        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(spec, beta)} for mr in metric_rows)
+        out.append(
+            {
+                **ident,
+                **metrics,
+                "beta": beta,
+                "detector_tier": "centroid",
+                "gmm_variant": centroid_line_tag(spec, beta),
+            }
+        )
     return out
 
 
@@ -2892,6 +2959,10 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
 #: labelled collection today) and the cell's media less the voted ones (``unvoted``).
 CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
 
+#: The variant ``query@<beta>`` (#4800): in a typed-query run, the typed query's own set with
+#: its line at that balance, priced on the same clicks as the centroid's lines.
+QUERY_LINE_VARIANT = "query"
+
 #: The ``gmm_variant`` tag of the head's rows at a click where the typed query holds (#4736):
 #: Test gives the query's set there, so the head's line is what it would have given.
 QUERY_HOLD_HEAD_TAG = "hold:head"
@@ -2900,10 +2971,14 @@ QUERY_HOLD_HEAD_TAG = "hold:head"
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
 
+    ``query@<beta>`` (:data:`QUERY_LINE_VARIANT`, #4800) is the typed query's
+    own set, which takes no corpus.
+
     Raises:
         ValueError: On a rule outside
-            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, a
-            balance that is not a positive number, or a repeated variant.
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES` and
+            :data:`QUERY_LINE_VARIANT`, a balance that is not a positive
+            number, or a repeated variant.
     """
     if spec is None:
         return []
@@ -2918,13 +2993,13 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
             beta = float("nan")
         if (
             not sep
-            or rule not in CENTROID_LINE_RULES
+            or not (rule in CENTROID_LINE_RULES or (rule == QUERY_LINE_VARIANT and not tilde))
             or (tilde and corpus not in CENTROID_LINE_CORPORA)
             or not (math.isfinite(beta) and beta > 0)
         ):
             raise ValueError(
                 f"a centroid line variant is '<rule>[~<corpus>]@<beta>' with rule in {CENTROID_LINE_RULES} "
-                f"and corpus in {CENTROID_LINE_CORPORA}; got {item!r}"
+                f"and corpus in {CENTROID_LINE_CORPORA}, or '{QUERY_LINE_VARIANT}@<beta>'; got {item!r}"
             )
         rule = spec
         if (rule, beta) in out:
@@ -3099,6 +3174,7 @@ def simulate_voting_iterations(  # noqa: C901
     query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
+    query_miss: bool = True,
     find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
     find_corpus_scores: Optional[Mapping[int, float]] = None,
     find_mix: "float | str | None" = None,
@@ -3267,7 +3343,11 @@ def simulate_voting_iterations(  # noqa: C901
             "centroid_line:<rule>@<beta>"`` so a production read skips it.
             The centroid never picks, so these rows change nothing else, and
             Autopilot's opening reads no balance, so a variant's balance prices
-            the line a user at that balance would see on these clicks.
+            the line a user at that balance would see on these clicks.  In a
+            typed-query run, where Test gives the typed query's set under the
+            quota, the same rows price the centroid there all the same, from
+            the first Good, and ``"query@<beta>"`` adds the typed query's set
+            at that balance from the first vote (#4800).
         handover_shadow: Price a hand-over rule on the same session (#4776):
             at every click Test gives the trained head, also a row of what the
             Goods' centroid would give there, scored as the centroid's rows
@@ -3324,6 +3404,16 @@ def simulate_voting_iterations(  # noqa: C901
             untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
             priced on the same session.  Picks never change: the head is
             trained and asks either way.  Inert where *query_tier* is.
+        query_miss: Whether such a run's Test gives the Goods' centroid in
+            place of the typed query's set once the query has missed on a
+            patch space, as the app's does (#4800,
+            :func:`~vtscore.detectors.label_quota.query_missed`): under the
+            quota, a Good in hand and a Bad before the Goods quota, on a run
+            whose media carry a patch grid (*region_aware*).
+            ``True`` - the default - is the app; ``False`` is the arm before
+            (the typed query's set until the quota).  The click's untagged row
+            is then the centroid's (``detector_tier = "centroid"``).  Picks
+            never change.  Inert where *query_tier* is.
         find_corpus: A second corpus to Find on at every click (#4960,
             :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
             run's embedder, whose cell of the same name as *target_category*
@@ -4877,9 +4967,8 @@ def simulate_voting_iterations(  # noqa: C901
                 )
                 for mr in c_rows:
                     rows.append({**c_ident, **mr, **c_bands, **c_find, **c_timing})
-                if query_on:
-                    # The centroid is not what Test gives here, so its lines are not priced.
-                    continue
+                # In a typed-query run the centroid is not what Test gives, but it is
+                # priced all the same when asked: the set a fallback would give (#4800).
                 rows.extend(
                     _centroid_line_variant_rows(
                         line_variants,
@@ -4893,6 +4982,7 @@ def simulate_voting_iterations(  # noqa: C901
                         region_aware=region_aware,
                         style_obj=style_obj,
                         voted=set(good_votes) | set(bad_votes),
+                        query_scores=query_scores,
                     )
                 )
             continue
@@ -5083,8 +5173,10 @@ def simulate_voting_iterations(  # noqa: C901
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
-        # the quota too while the query holds on a single-vector space (#4736).
-        query = centroid and query_on
+        # the quota too while the query holds on a single-vector space (#4736), but the
+        # centroid once the query has missed on a patch space (#4800).
+        missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
+        query = centroid and query_on and not missed
         held = (
             query_on
             and not centroid
@@ -5099,7 +5191,7 @@ def simulate_voting_iterations(  # noqa: C901
         # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
         scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
-        if centroid and query_scores is not None:
+        if query and query_scores is not None:
             centroid_step, c_rows = _query_test(
                 query_scores,
                 clips_dict,
@@ -5632,7 +5724,8 @@ def simulate_voting_iterations(  # noqa: C901
                     **timing_cols,
                 }
             )
-        if centroid and line_variants and not query:
+        if centroid and line_variants:
+            # A typed-query run prices the centroid here too, beside its query's own set (#4800).
             rows.extend(
                 _centroid_line_variant_rows(
                     line_variants,
@@ -5642,6 +5735,7 @@ def simulate_voting_iterations(  # noqa: C901
                     test_ids,
                     target_category,
                     inclusion,
+                    query_scores=query_scores,
                     region_voting=region_voting,
                     region_aware=region_aware,
                     style_obj=style_obj,

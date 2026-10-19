@@ -936,6 +936,11 @@ MIRRORS: list[Mirror] = [
             "cached_head_is_current); the harness calls the same query_holds on its vote counts "
             "(query_hold, default QUERY_HOLD_LABELS; 0 is the arm before), writes the query's row "
             "untagged with app_trained 0 and keeps the head's rows tagged hold:head. "
+            "Under the quota on a patch space, once the typed query has missed - a Good, and a Bad "
+            "before the Goods quota (QUERY_MISS_BADS) - the detector gives the Goods' centroid in place of its "
+            "query (#4800, label_quota.query_missed, read by _query_tier and cached_head_is_current); "
+            "the harness calls the same query_missed on its vote counts (query_miss, default on; "
+            "False is the arm before) and writes the centroid's row untagged there. "
             "The trained head it then fits starts from the typed query too (#4859): mirrored by "
             "training.typed_query_prior. "
             "If the app's tiers move - a new tier, a quota read from somewhere "
@@ -950,7 +955,8 @@ MIRRORS: list[Mirror] = [
             "(labelset_train_and_score with label_quota=False). The hold's space is the run's "
             "region_aware (its media carry a patch grid) where the app reads the embedder's "
             "capability (_patch_space_for): the same split on every production path, and an "
-            "unknown embedder, which the app does not hold, never reaches the harness."
+            "unknown embedder, which the app does not hold, never reaches the harness. The "
+            "miss's space is read the same way."
         ),
         no_harness_pin=(
             "simulate_voting_iterations is the whole voting loop; the quota's own rows are "
@@ -976,6 +982,8 @@ MIRRORS: list[Mirror] = [
             "(_centroid_beta), the harness at the run's beta. Both count unvoted media only "
             "(#4779): the app masks the labelset's labelled media out of the line's count "
             "(fit_centroid's line_mask), and the harness's withheld half holds no voted media. "
+            "The harness's priced lines (#4732's variant rows) score the same probe once a click "
+            "and draw each line off it (_centroid_cut_step, #4800), the set _centroid_test gives. "
             "If the app changes which vectors average, which corpus the line is cut on, or "
             "which balance draws it, change the harness to match."
         ),
