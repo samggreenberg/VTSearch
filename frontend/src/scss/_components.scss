@@ -139,7 +139,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
   // Size modifier: the one large action a dialog leads with, set apart from
   // its footer (the Find Results dialog's Browse, #5102). The size of the
-  // Dashboard's Train / Test / Find buttons.
+  // Dashboard's Train / Tune / Find buttons.
   &--lg {
     padding: var(--space-md) var(--space-2xl);
     font-size: var(--font-xl);
