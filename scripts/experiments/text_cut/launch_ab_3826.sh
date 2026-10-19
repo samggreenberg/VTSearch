@@ -103,7 +103,7 @@ abanalyze)
 status)
   echo "cells:   $(n_cells)"
   for arm in gmm_midpoint guarded_tail; do
-    echo "ab/$arm: $(ls "$BASE/ab_$arm/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$') cells written"
+    echo "ab/$arm: $(ls "$BASE/ab_$arm/results/cells" 2>/dev/null | grep -cE '^task_[0-9]+\.csv(\.gz)?$') cells written"
   done
   squeue -u "$USER" -o "%.14i %.14j %.8T %.8M" | grep tcab || true
   ;;

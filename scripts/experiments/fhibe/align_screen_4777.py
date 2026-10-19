@@ -89,8 +89,10 @@ def session_starts(cells: Path, dataset: str) -> set[int]:
     """
     import pandas as pd  # noqa: PLC0415
 
+    from _cells_paths import side_frame_files  # noqa: PLC0415
+
     starts = set()
-    for f in sorted(cells.glob("task_*__picks.csv")):
+    for f in side_frame_files(cells, "__picks"):
         df = pd.read_csv(f, usecols=["dataset", "t", "phase", "picked_id"])
         first = df[(df["dataset"] == dataset) & (df["t"] == 1) & (df["phase"] == "example")]
         starts.update(int(v) for v in first["picked_id"])

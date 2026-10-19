@@ -41,7 +41,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_io import main_frame_files
+from _cells_io import main_frame_files, open_frame
 
 from study_paths import require_study_dir
 
@@ -87,7 +87,7 @@ def load_rows(cells_dir: Path) -> list[dict]:
             dropped += 1
             continue
         try:
-            with f.open(newline="") as fh:
+            with open_frame(f) as fh:
                 rows.extend(list(csv.DictReader(fh)))
         except Exception:
             dropped += 1

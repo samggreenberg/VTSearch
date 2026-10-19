@@ -197,7 +197,7 @@ status)
   squeue -u "$USER" -o "%.12i %.22j %.9T %.10M %R" | grep -E 'grid3159|JOBID' || echo "(no grid3159 jobs)"
   for arm in ${ARMS//,/ }; do
     d="$BENCH_ROOT/$arm/results/cells"
-    n=$(ls "$d" 2>/dev/null | grep -c '^task_[0-9]*\.csv$' || true)
+    n=$(ls "$d" 2>/dev/null | grep -cE '^task_[0-9]+\.csv(\.gz)?$' || true)
     echo "  $arm: $n cells written"
   done
   ;;

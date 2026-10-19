@@ -125,7 +125,7 @@ def read_cell(args: tuple[str, float]) -> dict | None:
 
 
 def extract(a: argparse.Namespace) -> None:
-    cells = sorted(str(p) for p in Path(a.cells).glob("task_[0-9]*.csv") if "__" not in p.name)
+    cells = [str(p) for p in _cells_io.main_frame_files(a.cells)]
     with ProcessPoolExecutor(a.workers) as ex:
         got = list(ex.map(read_cell, [(c, a.beta) for c in cells], chunksize=4))
     runs = [g for g in got if g is not None]
@@ -499,8 +499,11 @@ def arm_check(a: argparse.Namespace) -> None:
         preset, rest = spec.split("=", 1)
         arm_dir, ctl_dir, beta_s, offline = rest.split("::")
         beta = float(beta_s)
-        cells = sorted(p.name for p in Path(arm_dir).glob("task_[0-9]*.csv") if "__" not in p.name)
-        jobs = [(str(Path(arm_dir) / c), str(Path(ctl_dir) / c), beta, a.hold) for c in cells]
+        cells = [p.name for p in _cells_io.main_frame_files(arm_dir)]
+        # The control's cell in whichever spelling it was written (a CALIB_CELLS_GZIP arm against a plain control).
+        ctl = {c: Path(ctl_dir) / c.removesuffix(".gz") for c in cells}
+        ctl = {c: p if p.exists() else p.with_name(p.name + ".gz") for c, p in ctl.items()}
+        jobs = [(str(Path(arm_dir) / c), str(ctl[c]), beta, a.hold) for c in cells]
         with ProcessPoolExecutor(a.workers) as ex:
             got = [g for g in ex.map(read_arm_pair, jobs, chunksize=4) if g is not None]
         errors = [g["error"] for g in got if "error" in g]

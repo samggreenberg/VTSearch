@@ -50,7 +50,7 @@ step() {
 # seeds); read as "complete" for the 3600-cell grid that replaced it, the same
 # literal would have been wrong in the direction that HIDES missing cells.
 # `launch_scale.sh` records the shape it launched beside the results.
-CELLS=$(ls "$EXP/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$')
+CELLS=$(ls "$EXP/results/cells" 2>/dev/null | grep -cE '^task_[0-9]+\.csv(\.gz)?$')
 SHAPE="$EXP/results/grid_shape.json"
 EXPECT=$(python - "$SHAPE" <<'PY' 2>/dev/null || true
 import json, sys

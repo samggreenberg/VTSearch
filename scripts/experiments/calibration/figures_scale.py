@@ -24,7 +24,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_paths import main_frame_files
+from _cells_paths import main_frame_files, open_frame
 
 # One wrapped-panel-grid helper, not two: both figure scripts face the same
 # problem (a row of panels that grows with the arm count) and a second copy is
@@ -75,7 +75,7 @@ def main() -> int:
 
     rows = []
     for f in main_frame_files(cells):
-        with f.open(newline="") as fh:
+        with open_frame(f) as fh:
             rows.extend(list(csv.DictReader(fh)))
     print(f"{len(rows)} rows")
 

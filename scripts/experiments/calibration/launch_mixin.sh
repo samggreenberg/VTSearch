@@ -118,7 +118,9 @@ cells, n = Path(sys.argv[1]), int(sys.argv[2])
 # `__` marks a side frame (`__sweep`, `__picks`, ...); only the main frame
 # means the cell ran.  Same rule as `_cells_io.main_frame_files`, spelled out
 # rather than imported because this heredoc runs before the venv is on path.
-have = {int(p.stem.split("_")[1]) for p in cells.glob("task_*.csv") if "__" not in p.stem}
+# `.csv*` and the index cut at the first dot: a CALIB_CELLS_GZIP cell is
+# `task_NNNN.csv.gz`, whose `.stem` still ends in `.csv`.
+have = {int(p.name.split(".")[0].split("_")[1]) for p in cells.glob("task_*.csv*") if "__" not in p.name}
 todo = [i for i in range(n) if i not in have]
 # Collapse consecutive indices into ranges.  sbatch rejects an over-long
 # --array string outright ("Pathname ... too long"), which a fully-missing arm

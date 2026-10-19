@@ -55,7 +55,7 @@ _COLS = [
 def load_rows(run: Path) -> pd.DataFrame:
     """Every cell's base rows (the shipped line, one per click), clicks 1..HORIZON."""
     frames = []
-    for f in sorted(glob.glob(str(run / "results" / "cells" / "task_[0-9][0-9][0-9][0-9].csv"))):
+    for f in sorted(glob.glob(str(run / "results" / "cells" / "task_[0-9][0-9][0-9][0-9].csv*"))):
         d = pd.read_csv(f, usecols=lambda c: c in _COLS, low_memory=False)
         d = d[(d["strategy"] == "autopilot") & d["gmm_variant"].isna()]
         frames.append(d.drop(columns=["gmm_variant", "strategy"]))
@@ -68,7 +68,7 @@ def load_rows(run: Path) -> pd.DataFrame:
 def load_picks(run: Path) -> pd.DataFrame:
     frames = [
         pd.read_csv(f, usecols=["dataset", "category", "t", "phase", "picked_id", "picked_label"])
-        for f in sorted(glob.glob(str(run / "results" / "cells" / "task_*__picks.csv")))
+        for f in sorted(glob.glob(str(run / "results" / "cells" / "task_*__picks.csv*")))
     ]
     return pd.concat(frames, ignore_index=True)
 

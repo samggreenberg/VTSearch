@@ -1416,12 +1416,15 @@ PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").re
 #: on.  Unset = off.
 RANK_FRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_RANK_FRAME_STEPS", "").replace(",", " ").split())
 
-#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
-#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
-#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  **On by
+#: default since #5092**; ``CALIB_CELLS_GZIP=0`` writes plain text.  A COCO
+#: Better cell's main frame is ~3.3 MB as text and ~180 KB gzipped; #4184's
+#: 5,040 cells needed ~19 GB plain on a volume with 7 GB free.  Every study
+#: launcher opted in, but the State of the App review itself did not, and its
+#: 2026-10-16 run wrote 84 GB of plain cells and filled the 1 TB volume (#4953).
 #: ``_cells_paths`` reads both spellings, so every analyzer that goes through
-#: it is unaffected.
-CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
+#: it is unaffected; ``gzip_cells.py`` converts a finished run in place.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "1") == "1"
 
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)

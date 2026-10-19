@@ -19,7 +19,9 @@ denominator.  The number still looks like a number.
 
 from __future__ import annotations
 
+import gzip
 from pathlib import Path
+from typing import IO
 
 #: Every side frame ``run_cells.py`` writes, as a registry — **not** as the
 #: filter.  :func:`main_frame_files` excludes side frames structurally, on the
@@ -79,6 +81,19 @@ def main_frame_files(cells_dir: str | Path) -> list[Path]:
 def side_frame_files(cells_dir: str | Path, suffix: str) -> list[Path]:
     """Every cell's side frame of one kind, e.g. ``suffix="__cutincl"``."""
     return _cell_files(cells_dir, f"task_*{suffix}")
+
+
+def open_frame(path: str | Path) -> IO[str]:
+    """A cell frame opened as text for the ``csv`` module, in either spelling.
+
+    pandas picks the codec off the suffix by itself; ``open()`` does not, and a
+    ``.gz`` frame read as text fails on its first byte.  Since #5092 gzip is the
+    default spelling, so every stdlib reader of a frame goes through here.
+    """
+    path = Path(path)
+    if path.suffix == ".gz":
+        return gzip.open(path, "rt", newline="")
+    return open(path, newline="")
 
 
 def pframe_files(cells_dir: str | Path) -> list[Path]:
