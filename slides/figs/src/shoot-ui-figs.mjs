@@ -4,7 +4,7 @@
  *   node slides/figs/src/shoot-ui-figs.mjs            # every shot
  *   node slides/figs/src/shoot-ui-figs.mjs train-loop # one group
  *
- * Five groups, and the first four are one continuous session rather than
+ * Six groups, and the first four are one continuous session rather than
  * unrelated frames — they are the deck's click-by-click introduction to the
  * tool, and they are shot in the order a user does them:
  *
@@ -15,6 +15,8 @@
  *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly,
  *                                                            then a staged stop
  *   find           `figs/ui-find*.webp`                    — score unseen media
+ *   browse         `figs/ui-vision-*[.buildN].webp`       — Find's results, then
+ *                                                            the whole pile, as a map
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
  *
  * The session starts from an app with nothing in it. Both piles of photographs
@@ -83,6 +85,7 @@ import {
   appClient,
   BOOK_DETECTOR,
   BOOK_TEXT,
+  BROWSE_DATASET,
   corpusPath,
   framesOf,
   HERO_REGION,
@@ -1125,6 +1128,217 @@ async function shootRegionVoting(page) {
   await shoot(page, 'ui-region-voting');
 }
 
+// ── browse ───────────────────────────────────────────────────────────────────
+
+/**
+ * The Book detector's votes, for a `browse` run that has no session to take
+ * them from.
+ *
+ * In a full run the Vision frames use the detector the train loop just voted
+ * on, as a user would: they come after it in the deck. A run of `browse` alone
+ * starts from an empty app, so it puts votes of the same size on the same pile
+ * through the API — none of the Vision slides shows voting, so none of them
+ * claims these were cast by hand. Enough of them to clear the label quota and
+ * the typed query's hold (#4736), so Find runs a trained head as it does after
+ * the session; Goods are books the deck would call books (`isBook`), Bads the
+ * near-misses the session's own Bad pile fills with.
+ */
+const BROWSE_STAGED_VOTES = {
+  good: 18,
+  bad: { laptop: 3, tv: 3, keyboard: 2, 'cell-phone': 2, clock: 2, chair: 2, vase: 1, dog: 1, bus: 1, pizza: 1 },
+};
+
+/**
+ * How far the two zoomed frames of the whole-pile map are from its fit, in
+ * wheel notches. A notch is a factor of √2 at the app's default two notches
+ * per level, so 4 is one tile layer finer twice over and 7 three and a half:
+ * far enough apart that the signposts on screen are a different layer each
+ * time, which is the whole of what the slide shows.
+ */
+const BROWSE_ZOOM_NOTCHES = [4, 7];
+
+/** The Book detector, trained: the session's if it ran, else staged. */
+async function trainedBookDetector() {
+  const train = await app.ensureDataset(TRAIN_DATASET, 'siglip');
+  const existed = app.named(await app.detectors(), BOOK_DETECTOR);
+  const detector = await app.ensureDetector(BOOK_DETECTOR, train, BOOK_TEXT);
+  if (!existed) {
+    const meta = await app.mediaIndex(train, detector);
+    await app.setVotes(train, detector, {
+      good: framesOf(meta, 'book', BROWSE_STAGED_VOTES.good, isBook),
+      bad: Object.entries(BROWSE_STAGED_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
+    });
+  }
+  return detector;
+}
+
+/**
+ * Wait for Browse to show a finished, lettered map, then clear the frame.
+ *
+ * Finished means the cover that hides the map until its first tiles have
+ * painted is gone, and lettered means the signpost toggle is enabled: names
+ * arrive after the map (a subset's are fitted when it is), and a shot taken
+ * between the two is a map with no signs on it. The docked tile panel opens
+ * empty, holding a third of the window for a tile nobody has right-clicked;
+ * closed, the map gets that width. The pointer goes to the top bar, because a
+ * tile under it is drawn enlarged.
+ */
+async function openedMap(page) {
+  await page.waitForURL(/#\/browse\//, { timeout: 600000 });
+  await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 }).catch(() => {});
+  await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
+  const close = page.locator('.browse-details .bin-popup-close');
+  if (await close.count()) await close.first().click();
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+}
+
+/**
+ * Where a projection-space point is on screen with the map at its fit.
+ *
+ * The canvas draws no DOM for its tiles or its signs, so the harness works the
+ * framing out the way the canvas does (`computeFitZoom` and `fitToData` in
+ * `browse-canvas/view-transform.ts`): centred on the layout's bounds, at the
+ * zoom that just holds them plus a margin of one tile and 5%, with the tile
+ * layer picked for the default thumbnail size.
+ */
+async function fitScreenPoint(page, meta, [px, py]) {
+  const box = await page.locator('vt-browse-canvas .canvas-container').first().boundingBox();
+  if (!box) throw new Error('no Browse canvas');
+  const [xmin, ymin, xmax, ymax] = meta.bounds;
+  const dataW = xmax - xmin || 1;
+  const dataH = ymax - ymin || 1;
+  const pad = 0.05;
+  const targetRadius = 28; // BrowseCanvasComponent.DEFAULT_TARGET_RADIUS, the M size
+  let zoom = Math.min(box.width / (dataW * (1 + 2 * pad)), box.height / (dataH * (1 + 2 * pad)));
+  for (let i = 0; i < 3; i++) {
+    const ideal = Math.log2((meta.base_radius * zoom) / targetRadius);
+    const level = Math.max(0, Math.min(meta.levels.length - 1, Math.round(ideal)));
+    const r = meta.base_radius / 2 ** level;
+    zoom = Math.min(box.width / (dataW + 2 * (r + dataW * pad)), box.height / (dataH + 2 * (r + dataH * pad)));
+  }
+  return {
+    x: box.x + box.width / 2 + (px - (xmin + xmax) / 2) * zoom,
+    y: box.y + box.height / 2 + (py - (ymin + ymax) / 2) * zoom,
+    centre: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  };
+}
+
+/**
+ * The sign the zoomed frames close in on: the finest one that names books.
+ *
+ * Books are the deck's running example, so the map is zoomed to where they
+ * landed rather than to wherever the layout happened to put its densest
+ * corner. Picked by rule rather than by name or position, so a re-layout
+ * still lands on the books; failing that, on the finest sign the fit shows
+ * nearest the centre.
+ */
+function bookSign(labels, meta) {
+  const finest = Math.max(...labels.map((l) => l.level));
+  const fine = labels.filter((l) => l.level === finest);
+  const named = fine.filter((l) => /\bbook/i.test(l.text)).sort((a, b) => b.score - a.score);
+  if (named.length) return named[0];
+  const [xmin, ymin, xmax, ymax] = meta.bounds;
+  const d = (l) => Math.hypot(l.x - (xmin + xmax) / 2, l.y - (ymin + ymax) / 2);
+  return fine.sort((a, b) => d(a) - d(b))[0];
+}
+
+/**
+ * The Vision section: Find's results as a map, then the whole pile, closer
+ * and closer, then one tile opened.
+ *
+ * One Find run over `photos-all` with the trained Book detector. Its results
+ * dialog is the first frame — a list of file names, which is the thing Browse
+ * is the answer to — and its Browse button the second, on the results' own
+ * map. Then the pile's map from its row's ⋯ menu, at fit and at two zooms
+ * centred on the books (`bookSign`), so each frame is lettered by a finer
+ * layer of signposts than the last; and last a right-click on a tile there,
+ * with the panel's details showing the tags each photo was given, which are
+ * what the signposts are named from.
+ *
+ * Rendering is pinned to full effects for the run: headless chromium has no
+ * GPU, the app's Auto detection reads that as a slow client and draws the
+ * canvas at one pixel per CSS pixel, and the frames are shot at two.
+ */
+async function shootBrowse(page) {
+  const pile = await app.ensureDataset(BROWSE_DATASET, 'siglip');
+  await app.ensureProjection(pile);
+  await trainedBookDetector();
+  const { browse_graphics: graphics } = await app.api('/api/settings');
+  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: 'full' } });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
+  await openDashboard(page);
+  await selectOnly(page, 'tr[vt-dataset-card]', BROWSE_DATASET);
+  await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  const dialog = page.locator('vt-modal').filter({ hasText: 'Find Results' });
+  await dialog.locator('.results-table').waitFor({ timeout: 600000 });
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(1500);
+  await shoot(page, 'ui-vision-find.build1');
+
+  await dialog.getByRole('button', { name: 'Browse', exact: true }).click();
+  await openedMap(page);
+  await shoot(page, 'ui-vision-find');
+
+  // Back to the dialog, closed, and on to the whole pile.
+  await page.locator('.browse-back').click();
+  await dialog.locator('.results-table').waitFor({ timeout: 60000 });
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await openDashboard(page);
+  const row = page
+    .locator('tr[vt-dataset-card]')
+    .filter({ has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${BROWSE_DATASET}\\s*$`) }) })
+    .first();
+  await row.locator('.overflow-btn').first().click();
+  await page.locator('.context-menu .menu-item', { hasText: 'Browse dataset' }).first().click();
+  await openedMap(page);
+  await shoot(page, 'ui-vision-map.build1');
+
+  // Closer, twice, on the books. The wheel zooms about the pointer, which holds
+  // the books' sign where it was at the fit; a drag then brings it to the
+  // centre, about which the second zoom's notches close in.
+  const meta = await app.api('/api/projection/meta', { dataset: pile.id });
+  const { labels } = await app.api('/api/projection/labels', { dataset: pile.id });
+  const sign = bookSign(labels, meta);
+  log(`browse: closing in on "${sign.text}"`);
+  const at = await fitScreenPoint(page, meta, [sign.x, sign.y]);
+  await page.mouse.move(at.x, at.y);
+  for (let i = 0; i < BROWSE_ZOOM_NOTCHES[0]; i++) {
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(250);
+  }
+  await page.waitForTimeout(1500);
+  await page.mouse.down();
+  await page.mouse.move((at.x + at.centre.x) / 2, (at.y + at.centre.y) / 2, { steps: 10 });
+  await page.mouse.move(at.centre.x, at.centre.y, { steps: 10 });
+  await page.mouse.up();
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+  await shoot(page, 'ui-vision-map.build2');
+
+  await page.mouse.move(at.centre.x, at.centre.y);
+  for (let i = BROWSE_ZOOM_NOTCHES[0]; i < BROWSE_ZOOM_NOTCHES[1]; i++) {
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(250);
+  }
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+  await shoot(page, 'ui-vision-map');
+
+  // One tile, opened: the one under the books' sign, with its details on.
+  await page.mouse.click(at.centre.x, at.centre.y, { button: 'right' });
+  await page.waitForSelector('.bin-popup-entry', { timeout: 30000 });
+  await page.locator('.browse-details button[aria-label="Show metadata"]').first().click();
+  await page.locator('.bin-popup-entry').first().hover();
+  await page.waitForSelector('.bin-popup-preview-img', { timeout: 10000 });
+  await page.waitForTimeout(1500);
+  await shoot(page, 'ui-vision-tile');
+
+  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: graphics } });
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -1235,6 +1449,7 @@ try {
   }, STILL_CSS);
   if (intro) await shootSession(page);
   // After the session, so its datasets never sit on the session's dashboards.
+  if (wanted('browse')) await shootBrowse(page);
   if (wanted('region-voting')) await shootRegionVoting(page);
 } finally {
   await browser.close();
