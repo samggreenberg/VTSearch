@@ -433,14 +433,24 @@ Browser, and clears it with the pair state.
   now seen the test set; the server's `find_eval_stale`).
 - The verdict is kept on the detector server-side (#4526), so a `start` over
   an unchanged ranking can come back already `done` with `test.kept_at` set:
-  the result pane says when those picks were taken, and the service re-reads
-  the votes, since the kept picks are session votes again. There is no
+  the result pane says when those picks were taken, and the kept picks are
+  session votes again, in Review's piles once it opens. There is no
   forget button: a retrain marks the verdict stale and a changed ranking
   deals a fresh test, so nothing is owed to the user there
   (`/api/line-test/forget` is the screenshot harness's reset). The two readers of the kept verdicts are the
   detector Stats modal's *Tested on* section and the AutoFind tab's
   `vt-detector-card`, which shows its row's `test_verdict` under the name;
   both word it through `verdictLine` / `verdictTitle` in `utils/line-test.ts`.
+
+**What a vote waits on** (#5099). The view's one `MediaPrefetchService`
+effect warms the next two images of whichever queue the tab votes through:
+the round's unvoted picks after the one on screen
+(`LineTestSessionService.upcoming`) on Autopilot, the boundary walk on
+Review. The vote piles (`/api/votes`) are read when the view opens, after a
+scoring pass, a balance change or a pair switch, and polled only while
+Review is up (`syncPiles`): no vote on either tab re-reads them. In Find
+that read carries every item's presumed label, megabytes on a large
+dataset, and a re-read per vote held up the next image.
 
 ### Browse view (`components/browse-*`)
 
