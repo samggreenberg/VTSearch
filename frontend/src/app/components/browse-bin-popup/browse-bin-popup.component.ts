@@ -20,6 +20,7 @@ import {
 } from '../../utils/bin-grid-metrics';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
+import { isSoloMediaType } from '../../utils/solo-media-type';
 import { BrowseAudioAudition, type NowPlaying } from '../../utils/browse-audio-audition';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
@@ -667,6 +668,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  field. Falls back to the active dataset's media type before load. */
   get metadataMediaType(): string {
     return this.focusedMedia()?.media_type || this.mediaType();
+  }
+
+  /** Whether the metadata column has a Media Type row: not on a server locked
+   *  to the item's type, where it could be nothing else (#5106). */
+  get showMetadataMediaType(): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.metadataMediaType);
   }
 
   /** MD5 of the focused item, matching the center panel's MD5 field. */

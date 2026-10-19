@@ -98,13 +98,15 @@
                 <span class="bin-popup-meta-value">{{ metadataName }}</span>
               </div>
             </div>
-            <div class="bin-popup-meta-item">
-              <span class="bin-popup-meta-label">Media Type</span>
-              <div class="bin-popup-meta-value-row">
-                <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
-                <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
+            @if (showMetadataMediaType) {
+              <div class="bin-popup-meta-item">
+                <span class="bin-popup-meta-label">Media Type</span>
+                <div class="bin-popup-meta-value-row">
+                  <vt-copy-detail-button [value]="metadataMediaType | titlecase" label="Media Type" />
+                  <span class="bin-popup-meta-value">{{ metadataMediaType | titlecase }}</span>
+                </div>
               </div>
-            </div>
+            }
             @for (entry of metadataCustom | keyvalue; track entry.key) {
               <div class="bin-popup-meta-item">
                 <span class="bin-popup-meta-label">{{ entry.key }}</span>

@@ -202,27 +202,52 @@ function capitalizeFirst(s: string): string {
 }
 
 describe('formatProgressHeader for a background AutoFind', () => {
-  it('names the run, not a load, and counts detectors', () => {
+  it('names the run, not a load, and counts labels while they resolve', () => {
     const { header, subtitle, detail } = formatProgressHeader(
-      { status: 'loading', message: 'Resolving 27 label origins…', current: 0, total: 2 },
+      { status: 'loading', message: 'Resolving 27 label origins…', current: 12, total: 27, media_type: 'image' },
       'autofind',
     );
     expect(header).toBe('Running AutoFind · Resolving labels');
     expect(subtitle).toContain('labeled examples');
-    expect(detail).toBe('0/2 detectors done');
+    expect(detail).toBe('12/27 labels');
   });
 
-  it('falls back to scoring between trains', () => {
-    const { header } = formatProgressHeader(
-      { status: 'loading', message: 'Scored 1 of 2 AutoFind detectors…', current: 1, total: 2 },
+  // #5101: the count is the items a scoring pass has got through, not detectors.
+  it.each([
+    ['image', '1,200/5,000 images'],
+    ['audio', '1,200/5,000 audio clips'],
+    [undefined, '1,200/5,000 items'],
+  ])('counts the %s items a calibration pass has scored', (mediaType, expected) => {
+    const { header, subtitle, detail } = formatProgressHeader(
+      { status: 'loading', message: 'Calibrating the threshold…', current: 1200, total: 5000, media_type: mediaType },
+      'autofind',
+    );
+    expect(header).toBe('Running AutoFind · Calibrating');
+    expect(subtitle).toContain('a few times over');
+    expect(detail).toBe(expected);
+  });
+
+  it('counts the items of the scoring pass', () => {
+    const { header, detail } = formatProgressHeader(
+      { status: 'loading', message: 'Scoring every item…', current: 4000, total: 5000, media_type: 'image' },
       'autofind',
     );
     expect(header).toBe('Running AutoFind · Scoring');
+    expect(detail).toBe('4,000/5,000 images');
+  });
+
+  it('shows no count while a phase has none', () => {
+    const { header, detail } = formatProgressHeader(
+      { status: 'loading', message: 'Training detector from labels…', current: 0, total: 0, media_type: 'image' },
+      'autofind',
+    );
+    expect(header).toBe('Running AutoFind · Training detectors');
+    expect(detail).toBe('');
   });
 
   it("calls the Find button's run a Find (#4615)", () => {
     const { header, subtitle } = formatProgressHeader(
-      { status: 'loading', message: 'Scored 1 of 2 detectors…', current: 1, total: 2 },
+      { status: 'loading', message: 'Scoring every item…', current: 1, total: 2 },
       'find',
     );
     expect(header).toBe('Running Find · Scoring');

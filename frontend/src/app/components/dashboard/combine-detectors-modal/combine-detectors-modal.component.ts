@@ -7,6 +7,7 @@ import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.se
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
 import { DetectorRegistryEntry } from '../../../generated/api-client/models/detector-registry-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 
 interface SourceRow {
   name: string;
@@ -29,6 +30,9 @@ export class CombineDetectorsModalComponent implements OnInit {
   readonly sources = input<DetectorRegistryEntry[]>([]);
   /** All registered model names; used for inline name-collision check. */
   readonly existingNames = input<string[]>([]);
+  /** The server's one media type when it is locked to one, from the
+   *  Dashboard; see {@link showMediaType}. */
+  readonly soloMediaType = input<string | null>(null);
 
   readonly closed = output<void>();
   readonly created = output<string>();
@@ -45,6 +49,12 @@ export class CombineDetectorsModalComponent implements OnInit {
   rows: SourceRow[] = [];
   totalLabels = 0;
   mediaType = '';
+
+  /** Whether the summary names the sources' media type: not on a server
+   *  locked to that one type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.soloMediaType(), this.mediaType);
+  }
 
   ngOnInit(): void {
     this.rows = this.sources().map((m) => ({

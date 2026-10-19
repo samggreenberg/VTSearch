@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 
@@ -13,6 +13,7 @@ import { DashboardSelectionService } from '../../services/dashboard-selection.se
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { configureZoneless } from '../../testing/zoneless-testbed';
@@ -160,6 +161,31 @@ describe('ContextPulldownComponent', () => {
       setRegistry([makeDataset('d1', 'Alpha')]);
       expect(component.activeName).toBe('');
       expect(component.activeRowExists).toBe(false);
+    });
+  });
+
+  describe("a row's media type (#5106)", () => {
+    /** The type tags of an open dataset pulldown over an audio and an image
+     *  dataset, on a server whose settings are `settings`. */
+    async function rowTypes(settings: object): Promise<string[]> {
+      TestBed.inject(SettingsStateService).load();
+      TestBed.tick();
+      TestBed.inject(HttpTestingController).expectOne('/api/settings').flush(settings);
+      await createPulldown('dataset');
+      setRegistry([makeDataset('d1', 'Alpha'), makeDataset('d2', 'Beta', { media_type: 'image' })]);
+      component.openMenu();
+      await settleZoneless(fixture);
+      return Array.from(fixture.nativeElement.querySelectorAll('.pulldown-row') as NodeListOf<HTMLElement>).map(
+        (row) => row.querySelector('.row-type')?.textContent?.trim() ?? '',
+      );
+    }
+
+    it('tags every row on a server open to every type', async () => {
+      expect(await rowTypes({})).toEqual(['· Audio', '· Image']);
+    });
+
+    it('leaves the tag off the rows of the type the server is locked to', async () => {
+      expect(await rowTypes({ solo_media_type: 'audio' })).toEqual(['', '· Image']);
     });
   });
 

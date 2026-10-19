@@ -66,6 +66,29 @@ describe('CombineDatasetsModalComponent', () => {
     await settleZoneless(fixture);
   }
 
+  describe('the Type column on a server locked to one media type (#5106)', () => {
+    const typeCells = () => fixture.nativeElement.querySelectorAll('.col-type').length;
+
+    it('shows it on a server open to every type', async () => {
+      await init([ds('a', 'Alpha', 'image', 10, '/data/a.pkl'), ds('b', 'Bravo', 'image', 20, '/data/b.pkl')]);
+      // Header, both rows, footer.
+      expect(typeCells()).toBe(4);
+    });
+
+    it('drops it when every row is of the locked type', async () => {
+      fixture.componentRef.setInput('soloMediaType', 'image');
+      await init([ds('a', 'Alpha', 'image', 10, '/data/a.pkl'), ds('b', 'Bravo', 'image', 20, '/data/b.pkl')]);
+      expect(component.showTypeColumn).toBe(false);
+      expect(typeCells()).toBe(0);
+    });
+
+    it('keeps it to show a row of another type', async () => {
+      fixture.componentRef.setInput('soloMediaType', 'image');
+      await init([ds('a', 'Alpha', 'image', 10, '/data/a.pkl'), ds('b', 'Bravo', 'audio', 20, '/data/b.pkl')]);
+      expect(typeCells()).toBe(4);
+    });
+  });
+
   it('builds rows from input datasets, filtering out entries with no pkl_path', async () => {
     await init([
       ds('a', 'Alpha', 'audio', 10, '/data/a.pkl'),

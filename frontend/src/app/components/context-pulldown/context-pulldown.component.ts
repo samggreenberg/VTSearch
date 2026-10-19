@@ -13,12 +13,14 @@ import { PulldownControlService } from '../../services/pulldown-control.service'
 import { DashboardSortService } from '../../services/dashboard-sort.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { SortState, sortRowsByColumn } from '../../utils/sort-rows';
 import { clusterImportSiblings } from '../../utils/import-siblings';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { isPairCompatible } from '../../utils/context-compat';
+import { isSoloMediaType } from '../../utils/solo-media-type';
 
 type PulldownKind = 'dataset' | 'detector';
 
@@ -79,6 +81,7 @@ export class ContextPulldownComponent implements OnInit {
   private dashboardSort = inject(DashboardSortService);
   private dashSelection = inject(DashboardSelectionService);
   private runningJobs = inject(RunningJobsService);
+  private settingsState = inject(SettingsStateService);
   private cdr = inject(ChangeDetectorRef);
 
   readonly kind = input<PulldownKind>('dataset');
@@ -433,6 +436,12 @@ export class ContextPulldownComponent implements OnInit {
     // The active state renders a `vt-icon` check in the template; this getter
     // only covers the loaded (●) / unloaded (○) dot for inactive rows.
     return row.loaded ? '●' : '○';
+  }
+
+  /** Whether a row names its media type: not on a server locked to that one
+   *  type, where every row would say the same (#5106). */
+  showRowType(row: PulldownRow): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, row.mediaType);
   }
 
   glyphTitle(row: PulldownRow): string {

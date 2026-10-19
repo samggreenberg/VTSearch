@@ -1616,6 +1616,56 @@ describe('DashboardComponent', () => {
     expect(el.querySelector('.dash-table')).toBeTruthy();
   });
 
+  describe('the Type columns on a server locked to one media type (#5106)', () => {
+    /** Load settings with `solo_media_type` set to `solo` (or unset), then repaint. */
+    async function loadSolo(solo: string | null): Promise<void> {
+      TestBed.inject(SettingsStateService).load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush(solo ? { solo_media_type: solo } : {});
+      await settleResource();
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+    }
+
+    const typeHeaders = () => (fixture.nativeElement as HTMLElement).querySelectorAll('th[data-col="media_type"]').length;
+
+    it('shows them on a server open to every type', async () => {
+      flushInitialRequests([{ id: 'd1', name: 'A', media_type: 'image' }], [{ id: 'm1', name: 'M', media_type: 'image' }]);
+      await loadSolo(null);
+      expect(component.visibleDatasetColumns).toContain('media_type');
+      expect(component.visibleDetectorColumns).toContain('media_type');
+      expect(typeHeaders()).toBe(2);
+    });
+
+    it('drops them when every row is of the locked type, where they could say nothing else', async () => {
+      flushInitialRequests(
+        [
+          { id: 'd1', name: 'A', media_type: 'image' },
+          { id: 'd2', name: 'B', media_type: 'image' },
+        ],
+        [{ id: 'm1', name: 'M', media_type: 'image' }],
+      );
+      await loadSolo('image');
+      expect(component.soloMediaType).toBe('image');
+      expect(component.visibleDatasetColumns).not.toContain('media_type');
+      expect(component.visibleDetectorColumns).not.toContain('media_type');
+      expect(typeHeaders()).toBe(0);
+    });
+
+    it('brings a table\'s column back for one row of another type', async () => {
+      flushInitialRequests(
+        [
+          { id: 'd1', name: 'A', media_type: 'image' },
+          { id: 'd2', name: 'B', media_type: 'audio' },
+        ],
+        [{ id: 'm1', name: 'M', media_type: 'image' }],
+      );
+      await loadSolo('image');
+      expect(component.visibleDatasetColumns).toContain('media_type');
+      expect(component.visibleDetectorColumns).not.toContain('media_type');
+    });
+  });
+
   describe('onLabel', () => {
     // Phase 2: onLabel just navigates to the URL-encoded pair; the
     // `activeContextGuard` owns the dataset/detector load and any

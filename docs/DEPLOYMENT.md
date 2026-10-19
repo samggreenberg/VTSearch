@@ -506,8 +506,10 @@ through their CLI flag or environment variable.
   boundary. Also settable with `--autopilot-only` / `VTSEARCH_AUTOPILOT_ONLY`.
 - `solo_media_type`: narrows the whole instance to one media type. The importer
   and new-detector flows hide their media-type pickers and lock to it, the
-  converter picker filters to converters that output it, and media-type steps
-  in tabbed UIs are skipped. `null` shows everything. Users cannot change it;
+  converter picker filters to converters that output it, media-type steps
+  in tabbed UIs are skipped, and fields that could only name it (Find Results,
+  the metadata panes, the Dashboard's Type columns) are hidden. `null` shows
+  everything. Users cannot change it;
   also settable with `--solo-media-type` / `VTSEARCH_SOLO_MEDIA_TYPE`, either of
   which wins for the process lifetime.
 - `projection_n_neighbors`, `projection_min_dist`: UMAP knobs for the VTSBrowse

@@ -6,10 +6,12 @@
   } @else if (stats(); as stats) {
     <table class="data-table stats-table">
       <tbody>
-        <tr>
-          <td class="stat-label" title="Media type: audio, image, text, video, or document">Type</td>
-          <td class="stat-value">{{ mediaType }}</td>
-        </tr>
+        @if (showMediaType) {
+          <tr>
+            <td class="stat-label" title="Media type: audio, image, text, video, or document">Type</td>
+            <td class="stat-value">{{ mediaType }}</td>
+          </tr>
+        }
         <tr>
           <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
           <td class="stat-value">{{ stats.num_items | number }}</td>

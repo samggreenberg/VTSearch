@@ -138,13 +138,13 @@
             </div>
           </div>
 
-          @if (mediaTypes().length > 0) {
+          @if (tabMediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->
-            @if (mediaTypes().length > 1) {
+            @if (tabMediaTypes().length > 1) {
               <div class="view-tabs">
-                @for (mt of mediaTypes(); track mt.type_id) {
+                @for (mt of tabMediaTypes(); track mt.type_id) {
                   <button
                     class="view-tab"
                     [class.view-tab--active]="activeViewTab() === mt.type_id"
@@ -289,12 +289,12 @@
               <option value="reduced">Reduced</option>
             </select>
           </div>
-          @if (mediaTypes().length > 0) {
+          @if (tabMediaTypes().length > 0) {
             <!-- A lone media type needs no tab bar (nothing to switch to); the
                  content below still renders for the single active type. -->
-            @if (mediaTypes().length > 1) {
+            @if (tabMediaTypes().length > 1) {
               <div class="view-tabs">
-                @for (mt of mediaTypes(); track mt.type_id) {
+                @for (mt of tabMediaTypes(); track mt.type_id) {
                   <button
                     class="view-tab"
                     [class.view-tab--active]="activeBrowseTab() === mt.type_id"
@@ -427,7 +427,7 @@
             <div class="server-value">{{ settings().autopilot_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
-            <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type:</label>
+            <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, converters that output other types are filtered out, and fields that could only name this type (Find Results, the metadata panes, the Dashboard's Type columns) are hidden. Set with --solo-media-type or the solo_media_type setting.">Solo media type:</label>
             <div class="server-value" [class.server-value--empty]="!effectiveSoloMediaType">{{ soloMediaTypeDisplay }}</div>
           </div>
           <div class="form-group">

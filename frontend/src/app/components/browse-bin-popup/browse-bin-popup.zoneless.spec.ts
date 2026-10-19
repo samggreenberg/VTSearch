@@ -245,6 +245,37 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
+  describe('the metadata column\'s Media Type row (#5106)', () => {
+    /** The metadata column's labels for a text bin on a server with `extra`. */
+    async function labelsWith(extra: Record<string, unknown>): Promise<(string | undefined)[]> {
+      settings.set({ popup_metadata_shown: { text: true }, ...extra });
+      const fixture = makeFixture();
+      fixture.componentRef.setInput('mediaType', 'text');
+      fixture.componentRef.setInput('memberIds', [1, 2]);
+      fixture.componentRef.setInput('repId', 1);
+      await settlePasses(fixture);
+      const labels = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.bin-popup-meta-label'),
+      ).map((el) => el.textContent?.trim());
+      fixture.destroy();
+      return labels;
+    }
+
+    it('shows on a server open to every type', async () => {
+      expect(await labelsWith({})).toContain('Media Type');
+    });
+
+    it("drops out on a server locked to the bin's type, where it could be nothing else", async () => {
+      const labels = await labelsWith({ solo_media_type: 'text' });
+      expect(labels).not.toContain('Media Type');
+      expect(labels).toContain('Name');
+    });
+
+    it('stays for a type the lock does not account for', async () => {
+      expect(await labelsWith({ solo_media_type: 'image' })).toContain('Media Type');
+    });
+  });
+
   it('reserves the body padding so a small text bin grid does not scroll', async () => {
     // The body is ``box-sizing: border-box`` with 12px of vertical padding, so its
     // bound height must exceed the flex content it holds by that padding — else the
