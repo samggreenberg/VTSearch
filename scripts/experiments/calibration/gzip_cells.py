@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         for cells in found:
             t = convert_dir(cells, apply=args.apply, quiet_minutes=args.quiet_minutes, force=args.force, jobs=args.jobs)
             if t.skipped:
-                print(f"SKIP {cells}: {t.skipped}")
+                print(f"SKIP {cells}: {t.skipped}", flush=True)
                 rc = 1
                 continue
             verb = "gzipped" if args.apply else "would gzip"
@@ -212,7 +212,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"{cells}: {verb} {t.converted} frame(s), {_gb(t.before)}{after}"
                 + (f"; {t.resumed} left from an interrupted pass" if t.resumed else "")
-                + (f"; {t.empty} empty frame(s) left plain" if t.empty else "")
+                + (f"; {t.empty} empty frame(s) left plain" if t.empty else ""),
+                flush=True,  # a batch log is block-buffered; the first pass logged nothing for 28 min
             )
             for name in t.conflicts:
                 print(f"  CONFLICT {name}: plain and gzipped copies differ; both left in place")
