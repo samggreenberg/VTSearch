@@ -1225,22 +1225,22 @@ async function fitScreenPoint(page, meta, [px, py]) {
 }
 
 /**
- * The sign the zoomed frames close in on: the finest one that names books.
+ * The sign the zoomed frames close in on: the region holding the most books.
  *
- * Books are the deck's running example, so the map is zoomed to where they
- * landed rather than to wherever the layout happened to put its densest
- * corner. Picked by rule rather than by name or position, so a re-layout
- * still lands on the books; failing that, on the finest sign the fit shows
- * nearest the centre.
+ * Books are the deck's running example, but no sign on this map says book: in
+ * COCO a book is mostly a shelf in a living room. So the zooms go where the
+ * books landed, which takes knowing which photos each region holds; the app
+ * saves a sign and its anchor, not its members, and `make-signpost-figs.py`
+ * works them out again (its `--where`), so the frames and What's in a Name
+ * are about the same region.
  */
-function bookSign(labels, meta) {
-  const finest = Math.max(...labels.map((l) => l.level));
-  const fine = labels.filter((l) => l.level === finest);
-  const named = fine.filter((l) => /\bbook/i.test(l.text)).sort((a, b) => b.score - a.score);
-  if (named.length) return named[0];
-  const [xmin, ymin, xmax, ymax] = meta.bounds;
-  const d = (l) => Math.hypot(l.x - (xmin + xmax) / 2, l.y - (ymin + ymax) / 2);
-  return fine.sort((a, b) => d(a) - d(b))[0];
+function bookSign(pklPath) {
+  const out = execFileSync('python', [join(FIGS, 'src', 'make-signpost-figs.py'), pklPath, '--where'], {
+    cwd: REPO,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  return JSON.parse(out.trim().split('\n').pop());
 }
 
 /**
@@ -1251,7 +1251,7 @@ function bookSign(labels, meta) {
  * dialog is the first frame — a list of file names, which is the thing Browse
  * is the answer to — and its Browse button the second, on the results' own
  * map. Then the pile's map from its row's ⋯ menu, at fit and at two zooms
- * centred on the books (`bookSign`), so each frame is lettered by a finer
+ * centred on where the books landed (`bookSign`), so each frame is lettered by a finer
  * layer of signposts than the last; and last a right-click on a tile there,
  * with the panel's details showing the tags each photo was given, which are
  * what the signposts are named from.
@@ -1261,7 +1261,20 @@ function bookSign(labels, meta) {
  * canvas at one pixel per CSS pixel, and the frames are shot at two.
  */
 async function shootBrowse(page) {
-  const pile = await app.ensureDataset(BROWSE_DATASET, 'siglip');
+  // The map is built at import, as Build Browse map now builds it, so the tags
+  // the signposts are named from are saved in the dataset with it, where
+  // `make-signpost-figs.py` reads them. Embedding 4,700 photographs on the two
+  // threads `ensureApp` gives the app takes most of an hour. The dataset is
+  // registered before its map is fitted, and a build asked for meanwhile would
+  // fit a second one, so a fresh import is waited out rather than asked.
+  const fresh = !app.named(await app.datasets(), BROWSE_DATASET);
+  const pile = await app.ensureDataset(BROWSE_DATASET, 'siglip', [], { build_projection: 'true' }, 3 * 3600000);
+  if (fresh) {
+    await app.waitFor(`the ${BROWSE_DATASET} map built at import`, async () => {
+      const meta = await app.api('/api/projection/meta', { dataset: pile.id });
+      return meta.status === 'ready' && meta.has_labels;
+    }, 3600000);
+  }
   await app.ensureProjection(pile);
   await trainedBookDetector();
   const { browse_graphics: graphics } = await app.api('/api/settings');
@@ -1300,8 +1313,7 @@ async function shootBrowse(page) {
   // the books' sign where it was at the fit; a drag then brings it to the
   // centre, about which the second zoom's notches close in.
   const meta = await app.api('/api/projection/meta', { dataset: pile.id });
-  const { labels } = await app.api('/api/projection/labels', { dataset: pile.id });
-  const sign = bookSign(labels, meta);
+  const sign = bookSign(app.named(await app.datasets(), BROWSE_DATASET).pkl_path);
   log(`browse: closing in on "${sign.text}"`);
   const at = await fitScreenPoint(page, meta, [sign.x, sign.y]);
   await page.mouse.move(at.x, at.y);
@@ -1337,6 +1349,13 @@ async function shootBrowse(page) {
   await shoot(page, 'ui-vision-tile');
 
   await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: graphics } });
+
+  // What's in a Name, drawn from the container the app saved the pile and its
+  // map into, so the figure names the region these frames close in on.
+  execFileSync('python', [join(FIGS, 'src', 'make-signpost-figs.py'), app.named(await app.datasets(), BROWSE_DATASET).pkl_path], {
+    cwd: REPO,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -1373,6 +1392,10 @@ async function ensureApp() {
       VTSEARCH_DATA_DIR: APP_DATA_DIR,
       VTSEARCH_MODELS_DIR: process.env.VTSEARCH_MODELS_DIR || join(REPO, 'data', 'models'),
       VTSEARCH_TORCH_THREADS: '2',
+      // The Browse map seeded, as refresh.sh seeds it (#4296): an unseeded fit
+      // lays the Vision pile out differently every run, and What's in a Name
+      // can only find the app's regions again under the seed they were fit by.
+      VTSEARCH_PROJECTION_SEED: process.env.VTSEARCH_PROJECTION_SEED || '0',
     },
     stdio: 'ignore',
     detached: false,
