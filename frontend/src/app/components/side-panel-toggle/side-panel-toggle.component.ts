@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 /**
- * The fold control for a side panel of Train and Test (#4673).
+ * The fold control for a side panel of Train and Tune (#4673).
  *
  * Folded, it is the whole strip the panel leaves behind: one button the height
  * of the pane, with an arrow pointing back into the view and the panel's name

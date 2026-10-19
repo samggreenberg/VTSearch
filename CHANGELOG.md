@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
+  #5098). What people get from it is a better detector, not only a verdict on the one they have:
+  the view tests the line on a dataset the detector never trained on, then lets you correct its
+  calls, lean its Threshold, or move it to AutoFind. The button, its view (now at `/tune/…`; an old
+  `/test/…` link lands on the Dashboard), Settings, Toasty's hints and the guide all say Tune; the
+  test of the line inside it keeps its name. From the click until the view opens, a bar under the
+  button follows the dataset and detector loads the view waits for, where only the icon used to
+  waggle.
+
 - **A server locked to one media type stops naming it everywhere** (issue #5106). With
   `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
   the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
@@ -32,7 +41,7 @@ not list every commit. Use `git log` for the full history.
   resolve, then `3,000/5,000 images` (or clips, documents, …) for each pass over the dataset.
 
 - **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
-  Test view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
+  Tune view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
   reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
   Threshold** table, with a note over them when the result is out of date or the line has moved.
   They used to sit part-way down the narrow result pane on the right, which now keeps the numbers
@@ -1062,9 +1071,9 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
-- **Voting in Test keeps up with you, as it does in Train** (issue #5099). The Test autopilot now loads
+- **Voting in Tune keeps up with you, as it does in Train** (issue #5099). The Tune autopilot now loads
   the next two picks' images while you look at the current one, so a vote shows the next pick at once
-  rather than waiting for its download. No vote on either Test tab re-downloads the full vote list any
+  rather than waiting for its download. No vote on either Tune tab re-downloads the full vote list any
   more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
   refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
   that fails to load is no longer requested again and again.

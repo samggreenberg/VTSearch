@@ -61,7 +61,7 @@ function compactCount(n: number): string {
 }
 
 /**
- * The Test autopilot's right pane (#4524): the result as it forms. The picks
+ * The Tune autopilot's right pane (#4524): the result as it forms. The picks
  * so far by band, the precision and recall ranges with their lights, the
  * F-beta headline, the band-resolution precision curve (which replaces the
  * retired Stats modal's *Checked by you* curve: unbiased, from the uniform

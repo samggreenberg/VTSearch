@@ -493,10 +493,10 @@ through their CLI flag or environment variable.
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
   `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
-- `autopilot_only`: keeps **Train** and **Test** on their Autopilot tabs. Train
-  loses its Manual tab and Test its Review tab, and neither view shows a tab
+- `autopilot_only`: keeps **Train** and **Tune** on their Autopilot tabs. Train
+  loses its Manual tab and Tune its Review tab, and neither view shows a tab
   bar, so users only see the guided flow. Train starts in Autopilot whatever a
-  user's own `autopilot_enabled` preference says. With Test's Review tab gone,
+  user's own `autopilot_enabled` preference says. With Tune's Review tab gone,
   its Browse / To Dataset / Export actions for unverified matches are gone too.
   Autopilot needs a first sort to start from, and on a dataset that can't search by
   text that has to be an example item, which the New Detector dialog
@@ -864,7 +864,7 @@ evaluation, sorting, voting) works fully offline.
 | `VTSEARCH_SUPPORT_EMAIL` | unset (persisted `support_email`, else the built-in project address) | Env-var form of `--support-email`: the Help modal's "Email us" recipient. |
 | `VTSEARCH_ON_DATASET_IMPORTED` | unset | Env-var form of `--on-dataset-imported`: comma-separated `module:function` hooks called when a web import succeeds or fails ([EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). A spec that fails to load is reported on stdout and none of the variable's hooks are installed. Deliberately not a setting: nothing in the settings file can name code to run. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Env-var form of `--semantic-only` (`1`/`true`/`yes`/`on`): only Semantic embedders are offered or accepted. |
-| `VTSEARCH_AUTOPILOT_ONLY` | unset | Env-var form of `--autopilot-only` (`1`/`true`/`yes`/`on`): Train and Test show only their Autopilot tabs. |
+| `VTSEARCH_AUTOPILOT_ONLY` | unset | Env-var form of `--autopilot-only` (`1`/`true`/`yes`/`on`): Train and Tune show only their Autopilot tabs. |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Env-var form of `--dataset-max-age-days`: new datasets expire this many days out. Positive integers only. |
 | `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Env-var form of `--solo-media-type`: lock the instance to one registered media type (`python app.py --list-media-types`). |
 | `VTSEARCH_SOLO_EMBEDDERS` | unset | Env-var form of the repeatable `--solo-embedder`, as comma-separated `TYPE=EMBEDDER` pairs (`image=siglip,audio=clap`). A per-process fallback that a user's own choice overrides, not a lock. |

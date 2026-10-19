@@ -8,21 +8,7 @@ import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import { LoadingTask } from '../models/api.models';
-
-/** A task row's identity across reuse. Loads of one dataset or detector share
- *  a task id (`_regload_<id>`, `_detload_<id>`), and a finished row lingers
- *  on the channel for seconds afterwards (5s, or 30s with an error), so the
- *  id alone cannot tell this load's row from the last one's; `created_at`
- *  can. */
-function rowKey(task: LoadingTask): string {
-  return `${task.task_id}@${task.created_at}`;
-}
-
-/** Keys of the rows on *tasks* that have already settled: leftovers of
- *  earlier loads, which a waiter must not read as its own load finishing. */
-function settledRowKeys(tasks: LoadingTask[]): ReadonlySet<string> {
-  return new Set(tasks.filter((t) => t.status === 'idle').map(rowKey));
-}
+import { rowKey, settledRowKeys } from '../utils/pair-load-bar';
 
 interface ActiveSwitch {
   requestId: number;
@@ -65,7 +51,7 @@ interface ActiveSwitch {
  * Two entry points:
  *
  *  - `switchTo(ds, det)`: called by the top-bar pulldowns. When the
- *    user is on `/label/:ds/:det` or `/test/:ds/:det`, it navigates to
+ *    user is on `/label/:ds/:det` or `/tune/:ds/:det`, it navigates to
  *    the new URL (the route guard then calls `applyActivePair`). On
  *    other routes (e.g. `/dashboard`) it flips the pair imperatively.
  *  - `applyActivePair(ds, det)`: called by the active-context route
@@ -92,7 +78,7 @@ export class ContextSwitchService {
   }
 
   /**
-   * Pulldown-initiated switch. On `/label` or `/test`, navigates to the
+   * Pulldown-initiated switch. On `/label` or `/tune`, navigates to the
    * matching `/<view>/:ds/:det` URL; the route guard then drives the
    * active-pair flip via `applyActivePair`. On other routes, flips the
    * pair imperatively (no navigation).
@@ -103,14 +89,14 @@ export class ContextSwitchService {
   switchTo(datasetId: string, detectorId: string): void {
     const currentUrl = this.router.url.split('?')[0];
     const onLabel = currentUrl.startsWith('/label');
-    const onTest = currentUrl.startsWith('/test');
+    const onTune = currentUrl.startsWith('/tune');
     const onBrowse = currentUrl.startsWith('/browse');
     if (onBrowse && datasetId) {
       this.router.navigate(['/', 'browse', datasetId]);
       return;
     }
-    if ((onLabel || onTest) && datasetId && detectorId) {
-      const seg = onTest ? 'test' : 'label';
+    if ((onLabel || onTune) && datasetId && detectorId) {
+      const seg = onTune ? 'tune' : 'label';
       this.router.navigate(['/', seg, datasetId, detectorId]);
       return;
     }

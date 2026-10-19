@@ -540,7 +540,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
     });
 
-    it('goes Back to the Dashboard and reopens those results, not to Test', async () => {
+    it('goes Back to the Dashboard and reopens those results, not to Tune', async () => {
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.subset).toBe(true);
@@ -566,12 +566,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       expect(fixture.componentInstance.errorMessage()).toContain('Open the Find results again');
     });
 
-    it('keeps Back to Test for a Test-view subset', async () => {
+    it('keeps Back to Tune for a Tune-view subset', async () => {
       query = { subset: '1' };
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.resultsRunId).toBe('');
-      expect(component.backTarget).toBe('Test');
+      expect(component.backTarget).toBe('Tune');
       expect(component.countNoun).toBe('positives');
       expect(component.canVerify).toBe(true);
     });

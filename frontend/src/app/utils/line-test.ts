@@ -5,7 +5,7 @@ import type { LineTestVerdict } from '../generated/api-client/models/line-test-v
 import { formatTimestamp } from './format-date';
 
 /**
- * Test mode's test of the line (#4524; the design is in `vtscore/docs/packages/training.md`,
+ * Tune mode's test of the line (#4524; the design is in `vtscore/docs/packages/training.md`,
  * the statistics `vtscore/training/thresholds/line_test.py`): the vocabulary
  * the Find view's Autopilot tab reads the server's state in, and the words it
  * puts on it. The phase is derived server-side on every read (`line_phase`);
@@ -48,7 +48,7 @@ export function fbetaHeadline(estimate: LineTestEstimate): string {
   return `${estimate.point.toFixed(2)} (${estimate.lo.toFixed(2)}–${estimate.hi.toFixed(2)})`;
 }
 
-/** The dot and text the balance control shows under its spectrum in Test. */
+/** The dot and text the balance control shows under its spectrum in Tune. */
 export interface TestLineState {
   text: string;
   title: string;
@@ -56,7 +56,7 @@ export interface TestLineState {
 }
 
 /**
- * The balance control's state line in Test (the owner's choice, #4524): this
+ * The balance control's state line in Tune (the owner's choice, #4524): this
  * corpus's test result, or *untested*, never Train's check range, which
  * measured the training corpus and would read as this one's. Null before a
  * Find pass has drawn a line.

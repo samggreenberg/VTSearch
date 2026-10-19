@@ -115,7 +115,7 @@ describe('VotingOverlayComponent', () => {
 
     fixture.componentRef.setInput('hint', 'test-vote');
     await settleZoneless(fixture);
-    expect(text()).toContain("picks from both sides of your detector's line");
+    expect(text()).toContain("Tune tests your detector's line with picks from both sides of it");
 
     fixture.componentRef.setInput('hint', null);
     await settleZoneless(fixture);

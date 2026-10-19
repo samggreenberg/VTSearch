@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 /**
  * Where a subset browse was launched from, and so where its **Back** returns:
- * the Test view, or the Find Results dialog of run *runId* (#4615), which
+ * the Tune view, or the Find Results dialog of run *runId* (#4615), which
  * reopens on the Dashboard. Rides the browse URL's query (`from=results&run=…`)
  * rather than the in-memory handoff, so it survives a reload.
  */
@@ -22,7 +22,7 @@ export interface BrowseSubset {
 }
 
 /**
- * Carries the subset selection from the Test view (or the Find Results dialog)
+ * Carries the subset selection from the Tune view (or the Find Results dialog)
  * to the Browse view across a route navigation. The launcher stashes the ids
  * here and navigates to `/browse/:datasetId?subset=1`; the Browse view reads
  * them back on init.

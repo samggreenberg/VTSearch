@@ -259,7 +259,7 @@ drawn*, not *who was driving*, and the two come apart — a user can pick the
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `check`, `test`, `unknown` | Which UI flow drove the vote (`check` is a spot-check pick, `test` a Test-mode pick that never trains). |
+| `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `check`, `test`, `unknown` | Which UI flow drove the vote (`check` is a spot-check pick, `test` a Tune test pick that never trains). |
 | `phase` | `good`, `bad`, `more`, `hard`, `new` | Autopilot phase; ignored unless `flow` is `autopilot`. |
 | `select_mode` | `top`, `hard`, `new` | How the item was drawn off the ranking. |
 | `sort_kind` | `learned`, `text`, `load` | Which ranking the user was looking at. |
@@ -414,7 +414,7 @@ X-Dataset-Id: <the face dataset's id>
 ```
 
 One window of a ranking of face crops **grouped by the photo each face was cut
-from** (issue #4751): the server half of Train and Test's **Collapse to photos**.
+from** (issue #4751): the server half of Train and Tune's **Collapse to photos**.
 The photo is found as an item of the Image dataset the same multi-dataset
 import produced, as [`GET /api/medias/<id>/source`](#resolve-a-derived-items-source)
 finds it. Takes the `sort_token` of any sort, including

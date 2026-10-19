@@ -18,7 +18,7 @@ import { BALANCE_PRESETS } from '../../../utils/line-balance';
 import { estimatePercent } from '../../../utils/line-test';
 
 /**
- * The Test autopilot's centre pane (#4524): the current pick with Good and
+ * The Tune autopilot's centre pane (#4524): the current pick with Good and
  * Bad, the round's dots, the phase's one-line prompt, and ↓ to go back one
  * pick, as the spot-check modal shows a round, but as the view rather than a
  * modal over a list. Before a test exists it says what the pane is waiting on.

@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { SourcePhotoService } from './source-photo.service';
 
 /**
- * Collapse to photos (#4751): show a face dataset's Train and Test rankings as
+ * Collapse to photos (#4751): show a face dataset's Train and Tune rankings as
  * the photos the faces were cut from.
  *
  * A presentation mode on the ranking, never a new ranking: the server groups
@@ -12,7 +12,7 @@ import { SourcePhotoService } from './source-photo.service';
  * Votes, counts and the Find actions stay on faces, since the detector is a
  * face detector.
  *
- * The switch is the user's and lasts the session, across Train and Test and
+ * The switch is the user's and lasts the session, across Train and Tune and
  * dataset switches; it takes effect only where Show in photo is offered (a
  * convert-in dataset whose import also made an Image dataset), so turning it
  * on for a face dataset leaves every other dataset's list as it was.

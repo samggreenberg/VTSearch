@@ -663,7 +663,7 @@ async function warnIfMotionForced(): Promise<void> {
 }
 
 /**
- * Open both side panels of Train and Test for the run. They start folded to a
+ * Open both side panels of Train and Tune for the run. They start folded to a
  * strip (#4673), and the shots are of what is in them: the vote piles, the work
  * queue, the test's result. A recipe that wants a fold clicks its arrow.
  */

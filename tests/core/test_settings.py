@@ -567,7 +567,7 @@ class TestSettingsModule:
         assert settings_mod.get_autopilot_enabled() is False
 
     def test_side_panels_default_hidden(self):
-        # Train and Test open with both side panels folded (#4673).
+        # Train and Tune open with both side panels folded (#4673).
         assert settings_mod.get_hide_left_panel() is True
         assert settings_mod.get_hide_right_panel() is True
 
