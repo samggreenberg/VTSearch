@@ -1,0 +1,136 @@
+preset,arm,label,metric,at,n,mean,se,resolvable,share_better_005,share_worse_005
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,0.0157064,0.00323671,True,0.193056,0.108333
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.00742364,0.00312438,True,0.177778,0.131944
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,-0.00712068,0.00244177,True,0.108333,0.168056
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,0.00814815,0.00098723,True,0.0652778,0.00972222
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.00382658,0.00151483,True,0.1,0.0541667
+b025,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.0052671,0.00103719,True,0.0555556,0.0277778
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,0.00905561,0.00146164,True,0.109722,0.0361111
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00476708,0.000793108,True,0.0291667,0.00555556
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.00196367,0.000510547,True,0.0138889,0.00138889
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,0.00231514,0.000457353,True,0.00416667,0.00416667
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.0052654,0.000442004,True,0.00555556,0
+b025,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00428198,0.000361397,True,0.00277778,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=50,720,0.0161584,0.00352291,True,0.188889,0.108333
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=100,720,0.0103117,0.00318216,True,0.190278,0.127778
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=150,720,-0.00773433,0.00267889,True,0.120833,0.191667
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-50,720,0.00842204,0.000998417,True,0.0638889,0.00833333
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 51-150,720,0.00332416,0.00158146,True,0.0930556,0.0611111
+b025,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-150,720,0.00502345,0.00109992,True,0.0597222,0.0347222
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=50,720,0.00865694,0.00150243,True,0.108333,0.0361111
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=100,720,0.00450107,0.000801221,True,0.0263889,0.00694444
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=150,720,0.00190278,0.000527271,True,0.0138889,0.00277778
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-50,720,0.00225342,0.00047616,True,0.00416667,0.00416667
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 51-150,720,0.00495736,0.000459737,True,0.00555556,0.00138889
+b025,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-150,720,0.00405605,0.000367754,True,0.00277778,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=10,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=50,720,-0.55,0.508189,False,0.372222,0.311111
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=100,720,2.92917,0.376698,True,0.530556,0.219444
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=150,720,3.43333,0.525083,True,0.552778,0.220833
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-25,720,0,0,False,0,0
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-50,720,-0.739639,0.179126,True,0.326389,0.380556
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 51-150,720,2.59329,0.270323,True,0.633333,0.254167
+b025,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-150,720,1.48231,0.184243,True,0.609722,0.263889
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,0.0159422,0.00226974,True,0.175,0.0597222
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.00490008,0.00148188,True,0.0902778,0.0625
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,-0.00376533,0.00147132,True,0.0638889,0.0944444
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,0.0093303,0.00088582,True,0.0666667,0.00277778
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.00566492,0.000808845,True,0.0305556,0.0138889
+b1,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.00688672,0.000615529,True,0.0152778,0.00416667
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,0.0105827,0.00146163,True,0.104167,0.0319444
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00440528,0.000776315,True,0.0305556,0.00555556
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.00244017,0.000554213,True,0.0138889,0.00277778
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,0.00246727,0.000433326,True,0.00555556,0.00277778
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.00595108,0.000474336,True,0.00972222,0
+b1,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00478981,0.000380284,True,0.00277778,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=50,720,0.0161619,0.00224692,True,0.176389,0.0541667
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=100,720,0.00499036,0.00157756,True,0.101389,0.0583333
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=150,720,-0.00296052,0.00149906,False,0.0680556,0.0972222
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-50,720,0.00963538,0.000903265,True,0.0736111,0.00416667
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 51-150,720,0.00566834,0.000835623,True,0.0333333,0.00972222
+b1,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-150,720,0.00699069,0.000632765,True,0.0180556,0.00138889
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=50,720,0.0101408,0.00152708,True,0.102778,0.0333333
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=100,720,0.00436534,0.00077932,True,0.0319444,0.00555556
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=150,720,0.0025736,0.000561053,True,0.0152778,0.00277778
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-50,720,0.00245045,0.000463408,True,0.00555556,0.00416667
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 51-150,720,0.00575228,0.000477692,True,0.00972222,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-150,720,0.00465167,0.000388564,True,0.00277778,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=10,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=50,720,0.247222,1.2217,False,0.436111,0.280556
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=100,720,7.08333,0.932304,True,0.548611,0.254167
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=150,720,7.41389,1.40404,True,0.555556,0.298611
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-25,720,0,0,False,0,0
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-50,720,-3.11628,0.419453,True,0.2875,0.463889
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 51-150,720,5.98706,0.601608,True,0.609722,0.305556
+b1,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-150,720,2.95261,0.427191,True,0.518056,0.398611
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=50,720,0.0077692,0.0016277,True,0.109722,0.0486111
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=100,720,0.00936947,0.00156006,True,0.113889,0.0444444
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,t=150,720,0.00508663,0.00128094,True,0.0736111,0.0319444
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-50,720,0.00260891,0.000453672,True,0.00694444,0.00416667
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 51-150,720,0.00895079,0.000852738,True,0.0597222,0.00694444
+b4,nowalk,"New on the Hard pick, no atlas walk",objective,mean 1-150,720,0.00683683,0.0006065,True,0.0138889,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=50,720,0.00615943,0.00105079,True,0.0611111,0.025
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=100,720,0.00511437,0.000929883,True,0.0444444,0.00972222
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,t=150,720,0.00246882,0.000678092,True,0.0208333,0.00694444
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-50,720,0.00158965,0.000355675,True,0.00138889,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 51-150,720,0.0060779,0.000565138,True,0.0208333,0.00277778
+b4,nowalk,"New on the Hard pick, no atlas walk",ap,mean 1-150,720,0.00458181,0.000408465,True,0.00416667,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=50,720,0.00730706,0.00157806,True,0.101389,0.0513889
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=100,720,0.00825168,0.00162769,True,0.115278,0.0513889
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,t=150,720,0.0038885,0.00156642,True,0.0819444,0.0458333
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-50,720,0.00230362,0.000460747,True,0.00416667,0.00277778
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 51-150,720,0.0075304,0.000937407,True,0.0555556,0.0125
+b4,nowalk,"New on the Hard pick, no atlas walk",find_objective,mean 1-150,720,0.00578814,0.000661726,True,0.0166667,0.00694444
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=50,720,0.00549741,0.00109455,True,0.0625,0.0291667
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=100,720,0.00481074,0.000931807,True,0.0472222,0.0111111
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,t=150,720,0.00227285,0.00069609,True,0.0208333,0.00972222
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-50,720,0.00152879,0.000385041,True,0.00277778,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 51-150,720,0.00570624,0.000579959,True,0.0208333,0.00277778
+b4,nowalk,"New on the Hard pick, no atlas walk",find_ap,mean 1-150,720,0.00431376,0.000423848,True,0.00416667,0.00138889
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=10,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=50,720,-1.29722,2.14906,False,0.35,0.2875
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=100,720,9.17222,3.74141,True,0.431944,0.427778
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,t=150,720,1.51944,5.52785,False,0.404167,0.497222
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-25,720,0,0,False,0,0
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-50,720,-1.03175,0.905135,False,0.305556,0.344444
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 51-150,720,4.07336,2.27434,False,0.454167,0.473611
+b4,nowalk,"New on the Hard pick, no atlas walk",find_n_flagged,mean 1-150,720,2.37166,1.51679,False,0.448611,0.477778

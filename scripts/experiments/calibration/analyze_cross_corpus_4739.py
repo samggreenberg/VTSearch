@@ -362,22 +362,20 @@ def figures(out: Path, legs: list[str]) -> None:
         fig.tight_layout()
         fig.savefig(figdir / "walk_price_by_corpus.png", dpi=130)
         plt.close(fig)
-    # 2. The screens alone: how many each arm returns among them (mean over runs), and how often any, every vote.
+    # 2. The screens alone: how many each arm returns among them, mean over runs, every vote. (Every run returns at
+    # least one at every vote: the line on a corpus with no positive still keeps its top.)
     if "screens_only" in legs and (out / "screens_only" / "find_curves.csv").is_file():
         fc = pd.read_csv(out / "screens_only" / "find_curves.csv")
-        fig, axes = plt.subplots(2, len(presets), figsize=(5.0 * len(presets), 5.8), squeeze=False, sharex=True)
+        fig, axes = plt.subplots(1, len(presets), figsize=(5.0 * len(presets), 3.4), squeeze=False)
         for j, p in enumerate(presets):
+            ax = axes[0][j]
             for arm, colour in (("ctl", "#2a78d6"), ("nowalk", "#1baf7a")):
                 c = fc[(fc["preset"] == p) & (fc["arm"] == arm)]
-                axes[0][j].plot(c["t"], c["returned_mean"], color=colour, lw=1.6, label=arm)
-                axes[1][j].plot(c["t"], 1 - c["returned_none"], color=colour, lw=1.6, label=arm)
-            axes[0][j].set_title(f"screens alone, beta {PRESETS[p]:g}", fontsize=9)
-            axes[1][j].set_ylim(-0.03, 1.03)
-            axes[1][j].set_xlabel("votes")
-            for ax in (axes[0][j], axes[1][j]):
-                ax.grid(alpha=0.3)
+                ax.plot(c["t"], c["returned_mean"], color=colour, lw=1.6, label=arm)
+            ax.set_title(f"screens alone, beta {PRESETS[p]:g}", fontsize=9)
+            ax.set_xlabel("votes")
+            ax.grid(alpha=0.3)
         axes[0][0].set_ylabel("screens returned (mean over runs)")
-        axes[1][0].set_ylabel("share of runs returning any")
         axes[0][0].legend(fontsize=8)
         fig.tight_layout()
         fig.savefig(figdir / "screens_returned.png", dpi=130)
