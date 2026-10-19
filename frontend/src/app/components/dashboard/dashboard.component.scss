@@ -14,6 +14,8 @@
   position: relative;
   // Width of each Train / Tune / Find group.
   --action-btn-group-width: 220px;
+  // Each button's least width, which Tune's click bar matches.
+  --action-btn-min-width: 120px;
 }
 
 .dashboard-section-wrap {
@@ -228,7 +230,7 @@
   position: relative;
 
   .btn {
-    min-width: 120px;
+    min-width: var(--action-btn-min-width);
     padding: var(--space-md) var(--space-2xl);
     font-size: var(--font-xl);
     display: inline-flex;
@@ -272,13 +274,14 @@
   max-width: 100%;
 }
 
-// Tune's click bar (#5098) stands in the reason's slot, at the reason's height.
+// Tune's click bar (#5098) stands in the reason's slot, at the reason's height
+// and the button's width.
 .btn-load-bar {
   display: flex;
   align-items: center;
   font-size: var(--font-xs);
   height: 1.2em;
-  width: 100%;
+  width: var(--action-btn-min-width);
 
   vt-progress-bar {
     flex: 1 1 auto;
