@@ -423,16 +423,18 @@ Browser, and clears it with the pair state.
 - `vt-line-test-stage` (centre): the current pick with Good and Bad, the
   round's dots, the phase's prompt, through a `KeyboardService.captureVoteKeys`
   claim held while it is on screen, as the spot check's stage does in Train.
+  At Done it is the verdict (#5100), with the stale / moved note over it and
+  its three exits (**Move to AutoFind**, which sets the detector's autofind
+  flag and heads to the Dashboard; **Lean the Threshold**, the per-preset
+  table the server prices from the same picks, whose click is the control's
+  own balance pick; **Add Corrections and retrain**, the view's existing
+  corrections path), all emitted to the view: the decision stays where the
+  user just voted, and in view when the right pane is folded.
 - `vt-line-test-result` (right): the result as it forms, in place of the two
   piles: the F-beta headline, the Right and Found ranges with their lights,
-  the band-resolution precision curve, the picks by band, and at Done the
-  verdict with its three exits (**Move to AutoFind**, which sets the
-  detector's autofind flag and heads to the Dashboard; **Lean the
-  Threshold**, the per-preset table the server prices from the same picks,
-  whose click is the control's own balance pick; **Add Corrections and
-  retrain**, the view's existing corrections path). The trust chips
+  the band-resolution precision curve and the picks by band. The trust chips
   (Training-domain overlap, Evidence coverage) and a 2×2 of the session's
-  checks live under the verdict, read once the test is done.
+  checks live under the result, read once the test is done.
 - The balance is live between phases and frozen within one
   (`LineTestSessionService.locked`): the view drops a pick while a phase
   runs, and after a pick lands it re-reads the test so the result reports

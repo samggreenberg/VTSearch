@@ -246,9 +246,9 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /**
    * The side panels' folds (#4673). The left folds on the Autopilot tab only:
    * Review is driven from its list. The right folds on both tabs, but a
-   * verdict opens it on its own (the stage says "read the result on the
-   * right") until the user folds it again; that is this test's, so the saved
-   * setting is not touched by it.
+   * verdict opens it on its own (the numbers behind the stage's verdict)
+   * until the user folds it again; that is this test's, so the saved setting
+   * is not touched by it.
    */
   readonly leftCollapsed = computed(() => this.panelHide.left() && this.findTab() === 'autopilot');
   private readonly verdictShown = computed(() => this.findTab() === 'autopilot' && this.lineTest.phase() === 'done');

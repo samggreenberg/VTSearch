@@ -1031,7 +1031,10 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
       await settleZoneless(fixture);
       expect(hint()?.getAttribute('hintId')).toBe('test-done');
-      expect(hint()?.textContent).toContain('Read the verdict on the right');
+      expect(hint()?.textContent).toContain('Move the detector to AutoFind');
+      // The verdict and its exits are the stage's now (#5100), not the result pane's.
+      expect(el.querySelector('vt-line-test-stage .verdict-card .exits')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-result .exits')).toBeNull();
     });
 
     it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {

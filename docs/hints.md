@@ -107,7 +107,7 @@ dry-run length, 16. In `autopilot-done-level`, `{F}` is the F-beta the labels li
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `test-vote` | happy | Tune tests your detector's line with picks from both sides of it, in random order. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
-| `test-done` | happy | The test is done. Read the verdict on the right, or open the **Review** tab to check the list yourself. | The test reached Done. Stands under the stage's **Test done** heading, which says nothing more. |
+| `test-done` | happy | The test is done. Move the detector to **AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
 | `review` | happy | Every item is here, best match first. Click one to check it with Good or Bad, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 
 ## Dialogs

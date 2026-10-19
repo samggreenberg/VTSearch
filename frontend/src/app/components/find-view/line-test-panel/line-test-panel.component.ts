@@ -138,7 +138,7 @@ export class LineTestPanelComponent {
         );
       }
       case 'done':
-        return light('green', 'The ranges have stopped moving usefully. Read the result on the right.');
+        return light('green', 'The ranges have stopped moving usefully. Read the verdict in the centre.');
       default:
         return null;
     }
