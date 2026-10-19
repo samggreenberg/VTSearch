@@ -12,6 +12,7 @@ import { provideRouter, Router } from '@angular/router';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 
 /**
  * Zoneless staleness canary for the center panel.
@@ -380,12 +381,16 @@ describe('CenterPanelComponent', () => {
         el.textContent?.trim(),
       );
 
-    /** Show the metadata grid for the audio item on a server with `settings`. */
+    /** Show the metadata grid for the audio item on a server with `settings`
+     *  (the tray's open state is itself a setting, `show_metadata`). The
+     *  settings GET is an `rxResource`, so drain a macrotask and tick to issue
+     *  it before flushing (see the keyboard canary above). */
     async function showWith(settings: object): Promise<void> {
       fixture.componentRef.setInput('media', mockMedia);
-      component.showMetadata.set(true);
-      await settleZoneless(fixture);
-      for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush(settings);
+      TestBed.inject(SettingsStateService).load();
+      await new Promise<void>((resolve) => setTimeout(resolve));
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush({ show_metadata: true, ...settings });
       await settleZoneless(fixture);
     }
 

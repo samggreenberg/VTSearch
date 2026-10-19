@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A server locked to one media type stops naming it everywhere** (issue #5106). With
+  `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
+  the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
+  every item. Those fields now drop out, as do Settings' per-type tab bars under Scroll Style and
+  Browser. A dataset or detector of another type, kept from before the lock, still shows its type, and
+  brings its table's Type column back.
+
 - **A server that trusts session cookies no longer signs them with the key printed in the source**
   (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
   anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
