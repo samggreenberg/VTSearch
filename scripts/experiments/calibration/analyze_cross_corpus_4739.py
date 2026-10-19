@@ -319,6 +319,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             "the trajectories every #4739 leg shares",
             default_metric="fbeta",
             hide_metrics=("cost",),
+            # 4,320 runs bust the repo's 4 MB file cap even at the coarsest per-seed grid (4.6 MB): the averaged
+            # view alone (#4651), which the page says.
+            runs_budget_mb=0,
         )
     return status
 

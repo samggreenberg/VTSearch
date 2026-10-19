@@ -259,8 +259,10 @@ These are the owner's calls; nothing changes in the app here.
   - `find_curves.csv`, `find_paired_curve.csv`, `flags.csv` (the Find corpus);
   - `REPORT_autopilot.md` and `provenance.json`.
 - `REPORT_cross_corpus.md`: the analyzer's machine summary; `provenance.json`: the legs read.
-- `viewer.html`: every slice of the in-corpus read; `figures/fbeta_vs_clicks*.png`: the quality-over-clicks
-  pair.
+- `viewer.html`: every slice of the in-corpus read, averaged over seeds.
+  - Its per-seed lines are omitted: 4,320 runs bust the repo's 4 MB file cap even at the coarsest grid.
+  - The page with them (5.7 MB) stays at `/expscratch/sgreenberg/cross-corpus-4739/analysis/viewer.html`.
+  - `figures/fbeta_vs_clicks*.png` is the quality-over-clicks pair, every run its own line in the second.
 - `figures/screens_examples.csv`: every screen the four example detectors return. It was made by
   `screens_examples_4739.py` from the `__find` dumps.
 - The cells stay at `/expscratch/sgreenberg/cross-corpus-4739/`.
