@@ -214,3 +214,88 @@ class TestTheQueryTestIsThePlantedAnswer:
         pos = np.asarray([media_is_positive(clips[c], "alpha") for c in test_ids], dtype=bool)
         assert rows[0]["n_flagged"] == int(kept.sum())
         assert rows[0]["recall"] == pytest.approx(float((kept & pos).sum() / pos.sum()))
+
+
+#: #4800's variants: the centroid at the app's rule over two corpora, and the typed query's set, at two balances.
+VARIANTS = ["count_gap_floor_skip25_b1@1", "count_gap_floor_skip25_b1~unvoted@4", "query@1", "query@0.25"]
+
+
+@pytest.fixture(scope="module")
+def priced_run():
+    return _run(query_hold=0, centroid_line_variants=VARIANTS)
+
+
+def _tagged(rows, spec):
+    from vtscore.eval.voting_iterations import centroid_line_tag
+
+    rule, _, beta = spec.partition("@")
+    return {r["t"]: r for r in rows if r.get("gmm_variant") == centroid_line_tag(rule, float(beta))}
+
+
+class TestTheCentroidIsPricedUnderTheQuery:
+    """#4800: a typed-query run prices the Goods' centroid and the query's set at other balances as tagged rows."""
+
+    def test_the_variants_parse_and_the_query_takes_no_corpus(self):
+        from vtscore.eval.voting_iterations import QUERY_LINE_VARIANT, parse_centroid_line_variants
+
+        assert parse_centroid_line_variants("query@0.25,count@1") == [(QUERY_LINE_VARIANT, 0.25), ("count", 1.0)]
+        with pytest.raises(ValueError, match="query@"):
+            parse_centroid_line_variants("query~unvoted@1")
+
+    def test_the_session_and_its_untagged_rows_are_the_unpriced_runs(self, priced_run, typed_run):
+        rows, picks = priced_run
+        old, old_picks = typed_run
+        assert [(p["t"], p["picked_id"]) for p in picks] == [(p["t"], p["picked_id"]) for p in old_picks]
+        base = [r for r in rows if not str(r.get("gmm_variant") or "").startswith("centroid_line:")]
+        assert len(base) == len(old)
+        for a, b in zip(base, old, strict=True):
+            assert (a["t"], a["detector_tier"], a["fbeta"], a["n_flagged"]) == (
+                b["t"],
+                b["detector_tier"],
+                b["fbeta"],
+                b["n_flagged"],
+            )
+
+    def test_the_centroid_rows_ride_the_query_clicks_that_hold_a_good(self, priced_run):
+        rows, _picks = priced_run
+        query_clicks = {r["t"]: r for r in _base(rows) if r["detector_tier"] == TIER_QUERY}
+        with_good = {t for t, r in query_clicks.items() if r["n_good"] >= 1}
+        assert with_good
+        for spec in VARIANTS[:2]:
+            tagged = _tagged(rows, spec)
+            assert set(tagged) == with_good, spec
+            assert {r["detector_tier"] for r in tagged.values()} == {TIER_CENTROID}
+        for spec in VARIANTS[2:]:
+            tagged = _tagged(rows, spec)
+            assert set(tagged) == set(query_clicks), spec
+            assert {r["detector_tier"] for r in tagged.values()} == {TIER_QUERY}
+        assert {r["beta"] for r in _tagged(rows, "query@0.25").values()} == {0.25}
+
+    def test_a_click_before_the_first_good_prices_the_query_alone(self):
+        from vtscore.eval.voting_iterations import _centroid_line_variant_rows, parse_centroid_line_variants
+
+        clips, seed_scores = _world()
+        kw = {"region_voting": False, "region_aware": False, "style_obj": None, "voted": {5}}
+        args = (parse_centroid_line_variants(VARIANTS), {"t": 1}, {}, clips, list(range(2, 81, 2)), "alpha", 0)
+        rows = _centroid_line_variant_rows(*args, **kw, query_scores=seed_scores)
+        assert [r["gmm_variant"] for r in rows] == ["centroid_line:query@1", "centroid_line:query@0.25"]
+        assert _centroid_line_variant_rows(*args, **kw) == []
+
+    def test_the_query_at_the_runs_balance_is_the_untagged_row(self, priced_run):
+        rows, _picks = priced_run
+        base = {r["t"]: r for r in _base(rows) if r["detector_tier"] == TIER_QUERY}
+        tagged = _tagged(rows, "query@1")
+        for t, r in base.items():
+            for col in ("precision", "recall", "fbeta", "n_flagged"):
+                assert tagged[t][col] == r[col] or (math.isnan(tagged[t][col]) and math.isnan(r[col])), (t, col)
+
+    def test_the_centroid_at_the_apps_rule_is_what_the_arm_before_gives(self, priced_run, before_run):
+        """The arm before (``query_tier=False``) gives the centroid on these clicks: its rows are the tagged ones."""
+        rows, _picks = priced_run
+        old = {r["t"]: r for r in _base(before_run[0]) if r["detector_tier"] == TIER_CENTROID}
+        tagged = _tagged(rows, "count_gap_floor_skip25_b1@1")
+        assert set(tagged) <= set(old)
+        assert tagged
+        for t, r in tagged.items():
+            for col in ("precision", "recall", "fbeta", "n_flagged"):
+                assert r[col] == pytest.approx(old[t][col], nan_ok=True), (t, col)
