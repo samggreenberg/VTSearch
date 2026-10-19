@@ -1160,6 +1160,9 @@ const BROWSE_STAGED_VOTES = {
  */
 const BROWSE_ZOOM_NOTCHES = [4, 10];
 
+/** How many notches the map steps back out before a tile is opened (`shootBrowse`). */
+const BROWSE_TILE_BACK = 3;
+
 /**
  * The Browse panels for the run, as a user would drag them. The Selection
  * panel stays empty in every frame, so it is narrowed to its least and the map
@@ -1371,13 +1374,40 @@ async function shootBrowse(page) {
   await page.waitForTimeout(3000);
   await shoot(page, 'ui-vision-map');
 
-  // One tile, opened: the one under the books' sign, with its details on.
-  await page.mouse.click(at.centre.x, at.centre.y, { button: 'right' });
-  await page.waitForSelector('.bin-popup-entry', { timeout: 30000 });
-  await page.locator('.browse-details button[aria-label="Show metadata"]').first().click();
+  // One tile, opened: the nearest one under the books' sign, with its details
+  // on. At the last zoom a tile is one photo, and a one-photo tile opens with
+  // no grid of its contents, so the map steps back first to where a tile holds
+  // a handful. The sign's anchor is a photo, but its pill sits over the tiles
+  // around it and a tile is a cell of the grid, not a point, so the
+  // right-click walks out from the anchor until a tile answers.
+  await page.mouse.move(at.centre.x, at.centre.y);
+  for (let i = 0; i < BROWSE_TILE_BACK; i++) {
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(250);
+  }
+  await page.waitForTimeout(2500);
+  let opened = false;
+  for (const [dx, dy] of [[0, 0], [0, 30], [30, 30], [-30, 30], [0, 60], [30, 0], [-30, 0], [0, -30]]) {
+    await page.mouse.click(at.centre.x + dx, at.centre.y + dy, { button: 'right' });
+    opened = await page.waitForSelector('.bin-popup-entry', { timeout: 4000 }).then(() => true, () => false);
+    if (opened) break;
+  }
+  if (!opened) throw new Error('no tile answered a right-click under the books\' sign');
+  // The details column's toggle is remembered, so it may already be on.
+  const details = page.locator('.browse-details button[aria-label="Show metadata"]');
+  if (await details.count()) await details.first().click();
   await page.locator('.bin-popup-entry').first().hover();
   await page.waitForSelector('.bin-popup-preview-img', { timeout: 10000 });
   await page.waitForTimeout(1500);
+  // The details name the folder the pile was imported from, which is this
+  // checkout's path; shown as `shownPath` shows it, as the import frames do.
+  const real = corpusPath(BROWSE_DATASET);
+  await page.evaluate(({ real, shown }) => {
+    const walk = document.createTreeWalker(document.querySelector('.browse-details'), NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      if (node.nodeValue.includes(real)) node.nodeValue = node.nodeValue.split(real).join(shown);
+    }
+  }, { real, shown: shownPath(BROWSE_DATASET) });
   await shoot(page, 'ui-vision-tile');
 
   await app.api('/api/settings', { method: 'PUT', body: restore });
