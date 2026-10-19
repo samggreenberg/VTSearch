@@ -45,7 +45,7 @@
   },
   "detectors.label_quota_centroid": {
     "app": "95fcadc095dc1709f1ebf4932db0f8dce5a1310f66b1d242696066b05135f283",
-    "harness": "5923b7ff1c978b52472b28e042e60fb42211b4baa933ff4fc9537997fc312740"
+    "harness": "ce1c3abb4ce50db7c825c7791e64c0f7308073af9226ae125693979c1885aee4"
   },
   "detectors.label_quota_default": {
     "app": "4d14903a40db804b6f13729d7f7ab34107c09094a09741be50badff5bb004f57"

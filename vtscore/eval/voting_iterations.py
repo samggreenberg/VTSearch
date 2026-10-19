@@ -76,7 +76,7 @@ from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -3174,6 +3174,7 @@ def simulate_voting_iterations(  # noqa: C901
     query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
+    query_miss: bool = True,
     find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
     find_corpus_scores: Optional[Mapping[int, float]] = None,
     find_mix: "float | str | None" = None,
@@ -3403,6 +3404,16 @@ def simulate_voting_iterations(  # noqa: C901
             untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
             priced on the same session.  Picks never change: the head is
             trained and asks either way.  Inert where *query_tier* is.
+        query_miss: Whether such a run's Test gives the Goods' centroid in
+            place of the typed query's set once the query has missed on a
+            patch space, as the app's does (#4800,
+            :func:`~vtscore.detectors.label_quota.query_missed`): under the
+            quota, a Good in hand and the Bads quota met before the Goods
+            quota, on a run whose media carry a patch grid (*region_aware*).
+            ``True`` - the default - is the app; ``False`` is the arm before
+            (the typed query's set until the quota).  The click's untagged row
+            is then the centroid's (``detector_tier = "centroid"``).  Picks
+            never change.  Inert where *query_tier* is.
         find_corpus: A second corpus to Find on at every click (#4960,
             :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
             run's embedder, whose cell of the same name as *target_category*
@@ -5162,8 +5173,10 @@ def simulate_voting_iterations(  # noqa: C901
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
-        # the quota too while the query holds on a single-vector space (#4736).
-        query = centroid and query_on
+        # the quota too while the query holds on a single-vector space (#4736), but the
+        # centroid once the query has missed on a patch space (#4800).
+        missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
+        query = centroid and query_on and not missed
         held = (
             query_on
             and not centroid
@@ -5178,7 +5191,7 @@ def simulate_voting_iterations(  # noqa: C901
         # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
         scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
-        if centroid and query_scores is not None:
+        if query and query_scores is not None:
             centroid_step, c_rows = _query_test(
                 query_scores,
                 clips_dict,

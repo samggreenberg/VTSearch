@@ -1053,17 +1053,21 @@ def _query_tier(resolved_tier: str, labelset: LabelSet, embedder: str | None) ->
     Under the quota (#4758) by what resolved *and* by what is labelled.  The
     quota counts the labels that resolved; a labelset that meets it as written
     but whose origins failed to resolve is a resolution failure to report, not
-    a detector under the quota, so it does not get the query.  Past the quota,
-    the query holds on a single-vector space until
+    a detector under the quota, so it does not get the query.  Under the quota
+    on a patch space, once the query has missed and a Good resolved to centre
+    on, the Goods' centroid answers instead (#4800,
+    :func:`~vtscore.detectors.label_quota.query_missed`).  Past the quota, the
+    query holds on a single-vector space until
     :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS` labels (#4736, :func:`~vtscore.detectors.label_quota.query_holds`):
     *embedder* is the space the labels were embedded in.
     """
-    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds
+    from vtscore.detectors.label_quota import TIER_CENTROID, TIER_TRAINED, labelset_quota, query_holds, query_missed
     from vtscore.detectors.training import _patch_space_for
 
     quota = labelset_quota(labelset)
     if resolved_tier != TIER_TRAINED and quota.tier != TIER_TRAINED:
-        return True
+        missed = query_missed(quota.n_good, quota.n_bad, patch_space=_patch_space_for(embedder))
+        return not (missed and resolved_tier == TIER_CENTROID)
     return query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(embedder))
 
 

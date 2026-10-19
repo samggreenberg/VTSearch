@@ -338,3 +338,60 @@ class TestAPricedCentroidIsTheCentroidTest:
                 assert got[col] == want[col] or (math.isnan(got[col]) and math.isnan(want[col])), (name, col)
             for col in ("auroc", "average_precision"):
                 assert got[col] == pytest.approx(want[col], abs=1e-9, nan_ok=True), (name, col)
+
+
+def _missing_world():
+    """A patch-grid cell whose typed query ranks two Goods first, then a run of Bads, then the other Goods."""
+    from tests_lib.detectors.test_find_corpus import _patch_medias
+
+    clips = _patch_medias(16, 64, seed=5)
+    pos = [c for c, m in clips.items() if m["category"] == "alpha"]
+    neg = [c for c, m in clips.items() if m["category"] != "alpha"]
+    order = [*pos[:2], *neg[:12], *pos[2:], *neg[12:]]
+    seed_scores = {cid: 0.9 - 0.005 * i for i, cid in enumerate(order)}
+    return clips, seed_scores
+
+
+def _missing_run(**kwargs):
+    clips, seed_scores = _missing_world()
+    picks: list[dict] = []
+    rows = simulate_voting_iterations(
+        clips, "alpha", seed=1, max_steps=14, calibrate_count=2, spot_check="off", region_voting=True,
+        pick_sink=picks, seed_scores=seed_scores, **kwargs,
+    )  # fmt: skip
+    return rows, picks
+
+
+@pytest.fixture(scope="module")
+def runs():
+    """The app, the arm before #4800 (the query until the quota) and the arm before #4758 (the centroid)."""
+    return _missing_run(), _missing_run(query_miss=False), _missing_run(query_tier=False)
+
+
+class TestTheQueryMiss:
+    """#4800: on a patch space, once the typed query has missed, Test gives the Goods' centroid until the quota."""
+
+    def test_the_missed_votes_are_the_centroids_and_the_rest_the_querys(self, runs):
+        from vtscore.detectors.label_quota import query_missed
+
+        (rows, _picks), _before, _old = runs
+        base = _base(rows)
+        missed = [r for r in base if query_missed(r["n_good"], r["n_bad"], patch_space=True)]
+        assert missed, "the world's query misses"
+        assert {r["detector_tier"] for r in missed} == {TIER_CENTROID}
+        under = [r for r in base if label_quota(r["n_good"], r["n_bad"]).tier != TIER_TRAINED and r not in missed]
+        assert under and {r["detector_tier"] for r in under} == {TIER_QUERY}
+
+    def test_the_arm_before_keeps_the_query_and_the_session(self, runs):
+        (rows, picks), (before, before_picks), _old = runs
+        assert [(p["t"], p["picked_id"]) for p in picks] == [(p["t"], p["picked_id"]) for p in before_picks]
+        assert TIER_CENTROID not in {r["detector_tier"] for r in _base(before)}
+
+    def test_the_centroid_rows_are_the_centroids_own(self, runs):
+        """The centroid there is the one the arm before #4758 gives on the same click."""
+        (rows, _picks), _before, (old, _old_picks) = runs
+        old_by_t = {r["t"]: r for r in _base(old)}
+        for r in (r for r in _base(rows) if r["detector_tier"] == TIER_CENTROID):
+            for col in ("precision", "recall", "fbeta", "n_flagged"):
+                o = old_by_t[r["t"]][col]
+                assert r[col] == o or (math.isnan(r[col]) and math.isnan(o)), (r["t"], col)

@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **On a patch space a typed-query detector gives the Goods' centroid once its query has missed** (issue #4800).
+  Under the label quota, a detector made from a typed query gives that query's own set (#4758). On a patch space,
+  once the Bads quota is met before the Goods quota with a Good in hand (`label_quota.query_missed`: 1-2 Goods and
+  4-15 Bads), it now gives the Goods' centroid instead, until the quota. `_query_tier` gives the centroid there only
+  where a Good resolved; `cached_head_is_current` takes a cached centroid there and refuses a cached query head. A
+  single-vector space, and an embedder the registry does not know, keep the query. On the Region path (COCO
+  Better, DINOv3 learning on SigLIP's typed query, @@4800-RUNS@@ sessions) Find's mean F-beta gains
+  @@4800-GAIN-CHANGELOG@@ (`docs/experiments/@@4800-DIR@@`). The eval harness follows (`query_miss`,
+  `CALIB_QUERY_MISS=0` is the arm before). Its priced centroid lines (`centroid_line_variants`) score a click's
+  media once and draw every line off that pass (`step_trainers._centroid_cut_step`), the same sets as before, and
+  `query@<beta>` prices the typed query's own set beside them in a typed-query run.
+
 - **Above beta 1 the head's count line keeps 1.3x what stands out at beta 4, and reaches deeper where a held-out Good
   sits below it** (issue #5039). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods the labels
   line is the head's count (#4786, #4798). Its count now grows as `beta ** HEAD_COUNT_RECALL_EXPONENT` (0.18925) above

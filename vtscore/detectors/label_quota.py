@@ -70,6 +70,15 @@ vote 10, so a patch space has no hold: there the same hold loses -0.035 over
 votes 1-25 (``docs/experiments/2026-10-12-handover-4736``).  The Train view's
 learned sort is the head either way: the hold changes what is shown, never
 what Autopilot asks.
+
+**The typed query's miss (#4800).**  On a patch space, once the typed query has
+missed - the Bads quota met before the Goods quota, :func:`query_missed` - a
+typed-query detector gives the Goods' centroid in place of its query, until the
+quota.  The query's top turned up Bads first, and the centroid of the Goods'
+own boxes is then the better set; before the miss the query's is.  A
+single-vector space keeps the query: there the same rule is worth nothing
+(#4758).  Like the hold, it changes what Find, Test and AutoFind give, never
+what Autopilot asks.
 """
 
 from __future__ import annotations
@@ -174,6 +183,22 @@ def query_holds(n_good: int, n_bad: int, *, patch_space: bool | None, hold: int 
     except in an eval arm.
     """
     return patch_space is False and int(n_good) + int(n_bad) < int(hold)
+
+
+def query_missed(n_good: int, n_bad: int, *, patch_space: bool | None) -> bool:
+    """Whether a typed-query detector under the quota gives the Goods' centroid in place of its query (#4800).
+
+    True on a known patch space (*patch_space* ``True``) under the quota once
+    the typed query has missed: a Good in hand but fewer than
+    :data:`GOOD_QUOTA`, and at least :data:`BAD_QUOTA` Bads, the Bads quota met
+    first (and fewer than :data:`DRY_BAD_QUOTA`, from which the trained head
+    answers).  A single-vector space, or one the registry does not know
+    (``None``), keeps the query.  It reads the counts only, as the quota does,
+    and says nothing about a detector without a typed query: the caller asks
+    only for one that has.
+    """
+    n_good, n_bad = int(n_good), int(n_bad)
+    return patch_space is True and 1 <= n_good < GOOD_QUOTA and BAD_QUOTA <= n_bad < DRY_BAD_QUOTA
 
 
 def labelset_quota(labelset: "LabelSet | None") -> LabelQuota:

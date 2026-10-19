@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -59,7 +60,7 @@ SPANS = {"1-10": 10, "1-50": 50, "1-150": 150}
 FULL = 150
 CORPORA = {"withheld": CENTROID_LINE_RULE, "labelled": f"{CENTROID_LINE_RULE}~unvoted"}
 COLS = ["t", "beta", "fbeta", "precision", "recall", "n_flagged", "detector_tier", "gmm_variant", "schedule", "phase"]
-PICK_COLS = ["seed", "dataset", "category", "embedder", "t", "picked_id", "picked_label", "n_good", "n_bad"]
+PICK_COLS = ["seed", "dataset", "category", "embedder", "t", "phase", "picked_id", "picked_label", "n_good", "n_bad"]
 
 
 def _missed(g: np.ndarray, b: np.ndarray, bads: int = BAD_QUOTA) -> np.ndarray:
@@ -185,11 +186,8 @@ def same_session(run: Path, others: list[Path], horizon: int) -> list[dict]:
             a, b = _picks(mine[name]), _picks(f)
             if a is None or b is None:
                 continue
-            g, bad = a["n_good"].to_numpy(), a["n_bad"].to_numpy()
-            under = np.array([label_quota(int(x), int(y)).tier != "trained" for x, y in zip(g, bad)])
             # Through the vote that meets the quota: every vote a fallback could change, and the one after.
-            last = int(a["t"].to_numpy()[under].max()) + 1 if under.any() else 1
-            last = min(last, horizon)
+            last = _through_quota(a, horizon)
             ka = a[a["t"] <= last][["t", "picked_id"]].to_numpy().tolist()
             kb = b[b["t"] <= last][["t", "picked_id"]].to_numpy().tolist()
             if ka == kb:
@@ -201,11 +199,25 @@ def same_session(run: Path, others: list[Path], horizon: int) -> list[dict]:
     return out
 
 
+def _through_quota(picks: pd.DataFrame, horizon: int) -> int:
+    """The vote that meets the quota (or H): the last vote any design here can change, and the pick it answers."""
+    under = np.array([label_quota(int(x), int(y)).tier != "trained" for x, y in zip(picks["n_good"], picks["n_bad"])])
+    last = int(picks["t"].to_numpy()[under].max()) + 1 if under.any() else 1
+    return min(last, horizon)
+
+
 def reference(run: Path, ref: Path, horizon: int) -> dict:
-    """Against a production run at the same balance: the same votes through H, and the same untagged rows there."""
+    """Against a production run at the same balance: the same session through the quota, and where the two part.
+
+    The designs differ only on votes under the quota, so the run is today's session if every vote through the one
+    that meets the quota is the reference's, and its untagged rows there are too. Past it the runs may part: a run
+    cut at H votes has no budget for a check the reference prompts (``phase`` there says which).
+    """
     mine = {Path(f).name: f for f in map(str, _cells_io.main_frame_files(run / "results" / "cells"))}
-    same = differ = rows_same = rows_differ = 0
+    same = differ = rows_same = rows_differ = parted = 0
     bad: list[str] = []
+    part_phases: dict[str, int] = {}
+    cols = ["t", "fbeta", "precision", "recall", "n_flagged", "detector_tier"]
     for f in map(str, _cells_io.main_frame_files(ref / "results" / "cells")):
         name = Path(f).name
         if name not in mine:
@@ -213,29 +225,38 @@ def reference(run: Path, ref: Path, horizon: int) -> dict:
         a, b = _picks(mine[name]), _picks(f)
         if a is None or b is None:
             continue
-        ka = a[a["t"] <= horizon][["t", "picked_id"]].to_numpy().tolist()
-        kb = b[b["t"] <= horizon][["t", "picked_id"]].to_numpy().tolist()
-        if ka == kb:
+        last = _through_quota(b, horizon)
+        if (
+            a[a["t"] <= last][["t", "picked_id"]].to_numpy().tolist()
+            == b[b["t"] <= last][["t", "picked_id"]].to_numpy().tolist()
+        ):
             same += 1
         else:
             differ += 1
             bad.append(name)
-        cols = ["t", "fbeta", "precision", "recall", "n_flagged", "detector_tier"]
+        m = a[a["t"] <= horizon].merge(b[b["t"] <= horizon], on="t", suffixes=("", "_ref"))
+        split = m[m["picked_id"] != m["picked_id_ref"]]
+        if len(split):
+            parted += 1
+            ph = str(b.set_index("t")["phase"].get(int(split["t"].min()), "")) if "phase" in b else ""
+            part_phases[ph] = part_phases.get(ph, 0) + 1
         ra = _cells_io._base_rows(pd.read_csv(mine[name], usecols=lambda c: c in COLS, low_memory=False))
         rb = _cells_io._base_rows(pd.read_csv(f, usecols=lambda c: c in COLS, low_memory=False))
-        ra = ra[(ra["t"] <= horizon) & ~_cells_io.check_rows(ra)][cols].reset_index(drop=True)
-        rb = rb[(rb["t"] <= horizon) & ~_cells_io.check_rows(rb)][cols].reset_index(drop=True)
+        ra = ra[(ra["t"] <= last) & ~_cells_io.check_rows(ra)][cols].reset_index(drop=True)
+        rb = rb[(rb["t"] <= last) & ~_cells_io.check_rows(rb)][cols].reset_index(drop=True)
         if ra.shape == rb.shape and ra.astype(str).equals(rb.astype(str)):
             rows_same += 1
         else:
             rows_differ += 1
     return {
         "reference": str(ref),
-        "picks_same": same,
-        "picks_differ": differ,
-        "picks_differ_cells": bad[:10],
-        "untagged_rows_same": rows_same,
-        "untagged_rows_differ": rows_differ,
+        "picks_same_through_quota": same,
+        "picks_differ_through_quota": differ,
+        "differ_cells": bad[:10],
+        "untagged_rows_same_through_quota": rows_same,
+        "untagged_rows_differ_through_quota": rows_differ,
+        "parted_after_quota_by_vote_H": parted,
+        "reference_phase_where_they_part": part_phases,
     }
 
 
@@ -264,7 +285,9 @@ def breakdown(votes: pd.DataFrame) -> list[str]:
         "|---|---|---|---|---|---|---|",
     ]
     m = v[v["missed"]]
-    for (corpus, beta, nb), h in m.groupby(["corpus", "beta", pd.cut(m["n_bad"], [3, 5, 8, 11, 15], right=True)]):
+    for (corpus, beta, nb), h in m.groupby(
+        ["corpus", "beta", pd.cut(m["n_bad"], [3, 5, 8, 11, 15], right=True)], observed=True
+    ):
         if len(h):
             out.append(
                 f"| {corpus} | {beta:g} | {nb} | {len(h)} | {h['query_fbeta'].mean():.3f} "
@@ -359,7 +382,8 @@ def main() -> None:
             if not runs:
                 continue
             stack = {k: np.vstack(v) for k, v in acc.items()}
-            with np.errstate(invalid="ignore"):
+            with np.errstate(invalid="ignore"), warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)  # a vote no run has missed on: NaN
                 qm, cm = np.nanmean(stack["q"], axis=0), np.nanmean(stack["c"], axis=0)
             for t in range(args.horizon):
                 row = {
@@ -431,9 +455,11 @@ def main() -> None:
     if "reference" in checks:
         ref = checks["reference"]
         lines.append(
-            f"- Against {Path(ref['reference']).name}: picks through vote {args.horizon} same in {ref['picks_same']}, "
-            f"differ in {ref['picks_differ']}; untagged rows same in {ref['untagged_rows_same']}, "
-            f"differ in {ref['untagged_rows_differ']}."
+            f"- Against {Path(ref['reference']).name}: the votes through the one that meets the quota are the same in "
+            f"{ref['picks_same_through_quota']} runs, differ in {ref['picks_differ_through_quota']}; the untagged rows "
+            f"there same in {ref['untagged_rows_same_through_quota']}, differ in "
+            f"{ref['untagged_rows_differ_through_quota']}. Past the quota {ref['parted_after_quota_by_vote_H']} runs "
+            f"part by vote {args.horizon}, where the reference is in phase {ref['reference_phase_where_they_part']}."
         )
     lines += ["", *breakdown(vframe)]
     (args.out / "summary.md").write_text("\n".join(lines) + "\n")
