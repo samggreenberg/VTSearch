@@ -120,6 +120,40 @@ def test_every_cells_directory_under_a_run_is_found(gz, tmp_path: Path) -> None:
     assert [p.parent.name for p in found] == ["a", "b"]
 
 
+def _common(root: Path, target: Path) -> Path:
+    """A ``-common`` cells directory: one symlink per frame of *target* (2026-10-06-b*-common)."""
+    cells = root / "results" / "cells"
+    cells.mkdir(parents=True)
+    for f in target.iterdir():
+        if f.suffix == ".csv":
+            (cells / f.name).symlink_to(f)
+    return cells
+
+
+@pytest.mark.parametrize("order", ["target first", "links first"])
+def test_linked_frames_are_re_pointed_not_copied(gz, tmp_path: Path, order: str) -> None:
+    """#5092's first pass stopped on a ``-common`` directory whose links its target's conversion had broken."""
+    cells_io = _load("_cells_io")
+    target = _plain_run(tmp_path / "run")
+    common = _common(tmp_path / "run-common", target)
+    roots = [tmp_path / "run", tmp_path / "run-common"]
+    assert gz.main([str(r) for r in (roots if order == "target first" else roots[::-1])] + ["--apply"]) == 0
+    links = sorted(common.iterdir())
+    assert [p.name for p in links] == ["task_0000.csv.gz", "task_0000__picks.csv.gz", "task_0001.csv.gz"]
+    assert all(p.is_symlink() and p.resolve().parent == target.resolve() for p in links)
+    a, _ = cells_io.load_arm(target.parent)
+    b, _ = cells_io.load_arm(common.parent)
+    assert a.equals(b)
+
+
+def test_a_link_whose_target_is_still_plain_waits(gz, tmp_path: Path) -> None:
+    target = _plain_run(tmp_path / "run")
+    common = _common(tmp_path / "run-common", target)
+    assert gz.main([str(tmp_path / "run-common"), "--apply"]) == 0
+    assert sorted(p.name for p in common.iterdir()) == ["task_0000.csv", "task_0000__picks.csv", "task_0001.csv"]
+    assert (target / "task_0000.csv").exists()
+
+
 def test_open_frame_reads_either_spelling_for_the_csv_module(tmp_path: Path) -> None:
     """The stdlib readers (``csv.DictReader``) cannot take a ``.gz`` frame as text; ``open_frame`` can."""
     import csv

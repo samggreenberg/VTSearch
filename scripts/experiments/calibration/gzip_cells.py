@@ -28,6 +28,17 @@ What it leaves alone:
 * **A cells directory written to in the last ``--quiet-minutes``** (30), unless
   ``--force``: a run that is still writing would race the conversion.
 
+**Linked frames are re-pointed, not converted.**  A ``-common`` directory holds
+symlinks into another run's cells (2026-10-06-b*-common, 966 a preset).  Reading
+through a link and writing a gzipped copy would duplicate the data, and once the
+target run was converted its plain file would be gone and the link dangling --
+the first pass of #5092 stopped on exactly that.  So real files are converted
+first, in every directory given, and only then is each linked
+``task_NNNN.csv -> T`` replaced by ``task_NNNN.csv.gz -> T.gz``, once ``T.gz``
+exists.  A link whose target is still plain is left for a later pass.  (A
+``cells`` directory that is itself a link is not walked into; its target is
+converted on its own.)
+
 Dry run unless ``--apply``.  Each argument is a run directory (its ``cells``
 directories are found below it, e.g. ``results/cells`` or
 ``results/<arm>/cells``) or a ``cells`` directory itself::
@@ -64,7 +75,10 @@ class Tally:
     empty: int = 0
     before: int = 0
     after: int = 0
+    relinked: int = 0
+    links_waiting: int = 0
     conflicts: list[str] = field(default_factory=list)
+    broken: list[str] = field(default_factory=list)
     skipped: str = ""
 
 
@@ -126,7 +140,7 @@ def convert_dir(cells: Path, *, apply: bool, quiet_minutes: float, force: bool, 
         # Only this tool writes a ``.part``; one left over is a pass killed mid-write.
         for stale in cells.glob(".*.gz.part"):
             stale.unlink()
-    frames = sorted(p for p in cells.iterdir() if FRAME.match(p.name))
+    frames = sorted(p for p in cells.iterdir() if FRAME.match(p.name) and not p.is_symlink())
     if frames and not force:
         newest = max(p.stat().st_mtime for p in frames)
         if time.time() - newest < quiet_minutes * 60:
@@ -145,6 +159,26 @@ def convert_dir(cells: Path, *, apply: bool, quiet_minutes: float, force: bool, 
     return tally
 
 
+def relink_dir(cells: Path, tally: Tally, *, apply: bool) -> None:
+    """Re-point each linked plain frame at its target's gzipped spelling, once that exists."""
+    for link in sorted(p for p in cells.iterdir() if FRAME.match(p.name) and p.is_symlink()):
+        target = Path(os.readlink(link))
+        packed = target.with_name(target.name + ".gz")
+        if not (link.parent / packed).exists():
+            if (link.parent / target).exists():
+                tally.links_waiting += 1
+            else:
+                tally.broken.append(link.name)
+            continue
+        if apply:
+            new = link.with_name(link.name + ".gz")
+            if new.is_symlink() or new.exists():
+                new.unlink()
+            new.symlink_to(packed)
+            link.unlink()
+        tally.relinked += 1
+
+
 def _gb(n: int) -> str:
     return f"{n / 1e9:.2f} GB"
 
@@ -160,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rc = 0
     total_before = total_after = 0
+    done: list[Tally] = []
     for root in args.roots:
         found = cells_dirs(root)
         if not found:
@@ -184,6 +219,19 @@ def main(argv: list[str] | None = None) -> int:
                 rc = 1
             total_before += t.before
             total_after += t.after
+            done.append(t)
+    # Links last: a link's target may sit in a directory converted after the link's own.
+    for t in done:
+        relink_dir(t.cells_dir, t, apply=args.apply)
+        if t.relinked or t.links_waiting or t.broken:
+            verb = "re-pointed" if args.apply else "would re-point"
+            print(
+                f"{t.cells_dir}: {verb} {t.relinked} linked frame(s)"
+                + (f"; {t.links_waiting} wait for their target's conversion" if t.links_waiting else "")
+            )
+        for name in t.broken:
+            print(f"  BROKEN LINK {name}: neither its target nor the target's .gz exists")
+            rc = 1
     if args.apply:
         print(f"total: {_gb(total_before)} -> {_gb(total_after)}")
     else:
