@@ -394,7 +394,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `image` | `siglip_l` | SigLIP-L (SO400M/384) | `ViT-SO400M-14-SigLIP-384` | 1152 | — |
 | `text` | `e5` | E5 (text) | `intfloat/e5-base-v2` | 768 | **default** for its media type |
 | `text` | `bge` | BGE (text) | `BAAI/bge-base-en-v1.5` | 768 | — |
-| `video` | `xclip` | X-CLIP (video) | `microsoft/xclip-base-patch32` | 768 | **default** for its media type |
+| `video` | `xclip` | X-CLIP (video) | `microsoft/xclip-base-patch32` | 512 | **default** for its media type |
 | `video` | `languagebind` | LanguageBind (video) | `LanguageBind/LanguageBind_Video_V1.5_FT` | 768 | — |
 | `video` | `videomae` | VideoMAE v2 (action features) | `OpenGVLab/VideoMAEv2-Base` | 768 | no text queries |
 
