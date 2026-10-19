@@ -115,7 +115,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
   /**
-   * Component-provided: the Test autopilot's session (#4524), the test of the
+   * Component-provided: the Tune autopilot's session (#4524), the test of the
    * line over this pair's Find pass. The three panes read it; the view starts
    * it once the pass lands and the Autopilot tab is up.
    */
@@ -210,11 +210,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
   showExport = false;
   exportFilter: LabelFilter = 'good';
   /**
-   * The Find view's tab (#4524): **Autopilot**, the Test autopilot (the phase
+   * The Find view's tab (#4524): **Autopilot**, the Tune autopilot (the phase
    * panel on the left, the current pick in the centre, the result on the
    * right), or **Review**, today's Find in full (the ranked work queue, the
    * boundary walk, the two piles). Train's Autopilot / Manual split applied to
-   * Test: the guided flow is the default, the open one a tab away.
+   * Tune: the guided flow is the default, the open one a tab away.
    */
   readonly findTab = signal<'autopilot' | 'review'>('autopilot');
   /** Toasty's hint under the Review tab (#4807): the tab is open, the list is
@@ -222,7 +222,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   readonly reviewHint = computed(
     () => this.findTab() === 'review' && !this.sortState.sortBusy && this.voteState.verifiedIds.size === 0,
   );
-  /** The server's Autopilot-only lock (#4666): Test shows no Review tab. */
+  /** The server's Autopilot-only lock (#4666): Tune shows no Review tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /**
    * The balance control's state line (the owner's choice): this corpus's test
@@ -358,7 +358,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     // The centre panel lives on the Review tab only (#4524), so every switch
     // to Review makes a new one, and each needs its `init`: its settings, the
     // shortcuts, its keyboard subscription. Only the one the view opened with
-    // used to get it, and Test opens on Autopilot, where there is none
+    // used to get it, and Tune opens on Autopilot, where there is none
     // (#4555). A tick later, as the view-init call this replaces did, and only
     // if a switch back has not torn it down by then.
     effect(() => {
@@ -465,7 +465,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     }
 
     // Reload + rescore when the active pair changes via the top-bar
-    // switcher or a route-param swap (`/test/:ds/:det` → `/test/:ds2/:det2`).
+    // switcher or a route-param swap (`/tune/:ds/:det` → `/tune/:ds2/:det2`).
     // Skip the first emission (ngOnInit already triggered the initial
     // loads + runFindLabel call above).
     let firstPair = true;
@@ -579,7 +579,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
           this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
-          // Score is done: the Test autopilot takes over on its tab. The pass
+          // Score is done: the Tune autopilot takes over on its tab. The pass
           // is no longer busy, but `finalize` only says so after this handler
           // returns, and the start refuses a busy pass, so say it here first
           // (#4555).
@@ -900,7 +900,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     return !order.some((item) => !verified.has(item.id));
   });
 
-  // --- The Test autopilot (#4524) ---
+  // --- The Tune autopilot (#4524) ---
 
   /** The user picked a Find tab. Entering Autopilot with no test yet starts one, once the pass has landed. */
   onFindTabChange(tab: 'autopilot' | 'review'): void {

@@ -65,7 +65,7 @@ type Dot = 'green' | 'yellow' | 'none';
  * and labelling more to set one is too late there (#4317). A range that later
  * votes have left stale reads exactly as before; only its tooltip says so.
  *
- * In Test (the Find view since #4524) the host supplies the state line
+ * In Tune (the Find view since #4524) the host supplies the state line
  * (`lineState`): this corpus's test result, or *untested*, never Train's
  * check range, which measured the training corpus and would read as this
  * one's. While a test runs, through both its phases (matches, then misses),
@@ -96,7 +96,7 @@ export class BalanceComponent {
   readonly busy = input(false);
   /** The radios are frozen: a test phase is running over the line they would move (#4524). */
   readonly locked = input(false);
-  /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
+  /** The host's own state line, in place of the check's (Tune: this corpus's result, or untested). */
   readonly lineState = input<TestLineState | null>(null);
   /** Style the "Threshold:" heading as a form field's label, for a host that sets it among other form
    *  fields (the New Detector form), rather than as the side panel's small caption (#4718). */

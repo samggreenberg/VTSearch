@@ -314,7 +314,7 @@ describe('KeyboardService', () => {
       expect(actions.map((a) => a.direction)).toEqual(['good']);
     });
 
-    // #4555: the Test autopilot's stage holds a claim with no centre panel on
+    // #4555: the Tune autopilot's stage holds a claim with no centre panel on
     // screen to start the shortcuts, and its keys did nothing.
     it('takes the keys with nothing else listening, and listens no longer than the claim', () => {
       const actions: KeyboardAction[] = [];

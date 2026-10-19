@@ -1,7 +1,8 @@
+import { Component, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
 import { LoadingTask } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -9,10 +10,15 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { ProgressEventsService } from '../../services/progress-events.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { settleResource } from '../../testing/settle-resource';
+
+/** A route target for the Tune click to land on (the real view is lazy and guarded). */
+@Component({ template: '' })
+class StubViewComponent {}
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -240,11 +246,11 @@ describe('DashboardComponent', () => {
       expect(component.selectedDetectorIds.has('m2')).toBe(true);
       expect(component.labelEnabled).toBe(false);
       expect(component.labelHint).toBe('Frozen: move to Drafts to retrain');
-      // Test (read-only scoring) stays available.
+      // Tune (read-only scoring) stays available.
       expect(component.findEnabled).toBe(true);
     });
 
-    describe('Test follows the visible tab only (#4228)', () => {
+    describe('Tune follows the visible tab only (#4228)', () => {
       const dataset = [{ id: 'd1', name: 'Data', media_type: 'audio' }];
       const loneAutofind = [
         { id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true },
@@ -536,29 +542,29 @@ describe('DashboardComponent', () => {
       expect(component.labelEnabled).toBe(false);
     });
 
-    it('should disable Test with no selections', () => {
+    it('should disable Tune with no selections', () => {
       flushInitialRequests();
       selection.clear('dataset');
       selection.clear('detector');
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Test with matching media types', () => {
+    it('should enable Tune with matching media types', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      // Test requires the detector to have training labels.
+      // Tune requires the detector to have training labels.
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(true);
     });
 
-    it('should disable Test on media type mismatch', () => {
+    it('should disable Tune on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should disable Test when multiple datasets have different media types', () => {
+    it('should disable Tune when multiple datasets have different media types', () => {
       const datasets = [
         { id: 'd1', name: 'DS1', media_type: 'audio' },
         { id: 'd2', name: 'DS2', media_type: 'image' },
@@ -569,7 +575,7 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Test when all selected items share media type', () => {
+    it('should enable Tune when all selected items share media type', () => {
       const datasets = [
         { id: 'd1', name: 'DS1', media_type: 'image' },
         { id: 'd2', name: 'DS2', media_type: 'image' },
@@ -584,14 +590,14 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(true);
     });
 
-    it('should disable Test when the selected model has 0 training', () => {
+    it('should disable Tune when the selected model has 0 training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(false);
     });
 
-    it('should enable Test for a model with training', () => {
+    it('should enable Tune for a model with training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
@@ -606,7 +612,7 @@ describe('DashboardComponent', () => {
     // dashboard actions — on a big machine you can saturate the import
     // slots and still start another import, create/delete a detector, or
     // change the selection. Only an in-flight *active-pair switch* gates
-    // them, via `isContextSwitching`. Train/Test additionally wait out a
+    // them, via `isContextSwitching`. Train/Tune additionally wait out a
     // browse-prep (whose completion fires a competing /browse navigation),
     // via `isNavBusy`.
 
@@ -625,7 +631,7 @@ describe('DashboardComponent', () => {
       expect(component.isNavBusy).toBe(true);
     });
 
-    it('gates on a Train or Test click intent', () => {
+    it('gates on a Train or Tune click intent', () => {
       flushInitialRequests();
       component.trainLoading.set(true);
       expect(component.isContextSwitching).toBe(true);
@@ -634,7 +640,7 @@ describe('DashboardComponent', () => {
       expect(component.isContextSwitching).toBe(true);
     });
 
-    it('gates Train/Test during browse-prep but leaves independent actions live', () => {
+    it('gates Train/Tune during browse-prep but leaves independent actions live', () => {
       flushInitialRequests();
       vi.spyOn(component.browsePrep, 'preparing', 'get').mockReturnValue(true);
       expect(component.isContextSwitching).toBe(false);
@@ -695,7 +701,7 @@ describe('DashboardComponent', () => {
     });
   });
 
-  describe('Test button hints (findHint)', () => {
+  describe('Tune button hints (findHint)', () => {
     it('should hint about missing dataset and model', () => {
       flushInitialRequests();
       selection.clear('dataset');
@@ -726,12 +732,12 @@ describe('DashboardComponent', () => {
       expect(component.findHint).toBe('Media type mismatch');
     });
 
-    it('should return the test hint when Test is enabled', () => {
+    it('should return the tune hint when Tune is enabled', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findHint).toBe(
-        "Open the Test view to score the selected dataset and test the selected detector's line on it",
+        "Open the Tune view to score the selected dataset, test the selected detector's line on it, and correct what it gets wrong",
       );
     });
 
@@ -744,13 +750,13 @@ describe('DashboardComponent', () => {
 
     // #4758: a detector made from a typed query is that query's own set until
     // it has a trained head, so it can be tested before its first label.
-    it('enables Test on a detector with no labels but a typed query', () => {
+    it('enables Tune on a detector with no labels but a typed query', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0, text_query: 'a dog barking' }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBe(true);
       expect(component.findHint).toBe(
-        "Open the Test view to score the selected dataset and test the selected detector's line on it",
+        "Open the Tune view to score the selected dataset, test the selected detector's line on it, and correct what it gets wrong",
       );
     });
 
@@ -763,7 +769,7 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(true);
     });
 
-    // Test opens one view on one pair, so it takes exactly one of each, as
+    // Tune opens one view on one pair, so it takes exactly one of each, as
     // Train does, rather than quietly testing the first ticked pair; Find
     // takes any number.
     it('should hint about multiple datasets, leaving Find enabled', () => {
@@ -815,16 +821,16 @@ describe('DashboardComponent', () => {
       return button!;
     }
 
-    it('sits in the action bar after Train and Test', () => {
+    it('sits in the action bar after Train and Tune', () => {
       flushInitialRequests();
       autofindButton();
       const labels = Array.from(
         (fixture.nativeElement as HTMLElement).querySelectorAll('.dashboard-actions button'),
       ).map((b) => b.textContent?.trim());
-      expect(labels).toEqual(['Train', 'Test', 'Find']);
+      expect(labels).toEqual(['Train', 'Tune', 'Find']);
     });
 
-    it('is disabled, with the hint Test gives, until a dataset and a detector are ticked', () => {
+    it('is disabled, with the hint Tune gives, until a dataset and a detector are ticked', () => {
       flushInitialRequests();
       expect(component.autofindEnabled).toBe(false);
       expect(component.autofindHint).toBe('Select a dataset and detector above');
@@ -1368,14 +1374,14 @@ describe('DashboardComponent', () => {
       expect(hintTexts(el)[0]).toContain('The detector you selected is for a different kind of media than your dataset');
     });
 
-    it('suggests Test or Find once a trained detector and its dataset are selected (#4680)', () => {
+    it('suggests Tune or Find once a trained detector and its dataset are selected (#4680)', () => {
       const el = renderWith(
         [{ id: 'd1', name: 'DS', media_type: 'image' }],
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.dashboardHint).toBe('test-or-find');
       expect(hintTexts(el)).toEqual([
-        'Your detector is trained. Click Test to measure it on this dataset, or Find to collect its matches.',
+        'Your detector is trained. Click Tune to check it on this dataset and correct what it gets wrong, or Find to collect its matches.',
       ]);
     });
 
@@ -1456,7 +1462,7 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.showTrainHint).toBe(false);
-      // A trained detector moves Toasty on to Test or Find.
+      // A trained detector moves Toasty on to Tune or Find.
       expect(component.dashboardHint).toBe('test-or-find');
       expect(el.querySelectorAll('vt-toasty-hint').length).toBe(1);
     });
@@ -1529,7 +1535,7 @@ describe('DashboardComponent', () => {
       );
       const reasons = () =>
         [...el.querySelectorAll('.btn-disabled-reason')].map((r) => (r as HTMLElement).style.visibility);
-      // Train is enabled (its reason never shows); Test and Find are off for
+      // Train is enabled (its reason never shows); Tune and Find are off for
       // want of labels. Before the settings land no hint shows, so the reasons stand.
       expect(component.dashboardHint).toBe('train');
       expect(component.hintOnShow).toBe(false);
@@ -1659,6 +1665,69 @@ describe('DashboardComponent', () => {
       expect(routerSpy).not.toHaveBeenCalled();
       expect(component.newDetectorModalOpen).toBe(true);
       expect(component.trainAfterModelCreation).toBe(true);
+    });
+  });
+
+  describe('onFind (the Tune button, #5098)', () => {
+    const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
+    const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 12 }];
+
+    /** Publish rows on the two loading-task channels, as the SSE stream would. */
+    function publish(datasetTasks: LoadingTask[], detectorTasks: LoadingTask[] = []): void {
+      const events = TestBed.inject(ProgressEventsService) as unknown as {
+        _loadingTasks: WritableSignal<LoadingTask[]>;
+        _detectorLoadingTasks: WritableSignal<LoadingTask[]>;
+      };
+      events._loadingTasks.set(datasetTasks);
+      events._detectorLoadingTasks.set(detectorTasks);
+      TestBed.tick();
+    }
+
+    function loadBar(): HTMLElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector('.btn-load-bar');
+    }
+
+    it('navigates to /tune/:datasetId/:detectorId for the selected pair', () => {
+      flushInitialRequests(datasets, models);
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
+      component.onFind();
+      expect(routerSpy).toHaveBeenCalledWith(['/tune', 'd1', 'm1']);
+    });
+
+    it('shows a bar under the button from the click, in place of the reason', () => {
+      flushInitialRequests(datasets, models);
+      vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
+      expect(component.tuneBar()).toBeNull();
+      TestBed.tick();
+      expect(loadBar()).toBeNull();
+
+      component.onFind();
+      TestBed.tick();
+      // Nothing has published a load yet: a bar that only says it is working.
+      expect(component.tuneBar()).toEqual({ value: 0, max: 1, indeterminate: true });
+      expect(loadBar()?.querySelector('vt-progress-bar')).toBeTruthy();
+      const group = loadBar()!.closest('.action-btn-group')!;
+      expect(group.querySelector('.btn-disabled-reason')).toBeNull();
+    });
+
+    it('fills with the load the click is waiting on', () => {
+      flushInitialRequests(datasets, models);
+      vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
+      component.onFind();
+      publish([
+        { task_id: '_regload_d1', dataset_id: 'd1', status: 'loading', overall: 0.5, created_at: 2 } as LoadingTask,
+      ]);
+      expect(component.tuneBar()).toMatchObject({ value: 0.5, max: 1, indeterminate: false });
+    });
+
+    it('goes away once the navigation settles', async () => {
+      flushInitialRequests(datasets, models);
+      TestBed.inject(Router).resetConfig([{ path: 'tune/:datasetId/:detectorId', component: StubViewComponent }]);
+      component.onFind();
+      expect(component.tuneBar()).not.toBeNull();
+      await fixture.whenStable();
+      expect(component.findLoading()).toBe(false);
+      expect(component.tuneBar()).toBeNull();
     });
   });
 

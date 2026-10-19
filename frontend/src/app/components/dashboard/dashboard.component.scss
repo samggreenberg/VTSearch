@@ -12,7 +12,7 @@
   // Positioning context for Toasty's hints (`<vt-toasty-hint>`), which stand
   // beside a panel's + button or above the Train button.
   position: relative;
-  // Width of each Train / Test / Find group.
+  // Width of each Train / Tune / Find group.
   --action-btn-group-width: 220px;
 }
 
@@ -270,4 +270,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+// Tune's click bar (#5098) stands in the reason's slot, at the reason's height.
+.btn-load-bar {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-xs);
+  height: 1.2em;
+  width: 100%;
+
+  vt-progress-bar {
+    flex: 1 1 auto;
+  }
 }

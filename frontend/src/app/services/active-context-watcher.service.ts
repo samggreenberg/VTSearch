@@ -37,7 +37,7 @@ export class ActiveContextWatcherService {
    *  `/dashboard`. */
   private leaveBrokenPairView(): void {
     const url = this.router.url.split('?')[0];
-    if (url.startsWith('/label') || url.startsWith('/test')) {
+    if (url.startsWith('/label') || url.startsWith('/tune')) {
       this.router.navigate(['/dashboard']);
     }
   }

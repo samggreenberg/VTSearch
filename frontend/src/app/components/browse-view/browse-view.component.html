@@ -40,9 +40,9 @@
     @case ('done') {
       <div class="browse-status">
         <p class="browse-status-message browse-status-success">
-          All items were verified. Go back to Test to see your results.
+          All items were verified. Go back to Tune to see your results.
         </p>
-        <button class="btn btn--primary" (click)="back()">Back to Test</button>
+        <button class="btn btn--primary" (click)="back()">Back to Tune</button>
       </div>
     }
     @case ('ready') {
@@ -84,7 +84,7 @@
                 (click)="back()"
                 [title]="resultsRunId
                   ? 'Return to the Dashboard with these Find results open again'
-                  : 'Return to the Test view (keeps any items you removed from Good)'">
+                  : 'Return to the Tune view (keeps any items you removed from Good)'">
                 &larr; Back to {{ backTarget }}
               </button>
             }

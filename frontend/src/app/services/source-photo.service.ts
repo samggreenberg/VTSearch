@@ -39,7 +39,7 @@ export interface SourcePhotoRequest {
  * outlined.
  *
  * The photo is an item of the Image dataset the same import produced, and it
- * is shown in an overlay over the Train / Test view rather than by switching
+ * is shown in an overlay over the Train / Tune view rather than by switching
  * the active pair: the face detector is no detector for an Image dataset, so a
  * switch would land on the incompatible-pair explainer, and the pair reset
  * would lose the face ranking. The overlay reads the photo with the sibling's

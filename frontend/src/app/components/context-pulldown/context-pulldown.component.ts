@@ -86,7 +86,7 @@ export class ContextPulldownComponent implements OnInit {
   readonly menuRef = viewChild<ElementRef<HTMLDivElement>>('menuRef');
 
   open = false;
-  /** True on the browse (VTSBrowser) and Test views, where the
+  /** True on the browse (VTSBrowser) and Tune views, where the
    *  dataset/detector pair is fixed for the duration of the view. The
    *  pulldown then renders display-only: it still shows the active label
    *  but the trigger is disabled, so the pair can only be switched from the
@@ -219,7 +219,7 @@ export class ContextPulldownComponent implements OnInit {
       this.rebuildRows();
     });
 
-    // Lock the pulldown (display-only) on the browse / Test views. Seed from
+    // Lock the pulldown (display-only) on the browse / Tune views. Seed from
     // the current URL, then track navigations. Mirrors the router-URL view
     // detection in `AppComponent`.
     this.updateLocked(this.router.url);
@@ -233,10 +233,10 @@ export class ContextPulldownComponent implements OnInit {
     this.rebuildRows();
   }
 
-  /** Recompute {@link locked} from a URL. The browse and Test views pin the
+  /** Recompute {@link locked} from a URL. The browse and Tune views pin the
    *  active pair; the dashboard and label views leave the pulldown live. */
   private updateLocked(url: string): void {
-    const locked = url.startsWith('/browse') || url.startsWith('/test');
+    const locked = url.startsWith('/browse') || url.startsWith('/tune');
     if (locked === this.locked) return;
     this.locked = locked;
     // A menu open when we navigate into a locked view must close.
@@ -285,7 +285,7 @@ export class ContextPulldownComponent implements OnInit {
    * Idempotent; calling on an already-open menu just re-focuses.
    */
   openMenu(): void {
-    // Display-only on the browse / Test views: no dropdown, no add-new. The
+    // Display-only on the browse / Tune views: no dropdown, no add-new. The
     // trigger button is also `disabled`, but this guard covers the programmatic
     // open path (`pulldownControl.openSignal$`) which bypasses the button.
     if (this.locked) return;

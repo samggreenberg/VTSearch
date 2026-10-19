@@ -15,7 +15,7 @@ import { MediaStateService } from '../../../services/media-state.service';
 import type { Media } from '../../../models/api.models';
 
 /**
- * The Test autopilot's centre pane (#4524): the current pick with Good and
+ * The Tune autopilot's centre pane (#4524): the current pick with Good and
  * Bad, the round's dots, the phase's one-line prompt, and ↓ to go back one
  * pick, as the spot-check modal shows a round, but as the view rather than a
  * modal over a list. Before a test exists, and after Done, it says what the

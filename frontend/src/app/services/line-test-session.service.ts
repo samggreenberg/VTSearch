@@ -12,7 +12,7 @@ import { apiErrorMessage } from '../utils/api-error';
 import { lineTestPhase, type LineTestPhase } from '../utils/line-test';
 
 /**
- * One Find session's test of the line (#4524): the Test autopilot's state as
+ * One Find session's test of the line (#4524): the Tune autopilot's state as
  * the view and its three panes read it. Component-provided on the Find view,
  * beside `PairScopeService`, so it lives exactly as long as the pair does.
  *

@@ -6,7 +6,7 @@ import type { LabelQuota } from '../generated/api-client/models/label-quota';
  * query gives that query's own set, the text sort at its line (tier `query`,
  * #4758), from before its first label; one with no typed query gives the
  * Goods' centroid, cut by the count line at the balance (tier `centroid`,
- * #4732), and nothing before its first Good. These are the words the Test view
+ * #4732), and nothing before its first Good. These are the words the Tune view
  * and AutoFind's results put on it.
  */
 

@@ -282,7 +282,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
-  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // #4555: Tune opens on the Autopilot tab, and the test of the line starts
   // the moment the scoring pass lands, with no click. It used to wait for one:
   // the pass's `finalize` (which drops the busy flag) runs only after its
   // `next` returns, so the start, asked for from `next`, still saw the pass
@@ -953,7 +953,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
-    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // #4555: Tune opens on Autopilot, which has no centre panel, so the one
     // Review makes is not the one the view opened with; each must be started
     // (its settings, the shortcuts), or Review's keys do nothing.
     it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {

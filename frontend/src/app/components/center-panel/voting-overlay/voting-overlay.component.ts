@@ -8,7 +8,7 @@ import { countPhrase } from '../../../utils/count-phrase';
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
  * picks one: Train's label view walks `start-voting` and the Autopilot phase
  * hints, and shows `revote` on an item the user picked to change (#4824); the
- * Test view's stage shows `test-vote`.
+ * Tune view's stage shows `test-vote`.
  */
 export type VoteHintId = Extract<
   HintId,
