@@ -299,3 +299,42 @@ class TestTheCentroidIsPricedUnderTheQuery:
         for t, r in tagged.items():
             for col in ("precision", "recall", "fbeta", "n_flagged"):
                 assert r[col] == pytest.approx(old[t][col], nan_ok=True), (t, col)
+
+
+class TestAPricedCentroidIsTheCentroidTest:
+    """#4800's one probe pass a click gives each variant the set :func:`_centroid_test` gives at that line."""
+
+    SPECS = ["count_gap_floor_skip25_b1@1", "count_gap_floor_skip25_b1~unvoted@4", "midpoint@0.25", "count~pool@1"]
+
+    @staticmethod
+    def _worlds():
+        from tests_lib.detectors.test_find_corpus import _patch_medias
+        from vtscore.eval.patch_styles import resolve_style
+
+        clips, _seed_scores = _world()
+        yield "single", clips, {"region_voting": False, "region_aware": False, "style_obj": None}
+        patches = _patch_medias(16, 64, seed=2)
+        yield "patch", patches, {"region_voting": True, "region_aware": True, "style_obj": resolve_style("max_patch")}
+
+    @pytest.mark.parametrize("spec", SPECS)
+    def test_each_variant_matches(self, spec, monkeypatch):
+        import vtscore.eval.voting_iterations as vi
+
+        monkeypatch.setattr(vi, "PROBE_CHUNK", 7)  # chunks that split the corpus mid-way
+        for name, clips, geo in self._worlds():
+            ids = sorted(clips)
+            test_ids, goods, voted = ids[1::2], {ids[0]: None, ids[2]: None}, {ids[0], ids[2], ids[4]}
+            (got,) = vi._centroid_line_variant_rows(
+                vi.parse_centroid_line_variants(spec), {}, goods, clips, test_ids, "alpha", 0, voted=voted, **geo
+            )
+            rule, _, beta = spec.partition("@")
+            rule, _, corpus = rule.partition("~")
+            line_ids = {"pool": ids, "unvoted": [i for i in ids if i not in voted]}.get(corpus)
+            _step, (want,), _cal = vi._centroid_test(
+                goods, clips, test_ids, "alpha", 0, **geo, beta=float(beta), calibration_rows=False,
+                line_rule=rule, line_beta=float(beta), line_ids=line_ids,
+            )  # fmt: skip
+            for col in ("n_flagged", "precision", "recall", "fbeta", "fpr", "fnr", "cost"):
+                assert got[col] == want[col] or (math.isnan(got[col]) and math.isnan(want[col])), (name, col)
+            for col in ("auroc", "average_precision"):
+                assert got[col] == pytest.approx(want[col], abs=1e-9, nan_ok=True), (name, col)

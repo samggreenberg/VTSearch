@@ -15,6 +15,8 @@
 #   missed_query_4800.sh dirs [BETA]                  run dir <root>/<date>-missedq4800<tag>-region-b<beta>
 #   missed_query_4800.sh idx [FIRST [LAST]]           the grid indices of Region's cells for seeds FIRST..LAST
 #   missed_query_4800.sh variants                     the run's CALIB_CENTROID_LINE_VARIANTS
+#   missed_query_4800.sh preflight BETA [IDX]         the preflight a launch of the same cells would pass (launch
+#                                                     runs launch_bands.sh redo, which runs none)
 #   missed_query_4800.sh launch BETA [IDX]            a cpu array (default: every seed's Region cells)
 #
 # The run at beta 1 is the study. A few cells at beta 1/4 and 4 check that the votes under the quota are the same
@@ -71,6 +73,25 @@ idx)
 variants)
   variants
   ;;
+preflight)
+  # launch_bands.sh's redo runs no preflight: run it on the exact env a launch would submit with, by standing a
+  # function in for sbatch (nothing is queued; launch_bands records job id 0 for the redo, the launch rewrites it).
+  sbatch() {
+    local a name="" mem="" arr="" spec n=0 r
+    for a in "$@"; do
+      case "$a" in --job-name=*) name="${a#*=}" ;; --mem=*) mem="${a#*=}" ;; --array=*) arr="${a#*=}" ;; esac
+    done
+    spec="${arr%%\%*}"
+    for r in ${spec//,/ }; do
+      if [[ "$r" == *-* ]]; then n=$((n + ${r#*-} - ${r%-*} + 1)); else n=$((n + 1)); fi
+    done
+    bash "$VTS_REPO/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod --job-name "$name" \
+      --mem "$mem" --conc "${arr##*%}" --array-tasks "$n" --patch --require-text-seed \
+      --require-region-voting "coco_better:siglip+dinov3_patch" >&2 && echo 0
+  }
+  export -f sbatch
+  exec bash "$0" launch "${@:2}"
+  ;;
 launch)
   b="${2:?beta (0.25, 1 or 4)}"
   idx="${3:-$(region_idx 0 $((SEEDS - 1)))}"
@@ -89,6 +110,6 @@ launch)
   exec bash "$HERE/launch.sh" redo "$idx"
   ;;
 *)
-  echo "usage: missed_query_4800.sh {dirs [BETA] | idx [FIRST [LAST]] | variants | launch BETA [IDX]}" >&2
+  echo "usage: missed_query_4800.sh {dirs [BETA] | idx [FIRST [LAST]] | variants | {preflight|launch} BETA [IDX]}" >&2
   exit 1 ;;
 esac

@@ -90,7 +90,10 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_cut_step,
+    _centroid_goods,
     _centroid_step,
+    _head_step,
     _labelset_error_costs,
     _query_step,
     _score_pool,
@@ -2785,6 +2788,11 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+#: How many media a priced centroid's probe scores at a time (#4800): a region run's
+#: every box at once is several GB over the pool, and each media scores alone.
+PROBE_CHUNK = 2048
+
+
 def _centroid_line_variant_rows(
     variants: list[tuple[str, float]],
     ident: dict[str, Any],
@@ -2816,8 +2824,32 @@ def _centroid_line_variant_rows(
     *beta* (:func:`_query_test`), so both of the sets a Find could give under
     the quota are priced at every balance.  A centroid rule needs a Good and
     the query rule a typed query: a click without one has no such row.
+
+    Every centroid variant of a click is the same head cut at another line, so
+    the click scores its media once, with the unit probe
+    :func:`~vtscore.detectors.centroid_head.fit_centroid` draws every line from
+    (:data:`PROBE_CHUNK` media at a time), and each variant draws its line off
+    those scores and reads its withheld half's off them too
+    (:func:`~vtscore.eval.step_trainers._centroid_cut_step`, #4800).  It is the
+    same set :func:`_centroid_test` gives, without its two passes a variant
+    over a region run's every box.
     """
+    from vtscore.detectors.centroid_head import centroid_head, fit_centroid, goods_centroid  # noqa: PLC0415
+
     out: list[dict[str, Any]] = []
+    goods: list[Any] = []
+    probe: dict[int, float] = {}
+
+    def probe_scores(ids: list[int]) -> list[float]:
+        """The unit probe's score of each of *ids*, scoring only the media no earlier variant has."""
+        todo = [cid for cid in dict.fromkeys(ids) if cid not in probe]
+        step = _head_step(centroid_head(goods_centroid(goods), 0.0, scale=1.0))
+        for i in range(0, len(todo), PROBE_CHUNK):
+            chunk = todo[i : i + PROBE_CHUNK]
+            got = _score_media_ids(step, clips_dict, chunk, region_aware=region_aware, style_obj=style_obj)
+            probe.update(zip(chunk, (float(s) for s in got)))
+        return [probe[cid] for cid in ids]
+
     for spec, beta in variants:
         if spec == QUERY_LINE_VARIANT:
             if query_scores is None:
@@ -2839,30 +2871,35 @@ def _centroid_line_variant_rows(
             continue
         if not good_votes:
             continue
+        if not goods:
+            goods = _centroid_goods(
+                good_votes, clips_dict, target_category, region_voting=region_voting, style_obj=style_obj
+            )
         rule, _, corpus = spec.partition("~")
-        line_ids = None
+        line_ids = list(test_ids)
         if corpus == "pool":
             line_ids = list(clips_dict)
         elif corpus == "unvoted":
             line_ids = [i for i in clips_dict if i not in (voted or set())]
-        _step, metric_rows, _cal = _centroid_test(
-            good_votes,
+        _head, _thr, line = fit_centroid(goods, lambda _probe, ids=line_ids: probe_scores(ids), rule=rule, beta=beta)
+        test_scores = dict(zip(test_ids, probe_scores(list(test_ids)), strict=True))
+        metrics = _evaluate_on_test(
+            _centroid_cut_step(test_scores, line.cut),
+            CENTROID_THRESHOLD,
             clips_dict,
             test_ids,
             target_category,
             inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
             beta=beta,
-            calibration_rows=False,
-            line_rule=rule,
-            line_beta=beta,
-            line_ids=line_ids,
         )
-        out.extend(
-            {**ident, **mr, "beta": beta, "detector_tier": "centroid", "gmm_variant": centroid_line_tag(spec, beta)}
-            for mr in metric_rows
+        out.append(
+            {
+                **ident,
+                **metrics,
+                "beta": beta,
+                "detector_tier": "centroid",
+                "gmm_variant": centroid_line_tag(spec, beta),
+            }
         )
     return out
 
