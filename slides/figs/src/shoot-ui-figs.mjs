@@ -1151,11 +1151,29 @@ const BROWSE_STAGED_VOTES = {
 /**
  * How far the two zoomed frames of the whole-pile map are from its fit, in
  * wheel notches. A notch is a factor of √2 at the app's default two notches
- * per level, so 4 is one tile layer finer twice over and 7 three and a half:
- * far enough apart that the signposts on screen are a different layer each
- * time, which is the whole of what the slide shows.
+ * per level, so 4 notches is two levels and 10 five. A sign is drawn from a
+ * level and a half before its own to two and a half past it (`sign-layout.ts`),
+ * and the pile's four layers of signs sit 1.8 levels apart, so the fit (about
+ * level 1.2) letters the two hedged layers, 4 notches the second and third,
+ * and 10 the finest alone. Fewer than 10 and the books' sign is hidden under
+ * its parent's, which names nearly the same photos from nearly the same spot.
  */
-const BROWSE_ZOOM_NOTCHES = [4, 7];
+const BROWSE_ZOOM_NOTCHES = [4, 10];
+
+/**
+ * The Browse panels for the run, as a user would drag them. The Selection
+ * panel stays empty in every frame, so it is narrowed to its least and the map
+ * gets the width; the tile panel, which is the last frame's subject, is
+ * widened, with room in its details column for a photo's tags on a few lines.
+ */
+const BROWSE_LAYOUT = {
+  browse_panel_width: 260,
+  browse_details_panel_width: 540,
+  browse_details_metadata_width: 250,
+};
+
+/** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
+const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
 
 /** The Book detector, trained: the session's if it ran, else staged. */
 async function trainedBookDetector() {
@@ -1177,16 +1195,21 @@ async function trainedBookDetector() {
  *
  * Finished means the cover that hides the map until its first tiles have
  * painted is gone, and lettered means the signpost toggle is enabled: names
- * arrive after the map (a subset's are fitted when it is), and a shot taken
- * between the two is a map with no signs on it. The docked tile panel opens
+ * arrive after the map, and a shot taken between the two is a map with no
+ * signs on it. Only a whole pile's map is waited on for them (*signs*): a map
+ * of Find's few dozen results is too small for Toponymy to find regions in,
+ * so it has none to wait for. The docked tile panel opens
  * empty, holding a third of the window for a tile nobody has right-clicked;
  * closed, the map gets that width. The pointer goes to the top bar, because a
  * tile under it is drawn enlarged.
  */
-async function openedMap(page) {
-  await page.waitForURL(/#\/browse\//, { timeout: 600000 });
-  await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 }).catch(() => {});
-  await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
+async function openedMap(page, signs = true) {
+  await page.waitForURL(/\/browse\//, { timeout: 600000, waitUntil: 'commit' });
+  // The cover is only mounted once the map is: before that its absence means
+  // nothing, so wait for the map first and then for the cover to lift.
+  await page.waitForSelector('.browse-content', { timeout: 600000 });
+  await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 });
+  if (signs) await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
   const close = page.locator('.browse-details .bin-popup-close');
   if (await close.count()) await close.first().click();
   await page.mouse.move(700, 20);
@@ -1258,7 +1281,8 @@ function bookSign(pklPath) {
  *
  * Rendering is pinned to full effects for the run: headless chromium has no
  * GPU, the app's Auto detection reads that as a slow client and draws the
- * canvas at one pixel per CSS pixel, and the frames are shot at two.
+ * canvas at one pixel per CSS pixel, and the frames are shot at two. The
+ * panels are set as `BROWSE_LAYOUT` says; both are put back afterwards.
  */
 async function shootBrowse(page) {
   // The map is built at import, as Build Browse map now builds it, so the tags
@@ -1277,8 +1301,11 @@ async function shootBrowse(page) {
   }
   await app.ensureProjection(pile);
   await trainedBookDetector();
-  const { browse_graphics: graphics } = await app.api('/api/settings');
-  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: 'full' } });
+  const settings = await app.api('/api/settings');
+  const restore = Object.fromEntries(
+    ['browse_graphics', ...Object.keys(BROWSE_LAYOUT)].map((key) => [key, settings[key]]),
+  );
+  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: 'full', ...BROWSE_LAYOUT } });
   await page.reload({ waitUntil: 'domcontentloaded' });
 
   await openDashboard(page);
@@ -1287,18 +1314,23 @@ async function shootBrowse(page) {
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   const dialog = page.locator('vt-modal').filter({ hasText: 'Find Results' });
   await dialog.locator('.results-table').waitFor({ timeout: 600000 });
+  // The dialog opens on the first exporter, Send by Email, whose two empty
+  // required addresses draw red and take the room the list needs. A user
+  // sending the list on picks somewhere and fills it in; this one picks a file.
+  await dialog.locator('.export-row select').selectOption({ label: BROWSE_EXPORT.exporter });
+  await dialog.locator(`#adr-${BROWSE_EXPORT.field}`).fill(BROWSE_EXPORT.value);
   await page.mouse.move(700, 20);
   await page.waitForTimeout(1500);
   await shoot(page, 'ui-vision-find.build1');
 
   await dialog.getByRole('button', { name: 'Browse', exact: true }).click();
-  await openedMap(page);
+  await openedMap(page, false);
   await shoot(page, 'ui-vision-find');
 
   // Back to the dialog, closed, and on to the whole pile.
   await page.locator('.browse-back').click();
   await dialog.locator('.results-table').waitFor({ timeout: 60000 });
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await dialog.locator('.form-actions .btn', { hasText: 'Close' }).click();
   await openDashboard(page);
   const row = page
     .locator('tr[vt-dataset-card]')
@@ -1348,7 +1380,7 @@ async function shootBrowse(page) {
   await page.waitForTimeout(1500);
   await shoot(page, 'ui-vision-tile');
 
-  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: graphics } });
+  await app.api('/api/settings', { method: 'PUT', body: restore });
 
   // What's in a Name, drawn from the container the app saved the pile and its
   // map into, so the figure names the region these frames close in on.
