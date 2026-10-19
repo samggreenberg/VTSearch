@@ -442,6 +442,22 @@ describe('AutoDetectResultsModalComponent Browse', () => {
     component.close();
     expect(browsePrep.cancel).toHaveBeenCalled();
   });
+
+  // #5102: the way in to the results, not one small button among the footer's.
+  it('leads with a large Browse over the list, not in the footer', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const el: HTMLElement = fixture.nativeElement;
+    const lead = el.querySelector('.browse-lead button') as HTMLButtonElement;
+    expect(lead.textContent?.trim()).toBe('Browse');
+    expect(lead.classList).toContain('btn--lg');
+    expect(lead.disabled).toBe(false);
+    const footer = Array.from(el.querySelectorAll('.form-actions button')).map((b) => b.textContent?.trim());
+    expect(footer).not.toContain('Browse');
+
+    lead.click();
+    expect(contextSwitch.applyActivePair).toHaveBeenCalledWith('ds1', '');
+  });
 });
 
 /**
