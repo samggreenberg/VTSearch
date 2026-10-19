@@ -400,7 +400,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 **Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). The same folder tabs, smaller, over a bordered content box: the active tab's background matches `.view-tab-content` and it drops its bottom edge, so it opens into the box, with the accent edge along its top. Inactive tabs are `--bg-hover`, and hover lights their text and edge (`--border-secondary`) but leaves the fill, since a step toward the panel would look like the active tab. The strip's bottom border is the box's top edge; with no strip, the box keeps its own. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
-**The left panel's strip - `.left-tabs` / `.left-tab`** (`left-panel.component.scss`) is the one horizontal strip that isn't a shared primitive: Train's **Manual** / **Autopilot** and Test's **Autopilot** / **Review**, kept local because it swaps in short labels under the panel's `left-panel` container query. It is drawn as the same folder tabs, splitting the panel's width equally. It sits on the panel rather than on a surface, so it takes `.view-tab`'s fills and hover: inactive tabs `--bg-hover`, and the active one `--bg-panel`, so it opens into the tab panel below. Active class: `.active`.
+**The left panel's strip - `.left-tabs` / `.left-tab`** (`left-panel.component.scss`) is the one horizontal strip that isn't a shared primitive: Train's **Manual** / **Autopilot** and Tune's **Autopilot** / **Review**, kept local because it swaps in short labels under the panel's `left-panel` container query. It is drawn as the same folder tabs, splitting the panel's width equally. It sits on the panel rather than on a surface, so it takes `.view-tab`'s fills and hover: inactive tabs `--bg-hover`, and the active one `--bg-panel`, so it opens into the tab panel below. Active class: `.active`.
 
 Note the state-class inconsistency: `.tab` and `.left-tab` take `.active`, while `.side-tab` and `.view-tab` take `--active` modifiers. Match the primitive you're using.
 
@@ -464,7 +464,7 @@ The dashboard's dataset/detector rows (`vt-dataset-card`, `vt-detector-card`) re
 
 ### 2.12 Pane divider
 
-`.pane-divider` is the draggable rule between resizable layout panes (Test, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
+`.pane-divider` is the draggable rule between resizable layout panes (Tune, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
 
 ### 2.13 Motion and misc utilities
 
@@ -474,7 +474,7 @@ Global classes that any component can apply. All animations here are silenced by
 |-------|------------|
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
-| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Test buttons, in-flight import/export submits). |
+| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Tune buttons, in-flight import/export submits). |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 
@@ -635,7 +635,7 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 |---------|----------------|-------------|
 | The trained ranker (the product's core object) | **detector** | model |
 | Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
-| Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
+| Testing a detector's line on a dataset it never trained on, and correcting it there | **Tune** (the Dashboard button and its view); the measurement inside it is *the test* | Test (as the button or view) |
 | Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoFind** (the detector tab, and the runs it starts on every import and from the CLI) / **AutoFind** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
 | The mascot | **King Toasty** ("Toasty" in running text) | Searchy, or any other name |
@@ -645,11 +645,11 @@ login logo, `/logo.svg`, the favicons, and the hint and toast faces in
 `utils/toasty-faces.ts`) is the crowned toast holding the magnifying glass. A new
 face or pose is a variant of that drawing, never a different one.
 
-`Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep
-them stable. The Test view's code is still named `find` (#4525), as the Train
+`Train`, `Tune` and `Find` are the three flow verbs surfaced to users; keep
+them stable. The Tune view's code is still named `find` (#4525, #5098), as the Train
 view's is `label`; that is an internal identifier and exempt. Meaning-bearing
 distinctions are *not* drift and stay as-is: `Verified Good` vs. `Good` (a
-real Test-view state), and `Positives`/`Negatives` inside the
+real Tune-view state), and `Positives`/`Negatives` inside the
 detector-stats table (standard ML terminology in that context).
 
 ---

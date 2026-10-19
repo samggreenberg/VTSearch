@@ -39,7 +39,7 @@
 <!-- **g** — Section six: the data we test all this on, and how the app does on
      it today. -->
 
-<!-- **h** — Section seven: the Test button. How you find out how good your
+<!-- **h** — Section seven: the Tune button. How you find out how good your
      detector is on your own pictures, and how often that answer holds up. -->
 
 <!-- **i** — Section eight: voting on part of a picture instead of the whole

@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
+  #5098). What people get from it is a better detector, not only a verdict on the one they have:
+  the view tests the line on a dataset the detector never trained on, then lets you correct its
+  calls, lean its Threshold, or move it to AutoFind. The button, its view (now at `/tune/…`; an old
+  `/test/…` link lands on the Dashboard), Settings, Toasty's hints and the guide all say Tune; the
+  test of the line inside it keeps its name. From the click until the view opens, a bar under the
+  button follows the dataset and detector loads the view waits for, where only the icon used to
+  waggle.
+
 - **A server that trusts session cookies no longer signs them with the key printed in the source**
   (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
   anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's

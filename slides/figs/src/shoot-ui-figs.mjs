@@ -207,7 +207,7 @@ const CALLOUT_SCALE = 1.3;
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
 
-// The Test view's layout for the Instruction section's Review frame, as the
+// The Tune view's layout for the Instruction section's Review frame, as the
 // settings a user would have after dragging the two dividers and picking a
 // thumbnail size. That frame's subject is the ranking in the left column, and
 // at the app's defaults that column was the narrowest of the three, its
@@ -222,7 +222,7 @@ const GRID_ROWS = 3;
 // loop in this layout. (It was drawn for `ui-find-line`, the same screen
 // scrolled to the line, a slide the deck cut as too technical that early;
 // owner, 2026-10-13.)
-// Both side panels open: Train and Test fold them to a strip by default
+// Both side panels open: Train and Tune fold them to a strip by default
 // (#4673), and every slide is of what is in them.
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
 const FIND_LAYOUT = {
@@ -966,17 +966,17 @@ async function shootFind(page) {
   await shootNumbered(page, 'ui-steps-find.build1', [
     step(1, datasetRow(TEST_DATASET)),
     step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Test')),
+    step(3, dashButton('Tune')),
   ]);
 
-  // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
+  // Tune, not Find: since #4525 the Find button runs AutoFind and opens no view.
   // Its scoring pass says which detector the labels gave (`label_quota`).
   const [scored] = await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/find-label',
       { timeout: 300000 },
     ),
-    page.getByRole('button', { name: 'Test', exact: true }).click(),
+    page.getByRole('button', { name: 'Tune', exact: true }).click(),
   ]);
   assertTrainedHead((await scored.json()).label_quota);
   await page.waitForSelector('.panel-right', { timeout: 300000 });
@@ -984,7 +984,7 @@ async function shootFind(page) {
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 })
     .catch(() => {});
-  // Test opens on its Autopilot tab, which hides the ranking (#4524); the
+  // Tune opens on its Autopilot tab, which hides the ranking (#4524); the
   // slides show the ranking, on the Review tab.
   await page.locator('.left-tab[title^="Review"]').first().click();
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
@@ -1004,12 +1004,12 @@ async function shootFind(page) {
 }
 
 /**
- * Fail the run unless Test scored with the session's trained head (#4890).
+ * Fail the run unless Tune scored with the session's trained head (#4890).
  *
  * The deck says the ranking `find` shows is a real trained head's, and
  * `ui-steps-find` frames it. Under the label quota, or under the typed query's
  * hold (#4736), the detector is its typed query's own set instead, with a note
- * under the Test view's tabs saying so; `TRAIN_FINAL` stops the session on
+ * under the Tune view's tabs saying so; `TRAIN_FINAL` stops the session on
  * vote counts, not on that. *quota* is the scoring pass's `label_quota`.
  */
 function assertTrainedHead(quota) {
@@ -1020,7 +1020,7 @@ function assertTrainedHead(quota) {
     : '';
   const as = { query: "its typed query's own set", centroid: "the Goods' centroid", none: 'nothing' }[quota?.tier];
   throw new Error(
-    `find: Test scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
+    `find: Tune scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
       'raise TRAIN_FINAL so the train loop ends with one',
   );
 }

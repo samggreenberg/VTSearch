@@ -17,7 +17,7 @@
 7. [Manual mode: for power users](#manual-mode-for-power-users)
 8. [Region voting on images](#region-voting-on-images)
 9. [Creating a detector](#creating-a-detector)
-10. [Testing a detector](#testing-a-detector)
+10. [Tuning a detector](#tuning-a-detector)
 11. [View options](#view-options)
 12. [Settings tabs](#settings-tabs)
 13. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
@@ -63,7 +63,7 @@ need to think about sort modes or selection strategies directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.webp" />
-  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Test / Find beneath them" width="720" />
+  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Tune / Find beneath them" width="720" />
 </picture>
 
 > Every screenshot in this guide follows one example: a few hundred cartoon
@@ -88,12 +88,13 @@ need to think about sort modes or selection strategies directly.
   from them whenever it loads.
 - **Good** and **Bad** - your answer on one item: what you are looking for,
   or not. The guide also calls an answer a *vote* or a *label*.
-- **Train**, **Test** and **Find** - the three buttons under the Dashboard's
-  tables: teach a detector with your answers, measure how far to trust its
-  line on a dataset, and collect its matches without opening a view.
+- **Train**, **Tune** and **Find** - the three buttons under the Dashboard's
+  tables: teach a detector with your answers, test its line on a new dataset
+  and correct what it gets wrong, and collect its matches without opening a
+  view.
 - **Autopilot** - the guided mode that picks which item to show you next and
   says when the detector is done. The **Manual** tab (in Train) and the
-  **Review** tab (in Test) let you choose yourself.
+  **Review** tab (in Tune) let you choose yourself.
 - **The line** and **the Threshold** - the cut through a detector's ranking
   between its matches and the rest, and the setting that says which way it
   leans (below).
@@ -111,7 +112,7 @@ A trained detector gives every item a **score** and ranks the dataset by
 it, best match first. It also draws a **line** through that ranking (the
 *threshold*): items at or above the line are its **matches**, and items
 below it are not. Everything that acts on "the matches" acts on exactly the
-items above the line: the *Unverified Good* count in Test, **To Dataset**,
+items above the line: the *Unverified Good* count in Tune, **To Dataset**,
 **Export**, **Browse**, and the exports an AutoFind detector sends.
 
 Two numbers describe how good a set of matches is:
@@ -131,11 +132,11 @@ same items stay in the same order. Which way to lean depends on what you
 will do with the results. If you will read every match, lean toward
 precision; if missing one is the costly mistake, lean toward recall.
 
-In the Test view, the Test autopilot measures both on the collection in
+In the Tune view, the Tune autopilot measures both on the collection in
 front of you: **Right** is the likely share of what the line keeps that is a
 match, and **Found** the likely share of all the matches it keeps, each from
 random picks you voted on rather than from the detector's own guess (see
-[Testing a detector](#testing-a-detector)). How the line is drawn, and how the
+[Tuning a detector](#tuning-a-detector)). How the line is drawn, and how the
 **Threshold** leans it, is under [Threshold](#3-threshold); how Autopilot
 checks the line before it calls a detector done is under
 [How close the line got](#how-close-the-line-got). You can leave both alone
@@ -258,20 +259,20 @@ detector never saw any of these pictures while you were training it.
   <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of pictures the detector has never seen, then (4) Import" width="720" />
 </picture>
 
-### Step 4: Test the detector on the new dataset
+### Step 4: Tune the detector on the new dataset
 
 Back on the dashboard:
 
 1. Tick the new dataset (`drawings-new`).
 2. Tick the trained detector (`Yellow Smileys`).
-3. Click **Test** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Test button" height="24" /></picture>.
+3. Click **Tune** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Tune button" height="24" /></picture>.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find.dark.webp" />
-  <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Test" width="720" />
+  <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Tune" width="720" />
 </picture>
 
-Test scores every picture in the dataset and opens on its **Autopilot**
+Tune scores every picture in the dataset and opens on its **Autopilot**
 tab, which tests the detector's line: it shows you pictures picked at random
 from either side of the line, you answer each with **Good** or **Bad**, and
 the result on the right says how much of what the detector would ship is
@@ -293,11 +294,11 @@ results in full:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.webp" />
-  <img src="assets/step-find-results.light.webp" alt="Step 4, the Review tab: Test ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
+  <img src="assets/step-find-results.light.webp" alt="Step 4, the Review tab: Tune ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
 </picture>
 
 That is the whole loop. Once you trust the detector, the **Find** button
-beside **Test** runs it on new datasets without a test: tick the detectors
+beside **Tune** runs it on new datasets without a test: tick the detectors
 and the datasets, and click **Find**. Or move the detector to the
 **AutoFind** tab, and it runs on every dataset you import (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
@@ -315,7 +316,7 @@ drawings and the same `Yellow Smileys` detector as
 [Step by step](#step-by-step-your-first-search). Do that first: every page
 picks up where it leaves off.
 
-**Test a detector and use its matches**
+**Tune a detector and use its matches**
 
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
@@ -548,7 +549,7 @@ alone; the others carry on. The **Downloaded Media** importer has no
 Multi-Dataset box: a demo is one dataset of one kind.
 
 **Show in photo.** When an import made both a Face and an Image dataset, a
-face in Train or Test is one click from the photo it was cut out of. Click
+face in Train or Tune is one click from the photo it was cut out of. Click
 **Show in photo** under the face, or, in Train, right-click it in the list. The photo
 opens over the ranking with the face outlined, and **← Back** (or Esc) returns
 you to the face you were on, with the ranking as you left it. If the Image
@@ -556,14 +557,14 @@ dataset isn't loaded, the window offers to load it first. A face whose photo
 isn't in the Image dataset (you left that image out, say) has no button.
 
 **Collapse to photos.** On the same kind of Face dataset, the list in Train's
-**Manual** tab and Test's **Review** tab has a **Show: Faces | Photos** switch
+**Manual** tab and Tune's **Review** tab has a **Show: Faces | Photos** switch
 under its header. **Photos** shows the ranking as the photos the faces came
 from: each photo once, where its best face ranks, with every ranked face in it
 outlined and a small picture of each face underneath. Faces below the line are
 outlined faintly; the others are the matches. An outlined face (or its small
 picture) works just like that face's card in the list: click it to show it in
 the middle, or, with hover focus, click and right-click to vote it Bad and
-Good. Votes always go on the face, never the photo, and the counts and Test's
+Good. Votes always go on the face, never the photo, and the counts and Tune's
 **Browse**, **To Dataset** and **Export** still count and send faces, as the
 line above the photos reminds you. A face whose photo isn't in the Image
 dataset shows on its own, marked "photo not found". If the Image dataset isn't
@@ -586,7 +587,7 @@ dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
 and **Export**s the listed rows to any exporter. A detector with too few
 labels for a trained one runs as its typed description, or as the Goods'
-centroid, as in [Test](#testing-a-detector), and the dialog names it, with the
+centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
 results there too. If none of your AutoFind detectors can run on the new
@@ -607,9 +608,9 @@ detectors are for that dataset's media type.
 To run detectors of your choosing instead - drafts included, without
 moving them to the AutoFind tab - tick them and the datasets to run them
 on, and click the big **Find** button in the Dashboard's action bar,
-beside **Train** and **Test**. It is enabled once at least one dataset
+beside **Train** and **Tune**. It is enabled once at least one dataset
 and one detector are ticked, all of one media type, and every ticked
-detector has labels or was made from a typed description. Unlike Test,
+detector has labels or was made from a typed description. Unlike Tune,
 which takes exactly one dataset and one detector, it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
@@ -726,13 +727,13 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 The dividers between panels can be dragged to resize them. The app
 remembers your layout per media type.
 
-Train and Test open with both side panels **folded** to a thin strip, so the
+Train and Tune open with both side panels **folded** to a thin strip, so the
 item in the middle has the room. The left one folds on the **Autopilot** tab
 only (Manual and Review are driven from its list); the right one folds on
 every tab. Click a strip, or drag its divider out, to open the panel, and the
 small ◀ / ▶ at the top of an open panel folds it again. Each side remembers
-your choice; **Hide left panel in Train and Test** and **Hide right panel in
-Train and Test**, in the Settings modal's Appearance tab, set it too. A test
+your choice; **Hide left panel in Train and Tune** and **Hide right panel in
+Train and Tune**, in the Settings modal's Appearance tab, set it too. A test
 that reaches **Done!** opens its result panel on its own.
 
 ---
@@ -908,8 +909,8 @@ one. If a check ended in your last 25
 answers, Autopilot skips this one: that check has just measured the line. It
 also runs none when you come back to a detector that had already reached
 **Done!** when Autopilot started: the session that finished it had its check.
-Test runs no spot check: it is where you test the Threshold you set in Train,
-not where you set it.
+Tune runs no spot check: it tests the Threshold you set in Train with picks of
+its own, on data the detector never trained on.
 
 **When your labels still overlap**, Autopilot checks sooner. If the detector
 scores your Good and Bad answers close together, a note under the Threshold
@@ -982,8 +983,8 @@ did we get?". The **found** phrase is the rougher of the two: it reads
 the same picks against the detector's own estimate of how many matches the
 list holds, which is the one thing the picks cannot measure. The check
 decides where to stop on the picks' plain share, so the range says how sure
-the picks are, and the count says where the balance peaked. The Test view does
-not show this range: there the Test autopilot measures the line on the
+the picks are, and the count says where the balance peaked. The Tune view does
+not show this range: there the Tune autopilot measures the line on the
 collection you are testing, and its result pane draws its own ranges.
 
 **A range measures the list as it was when you checked it.** Your check
@@ -1000,7 +1001,7 @@ check runs on it; move back and the earlier check shows again.
 votes.
 
 Everything that uses the matches works on the line in every state: the
-*Unverified Good* count, Test's review walk, **To Dataset**, **Export**
+*Unverified Good* count, Tune's review walk, **To Dataset**, **Export**
 and **Browse** all act on the items above it. An AutoFind or command-line run
 has nobody to vote, so it can't be checked: it exports the line your labels
 draw for that collection and records it as unchecked, with a line in the run's log and a
@@ -1018,7 +1019,7 @@ ranking, or you want to label under an unusual regime (e.g. pure
 diversity sampling with no voting).
 
 Your server may not offer it: an administrator can set VTSearch to
-**Autopilot only**, which removes the Manual tab (and Test's **Review** tab),
+**Autopilot only**, which removes the Manual tab (and Tune's **Review** tab),
 leaving Autopilot with no tab bar. Settings ▸ Server shows whether it is on.
 
 The Manual tab shows three control rows above the media list.
@@ -1066,7 +1067,7 @@ but in Manual mode you choose directly.
 A spectrum from **False Positives** to **False Negatives**, with three radio
 buttons under it, one under each third: which of the two mistakes the
 detector's line leans toward. In Train it sits on the Manual tab, under the
-two rows above; in Test it is at the top of the left panel; and the New
+two rows above; in Tune it is at the top of the left panel; and the New
 Detector form asks for it under **Advanced ▾**. Toward False Positives the
 line returns the most, with more wrong ones in it; toward False Negatives it
 returns only the surest, and misses more; the middle radio (the default)
@@ -1084,7 +1085,7 @@ how close it got. Hover a radio for what it does; the **?** beside
 The detector keeps its Threshold: it is saved with the detector. Autopilot,
 which has no Threshold of its own, draws the line there, and the next New
 Detector form starts on your last pick (the middle radio until you have one).
-Moving it later, in Manual or Test, changes it for that detector only, and
+Moving it later, in Manual or Tune, changes it for that detector only, and
 moves the line over the scores the detector already has; the ranking itself
 does not change. A Threshold set some other way, such as from the command
 line, shows on the nearest of the three radios, and moves to it. Leave it on
@@ -1105,7 +1106,7 @@ for your labels to place it. Because the line comes from your labels, it
 travels with them: export the detector, run it on another collection, and
 VTSearch draws the line the same way there.
 
-Once the list is ranked by the detector (a **Learned** sort, or Test), the
+Once the list is ranked by the detector (a **Learned** sort, or Tune), the
 note under the spectrum says what the line keeps:
 
 - **32 more kept, unchecked** - the line keeps 32 items you haven't voted
@@ -1117,9 +1118,9 @@ note under the spectrum says what the line keeps:
   detector the line is where its verification stage stops, not a cut on a
   ranking, so no check applies to it.
 
-In Test the note reads that collection's test result instead (*Untested*, or
-*Tested · …*; see [The Test autopilot](#the-test-autopilot)), and there is no
-spot check: Test is where you test the Threshold you set in Train.
+In Tune the note reads that collection's test result instead (*Untested*, or
+*Tested · …*; see [The Tune autopilot](#the-tune-autopilot)), and there is no
+spot check: Tune tests the Threshold you set in Train with picks of its own.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:
 the line always keeps the top of one ranking, so everything it keeps on the
@@ -1287,7 +1288,7 @@ It has two tabs:
   detector leans toward, the same three radios as the [Threshold](#3-threshold)
   in Manual mode. The detector keeps it, and Autopilot draws its line there.
   It starts on your last pick, so most detectors never need it opened; you
-  can change it later in Manual or Test.
+  can change it later in Manual or Tune.
 - **Auto-export** (both tabs, only on a server set up for it) - where the
   detector's labels are copied as you label, so a copy outside VTSearch stays
   current (see [Auto-export](#auto-export)). The form asks only for what
@@ -1312,28 +1313,31 @@ in [Start a detector from an example picture](howto/start-from-an-example.md).
 
 ---
 
-## Testing a detector
+## Tuning a detector
 
-**Test** scores an entire dataset with a detector and drops you into a
-dedicated **three-pane view** to test the detector's line on it, and to
-confirm or correct its calls before exporting. Start it from the Dashboard:
-select a dataset row and a detector row, then click **Test** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Test button" height="24" /></picture> in
-the action bar (VTSearch scores every item, showing progress while it
-runs). The left pane then carries two tabs, the Train view's Autopilot /
-Manual split applied to testing:
+**Tune** scores an entire dataset with a detector and drops you into a
+dedicated **three-pane view** to test the detector's line on it and make the
+detector better there: correct its calls, lean its Threshold, and put it on
+AutoFind once it ships what you want. Start it from the Dashboard: select a
+dataset row and a detector row, then click **Tune** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Tune button" height="24" /></picture> in
+the action bar. A bar under the button fills while VTSearch loads the dataset
+and the detector, if either isn't loaded yet; then the view opens and scores
+every item, showing progress while it runs. The left pane then carries two
+tabs, the Train view's Autopilot / Manual split applied to tuning:
 
-- **Autopilot** - the Test autopilot, which measures the line: the guided
-  flow, and the tab Test opens on.
+- **Autopilot** - the Tune autopilot, which tests the line: the guided
+  flow, and the tab Tune opens on.
 - **Review** - the ranked list under the line, the boundary walk, and the
   **Verified Good** / **Verified Bad** piles: every result, a tab away, with
   the test's picks already in the piles. A user who wants the list without
   testing clicks **Review** once scoring ends; the test waits on its tab, and
   the Threshold stays frozen until it reaches **Done!**.
 
-On a server set to **Autopilot only**, Test shows the Autopilot alone, with
+On a server set to **Autopilot only**, Tune shows the Autopilot alone, with
 no tab bar and no Review tab.
 
-Test is where you decide whether to trust a detector. To run detectors you
+Tune is where a detector gets better on data it never trained on, and where
+you find out how far to trust it. To run detectors you
 already trust and collect what they match, with no view to work through, use
 the Dashboard's **Find** button instead (see
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
@@ -1343,7 +1347,7 @@ Goods' centroid.** Until it has 3 Goods and 4 Bads, or one Good and 16 Bads,
 VTSearch does not train a detector from its labels.
 
 - **A detector made from a typed description** (the **Text** tab of New
-  Detector) is that description instead. Test, Find and AutoFind keep the
+  Detector) is that description instead. Tune, Find and AutoFind keep the
   images its text sort keeps in Train, at the detector's Threshold, so you can
   test it before your first vote. Those are the matches Autopilot shows you
   while it gathers the first labels, and on those first votes they are better
@@ -1358,17 +1362,17 @@ VTSearch does not train a detector from its labels.
   to test it; with no Good at all it can't be tested.
 
 Either way the Threshold moves the line (fewer toward the false-negative end,
-more toward the false-positive end), and the Test view says so under its tabs,
+more toward the false-positive end), and the Tune view says so under its tabs,
 with how many more Goods and Bads a trained detector needs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
-  <img src="assets/find-view.light.webp" alt="The Test view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)" width="720" />
+  <img src="assets/find-view.light.webp" alt="The Tune view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)" width="720" />
 </picture>
 
-### The Test autopilot
+### The Tune autopilot
 
-The question the Test autopilot answers is the one AutoFind needs answered: *if
+The question the Tune autopilot answers is the one AutoFind needs answered: *if
 this detector shipped the matches it finds in a future dataset like this one,
 unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
@@ -1447,7 +1451,7 @@ ways out, as Toasty does when Autopilot finishes in Train:
 - **Add Corrections and retrain** - the failed-the-test exit: hand the picks
   you disagreed with (and anything you corrected in Review) to the detector.
   The result is then *out of date*, since the detector has seen the test set;
-  running Test again retrains and re-scores, and every item you verified
+  running Tune again retrains and re-scores, and every item you verified
   keeps the call *you* made. See
   [Check and correct a detector's calls](howto/check-and-correct.md).
 
@@ -1459,7 +1463,7 @@ lists it under *Tested on*, and an AutoFind detector shows its latest under its
 name on the Dashboard. Once the detector is retrained (more votes in Train,
 **Add Corrections**, imported labels), the ranking those picks were drawn
 from no longer exists, so the verdict is marked *out of date*; it stays, so
-you can see what the detector used to ship. Open Test on a collection you
+you can see what the detector used to ship. Open Tune on a collection you
 tested before, with the detector and its ranking unchanged, and the test
 picks up where it left off: the kept picks come back, already in the Review
 tab's piles, and the result says when you took them, so there is nothing to
@@ -1473,7 +1477,7 @@ collection.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="400" />
+  <img src="assets/find-stats.light.webp" alt="The Tune view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="400" />
 </picture>
 
 ### Review
@@ -1499,9 +1503,9 @@ The action buttons let you act on the result:
 - **Add Corrections to Detector** - the same exit as the verdict's: fold the
   items you changed from the detector's call back into the detector's
   examples. Nothing is re-scored straight away (the test result is marked out
-  of date); running Test again retrains the detector and re-scores the
+  of date); running Tune again retrains the detector and re-scores the
   dataset with it.
-- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Test view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
+- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Tune view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
   [Browse](#browse-exploring-a-dataset-spatially) view.
@@ -1597,7 +1601,7 @@ eight tabs:
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
   largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Hide left panel** / **Hide right panel in Train and Test**
+  panel, the **Hide left panel** / **Hide right panel in Train and Tune**
   toggles, the **Enable achievements** toggle, **Hide All** / **Show All** for
   [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
   mode and thumbnail size).
@@ -1671,7 +1675,7 @@ with bulk-action and per-card controls.
     retrain, or label import until you pick **Move to Drafts** from the
     **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
     positives**, **Stats**, **Export labels**) stay available, and
-    **Test** and **Find** work as usual. Under each name is the latest
+    **Tune** and **Find** work as usual. Under each name is the latest
     [test verdict](#the-result) the detector keeps (*Tested on
     drawings-new: likely 70-85% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
@@ -1686,7 +1690,7 @@ with bulk-action and per-card controls.
   Drafts, where a new detector lands.
 
   Only detectors on the tab you're looking at can be selected, so
-  **Train**, **Test** and **Find** always act on rows you can see. Switching
+  **Train**, **Tune** and **Find** always act on rows you can see. Switching
   tabs clears the detector selection, and picking a detector from the
   top bar switches to its tab.
 
@@ -1707,9 +1711,10 @@ of [Toasty's hints](#toastys-hints) pointing at **Train**), then click the **Tra
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
-**Testing a detector:** select a dataset and a detector, then click
-**Test** in the action bar to open the test view (see
-[Testing a detector](#testing-a-detector)).
+**Tuning a detector:** select a dataset and a detector, then click
+**Tune** in the action bar to open the Tune view (see
+[Tuning a detector](#tuning-a-detector)). A bar under the button fills while
+the dataset and the detector load.
 
 **Finding with detectors of your choice:** select any number of datasets
 and detectors of one media type, then click **Find** in the action bar.
@@ -1719,7 +1724,7 @@ selected detector, shown on its row, and the results open in the
 [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset)).
 
 You can keep multiple datasets and multiple detectors loaded at once.
-Loading just pulls them into memory; the Train / Test / Find buttons
+Loading just pulls them into memory; the Train / Tune / Find buttons
 work on whichever rows you currently have selected.
 
 ### Toasty's hints
@@ -1743,10 +1748,10 @@ time:
   one at a time), or when a detector with no labels is ticked among others
   (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
-  dataset, **Test** or **Find** once the selected detector is trained, and
+  dataset, **Tune** or **Find** once the selected detector is trained, and
   **Find** alone when you have ticked several datasets or detectors.
 
-While one of his hints is up, the reason under a disabled **Train**, **Test**
+While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add
 one", since the hint says the same thing; both come back if you hide the
 hint.
@@ -1764,7 +1769,7 @@ Autopilot's pick. He explains the **Update Sort
 Example?** prompt from just below it (see [Get Autopilot
 unstuck](howto/unstick-autopilot.md)), and when Autopilot finishes he stands
 under the top bar's **Dashboard** button (see [Autopilot: the guided
-workflow](#autopilot-the-guided-workflow)). In the Test view he explains the
+workflow](#autopilot-the-guided-workflow)). In the Tune view he explains the
 first pick, the verdict once the test is done, and the **Review** tab the
 first time you open it.
 
@@ -1933,10 +1938,10 @@ how you carve a region of interest out of a large collection by eye; on a
 whole dataset the selection is for looking, and is gone when you leave
 Browse.
 
-Browse can also open **scoped to a Test result**: after scoring a dataset
+Browse can also open **scoped to a Tune result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
-(See [Testing a detector](#testing-a-detector), and
+(See [Tuning a detector](#tuning-a-detector), and
 [Explore a dataset with Browse](howto/explore-with-browse.md).)
 
 ---
@@ -1944,13 +1949,13 @@ you can map just the matched items and use **Verified Good** /
 ## Exporting your work
 
 In the labeling view, the right panel's **Export** button saves your current
-labels. In Test, the **Export** icons at the top of the **Verified Good** and
+labels. In Tune, the **Export** icons at the top of the **Verified Good** and
 **Verified Bad** piles send each set (checked or not), and the one beside
 the Threshold sends only the matches you haven't checked (see
 [Send your matches somewhere](howto/export-matches.md)). Both open the same
 window with the same destinations, and its title says what is leaving:
 **Export Detector Labels** for your answers (the thing that rebuilds the
-detector), **Export Results** for what the detector matched in Test (**Export Unverified
+detector), **Export Results** for what the detector matched in Tune (**Export Unverified
 Good** from the Threshold's button). Formats (by their display names):
 
 <picture>
@@ -1999,7 +2004,7 @@ Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
 from, and a good-only or bad-only file can't rebuild the detector at the
 other end (a labels file carries no typed description, so a good-only one
-gives only the Goods' centroid, as in [Test](#testing-a-detector), and a
+gives only the Goods' centroid, as in [Tune](#tuning-a-detector), and a
 bad-only one nothing). Narrowing to **Good** or **Bad** is still available - it's a
 useful way to get just the hits as a list - and the modal says what
 you're giving up when you do.
@@ -2078,7 +2083,7 @@ Two ways to bring in existing work:
   exported from VTSearch.
 - **Detectors** - the **Load** sort mode's **Sort by Detector** option
   lists the saved detectors on the Dashboard, so you can rank a fresh
-  dataset by one without retraining; [Test](#testing-a-detector) and **Find**
+  dataset by one without retraining; [Tune](#tuning-a-detector) and **Find**
   run one over a whole dataset. To bring in a detector from another
   VTSearch, see [Move a detector to another VTSearch](howto/move-a-detector.md).
 
@@ -2123,7 +2128,7 @@ not 1 + 2 + 4.
 | **Get Out the Vote** | Every Good or Bad you cast on a media item. | 100 | 1,000 | 10,000 | 100,000 |
 | **Teacher's Pet** | Each detector you trained, counted on its first vote. | 2 | 20 | 200 | 2,000 |
 | **Detector Collector** | Detectors built up from imported labels. | 1 | 10 | 100 | 1,000 |
-| **Finders Keepers** | Media items scored by Test, Find and AutoFind (GUI and CLI combined). | 2,000 | 20,000 | 200,000 | 2,000,000 |
+| **Finders Keepers** | Media items scored by Tune, Find and AutoFind (GUI and CLI combined). | 2,000 | 20,000 | 200,000 | 2,000,000 |
 | **Your Days are Numbered** | Distinct calendar days on which you cast at least one vote. | 2 | 20 | 200 | 2,000 |
 | **Multi Media** | Distinct media types you've voted on (audio, image, text, video, document). | 2 | 3 | 4 | 5 |
 | **Marathoner** | Longest run of consecutive votes with at most a 10-minute gap. | 200 | 400 | 600 | 1,000 |
@@ -2210,7 +2215,7 @@ it back on starts every count again from zero.
   `↑` instead drops you on the next unlabeled item, wherever the
   current selection strategy says that is. Because the arrows carry this, **volume moved to
   `Shift`+`↑` / `Shift`+`↓`**.
-- **Double-click the image to zoom in.** In Train / Test, a double-click
+- **Double-click the image to zoom in.** In Train / Tune, a double-click
   on the image zooms in on the spot you clicked - the quick way to check a
   detail before voting without leaving the keyboard rhythm. Double-click
   again to go deeper; the viewer stops at 5x, and a double-click there

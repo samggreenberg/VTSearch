@@ -185,9 +185,9 @@ slides:
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos
 
-  # VII — Examination: the Test button (#4594, #4598), how a user finds out
+  # VII — Examination: the Tune button (#4594, #4598; Test until #5098), how a user finds out
   # what section VI just measured, on their own pile. It follows Experimentation
-  # because its last slide grades the Test on the COCO Better sessions the room
+  # because its last slide grades Tune's test on the COCO Better sessions the room
   # has just met. The question and its two rules; the background, one idea a
   # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
@@ -211,7 +211,7 @@ slides:
   floor-check
   # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check
   # early (#4496), past the opening and never on faces (#4799). After Spot
-  # Check, which it calls. Then Test, the same question on a pile the
+  # Check, which it calls. Then Tune's test, the same question on a pile the
   # detector never saw.
   weak-spot
   test-question
