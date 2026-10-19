@@ -472,6 +472,7 @@
 @if (modals.combineDatasets.open) {
   <vt-combine-datasets-modal
     [datasets]="modals.combineDatasets.datasets"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeCombineDatasets()"
     (combineStarted)="onCombineStarted($event)"
   />
@@ -481,6 +482,7 @@
   <vt-combine-detectors-modal
     [sources]="combineSelectedDetectorSources"
     [existingNames]="allDetectorNames"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeCombineDetectors()"
     (created)="onDetectorsCombined($event)"
   />
@@ -509,6 +511,7 @@
     [datasetName]="modals.stats.datasetName"
     [isDefaultLogin]="isDefaultLogin()"
     [serverSetsAgeOff]="serverSetsAgeOff()"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeStats()"
   />
 }
@@ -517,6 +520,7 @@
   <vt-detector-stats-modal
     [detectorId]="modals.detectorStats.detectorId"
     [detectorName]="modals.detectorStats.detectorName"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeDetectorStats()"
   />
 }

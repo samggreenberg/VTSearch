@@ -98,6 +98,28 @@ describe('DetectorStatsModalComponent', () => {
     expect(rows[1].title).toContain('retrained since');
   });
 
+  describe('the Media type row on a server locked to one media type (#5106)', () => {
+    async function statLabelsWith(solo: string): Promise<(string | undefined)[]> {
+      fixture.componentRef.setInput('soloMediaType', solo);
+      await fixture.whenStable();
+      httpMock.expectOne('/api/detectors/registry/det1/stats').flush(mockStats);
+      await settleZoneless(fixture);
+      return Array.from(fixture.nativeElement.querySelectorAll('.stat-label') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+    }
+
+    it('hides it for a detector of the locked type, where it could be nothing else', async () => {
+      const labels = await statLabelsWith('audio');
+      expect(labels).not.toContain('Media type');
+      expect(labels).toContain('Embedder');
+    });
+
+    it('keeps it for a detector of a type the lock does not account for', async () => {
+      expect(await statLabelsWith('image')).toContain('Media type');
+    });
+  });
+
   it('repaints the error text on a failed load (zoneless canary)', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/detectors/registry/det1/stats').flush(

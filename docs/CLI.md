@@ -908,7 +908,9 @@ who only ever look at one media type (e.g. images, optionally pulled
 in via converters from videos/documents). When set, the dataset
 importer and new-detector flows hide their mediaType pickers and lock
 to this type, the converter list filters to converters whose output is
-this type, and the type's default embedder is warmed at startup:
+this type, the read-only fields that could only name this type (Find
+Results, the metadata panes, the Dashboard's Type columns, …) drop out,
+and the type's default embedder is warmed at startup:
 
 ```bash
 python app.py --solo-media-type image

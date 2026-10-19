@@ -62,6 +62,19 @@ describe('CombineDetectorsModalComponent', () => {
     expect(text).toContain('2 detectors · 8 total labels');
   });
 
+  it('names the sources\' media type on a server open to every type', async () => {
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.info-text')?.textContent).toContain('media type: Audio');
+  });
+
+  it('leaves it out on a server locked to that type, where it could be nothing else (#5106)', async () => {
+    fixture.componentRef.setInput('soloMediaType', 'audio');
+    await fixture.whenStable();
+    const info = fixture.nativeElement.querySelector('.info-text')?.textContent as string;
+    expect(info).not.toContain('media type');
+    expect(info).toContain('2 detectors · 8 total labels');
+  });
+
   it('blocks a name that collides with an existing detector', async () => {
     await fixture.whenStable();
     await submitAs('Barks');

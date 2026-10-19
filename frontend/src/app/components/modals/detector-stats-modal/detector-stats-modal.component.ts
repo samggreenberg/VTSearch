@@ -6,6 +6,7 @@ import type { DetectorRegistryStatsResponse } from '../../../generated/api-clien
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
@@ -26,6 +27,9 @@ export class DetectorStatsModalComponent implements OnInit {
 
   readonly detectorId = input('');
   readonly detectorName = input('');
+  /** The server's one media type when it is locked to one, from the
+   *  Dashboard; see {@link showMediaType}. */
+  readonly soloMediaType = input<string | null>(null);
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
@@ -48,6 +52,12 @@ export class DetectorStatsModalComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  /** Whether the Media type row shows: not on a server locked to the
+   *  detector's type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
   close(): void {
