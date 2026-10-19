@@ -12,9 +12,12 @@ Reads the nine arms ``launch_autopilot_4671.sh`` wrote under ``--base`` (``ctl_*
 * ``paired_curve.csv`` - the paired difference in the objective at every vote, with its SE.
 * ``REPORT_autopilot.md`` - the machine summary; ``provenance.json``; ``figures/``.
 
+``--arms`` reads a subset (``ctl`` always among them): #4739's legs run ``ctl`` and ``nowalk`` only.
+
 On arms run with a second corpus to Find on (#4960, ``CALIB_FIND_CORPUS``; #4739's legs), the ``find_*`` columns
 are read the same way, every run at every vote, paired by (category, seed), into ``find_curves.csv`` (the objective
-and AP on that corpus, and how many it returns), the ``find_objective`` / ``find_ap`` rows of ``paired.csv``, and
+and AP on that corpus, and how many it returns), the ``find_objective`` / ``find_ap`` / ``find_n_flagged`` rows of
+``paired.csv``, ``find_paired_curve.csv`` (the paired difference in the Find objective at every vote), and
 ``flags.csv``: per arm and snapshot click, the share of runs each domain-shift flag fires in, with the atypical and
 unsupported shares' means. Before a run shows a detector the Find corpus is read at the typed query's own set there,
 off the run's own typed-query rows, as the in-corpus read takes ``text_baseline.csv``'s.
@@ -144,8 +147,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--out", required=True)
     ap.add_argument("--horizon", type=int, default=150)
     ap.add_argument("--seeds", help="comma-separated seeds to read (an interim read); default all")
+    ap.add_argument("--arms", default=",".join(a for a, *_ in ARMS), help="the arms to read; ctl must be one")
     ap.add_argument("--no-figures", action="store_true")
     args = ap.parse_args(argv)
+    wanted = {a.strip() for a in args.arms.split(",") if a.strip()}
+    unknown = wanted - {a for a, *_ in ARMS}
+    if unknown or "ctl" not in wanted:
+        ap.error(f"--arms must name ctl and only known arms; got {sorted(wanted)}")
+    arms = tuple(a for a in ARMS if a[0] in wanted)
     base, out = Path(args.base), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
@@ -159,7 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     frames: dict[str, pd.DataFrame] = {}
     provs: dict[str, dict] = {}
     for p, beta in PRESETS.items():
-        for arm, _label, want in ARMS:
+        for arm, _label, want in arms:
             name = f"{arm}_{p}"
             if not (base / name / "results" / "cells").is_dir():
                 failures.append(f"{name}: no cells dir")
@@ -187,7 +196,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     grid = grid.reset_index(drop=True)
     lines += [f"Grid: {len(grid)} cells.", ""]
 
-    curve_rows, pair_rows, pcurve_rows = [], [], []
+    curve_rows, pair_rows, pcurve_rows, find_pcurve_rows = [], [], [], []
     find_curve_rows: list[pd.DataFrame] = []
     flags: list[dict] = []
     for p, beta in PRESETS.items():
@@ -197,7 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         sets = text_set(raw, f"text_line_precision_{tag}", f"text_line_recall_{tag}", f"text_line_fpr_{tag}")
         mats: dict[str, dict[str, pd.DataFrame]] = {}
         find_mats: dict[str, dict[str, pd.DataFrame]] = {}
-        for arm, label, _want in ARMS:
+        for arm, label, _want in arms:
             name = f"{arm}_{p}"
             if name not in frames:
                 continue
@@ -258,6 +267,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                             "objective_se": (fm.std(axis=0, ddof=1) / np.sqrt(fm.notna().sum(axis=0))).to_numpy(),
                             "ap": fgot["ap"].mean(axis=0).to_numpy(),
                             "returned_median": fk.median(axis=0).to_numpy(),
+                            "returned_mean": fk.mean(axis=0).to_numpy(),
                             "returned_none": (fk < 0.5).mean(axis=0).to_numpy(),
                             "runs": fm.notna().sum(axis=0).to_numpy(),
                             "runs_counted": fk.notna().sum(axis=0).to_numpy(),
@@ -267,28 +277,21 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                 flags += [{"preset": p, "arm": arm, **r} for r in flag_rows(frame)]
         if "ctl" not in mats:
             continue
-        for arm, label, _want in ARMS[1:]:
+        for arm, label, _want in arms[1:]:
             if arm not in mats:
                 continue
             for metric in ("objective", "ap"):
                 for r in paired_rows(mats["ctl"][metric], mats[arm][metric]):
                     pair_rows.append({"preset": p, "arm": arm, "label": label, "metric": metric, **r})
-                if "ctl" in find_mats and arm in find_mats:
+            if "ctl" in find_mats and arm in find_mats:
+                # The returned count too: on a corpus with no positive (`only` on a foreign dataset) it is the read.
+                for metric in ("objective", "ap", "n_flagged"):
                     for r in paired_rows(find_mats["ctl"][metric], find_mats[arm][metric]):
                         pair_rows.append({"preset": p, "arm": arm, "label": label, "metric": f"find_{metric}", **r})
-            a, b = mats["ctl"]["objective"], mats[arm]["objective"]
-            idx = a.index.intersection(b.index)
-            d = b.loc[idx] - a.loc[idx]
-            pcurve_rows.append(
-                pd.DataFrame(
-                    {
-                        "t": d.columns.astype(int),
-                        "delta": d.mean(axis=0).to_numpy(),
-                        "se": (d.std(axis=0, ddof=1) / np.sqrt(d.notna().sum(axis=0))).to_numpy(),
-                        "n": d.notna().sum(axis=0).to_numpy(),
-                    }
-                ).assign(preset=p, arm=arm)
-            )
+                find_pcurve_rows.append(
+                    paired_curve(find_mats["ctl"]["objective"], find_mats[arm]["objective"], p, arm)
+                )
+            pcurve_rows.append(paired_curve(mats["ctl"]["objective"], mats[arm]["objective"], p, arm))
 
     curve = pd.concat(curve_rows, ignore_index=True) if curve_rows else pd.DataFrame()
     pairs = pd.DataFrame(pair_rows)
@@ -301,6 +304,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     if not fcurve.empty:
         fcurve.to_csv(out / "find_curves.csv", index=False, float_format="%.6g")
         flag_frame.to_csv(out / "flags.csv", index=False, float_format="%.6g")
+    if find_pcurve_rows:
+        pd.concat(find_pcurve_rows, ignore_index=True).to_csv(
+            out / "find_paired_curve.csv", index=False, float_format="%.6g"
+        )
 
     lines += ["## Session means (every run, every vote)", ""]
     lines += [
@@ -335,6 +342,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     if not args.no_figures and not curve.empty:
         figures(curve, pcurve, out / "figures")
     return 1 if failures else 0
+
+
+def paired_curve(a: pd.DataFrame, b: pd.DataFrame, preset: str, arm: str) -> pd.DataFrame:
+    """``b - a`` at every vote on the runs both measured, with its SE: one arm against the control."""
+    idx = a.index.intersection(b.index)
+    d = b.loc[idx] - a.loc[idx]
+    return pd.DataFrame(
+        {
+            "t": d.columns.astype(int),
+            "delta": d.mean(axis=0).to_numpy(),
+            "se": (d.std(axis=0, ddof=1) / np.sqrt(d.notna().sum(axis=0))).to_numpy(),
+            "n": d.notna().sum(axis=0).to_numpy(),
+        }
+    ).assign(preset=preset, arm=arm)
 
 
 def find_report(fcurve: pd.DataFrame, flag_frame: pd.DataFrame, horizon: int) -> list[str]:
