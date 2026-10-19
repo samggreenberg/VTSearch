@@ -170,11 +170,13 @@ votes 1-25, so a patch space, or an embedder the registry does not know
 **On a patch space the Goods' centroid answers once the typed query has missed
 (#4800).** A typed query that turned up 4 Bads before its third Good has
 visibly missed, and on the Region path the centroid of the Goods' own boxes is
-then the better set: @@4800-MISSED-F@@. Before the miss the query's set is the
-better one (@@4800-NOTMISSED-F@@), so a typed-query detector on a patch space
+then the better set: on those votes it scored 0.18 to 0.38 F-beta against the
+query's 0.08 to 0.29 (864 sessions, beta 1/4, 1 and 4). Before the miss the query's
+set is the better one (0.41 to 0.72 against the centroid's 0.33 to 0.62), so a typed-query detector on a patch space
 gives the centroid only from the miss to the quota (`label_quota.query_missed`:
-a Good but fewer than 3, and 4 to 15 Bads). Over a session that gains
-@@4800-GAIN@@ (`docs/experiments/@@4800-DIR@@`). A single-vector space keeps
+a Good but fewer than 3, and 4 to 15 Bads). That gains +0.009 / +0.006 / +0.008
+over votes 1-10 and +0.005 / +0.003 / +0.004 over 1-50 at beta 1/4, 1 and 4, all
+in the fifth of sessions whose query misses (`docs/experiments/2026-10-19-region-missed-query-4800`). A single-vector space keeps
 the query: on COCO Better's Binary opening the same rule was worth under 0.003
 either way (#4758). Like the hold, it changes what Test, Find, AutoFind, a
 load, an export and the CLI give, never what Autopilot asks.
@@ -392,7 +394,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `image` | `siglip_l` | SigLIP-L (SO400M/384) | `ViT-SO400M-14-SigLIP-384` | 1152 | — |
 | `text` | `e5` | E5 (text) | `intfloat/e5-base-v2` | 768 | **default** for its media type |
 | `text` | `bge` | BGE (text) | `BAAI/bge-base-en-v1.5` | 768 | — |
-| `video` | `xclip` | X-CLIP (video) | `microsoft/xclip-base-patch32` | 512 | **default** for its media type |
+| `video` | `xclip` | X-CLIP (video) | `microsoft/xclip-base-patch32` | 768 | **default** for its media type |
 | `video` | `languagebind` | LanguageBind (video) | `LanguageBind/LanguageBind_Video_V1.5_FT` | 768 | — |
 | `video` | `videomae` | VideoMAE v2 (action features) | `OpenGVLab/VideoMAEv2-Base` | 768 | no text queries |
 

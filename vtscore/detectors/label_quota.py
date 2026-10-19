@@ -75,9 +75,11 @@ what Autopilot asks.
 missed - the Bads quota met before the Goods quota, :func:`query_missed` - a
 typed-query detector gives the Goods' centroid in place of its query, until the
 quota.  The query's top turned up Bads first, and the centroid of the Goods'
-own boxes is then the better set; before the miss the query's is.  A
-single-vector space keeps the query: there the same rule is worth nothing
-(#4758).  Like the hold, it changes what Find, Test and AutoFind give, never
+own boxes is then the better set; before the miss the query's is.  On the
+Region path (864 sessions) that gains +0.006 F-beta over votes 1-10 and +0.003
+over 1-50 at beta 1, and more at 1/4 and 4
+(``docs/experiments/2026-10-19-region-missed-query-4800``).  A single-vector
+space keeps the query: there the same rule is worth nothing (#4758).  Like the hold, it changes what Find, Test and AutoFind give, never
 what Autopilot asks.
 """
 

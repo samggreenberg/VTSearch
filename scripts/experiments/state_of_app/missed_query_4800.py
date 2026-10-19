@@ -17,13 +17,14 @@ vote under the quota with a Good and fewer than 3 Goods holds at most 2 Goods an
 ``centroid`` and ``oracle`` is exact from H = 17.
 
 Designs (``DESIGNS``): ``missed`` is #4800's rule; ``missed_1good`` takes the centroid only with 1 Good;
-``bads3`` / ``bads2`` fall back earlier (3 or 2 Bads before the Goods quota); ``centroid`` is the centroid at every
+``bads3`` / ``bads2`` / ``bads1`` fall back earlier (3, 2 or 1 Bads before the Goods quota); ``centroid`` is the centroid at every
 vote with a Good (the design before #4758, inexact past H when a run still waits for its 4th Bad there); ``oracle``
 takes the better set at every such vote (the headroom, not a rule).
 
 Writes under ``--out``: ``cells.csv`` (one row per run x corpus x beta), ``summary.csv`` (each design's paired mean
 difference over votes 1-10, 1-50 and 1-150, SEs clustered on the category), ``votes.csv`` (every vote under the quota
-with a Good), ``curves.csv`` (per vote: the share of runs whose query has missed, both sets' F-beta on those runs, and
+with a Good) and ``votes_under_quota.csv`` (those votes by the Goods and Bads in hand, ``goods`` 3 standing for 3 or
+more), ``curves.csv`` (per vote: the share of runs whose query has missed, both sets' F-beta on those runs, and
 each design's mean difference), ``checks.json`` and ``summary.md``.
 
 Usage::
@@ -73,6 +74,7 @@ DESIGNS = {
     "missed_1good": lambda g, b: _missed(g, b) & (g == 1),
     "bads3": lambda g, b: _missed(g, b, 3),
     "bads2": lambda g, b: _missed(g, b, 2),
+    "bads1": lambda g, b: _missed(g, b, 1),
     "centroid": lambda g, b: np.ones_like(g, dtype=bool),
 }
 ORACLE = "oracle"
@@ -401,6 +403,20 @@ def main() -> None:
     frame.to_csv(args.out / "cells.csv", index=False)
     vframe = pd.DataFrame(votes)
     vframe.to_csv(args.out / "votes.csv", index=False)
+    if len(vframe):
+        v = vframe.assign(
+            diff=vframe["centroid_fbeta"] - vframe["query_fbeta"],
+            missed=_missed(vframe["n_good"].to_numpy(), vframe["n_bad"].to_numpy()),
+            goods=np.minimum(vframe["n_good"], GOOD_QUOTA),
+        )
+        agg = v.groupby(["corpus", "beta", "goods", "missed", "n_bad"], as_index=False).agg(
+            votes=("diff", "size"),
+            query_fbeta=("query_fbeta", "mean"),
+            centroid_fbeta=("centroid_fbeta", "mean"),
+            centroid_minus_query=("diff", "mean"),
+            centroid_better_share=("diff", lambda d: float((d > 0).mean())),
+        )
+        agg.to_csv(args.out / "votes_under_quota.csv", index=False)
     pd.DataFrame(curves).to_csv(args.out / "curves.csv", index=False)
 
     summ = []
