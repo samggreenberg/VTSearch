@@ -37,7 +37,7 @@ def _rows() -> ScoringRows:
     )
 
 
-def _model() -> nn.Module:
+def _model() -> nn.Sequential:
     torch.manual_seed(0)
     return nn.Sequential(nn.Linear(DIM, 1))
 
