@@ -380,7 +380,8 @@ export function formatProgressHeader(
     current != null && total != null && total > 0 ? formatProgressFraction(current, total) : '';
   // A run counts the labels its detector resolves, then the items each scoring
   // pass gets through (#5101); its message is already the phase.
-  const item = kind === 'autofind' || kind === 'find' ? (counts ? runCountUnit(phase, prog.media_type) : '') : stripActionVerb(message);
+  const isRun = kind === 'autofind' || kind === 'find';
+  const item = isRun ? (counts ? runCountUnit(phase, prog['media_type']) : '') : stripActionVerb(message);
   const detail = [counts, item].filter(Boolean).join(' ');
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };

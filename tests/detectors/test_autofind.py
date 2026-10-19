@@ -350,7 +350,10 @@ class TestRunProgress:
         finally:
             loading_tasks.unsubscribe(record)
 
-        running = [f for f in frames if f["task_id"] == task_id and f["status"] == "loading"]
+        # The row's birth frame comes before the run's first word, with no bar.
+        running = [
+            f for f in frames if f["task_id"] == task_id and f["status"] == "loading" and f["overall"] is not None
+        ]
         overall = [f["overall"] for f in running]
         assert overall == sorted(overall), "the bar never moves back"
         assert any(0.0 < o < 1.0 for o in overall), "the bar moved before the run ended"
