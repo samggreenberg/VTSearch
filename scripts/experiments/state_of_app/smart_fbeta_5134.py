@@ -457,6 +457,17 @@ def _style(ax) -> None:
         ax.spines[sp].set_color(MUTED)
 
 
+def _legend(axes) -> tuple[list, list]:
+    """Every series drawn on any panel, once each, in the order first drawn."""
+    handles, labels = [], []
+    for ax in axes.flat:
+        for h, label in zip(*ax.get_legend_handles_labels(), strict=True):
+            if label not in labels:
+                handles.append(h)
+                labels.append(label)
+    return handles, labels
+
+
 def figures(price_dir: Path, ab_dir: Path | None, out: Path) -> None:
     """``lights.png``: each light's share of sessions green over clicks, above the objective it should track;
     ``ab.png``: each closed-loop arm minus today's app over clicks (paired, ±1 SE over classes)."""
@@ -509,7 +520,7 @@ def figures(price_dir: Path, ab_dir: Path | None, out: Path) -> None:
         if j == 0:
             ax.set_ylabel("withheld F-beta,\narm minus today", color=INK)
         _style(ax)
-    handles, labels = axes[0, 0].get_legend_handles_labels()
+    handles, labels = _legend(axes)
     fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, fontsize=9, labelcolor=INK)
     fig.tight_layout(rect=(0, 0, 1, 0.82))
     fig.savefig(out / "ab.png", dpi=150, facecolor=SURFACE)

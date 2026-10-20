@@ -17,8 +17,8 @@ Schematic inputs, real code, as in `make-test-figs.py`:
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
   `scripts/check-eval-app-sync.py`) through the steps, and every target it
   prints is that module's constant.
-* `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
-  session's error costs, and asserts the lights the slide draws.
+* `autopilot-smart` runs the shipped `rising_status_from_scores` on a planted
+  session's F-beta points (#5134), and asserts the lights the slide draws.
 * `autopilot-stable` runs the shipped `count_flips` on two planted retrains,
   and asserts the flips the slide counts.
 * `autopilot-span` counts the walk's run over the first 40 cells of an atlas,
@@ -64,10 +64,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
 
 from vtscore.detectors.cost_trend import (  # noqa: E402
-    SMART_FLAT_THRESHOLD,
+    SMART_RISE_THRESHOLD,
     SMART_SLOPE_T,
     SMART_WINDOW,
-    smart_status_from_costs,
+    rising_status_from_scores,
 )
 from vtscore.detectors.stability import (  # noqa: E402
     STABLE_BAND_STD_FRACTION,
@@ -404,7 +404,7 @@ SPANISH_INSET = 0.12
 SPANISH_YLIM = (-1.85, 3.35)
 #: The ability each page shows, as the notes describe it: the class's words, once a test is the newest on the page.
 SPANISH_SHOWN = ("Bad", "Great", "Bad", "Good", "Bad", "Ok", "Ok", "Ok")
-#: A planted session's error cost, one point a retrain: falling fast, then
+#: A planted session's F-beta, one point a retrain (#5134): rising fast, then
 #: flat with the step-to-step scatter a real labelset gives it.
 SMART_RETRAINS = 30
 SMART_SEED = 7
@@ -428,25 +428,25 @@ def _spanish_points(page: int) -> list[tuple[float, float]]:
     return out
 
 
-def _smart_costs() -> np.ndarray:
+def _smart_fbetas() -> np.ndarray:
     rng = np.random.default_rng(SMART_SEED)
     t = np.arange(1, SMART_RETRAINS + 1)
-    return 0.16 + 0.55 * np.exp(-t / 5.5) + rng.normal(0.0, 0.008, size=t.size)
+    return 0.84 - 0.6 * np.exp(-t / 5.5) + rng.normal(0.0, 0.008, size=t.size)
 
 
-def _smart_window(costs: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
+def _smart_window(fbetas: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
     """The last ``SMART_WINDOW`` retrains up to *end* (1-based), and the shipped Smart status over them."""
-    window = costs[end - SMART_WINDOW : end]
-    return window, smart_status_from_costs(list(window), good=10, bad=10)
+    window = fbetas[end - SMART_WINDOW : end]
+    return window, rising_status_from_scores(list(window), good=10, bad=10)
 
 
 def smart_fig() -> None:
-    """Smart: the idea, in Spanish classes, and then the error cost of the last ten detectors.
+    """Smart: the idea, in Spanish classes, and then the F-beta of the last ten detectors.
 
     Ten stages (owner, #4884): eight pages of the idea, a student whose ability
     axis rescales each time a class shows them how much more Spanish there is,
     until a class brings nothing new and the curve goes flat; then the shipped
-    measure, early in a session (still falling) and later (flat).
+    measure, early in a session (still rising) and later (flat).
     """
     # Every test on its own page reads as the notes say it does.
     for page, words in enumerate(SPANISH_SHOWN, start=1):
@@ -456,12 +456,12 @@ def smart_fig() -> None:
     for page in (3, 5):
         assert all(y < 0 for _x, y in _spanish_points(page)[: page - 2]), page
     # The notes say "two standard errors" and "the 1.5% line".
-    assert (SMART_SLOPE_T, SMART_FLAT_THRESHOLD) == (2.0, -0.015), (SMART_SLOPE_T, SMART_FLAT_THRESHOLD)
-    costs = _smart_costs()
-    early, late = _smart_window(costs, SMART_EARLY_END), _smart_window(costs, SMART_LATE_END)
+    assert (SMART_SLOPE_T, SMART_RISE_THRESHOLD) == (2.0, 0.015), (SMART_SLOPE_T, SMART_RISE_THRESHOLD)
+    fbetas = _smart_fbetas()
+    early, late = _smart_window(fbetas, SMART_EARLY_END), _smart_window(fbetas, SMART_LATE_END)
     assert early[1]["status"] == "yellow", early[1]
     assert late[1]["status"] == "green" and not late[1]["drift_within_noise"], late[1]
-    _save(SMART_STAGES, lambda stage: _smart_stage(stage, costs), "autopilot-smart")
+    _save(SMART_STAGES, lambda stage: _smart_stage(stage, fbetas), "autopilot-smart")
 
 
 def _spanish_stage(page: int) -> Figure:
@@ -502,7 +502,7 @@ def _fit_line(window: np.ndarray, x0: int) -> tuple[np.ndarray, np.ndarray]:
     return xs, slope * xs + intercept
 
 
-def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
+def _smart_stage(stage: int, fbetas: np.ndarray) -> Figure:
     if stage <= SPANISH_PAGES:
         return _spanish_stage(stage)
     fig = plt.figure(figsize=(W, H))
@@ -510,9 +510,9 @@ def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
     ax.set_xlim(0.3, SMART_RETRAINS + 0.7)
     ax.set_ylim(0.0, SMART_Y_TOP)
     ax.set_xticks([1, 10, 20, 30])
-    ax.set_yticks([0.0, 0.2, 0.4, 0.6])
+    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax.set_xlabel("retrain")
-    ax.set_ylabel("mistakes, FPR + FNR")
+    ax.set_ylabel("F-beta on today's votes")
     fig.text(0.40, 0.86, "Is the detector still getting better?", ha="left", va="center", fontsize=19)
     overlay = _overlay(fig)
     _side_block(
@@ -527,12 +527,12 @@ def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
     )
     shown = SMART_EARLY_END if stage == SPANISH_PAGES + 1 else SMART_RETRAINS
     xs = np.arange(1, shown + 1)
-    ax.plot(xs, costs[:shown], linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
-    windows = [(SMART_EARLY_END, 0.56, "still falling")]
+    ax.plot(xs, fbetas[:shown], linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
+    windows = [(SMART_EARLY_END, 0.42, "still rising")]
     if stage == SMART_STAGES:
-        windows.append((SMART_LATE_END, 0.36, "flat"))
+        windows.append((SMART_LATE_END, 0.6, "flat"))
     for end, label_y, words in windows:
-        window, status = _smart_window(costs, end)
+        window, status = _smart_window(fbetas, end)
         x0 = end - SMART_WINDOW + 1
         ax.add_patch(Rectangle((x0 - 0.45, 0.0), SMART_WINDOW - 0.1, SMART_Y_TOP, facecolor="#eef1f5",
                                edgecolor="none", zorder=1))  # fmt: skip
@@ -545,8 +545,8 @@ def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
     return fig
 
 
-#: The top of the Smart chart's cost axis: clear of the session's first point.
-SMART_Y_TOP = 0.7
+#: The top of the Smart chart's F-beta axis: F-beta's own.
+SMART_Y_TOP = 1.0
 
 
 def _signed(value: float) -> str:
