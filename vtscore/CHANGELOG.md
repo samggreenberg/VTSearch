@@ -12,6 +12,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The Evidence coverage verdict ranks against the training haystack, not the votes' own spread** (issue #5089).
+  `evidence_coverage_report` drew `unsupported` from the share with support p-value `D < alpha`, `D` ranked against the
+  labelset's leave-one-out distances; active learning picks the votes, so on #4739's bench it fired on 81-83% of
+  in-domain runs by vote 150, and below 20 votes of a class it could not fire at all. It now takes `baseline`, the
+  training haystack's `reference_cutoffs` (per predicted class, the distance past 95% of the haystack's media called
+  that class), and draws `unsupported` from the share beyond them (`frac_beyond`, `z_beyond`; `beyond_reference`):
+  in-domain it fires on 1 of 4,320 runs at vote 150, and on the 22% screens mix and on screens alone on 99.6-100% of
+  runs from vote 10 (`docs/experiments/2026-10-19-evidence-chip-5089`). Without a baseline `unsupported` is `False`;
+  `frac_unsupported`, `z_score` and `median_support` keep their meaning. New module `vtscore.detectors.evidence_baseline`
+  stamps the cuts (embedder, width, labelset signature, k, alpha) for the detector JSON (`evidence_baseline`) and refuses
+  a stale stamp; `training_domain.labelled_media_ids` names a labelset's media in a dataset. The eval harness's Find
+  corpus ranks against the sim pool's unvoted media (`find_corpus.pool_baseline`, `FindCorpus.pool_ids`), and its flag
+  rows gain `evidence_frac_beyond` and the counts behind the shares (`evidence_n*`, `evidence_pool_n*`,
+  `evidence_n_{pos,neg}_beyond_pool`; `unsupported_counts`, `reference_vacuum_counts`).
 - **On a patch space a typed-query detector gives the Goods' centroid once its query has missed** (issue #4800).
   Under the label quota, a detector made from a typed query gives that query's own set (#4758). On a patch space,
   once a Bad comes before the Goods quota with a Good in hand (`label_quota.query_missed`: 1-2 Goods and 1-15 Bads,

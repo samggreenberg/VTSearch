@@ -282,7 +282,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
-  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // #4555: Tune opens on the Autopilot tab, and the test of the line starts
   // the moment the scoring pass lands, with no click. It used to wait for one:
   // the pass's `finalize` (which drops the busy flag) runs only after its
   // `next` returns, so the start, asked for from `next`, still saw the pass
@@ -638,7 +638,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
   });
 
-  // #5099: the Test autopilot's stage shows the round's picks one at a time,
+  // #5099: the Tune autopilot's stage shows the round's picks one at a time,
   // and used to fetch each only once it was on screen.
   it("warms the test's next two unvoted picks on the Autopilot tab, and moves on with a vote", () => {
     const lineTest = fixture.componentInstance.lineTest;
@@ -1019,7 +1019,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const el = fixture.nativeElement as HTMLElement;
       const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
       expect(hint()?.getAttribute('hintId')).toBe('test-vote');
-      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+      expect(hint()?.textContent).toContain('line with picks from both sides of it');
 
       // The first pick voted: the explanation has done its job.
       fixture.componentInstance.lineTest.response.set(
@@ -1056,7 +1056,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
-    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // #4555: Tune opens on Autopilot, which has no centre panel, so the one
     // Review makes is not the one the view opened with; each must be started
     // (its settings, the shortcuts), or Review's keys do nothing.
     it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {

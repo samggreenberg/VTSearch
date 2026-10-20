@@ -2,7 +2,7 @@
 
 The frontend's active-context route guard calls ``POST /api/sessions/recent``
 whenever the user enters ``/label/:datasetId/:detectorId`` or
-``/test/:datasetId/:detectorId`` to bump that pair's ``last_activity``
+``/tune/:datasetId/:detectorId`` to bump that pair's ``last_activity``
 timestamp, and the burger menu's "Recent sessions" submenu reads
 ``GET /api/sessions/recent`` to render the list.
 

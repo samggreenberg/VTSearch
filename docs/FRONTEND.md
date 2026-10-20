@@ -89,7 +89,7 @@ active context in the URL:
 |------|-------|------|
 | `/dashboard` | — | Dataset & detector management |
 | `/label/:datasetId/:detectorId` | `activeContextGuard` | Labeling / training |
-| `/test/:datasetId/:detectorId` | `activeContextGuard` | Test (`FindViewComponent`) |
+| `/tune/:datasetId/:detectorId` | `activeContextGuard` | Tune (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
 
 Bare `/label`, `/test`, `/browse` (and anything unmatched) redirect to
@@ -162,7 +162,7 @@ the component —
 - `DashboardLoadingTasksService` — per-task loading rows, and the
   poll-until-settled-then-refresh bookkeeping.
 - `DashboardSelectionService` — the highlighted table rows (which drive
-  Train / Test / Find / Combine / Delete), *owned* here rather than mirrored from the
+  Train / Tune / Find / Combine / Delete), *owned* here rather than mirrored from the
   component, so the top-bar pulldowns show what is *selected* while the
   Dashboard is on screen (not merely what is loaded) by reading signals
   directly, and the selection survives a round trip to another view. Both
@@ -217,7 +217,7 @@ selected (`endQueryHold`). Whether a run holds is the view's call
 on the typed query's text sort, not an example opening, retrain mode or a
 document dataset's walk.
 
-The three panels are shared with the Test view:
+The three panels are shared with the Tune view:
 
 - **Left** — media list (virtual scroller), sort bar, Threshold, stripe
   overview, select mode, and the **Autopilot panel** that drives the automated
@@ -228,11 +228,11 @@ The three panels are shared with the Test view:
 
 **Folding the side panels** (#4673). Each side folds to a 48px strip
 (`vt-side-panel-toggle`), per the `hide_left_panel` / `hide_right_panel`
-settings, both on by default and shared by Train and Test.
+settings, both on by default and shared by Train and Tune.
 `PanelHideStateService` (root) reads them and holds a click until the PUT
 echoes it. The left folds on an Autopilot tab only (`LeftPanelComponent.folded`;
 Manual and Review are driven from the list), and in Train its strip is the
-Autopilot panel's own phase rail. The right folds on every tab, and Test opens
+Autopilot panel's own phase rail. The right folds on every tab, and Tune opens
 it on its own while a verdict is up (`FindViewComponent.rightCollapsed`). A fold
 swaps the grid column, not the width: `--left-width` / `--right-width` keep the
 open width, and the `.layout--*-collapsed` classes put the strip's 48px in its
@@ -240,7 +240,7 @@ place. A folded right panel is unmounted, which is why the views, not
 `vt-right-panel`, own the votes poll.
 
 **The Threshold** (`vt-balance`, the balance, in Train's Manual tab and on
-both of Test's tabs; #4413) is the one knob on the detector's line. The balance is
+both of Tune's tabs; #4413) is the one knob on the detector's line. The balance is
 F-beta's beta: which way to lean between false positives and false negatives.
 It is the detector's own, kept on the detector (#4665): the New Detector modal
 mounts the same control (with no line, so no state line) and sends the pick
@@ -254,10 +254,10 @@ what it estimated. Two values back the control, and they travel separately:
 the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked`,
 `checked`, or `gate` for a structural detector's verification gate, the count
 kept, the check's two likely ranges and its F-beta estimate), and only ever
-arrives *with* that line (a sort, a Test pass, or the balance POST's own
+arrives *with* that line (a sort, a Tune pass, or the balance POST's own
 response). Each view has one write path, both
 `switchMap`-ed and pair-scoped so a balance the user moved past can never land
-last. Test's
+last. Tune's
 (`betaRequests$`, debounced) installs the returned line straight over the
 frozen scores. Label's (in `SortRunnerService`) re-runs the learned sort, but
 only from the POST's response: the learned sort reads the balance server-side
@@ -276,11 +276,11 @@ Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
 false negatives; #4448), and never shows a balance as a word or a number: each
 radio's tooltip says where it sits (#4298, #4317). The radios show the host's
 balance, never the click: a pick puts the DOM back on `value()` before
-emitting, so a pick the host drops (Test, mid-pass) leaves them where they
+emitting, so a pick the host drops (Tune, mid-pass) leaves them where they
 were. A stored balance off the list is shown on the nearest radio (nearest in
 log space, a tie to the preset farther from 1, so the old 2 and 0.5 show as 4
 and 1/4) and snapped to it through the control's
-own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
+own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Tune
 drops a balance change while a pass is running. Under the spectrum the state
 line reads "Checked the 40 kept you hadn't voted on · likely 55–100% right,
 about half of them found (checked 5) · 32 more kept" or "32 more kept,
@@ -312,9 +312,9 @@ run whose first labeling-status reading is already all green or at the level
 holds 200 votes, latches `doneChecked` at that reading, so
 re-entry runs no check, even after a server restart has forgotten the last
 one. The
-Threshold control starts none (it has no check button), and Test runs none:
+Threshold control starts none (it has no check button), and Tune runs none:
 it tests the balance Train set, and labelling more to set one is too late
-there (#4317); its own test of the line is the Test autopilot (below), and
+there (#4317); its own test of the line is the Tune autopilot (below), and
 the control's state line there is the host's (`lineState`: this corpus's
 result, or untested) with the radios `locked` while a phase runs.
 **When a check runs.** The label view starts both kinds. For weak separation
@@ -367,31 +367,38 @@ that *later* votes do that. The line draws the same in every state; the state
 and its likely range live in the balance control, and a stale range differs
 only in its tooltip (`staleNote`).
 
-### Test view (`components/find-view/`)
+### Tune view (`components/find-view/`)
 
-The Dashboard's **Test** button opens it at `/test/:datasetId/:detectorId`.
-It was called Find until #4525 renamed it, and its code keeps that name, as
-the Train view's is `label`: `FindViewComponent`, `panelMode: 'find'`,
+The Dashboard's **Tune** button opens it at `/tune/:datasetId/:detectorId`.
+It was called Find until #4525 and Test until #5098, and its code keeps the
+first name, as the Train view's is `label`: `FindViewComponent`, `panelMode: 'find'`,
 `VoteStateService.findMode`, and on the API side `/api/find-label`,
 `find_mode` and the `find` SSE channel. **Find** is now the Dashboard's third
 button, which opens no view: it starts a background AutoFind run per ticked
 dataset with the ticked detectors (`DashboardComponent.onAutofind`,
 `AutoFindService.find`), and the Find Results dialog opens as they land. The
 dialog's **Browse** lays the listed items out in Browse through the same
-`BrowseSubsetPrepService` the Test view's Browse uses, with an origin
+`BrowseSubsetPrepService` the Tune view's Browse uses, with an origin
 (`?from=results&run=…`) that sends Browse's Back to those results instead of
-to Test.
+to Tune.
+
+From the Tune click until the route activates, a bar stands under the button
+in its reason's slot (`DashboardComponent.tuneBar`, #5098). It reads the
+dataset and detector loads the `activeContextGuard` holds the route for off the
+two loading-task channels (`utils/pair-load-bar.ts`), as one bar across both,
+and is indeterminate while nothing has published yet, which also covers the
+lazy route's chunk download.
 
 Scores the active pair's dataset with its detector (`POST /api/find-label`)
 and opens on two tabs in the left panel (`findTab`, owned by the view since
-the centre and right panes switch with it; #4524): **Autopilot**, the Test
+the centre and right panes switch with it; #4524): **Autopilot**, the Tune
 autopilot, and **Review**, the ranked result in full (the work queue under
 the line, the boundary walk, the Verified Good / Verified Bad piles, To
 Dataset / Export / Browse, which can hand a subset of result ids to Browse
 through `BrowseSubsetService`). Train's Autopilot / Manual split applied to
-testing: the guided flow is the default, the open one a tab away.
+tuning: the guided flow is the default, the open one a tab away.
 
-**The Test autopilot** measures the line on the corpus in front of the user
+**The Tune autopilot** measures the line on the corpus in front of the user
 with uniform picks from rank bands on both sides of it (`vtscore/docs/packages/training.md`;
 the statistics are `vtscore/training/thresholds/line_test.py`, the routes
 `/api/line-test*` in `vtsearch/routes/line_test.py`). The server owns the
@@ -744,7 +751,7 @@ panel swaps `vt-media-list` for `vt-photo-grid` while `CollapsePhotosService`
 is active (switched on, on a dataset where Show in photo is offered), and the
 grid draws each photo with `mediaUrlIn(photoDatasetId, …)`. The grouping is the
 server's (`GET /api/sort/collapsed`, keyed by `SortStateService.sortToken`, so
-Test's `setSortResults` keeps find-label's token); the grid only pages rows and
+Tune's `setSortResults` keeps find-label's token); the grid only pages rows and
 leaves out the faces it is told to hide. A face on a photo emits the same
 `mediaSelect` / `mediaVote` / `mediaContextRequest` a card does, so the host's
 vote flow is unchanged. The Show in photo overlay and the grid both answer the
@@ -753,7 +760,7 @@ vote flow is unchanged. The Show in photo overlay and the grid both answer the
 
 ### Routes and guards — the URL is the source of truth
 
-`/label/:datasetId/:detectorId` and `/test/:datasetId/:detectorId` carry the
+`/label/:datasetId/:detectorId` and `/tune/:datasetId/:detectorId` carry the
 pair so reload, share links, and browser back/forward all work.
 `activeContextGuard` resolves the URL pair before the view renders: it awaits
 the registry fetch (a cold deep-link can arrive first), toasts and redirects to
@@ -1109,7 +1116,7 @@ Shared fragments live in `src/app/testing/` and compose freely in a
 - `settle-resource.ts` — `settleResource()` / `settleZoneless(fixture)`, the
   awaits the two subsections below rely on.
 - `line-balance.ts` / `line-test.ts` — wire-shaped fixtures for the balance and
-  Test-autopilot payloads.
+  Tune-autopilot payloads.
 
 ### The zoneless oracle
 

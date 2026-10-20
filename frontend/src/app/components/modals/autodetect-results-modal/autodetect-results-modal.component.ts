@@ -406,7 +406,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   }
 
   /**
-   * Open the listed items in Browse, as a map of their own. As in the Test
+   * Open the listed items in Browse, as a map of their own. As in the Tune
    * view, the map is built here, behind a progress bar with a Cancel, and the
    * dialog hands off to Browse only once it is ready; the run's dataset is
    * made active first, since the build scores against the active dataset.

@@ -335,9 +335,9 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
-    # Lock Train and Test to their **Autopilot** tabs (#4666).  An operator who
+    # Lock Train and Tune to their **Autopilot** tabs (#4666).  An operator who
     # wants users on the guided flow only can drop Train's Manual tab and
-    # Test's Review tab; the tab bars then do not render at all, so the left
+    # Tune's Review tab; the tab bars then do not render at all, so the left
     # pane is just the Autopilot panel.  A UI simplification, not a permission
     # boundary: the backend serves the same routes either way.  Set with the
     # ``--autopilot-only`` CLI flag / ``VTSEARCH_AUTOPILOT_ONLY`` env var
@@ -465,7 +465,7 @@ class UserSettings(BaseModel):
     hide_all_hints: bool = False
     hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
-    # Whether Train and Test open with each side panel folded to a thin
+    # Whether Train and Tune open with each side panel folded to a thin
     # strip (#4673). The left folds only on the Autopilot tab, where the
     # centre already serves every pick; Manual and Review keep their list.
     # The right folds on every tab. Both default to hidden, leaving the

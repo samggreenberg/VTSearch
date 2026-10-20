@@ -2,7 +2,7 @@
 
 A detector is only as good as the examples it learned from. Point it at
 pictures unlike any of them and it still gives an answer for every one; it
-just has nothing to base it on. The result pane in Test answers two
+just has nothing to base it on. The result pane in Tune answers two
 questions before you rely on it: how right its line is on *this* collection,
 measured on pictures you answered yourself, and how often it is calling
 pictures it has never seen the like of, so you know which calls to check by
@@ -10,13 +10,13 @@ hand.
 
 This page picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Test**. It is at its most useful for a detector
+over `drawings-new` with **Tune**. It is at its most useful for a detector
 someone *else* trained, since you don't know what that one has seen. The red
 numbers in each screenshot show where to click, in order.
 
 ## Step 1: Test the line
 
-Test opens on its **Autopilot** tab, which shows you pictures picked at random
+Tune opens on its **Autopilot** tab, which shows you pictures picked at random
 from either side of the line, a round of five at a time. Answer each with
 **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-good.dark.webp" /><img src="../assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> or **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-bad.dark.webp" /><img src="../assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or `→` / `←`) until the
 phases on the left read **Done!**: first **Check the matches** (pictures
@@ -34,14 +34,20 @@ the result carries:
 2. **Training-domain overlap** says how much of *this* dataset looks unlike
    the one you picked: here "**3%** of this dataset looks atypical vs
    **drawings** — largely in-domain".
-3. **Evidence coverage** says how much of the dataset the detector is calling
-   with no labelled example anything like it behind the call: here "**0%** of
-   this dataset sits in an evidence vacuum — mostly backed by labeled
-   evidence".
+3. **Evidence coverage** says how much of the dataset sits farther from the
+   detector's labelled examples than 95% of the dataset it was trained on
+   does: "**5%** of this dataset sits farther from the detector's examples
+   than 95% of **drawings** — as well covered as its training data". About
+   5% is what the training data itself reads, so 5% means the detector
+   knows these pictures as well as the ones it learned from. Until you have
+   run **Tune** on the dataset the detector was trained on, there is nothing
+   to measure against: the chip shows the share of the dataset in an
+   evidence vacuum, "no verdict until you run Tune on the dataset the
+   detector was trained on".
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />
-  <img src="../assets/trust-stats.light.webp" alt="Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="400" />
+  <img src="../assets/trust-stats.light.webp" alt="Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector's examples than its training data does" width="400" />
 </picture>
 
 The two checks answer the same question from different ends:
@@ -52,18 +58,23 @@ The two checks answer the same question from different ends:
   the detector is being asked about a different kind of picture from the
   ones it was trained on (domain shift).
 - **Evidence coverage** compares the *detector's own examples* with this
-  dataset, so it works even when you don't have the training data. A large
-  share means many calls are guesses.
+  dataset. Its yardstick is how far the training data sat from those
+  examples, which the detector records when you run **Tune** on the
+  dataset it was trained on, so it works afterwards even when you don't
+  have the training data, as with a detector someone sends you. A share
+  well above 5% means many calls are guesses. A new vote changes the
+  examples, so the yardstick is measured again at the next Tune on the
+  training data; until then the chip gives its share without a verdict.
 
 The first check also runs earlier, on its own: the moment you pick a detector
 and a dataset, before you test anything. When its verdict is *likely domain
 shift*, a warning says so ("**31%** of this dataset looks atypical vs
-**drawings**: likely domain shift"), and its **Test it** button opens this
+**drawings**: likely domain shift"), and its **Tune it** button opens this
 pane. It warns once for each detector and dataset, and only when the dataset
 the detector learned from is loaded.
 
 The verdict after each figure (*largely in-domain* or *likely domain shift*;
-*mostly backed by labeled evidence* or *often calling without support*) is
+*as well covered as its training data* or *often calling without support*) is
 VTSearch's reading of it. The line under each gives the numbers behind it.
 
 ## Step 3: Read what the picks said
@@ -96,7 +107,7 @@ collection as a whole.
 - **A large share atypical, or in an evidence vacuum**: the detector needs
   examples from this kind of picture. **Add Corrections and retrain** hands it
   the picks you disagreed with, and the pictures you check by hand on the
-  **Review** tab; then run Test again
+  **Review** tab; then run Tune again
   ([Check and correct a detector's calls](check-and-correct.md)). That
   teaches it more than moving the Threshold would.
 

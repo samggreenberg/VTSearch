@@ -1,4 +1,4 @@
-"""Test mode's test of the line (#4524): draw picks, take the votes, report what the line would ship.
+"""Tune's test of the line (#4524): draw picks, take the votes, report what the line would ship.
 
 Find scores a corpus the detector never trained on and draws the balance's
 line on it.  A **test** measures that line: uniform picks from rank bands on
@@ -54,7 +54,7 @@ log = logging.getLogger(__name__)
 line_test_bp = Blueprint(
     "line_test",
     __name__,
-    description="Test mode's test of the line: draw picks, take the votes, report what the line would ship.",
+    description="Tune's test of the line: draw picks, take the votes, report what the line would ship.",
 )
 
 

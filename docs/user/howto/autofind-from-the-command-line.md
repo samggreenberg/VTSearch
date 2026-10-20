@@ -36,7 +36,7 @@ The detector moves from the **Drafts** tab of the **Detectors** card to the
 
 An AutoFind detector is *frozen*: it can't be renamed, deleted, trained or
 given more labels, so what runs unattended is exactly what you tested. It can
-still be tested with **Test** and run with **Find**, and its **⋯** menu keeps
+still be tested with **Tune** and run with **Find**, and its **⋯** menu keeps
 **Browse positives**, **Export labels** and **Stats**. To change it, choose
 **Move to Drafts** from the same menu, change it, and move it back.
 

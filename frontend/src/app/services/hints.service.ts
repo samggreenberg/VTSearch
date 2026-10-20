@@ -39,7 +39,7 @@ export const HINT_IDS = [
   'autopilot-done-cap',
   'autopilot-ran-dry',
   'all-labeled',
-  // Test view.
+  // Tune view.
   'test-vote',
   'test-done',
   'review',

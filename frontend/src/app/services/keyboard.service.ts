@@ -93,7 +93,7 @@ export class KeyboardService implements OnDestroy {
   /**
    * Listen while the shortcuts are started or a claim is held, whichever
    * comes and goes first. A claim's holder can be on screen with no centre
-   * panel to start them (the Test autopilot's stage, #4555), and a centre
+   * panel to start them (the Tune autopilot's stage, #4555), and a centre
    * panel torn down beside it must not take its keys away.
    */
   private sync(): void {

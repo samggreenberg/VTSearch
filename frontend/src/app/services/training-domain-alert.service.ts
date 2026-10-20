@@ -20,7 +20,7 @@ interface Pair {
  * Warn when a detector meets a dataset unlike the one it was trained on, before
  * the user runs it there (#4961).
  *
- * The Test result's **Training-domain overlap** check used to be the only word
+ * The Tune result's **Training-domain overlap** check used to be the only word
  * on this, and it shows only once a test is done. The check itself needs no
  * scored run, so this service runs it the moment a (dataset, detector) pair
  * becomes active: `GET /api/find/training-domain` works out the training
@@ -76,20 +76,20 @@ export class TrainingDomainAlertService {
     const detector = this.datasetState.detectorById().get(pair.modelId)?.name ?? 'This detector';
     const dataset = this.datasetState.datasetById().get(pair.datasetId)?.name ?? 'this dataset';
     const pct = Math.round(shift.frac_atypical * 100);
-    const onTest = this.router.url.split('?')[0].startsWith('/test/');
+    const onTune = this.router.url.split('?')[0].startsWith('/tune/');
     this.toast.warning({
-      // The Test result's own line, word for word: the verdict and nothing stronger.
+      // The Tune result's own line, word for word: the verdict and nothing stronger.
       message: `${pct}% of this dataset looks atypical vs ${reference}: likely domain shift`,
       detail:
         `${detector} learned from ${reference} (${report.labels_in_reference} of its ` +
         `${report.labels_total} labelled examples are there). Check its calls on ${dataset} ` +
         `by hand before relying on them.`,
-      action: onTest
+      action: onTune
         ? undefined
         : {
-            label: 'Test it',
-            title: `Test ${detector} on ${dataset}`,
-            onClick: () => void this.router.navigate(['/test', pair.datasetId, pair.modelId]),
+            label: 'Tune it',
+            title: `Tune ${detector} on ${dataset}`,
+            onClick: () => void this.router.navigate(['/tune', pair.datasetId, pair.modelId]),
           },
       dedupKey: `training-domain:${key}`,
     });

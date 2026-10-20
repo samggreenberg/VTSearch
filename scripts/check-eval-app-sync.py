@@ -1060,7 +1060,10 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="find.evidence_coverage",
         app="py:vtsearch.routes.detectors.scoring.find_evidence_coverage",
-        harness="vtscore/eval/find_corpus.py::evidence_flags,vote_vectors,FindCorpus.matrix",
+        harness=(
+            "vtscore/eval/find_corpus.py::evidence_flags,pool_baseline,vote_vectors,FindCorpus.matrix,"
+            "FindCorpus.pool_matrix"
+        ),
         kind="ported",
         note=(
             "The Evidence coverage chip read against #4960's Find corpus at the snapshot clicks. The report "
@@ -1070,14 +1073,21 @@ MIRRORS: list[Mirror] = [
             "patch dataset; vote_vectors assembles the trainers' same rows), the whole-image vector of every "
             "scored media (FindCorpus.matrix), and each predicted positive where its Find score clears the "
             "Find threshold (the caller, _find_corpus_columns, passes score >= the line's cut on that "
-            "corpus). The route reports nothing with no labelled rows or no scored media; so does "
-            "evidence_flags. If the route changes which rows it reads, the threshold or a default, follow it."
+            "corpus). The verdict's training baseline (#5089) is reference_cutoffs on both sides: the app "
+            "draws it (_evidence_baseline) on the training dataset's scored media less its labelled ones, "
+            "each called at that Find's threshold; the harness (pool_baseline) on the sim pool's unvoted "
+            "media (FindCorpus.pool_matrix), found as a Find there draws it. The route reports nothing with "
+            "no labelled rows or no scored media; so does evidence_flags. If the route changes which rows it "
+            "reads, the threshold, the baseline's media or a default, follow it."
         ),
         divergence=(
             "INTENTIONAL: the app's labelset vectors are the label embeddings re-derived at detector load; "
             "the harness reads the same media's vectors straight off the run's medias, and a Good's is the "
             "row its trainers fit (the ground-truth box pooled under region voting), which is what the app's "
-            "region vote stores."
+            "region vote stores. The app's baseline off the training dataset is the one recorded on the "
+            "detector at its last test there, refused once a vote restamps it (no verdict until the next); "
+            "the harness draws it fresh at every snapshot click, so it models a user who tested on the "
+            "training dataset at the click's votes, the case the verdict is priced on."
         ),
     ),
 ]

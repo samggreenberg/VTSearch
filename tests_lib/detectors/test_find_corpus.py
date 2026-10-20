@@ -307,6 +307,33 @@ class TestTheFlags:
         rest = [r for r in on if math.isnan(r["flags_at"])]
         assert rest and all(all(math.isnan(r[c]) for c in FIND_FLAG_COLUMNS) for r in rest)
 
+    def test_the_evidence_counts_split_the_share_and_read_the_unvoted_pool(self, paired):
+        # #5089: the counts behind the Evidence share, by predicted class, and the
+        # same counts over the haystack the votes came from.
+        _, on, _, _ = paired
+        at = [r for r in on if not math.isnan(r["flags_at"])]
+        assert at
+        for r in at:
+            assert r["evidence_n"] == len(_foreign())
+            unsupported = r["evidence_n_pos_unsupported"] + r["evidence_n_neg_unsupported"]
+            assert unsupported / r["evidence_n"] == pytest.approx(r["evidence_frac_unsupported"])
+            assert r["evidence_n_pos_unsupported"] <= r["evidence_n_pred_pos"] <= r["evidence_n"]
+            # The pool's unvoted media: the voting half less this click's votes.
+            assert r["evidence_pool_n"] == r["n_haystack"] - r["n_good"] - r["n_bad"]
+            assert r["evidence_pool_n_pos_unsupported"] <= r["evidence_pool_n_pred_pos"] <= r["evidence_pool_n"]
+            assert r["evidence_n_pos_beyond_pool"] <= r["evidence_n_pred_pos"]
+            assert r["evidence_n_neg_beyond_pool"] <= r["evidence_n"] - r["evidence_n_pred_pos"]
+
+    def test_the_evidence_verdict_reads_the_share_beyond_the_pool(self, paired):
+        # #5089: the verdict ranks against the sim pool's unvoted media, the
+        # harness's training haystack, as the app's ranks against the training dataset's.
+        _, on, _, _ = paired
+        for r in (r for r in on if not math.isnan(r["flags_at"])):
+            beyond = (r["evidence_n_pos_beyond_pool"] + r["evidence_n_neg_beyond_pool"]) / r["evidence_n"]
+            assert r["evidence_frac_beyond"] == pytest.approx(beyond)
+            z = (beyond - 0.05) / math.sqrt(0.05 * 0.95 / r["evidence_n"])
+            assert r["evidence_unsupported"] == (1.0 if z > 3.0 and beyond >= 0.1 else 0.0)
+
     def test_the_blank_row_names_every_column(self):
         blank = blank_find_columns()
         assert set(blank) == _FIND and all(math.isnan(v) for v in blank.values())

@@ -538,6 +538,8 @@ class TestTheFindCorpusFlagsArePinned:
         ("find.evidence_coverage", "harness", HARNESS, "evidence_flags"),
         ("find.evidence_coverage", "harness", HARNESS, "vote_vectors"),
         ("find.evidence_coverage", "harness", HARNESS, "FindCorpus.matrix"),
+        ("find.evidence_coverage", "harness", HARNESS, "pool_baseline"),
+        ("find.evidence_coverage", "harness", HARNESS, "FindCorpus.pool_matrix"),
     ]
 
     @staticmethod

@@ -121,7 +121,7 @@ export class DetectorCardComponent {
   get verdictHint(): string {
     const verdict = this.verdict;
     if (!verdict) {
-      return 'No test has measured what this detector ships. Tick it and a dataset it never trained on, then click Test.';
+      return 'No test has measured what this detector ships. Tick it and a dataset it never trained on, then click Tune.';
     }
     return verdictTitle(verdict);
   }

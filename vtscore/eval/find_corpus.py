@@ -117,7 +117,14 @@ class FindCorpus:
     query_scores: "dict[int, float] | None"
     n_withheld: int
     n_foreign: int
+    #: The sim pool, the haystack the votes are drawn from, and the typed
+    #: query's cosine over it on a typed-query run: the Evidence counts'
+    #: in-domain baseline (#5089).
+    pool_ids: list[int] = field(default_factory=list)
+    pool_query_scores: "dict[int, float] | None" = None
     _matrix: "np.ndarray | None" = field(default=None, repr=False)
+    _pool_rows: "dict[int, int] | None" = field(default=None, repr=False)
+    _pool_matrix: "np.ndarray | None" = field(default=None, repr=False)
 
     def matrix(self) -> "np.ndarray":
         """The corpus's whole-image vectors, in :attr:`ids` order: what both flags read.
@@ -131,6 +138,20 @@ class FindCorpus:
                 [np.asarray(media_embedding(self.clips[cid]), dtype=np.float32) for cid in self.ids]
             )
         return self._matrix
+
+    def pool_matrix(self, ids: Sequence[int]) -> "np.ndarray":
+        """The whole-image vectors of *ids*, members of :attr:`pool_ids`, in that order.
+
+        The pool's vectors are stacked once, on the first snapshot click, and
+        each click reads the rows of its unvoted media.
+        """
+        if self._pool_matrix is None:
+            self._pool_rows = {cid: i for i, cid in enumerate(self.pool_ids)}
+            self._pool_matrix = np.stack(
+                [np.asarray(media_embedding(self.clips[cid]), dtype=np.float32) for cid in self.pool_ids]
+            )
+        assert self._pool_rows is not None
+        return self._pool_matrix[[self._pool_rows[cid] for cid in ids]]
 
 
 def _draw(foreign_ids: list[int], mix: "float | str", n_withheld: int, seed: int) -> list[int]:
@@ -200,6 +221,7 @@ def build_find_corpus(
     region_aware: bool,
     query_scores: "Mapping[int, float] | None" = None,
     foreign_query_scores: "Mapping[int, float] | None" = None,
+    pool_ids: "Sequence[int]" = (),
 ) -> FindCorpus:
     """The Find corpus of a run on *clips_dict* whose withheld half is *test_ids*.
 
@@ -211,6 +233,7 @@ def build_find_corpus(
     it).  *query_scores* is the run's typed-query sort, when its Test can give
     the typed query's set, and then *foreign_query_scores* - the same query's
     cosine over *foreign* - is required for a corpus holding foreign medias.
+    *pool_ids* is the run's sim pool, kept for the Evidence counts' baseline.
 
     Refused when the corpus would be empty, or *foreign* is not in the run's
     embedder: another vector width, or patch grids on one side only.
@@ -230,6 +253,8 @@ def build_find_corpus(
         query_scores=corpus_query,
         n_withheld=len(withheld),
         n_foreign=len(taken),
+        pool_ids=list(pool_ids),
+        pool_query_scores=None if query_scores is None else {cid: float(query_scores[cid]) for cid in pool_ids},
     )
 
 
@@ -326,7 +351,11 @@ def vote_vectors(
 
 
 def evidence_flags(
-    pos: "np.ndarray", neg: "np.ndarray", matrix: "np.ndarray", predicted_positive: "np.ndarray"
+    pos: "np.ndarray",
+    neg: "np.ndarray",
+    matrix: "np.ndarray",
+    predicted_positive: "np.ndarray",
+    baseline: "Mapping[str, Any] | None" = None,
 ) -> dict[str, float]:
     """The Evidence coverage chip's reading of *matrix* under the votes, NaN where the app has none.
 
@@ -334,8 +363,11 @@ def evidence_flags(
     :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` at its
     defaults over the whole-image vector of every scored media, each predicted
     positive where its Find score clears the Find threshold; *pos* / *neg* are
-    the labelset's rows (:func:`vote_vectors`).  It reports nothing without
-    labelled rows or scored media.
+    the labelset's rows (:func:`vote_vectors`).  Its verdict ranks against the
+    training haystack's baseline (#5089), the app's training dataset and here
+    the sim pool's unvoted media (:func:`pool_baseline`); with *baseline*
+    ``None`` the verdict is 0 and ``evidence_frac_beyond`` NaN, as the app draws
+    none.  It reports nothing without labelled rows or scored media.
     """
     nan = math.nan
     if pos.shape[0] + neg.shape[0] == 0 or matrix.shape[0] == 0:
@@ -344,13 +376,80 @@ def evidence_flags(
             "evidence_z": nan,
             "evidence_unsupported": nan,
             "evidence_frac_low_trust": nan,
+            "evidence_frac_beyond": nan,
         }
     from vtscore.detectors.evidence_coverage import evidence_coverage_report  # noqa: PLC0415
 
-    report = evidence_coverage_report(pos, neg, matrix, np.asarray(predicted_positive, dtype=bool))
+    report = evidence_coverage_report(pos, neg, matrix, np.asarray(predicted_positive, dtype=bool), baseline=baseline)
     return {
         "evidence_frac_unsupported": float(report["frac_unsupported"]),
         "evidence_z": float(report["z_score"]),
         "evidence_unsupported": 1.0 if report["unsupported"] else 0.0,
         "evidence_frac_low_trust": float(report["frac_low_trust"]),
+        "evidence_frac_beyond": nan if report["frac_beyond"] is None else float(report["frac_beyond"]),
+    }
+
+
+def pool_baseline(
+    pos: "np.ndarray", neg: "np.ndarray", pool_matrix: "np.ndarray", pool_positive: "np.ndarray"
+) -> "dict[str, Any] | None":
+    """The Evidence verdict's training baseline over the sim pool's unvoted media (#5089); ``None`` without votes.
+
+    The app draws it on the training dataset's scored, unlabelled media as a
+    Find there calls them; the harness's training haystack is the sim pool, so
+    the caller passes its unvoted media found as a Find there draws it.
+    """
+    if pos.shape[0] + neg.shape[0] == 0:
+        return None
+    from vtscore.detectors.evidence_coverage import reference_cutoffs  # noqa: PLC0415
+
+    return reference_cutoffs(pos, neg, pool_matrix, np.asarray(pool_positive, dtype=bool))
+
+
+def evidence_class_counts(
+    pos: "np.ndarray", neg: "np.ndarray", matrix: "np.ndarray", predicted_positive: "np.ndarray", *, prefix: str
+) -> dict[str, float]:
+    """The counts behind the Evidence share, by predicted class, as ``<prefix>_*`` columns (#5089); NaN without votes.
+
+    :func:`~vtscore.detectors.evidence_coverage.unsupported_counts` at the
+    report's defaults: ``<prefix>_n`` items, ``<prefix>_n_pred_pos`` of them
+    predicted positive, and how many of each predicted class sit in an evidence
+    vacuum.  Read over the Find corpus (``evidence``) and over the sim pool's
+    unvoted media (``evidence_pool``), so a rule on the predicted positives or
+    against the pool's own share can be priced from the cells.
+    """
+    names = ("n", "n_pred_pos", "n_pos_unsupported", "n_neg_unsupported")
+    if pos.shape[0] + neg.shape[0] == 0:
+        return {f"{prefix}_{name}": math.nan for name in names}
+    from vtscore.detectors.evidence_coverage import unsupported_counts  # noqa: PLC0415
+
+    counts = unsupported_counts(pos, neg, matrix, np.asarray(predicted_positive, dtype=bool))
+    counts["n"] = counts.pop("n_items")
+    return {f"{prefix}_{name}": float(counts[name]) for name in names}
+
+
+def evidence_beyond_pool(
+    pos: "np.ndarray",
+    neg: "np.ndarray",
+    matrix: "np.ndarray",
+    predicted_positive: "np.ndarray",
+    pool_matrix: "np.ndarray",
+    pool_positive: "np.ndarray",
+) -> dict[str, float]:
+    """The Find corpus's media farther from their class's votes than the unvoted pool's, by predicted class (#5089).
+
+    :func:`~vtscore.detectors.evidence_coverage.reference_vacuum_counts` at the
+    report's defaults, the pool's media found as a Find there draws it as the
+    reference; NaN without votes.
+    """
+    if pos.shape[0] + neg.shape[0] == 0:
+        return {"evidence_n_pos_beyond_pool": math.nan, "evidence_n_neg_beyond_pool": math.nan}
+    from vtscore.detectors.evidence_coverage import reference_vacuum_counts  # noqa: PLC0415
+
+    counts = reference_vacuum_counts(
+        pos, neg, matrix, np.asarray(predicted_positive, dtype=bool), pool_matrix, np.asarray(pool_positive, dtype=bool)
+    )
+    return {
+        "evidence_n_pos_beyond_pool": float(counts["n_pos_beyond"]),
+        "evidence_n_neg_beyond_pool": float(counts["n_neg_beyond"]),
     }

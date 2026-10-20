@@ -98,14 +98,14 @@ describe('TrainingDomainAlertService (#4961)', () => {
 
     expect(toast.warning).toHaveBeenCalledTimes(1);
     const opts = toast.warning.mock.calls[0][0];
-    // The Test result's line and verdict, nothing stronger.
+    // The Tune result's line and verdict, nothing stronger.
     expect(opts.message).toBe('31% of this dataset looks atypical vs Photos: likely domain shift');
     expect(opts.detail).toContain('Cats learned from Photos (40 of its 52 labelled examples are there)');
     expect(opts.detail).toContain('Check its calls on Screenshots by hand');
     expect(opts.dedupKey).toBe('training-domain:screens::cats');
 
     opts.action.onClick();
-    expect(navigate).toHaveBeenCalledWith(['/test', 'screens', 'cats']);
+    expect(navigate).toHaveBeenCalledWith(['/tune', 'screens', 'cats']);
   });
 
   it('says nothing for a dataset like the training one', () => {
@@ -169,10 +169,10 @@ describe('TrainingDomainAlertService (#4961)', () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
-  it('offers no Test button when the user is already testing', () => {
+  it('offers no Tune button when the user is already tuning', () => {
     respond = () => of(report());
     start();
-    url = '/test/screens/cats';
+    url = '/tune/screens/cats';
     context.setActivePair('screens', 'cats');
     expect(toast.warning.mock.calls[0][0].action).toBeUndefined();
   });
