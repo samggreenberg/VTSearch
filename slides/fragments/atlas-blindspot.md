@@ -2,7 +2,7 @@
 
 ![bg fit](figs/atlas-blindspot.webp)
 
-## Off the Map
+## Novel Territory
 
 <!-- build: figs/atlas-blindspot.build1.webp -->
 

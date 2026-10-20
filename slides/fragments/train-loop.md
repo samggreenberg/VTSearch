@@ -15,8 +15,6 @@
 
 <!-- build: figs/ui-train-loop.build5.webp -->
 
-<!-- build: figs/ui-train-loop.build6.webp -->
-
 <!-- **a** — This is training. It shows a picture, we hit Good or Bad, and the
      votes pile up on the right. The strip on the left is Autopilot picking
      what's next. Suitcase of books? Good. -->
@@ -36,7 +34,3 @@
 <!-- **f** — Skip ahead thirty-ish votes. Now it's asking about a desk with a
      laptop, cables, and ONE book. The easy ones are done; this is what it can't
      call yet. -->
-
-<!-- **g** — And VTSearch tells you when to stop. Once it's seen enough, it
-     says the detector's trained, so you don't have to decide that yourself.
-     -->

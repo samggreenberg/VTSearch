@@ -7,7 +7,7 @@ Run from the repo root (the results slide reads the #4776 report's committed cur
 
 Two slides.
 
-**Head Start** (section XII, after Face Off) is a schematic of how the detector's line is placed
+**Head Start** (section XIII, after Face Off) is a schematic of how the detector's line is placed
 once there are enough votes to train it, drawn twice on the same plane of items, the same three Goods
 (a person's photos) and the same four Bads (four strangers):
 
@@ -27,7 +27,7 @@ give it. So the panels draw the mechanism each head reduces to with a few votes,
 person's photos; the after line keeps every photo and no stranger). Pages: a, the votes; b, the plain
 SVM's line; c, the Goods' average; d, the line started from it.
 
-**Running Start** (section XII, after Head Start) is what that bought, from the report's
+**Running Start** (section XIII, after Head Start) is what that bought, from the report's
 `prior_curves.csv`: what a Find returns at every vote, F-beta at β 1, today's head against the head
 started from the Goods' average, on faces from 1 and from 4 starting photos (562 people) and on COCO
 Better's Binary opening (720 runs; the 18 that never find a Good return nothing under either head and

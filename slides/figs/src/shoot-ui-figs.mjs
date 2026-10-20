@@ -11,9 +11,9 @@
  *   steps          `figs/ui-steps-*[.buildN].webp`         — the same session,
  *                                                            numbered (#4202)
  *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
- *                                                            then name the concept
- *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly,
- *                                                            then a staged stop
+ *                                                            then name the concept,
+ *                                                            ringed
+ *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   browse         `figs/ui-vision-*[.buildN].webp`       — Find's results, then
  *                                                            the whole pile, as a map
@@ -80,7 +80,6 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
-import { clearStopHint, drawStopHint } from './stop-hint.mjs';
 import {
   appClient,
   BOOK_DETECTOR,
@@ -355,8 +354,7 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * this script started has `hide_all_hints` set (`ensureApp`), so a frame is
  * what a user who ticked Hide all hints sees (#4807); this rule is the backstop
  * for an app the caller pointed it at. Toasty floats over the page, so hiding
- * him moves nothing else. The one Toasty on a slide is the train loop's last
- * page, where he is the subject, and `stop-hint.mjs` draws him there itself.
+ * him moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
@@ -602,7 +600,9 @@ async function shootMakeDetector(page) {
   if (named !== BOOK_DETECTOR) {
     throw new Error(`the dialog named the detector ${named}, not ${BOOK_DETECTOR} (book-example.mjs)`);
   }
-  await shoot(page, 'ui-make-detector');
+  // A red ring round the phrase, so the presenter has something to point at
+  // when they say "that's all we need" (#5132).
+  await shootNumbered(page, 'ui-make-detector', [{ target: '.example-panel input.form-input', kind: 'ring' }]);
   await shootNumbered(page, 'ui-steps-make-detector', [
     step(2, '.example-panel input.form-input'),
     step(3, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
@@ -911,14 +911,7 @@ async function shootTrainLoop(page) {
   log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
   await assertVoteColumns(page);
-  await shoot(page, 'ui-train-loop.build6');
-  // The last page is staged: Toasty saying the detector is trained, over the
-  // frame just shot, because the real hand-off waits for far more votes than
-  // this session casts (`stop-hint.mjs`, #4833).
-  await drawStopHint(page);
-  await page.waitForTimeout(200);
   await shoot(page, 'ui-train-loop');
-  await clearStopHint(page);
 }
 
 /** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */
