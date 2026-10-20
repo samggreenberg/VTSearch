@@ -16844,7 +16844,23 @@
     },
     "/api/votes": {
       "get": {
+        "description": "``scope=verified`` limits every per-item field to the ids the human has\nverified this Find session; Find's Review tab polls that (#5115).",
         "operationId": "get_votes",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "verified"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -16855,6 +16871,9 @@
               }
             },
             "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

@@ -200,6 +200,29 @@ export class FindViewComponent implements OnInit, OnDestroy {
     return order && verified.size > 0 ? order.filter((item) => !verified.has(item.id)) : order;
   });
   /**
+   * How many unverified items sit on each face of the cutoff: the right
+   * panel's *Unverified Good* / *Unverified Bad* notes, and with the verified
+   * piles the size of the sets its actions take. Counted over the frozen
+   * ranking and the live cutoff, as {@link unverifiedGoodIds} scopes them:
+   * Find reads only the verified votes (#5115), so the presumptions these
+   * used to be counted from never reach the client.
+   */
+  readonly unverifiedCounts = computed(() => {
+    const order = this.sortState.sortOrder;
+    const threshold = this.sortState.threshold;
+    let good = 0;
+    let bad = 0;
+    if (order && threshold != null) {
+      const verified = this.voteState.verifiedIds;
+      for (const item of order) {
+        if (verified.has(item.id)) continue;
+        if (item.score >= threshold) good++;
+        else bad++;
+      }
+    }
+    return { good, bad };
+  });
+  /**
    * Stable empty vote sets handed to the left panel in Find mode: the left
    * shows only unverified items, which carry no colour, so the media-list and
    * stripe must never paint green/red there.  A shared frozen reference keeps
@@ -814,8 +837,9 @@ export class FindViewComponent implements OnInit, OnDestroy {
     this.voteState.setOptimisticVerified(event.id, verified);
     // No re-read of the piles here (#5099): the vote POST's reply has already
     // set the item's polarity, the line above moves it, and the poll brings
-    // the rest. In Find that read carries every item's presumed label, which
-    // on a large dataset held up the next image.
+    // the rest. That read once carried every item's presumed label, which on
+    // a large dataset held up the next image (it is the verified scope now,
+    // #5115, but a re-read per vote still buys nothing).
     // Auto-advance to the next item on the boundary walk, so "just sit and
     // vote" samples both faces of the cutoff instead of only the positives.
     this.advanceToBoundary();
@@ -918,12 +942,12 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /**
    * Poll the vote piles (`/api/votes`) while the Review tab is up, reading
    * them afresh as it opens, and stop while it is not (#5099). Only Review
-   * shows them, and in Find the read carries every item's presumed label:
-   * megabytes on a large dataset, which every test vote used to fetch twice
-   * over (its own re-read, and the poll it kept fast), each time racing the
-   * next pick's image. The one-off reads (the view opening, a scoring pass, a
-   * balance change, a pair switch) stay on both tabs: the boundary walk seeds
-   * off the verified set.
+   * shows them. The read was every item's presumed label then, megabytes on
+   * a large dataset that every test vote fetched twice over, racing the next
+   * pick's image; Find reads the verified scope now (#5115), a few KB, but
+   * the Autopilot tab still has no use for it. The one-off reads (the view
+   * opening, a scoring pass, a balance change, a pair switch) stay on both
+   * tabs: the boundary walk seeds off the verified set.
    */
   private syncPiles(): void {
     if (this.findTab() === 'review') {
@@ -1059,19 +1083,17 @@ export class FindViewComponent implements OnInit, OnDestroy {
    * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
    * balance change pick up the *previous* cutoff's positives (the stale-superset bug);
    * scoring against the live cutoff keeps Browse in lock-step with the green
-   * line the user sees. Falls back to `goodVotes` only when scores are absent
-   * (no scoring pass yet).
+   * line the user sees. Empty before a scoring pass: Find reads only the
+   * verified votes (#5115), so there are no presumptions to fall back on.
    */
   private unverifiedGoodIds(): number[] {
     const verified = this.voteState.verifiedIds;
     const order = this.sortState.sortOrder;
     const threshold = this.sortState.threshold;
-    if (order && threshold != null) {
-      return order
-        .filter((item) => item.score >= threshold && !verified.has(item.id))
-        .map((item) => item.id);
-    }
-    return Array.from(this.voteState.goodVotes).filter((id) => !verified.has(id));
+    if (!order || threshold == null) return [];
+    return order
+      .filter((item) => item.score >= threshold && !verified.has(item.id))
+      .map((item) => item.id);
   }
 
   /**

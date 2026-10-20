@@ -65,6 +65,13 @@ describe('SortingApiService', () => {
     req.flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
   });
 
+  it("getVotes('verified') asks for Find's scope (#5115)", () => {
+    service.getVotes('verified').subscribe();
+    const req = httpMock.expectOne((r) => r.url === '/api/votes');
+    expect(req.request.params.get('scope')).toBe('verified');
+    req.flush({ good: [], bad: [], verified: [], click_times: {}, learned_scores: {} });
+  });
+
   it('clearVotes should POST', () => {
     service.clearVotes().subscribe();
     const req = httpMock.expectOne('/api/votes/clear');

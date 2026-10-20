@@ -54,7 +54,7 @@
       label="good"
       [ids]="goodDisplayIds"
       [headingLabel]="mode() === 'find' ? 'Verified Good' : null"
-      [foldedNote]="mode() === 'find' ? ((unverifiedGoodCount | number) + ' Unverified Good') : null"
+      [foldedNote]="mode() === 'find' ? ((unverifiedGoodCount() | number) + ' Unverified Good') : null"
       [emptyHint]="mode() === 'find' ? 'Nothing confirmed good yet. Reviewing an item on the left moves it here.' : ''"
       [medias]="medias()"
       [clickTimes]="clickTimes()"
@@ -68,13 +68,13 @@
     >
       @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="card-icon-btn" [disabled]="disabled() || goodIds().length === 0" (click)="onBrowse()" aria-label="Browse" title="Browse positive items (verified and unverified).">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onBrowse()" aria-label="Browse" title="Browse positive items (verified and unverified).">
             <vt-icon type="eye" [size]="14"></vt-icon>
           </button>
-          <button class="card-icon-btn" [disabled]="disabled() || goodIds().length === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the full good set (verified + unverified) into their own dataset">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the full good set (verified + unverified) into their own dataset">
             <vt-icon type="cubes" [size]="14"></vt-icon>
           </button>
-          <button class="card-icon-btn" [disabled]="disabled() || goodIds().length === 0" (click)="onExportGood()" aria-label="Export" title="Export the full good set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="card-icon-btn" [disabled]="disabled() || findGoodTotal === 0" (click)="onExportGood()" aria-label="Export" title="Export the full good set (verified + unverified) to clipboard, file, email, or webhook">
             <vt-icon type="export" [size]="14"></vt-icon>
           </button>
         </div>
@@ -87,7 +87,7 @@
       label="bad"
       [ids]="badDisplayIds"
       [headingLabel]="mode() === 'find' ? 'Verified Bad' : null"
-      [foldedNote]="mode() === 'find' ? ((unverifiedBadCount | number) + ' Unverified Bad') : null"
+      [foldedNote]="mode() === 'find' ? ((unverifiedBadCount() | number) + ' Unverified Bad') : null"
       [emptyHint]="mode() === 'find' ? 'Nothing confirmed bad yet. Reviewing an item on the left moves it here.' : ''"
       [medias]="medias()"
       [clickTimes]="clickTimes()"
@@ -100,7 +100,7 @@
     >
       @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="card-icon-btn" [disabled]="disabled() || badIds().length === 0" (click)="onExportBad()" aria-label="Export" title="Export the full bad set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="card-icon-btn" [disabled]="disabled() || findBadTotal === 0" (click)="onExportBad()" aria-label="Export" title="Export the full bad set (verified + unverified) to clipboard, file, email, or webhook">
             <vt-icon type="export" [size]="14"></vt-icon>
           </button>
         </div>

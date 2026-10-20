@@ -164,6 +164,8 @@
           [medias]="mediaState.mediasSignal()"
           [focusMode]="focusModeRight()"
           [disabled]="waiting"
+          [unverifiedGoodCount]="unverifiedCounts().good"
+          [unverifiedBadCount]="unverifiedCounts().bad"
           mode="find"
           (mediaSelected)="onMediaSelect($event)"
           (mediaVoted)="onHoverVote($event)"

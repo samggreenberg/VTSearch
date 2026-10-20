@@ -891,6 +891,15 @@ counts when no detector context is active. `good_region_boxes` maps media id
 (as a string) to the normalised `[x0, y0, x1, y1]` box of a good vote cast by
 drawing on the image; only good votes that carry a box appear.
 
+**Query:**
+- `?scope=all` (default): every vote the pair holds.
+- `?scope=verified`: only the `verified` ids. `good`, `bad`, `click_times`,
+  `learned_scores` and `good_region_boxes` are limited to them; the labelset
+  counts are unchanged. In Find every other item carries the detector's
+  presumed label, which the client places by the frozen ranking and the
+  cutoff, so the full scope there is a megabyte or more on a large dataset.
+  Find's Review tab polls this scope (#5115). Any other value is a 422.
+
 ### Clear votes
 
 ```
