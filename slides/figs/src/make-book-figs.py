@@ -130,6 +130,12 @@ RANKING = (
 #: of them are ever worth the same thing.
 CUTS = (2, 5, 8)
 
+#: The score the detector gives each item of `RANKING`, in its order (owner,
+#: #5132: the number, not a word for it). Placed like the ranking itself, so
+#: each drawn cut falls on a round number halfway between its neighbours: the
+#: last page turns "include 5" into "score 0.45 and up".
+SCORES = (0.04, 0.11, 0.19, 0.27, 0.38, 0.52, 0.60, 0.73, 0.87, 0.95)
+
 
 def tile(name: str, size: int = 512) -> np.ndarray:
     """One roster frame, cropped square and resampled to `size`."""
@@ -295,10 +301,15 @@ RANK_GAP = 0.11
 #: second, unrelated object (#3296). Ducking under the notch's floor instead
 #: buys the full span for the price of 1.2 units of headroom nothing was using.
 RANK_AXIS_Y = 5.80
-RANK_AXIS_LABEL_Y = 6.06
+RANK_SCORE_Y = 6.06
 RANK_TILE_Y = 4.05
 RANK_MARK_Y = 3.60
 RANK_CUT_LABEL_Y = 2.78
+#: The cut's value, under its two error counts.
+RANK_CUT_VALUE_Y = 1.50
+#: The pages: the photos with their scores; then what each really is; then the
+#: three cuts; then each cut as a score (owner, #5132).
+RANK_STAGES = 4
 
 #: Big enough to read from the back of the room. The mark is the *only* thing
 #: on the slide that says which tiles are books — the thumbnails read as
@@ -308,6 +319,7 @@ RANK_MARK_PT = 56
 
 
 assert RANK_TILE_Y + RANK_TILE < RANK_AXIS_Y < RANK_TOP, "the score axis no longer clears the tile row"
+assert len(SCORES) == len(RANKING) and list(SCORES) == sorted(SCORES), "a score per item, low to high"
 
 
 def _rank_x(index: int) -> float:
@@ -343,20 +355,30 @@ def _errors(admitted: int) -> str:
     return f"{false_pos} false positive{'' if false_pos == 1 else 's'}\n{false_neg} false negative{'' if false_neg == 1 else 's'}"
 
 
-def rank_fig() -> None:
-    """The ranking and what it got wrong, then three cuts that all look reasonable.
+def _cut_value(admitted: int) -> float:
+    """The score a cut sits at: halfway between the last item it drops and the first it keeps."""
+    first_kept = len(RANKING) - admitted
+    return (SCORES[first_kept - 1] + SCORES[first_kept]) / 2
 
-    It opens on the photos already labeled (#4833): a bare ranking before the
-    marks was a page spent on something the room has just seen.
+
+def rank_fig() -> None:
+    """The ranking with its scores, what it got wrong, three cuts that all look reasonable, and each as a score.
+
+    The first page is the ranking alone, each photo with the score the detector
+    gave it (owner, #5132), and the truth arrives on the second.
     """
-    final = _rank_stage(2)
+    for admitted in CUTS:
+        value = _cut_value(admitted)
+        assert abs(value * 20 - round(value * 20)) < 1e-9, f"include {admitted} cuts at {value}, not a round number"
+    final = _rank_stage(RANK_STAGES)
     box = tight_box(final)
-    save(_rank_stage(1), OUT, "book-rank.build1.webp", column=FULL_BLEED, box=box)
+    for stage in range(1, RANK_STAGES):
+        save(_rank_stage(stage), OUT, f"book-rank.build{stage}.webp", column=FULL_BLEED, box=box)
     save(final, OUT, "book-rank.webp", column=FULL_BLEED, box=box)
 
 
 def _rank_stage(stage: int) -> plt.Figure:
-    """Stage 1 the ranking with the truth, 2 adds the cuts anyone could pick."""
+    """Stage 1 the ranking and its scores, 2 adds the truth, 3 the cuts anyone could pick, 4 each cut's score."""
     width, height = RANK_CANVAS
     fig, ax = _canvas(width, height, RANK_UNIT)
 
@@ -372,22 +394,15 @@ def _rank_stage(stage: int) -> plt.Figure:
         xytext=(left, RANK_AXIS_Y),
         arrowprops={"arrowstyle": "-|>,head_width=0.16,head_length=0.34", "color": SOFT, "linewidth": 1.6},
     )
-    ax.text(
-        (left + right) / 2,
-        RANK_AXIS_LABEL_Y,
-        # In quotes because it is a word we made up: the detector's score, named
-        # for the concept it is a score *of*. The next slide carries the same
-        # label in the same place.
-        "“Bookness”, low to high",
-        ha="center",
-        va="bottom",
-        fontsize=21,
-        color=SOFT,
-    )
 
     for index, (name, positive) in enumerate(RANKING):
         x = _rank_x(index)
         _photo(ax, name, x, RANK_TILE_Y, RANK_TILE)
+        # The detector's own number for this photo, over it on the axis.
+        ax.text(x + RANK_TILE / 2, RANK_SCORE_Y, f"{SCORES[index]:.2f}", ha="center", va="bottom", fontsize=21,
+                color=SOFT)  # fmt: skip
+        if stage < 2:
+            continue
         ax.text(
             x + RANK_TILE / 2,
             RANK_MARK_Y,
@@ -398,7 +413,7 @@ def _rank_stage(stage: int) -> plt.Figure:
             color=GREEN if positive else RED,
         )
 
-    if stage >= 2:
+    if stage >= 3:
         for admitted in CUTS:
             x = _cut_x(admitted)
             ax.plot(
@@ -428,6 +443,9 @@ def _rank_stage(stage: int) -> plt.Figure:
                 fontsize=21,
                 color=INK,
             )
+            if stage >= 4:
+                ax.text(x, RANK_CUT_VALUE_Y, f"score ≥ {_cut_value(admitted):.2f}", ha="center", va="top",
+                        fontsize=22, color=INK, fontweight="bold")  # fmt: skip
 
     return fig
 

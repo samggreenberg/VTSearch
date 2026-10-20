@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-labels-line.webp)
 
-## Just How<br>You Like It
+## Twin Peaks
 
 <!-- build: figs/calib-labels-line.build1.webp -->
 

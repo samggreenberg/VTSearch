@@ -1942,8 +1942,151 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Squaring the Cube — UMAP flattens the cube into the map Browse draws (#5132)
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: Embed-time Stories' second page, with a second arrow out of the cube: UMAP,
+#: into a flat square holding the same dots (owner, #5132). Three objects and two
+#: arrows do not fit across the slide at Embed-time Stories' scale, so the
+#: drawing is that one at `UMAP_SCALE` of its size, type and all: the canvas
+#: spans more units, and every point size is scaled to match (23px for the word
+#: in an arrow, over the type floor).
+UMAP_SCALE = 0.744
+UMAP_CANVAS = (CANVAS[0] / UMAP_SCALE, CANVAS[1] / UMAP_SCALE)
+#: The row's vertical centre, the left margin, and the flat square's side: the
+#: cube's front face, so the square reads as that face with the depth taken out.
+UMAP_ROW_Y = 5.6
+UMAP_LEFT = 1.07
+UMAP_SQUARE = CUBE_SIDE
+#: The flattening's own seed, and the room the square leaves round its dots.
+UMAP_SEED = 7
+UMAP_PAD = 0.06
+#: The word inside the second arrow: the method's name, which is what the room
+#: will meet again under Browse.
+UMAP_WORD = "UMAP"
+UMAP_STAGES = 2
+
+
+def _umap_arrow_len(label: str) -> float:
+    """The shortest block arrow whose word fits clear of its head, in this canvas's units."""
+    size = FLOW_ARROW_PT * UMAP_SCALE
+    width = TextPath((0, 0), label, size=size, prop=FontProperties(family="DejaVu Sans")).get_extents().width
+    return width / (UNIT_PT * UMAP_SCALE) + 2 * FLOW_HEAD_L
+
+
+@functools.lru_cache(maxsize=1)
+def _umap_flat() -> np.ndarray:
+    """The cube's dots, flattened by a real UMAP and spread to fill a unit square without touching.
+
+    UMAP keeps neighbours rather than distances, so the square is not a view of
+    the cube from any side: it is what the map is made of. The fit is then
+    rescaled into the square and relaxed until no two dots overlap on the page,
+    which moves each only as far as the drawing needs.
+    """
+    import umap  # noqa: PLC0415
+
+    flat = umap.UMAP(n_neighbors=12, min_dist=0.5, random_state=UMAP_SEED).fit_transform(_flow_field_3d())
+    # UMAP lays a cloud with no structure out as a disc; stretch each point
+    # radially so the disc's edge meets the square's, which moves no dot past
+    # a neighbour, then fit the result to the unit square.
+    flat = flat - flat.mean(axis=0)
+    radius = np.hypot(flat[:, 0], flat[:, 1])
+    flat = flat / radius.max()
+    stretch = 1.0 / np.maximum(np.abs(flat[:, 0]), np.abs(flat[:, 1])).clip(1e-9) * np.hypot(flat[:, 0], flat[:, 1])
+    flat = flat * stretch[:, None]
+    flat = (flat - flat.min(axis=0)) / (flat.max(axis=0) - flat.min(axis=0))
+    flat = UMAP_PAD + flat * (1 - 2 * UMAP_PAD)
+    apart = FLOW_APART / UMAP_SQUARE
+    for _ in range(400):
+        moved = False
+        for i in range(len(flat)):
+            for j in range(i + 1, len(flat)):
+                d = flat[j] - flat[i]
+                gap = float(np.hypot(*d))
+                if gap < apart:
+                    push = (apart - gap) / 2 * (d / gap if gap else np.array([1.0, 0.0]))
+                    flat[i] -= push
+                    flat[j] += push
+                    moved = True
+        flat = np.clip(flat, UMAP_PAD, 1 - UMAP_PAD)
+        if not moved:
+            break
+    gaps = [np.hypot(*(flat[i] - flat[j])) for i in range(len(flat)) for j in range(i + 1, len(flat))]
+    assert min(gaps) >= apart * 0.98, "two flattened dots still touch"
+    return flat
+
+
+def umap_flow_fig() -> None:
+    """Photographs into the cube, as Embed-time Stories drew them, and then UMAP out of it, into a square.
+
+    Two pages: the cube as Embed-time Stories' second page left it; then the
+    second arrow and the square, the same sixty dots laid flat.
+    """
+    for stage in range(1, UMAP_STAGES):
+        save(_umap_flow_stage(stage), OUT, f"umap-flow.build{stage}.webp", column=FULL_BLEED, tight=False)
+    save(_umap_flow_stage(UMAP_STAGES), OUT, "umap-flow.webp", column=FULL_BLEED, tight=False)
+
+
+def _umap_flow_stage(stage: int) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, UMAP_CANVAS[0])
+    ax.set_ylim(0, UMAP_CANVAS[1])
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+    stack_w = CARD_W + (CARDS - 1) * CARD_STEP
+    stack_h = CARD_H + (CARDS - 1) * CARD_STEP
+    cube_w = CUBE_SIDE + CUBE_DEPTH
+    embed_len = _umap_arrow_len(EMBED_WORD) + 0.25
+    umap_len = _umap_arrow_len(UMAP_WORD) + 0.13
+    stack_x = UMAP_LEFT
+    embed_x0 = stack_x + stack_w + FLOW_GAP
+    cube_x = embed_x0 + embed_len + FLOW_GAP
+    umap_x0 = cube_x + cube_w + FLOW_GAP
+    square_x = umap_x0 + umap_len + FLOW_GAP
+    assert square_x + UMAP_SQUARE <= UMAP_CANVAS[0] - 0.5, "the square runs off the slide"
+    y = UMAP_ROW_Y
+    cube_y = y - CUBE_SIDE / 2
+
+    name_pt = FLOW_NAME_PT * UMAP_SCALE
+
+    def name(x: float, bottom: float, text: str) -> None:
+        ax.text(x, bottom - NAME_DROP, text, ha="center", va="baseline", fontsize=name_pt, color=INK, zorder=4)
+
+    def arrow(x0: float, length: float, word: str) -> None:
+        _block_arrow(ax, (x0, y), (x0 + length, y), word)
+        # `_block_arrow` sets its word at Embed-time Stories' size; this canvas draws everything smaller.
+        ax.texts[-1].set_fontsize(FLOW_ARROW_PT * UMAP_SCALE)
+
+    _photo_stack(ax, stack_x, y - stack_h / 2)
+    name(stack_x + stack_w / 2, y - stack_h / 2, "Photos")
+    arrow(embed_x0, embed_len, EMBED_WORD)
+    ax.text(embed_x0 + embed_len / 2, y - 0.95, "SigLIP", ha="center", va="center", fontsize=name_pt, color=INK,
+            zorder=4)  # fmt: skip
+    _wire_cube(ax, cube_x, cube_y)
+    for point in _flow_field_3d():
+        dx, dy = _cube_project(point)
+        _flow_dot(ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1 - point[2]))
+    name(cube_x + cube_w / 2, cube_y, "768-d")
+
+    if stage >= 2:
+        arrow(umap_x0, umap_len, UMAP_WORD)
+        square_y = y - UMAP_SQUARE / 2
+        ax.add_patch(plt.Rectangle((square_x, square_y), UMAP_SQUARE, UMAP_SQUARE, facecolor="none", edgecolor=WIRE,
+                                   linewidth=1.4, zorder=2))  # fmt: skip
+        # Every dot at the size of one at the cube's mid-depth: the square has no depth left to shrink them by.
+        radius = FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * 0.5)
+        for u, v in _umap_flat():
+            _flow_dot(ax, square_x + u * UMAP_SQUARE, square_y + v * UMAP_SQUARE, radius, 5)
+        name(square_x + UMAP_SQUARE / 2, square_y, "2-d")
+    return fig
+
+
 if __name__ == "__main__":
     vote_boundary_fig()
     second_cut_fig()
     embed_flow_fig()
+    umap_flow_fig()
     print("wrote figures to", OUT)

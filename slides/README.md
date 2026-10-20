@@ -297,7 +297,7 @@ which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1o` however far apart its fifteen pages fall — which is the same rule a
+  `1a … 1p` however far apart its sixteen pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -305,8 +305,8 @@ which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees fifteen times from printing the same four paragraphs
-into the speaker's hand fifteen times.
+keeps a slide the room sees sixteen times from printing the same four paragraphs
+into the speaker's hand sixteen times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with every earlier page of the group as a lettered contact sheet, in letter
@@ -320,7 +320,7 @@ against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown fifteen times owes fifteen lettered
+group across the whole deck, so a fragment shown sixteen times owes sixteen lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -387,8 +387,8 @@ them changes a pixel of any slide:
   before the first section at the top level, then each section, with its slides
   one level under it. One entry per slide, never per reveal: a build's entry
   lands on its first page. Each entry leads with the address the deck uses for
-  it — a section its Roman numeral, `III. Inclination`, and a slide its page
-  number, `14. The Cutting Room` — followed by the section's line or the
+  it — a section its Roman numeral, `IV. Inclination`, and a slide its page
+  number, `17. The Cutting Room` — followed by the section's line or the
   slide's headline, with the line break taken out.
 - **Page labels.** The viewer's page box reads the address the page prints —
   `17c`, not `83` — so a reader told to look at 17c can type exactly that. The
@@ -515,7 +515,7 @@ caption. Nothing is staged through the API that a slide says was done by hand:
 the button `train-loop` clicks is chosen from the served item's own file name,
 so the piles are a real session's.
 
-The **Instruction** figures (`figs/ui-steps-*.webp`, section XIII) are that same
+The **Instruction** figures (`figs/ui-steps-*.webp`, section XIV) are that same
 session photographed a second time at the moments a user has to click, with a
 red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
 with the user guide's screenshots). Where a moment is also an intro frame, the
@@ -523,7 +523,7 @@ two are shot back to back — clean, then numbered — so the two sections show 
 session rather than two. The disc size is set for the slot (`CALLOUT_SCALE`):
 its digit lands at 22px on the slide, above the type floor.
 
-The **Vision** figures (`figs/ui-vision-*.webp`, section VI, the `browse` group)
+The **Vision** figures (`figs/ui-vision-*.webp`, section VII, the `browse` group)
 come after the session and use its trained detector, on a third pile:
 `photos-all`, all of val2017 that `photos-train` does not hold (about 4,700
 photographs, `coco_fixture.WHOLE`), because a map of `photos-prod`'s 240 is a
