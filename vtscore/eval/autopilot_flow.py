@@ -69,6 +69,8 @@ from vtscore.detectors.cost_trend import (
     SMART_MIN_POINTS,
     SMART_SLOPE_T,
     SMART_WINDOW,
+    cost_trend,
+    rising_status_from_scores,
     smart_status_from_costs,
 )
 from vtscore.detectors.stability import (
@@ -233,6 +235,42 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 
 #: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
 SMART_GATES = ("app", "never")
+
+#: What the Smart light is read off (#5134).  ``"cost"`` is the app: FPR + FNR of
+#: the last :data:`SMART_WINDOW` models, re-scored on the current votes, green once
+#: it stops falling.  Every other one is a candidate in the objective's units,
+#: green once it stops *rising*
+#: (:func:`~vtscore.detectors.cost_trend.rising_status_from_scores`):
+#:
+#: * :data:`SMART_WINDOW_READINGS`, the same re-scored window in other units: ``ap``
+#:   (average precision), ``fbeta`` (F-beta at the session's beta at each model's own
+#:   Smart cut) and ``fbeta_best`` (the best F-beta any cut reaches);
+#: * :data:`SMART_HISTORY_READINGS`, one value per retrain, kept as a history:
+#:   ``heldout_ap`` and ``heldout_fbeta`` (the same two on the calibration folds'
+#:   held-out scores of the votes) and ``line`` (the labels line's expected F-beta,
+#:   :func:`~vtscore.training.thresholds.labels_line.stop_level_reading`, from the
+#:   first retrain its class model cuts).
+#:
+#: The caller hands :meth:`AutopilotFlow.record_step` the readings; none reads the
+#: served line.
+SMART_WINDOW_READINGS: tuple[str, ...] = ("ap", "fbeta", "fbeta_best")
+SMART_HISTORY_READINGS: tuple[str, ...] = ("heldout_ap", "heldout_fbeta", "line")
+SMART_READINGS: tuple[str, ...] = (*SMART_WINDOW_READINGS, *SMART_HISTORY_READINGS)
+SMART_SIGNALS: tuple[str, ...] = ("cost", *SMART_READINGS)
+#: What each reading's trend is recorded as (#5134): the window's relative slope,
+#: its mean, the slope's t, and the newest value.  ``rel <= SMART_RISE_THRESHOLD``
+#: or ``t < SMART_SLOPE_T`` is green, so any threshold on either can be re-read
+#: offline, and ``rel * mean`` is the slope in the reading's own units.
+SMART_READING_PARTS: tuple[str, ...] = ("slope", "mean", "t", "last")
+SMART_READING_COLUMNS: tuple[str, ...] = tuple(
+    f"smart_{name}_{part}" for name in SMART_READINGS for part in SMART_READING_PARTS
+)
+
+
+def reading_columns_nan() -> dict[str, float]:
+    """:data:`SMART_READING_COLUMNS`, every one NaN: no reading, or none fitted."""
+    return dict.fromkeys(SMART_READING_COLUMNS, math.nan)
+
 
 #: What tells the user they can stop (#4878).  ``"lights|level"`` is the app since
 #: #4878: Done once Smart, Stable and Span are all green, or once the labels line
@@ -526,6 +564,7 @@ class AutopilotFlow:
         done_check: bool = True,
         stop_rule: str = "lights|level",
         stop_cap: int | None = STOP_CAP,
+        smart_signal: str = "cost",
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -556,6 +595,12 @@ class AutopilotFlow:
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
+        #: What the Smart light is read off (:data:`SMART_SIGNALS`, #5134): ``"cost"``
+        #: is the app; a reading's light is green once it stops rising.  Its
+        #: inputs come through :meth:`record_step`.
+        if smart_signal not in SMART_SIGNALS:
+            raise ValueError(f"smart_signal must be one of {SMART_SIGNALS}, got {smart_signal!r}")
+        self.smart_signal = smart_signal
         #: What tells the user they can stop (:data:`STOP_RULES`).  The app's,
         #: ``"lights|level"``, and the level arms read *level_met*, which the
         #: caller passes to :meth:`update` from the step's labels line; without
@@ -599,6 +644,16 @@ class AutopilotFlow:
         #: The most recent Smart window: the last :data:`SMART_WINDOW` models'
         #: costs, all against the *current* labelset.  Replaced, never appended.
         self.recent_error_costs: list[float] = []
+        #: #5134's readings: the re-scored window in other units (replaced, as the
+        #: costs are) and the per-retrain histories (appended, the last
+        #: :data:`SMART_WINDOW` finite values kept).  Empty unless the caller hands
+        #: them to :meth:`record_step`.
+        self.smart_windows: dict[str, list[float]] = {}
+        self.smart_histories: dict[str, list[float]] = {}
+        #: Each reading's trend as of the last :meth:`update`, by ``smart_<reading>_<part>``
+        #: (:data:`SMART_READING_PARTS`); NaN where too few points, or too few
+        #: votes of either class, to fit one.
+        self.smart_reading_columns: dict[str, float] = reading_columns_nan()
         self.stability: list[dict[str, Any]] = []
         self._prev_snapshot: Optional[ScoredSnapshot] = None
         #: The three indicator lights behind the phase, as of the last
@@ -665,6 +720,8 @@ class AutopilotFlow:
         threshold: float | None = None,
         *,
         num_pool: int | None = None,
+        windows: dict[str, list[float]] | None = None,
+        history: dict[str, float | None] | None = None,
     ) -> None:
         """Fold one step's model into the Smart / Stable inputs.
 
@@ -681,9 +738,21 @@ class AutopilotFlow:
         *num_pool* is the whole haystack size the rates are taken over; it
         defaults to the scored ids plus nothing, which is right only for a
         caller that scores every pool item including the labeled ones.
+
+        *windows* and *history* are #5134's readings (:data:`SMART_READINGS`):
+        the re-scored window in other units, which replaces the last one as the
+        costs do, and this retrain's value of each history reading, appended
+        where finite (``None`` or NaN adds nothing: no class model, no folds).
         """
         if error_costs is not None:
             self.recent_error_costs = list(error_costs)
+        if windows is not None:
+            self.smart_windows = {name: list(values) for name, values in windows.items()}
+        for name, value in (history or {}).items():
+            if value is not None and math.isfinite(value):
+                kept = self.smart_histories.setdefault(name, [])
+                kept.append(float(value))
+                del kept[:-SMART_WINDOW]
         if scores is None:
             return
         if threshold is None:
@@ -727,6 +796,11 @@ class AutopilotFlow:
         smart_d = smart_detail(self.recent_error_costs, good_count, bad_count)
         stable_d = stable_detail(self.stability, good_count, bad_count)
         smart: Status = smart_d["status"]
+        self.smart_reading_columns = self._reading_columns(good_count, bad_count)
+        if self.smart_signal != "cost":
+            # #5134's arm: the light is the reading's, green once it stops rising.
+            # ``smart_slope`` / ``smart_slope_t`` below stay the cost window's, the app's.
+            smart = rising_status_from_scores(self.smart_reading(self.smart_signal), good_count, bad_count)["status"]
         stable: Status = stable_d["status"]
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
         self.smart, self.stable, self.span = smart, stable, sp
@@ -766,6 +840,28 @@ class AutopilotFlow:
             "good_ran_dry": self.good_dry,
         }
         return self._derive()
+
+    def smart_reading(self, name: str) -> list[float]:
+        """Reading *name*'s current window, oldest first (:data:`SMART_READINGS`, #5134)."""
+        if name in SMART_WINDOW_READINGS:
+            return list(self.smart_windows.get(name, []))
+        return list(self.smart_histories.get(name, []))
+
+    def _reading_columns(self, good: int, bad: int) -> dict[str, float]:
+        """Every reading's trend, as :data:`SMART_READING_PARTS` (#5134); NaN where the rule would not fit one."""
+        out = reading_columns_nan()
+        if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+            return out
+        for name in SMART_READINGS:
+            window = [v for v in self.smart_reading(name) if math.isfinite(v)][-SMART_WINDOW:]
+            if len(window) < SMART_MIN_POINTS:
+                continue
+            trend = cost_trend(window)
+            out[f"smart_{name}_slope"] = trend.relative_slope
+            out[f"smart_{name}_mean"] = sum(window) / len(window)
+            out[f"smart_{name}_t"] = trend.t_stat
+            out[f"smart_{name}_last"] = window[-1]
+        return out
 
     def _derive(self) -> Phase:
         """The phase from the last :meth:`update`'s inputs and the history held here."""

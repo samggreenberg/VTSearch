@@ -56,7 +56,14 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import (
+    MORE_DRY_RUN,
+    SMART_WINDOW,
+    STOP_CAP,
+    AutopilotFlow,
+    app_has_detector,
+    reading_columns_nan,
+)
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -94,7 +101,9 @@ from vtscore.eval.step_trainers import (
     _centroid_goods,
     _centroid_step,
     _head_step,
+    _heldout_readings,
     _labelset_error_costs,
+    _labelset_window_readings,
     _query_step,
     _score_pool,
     _train_and_calibrate,
@@ -128,6 +137,7 @@ from vtscore.training.thresholds import (
     head_count_serves,
     STOP_LEVEL,
     stop_level_met,
+    stop_level_reading,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -3147,6 +3157,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
+    smart_signal: str = "cost",
+    smart_readings: bool = False,
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
     stop_cap: Optional[int] = STOP_CAP,
@@ -3609,6 +3621,15 @@ def simulate_voting_iterations(  # noqa: C901
         smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
+        smart_signal: What the Smart light is read off (#5134;
+            :data:`~vtscore.eval.autopilot_flow.SMART_SIGNALS`).  ``"cost"`` (the
+            default) is the app, FPR + FNR going flat; every other is a candidate
+            in the objective's units, green once it stops rising.  Needs the
+            Autopilot flow; the F-beta ones and ``line`` need a balance too.
+        smart_readings: Record every candidate's trend on each row
+            (``smart_<reading>_<part>``, #5134) without moving the light, so one
+            run of the app prices them all.  On whenever *smart_signal* is not
+            ``"cost"``.
         stop_rule: What tells the user they can stop (#4878;
             :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
             (the default) is the app: Done once every quality light is green, or
@@ -4377,6 +4398,7 @@ def simulate_voting_iterations(  # noqa: C901
             good_dry_run=flow_good_dry_run,
             stop_rule=stop_rule,
             stop_cap=stop_cap,
+            smart_signal=smart_signal,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4388,6 +4410,12 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if smart_signal != "cost" and flow is None:
+        raise ValueError(f"smart_signal {smart_signal!r} needs Autopilot's phase machine")
+    if smart_signal in ("fbeta", "fbeta_best", "heldout_fbeta", "line") and beta is None:
+        # The light would never have a window to read.
+        raise ValueError(f"smart_signal {smart_signal!r} needs a balance (beta)")
+    read_smart = smart_readings or smart_signal != "cost"
     if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
         # An arm that waits on the level, with no line to read or no phase to move, would never stop.
         raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
@@ -4749,6 +4777,8 @@ def simulate_voting_iterations(  # noqa: C901
             # margin cannot disagree with the light above it; NaN where no phase
             # machine ran, or where the rule itself declined to fit one.
             **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
+            # #5134's Smart candidates: NaN unless the run reads them.
+            **(flow.smart_reading_columns if flow is not None else reading_columns_nan()),
             "app_trained": 1
             if (flow is None or app_has_detector(flow.phase, more_shown=more_walk == "detector"))
             else 0,
@@ -5411,6 +5441,25 @@ def simulate_voting_iterations(  # noqa: C901
                 # Rates are over the haystack the votes came out of, labeled
                 # items included, as the app divides by its whole scored pool.
                 num_pool=len(sim_ids),
+                # #5134's candidates: the same window in the objective's units, and
+                # this retrain's held-out and labels-line readings.
+                windows=_labelset_window_readings(
+                    recent_steps,
+                    good_votes,
+                    bad_votes,
+                    clips_dict,
+                    beta,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                )
+                if read_smart
+                else None,
+                history={
+                    **_heldout_readings(details.get("fold_orderings"), beta),
+                    "line": stop_level_reading(details.get("find_line"), beta)["expected_fbeta"],
+                }
+                if read_smart
+                else None,
             )
             flow.update(
                 len(good_votes),
@@ -5935,6 +5984,7 @@ def simulate_voting_iterations(  # noqa: C901
             "span_depth": -1,
             "span_target": -1,
             **{col: float("nan") for col in STOPPING_MARGIN_COLUMNS},
+            **reading_columns_nan(),
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,

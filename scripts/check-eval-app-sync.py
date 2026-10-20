@@ -608,7 +608,11 @@ MIRRORS: list[Mirror] = [
             "to score (a sort racing the caller's decision to skip the pool), where "
             "`record_step(scores=None)` keeps it, and no caller passes None; and once the pool is "
             "exhausted the app records a zero-flip entry even with no baseline, where the harness "
-            "records one only once it has a baseline."
+            "records one only once it has a baseline. "
+            "#5134's arm: `record_step` also folds `windows` and `history`, the Smart candidates in "
+            "the objective's units (AutopilotFlow.smart_signal), which the app does not read. The "
+            "default arm passes neither (smart_readings off, smart_signal 'cost'), and with them the "
+            "Stable entry and the cost window are untouched."
         ),
     ),
     Mirror(

@@ -487,6 +487,9 @@ def probe(C: Any) -> list[str]:
     # #3546's arms: neither has an app counterpart yet.
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
+    # #5134's arm: what the Smart light reads.  The readings alone move nothing.
+    if C.SMART_SIGNAL != "cost":
+        rows.append(("smart_signal", C.SMART_SIGNAL, "cost (FPR + FNR of the re-scored window, going flat)"))
     if C.STOP_RULE != "lights|level" or C.STOP_LEVEL != 0.5:
         rows.append(
             (

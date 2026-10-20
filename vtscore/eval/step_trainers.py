@@ -191,6 +191,91 @@ def _labelset_error_costs(
     return costs
 
 
+#: The Smart candidates read off a re-scored window of models (#5134), in the order
+#: :func:`_labelset_window_readings` returns them.
+WINDOW_READINGS: tuple[str, ...] = ("ap", "fbeta", "fbeta_best")
+
+
+def _labelset_window_readings(
+    model_steps: list[tuple[Any, float]],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    beta: float | None,
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+) -> dict[str, list[float]]:
+    """#5134's Smart candidates: the window :func:`_labelset_error_costs` re-scores, in the objective's units.
+
+    The same models, the same eval set (every current vote) and the same
+    scoring geometry; per model, oldest first, ``ap`` (average precision),
+    ``fbeta`` (F-*beta* at the model's own Smart cut, the one its cost is
+    priced at) and ``fbeta_best`` (the best F-*beta* any cut reaches).  None
+    reads the served line.  Empty lists with either class empty; the two
+    F-beta lists stay empty with no *beta* (no balance).  An eval arm, not the
+    app: it scores the window a second time rather than touch the pinned
+    :func:`_labelset_error_costs`.
+    """
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta, fbeta_at_cut  # noqa: PLC0415
+
+    out: dict[str, list[float]] = {name: [] for name in WINDOW_READINGS}
+    ids = list(good_votes) + list(bad_votes)
+    if not model_steps or not good_votes or not bad_votes:
+        return out
+    labels = np.array([1.0] * len(good_votes) + [0.0] * len(bad_votes))
+
+    def _read(scores: np.ndarray, kept: np.ndarray, cut: float) -> None:
+        out["ap"].append(average_precision(scores, kept))
+        if beta is not None:
+            out["fbeta"].append(fbeta_at_cut(scores, kept, cut, float(beta)))
+            out["fbeta_best"].append(best_fbeta(scores, kept, float(beta)))
+
+    if style_obj is not None or region_aware:
+        labelled = {cid: clips_dict[cid] for cid in ids if cid in clips_dict}
+        for step, threshold in model_steps:
+            assert step.torch_model is not None
+            scored_ids, scored = score_sim_set_with_model(
+                step.torch_model, region_aware, labelled, None, sorted(labelled), style_obj
+            )
+            by_id = dict(zip(scored_ids, scored, strict=True))
+            mask = np.array([cid in by_id for cid in ids])
+            scores = np.array([by_id[cid] for cid in ids if cid in by_id], dtype=np.float64)
+            _read(scores, labels[mask], threshold)
+        return out
+
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in ids])
+    for step, threshold in model_steps:
+        _read(np.asarray(step.predict(embs), dtype=np.float64).ravel(), labels, threshold)
+    return out
+
+
+#: The Smart candidates read once per retrain off its calibration folds (#5134).
+HELDOUT_READINGS: tuple[str, ...] = ("heldout_ap", "heldout_fbeta")
+
+
+def _heldout_readings(fold_orderings: Any, beta: float | None) -> dict[str, float]:
+    """#5134's held-out candidates: AP and best F-*beta* of the votes' held-out scores at this retrain.
+
+    The calibration folds' held-out scores of the votes, pooled as the labels
+    line's class model pools them (``class_score_model``): what the head does
+    on votes it did not train on.  One value per retrain, so a trend over them
+    is a history, not a re-scored window.  NaN with no folds or either class
+    missing; ``heldout_fbeta`` NaN with no *beta*.
+    """
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta  # noqa: PLC0415
+
+    nan = float("nan")
+    if not fold_orderings:
+        return {"heldout_ap": nan, "heldout_fbeta": nan}
+    scores = np.concatenate([np.asarray(sc, dtype=np.float64).ravel() for sc, _ in fold_orderings])
+    labels = np.concatenate([np.asarray(lb, dtype=np.float64).ravel() for _, lb in fold_orderings])
+    return {
+        "heldout_ap": average_precision(scores, labels),
+        "heldout_fbeta": best_fbeta(scores, labels, float(beta)) if beta is not None else nan,
+    }
+
+
 def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
     """Build a coverage atlas over *embeddings* for the autopilot New phase.
 

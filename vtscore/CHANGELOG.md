@@ -12,6 +12,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart has candidates in the objective's units, as an eval arm** (issue #5134). `vtscore.detectors.cost_trend`
+  gains `rising_status_from_scores` (the trend-and-scatter test with its sign turned over, `SMART_RISE_THRESHOLD`) and
+  the window scorers `average_precision`, `fbeta_at_cut` and `best_fbeta`. `AutopilotFlow` takes `smart_signal`
+  (`SMART_SIGNALS`: `cost`, the app, or `ap`, `fbeta`, `fbeta_best`, `heldout_ap`, `heldout_fbeta`, `line`) and
+  `record_step(windows=, history=)`; `simulate_voting_iterations` takes `smart_signal` and `smart_readings`, and every
+  row gains `smart_<reading>_{slope,mean,t,last}` (`SMART_READING_COLUMNS`, NaN unless read). The app's light is
+  unchanged. Additive.
 - **A learned sort leaves the Evidence verdict's training baseline to be drawn once the votes stop** (issue #5120).
   The baseline was drawn only by the evidence route on the training dataset, after a Find there.
   `vtscore.detectors.evidence_baseline` now holds the draw both share (`scored_queries`, `labelset_evidence`,

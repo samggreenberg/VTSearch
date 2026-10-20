@@ -1180,6 +1180,13 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: #5134: what the Smart light is read off.  Unset = the app (``cost``, FPR + FNR
+#: going flat); ``CALIB_SMART_SIGNAL=ap|fbeta|fbeta_best|heldout_ap|heldout_fbeta|line``
+#: is a candidate in the objective's units, green once it stops rising.
+#: ``CALIB_SMART_READINGS=1`` records every candidate's trend on each row without
+#: moving the light (on under any candidate arm).
+SMART_SIGNAL = os.environ.get("CALIB_SMART_SIGNAL", "").strip().lower() or "cost"
+SMART_READINGS = os.environ.get("CALIB_SMART_READINGS", "").strip().lower() in ("1", "true", "yes", "on")
 #: What tells the user they can stop (#4878): unset = the app (``lights|level``,
 #: every light green or the labels line's expected F-beta at ``CALIB_STOP_LEVEL``,
 #: the app's 0.5); ``CALIB_STOP_RULE=lights`` is the app before #4878, ``level``
