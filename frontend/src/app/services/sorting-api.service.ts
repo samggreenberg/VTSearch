@@ -154,8 +154,13 @@ export class SortingApiService {
     );
   }
 
-  getVotes(): Observable<VotesResponse> {
-    return getVotes(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  /**
+   * The vote piles. `'verified'` is Find's scope (#5115): the items the human
+   * has verified, and nothing on the rest, which in Find carry the detector's
+   * presumed label (megabytes on a large dataset). Omitted, every vote.
+   */
+  getVotes(scope?: 'all' | 'verified'): Observable<VotesResponse> {
+    return getVotes(this.http, this.config.rootUrl, scope ? { scope } : undefined).pipe(map((r) => r.body));
   }
 
   clearVotes(): Observable<OkResponse> {

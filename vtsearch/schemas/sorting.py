@@ -12,7 +12,8 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
                                                 :class:`SortPageResponseSchema`
 * ``GET  /api/sort/collapsed``                -> :class:`SortPageQuerySchema` ->
                                                 :class:`SortCollapsedResponseSchema`
-* ``GET  /api/votes``                         -> :class:`VotesResponseSchema`
+* ``GET  /api/votes``                         -> :class:`VotesQuerySchema` ->
+                                                :class:`VotesResponseSchema`
 * ``POST /api/votes/clear``                   -> :class:`OkResponseSchema`
 * ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
 * ``POST /api/textsort-suggestions``          -> :class:`TextsortSuggestionRequestSchema` ->
@@ -386,8 +387,30 @@ class LearnedSortCancelResponseSchema(Schema):
 # ---------------------------------------------------------------------------
 
 
+class VotesQuerySchema(Schema):
+    """Query for ``GET /api/votes``."""
+
+    # ``all`` (the default) is every vote the context holds.  ``verified`` is
+    # Find's view (#5115): only the items the human has verified, with their
+    # click times, learned scores and region boxes.  In Find every other item
+    # carries the detector's presumed label, which the client already derives
+    # from the frozen ranking and the cutoff, so sending it is megabytes on a
+    # large dataset for nothing the Review tab shows.
+    scope = fields.String(load_default="all", validate=validate.OneOf(["all", "verified"]))
+
+    class Meta:
+        # Tolerate request-context params (dataset_id / detector_id) smuggled in
+        # as query args by browser-native requests, matching the sort-page query.
+        unknown = "exclude"
+
+
 class VotesResponseSchema(Schema):
-    """Response for ``GET /api/votes``."""
+    """Response for ``GET /api/votes``.
+
+    Under ``scope=verified`` every per-item field (``good``, ``bad``,
+    ``click_times``, ``learned_scores``, ``good_region_boxes``) is limited to
+    the ``verified`` ids; the labelset counts are the same in both scopes.
+    """
 
     good = fields.List(fields.Integer(), required=True)
     bad = fields.List(fields.Integer(), required=True)
@@ -584,5 +607,6 @@ __all__ = [
     "SortResponseSchema",
     "TextsortSuggestionRequestSchema",
     "TextsortSuggestionsResponseSchema",
+    "VotesQuerySchema",
     "VotesResponseSchema",
 ]

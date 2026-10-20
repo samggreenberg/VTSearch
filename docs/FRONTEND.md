@@ -462,9 +462,14 @@ while the pick is unvoted, and the way it went once it is voted, so the
 next round's first image is held before the vote that deals it. The vote piles (`/api/votes`) are read when the view opens, when
 Review opens, and after a scoring pass, a balance change or a pair switch,
 and polled only while Review is up (`syncPiles`): no vote on either tab
-re-reads them. In Find
-that read carries every item's presumed label, megabytes on a large
-dataset, and a re-read per vote held up the next image.
+re-reads them. The Find view reads them as `?scope=verified` (#5115):
+the full read carries every item's presumed label, megabytes on a large
+dataset, where the verified scope is a few KB. `VoteStateService` picks the
+scope from `setFindMode`, so in Find `goodVotes` / `badVotes` hold verified
+items only (plus votes still in flight), and the unverified items are placed
+by the frozen ranking and the cutoff: `unverifiedSortOrder`, the boundary
+walk, and the right panel's *Unverified Good* / *Unverified Bad* counts
+(`FindViewComponent.unverifiedCounts`).
 
 ### Browse view (`components/browse-*`)
 

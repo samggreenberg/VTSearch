@@ -1078,6 +1078,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
+  piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on
+  a 50,000-item dataset, most of a remote link's bandwidth for as long as you kept voting. They now
+  carry only the items you checked, a few KB, and the *Unverified Good* / *Unverified Bad* counts
+  come from the ranking already on screen.
+
 - **Voting in Tune keeps up with you, as it does in Train** (issue #5099). The Tune autopilot now loads
   the next two picks' images while you look at the current one, so a vote shows the next pick at once
   rather than waiting for its download. No vote on either Tune tab re-downloads the full vote list any

@@ -26,10 +26,10 @@ import { lineTestPhase, type LineTestPhase } from '../utils/line-test';
  * order, so each is stamped with the request's sequence and an older one
  * never overwrites a newer (`apply`).
  *
- * A vote here never re-reads the vote piles (`/api/votes`): in Find that read
- * carries every item's presumed label, megabytes on a large dataset, and only
- * the Review tab shows the piles, so the view reads them when Review opens
- * (#5099).
+ * A vote here never re-reads the vote piles (`/api/votes`): only the Review
+ * tab shows them, so the view reads them when Review opens (#5099). That read
+ * was every item's presumed label then, megabytes on a large dataset; Find
+ * reads the verified scope now (#5115).
  */
 @Injectable()
 export class LineTestSessionService {

@@ -102,6 +102,12 @@ export class VoteStateService implements OnDestroy {
    * ``'none'`` so the big Good/Bad buttons read neutral and a click *verifies*
    * the item (sets an absolute good/bad) instead of toggling the detector's
    * presumption off.  Set by the Find view; left ``false`` in Label/Train.
+   *
+   * It also picks the ``/api/votes`` scope (#5115): in Find the reads ask for
+   * the verified items only, so ``goodVotes`` / ``badVotes`` hold those (and
+   * any vote still in flight), never the presumptions.  Those are every item
+   * in the dataset, megabytes on a large one, and the Find view places the
+   * unverified items by its frozen ranking and cutoff instead.
    */
   private findMode = false;
   /**
@@ -148,10 +154,12 @@ export class VoteStateService implements OnDestroy {
     this.stopPolling$.complete();
   }
 
+  /** Good votes. In Find, the verified ones only (see {@link findMode}). */
   get goodVotes(): Set<number> {
     return this._goodVotes();
   }
 
+  /** Bad votes. In Find, the verified ones only (see {@link findMode}). */
   get badVotes(): Set<number> {
     return this._badVotes();
   }
@@ -479,10 +487,14 @@ export class VoteStateService implements OnDestroy {
     this._clickTimes.set(times);
   }
 
+  /** A ``/api/votes`` read in the scope {@link findMode} picks. */
+  private fetchVotes(): Observable<VotesResponse> {
+    return this.sortingApi.getVotes(this.findMode ? 'verified' : undefined);
+  }
+
   loadVotes(): void {
     const seq = ++this.votesSeq;
-    this.sortingApi
-      .getVotes()
+    this.fetchVotes()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((votes) => this.applyVotesFresh(votes, seq));
   }
@@ -502,7 +514,7 @@ export class VoteStateService implements OnDestroy {
     adaptivePoll(
       () => {
         const seq = ++this.votesSeq;
-        return this.sortingApi.getVotes().pipe(map((votes) => ({ votes, seq })));
+        return this.fetchVotes().pipe(map((votes) => ({ votes, seq })));
       },
       {
         fastMs: intervalMs,

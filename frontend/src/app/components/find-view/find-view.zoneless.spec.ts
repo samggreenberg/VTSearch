@@ -76,7 +76,7 @@ describe('FindViewComponent (zoneless canary)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'audio' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -241,7 +241,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'image' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -418,7 +418,7 @@ describe('FindViewComponent (balance supersession)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'audio' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -573,7 +573,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
       httpMock
         .match('/api/medias/ids')
         .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -745,7 +745,7 @@ describe('FindViewComponent reading the vote piles (#5099)', () => {
     for (let i = 0; i < 3; i++) {
       await settleResource();
       httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -763,6 +763,19 @@ describe('FindViewComponent reading the vote piles (#5099)', () => {
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
+  });
+
+  it('reads only the verified votes (#5115)', () => {
+    vi.mocked(voteState.loadVotes).mockClear();
+    fixture.componentInstance.onFindTabChange('review');
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    // The one-off read and the poll's first tick, both scoped.
+    const reads = httpMock.match((req) => req.url === '/api/votes');
+    expect(reads.length).toBeGreaterThan(0);
+    for (const req of reads) {
+      expect(req.request.urlWithParams).toBe('/api/votes?scope=verified');
+      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+    }
   });
 
   it('reads them once as the view opens on Autopilot, and does not poll them there', () => {
@@ -821,7 +834,7 @@ describe('FindViewComponent ↓ then ↑ (#4306)', () => {
       httpMock
         .match('/api/medias/ids')
         .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -899,7 +912,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
     for (let i = 0; i < 3; i++) {
       await settleResource();
       httpMock.match('/api/medias/ids').forEach((req) => req.flush(ids.map((id) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -985,6 +998,32 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const voteState = TestBed.inject(VoteStateService);
       ranking.forEach(({ id }) => voteState.setOptimisticVerified(id, true));
       expect(fixture.componentInstance.queueEmpty()).toBe(true);
+    });
+
+    it('count the unverified items on each face of the line for the right panel (#5115)', async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 2, bad: 2 });
+
+      // A verified item leaves its face's count, whichever way it was voted.
+      const voteState = TestBed.inject(VoteStateService);
+      voteState.setOptimisticVerified(2, true);
+      voteState.setOptimisticVerified(4, true);
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 1, bad: 1 });
+
+      // The counts follow the line, with no re-read of the votes.
+      sortState.setSortResults(ranking, 0.3, lineBalance('unchecked'));
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 2, bad: 0 });
+
+      // And reach the panel: the Find piles carry no presumptions to count.
+      await settleZoneless(fixture);
+      const text = (fixture.nativeElement as HTMLElement).querySelector('vt-right-panel')!.textContent!;
+      expect(text).toContain('2 Unverified Good');
+      expect(text).toContain('0 Unverified Bad');
+    });
+
+    it('hand Browse / To Dataset / Export nothing before a scoring pass (#5115)', () => {
+      expect(view().unverifiedGoodIds()).toEqual([]);
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 0, bad: 0 });
     });
 
     it.each(BALANCE_STATES)('hand Browse / To Dataset / Export the positives above the line when %s', (status) => {
@@ -1163,7 +1202,7 @@ describe('FindViewComponent folding the side panels (#4673)', () => {
     for (let i = 0; i < 3; i++) {
       await settleResource();
       httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock
