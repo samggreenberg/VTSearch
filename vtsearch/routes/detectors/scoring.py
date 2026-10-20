@@ -588,18 +588,25 @@ def defer_learned_sort_baseline(
     add a distance pass over the dataset to every vote, so the sort only leaves
     them (:class:`~vtscore.detectors.evidence_baseline.PendingDraw`), to be
     drawn once the votes stop, or as soon as the evidence route off the training
-    dataset asks for it.  Runs inside the sort's job, whose active dataset is
-    *ds_ctx*.  Never raises: the baseline is a side channel, and the sort's
-    result is what the job is for.
+    dataset asks for it.  Only while the sort's head is the one a Find would
+    score with (:func:`~vtscore.detectors.model_loading.cached_head_is_current`):
+    under the label quota a Find trains the Goods' centroid instead (#4643), and
+    its line is not the sort's.  Runs inside the sort's job, whose active
+    dataset is *ds_ctx*.  Never raises: the baseline is a side channel, and the
+    sort's result is what the job is for.
     """
     import numpy as np
 
     from vtscore.detectors.evidence_baseline import PendingDraw, defer_baseline_draw
+    from vtscore.detectors.learned_sort import resolve_active_text_query
+    from vtscore.detectors.model_loading import cached_head_is_current
     from vtscore.embedding.media_vectors import media_embedding
 
     if labelset is None or not results or not det_ctx.detector_id:
         return
     try:
+        if not cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx)):
+            return
         embedder = det_ctx.embedder or None
         # The stamp names the vectors' width: any scored media's gives it.
         dim = 0
