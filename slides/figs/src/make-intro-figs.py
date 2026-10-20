@@ -1957,8 +1957,8 @@ UMAP_SCALE = 0.714
 UMAP_CANVAS = (CANVAS[0] / UMAP_SCALE, CANVAS[1] / UMAP_SCALE)
 #: The row's vertical centre, the left margin, and the flat square's side: the
 #: whole cube's, front face and depth together, so the square is the whole cube
-#: flattened and stands level with it, every dot at the height it had (owner,
-#: #5132: not the front face, with the dots squeezed into it).
+#: flattened and stands level with it, every dot where it was (owner, #5132:
+#: not the front face, with the dots squeezed into it).
 UMAP_ROW_Y = 5.6
 UMAP_LEFT = 1.0
 UMAP_SQUARE = CUBE_SIDE + CUBE_DEPTH
@@ -1976,54 +1976,21 @@ def _umap_arrow_len(label: str) -> float:
     return width / (UNIT_PT * UMAP_SCALE) + 2 * FLOW_HEAD_L
 
 
-def _ray_exit(centre: np.ndarray, way: np.ndarray, corners: list[tuple[float, float]]) -> float:
-    """How far along *way* from *centre* the ray leaves the convex polygon *corners*."""
-    exits = []
-    for a, b in zip(corners, corners[1:] + corners[:1], strict=True):
-        a, edge = np.asarray(a), np.asarray(b) - np.asarray(a)
-        det = way[0] * -edge[1] + edge[0] * way[1]
-        if abs(det) < 1e-12:
-            continue
-        rel = a - centre
-        t = (rel[0] * -edge[1] + edge[0] * rel[1]) / det
-        along = (way[0] * rel[1] - way[1] * rel[0]) / det
-        if t > 1e-9 and -1e-9 <= along <= 1 + 1e-9:
-            exits.append(t)
-    return min(exits)
-
-
 def _umap_flat() -> np.ndarray:
-    """The cube's dots, the whole cube turned into the whole square, each moved as little as it can be.
+    """The cube's dots, flattened: each exactly where the cube drawing puts it, in the square of its extent.
 
-    The cube draws as a hexagon: the square of its extent less two corners,
-    top left and bottom right, that the box does not reach. So the square keeps
-    every dot where the cube drawing puts it and opens those two corners out:
-    each dot slides away from the middle by however much the square reaches
-    past the hexagon in its direction. A dot whose direction meets a side the
-    two share does not move at all; the most any moves is toward a missing
-    corner. The room sees the same pattern at the same heights, and where it
-    came from (owner, #5132). A real UMAP keeps neighbours rather than a view,
-    and can move things further; this paints the picture rather than the method.
+    The square is the whole cube squashed along the line of sight, so every dot
+    keeps the coordinates it has in the cube (owner, #5132: the room looks at the
+    two side by side, and a dot that moved reads as a different dot). The two
+    corners the box does not reach, top left and bottom right, stay as empty
+    as they are in the cube. A real UMAP keeps neighbours rather than a view,
+    and can move things; this paints the picture rather than the method.
     """
-    side, depth = CUBE_SIDE, CUBE_DEPTH
-    whole = side + depth
-    hexagon = [(0.0, 0.0), (side, 0.0), (whole, depth), (whole, whole), (depth, whole), (0.0, side)]
-    square = [(0.0, 0.0), (whole, 0.0), (whole, whole), (0.0, whole)]
-    centre = np.array([whole / 2, whole / 2])
-    flat = []
-    for point in _flow_field_3d():
-        q = _cube_project(point) - centre
-        reach = float(np.hypot(*q))
-        if reach < 1e-12:
-            flat.append(centre)
-            continue
-        way = q / reach
-        flat.append(centre + q * _ray_exit(centre, way, square) / _ray_exit(centre, way, hexagon))
-    flat = np.array(flat)
+    flat = np.array([_cube_project(p) for p in _flow_field_3d()])
     radius = FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * 0.5)
     gaps = [np.hypot(*(flat[i] - flat[j])) for i in range(len(flat)) for j in range(i + 1, len(flat))]
     assert min(gaps) > 2 * radius + 0.02, "two flattened dots touch"
-    assert flat.min() > radius and flat.max() < whole - radius, "a flattened dot crosses the square's edge"
+    assert flat.min() > radius and flat.max() < UMAP_SQUARE - radius, "a flattened dot crosses the square's edge"
     return flat
 
 
@@ -2032,7 +1999,7 @@ def umap_flow_fig() -> None:
 
     Two pages: the cube as Embed-time Stories' second page left it; then the
     second arrow and the square, the whole cube flattened, the same sixty dots
-    at the same heights (`_umap_flat`).
+    at the same coordinates (`_umap_flat`).
     """
     for stage in range(1, UMAP_STAGES):
         save(_umap_flow_stage(stage), OUT, f"umap-flow.build{stage}.webp", column=FULL_BLEED, tight=False)
