@@ -360,13 +360,17 @@ export class FindViewComponent implements OnInit, OnDestroy {
     // shortcuts, its keyboard subscription. Only the one the view opened with
     // used to get it, and Tune opens on Autopilot, where there is none
     // (#4555). A tick later, as the view-init call this replaces did, and only
-    // if a switch back has not torn it down by then.
-    effect(() => {
+    // if a switch back has not torn it down by then. Nor the view itself:
+    // `centerPanel()` still returns the panel once the view is destroyed, and
+    // its `init` would start the shortcuts with nothing left to stop them
+    // (#5117), so the cleanup cancels a start still waiting.
+    effect((onCleanup) => {
       const panel = this.centerPanel();
       if (!panel) return;
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.centerPanel() === panel) panel.init();
       });
+      onCleanup(() => clearTimeout(timer));
     });
 
     effect(() => {

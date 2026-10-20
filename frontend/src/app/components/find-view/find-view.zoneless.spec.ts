@@ -1074,6 +1074,23 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await flushInit(ranking.map(({ id }) => id));
       expect(start).toHaveBeenCalledTimes(1);
     });
+
+    // #5117: a view torn down inside that tick started the panel it had just
+    // destroyed, and the shortcuts listened on with no panel to stop them.
+    it('starts no centre panel once the view is gone', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      expect(fixture.componentInstance.centerPanel()).toBeTruthy();
+      fixture.destroy();
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(start).not.toHaveBeenCalled();
+    });
   });
 });
 

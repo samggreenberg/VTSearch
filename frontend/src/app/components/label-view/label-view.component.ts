@@ -740,7 +740,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    setTimeout(() => this.centerPanel()?.init());
+    // Not once the view is gone: `centerPanel()` still returns the destroyed
+    // panel, and its `init` would start the shortcuts with nothing left to
+    // stop them (#5117).
+    const timer = setTimeout(() => this.centerPanel()?.init());
+    this.destroyRef.onDestroy(() => clearTimeout(timer));
   }
 
   /** Triggered by the top-bar context switcher whenever the active

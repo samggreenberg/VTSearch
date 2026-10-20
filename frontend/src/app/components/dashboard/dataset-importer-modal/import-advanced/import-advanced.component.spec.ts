@@ -105,14 +105,19 @@ describe('ImportAdvancedComponent', () => {
       scroller.getBoundingClientRect = () => ({ top: 0, bottom: 400, height: 400 }) as DOMRect;
       host.getBoundingClientRect = () => ({ top: 500 - scrollTop, bottom: 600 - scrollTop, height: 100 }) as DOMRect;
 
-      component.toggleAdvanced();
-      await settleZoneless(fixture);
-      expect(scrollTop).toBe(200);
+      try {
+        component.toggleAdvanced();
+        await settleZoneless(fixture);
+        expect(scrollTop).toBe(200);
 
-      scrollTop = 0;
-      component.toggleAdvanced();
-      await settleZoneless(fixture);
-      expect(scrollTop).toBe(0);
+        scrollTop = 0;
+        component.toggleAdvanced();
+        await settleZoneless(fixture);
+        expect(scrollTop).toBe(0);
+      } finally {
+        // Put the host back: TestBed removes only the host, not the scroller (#5117).
+        scroller.replaceWith(host);
+      }
     });
   });
 

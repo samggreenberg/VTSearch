@@ -17,6 +17,7 @@ import type { EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
+import { KeyboardService } from '../../services/keyboard.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -127,6 +128,18 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
     const nameEl = fixture.nativeElement.querySelector('.dataset-name');
     expect(nameEl).not.toBeNull();
     expect(nameEl!.textContent).toContain('Canary Dataset');
+  });
+
+  // #5117: the centre panel starts a tick after the view, and a view torn down
+  // inside that tick started the panel it had just destroyed: the shortcuts
+  // listened on with no panel to stop them.
+  it('starts no centre panel once the view is gone', async () => {
+    const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+    TestBed.tick();
+    expect(fixture.componentInstance.centerPanel()).toBeTruthy();
+    fixture.destroy();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(start).not.toHaveBeenCalled();
   });
 });
 
