@@ -17121,7 +17121,7 @@
       "name": "precision_check"
     },
     {
-      "description": "Test mode's test of the line: draw picks, take the votes, report what the line would ship.",
+      "description": "Tune's test of the line: draw picks, take the votes, report what the line would ship.",
       "name": "line_test"
     },
     {

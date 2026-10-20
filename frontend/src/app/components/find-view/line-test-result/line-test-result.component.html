@@ -8,17 +8,20 @@
       Move the Threshold toward False Positives to keep more, or train the detector further and score again.
     </p>
   } @else if (test(); as test) {
-    @if (stale()) {
-      <p class="stale-note" role="note">
-        ⚠ Out of date: corrections were added to the detector after this test, so it has now seen the test set.
-        Score the collection again to test the retrained detector.
-      </p>
-    } @else if (moved()) {
-      <p class="stale-note" role="note">
-        ⚠ The line has moved since this test: it measured the top {{ test.line_count | number }}, and the line keeps the
-        top {{ response()?.line_count | number }} now.
-        <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
-      </p>
+    <!-- At Done these notes stand over the verdict, in the centre pane (#5100). -->
+    @if (!done()) {
+      @if (stale()) {
+        <p class="stale-note" role="note">
+          ⚠ Out of date: corrections were added to the detector after this test, so it has now seen the test set.
+          Score the collection again to test the retrained detector.
+        </p>
+      } @else if (moved()) {
+        <p class="stale-note" role="note">
+          ⚠ The line has moved since this test: it measured the top {{ test.line_count | number }}, and the line keeps
+          the top {{ response()?.line_count | number }} now.
+          <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
+        </p>
+      }
     }
     @if (keptNote()) {
       <p class="result-note kept-note" role="note">{{ keptNote() }}</p>
@@ -48,57 +51,7 @@
         <p class="result-note">{{ tailNote() }}</p>
       }
 
-      @if (done()) {
-        <h3 class="section-title">Verdict</h3>
-        <p class="verdict">{{ verdict() }}</p>
-        <div class="exits">
-          <button
-            type="button"
-            class="btn btn--primary exit-btn"
-            (click)="moveToAutoFind.emit()"
-            title="Put this detector on the AutoFind list, so every dataset you import or run it over ships its matches unchecked, at this balance. The verdict beside the button says what that is likely to ship."
-          >Move to AutoFind</button>
-          <button
-            type="button"
-            class="btn btn--secondary exit-btn"
-            (click)="addCorrections.emit()"
-            title="The line is not good enough yet: hand the picks you disagreed with to the detector and retrain it. This result is then out of date, since the detector has seen the test set."
-          >Add Corrections and retrain</button>
-        </div>
-
-        @if (presetRows().length) {
-          <h3 class="section-title" title="The same picks, read at the line each balance would draw on this collection. Pick one to move the Threshold there; nothing is re-scored.">Lean the Threshold</h3>
-          <table class="data-table stats-table presets">
-            <thead>
-              <tr>
-                <th>Balance</th>
-                <th>Keeps</th>
-                <th>Right</th>
-                <th>Found</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of presetRows(); track row.beta) {
-                <tr [class.current]="row.current">
-                  <td>
-                    <button
-                      type="button"
-                      class="btn btn--toolbar preset-btn"
-                      [class.active]="row.current"
-                      [disabled]="row.current"
-                      [title]="presetTitle(row)"
-                      (click)="lean.emit(row.beta)"
-                    >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
-                  </td>
-                  <td class="num">{{ row.estimate!.count | number }}</td>
-                  <td class="num">{{ row.estimate!.precision.lo * 100 | number: '1.0-0' }}–{{ row.estimate!.precision.hi * 100 | number: '1.0-0' }}%</td>
-                  <td>{{ row.estimate!.found }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        }
-      }
+      <!-- The verdict and its exits are the centre pane's at Done (#5100). -->
 
       <!-- The band-resolution precision curve: the same draws read at every
            band edge. It replaces the Stats modal's "Checked by you" curve,
@@ -215,7 +168,7 @@
       }
 
       @if (evidence(); as ev) {
-        <h3 class="section-title" title="How much of this dataset sits farther from the detector's labelled examples than its training data does. Read from the detector's own votes and a baseline it records when tested on its training data, so it works even when the training data isn't loaded.">Evidence coverage</h3>
+        <h3 class="section-title" title="How much of this dataset sits farther from the detector's labelled examples than its training data does. Read from the detector's own votes and a baseline it records when you run Tune on its training data, so it works even when the training data isn't loaded.">Evidence coverage</h3>
         <div class="domain-overlap">
           @if (evidenceHasBaseline) {
             <div class="domain-chip evidence-chip" [class.shifted]="evidenceUnsupported" role="status">
@@ -233,7 +186,7 @@
             <div class="domain-chip evidence-chip" role="status">
               <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
               <span class="domain-chip-text">
-                of this dataset sits in an evidence vacuum — no verdict until the detector is tested on the dataset it was trained on
+                of this dataset sits in an evidence vacuum — no verdict until you run Tune on the dataset the detector was trained on
               </span>
             </div>
             <p class="domain-detail muted">

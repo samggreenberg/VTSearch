@@ -182,13 +182,15 @@
               <span class="metadata-value">{{ media()!.filename || 'Media #' + media()!.id }}</span>
             </div>
           </div>
-          <div class="metadata-item">
-            <span class="metadata-label">Media Type</span>
-            <div class="metadata-value-row">
-              <vt-copy-detail-button [value]="mediaType | titlecase" label="Media Type" />
-              <span class="metadata-value">{{ mediaType | titlecase }}</span>
+          @if (showMediaTypeField) {
+            <div class="metadata-item">
+              <span class="metadata-label">Media Type</span>
+              <div class="metadata-value-row">
+                <vt-copy-detail-button [value]="mediaType | titlecase" label="Media Type" />
+                <span class="metadata-value">{{ mediaType | titlecase }}</span>
+              </div>
             </div>
-          </div>
+          }
           @for (entry of customMetadata | keyvalue; track entry.key) {
             <div class="metadata-item">
               <span class="metadata-label">{{ entry.key }}</span>

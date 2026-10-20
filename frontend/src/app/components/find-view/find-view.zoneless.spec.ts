@@ -282,7 +282,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
-  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // #4555: Tune opens on the Autopilot tab, and the test of the line starts
   // the moment the scoring pass lands, with no click. It used to wait for one:
   // the pass's `finalize` (which drops the busy flag) runs only after its
   // `next` returns, so the start, asked for from `next`, still saw the pass
@@ -593,7 +593,11 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     });
   });
 
+  /** The boundary walk is the Review tab's queue; Autopilot warms the test's round. */
+  const toReview = () => fixture.componentInstance.onFindTabChange('review');
+
   it('warms the next two items of the boundary walk, alternating sides', () => {
+    toReview();
     TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
     // The walk's seed is the marginal positive, so `below` is served next.
     TestBed.inject(MediaStateService).selectMedia(2);
@@ -605,6 +609,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
   });
 
   it('retargets when an item is verified with the same item on screen', () => {
+    toReview();
     TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
     TestBed.inject(MediaStateService).selectMedia(2);
     (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
@@ -617,6 +622,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
   });
 
   it('retargets when the cutoff moves', () => {
+    toReview();
     const sortState = TestBed.inject(SortStateService);
     sortState.setSortResults(ranking, 0.5);
     TestBed.inject(MediaStateService).selectMedia(2);
@@ -630,6 +636,100 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     TestBed.tick();
 
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
+  });
+
+  // #5099: the Tune autopilot's stage shows the round's picks one at a time,
+  // and used to fetch each only once it was on screen.
+  it("warms the test's next two unvoted picks on the Autopilot tab, and moves on with a vote", () => {
+    const lineTest = fixture.componentInstance.lineTest;
+    lineTest.start();
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1, 4, 2] })));
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(1), url(4)], [url(3)]]);
+
+    lineTest.vote('good');
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1 })));
+  });
+
+  it('warms nothing of the boundary walk while the Autopilot tab is up', () => {
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    TestBed.inject(MediaStateService).selectMedia(2);
+    TestBed.tick();
+    expect(lastCall()).toEqual([[], []]);
+  });
+});
+
+/**
+ * #5099: in Find, `/api/votes` carries every item's presumed label, megabytes
+ * on a large dataset. Only the Review tab shows the piles, so only it polls
+ * them, and no single vote re-reads them.
+ */
+describe('FindViewComponent reading the vote piles (#5099)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let voteState: VoteStateService;
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    voteState = TestBed.inject(VoteStateService);
+    vi.spyOn(voteState, 'loadVotes');
+    vi.spyOn(voteState, 'startPolling');
+    vi.spyOn(voteState, 'stopPolling');
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
+      httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    }
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    voteState.stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('reads them once as the view opens on Autopilot, and does not poll them there', () => {
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    expect(voteState.startPolling).not.toHaveBeenCalled();
+  });
+
+  it('reads them afresh and polls them while Review is up, and stops on the way back', () => {
+    vi.mocked(voteState.loadVotes).mockClear();
+    fixture.componentInstance.onFindTabChange('review');
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    expect(voteState.startPolling).toHaveBeenCalledTimes(1);
+
+    vi.mocked(voteState.stopPolling).mockClear();
+    fixture.componentInstance.onFindTabChange('autopilot');
+    expect(voteState.stopPolling).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-read them after a Review vote: the POST's reply and the verified move cover the item", () => {
+    fixture.componentInstance.onFindTabChange('review');
+    vi.mocked(voteState.loadVotes).mockClear();
+    voteState.applyOptimisticState(1, 'good');
+    fixture.componentInstance.onMediaVoted({ id: 1, vote: 'good' });
+    expect(voteState.loadVotes).not.toHaveBeenCalled();
+    expect(voteState.verifiedIds.has(1)).toBe(true);
   });
 });
 
@@ -919,7 +1019,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const el = fixture.nativeElement as HTMLElement;
       const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
       expect(hint()?.getAttribute('hintId')).toBe('test-vote');
-      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+      expect(hint()?.textContent).toContain('line with picks from both sides of it');
 
       // The first pick voted: the explanation has done its job.
       fixture.componentInstance.lineTest.response.set(
@@ -931,7 +1031,10 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
       await settleZoneless(fixture);
       expect(hint()?.getAttribute('hintId')).toBe('test-done');
-      expect(hint()?.textContent).toContain('Read the verdict on the right');
+      expect(hint()?.textContent).toContain('Move the detector to AutoFind');
+      // The verdict and its exits are the stage's now (#5100), not the result pane's.
+      expect(el.querySelector('vt-line-test-stage .verdict-card .exits')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-result .exits')).toBeNull();
     });
 
     it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {
@@ -953,7 +1056,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
-    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // #4555: Tune opens on Autopilot, which has no centre panel, so the one
     // Review makes is not the one the view opened with; each must be started
     // (its settings, the shortcuts), or Review's keys do nothing.
     it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {

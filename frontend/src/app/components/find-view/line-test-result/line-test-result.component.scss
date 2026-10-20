@@ -115,31 +115,6 @@
   }
 }
 
-.verdict {
-  margin: 0;
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.exits {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-}
-
-.exit-btn {
-  width: 100%;
-}
-
-.presets .current td {
-  color: var(--text-primary);
-}
-
-.preset-btn.active {
-  cursor: default;
-}
-
 .num {
   text-align: right;
   font-variant-numeric: tabular-nums;

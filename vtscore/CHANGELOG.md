@@ -443,6 +443,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
+  (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
+  `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the
+  media whose rows have all been scored. A detector's train scores its haystack with its final head and each
+  calibration fold model before the detector's own pass, so this is how the app's Find bar counts all of them. The
+  hook is per thread, `None` reports nothing, and the outer callback comes back when the block exits.
+  `_forward_sigmoid_chunked` takes an optional `on_rows` (rows scored so far, per chunk). Additive.
+
 - **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
   (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:
   another dataset's medias in the run's embedder, whose cell of the same name is scored at every click by the

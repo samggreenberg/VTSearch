@@ -197,7 +197,7 @@ describe('LeftPanelComponent', () => {
       expect(el.querySelector('.tab-panel-manual')).toBeNull();
     });
 
-    it('renders no tab bar in Test', () => {
+    it('renders no tab bar in Tune', () => {
       const fresh = locked({ panelMode: 'find' });
       TestBed.tick();
       expect((fresh.nativeElement as HTMLElement).querySelector('.left-tabs')).toBeNull();
@@ -541,7 +541,7 @@ describe('LeftPanelComponent', () => {
 /**
  * Collapse to photos (#4751): the Faces | Photos switch in the ranking's
  * header, offered only where faces have photos, swaps the face list for the
- * photo grid in Train's Manual tab and Test's Review tab.
+ * photo grid in Train's Manual tab and Tune's Review tab.
  */
 describe('LeftPanelComponent with Collapse to photos', () => {
   let fixture: ComponentFixture<LeftPanelComponent>;
@@ -593,7 +593,7 @@ describe('LeftPanelComponent with Collapse to photos', () => {
     expect(q('vt-stripe-overview')).toBeNull();
   });
 
-  it('hands Test its hidden (verified) faces, and says the actions still send faces', async () => {
+  it('hands Tune its hidden (verified) faces, and says the actions still send faces', async () => {
     offered.set(true);
     on.set(true);
     fixture.componentRef.setInput('panelMode', 'find');

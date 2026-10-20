@@ -17,6 +17,36 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
+  #5098). What people get from it is a better detector, not only a verdict on the one they have:
+  the view tests the line on a dataset the detector never trained on, then lets you correct its
+  calls, lean its Threshold, or move it to AutoFind. The button, its view (now at `/tune/…`; an old
+  `/test/…` link lands on the Dashboard), Settings, Toasty's hints and the guide all say Tune; the
+  test of the line inside it keeps its name. From the click until the view opens, a bar under the
+  button follows the dataset and detector loads the view waits for, where only the icon used to
+  waggle.
+
+- **A server locked to one media type stops naming it everywhere** (issue #5106). With
+  `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
+  the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
+  every item. Those fields now drop out, as do Settings' per-type tab bars under Scroll Style and
+  Browser. A dataset or detector of another type, kept from before the lock, still shows its type, and
+  brings its table's Type column back.
+
+- **A Find or AutoFind run's bar moves while its detectors work, and counts items, not detectors**
+  (issue #5101). The bar on a dataset's row counted finished detectors, so a run with one detector
+  read `0/1 detectors done` and sat at zero until it ended. It now fills through each detector's
+  train, its calibration passes and its scoring pass, averaged over the run's detectors, and the
+  line beside it counts what the first unfinished detector is doing: `12/40 labels` while its labels
+  resolve, then `3,000/5,000 images` (or clips, documents, …) for each pass over the dataset.
+
+- **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
+  Tune view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
+  reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
+  Threshold** table, with a note over them when the result is out of date or the line has moved.
+  They used to sit part-way down the narrow result pane on the right, which now keeps the numbers
+  behind the verdict and can be folded away without hiding it.
+
 - **A server that trusts session cookies no longer signs them with the key printed in the source**
   (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
   anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
@@ -1040,6 +1070,13 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Voting in Tune keeps up with you, as it does in Train** (issue #5099). The Tune autopilot now loads
+  the next two picks' images while you look at the current one, so a vote shows the next pick at once
+  rather than waiting for its download. No vote on either Tune tab re-downloads the full vote list any
+  more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
+  refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
+  that fails to load is no longer requested again and again.
 
 - **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
   When an import converted PDFs (their text, or their pages as images) and did not clip the result, a

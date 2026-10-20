@@ -41,7 +41,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
   const stateText = () => root().querySelector('.balance-state-text');
   const hints = () => root().querySelectorAll('vt-field-hint-icon');
 
-  describe('in Test (#4524)', () => {
+  describe('in Tune (#4524)', () => {
     it('freezes the radios while a test phase runs, and says why', async () => {
       await show(1, lineBalance('unchecked'));
       fixture.componentRef.setInput('locked', true);

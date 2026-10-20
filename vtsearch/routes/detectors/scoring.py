@@ -81,7 +81,7 @@ def _abort_if_find_cancelled() -> None:
     """
     if find_progress.is_cancelled:
         find_idle()
-        abort(409, message="Test cancelled")
+        abort(409, message="Tune cancelled")
 
 
 def _keep_line_ranking(results: list[dict], threshold: float) -> float:
@@ -777,7 +777,7 @@ def find_corrections_to_detector():
 
         initial = det_ctx.find_initial_labels
         if not initial:
-            abort(400, message="No Test run to take corrections from. Score the dataset first.")
+            abort(400, message="No Tune run to take corrections from. Score the dataset first.")
 
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 

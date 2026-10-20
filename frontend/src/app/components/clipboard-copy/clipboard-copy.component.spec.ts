@@ -32,6 +32,30 @@ describe('ClipboardCopyComponent', () => {
     expect(btn.disabled).toBe(false);
   });
 
+  // #5103: each dropdown carries a visible label tied to it by `for`/`id`,
+  // rather than naming itself only through a hover tooltip.
+  function labelsFor(el: HTMLElement): string[] {
+    return Array.from(el.querySelectorAll('select')).map((select) => {
+      const label = el.querySelector(`label[for="${select.id}"]`);
+      return label?.textContent?.trim() ?? '';
+    });
+  }
+
+  it('labels the delimiter dropdown in table mode', () => {
+    expect(labelsFor(fixture.nativeElement)).toEqual(['Delimiter:']);
+  });
+
+  it('labels the column and separator dropdowns in list mode', async () => {
+    fixture.componentRef.setInput('mode', 'list');
+    await settleZoneless(fixture);
+    expect(labelsFor(fixture.nativeElement)).toEqual(['Column:', 'Separator:']);
+  });
+
+  it('gives each instance its own label ids', () => {
+    const other = TestBed.createComponent(ClipboardCopyComponent);
+    expect(other.componentInstance.delimiterId).not.toBe(fixture.componentInstance.delimiterId);
+  });
+
   // Zoneless staleness canary: `copy()` runs from a bound `(click)`, but the
   // `flash('Copied!')` that sets the feedback label happens in a post-`await`
   // continuation (after `navigator.clipboard.writeText`), OUTSIDE the click's

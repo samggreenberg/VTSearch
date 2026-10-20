@@ -1245,7 +1245,7 @@ def get_cli_autopilot_only() -> bool | None:
 
 
 def get_effective_autopilot_only() -> bool:
-    """Return whether Train and Test are locked to their Autopilot tabs.
+    """Return whether Train and Tune are locked to their Autopilot tabs.
 
     Resolution order:
 
@@ -1256,7 +1256,7 @@ def get_effective_autopilot_only() -> bool:
        defaults to ``False``.
 
     When true, the SPA renders neither Train's Manual / Autopilot tabs nor
-    Test's Autopilot / Review tabs: both views stay on their Autopilot panel
+    Tune's Autopilot / Review tabs: both views stay on their Autopilot panel
     (#4666).
     """
     return get_effective_override("autopilot_only")

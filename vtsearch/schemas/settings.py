@@ -190,7 +190,7 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
-    # Server-tier switch that locks Train and Test to their Autopilot tabs
+    # Server-tier switch that locks Train and Tune to their Autopilot tabs
     # (#4666). Set via the ``--autopilot-only`` CLI flag /
     # ``VTSEARCH_AUTOPILOT_ONLY`` env var (process-wide, all users) or the
     # persisted settings file; surfaced read-only here so the SPA can drop the

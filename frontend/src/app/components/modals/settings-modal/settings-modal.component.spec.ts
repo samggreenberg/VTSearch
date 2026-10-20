@@ -87,7 +87,8 @@ describe('SettingsModalComponent', () => {
   // Settle runs ngOnInit, whose forkJoin issues the four parallel GETs (plain
   // HTTP subscribes don't hold the app unstable, so whenStable resolves before
   // the flush). Settle again afterwards so the resolved signals repaint.
-  async function flushInit(): Promise<void> {
+  // `extraSettings` layers server-tier keys (e.g. `solo_media_type`) on top.
+  async function flushInit(extraSettings: Record<string, unknown> = {}): Promise<void> {
     await settleZoneless(fixture);
     // ngOnInit also refreshes HuggingFace sign-in status for the HuggingFace tab.
     httpMock
@@ -101,7 +102,7 @@ describe('SettingsModalComponent', () => {
     const versionReq = httpMock.expectOne('/api/version');
     // Deep-clone so per-test component mutations (onGridIconSizeChange, etc.)
     // never leak back into the shared mockSettings constant.
-    settingsReq.flush(structuredClone(mockSettings));
+    settingsReq.flush({ ...structuredClone(mockSettings), ...extraSettings });
     mediaTypesReq.flush(mockMediaTypes);
     embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
@@ -123,6 +124,32 @@ describe('SettingsModalComponent', () => {
     await flushInit();
     expect(component.mediaTypes().length).toBe(2);
     expect(component.activeViewTab()).toBe('audio');
+  });
+
+  describe('the per-type tab bars (#5106)', () => {
+    const tabNames = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+
+    it('offers a tab per registered type on a server open to every type', async () => {
+      await flushInit();
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
+      expect(tabNames()).toEqual(['Sound', 'Image']);
+    });
+
+    it('drops the bar on a server locked to one type, and settles on that type', async () => {
+      await flushInit({ solo_media_type: 'image' });
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['image']);
+      expect(component.activeViewTab()).toBe('image');
+      expect(component.activeBrowseTab()).toBe('image');
+      expect(tabNames()).toEqual([]);
+    });
+
+    it('keeps every tab when the lock names a type the registry lacks', async () => {
+      await flushInit({ solo_media_type: 'video' });
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
+    });
   });
 
   it('should update theme and save', async () => {

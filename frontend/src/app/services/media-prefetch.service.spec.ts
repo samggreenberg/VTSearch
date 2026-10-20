@@ -241,6 +241,49 @@ describe('MediaPrefetchService', () => {
       expect(pending.size).toBe(0);
     });
 
+    it('does not fetch a failed target again while the prediction holds it (#5099)', async () => {
+      svc.prefetch([A, B]);
+      pending.get(A)?.resolve(false);
+      await flush();
+      await flush();
+      // On to B, not back to A: a url that fails would otherwise be fetched
+      // back to back for as long as it stays a target.
+      expect(pending.has(B)).toBe(true);
+      pending.delete(A);
+      // A retarget that still wants A leaves it alone too.
+      svc.prefetch([A, B, C]);
+      pending.get(B)?.resolve(true);
+      await flush();
+      await flush();
+      expect(pending.has(C)).toBe(true);
+      expect(pending.has(A)).toBe(false);
+      expect(svc.resolve(A)).toBe(A);
+    });
+
+    it('tries a failed target again once a retarget has dropped it', async () => {
+      svc.prefetch([A]);
+      pending.get(A)?.resolve(false);
+      await flush();
+      await flush();
+      pending.clear();
+      svc.prefetch([B]);
+      svc.prefetch([A]);
+      expect(pending.has(A)).toBe(true);
+    });
+
+    it('does not count a target a retarget aborted as failed', async () => {
+      svc.prefetch([A]);
+      svc.prefetch([B]);
+      expect(pending.get(A)?.aborted).toBe(true);
+      await flush();
+      pending.get(B)?.resolve(true);
+      await flush();
+      await flush();
+      pending.delete(A);
+      svc.prefetch([A]);
+      expect(pending.has(A)).toBe(true);
+    });
+
     it('an empty prediction aborts what is in flight', async () => {
       svc.prefetch([A, B]);
       pending.get(A)?.resolve(true);

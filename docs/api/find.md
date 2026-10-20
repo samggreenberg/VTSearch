@@ -6,11 +6,11 @@ Endpoints for running detectors against data: multi-dataset **Find**, the
 active-dataset **Find Label** / **Auto-Detect** flows, and their evaluation
 stats and cancel companions.
 
-**Naming.** The app's **Test** view (`/test/:datasetId/:detectorId`) is the
+**Naming.** The app's **Tune** view (`/tune/:datasetId/:detectorId`) is the
 caller of Find Label, the find stats, corrections and queues, and the test of
 the line below. These routes, their fields (`find_mode`, `find_scores`) and
-the `find` SSE channel keep the view's former name, Find (#4525), so "Find
-mode" and "the Find pass" on this page mean the Test view's session.
+the `find` SSE channel keep the view's first name, Find (#4525), so "Find
+mode" and "the Find pass" on this page mean the Tune view's session.
 The Dashboard's **Find** button is something else: it starts a background
 AutoFind per ticked dataset
 ([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)).
@@ -260,7 +260,7 @@ POST /api/line-test/forget
 
 **All but `GET` require** `X-Detector-Id`.
 
-Test mode's test of the line the Find pass drew (#4524; the design is
+Tune's test of the line the Find pass drew (#4524; the design is
 [*The test sample*](../../vtscore/docs/packages/training.md#the-test-sample-linetest-linebudgets-line_phase-found_words), the statistics
 `vtscore/training/thresholds/line_test.py`). The question is *if this line
 went to AutoFind, what share of what it ships would be right, and what share of

@@ -13,7 +13,7 @@ import { unvoteLineTest } from '../generated/api-client/fn/line-test/unvote-line
 import { voteLineTest } from '../generated/api-client/fn/line-test/vote-line-test';
 
 /**
- * Test mode's test of the line (`/api/line-test`, #4524): start it over the
+ * Tune mode's test of the line (`/api/line-test`, #4524): start it over the
  * Find pass's frozen scores, record a pick's vote, take one back, cancel, and
  * read its state. Every verb answers with the same body: the balance's state,
  * the test (running, else the last finished one), whether the result is stale

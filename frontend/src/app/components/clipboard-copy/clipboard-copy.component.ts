@@ -35,6 +35,8 @@ interface DelimiterOption {
   styleUrl: './clipboard-copy.component.scss',
 })
 export class ClipboardCopyComponent implements OnChanges, OnDestroy {
+  private static nextId = 0;
+
   readonly mode = input<'table' | 'list'>('table');
   readonly rows = input<Record<string, unknown>[]>([]);
   readonly columns = input<ClipboardColumn[]>([]);
@@ -52,6 +54,11 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
     { value: '|', label: 'Pipe (|)' },
     { value: ';', label: 'Semicolon (;)' },
   ];
+
+  /** Ids tying each visible label to its select, unique per instance. */
+  private readonly idPrefix = `clipboard-copy-${ClipboardCopyComponent.nextId++}`;
+  readonly columnId = `${this.idPrefix}-column`;
+  readonly delimiterId = `${this.idPrefix}-delimiter`;
 
   delimiter = ',';
   /** List mode: which single column to copy. */

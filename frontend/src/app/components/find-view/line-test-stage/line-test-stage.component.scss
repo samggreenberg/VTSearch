@@ -101,3 +101,98 @@
   color: var(--text-secondary);
   line-height: 1.4;
 }
+
+// --- The verdict, at Done (#5100) -----------------------------------------
+// A centred column that scrolls when the pane is short: `margin: auto` centres
+// it without clipping its top, which `justify-content: center` would.
+
+.stage-done {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.done-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 40rem;
+  margin: auto;
+}
+
+.done-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.done-icon {
+  display: inline-flex;
+  color: var(--color-good);
+}
+
+// The one card in the pane, lifted and edged in the accent: the decision the
+// test was for.
+.verdict-card {
+  padding: var(--space-xl) var(--space-2xl);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-md);
+
+  .presets {
+    margin-bottom: 0;
+  }
+}
+
+.stale-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--text-warning);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.verdict {
+  margin: 0;
+  font-size: var(--font-lg);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.exits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+.exit-btn {
+  flex: 1 1 12rem;
+}
+
+.presets .current td {
+  color: var(--text-primary);
+}
+
+.preset-btn.active {
+  cursor: default;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

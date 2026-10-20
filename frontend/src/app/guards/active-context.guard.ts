@@ -10,7 +10,7 @@ import { ToastService } from '../services/toast.service';
 
 /**
  * Guard for the URL-driven active-context routes
- * (`/label/:datasetId/:detectorId`, `/test/:datasetId/:detectorId`).
+ * (`/label/:datasetId/:detectorId`, `/tune/:datasetId/:detectorId`).
  *
  * Resolves the URL pair into the active context, holding the route's
  * activation until any required dataset/detector load completes so the

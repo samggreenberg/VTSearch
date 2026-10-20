@@ -11,7 +11,8 @@
 # them, then the axis the *user* sets — F-beta, the three-radio balance that asks which mistake they mind
 # more (#4413, #4448), and the line the labels draw at its peak (#4452). Then
 # the places the loop never asks about, the steps Autopilot takes and when it
-# says stop (#4610), the data the experiments run on and how
+# says stop (#4610), Browse — Find's results and then the whole pile as a map,
+# lettered by signposts (#5097) — the data the experiments run on and how
 # the app does on it, how a user tests a detector on
 # their own pile and how often that test is right, the region-voting idea (whose
 # measured verdict waits for the runs still reporting), documents — logos on
@@ -22,15 +23,15 @@
 # behind them live in their reports, not on the slides or in the notes (see
 # #3246, #3265, #4827).
 #
-# The outline fragment appears thirteen times: once bare, as the opening list,
-# and then once before each section marked with `+at1` … `+at11`. It is one
-# slide shown thirteen ways rather than thirteen slides — `build.py` numbers it
-# 1a…1m — and the last showing, `+end`, is the deck's closing slide: it is the
+# The outline fragment appears fourteen times: once bare, as the opening list,
+# and then once before each section marked with `+at1` … `+at12`. It is one
+# slide shown fourteen ways rather than fourteen slides — `build.py` numbers it
+# 1a…1n — and the last showing, `+end`, is the deck's closing slide: it is the
 # only one that shows "Conclusion", as its marked line. Sections are numbered in
-# Roman numerals (I … XI), slides in Arabic, so the two never read alike.
+# Roman numerals (I … XII), slides in Arabic, so the two never read alike.
 #
 # This is the master deck: every fragment a talk might want is named here, and
-# a talk cuts its own manifest from it. Section XI, Instruction, is the one most
+# a talk cuts its own manifest from it. Section XII, Instruction, is the one most
 # talks cut — it is a how-to for users, not an argument for data scientists — and
 # a talk *for* users moves it up to follow section I instead.
 
@@ -149,7 +150,7 @@ slides:
   # lights (owner, #4872). Last, where the stop fired when it was measured:
   # #3945's sessions, the only stopping numbers committed so far, until a State
   # of the App review's stopping block replaces them (#4611). The ways a run
-  # ends and what the app says moved to section IX: one of the three is the
+  # ends and what the app says moved to section X: one of the three is the
   # documents' dry run, and nobody has heard of documents yet (owner, #4884).
   outline-hold-the-line +at5
   autopilot-smart
@@ -158,7 +159,22 @@ slides:
   autopilot-steps
   autopilot-stop
 
-  # VI — Experimentation: the photographs the experiments run on. Every dataset
+  # VI — Vision: Browse (#5097). Navigation ends with a trained detector, so
+  # this runs it: Find over the whole pile, its results a list of file names
+  # and then, one button on, a map of their own. Then the pile itself as a map,
+  # zoomed in twice on where the books landed, each frame lettered by a finer
+  # layer of signposts; one tile opened, showing the tags every photo was given;
+  # and how Toponymy names a region from those tags. The pile is `photos-all`,
+  # all of COCO val2017 the training pile does not hold, because a map of 240
+  # photographs is a dozen tiles under two layers of signs
+  # (`shoot-ui-figs.mjs`'s `browse` group, `make-signpost-figs.py`).
+  outline-hold-the-line +at6
+  vision-find
+  vision-map
+  vision-tile
+  vision-names
+
+  # VII — Experimentation: the photographs the experiments run on. Every dataset
   # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
   # else made, a slide of what they do not give you, then what we built from
   # them, in the same card — COCO into COCO Better (`coco_better` in code;
@@ -167,7 +183,7 @@ slides:
   # The figures are generated from the config the pile builds against, so a
   # rebuilt dataset is a re-run of the figure scripts rather than an edit here —
   # but the presenter notes carry numbers too, and those are hand-written.
-  outline-hold-the-line +at6
+  outline-hold-the-line +at7
   data-set-coco
   data-coco-better-complement
   data-coco-problems
@@ -185,9 +201,9 @@ slides:
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos
 
-  # VII — Examination: the Test button (#4594, #4598), how a user finds out
-  # what section VI just measured, on their own pile. It follows Experimentation
-  # because its last slide grades the Test on the COCO Better sessions the room
+  # VIII — Examination: the Tune button (#4594, #4598; Test until #5098), how a user finds out
+  # what section VII just measured, on their own pile. It follows Experimentation
+  # because its last slide grades Tune's test on the COCO Better sessions the room
   # has just met. The question and its two rules; the background, one idea a
   # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
@@ -197,7 +213,7 @@ slides:
   # the Range's, which open the section. Every figure but the last runs the
   # shipped `LineTest` on a planted pile (`make-test-figs.py`); the last is
   # #4560's shipped summary.
-  outline-hold-the-line +at7
+  outline-hold-the-line +at8
   # First the check Autopilot runs on the pile you trained on (owner, #4835:
   # moved here from Inclination, since it measures the line rather than
   # drawing it): the question the line cannot answer before anyone checks
@@ -211,7 +227,7 @@ slides:
   floor-check
   # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check
   # early (#4496), past the opening and never on faces (#4799). After Spot
-  # Check, which it calls. Then Test, the same question on a pile the
+  # Check, which it calls. Then Tune's test, the same question on a pile the
   # detector never saw.
   weak-spot
   test-question
@@ -224,9 +240,9 @@ slides:
   test-result
   test-coverage
 
-  # VIII — Region: the region vote in the app, what a patch is and the model
+  # IX — Region: the region vote in the app, what a patch is and the model
   # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
-  outline-hold-the-line +at8
+  outline-hold-the-line +at9
   voting-modes
   patches
   evt-gumbel
@@ -234,7 +250,7 @@ slides:
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
 
-  # IX — Document(ation): logos on scanned pages. The logo slide opens it
+  # X — Document(ation): logos on scanned pages. The logo slide opens it
   # because it introduces the idea of logo detection before the room is asked
   # to find logos on documents. It is the
   # `book` slide's claim made a second time, in the one domain where a room
@@ -249,7 +265,7 @@ slides:
   # three things the documents changed: the keypoint budget, the shortlist and
   # why a page vector cannot build one, and the votes. Tiles shipped after
   # these slides were drawn (#4378, #4415), and the notes say so.
-  outline-hold-the-line +at9
+  outline-hold-the-line +at10
   logo-grid
   logo-keypoints
   logo-match
@@ -257,7 +273,7 @@ slides:
   logo-stages
   logo-tiles
   logo-votes
-  # Then the same "Data, Set" card as section VI, for the document sources and
+  # Then the same "Data, Set" card as section VII, for the document sources and
   # FullMarks, built from the FullMarks datasheet.
   data-set-fullmarks-sources
   data-fullmarks-problems
@@ -279,7 +295,7 @@ slides:
   # radio (`make-sota-figs.py`, from the committed per-step CSVs).
   sota-documents
 
-  # X — Person(ification): faces, the third domain, and for now three slides: the
+  # XI — Person(ification): faces, the third domain, and for now three slides: the
   # same "Data, Set" card for FHIBE (#4713), Sony's consented face benchmark,
   # which the pile's identity cells are built from (#4699). The card is drawn
   # from the release itself, which is owner-only on the GRID, so
@@ -287,7 +303,7 @@ slides:
   # face is found and matched, where the line goes on faces and how it does
   # arrive with #4699's first study. FHIBE's terms allow a publication twenty
   # of its photos; the card's two pages show ten, so count before adding any.
-  outline-hold-the-line +at10
+  outline-hold-the-line +at11
   data-set-fhibe
   # Then Head Start: how the trained head's line is placed, the linear SVM before and after it
   # started from the Goods' average (#4776, #4785). A schematic drawn in faces, so it waits for the
@@ -302,13 +318,13 @@ slides:
   # (`make-many-words-figs.py`).
   many-words
 
-  # XI — Instruction: the tool as a how-to (#4202). Section I shows the same
+  # XII — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked
   # with a numbered red disc and the numbers keyed down the side, so the pages
   # still work as a handout with nobody talking over them. One session, shot
   # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
   # detector, train it, load a pile it never saw, and Find.
-  outline-hold-the-line +at11
+  outline-hold-the-line +at12
   steps-load-train
   steps-make-detector
   steps-train

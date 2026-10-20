@@ -28,7 +28,6 @@ import { DetectorsFindApiService } from '../../../services/detectors-find-api.se
 import { PairScopeService } from '../../../services/pair-scope.service';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { formatTimestamp } from '../../../utils/format-date';
-import { BALANCE_PRESETS } from '../../../utils/line-balance';
 import {
   estimatePercent,
   fbetaHeadline,
@@ -62,16 +61,15 @@ function compactCount(n: number): string {
 }
 
 /**
- * The Test autopilot's right pane (#4524): the result as it forms. The picks
+ * The Tune autopilot's right pane (#4524): the result as it forms. The picks
  * so far by band, the precision and recall ranges with their lights, the
  * F-beta headline, the band-resolution precision curve (which replaces the
  * retired Stats modal's *Checked by you* curve: unbiased, from the uniform
  * picks alone), and the two trust chips (Training-domain overlap, Evidence
- * coverage) that were behind the Stats button. At Done, the verdict with its
- * three exits, **Move to AutoFind**, **Lean the Threshold** (the ranges each
- * preset would ship, re-estimated from the picks already taken) and **Add
- * Corrections and retrain**; and *Nothing to test* when the line keeps fewer
- * items than one round.
+ * coverage) that were behind the Stats button; and *Nothing to test* when the
+ * line keeps fewer items than one round. The verdict and its three exits are
+ * the centre pane's at Done (`LineTestStageComponent`, #5100), so this pane
+ * is the detail behind them and can be folded away.
  *
  * Every number here comes from the server's draws (`/api/line-test`); the
  * pane only draws them. The Stats modal's 2×2 of the session's checks stays,
@@ -101,12 +99,6 @@ export class LineTestResultComponent {
   /** Bumped by the host when the session's checks changed under a finished test (corrections, Review votes). */
   readonly refresh = input(0);
 
-  /** Move the detector to AutoFind. */
-  readonly moveToAutoFind = output<void>();
-  /** Lean the Threshold to a preset (a beta). */
-  readonly lean = output<number>();
-  /** Fold the session's corrections into the detector and retrain. */
-  readonly addCorrections = output<void>();
   /** Test the line as it stands now (after it moved). */
   readonly testAgain = output<void>();
 
@@ -193,29 +185,6 @@ export class LineTestResultComponent {
         right: b.right,
         range: b.range ? estimatePercent(b.range) : '',
       }));
-  });
-
-  /** The line each preset would draw, from the picks already taken, left to right as the control offers them. */
-  readonly presetRows = computed(() => {
-    const presets = this.response()?.presets ?? [];
-    const current = this.test()?.beta ?? null;
-    return BALANCE_PRESETS.map((preset) => {
-      const p = presets.find((row) => row.beta === preset.value) ?? null;
-      return { beta: preset.value, hint: preset.hint, current: current === preset.value, estimate: p };
-    }).filter((row) => row.estimate !== null);
-  });
-
-  /** The verdict in one line: a reading of the ranges, not a threshold the app enforces. */
-  readonly verdict = computed(() => {
-    const e = this.estimates();
-    const t = this.test();
-    if (!e || !t) return '';
-    const found = this.classModel() ? `${e.found} (${estimatePercent(e.recall)} of all the matches)` : e.found;
-    return (
-      `On this collection the line keeps the top ${t.line_count.toLocaleString()}: likely ${estimatePercent(e.precision)} ` +
-      `of them are right, with ${found}. ` +
-      `That is what AutoFind would ship from a collection like this one.`
-    );
   });
 
   // --- The session's checks: the Stats modal's 2×2, kept under the result ---
@@ -528,12 +497,6 @@ export class LineTestResultComponent {
       `If the line kept the top ${e.count.toLocaleString()}: likely ${estimatePercent(e.precision)} right, ` +
       `${found}, F-beta ${fbetaHeadline(e.fbeta)}.`
     );
-  }
-
-  presetTitle(row: { hint: string; estimate: { count: number; precision: { lo: number; hi: number }; recall: { lo: number; hi: number } } | null }): string {
-    const e = row.estimate;
-    if (!e) return row.hint;
-    return `${row.hint}. The line would keep the top ${e.count.toLocaleString()}: likely ${estimatePercent(e.precision)} right, ${estimatePercent(e.recall)} of all the matches found.`;
   }
 
   pct(p: number | null | undefined): string {

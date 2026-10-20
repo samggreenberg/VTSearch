@@ -74,7 +74,7 @@ export class LeftPanelComponent implements OnInit {
   readonly loadingMore = input(false);
   /** The ranking's `sort_token`, which Collapse to photos groups by photo (#4751). */
   readonly sortToken = input<string | null>(null);
-  /** Faces Collapse to photos leaves out: Test's verified ones, as its list does. */
+  /** Faces Collapse to photos leaves out: Tune's verified ones, as its list does. */
   readonly hiddenIds = input<Set<number>>(new Set());
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
@@ -113,7 +113,7 @@ export class LeftPanelComponent implements OnInit {
   readonly textQuery = input('');
   /**
    * The user has hidden the left panel (`hide_left_panel`, #4673). It folds
-   * to its strip on the Autopilot tab only, Train's or Test's: Manual and
+   * to its strip on the Autopilot tab only, Train's or Tune's: Manual and
    * Review are driven from the list, so they keep it. See {@link folded}.
    */
   readonly collapsed = input(false);
@@ -129,16 +129,16 @@ export class LeftPanelComponent implements OnInit {
   readonly autopilotDisabled = input(false);
   /**
    * The server's `autopilot_only` lock (#4666): Train has no Manual tab and
-   * Test no Review tab, and neither renders its tab bar. Train stays on
+   * Tune no Review tab, and neither renders its tab bar. Train stays on
    * Autopilot whatever the user's `autopilot_enabled` preference says; when
    * Autopilot has no way to seed its first sort (`autopilotDisabled`) the panel
    * says why instead of falling back to Manual.
    */
   readonly autopilotOnly = input(false);
-  /** 'label' = full labeling UI (default), 'find' = the Test view's Autopilot / Review tabs (#4524, #4525) */
+  /** 'label' = full labeling UI (default), 'find' = the Tune view's Autopilot / Review tabs (#4524, #4525) */
   readonly panelMode = input<'label' | 'find'>('label');
   /**
-   * Find's tab (#4524): `autopilot` is the Test autopilot, whose phase panel the
+   * Find's tab (#4524): `autopilot` is the Tune autopilot, whose phase panel the
    * host projects as `[findAutopilot]`; `review` is today's Find in full, the
    * ranked work queue under the line. The host owns it, since the centre and
    * right panes switch with it.
@@ -205,7 +205,7 @@ export class LeftPanelComponent implements OnInit {
   /** Collapse to photos (#4751): the list shows the ranking as its photos. */
   readonly collapse = inject(CollapsePhotosService);
   /**
-   * Said on Test's work-queue actions while the ranking shows photos: they
+   * Said on Tune's work-queue actions while the ranking shows photos: they
    * still send faces, since the detector is a face detector and its labels
    * are face crops.
    */
@@ -215,7 +215,7 @@ export class LeftPanelComponent implements OnInit {
 
   readonly activeTab = signal<'manual' | 'autopilot'>('autopilot');
 
-  /** Folded to the strip: hidden, and on an Autopilot tab (Train's own, or Test's `findTab`). */
+  /** Folded to the strip: hidden, and on an Autopilot tab (Train's own, or Tune's `findTab`). */
   readonly folded = computed(
     () =>
       this.collapsed() &&

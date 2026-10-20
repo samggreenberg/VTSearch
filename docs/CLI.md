@@ -356,7 +356,7 @@ write out with the hits. See [the line state](api/labeling.md#the-line-state).
 
 **A detector with too few labels runs as its typed query, or as the Goods'
 centroid, and the run says so.** Under the label quota (3 Goods and 4 Bads,
-or a Good and 16 Bads) there is no trained head, here as in the app's Test and
+or a Good and 16 Bads) there is no trained head, here as in the app's Tune and
 AutoFind (see [find-label](api/find.md#find-label-score--label-the-active-dataset)).
 A detector made from a typed query (its `text_query`, else its first `text`
 example) scores as that query's own set: each item's cosine to the query in
@@ -908,7 +908,9 @@ who only ever look at one media type (e.g. images, optionally pulled
 in via converters from videos/documents). When set, the dataset
 importer and new-detector flows hide their mediaType pickers and lock
 to this type, the converter list filters to converters whose output is
-this type, and the type's default embedder is warmed at startup:
+this type, the read-only fields that could only name this type (Find
+Results, the metadata panes, the Dashboard's Type columns, …) drop out,
+and the type's default embedder is warmed at startup:
 
 ```bash
 python app.py --solo-media-type image
@@ -1052,7 +1054,7 @@ available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
 
-**Autopilot only** (`--autopilot-only`): keep Train and Test on their
+**Autopilot only** (`--autopilot-only`): keep Train and Tune on their
 Autopilot tabs, for a deployment whose users should only see the guided
 flow:
 
@@ -1060,7 +1062,7 @@ flow:
 python app.py --autopilot-only
 ```
 
-Train loses its Manual tab and Test its Review tab, and neither view
+Train loses its Manual tab and Tune its Review tab, and neither view
 renders a tab bar. Like `--semantic-only`, this is a **server-wide
 override** that can only turn the lock on: there is no
 `--no-autopilot-only`, the persisted `autopilot_only` setting can turn it
@@ -1068,7 +1070,7 @@ on too, and neither is editable via the Settings dialog or the settings
 API (the Settings ▸ Server tab reports it). The env-var equivalent is
 `VTSEARCH_AUTOPILOT_ONLY`; an explicit flag wins over it. See
 [`autopilot_only`](DEPLOYMENT.md#server-tier--datasettingsjson) for what
-it means for Test's Review actions, and for a detector Autopilot can't
+it means for Tune's Review actions, and for a detector Autopilot can't
 start.
 
 **Run a function when an import finishes** (`--on-dataset-imported

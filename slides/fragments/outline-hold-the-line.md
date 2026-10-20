@@ -7,13 +7,14 @@
 3. Inclination
 4. Exploration
 5. Navigation
-6. Experimentation
-7. Examination
-8. Region
-9. Document(ation)
-10. Person(ification)
-11. Instruction
-12. <span class="closing">Conclusion</span>
+6. Vision
+7. Experimentation
+8. Examination
+9. Region
+10. Document(ation)
+11. Person(ification)
+12. Instruction
+13. <span class="closing">Conclusion</span>
 
 <!-- **a** — Here's where we're going. First I'll build the tool from nothing.
      The next two sections are about the line: what it's made of, and where it
@@ -36,23 +37,26 @@
 <!-- **f** — Section five: Autopilot, start to finish. The steps it takes, and
      the three lights that say it's OK to stop. -->
 
-<!-- **g** — Section six: the data we test all this on, and how the app does on
+<!-- **g** — Section six: Vision. Find's results, and then the whole pile,
+     laid out as a map you can look around, with signs naming what's where. -->
+
+<!-- **h** — Section seven: the data we test all this on, and how the app does on
      it today. -->
 
-<!-- **h** — Section seven: the Test button. How you find out how good your
+<!-- **i** — Section eight: the Tune button. How you find out how good your
      detector is on your own pictures, and how often that answer holds up. -->
 
-<!-- **i** — Section eight: voting on part of a picture instead of the whole
+<!-- **j** — Section nine: voting on part of a picture instead of the whole
      thing, and what that does to the line. -->
 
-<!-- **j** — Section nine: documents. Finding logos on scanned pages, the
+<!-- **k** — Section ten: documents. Finding logos on scanned pages, the
      dataset we built for it, and how it does. -->
 
-<!-- **k** — Section ten: faces. The dataset we measure faces on, and a trick
+<!-- **l** — Section eleven: faces. The dataset we measure faces on, and a trick
      that gets a face detector off to a better start. -->
 
-<!-- **l** — Section eleven: the tool again, as a how-to. Every click numbered.
+<!-- **m** — Section twelve: the tool again, as a how-to. Every click numbered.
      It's the one to hand out. -->
 
-<!-- **m** — So that's the line: what it's built from, where it goes, and how
+<!-- **n** — So that's the line: what it's built from, where it goes, and how
      to check it. Thanks! Happy to take questions. -->

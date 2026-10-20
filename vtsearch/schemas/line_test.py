@@ -1,4 +1,4 @@
-"""Schemas for Test mode's test of the line (#4524).
+"""Schemas for Tune's test of the line (#4524).
 
 Every ``/api/line-test`` verb (``vtsearch/routes/line_test.py``) answers with
 :class:`LineTestResponseSchema`: the balance's state and the line it draws,

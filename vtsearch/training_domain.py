@@ -1,7 +1,7 @@
 """The training-domain overlap check: how much of the active dataset looks unlike a reference dataset.
 
 Two routes ask it.  ``GET /api/datasets/registry/<id>/domain-shift`` takes the
-reference from the caller (the Test result's **Compare against** picker).
+reference from the caller (the Tune result's **Compare against** picker).
 ``GET /api/find/training-domain`` works the reference out itself, from the
 loaded dataset holding most of the active detector's labelled examples
 (:mod:`vtscore.detectors.training_domain`), so the SPA can warn the moment a

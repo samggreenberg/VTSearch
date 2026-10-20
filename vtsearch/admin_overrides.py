@@ -5,7 +5,7 @@ it applies to every user, is fixed for the lifetime of the process, and is not
 editable through ``PUT /api/settings``. There are seven -- the solo
 mediaType lock, the per-mediaType solo-embedder locks, the plugin hide list,
 the dataset retention window, the support-email address, the Semantic-only
-embedder lock, and the Autopilot-only lock on Train and Test.
+embedder lock, and the Autopilot-only lock on Train and Tune.
 
 Every override is reachable two ways: a CLI flag, and an environment variable
 for the gunicorn-launched Docker images, which never parse ``argv``.
@@ -478,8 +478,8 @@ _REGISTRY: tuple[AdminOverride, ...] = (
         effective_key="autopilot_only",
         resolve=_resolve_switch,
         help=(
-            "Lock Train and Test to their Autopilot tabs: Train's Manual tab "
-            "and Test's Review tab are removed, and neither view renders a tab "
+            "Lock Train and Tune to their Autopilot tabs: Train's Manual tab "
+            "and Tune's Review tab are removed, and neither view renders a tab "
             "bar. The New Detector dialog already requires an example item for "
             "a dataset whose embedder can't search by text, so Autopilot always "
             "has a first sort to start from. Applies to all users for the "

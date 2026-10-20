@@ -122,7 +122,7 @@ times the bar.
   labelset's signature, k and alpha. On any other dataset it reads them while the stamp matches; a vote since, another
   embedder or no test on the training dataset yet gives no verdict until the next test there.
 - The chip reads "N% of this dataset sits farther from the detector's examples than 95% of *training dataset*", or,
-  without a baseline, the vacuum share and "no verdict until the detector is tested on the dataset it was trained on".
+  without a baseline, the vacuum share and "no verdict until you run Tune on the dataset the detector was trained on".
 - The harness ranks against the sim pool's unvoted media, drawn fresh at each snapshot click (the
   `find.evidence_coverage` mirror records that as a declared divergence).
 

@@ -25,7 +25,7 @@ dataset's Stats), which need no help to progress and can always be cancelled.
 
 **One at a time.** Only one hint is ever on screen. Each view shows at most
 one (the Dashboard's ladder below, the Train view's vote hint or hand-off, the
-Test view's stage or Review hint), and `ToastyHintComponent` shows a hint
+Tune view's stage or Review hint), and `ToastyHintComponent` shows a hint
 inside a dialog only while that dialog is the topmost one open, and a hint on
 a view only while no dialog is open at all. So opening any dialog, a confirm
 prompt included, hides the view's hint, and stacking a second dialog hides the
@@ -38,7 +38,7 @@ At most one at a time: the first row, top to bottom, whose condition holds
 (`dashboardHint` in `dashboard.component.ts`). So each row also means "and no
 row above it fires". None shows while Add Dataset or New Detector is open, or
 while the Dashboard is switching context. While one is on show, the reason
-under a disabled Train / Test / Find button is hidden, and so is an empty
+under a disabled Train / Tune / Find button is hidden, and so is an empty
 table's "Click **+** to add one": Toasty is saying it.
 
 | Hint | Toasty | Text | Fires when |
@@ -53,9 +53,9 @@ table's "Click **+** to add one": Toasty is saying it.
 | `wait-for-import` | happy | Your dataset is still importing. Select it when it joins the table. | A detector is selected and the only dataset is still importing, so there is no dataset row to select yet. |
 | `train` | happy | Your new detector has no training labels yet. Click **Train** to teach it with Good and Bad examples. | One detector with no training labels is selected, beside one dataset, so Train is enabled. |
 | `train-one-dataset` | surprised | You selected {N} datasets, but a new detector trains on one at a time. Select just one, then click **Train**. | Several datasets are selected with one detector that has no labels and no typed description, so nothing is enabled. |
-| `untrained-detector` | surprised | **{detector}** has no training labels yet, so it can't search. Deselect it, or select it alone with one dataset and click **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Test and Find are off. |
-| `test-or-find` | happy | Your detector is trained. Click **Test** to measure it on this dataset, or **Find** to collect its matches. | One trained detector and one dataset are selected, so Test is enabled. |
-| `find` | happy | You selected several datasets or detectors, so only **Find** is on. Click it to run each detector on each dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Test is not. |
+| `untrained-detector` | surprised | **{detector}** has no training labels yet, so it can't search. Deselect it, or select it alone with one dataset and click **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Tune and Find are off. |
+| `test-or-find` | happy | Your detector is trained. Click **Tune** to check it on this dataset and correct what it gets wrong, or **Find** to collect its matches. | One trained detector and one dataset are selected, so Tune is enabled. |
+| `find` | happy | You selected several datasets or detectors, so only **Find** is on. Click it to run each detector on each dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Tune is not. |
 
 `{media}` is "images, sounds or other media", or the one media type's plural
 ("images", "audio clips", …) when the server is locked to one
@@ -87,11 +87,11 @@ any run.
 | `keep-voting` | happy | Your detector now retrains on every vote. Keep voting until the lights on the left are all green. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
 | `spot-check` | happy | Autopilot is checking the line: these picks are drawn at random from bands of the list. Vote **Good** or **Bad** on each. | Autopilot's **Spot Check** step is on a run that trains the detector, its first round is on the stage, and no pick has been voted yet: the check before Done, or one Autopilot runs while the labels still overlap. The first vote ends it. |
 | `resort-prompt` | happy | Your {N clicks} {found only K positives}, and Autopilot needs {M} before it can move on. Switch to a different example sort, or keep clicking with this one. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
-| `autopilot-done` | happy | Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | An Autopilot run that started on an untrained detector finishes with every quality light green. The next vote ends it. |
-| `autopilot-done-level` | happy | Your detector is trained! It expects an F-beta of {F} at your balance. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, when the detector's labels line already expects an F-beta of 0.5 at the balance with a quality light still short of green (#4878). The next vote ends it. |
-| `autopilot-done-cap` | happy | Your detector is trained! That's {N} votes, as many as Autopilot asks for. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, when the votes reached Autopilot's cap of 200 with a quality light still short of green and the labels line short of its level (#4903). The next vote ends it. |
-| `autopilot-ran-dry` | happy | Your detector is trained! {N} of its best matches in a row were not good, so it has likely found what it can. Keep voting to sharpen it, or click **Dashboard** to test it or put it to work. | As `autopilot-done`, on a document dataset, where Autopilot finishes when its best matches run dry rather than on the lights. |
-| `all-labeled` | happy | You've labeled every item in this dataset! Click **Dashboard** to test or run your detector on another dataset. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
+| `autopilot-done` | happy | Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | An Autopilot run that started on an untrained detector finishes with every quality light green. The next vote ends it. |
+| `autopilot-done-level` | happy | Your detector is trained! It expects an F-beta of {F} at your balance. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, when the detector's labels line already expects an F-beta of 0.5 at the balance with a quality light still short of green (#4878). The next vote ends it. |
+| `autopilot-done-cap` | happy | Your detector is trained! That's {N} votes, as many as Autopilot asks for. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, when the votes reached Autopilot's cap of 200 with a quality light still short of green and the labels line short of its level (#4903). The next vote ends it. |
+| `autopilot-ran-dry` | happy | Your detector is trained! {N} of its best matches in a row were not good, so it has likely found what it can. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, on a document dataset, where Autopilot finishes when its best matches run dry rather than on the lights. |
+| `all-labeled` | happy | You've labeled every item in this dataset! Click **Dashboard** to tune or run your detector on another dataset. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
 
 `{M Goods}` and `{M Bads}` are Autopilot's Good and Bad targets ("3 Goods",
 "4 Bads" by default) and `{N}` the labels of that class so far. In `revote`,
@@ -102,12 +102,12 @@ any run.
 when none), and `{M}` the Good target. In `autopilot-ran-dry`, `{N}` is the
 dry-run length, 16. In `autopilot-done-level`, `{F}` is the F-beta the labels line expects, two decimals. In `autopilot-done-cap`, `{N}` is the vote count at Done (the cap, plus the check before Done).
 
-## Test view
+## Tune view
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `test-vote` | happy | Test shows you picks from both sides of your detector's line, in random order. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
-| `test-done` | happy | The test is done. Read the verdict on the right, or open the **Review** tab to check the list yourself. | The test reached Done. Stands under the stage's **Test done** heading, which says nothing more. |
+| `test-vote` | happy | Tune tests your detector's line with picks from both sides of it, in random order. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
+| `test-done` | happy | The test is done. Move the detector to **AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
 | `review` | happy | Every item is here, best match first. Click one to check it with Good or Bad, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 
 ## Dialogs
@@ -122,7 +122,7 @@ Each fires while its dialog is open and on top.
 | `new-detector` | happy | Describe what you're looking for in a few words, or give an example, then click **Create**. | **New Detector** is open on its main view (not its media picker). |
 | `use-example` | happy | **OK** uses the whole file as the example. **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
 | `find-results` | happy | These are the detector's matches in {dataset}. **Export** sends them on. **Browse** lays them out as a map. | **Find Results** is open. |
-| `export-results` | happy | Pick which items and columns to include, then where they go. | **Export Results** is open (the Test view's export; a detector's own export has no hint). |
+| `export-results` | happy | Pick which items and columns to include, then where they go. | **Export Results** is open (the Tune view's export; a detector's own export has no hint). |
 
 `{media}` is as on the Dashboard. `{dataset}` is the dataset Find ran on, by
 name.

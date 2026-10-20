@@ -16,7 +16,9 @@ pool and origin-based file resolution that are detector-specific.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -1046,7 +1048,9 @@ def _build_vote_xy(
     return X_list, y_list, groups, score_rows
 
 
-def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.ndarray:
+def _forward_sigmoid_chunked(
+    model: nn.Sequential, matrix: np.ndarray, on_rows: Callable[[int], None] | None = None
+) -> np.ndarray:
     """``sigmoid(model(matrix))`` as float64, upcasting a float16 matrix chunk-wise.
 
     The flattened patch matrix is stored float16 (see
@@ -1061,6 +1065,9 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
     leak non-finite floats into the JSON response.  The downstream segmented
     max-pool then incidentally drops sentinels in favour of any real score (in
     ``[0, 1]``) for the same media.
+
+    *on_rows*, when given, is called with the number of rows scored so far
+    after each chunk.
     """
     import torch  # noqa: PLC0415
 
@@ -1073,6 +1080,8 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
             block = np.ascontiguousarray(matrix[start : start + ROW_CHUNK])
             chunk = torch.from_numpy(block).to(device=device, dtype=torch.float32)
             out[start : start + chunk.shape[0]] = sigmoid_to_finite_array(model(chunk))
+            if on_rows is not None:
+                on_rows(start + chunk.shape[0])
     return out
 
 
@@ -1221,17 +1230,59 @@ def scoring_rows_for_snap(
     return rows
 
 
+_scoring_progress = threading.local()
+
+
+@contextmanager
+def scoring_progress(callback: Callable[[int, int], None] | None) -> Iterator[None]:
+    """Report every scoring pass this thread makes to *callback* ``(media_done, media_total)``.
+
+    Each :func:`score_rows_with_model` call inside the block is one pass over
+    its rows: *callback* fires with ``(0, n)`` as the pass starts and again
+    after each ``ROW_CHUNK`` block, ``media_done`` counting the media whose
+    rows have all been scored, ending at ``(n, n)``.  A detector's train scores
+    its whole haystack several times over (the final head, then each
+    calibration fold model) before its own scoring pass, so this is how a
+    caller can count those passes in media rather than only see them as time
+    gone by (issue #5101).
+
+    The hook is per thread, so detectors scored in parallel each report to
+    their own callback; ``None`` reports nothing, and the previous callback is
+    restored when the block exits.
+    """
+    previous = getattr(_scoring_progress, "callback", None)
+    _scoring_progress.callback = callback
+    try:
+        yield
+    finally:
+        _scoring_progress.callback = previous
+
+
 def score_rows_with_model(model: nn.Sequential, rows: ScoringRows) -> tuple[list[float], list[int]]:
     """Forward *rows* through *model* and max-pool them down to one score per media.
 
     Returns ``(scores_per_media, best_row_index_per_media)``; the winning row's
-    index is what surfaces the best-match overlay in the UI.
+    index is what surfaces the best-match overlay in the UI.  The pass reports
+    to the thread's :func:`scoring_progress` callback, if one is set.
     """
     from vtscore.embedding.matrix import segmented_max_pool  # noqa: PLC0415
 
     if not rows.ids:
         return [], []
-    flat_scores = _forward_sigmoid_chunked(model, rows.matrix)
+    report = getattr(_scoring_progress, "callback", None)
+    on_rows: Callable[[int], None] | None = None
+    if report is not None:
+        n_media = len(rows.ids)
+        n_rows = int(rows.matrix.shape[0])
+
+        def _on_rows(done: int) -> None:
+            # A media's rows are contiguous, so the media of the next unscored
+            # row is the count of media finished before it.
+            report(n_media if done >= n_rows else int(rows.media_index[done]), n_media)
+
+        on_rows = _on_rows
+        report(0, n_media)
+    flat_scores = _forward_sigmoid_chunked(model, rows.matrix, on_rows)
     return segmented_max_pool(flat_scores, rows.media_index, rows.region_index, len(rows.ids))
 
 

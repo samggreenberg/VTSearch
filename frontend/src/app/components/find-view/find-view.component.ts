@@ -115,7 +115,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
   /**
-   * Component-provided: the Test autopilot's session (#4524), the test of the
+   * Component-provided: the Tune autopilot's session (#4524), the test of the
    * line over this pair's Find pass. The three panes read it; the view starts
    * it once the pass lands and the Autopilot tab is up.
    */
@@ -210,11 +210,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
   showExport = false;
   exportFilter: LabelFilter = 'good';
   /**
-   * The Find view's tab (#4524): **Autopilot**, the Test autopilot (the phase
+   * The Find view's tab (#4524): **Autopilot**, the Tune autopilot (the phase
    * panel on the left, the current pick in the centre, the result on the
    * right), or **Review**, today's Find in full (the ranked work queue, the
    * boundary walk, the two piles). Train's Autopilot / Manual split applied to
-   * Test: the guided flow is the default, the open one a tab away.
+   * Tune: the guided flow is the default, the open one a tab away.
    */
   readonly findTab = signal<'autopilot' | 'review'>('autopilot');
   /** Toasty's hint under the Review tab (#4807): the tab is open, the list is
@@ -222,7 +222,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   readonly reviewHint = computed(
     () => this.findTab() === 'review' && !this.sortState.sortBusy && this.voteState.verifiedIds.size === 0,
   );
-  /** The server's Autopilot-only lock (#4666): Test shows no Review tab. */
+  /** The server's Autopilot-only lock (#4666): Tune shows no Review tab. */
   readonly autopilotOnly = computed(() => this.settingsState.settingsSignal()?.autopilot_only === true);
   /**
    * The balance control's state line (the owner's choice): this corpus's test
@@ -246,9 +246,9 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /**
    * The side panels' folds (#4673). The left folds on the Autopilot tab only:
    * Review is driven from its list. The right folds on both tabs, but a
-   * verdict opens it on its own (the stage says "read the result on the
-   * right") until the user folds it again; that is this test's, so the saved
-   * setting is not touched by it.
+   * verdict opens it on its own (the numbers behind the stage's verdict)
+   * until the user folds it again; that is this test's, so the saved setting
+   * is not touched by it.
    */
   readonly leftCollapsed = computed(() => this.panelHide.left() && this.findTab() === 'autopilot');
   private readonly verdictShown = computed(() => this.findTab() === 'autopilot' && this.lineTest.phase() === 'done');
@@ -358,7 +358,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     // The centre panel lives on the Review tab only (#4524), so every switch
     // to Review makes a new one, and each needs its `init`: its settings, the
     // shortcuts, its keyboard subscription. Only the one the view opened with
-    // used to get it, and Test opens on Autopilot, where there is none
+    // used to get it, and Tune opens on Autopilot, where there is none
     // (#4555). A tick later, as the view-init call this replaces did, and only
     // if a switch back has not torn it down by then.
     effect(() => {
@@ -381,19 +381,29 @@ export class FindViewComponent implements OnInit, OnDestroy {
       if (this.lineTest.phase() !== 'done') this.verdictFolded.set(false);
     });
 
-    // Warm the images the boundary walk will show next while the reviewer is
-    // looking at this one (#3896) — the same fix as the Train view's, for the
-    // same shape: {@link advanceToBoundary} runs only once the vote POST is
-    // back, so without this the next image's fetch starts with somebody
-    // waiting on it.
+    // Warm the images the next votes will show while the user is looking at
+    // this one (#3896) — the same fix as the Train view's — on whichever tab
+    // is up, since each votes through its own queue.
     //
-    // Tracks the ranking, the cutoff and the verified set as well as the
-    // selection, so a re-score, a balance change or a vote reconciling with
-    // the same item on screen retargets the warm instead of leaving it on a
-    // stale prediction. `nextFindSide` is a plain field; it only ever changes
-    // in the same step that changes the selection, so reading it here is
-    // enough.
+    // On Autopilot that is the test's round (#5099): the stage shows the
+    // picks one at a time, and without this every pick waited on a fresh
+    // download. Tracks the round, its votes and the pick on screen.
+    //
+    // On Review it is the boundary walk: {@link advanceToBoundary} runs only
+    // once the vote POST is back, so without this the next image's fetch
+    // starts with somebody waiting on it. Tracks the ranking, the cutoff and
+    // the verified set as well as the selection, so a re-score, a balance
+    // change or a vote reconciling with the same item on screen retargets the
+    // warm instead of leaving it on a stale prediction. `nextFindSide` is a
+    // plain field; it only ever changes in the same step that changes the
+    // selection, so reading it here is enough.
     effect(() => {
+      if (this.findTab() === 'autopilot') {
+        const id = this.lineTest.currentId();
+        const upcoming = this.lineTest.upcoming(PREFETCH_DEPTH);
+        untracked(() => this.warmUpcomingImages(id, upcoming));
+        return;
+      }
       const id = this.mediaState.selectedId();
       const upcoming = peekBoundaryQueue(
         this.sortState.sortOrder,
@@ -403,14 +413,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
         id,
         PREFETCH_DEPTH,
       );
-      untracked(() =>
-        this.mediaPrefetch.prefetch(
-          imageUrlsWhileImages(upcoming, (m) => this.mediaState.getMedia(m)?.media_type, (path) =>
-            this.activeContext.mediaUrl(path),
-          ),
-          id === null ? [] : [this.activeContext.mediaUrl(`/api/medias/${id}/image`)],
-        ),
-      );
+      untracked(() => this.warmUpcomingImages(id, upcoming));
     });
     this.destroyRef.onDestroy(() => this.mediaPrefetch.clear());
   }
@@ -440,10 +443,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
       this.lineTest.load();
     }
     this.mediaState.loadMedias();
+    // Read once here, and polled while the Review tab shows them (see
+    // `syncPiles`). The view's, not the right panel's: that one unmounts
+    // while it is folded (#4673). Stopped in `ngOnDestroy`.
     this.voteState.loadVotes();
-    // Stopped in `ngOnDestroy`. The view's, not the right panel's: that one
-    // unmounts while it is folded (#4673).
-    this.voteState.startPolling();
+    this.syncPiles();
     // The left work queue (ranking minus verified items) is the
     // `unverifiedSortOrder` computed, which tracks sortOrder + verifiedIds.
     this.loadSettings();
@@ -465,7 +469,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
     }
 
     // Reload + rescore when the active pair changes via the top-bar
-    // switcher or a route-param swap (`/test/:ds/:det` → `/test/:ds2/:det2`).
+    // switcher or a route-param swap (`/tune/:ds/:det` → `/tune/:ds2/:det2`).
     // Skip the first emission (ngOnInit already triggered the initial
     // loads + runFindLabel call above).
     let firstPair = true;
@@ -579,7 +583,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
           this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
-          // Score is done: the Test autopilot takes over on its tab. The pass
+          // Score is done: the Tune autopilot takes over on its tab. The pass
           // is no longer busy, but `finalize` only says so after this handler
           // returns, and the start refuses a busy pass, so say it here first
           // (#4555).
@@ -808,8 +812,10 @@ export class FindViewComponent implements OnInit, OnDestroy {
     const verified =
       this.voteState.goodVotes.has(event.id) || this.voteState.badVotes.has(event.id);
     this.voteState.setOptimisticVerified(event.id, verified);
-    // Re-fetch labelset counters + the authoritative verified set.
-    this.voteState.loadVotes();
+    // No re-read of the piles here (#5099): the vote POST's reply has already
+    // set the item's polarity, the line above moves it, and the poll brings
+    // the rest. In Find that read carries every item's presumed label, which
+    // on a large dataset held up the next image.
     // Auto-advance to the next item on the boundary walk, so "just sit and
     // vote" samples both faces of the cutoff instead of only the positives.
     this.advanceToBoundary();
@@ -900,12 +906,42 @@ export class FindViewComponent implements OnInit, OnDestroy {
     return !order.some((item) => !verified.has(item.id));
   });
 
-  // --- The Test autopilot (#4524) ---
+  // --- The Tune autopilot (#4524) ---
 
   /** The user picked a Find tab. Entering Autopilot with no test yet starts one, once the pass has landed. */
   onFindTabChange(tab: 'autopilot' | 'review'): void {
     this.findTab.set(tab);
+    this.syncPiles();
     this.startTestIfDue();
+  }
+
+  /**
+   * Poll the vote piles (`/api/votes`) while the Review tab is up, reading
+   * them afresh as it opens, and stop while it is not (#5099). Only Review
+   * shows them, and in Find the read carries every item's presumed label:
+   * megabytes on a large dataset, which every test vote used to fetch twice
+   * over (its own re-read, and the poll it kept fast), each time racing the
+   * next pick's image. The one-off reads (the view opening, a scoring pass, a
+   * balance change, a pair switch) stay on both tabs: the boundary walk seeds
+   * off the verified set.
+   */
+  private syncPiles(): void {
+    if (this.findTab() === 'review') {
+      this.voteState.loadVotes();
+      this.voteState.startPolling();
+    } else {
+      this.voteState.stopPolling();
+    }
+  }
+
+  /** Warm the images of the *upcoming* items, keeping *currentId*'s; image media only (see `imageUrlsWhileImages`). */
+  private warmUpcomingImages(currentId: number | null, upcoming: number[]): void {
+    this.mediaPrefetch.prefetch(
+      imageUrlsWhileImages(upcoming, (id) => this.mediaState.getMedia(id)?.media_type, (path) =>
+        this.activeContext.mediaUrl(path),
+      ),
+      currentId === null ? [] : [this.activeContext.mediaUrl(`/api/medias/${currentId}/image`)],
+    );
   }
 
   /** Start the test of the line when the Autopilot tab is up, the pass has landed, and no test exists. */
