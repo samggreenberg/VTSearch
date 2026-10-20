@@ -800,11 +800,11 @@ The phase panel labels them, in order:
    green. The third ends every session that has not got there by 200
    votes: past that, sessions that are still going gain little, from
    little, and the panel says so ("as many as Autopilot asks for"). The check is
-   a few items drawn at
-   random from bands of the list, shown in the centre one at a time for
-   your Good or Bad (see [How close the line got](#how-close-the-line-got)).
-   It measures how much of what the detector returns is right, and its
-   answers train the detector like any others. It runs once a session;
+   a few items drawn at random from bands of the list, and they are simply
+   your next items: you vote on them as on any others, and nothing else on
+   screen changes (see [How close the line got](#how-close-the-line-got)).
+   It measures how much of what the detector returns is right, and your
+   votes train the detector like any others. It runs once a session;
    while your Good and Bad labels still overlap, Autopilot also runs one
    earlier (once a session), and the panel goes back to the phase it
    interrupted afterwards.
@@ -903,12 +903,11 @@ kept besides the items you voted on).
 just before it says **Done!** (see [The phases](#the-phases)). There is no
 button for it; only Autopilot starts a check. VTSearch cuts the list you
 haven't voted on into bands from the top (the top 8, the next 8, then 16, 32,
-64, and so on), draws 5 items at random from a band, and shows them one at a
-time in the centre, where the item usually is. Vote each one Good or Bad with
-the usual keys: → for Good, ← for Bad, and ↓ to go back and change one. The
-last vote of a round sends it, and the check moves to the next band. **Stop
-check** ends it early, and Autopilot carries on; **Continue** ends a finished
-one. If a check ended in your last 25
+64, and so on), draws 5 items at random from a band, and makes them your next
+items. Nothing on screen says so, and there is nothing to do differently: vote
+on them as on any others, with the usual keys, and ↓ to go back and change
+one. Once all 5 have a vote, the check moves to the next band. Stopping
+Autopilot ends it early. If a check ended in your last 25
 answers, Autopilot skips this one: that check has just measured the line. It
 also runs none when you come back to a detector that had already reached
 **Done!** when Autopilot started: the session that finished it had its check.
@@ -926,11 +925,6 @@ check could help. Measured on COCO, sessions whose labels overlap returned
 far fewer wrong pictures and found more right ones for the same number of
 clicks.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
-  <img src="assets/floor-check.light.webp" alt="Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
-</picture>
-
 The picks come in the order they were drawn, which is random, with no rank
 and no score. They are a sample from the band, not the top of the list. A
 round is 5 picks from one band, whatever the radio.
@@ -941,23 +935,17 @@ round each. Once those are in, it weighs the
 picks by the size of their bands to estimate how many of the set are right,
 reads that against the detector's own count of how many matches the whole
 list holds to estimate how many it found, and scores the set on the balance
-your radio asks for. While a longer list scores better, the check says
-**Better so far: checking the next 32** and draws from the next band down;
-the first time a longer list scores worse it says **Past the peak: checking
-a shorter list** and steps back without drawing again. It ends on the set
+your radio asks for. While a longer list scores better, the check draws from
+the next band down; the first time a longer list scores worse it steps back
+without drawing again. It ends on the set
 where the balance peaked, or at either end of the list: on a long list of
 good matches that can be hundreds, on a short or sparse one as few as 8.
 **The check does not move the line**: it measures, and your picks become
 votes that the next retrain learns from like any other, but the line stays
 where your labels put it. What it reports is about the items the line kept,
 as they stood when the check started: of those, it counts the picks that
-fell among them. The check's last screen says what it found - **Checked the
-36 kept you hadn't voted on: likely 55–80% right, about half of them found
-(checked 12).** and **The line keeps the top 30 you haven't voted on, where
-your labels put it: the check informs the line and does not move it. The
-ranges are what the picks say about the 36 it kept when the check started;
-the Goods you had already voted on count in neither.** - and the note under
-the Threshold then shows the same result:
+fell among them. When it ends, Autopilot carries on, and the note under the
+Threshold, on the **Manual** tab, shows what it found:
 
 - **Checked the 36 kept you hadn't voted on · likely 55–80% right, about half
   of them found (checked 12) · 30 more kept** - when the check started the
@@ -1000,8 +988,8 @@ changed since the last one; any vote does that. A check belongs to the radio
 it was run on: move to another radio and the line is unchecked there until a
 check runs on it; move back and the earlier check shows again.
 
-**Stop check** leaves the Threshold as it was. The rounds you finished stay as
-votes.
+Stopping Autopilot during a check leaves the Threshold as it was. Every
+answer you gave the check stays a vote.
 
 Everything that uses the matches works on the line in every state: the
 *Unverified Good* count, Tune's review walk, **To Dataset**, **Export**

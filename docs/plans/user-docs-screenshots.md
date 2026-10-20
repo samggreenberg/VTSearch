@@ -240,8 +240,9 @@ the app with `VTSEARCH_PROJECTION_SEED` for the same map every run, and
 `ensure-fixtures.mjs` lays out the `drawings` map before any shot, since the
 first fit outlasts a recipe's wait on a small CPU box; the Browse recipes find
 a tile by hovering out from the middle rather than clicking a fixed point
-(#4296). The spot check draws its picks at random, so `refresh.sh` also sets
-`VTSEARCH_SPOT_CHECK_SEED` for the same `floor-check` pick every run (#4330).
+(#4296). Tune's test and the spot check draw their picks at random, so
+`refresh.sh` also sets `VTSEARCH_SPOT_CHECK_SEED` for the same picks every run
+(#4330).
 Every page asks for reduced motion, but the app's Show Animations setting
 outranks the browser for the motion it drives from JS (smooth scrolls, the vote
 swipe, Browse's zoom tweens), and its default, Show, forces that motion on; so
