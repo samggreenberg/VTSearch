@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
+  is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
+  the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your
+  votes, at your balance, stop rising, and its progress chart plots that F-beta. Measured on 2,160 sessions, the two
+  lights go green at the same clicks, and sessions end with the same F-beta; the change is so that every light speaks
+  the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
+  the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
+
 - **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
   coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
   detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and

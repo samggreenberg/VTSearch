@@ -12,13 +12,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
-- **Smart has candidates in the objective's units, as an eval arm** (issue #5134). `vtscore.detectors.cost_trend`
-  gains `rising_status_from_scores` (the trend-and-scatter test with its sign turned over, `SMART_RISE_THRESHOLD`) and
-  the window scorers `average_precision`, `fbeta_at_cut` and `best_fbeta`. `AutopilotFlow` takes `smart_signal`
-  (`SMART_SIGNALS`: `cost`, the app, or `ap`, `fbeta`, `fbeta_best`, `heldout_ap`, `heldout_fbeta`, `line`) and
-  `record_step(windows=, history=)`; `simulate_voting_iterations` takes `smart_signal` and `smart_readings`, and every
-  row gains `smart_<reading>_{slope,mean,t,last}` (`SMART_READING_COLUMNS`, NaN unless read). The app's light is
-  unchanged. Additive.
+- **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
+  cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
+  balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
+  sign turned over, `SMART_RISE_THRESHOLD`), `best_fbeta`, `smart_beta`, `SMART_NO_BALANCE_BETA`. Each point was the
+  detector's FPR + FNR at its own Inclusion 0 cut, green once it stopped falling; the A/B found the two a tie
+  (`docs/experiments/2026-10-20-smart-fbeta-5134`). **Breaking:** `labeling_progress.calculate_error_cost_over_time`
+  is replaced by `calculate_fbeta_over_time(..., beta=None)`, whose points are `{time_index, num_labels, fbeta}`;
+  `analyze_labeling_progress` returns `fbeta_over_time` in place of `error_cost_over_time`; `compute_labeling_status`,
+  `cached_indicator_history` and `analyze_labeling_progress` take `beta=`. `inject_live_model(smart_threshold=)` is
+  deprecated and ignored, and the cache keeps no Smart cut. `smart_status_from_costs`, `smart_cut` and
+  `SMART_INCLUSION` stay for the eval's `cost` arm.
+- **The eval harness has Smart's readings as arms** (issue #5134). `AutopilotFlow(smart_signal=, record_readings=)`
+  (`SMART_SIGNALS`, `APP_SMART_SIGNAL` = `fbeta_best`, the app; `cost`, the app before; `ap`, `fbeta`, `heldout_ap`,
+  `heldout_fbeta`, `line`) and `record_step(windows=, history=)`; `simulate_voting_iterations(smart_signal=,
+  smart_readings=)`; `step_trainers._labelset_window_readings` scores Smart's window. Every row gains
+  `smart_<reading>_{slope,mean,t,last}` (`SMART_READING_COLUMNS`), NaN unless `smart_readings`. The default arm's
+  Smart is the app's F-beta light.
 - **A learned sort leaves the Evidence verdict's training baseline to be drawn once the votes stop** (issue #5120).
   The baseline was drawn only by the evidence route on the training dataset, after a Find there.
   `vtscore.detectors.evidence_baseline` now holds the draw both share (`scored_queries`, `labelset_evidence`,
