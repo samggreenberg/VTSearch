@@ -1132,6 +1132,24 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await flushInit(ranking.map(({ id }) => id));
       expect(start).toHaveBeenCalledTimes(1);
     });
+
+    // A view left within that tick used to start its last panel anyway: the
+    // shortcuts listened on with no panel to stop them, and every later
+    // spec in the worker met a stray ArrowRight handler that blurred focus.
+    it('starts no centre panel once the view is gone', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      start.mockClear();
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      fixture.destroy();
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(start).not.toHaveBeenCalled();
+    });
   });
 });
 
