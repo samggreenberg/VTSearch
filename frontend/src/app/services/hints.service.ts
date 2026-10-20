@@ -34,9 +34,6 @@ export const HINT_IDS = [
   'keep-voting',
   'resort-prompt',
   'autopilot-done',
-  'autopilot-done-level',
-  'autopilot-done-cap',
-  'autopilot-ran-dry',
   'all-labeled',
   // Tune view.
   'test-vote',

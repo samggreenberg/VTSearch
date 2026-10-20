@@ -25,38 +25,34 @@
 @switch (hint()) {
   @case ('start-voting') {
     <vt-toasty-hint hintId="start-voting" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot picked this item for you. Click <strong>Good</strong>, or press the right arrow key, if
-      it's what you're looking for. Click <strong>Bad</strong>, or press the left arrow key, if not.
+      Autopilot picked this for you. Click <strong>Good</strong> if it's what you're looking for, or
+      <strong>Bad</strong> if not.
     </vt-toasty-hint>
   }
   @case ('revote') {
     <vt-toasty-hint hintId="revote" [anchor]="voteButtons" side="above" reach="right">
-      You already labeled this item <strong>{{ revoteLabel() }}</strong>. Click
-      <strong>{{ revoteOther() }}</strong>, or press the {{ revoteKey() }} arrow key, to change it. Click
-      Autopilot's current step on the left, or press the up arrow key, to go back to its pick.
+      You already labeled this <strong>{{ revoteLabel() }}</strong>. Click <strong>{{ revoteOther() }}</strong>
+      to change it, or click Autopilot's step on the left to carry on.
     </vt-toasty-hint>
   }
   @case ('find-goods') {
     <vt-toasty-hint hintId="find-goods" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot needs {{ goodsNeededPhrase() }} to start training. You've found {{ hintCounts().goods }}.
-      Keep voting.
+      Autopilot is looking for Goods now. Keep clicking.
     </vt-toasty-hint>
   }
   @case ('find-bads') {
     <vt-toasty-hint hintId="find-bads" [anchor]="voteButtons" side="above" reach="right">
-      Your Goods are in. Autopilot needs {{ badsNeededPhrase() }} too, and has {{ hintCounts().bads }}.
-      Keep voting.
+      Autopilot is looking for Bads now. Keep clicking.
     </vt-toasty-hint>
   }
   @case ('find-more') {
     <vt-toasty-hint hintId="find-more" [anchor]="voteButtons" side="above" reach="right">
-      Autopilot has its first Goods and Bads, and is walking the sort for more Goods. Keep voting.
+      Autopilot is looking for more Goods now. Keep clicking.
     </vt-toasty-hint>
   }
   @case ('keep-voting') {
     <vt-toasty-hint hintId="keep-voting" [anchor]="voteButtons" side="above" reach="right">
-      Your detector now retrains on every vote. Keep voting until the lights on the left are all
-      green.
+      Autopilot is sharpening your detector now. Keep clicking.
     </vt-toasty-hint>
   }
   @case ('test-vote') {
