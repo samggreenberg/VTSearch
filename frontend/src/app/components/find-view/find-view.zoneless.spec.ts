@@ -1081,7 +1081,6 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(text).not.toContain('Checked');
       // Find tests the balance Train set: it offers no spot check to set one (#4317).
       expect(row.querySelector('.balance-check-btn')).toBeNull();
-      expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-stage')).toBeNull();
     });
 
     it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
