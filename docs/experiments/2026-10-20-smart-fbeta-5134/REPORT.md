@@ -183,6 +183,38 @@ until the first click their lights differ, around click 25 to 30 where the first
   stay as arms and as `smart_readings` columns.
 - **The deck:** the Diminishing Returns slide (`autopilot-smart-trend`, its own slide since #5132) plots F-beta rising, then flat.
 
+## Where the stop fires now: the deck's Past the Exit (#5141)
+
+The deck's Past the Exit slide draws where Done fires in today's app and what clicking on buys. It read the
+2026-10-16 Binary Photo review, which ran the app before Smart's switch. Since #5141 it reads the shipped arm,
+`fbeta_best` (today's app with Smart on F-beta, dev 17600e2b7), read at the review's budget of 150 clicks:
+`read_at_budget.py` drops every row, pick and rank frame after click 150, then `analyze.py`, `by_click.py` and
+`stops_by_preset.py` run as on a review. The tables are in [`stop/`](stop/). They come from 5 seeds (720 sessions a
+radio), where the review had 45.
+
+| radio | fired | stop, KM median click | gain clicking on to 150, mean ± SE | ended ≥ 0.02 better / worse |
+|---|---|---|---|---|
+| β ¼ | 89% | 54 | +0.061 ± 0.007 | 49% / 16% |
+| β 1 | 87% | 59 | +0.045 ± 0.004 | 56% / 7% |
+| β 4 | 84% | 64 | +0.054 ± 0.005 | 58% / 7% |
+
+For context only, the 2026-10-16 review read 90% / 90% / 90%, at clicks 55 / 58 / 64, gaining +0.070 / +0.072 /
++0.068. Between the two the app took more than Smart's switch (#5039, #5040 and others), so the difference is not
+Smart's alone.
+
+```bash
+S=/expscratch/$USER/state-of-the-app P=scripts/experiments/state_of_app
+for b in 025 1 4; do
+  python $P/read_at_budget.py --src $S/2026-10-20-smart5134-fbeta_best-b$b/results --dst <out>/b$b/results --budget 150
+  python $P/analyze.py --exp <out>/b$b --baseline $S/2026-10-08-b1/text_baseline.csv --out <out>/b$b/analysis-binary --path binary
+done
+python $P/by_click.py --run 0.25=<out>/b025/analysis-binary --run 1=<out>/b1/analysis-binary \
+  --run 4=<out>/b4/analysis-binary --baseline $S/2026-10-08-b1/text_baseline.csv --embedder siglip \
+  --out <report>/stop/objective_by_click.csv
+python $P/stops_by_preset.py --run 0.25=<out>/b025/analysis-binary --run 1=<out>/b1/analysis-binary \
+  --run 4=<out>/b4/analysis-binary --out <report>/stop/stopping_by_preset.csv
+```
+
 ## What this leaves
 
 - **Smart says "you can likely stop" about as soon as it can say anything, in either unit.** At a median click 13,

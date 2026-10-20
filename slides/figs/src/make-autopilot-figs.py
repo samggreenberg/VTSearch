@@ -30,10 +30,13 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
 fired in today's app, at each radio's beta, and what clicking on bought. It is
-re-plotted from the 2026-10-16 Binary Photo review's committed tables
-(`docs/experiments/2026-10-16-state-of-the-app-binary-photo/`:
-`stopping_by_preset.csv` and `objective_by_click.csv`). `EXPECT` pins the numbers the
-notes quote.
+re-plotted from committed tables in the State of the App review's shape
+(`stopping_by_preset.csv` and `objective_by_click.csv`, written by
+`stops_by_preset.py` and `by_click.py`). Since #5141 they are #5134's shipped
+arm, Smart on F-beta, read at the review's 150-click budget
+(`docs/experiments/2026-10-20-smart-fbeta-5134/stop/`); the 2026-10-16 Binary
+Photo review measured the app before Smart's switch. `EXPECT` pins the numbers
+the notes quote.
 
 Every canvas is the whole 1280x720 slide at 100 px to the inch, saved at its
 declared bounds, so every stage of a build shares one framing by construction
@@ -84,8 +87,9 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
 )
 
 OUT = Path(__file__).resolve().parent.parent
-#: The State of the App review the measured slide reads: Binary Photo on COCO Better, one session set per radio.
-REPORT_SOTA = _REPO_ROOT / "docs" / "experiments" / "2026-10-16-state-of-the-app-binary-photo"
+#: The tables the measured slide reads: Binary Photo on COCO Better, one session set per radio, in the review's shape.
+#: #5134's shipped arm (Smart on F-beta) read at click 150 (#5141), until the next State of the App review.
+REPORT_STOP = _REPO_ROOT / "docs" / "experiments" / "2026-10-20-smart-fbeta-5134" / "stop"
 
 # The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): blue is the
 # line, red the losing arm and a Bad, green a Good. The lights borrow red and
@@ -1016,15 +1020,15 @@ STOP_BUDGET = 150
 #: committed table says anything else, so a new State of the App review is a re-run of this script and then
 #: a look at the notes.
 EXPECT = {
-    0.25: (0.90, 55, 0.070, 0.006, 0.18, 0.54),
-    1.0: (0.90, 58, 0.072, 0.006, 0.11, 0.63),
-    4.0: (0.90, 64, 0.068, 0.005, 0.08, 0.62),
+    0.25: (0.89, 54, 0.061, 0.007, 0.16, 0.49),
+    1.0: (0.87, 59, 0.045, 0.004, 0.07, 0.56),
+    4.0: (0.84, 64, 0.054, 0.005, 0.07, 0.58),
 }
 
 
 def _stop_rows() -> dict[float, dict[str, str]]:
     """The review's stopping table over every session, per radio (`stops_by_preset.py`)."""
-    path = REPORT_SOTA / "stopping_by_preset.csv"
+    path = REPORT_STOP / "stopping_by_preset.csv"
     if not path.exists():
         raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's stopping table")
     with path.open() as handle:
@@ -1033,7 +1037,7 @@ def _stop_rows() -> dict[float, dict[str, str]]:
 
 def _stop_curves() -> dict[float, tuple[np.ndarray, np.ndarray]]:
     """The objective a user has in hand at every click, mean over every session, per radio (`by_click.py`)."""
-    path = REPORT_SOTA / "objective_by_click.csv"
+    path = REPORT_STOP / "objective_by_click.csv"
     if not path.exists():
         raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's per-click objective")
     curves: dict[float, list[tuple[float, float]]] = {}
