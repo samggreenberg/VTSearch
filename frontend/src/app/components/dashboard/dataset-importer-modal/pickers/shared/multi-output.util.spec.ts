@@ -1,8 +1,11 @@
 import { ConverterInfo, DetectMediaTypeResponse, MediaTypeInfo } from '../../../../../models/api.models';
 import {
   buildOutputDrafts,
+  convertInOptionLabels,
   detectedCount,
+  draftsForConvertIn,
   draftToOutputRequest,
+  isConvertInType,
   isMultiOutputImporter,
   multiOutputCategories,
   outputsFromDrafts,
@@ -104,6 +107,31 @@ describe('multi-output.util', () => {
     expect(detectedCount(detection, 'document')).toBe(2);
     expect(detectedCount(detection, 'face')).toBe(0);
     expect(detectedCount(null, 'image')).toBe(0);
+  });
+
+  describe('convert-in types in the single-dataset dropdown', () => {
+    it('isConvertInType is true only for an embeddable type with no files of its own', () => {
+      expect(isConvertInType(mediaTypes, 'face')).toBe(true);
+      expect(isConvertInType(mediaTypes, 'hologram')).toBe(true);
+      expect(isConvertInType(mediaTypes, 'image')).toBe(false);
+      expect(isConvertInType(mediaTypes, 'document')).toBe(false);
+      expect(isConvertInType(mediaTypes, 'nope')).toBe(false);
+    });
+
+    it('labels each convert-in option with what it is cut from', () => {
+      expect(convertInOptionLabels(mediaTypes, convertersByType)).toEqual({ face: 'Face (from Image)' });
+    });
+
+    it('draftsForConvertIn seeds fresh rows and ticks the type and its sources only', () => {
+      const drafts = draftsForConvertIn([], mediaTypes, convertersByType, 'face');
+      expect(drafts.filter((d) => d.checked).map((d) => d.category)).toEqual(['face', 'image']);
+    });
+
+    it('draftsForConvertIn keeps what the editor already had ticked', () => {
+      const existing = tickCategory(buildOutputDrafts(mediaTypes, convertersByType), 'audio');
+      const drafts = draftsForConvertIn(existing, mediaTypes, convertersByType, 'face');
+      expect(drafts.filter((d) => d.checked).map((d) => d.category)).toEqual(['audio', 'face', 'image']);
+    });
   });
 
   describe('draftToOutputRequest', () => {

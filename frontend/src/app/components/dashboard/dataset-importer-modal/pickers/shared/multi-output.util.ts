@@ -172,6 +172,48 @@ export function tickCategory(drafts: OutputDraft[], category: string): OutputDra
   return drafts.map((d) => (d.category === category ? { ...d, checked: true } : d));
 }
 
+/** Whether *typeId* is a convert-in type (face): embeddable, but with no
+ *  files of its own.  The importers' media-type dropdown lists it like any
+ *  other type, but a single-dataset import of it reads nothing ("Import
+ *  produced no medias"), so the pickers make it in Multi-Dataset mode,
+ *  beside the dataset it is cut from ({@link draftsForConvertIn}). */
+export function isConvertInType(mediaTypes: MediaTypeInfo[], typeId: string): boolean {
+  const mt = mediaTypes.find((m) => m.type_id === typeId);
+  return !!mt && mt.importable === false && mt.embeddable !== false;
+}
+
+/** Dropdown labels for the convert-in options, naming what each is cut from:
+ *  ``"Face (from Image)"``. */
+export function convertInOptionLabels(
+  mediaTypes: MediaTypeInfo[],
+  convertersByType: Record<string, ConverterInfo[]>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const mt of mediaTypes) {
+    if (mt.importable !== false) continue;
+    const sources = [...new Set(convertersInto(convertersByType, mt.type_id).map((c) => c.source_type))];
+    if (!sources.length) continue;
+    const from = sources.map((s) => mediaTypes.find((m) => m.type_id === s)?.name.trim() || s).join(', ');
+    out[mt.folder_import_name || mt.type_id] = `${mt.name.trim()} (from ${from})`;
+  }
+  return out;
+}
+
+/** The drafts after picking convert-in *category* in the dropdown: *existing*
+ *  (or fresh, unticked rows when the editor has none yet) with the category
+ *  ticked, and every category its converters read from, so picking Face
+ *  makes the Face dataset and the Image one its faces are shown in. */
+export function draftsForConvertIn(
+  existing: OutputDraft[],
+  mediaTypes: MediaTypeInfo[],
+  convertersByType: Record<string, ConverterInfo[]>,
+  category: string,
+): OutputDraft[] {
+  const drafts = existing.length ? existing : buildOutputDrafts(mediaTypes, convertersByType);
+  const sources = new Set(convertersInto(convertersByType, category).map((c) => c.source_type));
+  return drafts.map((d) => (d.category === category || sources.has(d.category) ? { ...d, checked: true } : d));
+}
+
 /** The request entry for one ticked draft. */
 export function draftToOutputRequest(draft: OutputDraft): OutputRequest {
   const out: OutputRequest = {

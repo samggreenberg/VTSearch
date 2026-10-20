@@ -536,7 +536,8 @@ AutoFind run.
 - Rows are pre-ticked from what the folder scan finds; tick or untick as you
   like. **Document** makes an image dataset of the rendered pages (or, under
   its **Details ▾**, extracted text); **Face** makes a dataset of the faces
-  cropped out of the images, so it has no files of its own to find.
+  cropped out of the images, so it has no files of its own to find and the
+  scan never ticks it (see [Faces](#faces-find-a-person-in-a-folder-of-photos)).
 - Each ticked row's **Details ▾** opens that dataset's own Advanced settings
   (*Include media*, embedders, clipper, cleanup), in place of the dialog's
   single **Advanced ▾** toggle. *Build Browse map now* and *Merge
@@ -548,6 +549,32 @@ AutoFind run.
 Cancelling one row while the folder is still being read stops that dataset
 alone; the others carry on. The **Downloaded Media** importer has no
 Multi-Dataset box: a demo is one dataset of one kind.
+
+### Faces: find a person in a folder of photos
+
+VTSearch can search the faces in your photos rather than the photos
+themselves: it finds each face, cuts it out, and compares faces by who they
+are rather than by how the picture looks.
+
+1. Click **+** on the **Datasets** card, then **Files** and **Folder**, and
+   pick the folder of photos.
+2. In **Dataset media type**, pick **Face (from Image)**. The dialog switches
+   to **Multi-Dataset** with two rows ticked: **Face**, the faces cut out of
+   the photos, and **Image**, the photos themselves. Keep both: the Image
+   dataset is what **Show in photo** and **Show: Faces | Photos**, below,
+   open.
+3. To change how faces are found, open the Face row's **Details ▾**, then
+   **Details ▸** beside **Image**: the minimum detection confidence, the
+   padding around each face, the smallest face kept, whether faces are turned
+   upright first, and whether faces lying on their side are looked for.
+4. Click **Import**. Two datasets load side by side, `photos – Face` and
+   `photos – Image`.
+
+Then make a detector on the Face dataset and train it as usual. Every vote
+goes on a face, never a photo. Untick **Multi-Dataset** to go back to a single
+dataset of another kind. If the Face dataset fails with *Import produced no
+medias* when the photos do have faces in them, the server is missing the face
+model (`facenet-pytorch`; see [Setup](../SETUP.md)).
 
 **Show in photo.** When an import made both a Face and an Image dataset, a
 face in Train or Tune is one click from the photo it was cut out of. Click

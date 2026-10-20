@@ -292,5 +292,63 @@ describe('ServerFolderPickerComponent', () => {
       expect(component.multiDataset()).toBe(false);
       expect(component.outputDrafts()).toEqual([]);
     });
+
+    describe('Face in the dropdown', () => {
+      beforeEach(() => {
+        fixture.componentRef.setInput('importers', [
+          {
+            ...serverFolderImporter,
+            // Every registered type, as the backend lists them.
+            fields: [{ key: 'media_type', field_type: 'select', default: 'audio', options: ['audio', 'face', 'image'] }],
+            available_converters_by_media_type: {
+              ...serverFolderImporter.available_converters_by_media_type,
+              face: [{ name: 'image2face', source_type: 'image', target_type: 'face', fields: [] }],
+            },
+          },
+        ]);
+        fixture.componentRef.setInput('mediaTypes', [
+          { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
+          { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
+          { type_id: 'face', name: 'Face', folder_import_name: 'face', importable: false } as any,
+        ]);
+      });
+
+      it('names Face in the dropdown for what it is cut from', () => {
+        openAndFlush();
+        expect(component.mediaTypeOptionLabels['face']).toBe('Face (from Image)');
+        expect(component.mediaTypeOptionLabels['image']).toBe('Image');
+      });
+
+      it('picking Face switches to Multi-Dataset with Face and Image ticked, and submits both', async () => {
+        openAndFlush();
+        component.folderPath.set('/data/photos');
+        component.onMediaTypeChange('face');
+        await settleZoneless(fixture);
+        flushTypeOptions('image');
+        flushTypeOptions('face');
+
+        expect(component.multiDataset()).toBe(true);
+        // The dropdown keeps its single-dataset pick for the way back.
+        expect(component.mediaType()).toBe('audio');
+        expect(component.outputDrafts().filter((d) => d.checked).map((d) => d.category)).toEqual(['image', 'face']);
+
+        component.submit();
+        const req = httpMock.expectOne('/api/dataset/import/server_folder');
+        const body = req.request.body as Record<string, unknown>;
+        expect(body['media_type']).toBe('image');
+        expect(body['outputs']).toEqual([
+          { media_type: 'image', category: 'image', source_specs: [{ source_type: 'image', converter: null, params: {} }] },
+          { media_type: 'face', category: 'face', source_specs: [{ source_type: 'image', converter: 'image2face', params: {} }] },
+        ]);
+        req.flush({});
+      });
+
+      it('a guessed Face type does not make the single-dataset form a Face one', () => {
+        fixture.componentRef.setInput('guessedMediaType', 'face');
+        openAndFlush();
+        expect(component.mediaType()).toBe('audio');
+        expect(component.multiDataset()).toBe(false);
+      });
+    });
   });
 });

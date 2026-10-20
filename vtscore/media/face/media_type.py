@@ -67,8 +67,10 @@ class FaceMediaType(MediaType):
     @property
     def importable(self) -> bool:
         # A convert-in half type: faces only ever arise from converting an
-        # image (image2face), never from a native import, so this type is
-        # hidden from every import surface.
+        # image (image2face), never from a native import, so no folder scan
+        # finds files of it and no demo offers it.  The importers' media-type
+        # field still lists it; the Add Dataset dialog makes it in
+        # Multi-Dataset mode, beside the images it is cut from.
         return False
 
     # ------------------------------------------------------------------

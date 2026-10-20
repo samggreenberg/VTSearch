@@ -41,7 +41,10 @@ import {
 import {
   OutputDraft,
   buildOutputDrafts,
+  convertInOptionLabels,
   convertersByTypeOf,
+  draftsForConvertIn,
+  isConvertInType,
   isMultiOutputImporter,
   outputsFromDrafts,
   tickCategory,
@@ -172,7 +175,7 @@ export class ServerFolderPickerComponent {
   }
 
   get mediaTypeOptionLabels(): Record<string, string> {
-    return mediaTypeOptionLabels(this.mediaTypes());
+    return { ...mediaTypeOptionLabels(this.mediaTypes()), ...convertInOptionLabels(this.mediaTypes(), this.convertersByType) };
   }
 
   get mediaTypeOptionIcons(): Record<string, string> {
@@ -211,7 +214,9 @@ export class ServerFolderPickerComponent {
     this.mediaTypeOptions = mtField?.options || [];
 
     const guessedFolder = toFolderName(this.mediaTypes(), this.guessedMediaType());
-    if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder)) {
+    // A Face guess is no single-dataset type: Face is only made in
+    // Multi-Dataset mode (see onMediaTypeChange).
+    if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder) && !isConvertInType(this.mediaTypes(), this.guessedMediaType())) {
       this.mediaType.set(guessedFolder);
     } else {
       this.mediaType.set(mtField?.default || this.mediaTypeOptions[0] || 'audio');
@@ -354,6 +359,15 @@ export class ServerFolderPickerComponent {
   }
 
   onMediaTypeChange(mediaType: string): void {
+    const typeId = toTypeId(this.mediaTypes(), mediaType);
+    if (this.supportsMultiOutput && isConvertInType(this.mediaTypes(), typeId)) {
+      // A Face dataset has no files of its own: it is made in Multi-Dataset
+      // mode, beside the dataset it is cut from, and the dropdown keeps the
+      // type it had for when the user goes back to a single dataset.
+      this.outputDrafts.set(draftsForConvertIn(this.outputDrafts(), this.mediaTypes(), this.convertersByType, typeId));
+      this.setMultiDataset(true);
+      return;
+    }
     this.mediaType.set(mediaType);
     this.loadEmbedders(mediaType);
     this.loadClippers(mediaType);

@@ -27,7 +27,17 @@ import {
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
-import { OutputDraft, buildOutputDrafts, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
+import {
+  OutputDraft,
+  buildOutputDrafts,
+  convertInOptionLabels,
+  convertersByTypeOf,
+  draftsForConvertIn,
+  isConvertInType,
+  isMultiOutputImporter,
+  outputsFromDrafts,
+  tickCategory,
+} from '../shared/multi-output.util';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
 
@@ -192,7 +202,7 @@ export class GenericFormPickerComponent {
   }
 
   get mediaTypeOptionLabels(): Record<string, string> {
-    return mediaTypeOptionLabels(this.mediaTypes());
+    return { ...mediaTypeOptionLabels(this.mediaTypes()), ...convertInOptionLabels(this.mediaTypes(), this.convertersByType) };
   }
 
   get mediaTypeLabels(): Record<string, string> {
@@ -240,7 +250,9 @@ export class GenericFormPickerComponent {
 
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
     const guessedMediaType = this.guessedMediaType();
-    if (mediaTypeField && guessedMediaType) {
+    // A Face guess is no single-dataset type: Face is only made in
+    // Multi-Dataset mode (see onMediaTypeChange).
+    if (mediaTypeField && guessedMediaType && !isConvertInType(this.mediaTypes(), guessedMediaType)) {
       const folderName = toFolderName(this.mediaTypes(), guessedMediaType);
       if (folderName && mediaTypeField.options?.includes(folderName)) {
         this.formValues['media_type'] = folderName;
@@ -278,6 +290,15 @@ export class GenericFormPickerComponent {
   }
 
   onMediaTypeChange(mediaType: string): void {
+    const typeId = toTypeId(this.mediaTypes(), mediaType);
+    if (this.supportsMultiOutput && isConvertInType(this.mediaTypes(), typeId)) {
+      // A Face dataset has no files of its own: it is made in Multi-Dataset
+      // mode, beside the dataset it is cut from, and the dropdown keeps the
+      // type it had for when the user goes back to a single dataset.
+      this.outputDrafts.set(draftsForConvertIn(this.outputDrafts(), this.mediaTypes(), this.convertersByType, typeId));
+      this.setMultiDataset(true);
+      return;
+    }
     this.formValues['media_type'] = mediaType;
     this.loadClippers(mediaType);
     this.loadCleaners(mediaType);

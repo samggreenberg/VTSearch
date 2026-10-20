@@ -1086,6 +1086,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Picking Face in Add Dataset makes a Face dataset that works.** The *Dataset media type* dropdown
+  listed **Face**, but a single-dataset Face import read only face files, which do not exist, and failed
+  with *Import produced no medias* unless you found **Image** under **Advanced › Include media**. The
+  option now reads **Face (from Image)** and switches the dialog to **Multi-Dataset** with **Face** and
+  **Image** ticked: the faces cut out of the photos, and the photos that **Show in photo** opens. The user
+  guide has a new [Faces](docs/user/USER_GUIDE.md#faces-find-a-person-in-a-folder-of-photos) walkthrough.
+
 - **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
   piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on
   a 50,000-item dataset, most of a remote link's bandwidth for as long as you kept voting. They now
