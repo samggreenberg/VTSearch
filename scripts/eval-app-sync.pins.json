@@ -55,7 +55,7 @@
     "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
   },
   "find.evidence_coverage": {
-    "app": "def7f7ccad29af618f9cbc2f2e689db949bbcc3b8bbf75d8fc72ea4b7c402a2b",
+    "app": "6f23b3c170584d57bf6dbd4ba98005b36faf2380611d5968b8e091993c40fdf7",
     "harness": "70d48d5b55d66cd51672b51310ac8c63b1e235bf67f4325cfa56b2f00d3f8b76"
   },
   "find.training_domain": {

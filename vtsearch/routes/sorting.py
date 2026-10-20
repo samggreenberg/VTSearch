@@ -475,6 +475,7 @@ def learned_sort(body: dict):
         get_active_context,
         get_active_detector_context,
     )
+    from vtsearch.routes.detectors.scoring import defer_learned_sort_baseline
 
     wait = body["wait"]
 
@@ -542,6 +543,9 @@ def learned_sort(body: dict):
             calibration_fraction_value=calibration_fraction_value,
             beta_value=beta_value,
         )
+        # On the detector's training dataset, the Evidence verdict's baseline
+        # is drawn from this sort's scores once the votes stop (#5120).
+        defer_learned_sort_baseline(det_ctx, ds_ctx, snap, labelset, results, threshold)
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that

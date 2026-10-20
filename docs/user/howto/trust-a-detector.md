@@ -39,11 +39,11 @@ the result carries:
    does: "**5%** of this dataset sits farther from the detector's examples
    than 95% of **drawings** — as well covered as its training data". About
    5% is what the training data itself reads, so 5% means the detector
-   knows these pictures as well as the ones it learned from. Until you have
-   run **Tune** on the dataset the detector was trained on, there is nothing
-   to measure against: the chip shows the share of the dataset in an
-   evidence vacuum, "no verdict until you run Tune on the dataset the
-   detector was trained on".
+   knows these pictures as well as the ones it learned from. When the
+   detector has no record of its training data to measure against (see
+   below), the chip shows the share of the dataset in an evidence vacuum,
+   "no verdict until you run Tune on the dataset the detector was trained
+   on".
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />
@@ -59,12 +59,15 @@ The two checks answer the same question from different ends:
   ones it was trained on (domain shift).
 - **Evidence coverage** compares the *detector's own examples* with this
   dataset. Its yardstick is how far the training data sat from those
-  examples, which the detector records when you run **Tune** on the
-  dataset it was trained on, so it works afterwards even when you don't
-  have the training data, as with a detector someone sends you. A share
-  well above 5% means many calls are guesses. A new vote changes the
-  examples, so the yardstick is measured again at the next Tune on the
-  training data; until then the chip gives its share without a verdict.
+  examples, which the detector records on the dataset it was trained on:
+  as you train it there, shortly after your last answer, and whenever you
+  run **Tune** there. So it works afterwards even when you don't have the
+  training data, as with a detector someone sends you. A share well above
+  5% means many calls are guesses. Each answer changes the examples, so
+  the yardstick is measured again as the list re-sorts. Until a detector
+  has three Good and four Bad answers, training it records none, since
+  Tune then scores it another way; run **Tune** on the training data for a
+  verdict.
 
 The first check also runs earlier, on its own: the moment you pick a detector
 and a dataset, before you test anything. When its verdict is *likely domain

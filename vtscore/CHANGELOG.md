@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A learned sort leaves the Evidence verdict's training baseline to be drawn once the votes stop** (issue #5120).
+  The baseline was drawn only by the evidence route on the training dataset, after a Find there.
+  `vtscore.detectors.evidence_baseline` now holds the draw both share (`scored_queries`, `labelset_evidence`,
+  `draw_baseline`), and a deferred one: `PendingDraw` carries a sort's labels, scores and line and draws them when the
+  detector has not moved on since, `defer_baseline_draw` draws it on a timer once a detector's sorts have been quiet for
+  `DRAW_QUIET_SECONDS` (a newer one replaces it), `flush_baseline_draw` lands it at once, `discard_baseline_draw` drops
+  it, and a normal exit lands any still waiting. `record_baseline` takes `det_ctx=`, re-pointing that context's cached
+  labelset after the write so it does not read as an outside edit. Additive.
 - **The Evidence coverage verdict ranks against the training haystack, not the votes' own spread** (issue #5089).
   `evidence_coverage_report` drew `unsupported` from the share with support p-value `D < alpha`, `D` ranked against the
   labelset's leave-one-out distances; active learning picks the votes, so on #4739's bench it fired on 81-83% of

@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
+  coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
+  detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
+  taken straight to another dataset showed the vacuum share and "no verdict until you run Tune…". The Train view's
+  re-sort now leaves the yardstick to be recorded once the answers pause, and at once when the chip is read on
+  another dataset or the detector is unloaded. Under the label quota, where Tune scores the Goods' centroid rather
+  than the Train view's head, a Tune is still what records it.
+
 - **Tune no longer pauses between rounds** (issue #5116). The autopilot deals its picks in rounds of
   five, and the next round used to be chosen only once the last pick of a round was voted, so every
   fifth pick waited for the server and then for its image. Now, while you look at a round's last

@@ -1074,7 +1074,7 @@ MIRRORS: list[Mirror] = [
             "scored media (FindCorpus.matrix), and each predicted positive where its Find score clears the "
             "Find threshold (the caller, _find_corpus_columns, passes score >= the line's cut on that "
             "corpus). The verdict's training baseline (#5089) is reference_cutoffs on both sides: the app "
-            "draws it (_evidence_baseline) on the training dataset's scored media less its labelled ones, "
+            "draws it (evidence_baseline.draw_baseline) on the training dataset's scored media less its labelled ones, "
             "each called at that Find's threshold; the harness (pool_baseline) on the sim pool's unvoted "
             "media (FindCorpus.pool_matrix), found as a Find there draws it. The route reports nothing with "
             "no labelled rows or no scored media; so does evidence_flags. If the route changes which rows it "
@@ -1085,9 +1085,11 @@ MIRRORS: list[Mirror] = [
             "the harness reads the same media's vectors straight off the run's medias, and a Good's is the "
             "row its trainers fit (the ground-truth box pooled under region voting), which is what the app's "
             "region vote stores. The app's baseline off the training dataset is the one recorded on the "
-            "detector at its last test there, refused once a vote restamps it (no verdict until the next); "
-            "the harness draws it fresh at every snapshot click, so it models a user who tested on the "
-            "training dataset at the click's votes, the case the verdict is priced on."
+            "detector at its last test there, or drawn from its last learned sort there once the votes "
+            "stop (#5120: the same draw_baseline, at the sort's head and line, which a Find there reuses "
+            "above the label quota and nowhere else, so the sort leaves none below it); a vote restamps it "
+            "(no verdict until the next). The harness draws it fresh at every snapshot click, so it models "
+            "a user whose detector carries a baseline at the click's votes, the case the verdict is priced on."
         ),
     ),
 ]
