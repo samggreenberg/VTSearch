@@ -1947,7 +1947,7 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
 # ──────────────────────────────────────────────────────────────────────────────
 
 #: Embed-time Stories' second page, with a second arrow out of the cube: UMAP,
-#: into a flat square holding the same dots (owner, #5132). Three objects and two
+#: into a flat square holding the same dots in the same pattern (owner, #5132). Three objects and two
 #: arrows do not fit across the slide at Embed-time Stories' scale, so the
 #: drawing is that one at `UMAP_SCALE` of its size, type and all: the canvas
 #: spans more units, and every point size is scaled to match (23px for the word
@@ -1959,8 +1959,7 @@ UMAP_CANVAS = (CANVAS[0] / UMAP_SCALE, CANVAS[1] / UMAP_SCALE)
 UMAP_ROW_Y = 5.6
 UMAP_LEFT = 1.07
 UMAP_SQUARE = CUBE_SIDE
-#: The flattening's own seed, and the room the square leaves round its dots.
-UMAP_SEED = 7
+#: The room the square leaves round its dots.
 UMAP_PAD = 0.06
 #: The word inside the second arrow: the method's name, which is what the room
 #: will meet again under Browse.
@@ -1975,45 +1974,22 @@ def _umap_arrow_len(label: str) -> float:
     return width / (UNIT_PT * UMAP_SCALE) + 2 * FLOW_HEAD_L
 
 
-@functools.lru_cache(maxsize=1)
 def _umap_flat() -> np.ndarray:
-    """The cube's dots, flattened by a real UMAP and spread to fill a unit square without touching.
+    """The cube's dots, flattened straight: each where the cube drawing puts it, fitted to a unit square.
 
-    UMAP keeps neighbours rather than distances, so the square is not a view of
-    the cube from any side: it is what the map is made of. The fit is then
-    rescaled into the square and relaxed until no two dots overlap on the page,
-    which moves each only as far as the drawing needs.
+    The square is the cube squashed flat along the line of sight, so its dots
+    sit in the same pattern the cube shows and the room sees at a glance where
+    they came from (owner, #5132). A real UMAP keeps neighbours rather than a
+    view, and can move things; this paints the picture rather than the method.
+    The cube's dots are spaced on their projection (`FLOW_APART`), so the
+    flattened ones cannot touch either; the assertion keeps that true.
     """
-    import umap  # noqa: PLC0415
-
-    flat = umap.UMAP(n_neighbors=12, min_dist=0.5, random_state=UMAP_SEED).fit_transform(_flow_field_3d())
-    # UMAP lays a cloud with no structure out as a disc; stretch each point
-    # radially so the disc's edge meets the square's, which moves no dot past
-    # a neighbour, then fit the result to the unit square.
-    flat = flat - flat.mean(axis=0)
-    radius = np.hypot(flat[:, 0], flat[:, 1])
-    flat = flat / radius.max()
-    stretch = 1.0 / np.maximum(np.abs(flat[:, 0]), np.abs(flat[:, 1])).clip(1e-9) * np.hypot(flat[:, 0], flat[:, 1])
-    flat = flat * stretch[:, None]
+    flat = np.array([_cube_project(p) for p in _flow_field_3d()])
     flat = (flat - flat.min(axis=0)) / (flat.max(axis=0) - flat.min(axis=0))
     flat = UMAP_PAD + flat * (1 - 2 * UMAP_PAD)
-    apart = FLOW_APART / UMAP_SQUARE
-    for _ in range(400):
-        moved = False
-        for i in range(len(flat)):
-            for j in range(i + 1, len(flat)):
-                d = flat[j] - flat[i]
-                gap = float(np.hypot(*d))
-                if gap < apart:
-                    push = (apart - gap) / 2 * (d / gap if gap else np.array([1.0, 0.0]))
-                    flat[i] -= push
-                    flat[j] += push
-                    moved = True
-        flat = np.clip(flat, UMAP_PAD, 1 - UMAP_PAD)
-        if not moved:
-            break
     gaps = [np.hypot(*(flat[i] - flat[j])) for i in range(len(flat)) for j in range(i + 1, len(flat))]
-    assert min(gaps) >= apart * 0.98, "two flattened dots still touch"
+    radius = FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * 0.5)
+    assert min(gaps) * UMAP_SQUARE > 2 * radius + 0.02, "two flattened dots touch"
     return flat
 
 
@@ -2021,7 +1997,8 @@ def umap_flow_fig() -> None:
     """Photographs into the cube, as Embed-time Stories drew them, and then UMAP out of it, into a square.
 
     Two pages: the cube as Embed-time Stories' second page left it; then the
-    second arrow and the square, the same sixty dots laid flat.
+    second arrow and the square, the same sixty dots squashed flat
+    (`_umap_flat`).
     """
     for stage in range(1, UMAP_STAGES):
         save(_umap_flow_stage(stage), OUT, f"umap-flow.build{stage}.webp", column=FULL_BLEED, tight=False)
