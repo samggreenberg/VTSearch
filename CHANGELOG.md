@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
+  coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
+  detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
+  taken straight to another dataset showed the vacuum share and "no verdict until you run Tune…". The Train view's
+  re-sort now leaves the yardstick to be recorded once the answers pause, and at once when the chip is read on
+  another dataset or the detector is unloaded. Under the label quota, where Tune scores the Goods' centroid rather
+  than the Train view's head, a Tune is still what records it.
+
 - **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
   #5098). What people get from it is a better detector, not only a verdict on the one they have:
   the view tests the line on a dataset the detector never trained on, then lets you correct its
