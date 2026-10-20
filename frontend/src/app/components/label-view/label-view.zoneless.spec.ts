@@ -1084,9 +1084,8 @@ describe('LabelViewComponent', () => {
     votes([1, 3, 4], [5, 6, 7, 8]);
     expect(component.voteHint()).toBe('keep-voting');
 
-    // The Spot Check step's hint is on its first pick, until the check's
-    // first vote (#5136): the item on screen as the step begins is the step
-    // before it's.
+    // The Spot Check step has no hint (#5136): its picks are just the next
+    // items, and there is nothing to do differently.
     TestBed.inject(AutopilotStateService).beginSpotCheck('weak');
     TestBed.tick();
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
@@ -1101,15 +1100,8 @@ describe('LabelViewComponent', () => {
     component.onNavigate('forward');
     TestBed.tick();
     expect(component.mediaState.selectedId()).toBe(9);
-    expect(component.voteHint()).toBe('spot-check');
-    component.voteState.loadVotes();
-    httpMock.match('/api/votes').forEach((req) =>
-      req.flush({ good: [1, 3, 4, 9], bad: [5, 6, 7, 8], click_times: {}, learned_scores: {} }),
-    );
-    component.onNavigate('forward');
-    TestBed.tick();
-    expect(component.mediaState.selectedId()).toBe(10);
     expect(component.voteHint()).toBeNull();
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
   describe('changing a label (#4824)', () => {

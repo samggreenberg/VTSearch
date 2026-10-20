@@ -361,8 +361,8 @@ server, it ends the step on its own (`ended`): the view calls
 `endSpotCheck()`, catches up on the votes, re-reads the line (a finished
 check may have re-cut it server-side) with `GET /api/balance` through
 `SortRunnerService.refreshLine`, and makes the advance the round owed under
-the step underneath. Toasty's `spot-check` hint is on the check's first pick
-only (`fresh`). No re-sort follows the check's end: a retrain moves the list
+the step underneath. Toasty has no hint for the step: there is nothing to do
+differently. No re-sort follows the check's end: a retrain moves the list
 under the result, which is what reports it `stale`, and the owner's model is
 that *later* votes do that. The result lives in the balance control, on the
 Manual tab. The line draws the same in every state; the state

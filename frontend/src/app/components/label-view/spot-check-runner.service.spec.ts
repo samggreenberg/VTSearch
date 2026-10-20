@@ -84,20 +84,8 @@ describe('SpotCheckRunnerService (#5136)', () => {
     mediaState.selectMedia(99);
     started([3, 5]);
     expect(mediaState.selectedId()).toBe(99);
-    expect(runner.isPick(3)).toBe(true);
-    expect(runner.isPick(99)).toBe(false);
+    expect(runner.upcoming(null, 9)).toEqual([3, 5]);
     expect(runner.advancePending()).toBe(false);
-    expect(runner.fresh()).toBe(true);
-  });
-
-  it('is fresh until the check has its first vote', () => {
-    started([3, 5]);
-    labels([3], []);
-    expect(runner.fresh()).toBe(false);
-    labels([3, 5], []);
-    runner.advance(5);
-    votesReq().flush(response(running([8, 9], 2)));
-    expect(runner.fresh()).toBe(false);
   });
 
   it('shows the round in draw order, one unlabeled pick per advance', () => {
@@ -136,7 +124,7 @@ describe('SpotCheckRunnerService (#5136)', () => {
     req.flush(response(running([8, 9], 2)));
     expect(mediaState.selectedId()).toBe(8);
     expect(runner.advancePending()).toBe(false);
-    expect(runner.isPick(3)).toBe(false);
+    expect(runner.upcoming(8, 9)).toEqual([9]);
   });
 
   it('shows an undone pick again rather than sending the round', () => {
@@ -160,7 +148,7 @@ describe('SpotCheckRunnerService (#5136)', () => {
     runner.advance(3);
     votesReq().flush(response(finished()));
     expect(ended).toEqual([{ finished: true, owed: true }]);
-    expect(runner.isPick(3)).toBe(false);
+    expect(runner.upcoming(null, 9)).toEqual([]);
     expect(runner.advancePending()).toBe(false);
   });
 
@@ -191,7 +179,7 @@ describe('SpotCheckRunnerService (#5136)', () => {
     req.flush(response(running([5])));
     expect(cancelReqs().length).toBe(1);
     expect(ended).toEqual([]);
-    expect(runner.isPick(5)).toBe(false);
+    expect(runner.upcoming(null, 9)).toEqual([]);
   });
 
   it('cancels outright when nothing was voted this round, and is a no-op with no check', () => {
@@ -225,7 +213,7 @@ describe('SpotCheckRunnerService (#5136)', () => {
   it('forgets the check on a pair switch, and draws a fresh one at the next advance', () => {
     started([3]);
     runner.reset();
-    expect(runner.isPick(3)).toBe(false);
+    expect(runner.upcoming(null, 9)).toEqual([]);
     httpMock.expectNone(() => true);
     runner.advance();
     expect(runner.advancePending()).toBe(true);
