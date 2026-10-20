@@ -2,22 +2,40 @@
 
 Smart asks one question: *is the detector still getting better?*  It is
 answered by re-scoring the last :data:`SMART_WINDOW` cached models against the
-current labelset and looking at the trend of their error costs.  This module
-holds every constant and every line of that arithmetic, and both consumers call
-it rather than copying it:
+current labelset and looking at the trend of their F-beta, at the session's
+balance: green once it stops rising (issue #5134).  This module holds every
+constant and every line of that arithmetic, and both consumers call it rather
+than copying it:
 
 * :func:`vtscore.detectors.labeling_progress._compute_smart_status` (the app's
   ``/api/labeling-status`` indicator, which gates Autopilot's ``hard`` phase),
 * :func:`vtscore.eval.autopilot_flow.smart_status` (the harness's simulated
   user, which has to stop where the app stops for a study to mean anything).
 
+What a point is (issue #5134)
+-----------------------------
+
+Each point is one cached model's **best F-beta on the current votes**
+(:func:`best_fbeta`): its scores over every voted media, every cut through them,
+the best F-beta at the session's beta (:data:`SMART_NO_BALANCE_BETA` for a
+caller with no balance).  Cut-free, so it reads the ranking alone and cannot
+move when the served line switches rule.  Until #5134 a point was the model's
+``FPR + FNR`` at its own Inclusion 0 cut, green once it stopped *falling*: the
+last place the app priced a detector off the objective.  The A/B that retired it
+(``docs/experiments/2026-10-20-smart-fbeta-5134``) found the two lights green at
+the same clicks; the owner chose F-beta so that every light speaks the
+objective's units.  The cost rule (:func:`smart_status_from_costs`,
+:func:`smart_cut`) stays as the eval's ``cost`` arm.
+
 Two conditions, not one, and the second is the one from issue #3832
 ----------------------------------------------------------------------
 
 Green needs the trend to be **flat**, and the rule has always measured that as
-a least-squares slope normalised by the window's mean cost, green above
-:data:`SMART_FLAT_THRESHOLD`.  That half is unchanged: a decline shallower than
-1.5% of the mean per step is not worth another click.
+a least-squares slope normalised by the window's mean, green below
+:data:`SMART_RISE_THRESHOLD` (the cost rule: above :data:`SMART_FLAT_THRESHOLD`).
+A rise shallower than 1.5% of the mean per step is not worth another click.
+The rest of this section was written for the cost; it holds for F-beta with
+every sign turned over.
 
 What was missing is any notion of *how noisy the window is*.  On a category the
 embedding cannot separate - the #3831 dice pool, where the label is a die's
@@ -51,24 +69,20 @@ make the light depend on when the page was loaded and would have to be threaded
 through the harness's per-step trajectory as well.  A noise model gets the same
 flapping away without a hidden variable.
 
-What a cost is priced at (issue #4243)
---------------------------------------
+What a cost was priced at (issue #4243; the eval's ``cost`` arm since #5134)
+--------------------------------------------------------------------------
 
 Every cost in the window is ``FPR + FNR`` at :data:`SMART_INCLUSION`, measured
 at each model's own cut for that inclusion (:func:`smart_cut`), whatever
 Inclusion or precision floor the user has set.  Both callers take the weight and
 the cut from here, so what Smart measures cannot depend on which tier asked.
 
-Candidates in the objective's units (issue #5134)
--------------------------------------------------
+The A/B's other readings (issue #5134)
+--------------------------------------
 
-FPR + FNR is the last place the app prices a detector off F-beta.  #5134 asks
-whether Smart should read F-beta (or AP) going *up* instead, with the same
-trend-and-scatter test turned over: :func:`rising_status_from_scores` is that
-rule, and :func:`average_precision`, :func:`fbeta_at_cut` and
-:func:`best_fbeta` are what a window of models is scored with.  None of them
-reads the served line, so none moves when the line switches rule.  They are an
-eval arm until the A/B decides (``vtscore.eval.autopilot_flow.SMART_SIGNALS``).
+:func:`average_precision` and :func:`fbeta_at_cut` score the same window the
+other ways #5134 priced (``vtscore.eval.autopilot_flow.SMART_SIGNALS``), read by
+the same rising rule, :func:`rising_status_from_scores`.
 """
 
 from __future__ import annotations
@@ -256,13 +270,24 @@ def smart_cut(
 #: mean per model has stopped going up.
 SMART_RISE_THRESHOLD = -SMART_FLAT_THRESHOLD
 
+#: The beta Smart scores at for a caller with no balance (the app always sets
+#: one, #4413): F1.
+SMART_NO_BALANCE_BETA = 1.0
+
+
+def smart_beta(beta: float | None) -> float:
+    """The beta Smart's F-beta is read at: the session's balance, or :data:`SMART_NO_BALANCE_BETA` with none."""
+    return SMART_NO_BALANCE_BETA if beta is None else float(beta)
+
 
 def rising_status_from_scores(scores: Sequence[float], good: int, bad: int) -> dict[str, Any]:
-    """:func:`smart_status_from_costs` for a score that rises as the detector improves (issue #5134).
+    """The Smart indicator over one window of F-beta points, oldest first (issue #5134).
 
-    The same window, per-class minimum and trend-and-scatter test (#3832), with
-    the sign turned over: green once the window's relative slope is below
-    :data:`SMART_RISE_THRESHOLD`, or its rise is within
+    The app's rule since #5134, on :func:`best_fbeta` points; the eval's other
+    readings (#5134's AP and cut F-beta) go through it too.  The window,
+    per-class minimum and trend-and-scatter test of :func:`smart_status_from_costs`
+    (#3832) with the sign turned over: green once the window's relative slope
+    is below :data:`SMART_RISE_THRESHOLD`, or its rise is within
     :data:`SMART_SLOPE_T` standard errors of nothing.  ``drift_within_noise``
     marks the second kind of green.  Non-finite entries (a model that could not
     be scored) are dropped before the window is cut.

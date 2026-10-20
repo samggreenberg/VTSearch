@@ -5,8 +5,11 @@
 # candidate, green once it stops rising (the arms).
 #
 #   read         the app, CALIB_SMART_READINGS=1: every candidate's trend on every row, the light unchanged
-#   <signal>     CALIB_SMART_SIGNAL=<signal>, one of ap fbeta fbeta_best heldout_ap heldout_fbeta line
-#                (vtscore.eval.autopilot_flow.SMART_SIGNALS; readings on)
+#   <signal>     CALIB_SMART_SIGNAL=<signal>, one of vtscore.eval.autopilot_flow.SMART_SIGNALS
+#
+# The study ran at 58780e78c, before the ship: there the app's light was `cost` (FPR + FNR), `read` was that app,
+# and an arm recorded its readings by itself. Since the ship the app's light is `fbeta_best`, so the same A/B from
+# today's code is `read` against `CALIB_SMART_SIGNAL=cost` (add CALIB_SMART_READINGS=1 to the arms).
 #
 # The Binary Photo path at beta 1/4, 1 and 4, 5 seeds x 144 cells on the grid #4743 priced (2026-10-08-b1), paired by
 # cell and seed, 200 clicks and the closing check, as #5039's closed loop ran. An arm's run is the control's until the
@@ -25,7 +28,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${SMART5134_DATE:-2026-10-20}"
 SEEDS="${SMART5134_SEEDS:-5}"
-ARMS=(read ap fbeta fbeta_best heldout_ap heldout_fbeta line)
+ARMS=(read cost ap fbeta fbeta_best heldout_ap heldout_fbeta line)
 GRID_SRC="${SMART5134_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since
 
 knobs() { if [[ "$1" == read ]]; then echo "CALIB_SMART_READINGS=1"; else echo "CALIB_SMART_SIGNAL=$1"; fi; }

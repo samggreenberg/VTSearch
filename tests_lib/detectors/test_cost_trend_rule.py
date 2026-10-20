@@ -3,7 +3,11 @@
 :mod:`vtscore.detectors.cost_trend` is called by both the app's
 ``_compute_smart_status`` and the harness's ``smart_status``, so this is the one
 place the rule's behaviour is asserted; the two callers' tests only check that
-they pass their inputs through.
+they pass their inputs through.  Since #5134 Smart reads F-beta going flat
+(:func:`~vtscore.detectors.cost_trend.rising_status_from_scores`, the cost rule
+with its sign turned over, pinned in ``test_smart_signal_5134.py``); the cost
+rule below is the eval's ``cost`` arm, and its noise gate is the one the F-beta
+rule inherits.
 
 The scenario that motivated the noise gate, reproduced in the real harness on
 the synthetic "dice" pool from #3831 (dice labeled by whether they rolled at
@@ -34,6 +38,7 @@ from vtscore.detectors.cost_trend import (
     SMART_SLOPE_T,
     SMART_WINDOW,
     cost_trend,
+    rising_status_from_scores,
     smart_status_from_costs,
 )
 
@@ -42,6 +47,8 @@ from vtscore.detectors.cost_trend import (
 #: category that had long since plateaued: noisy, not falling, and read as
 #: "still declining" by the slope test alone.
 PLATEAU_WINDOW = [0.861, 0.832, 0.861, 0.861, 0.861, 0.887, 0.755, 0.669, 0.699, 0.857]
+#: The same plateau as F-beta points (#5134): the cost's mirror around its mean.
+PLATEAU_FBETAS = [round(2 * sum(PLATEAU_WINDOW) / len(PLATEAU_WINDOW) - c, 3) for c in PLATEAU_WINDOW]
 
 
 def _status(costs, good: int = 9, bad: int = 9) -> str:
@@ -218,21 +225,21 @@ class TestAppIndicatorPlumbing:
     """The app's ``/api/labeling-status`` Smart branch reads this same rule.
 
     ``_smart_status_uncached`` owns only the plumbing - which models are in the
-    window, and what they cost against the current labelset - so what is
+    window, and their F-beta against the current labelset (#5134) - so what is
     asserted here is that the plumbing hands the window over unchanged, plus
     the two "not enough yet" branches that never reach the rule.
     """
 
     @staticmethod
-    def _status(monkeypatch, costs, *, model_steps=None, good=9, bad=9):
+    def _status(monkeypatch, fbetas, *, model_steps=None, good=9, bad=9):
         from vtscore.detectors import labeling_progress
 
         monkeypatch.setattr(
             labeling_progress,
             "_eval_cached_models",
-            lambda cache, eval_set, indices=None: [{"error_cost": c} for c in costs],
+            lambda cache, eval_set, indices=None, beta=None: [{"fbeta": f} for f in fbetas],
         )
-        steps = list(range(len(costs))) if model_steps is None else model_steps
+        steps = list(range(len(fbetas))) if model_steps is None else model_steps
         # The cache is only ever handed on to ``_eval_cached_models``, stubbed
         # above, so an empty one carries everything this branch reads.
         cache = labeling_progress._ProgressCache(key=("dataset", "detector"))
@@ -241,7 +248,7 @@ class TestAppIndicatorPlumbing:
     def test_red_below_five_per_class(self, monkeypatch):
         result = self._status(monkeypatch, [0.3] * SMART_WINDOW, good=MIN_PER_CLASS - 1)
         assert result["status"] == "red"
-        assert result["reason"] == smart_status_from_costs([], MIN_PER_CLASS - 1, 9)["reason"]
+        assert result["reason"] == rising_status_from_scores([], MIN_PER_CLASS - 1, 9)["reason"]
 
     def test_yellow_before_three_detectors_exist(self, monkeypatch):
         result = self._status(monkeypatch, [0.3, 0.3], model_steps=[0, 1])
@@ -249,9 +256,12 @@ class TestAppIndicatorPlumbing:
         assert "Sort to train one" in result["reason"]
 
     def test_the_window_reaches_the_rule_unchanged(self, monkeypatch):
-        for costs in ([0.9, 0.7, 0.5, 0.3], [0.3] * SMART_WINDOW, PLATEAU_WINDOW):
-            assert self._status(monkeypatch, costs) == smart_status_from_costs(costs, 9, 9)
+        for fbetas in ([0.3, 0.5, 0.7, 0.9], [0.7] * SMART_WINDOW, PLATEAU_FBETAS):
+            assert self._status(monkeypatch, fbetas) == rising_status_from_scores(fbetas, 9, 9)
+
+    def test_a_rising_window_holds_the_light_yellow(self, monkeypatch):
+        assert self._status(monkeypatch, [0.3, 0.5, 0.7, 0.9])["status"] == "yellow"
 
     def test_a_noisy_plateau_no_longer_turns_the_light_yellow(self, monkeypatch):
         """The #3832 flap, at the level the user sees it."""
-        assert self._status(monkeypatch, PLATEAU_WINDOW)["status"] == "green"
+        assert self._status(monkeypatch, PLATEAU_FBETAS)["status"] == "green"

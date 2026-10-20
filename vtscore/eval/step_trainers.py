@@ -125,8 +125,9 @@ def _labelset_error_costs(
 ) -> list[float]:
     """Weighted FPR/FNR of **every** recent model on the current labelled set.
 
-    Feeds the Smart indicator.  Reproduces ``labeling_progress._eval_cached_models``
-    /``_score_step`` - and shares their arithmetic, via
+    Feeds Smart's ``cost`` arm, the app's light before #5134 (the app reads
+    :func:`_labelset_window_readings`' ``fbeta_best`` since).  It reproduced
+    ``labeling_progress._eval_cached_models`` / ``_score_step`` - and shared their arithmetic, via
     :func:`~vtscore.training.thresholds.weighted_error_cost`, so only the input
     plumbing differs: every model in the window is re-scored against the
     *current* labelset — the only ground truth the app has — with its own cached
@@ -191,9 +192,9 @@ def _labelset_error_costs(
     return costs
 
 
-#: The Smart candidates read off a re-scored window of models (#5134), in the order
-#: :func:`_labelset_window_readings` returns them.
-WINDOW_READINGS: tuple[str, ...] = ("ap", "fbeta", "fbeta_best")
+#: What :func:`_labelset_window_readings` reads off a re-scored window of models (#5134):
+#: ``fbeta_best`` is the app's Smart, the rest the A/B's other units.
+WINDOW_READINGS: tuple[str, ...] = ("fbeta_best", "ap", "fbeta")
 
 
 def _labelset_window_readings(
@@ -206,30 +207,37 @@ def _labelset_window_readings(
     region_aware: bool = False,
     style_obj: Any = None,
 ) -> dict[str, list[float]]:
-    """#5134's Smart candidates: the window :func:`_labelset_error_costs` re-scores, in the objective's units.
+    """The Smart window (#5134): each recent model re-scored on the current votes, in the objective's units.
 
-    The same models, the same eval set (every current vote) and the same
-    scoring geometry; per model, oldest first, ``ap`` (average precision),
-    ``fbeta`` (F-*beta* at the model's own Smart cut, the one its cost is
-    priced at) and ``fbeta_best`` (the best F-*beta* any cut reaches).  None
-    reads the served line.  Empty lists with either class empty; the two
-    F-beta lists stay empty with no *beta* (no balance).  An eval arm, not the
-    app: it scores the window a second time rather than touch the pinned
-    :func:`_labelset_error_costs`.
+    Feeds the Smart indicator.  Reproduces ``labeling_progress._eval_cached_models``
+    / ``_score_step``: every model in the window is re-scored against the
+    *current* labelset - the only ground truth the app has - in the arm's own
+    scoring geometry (issue #3757; see :func:`_labelset_error_costs`), and read
+    as ``fbeta_best``, the best F-*beta* any cut through its scores reaches
+    (:func:`~vtscore.detectors.cost_trend.best_fbeta`), the app's point.  Beside
+    it, per model and oldest first, the A/B's other units: ``ap`` (average
+    precision) and ``fbeta`` (F-*beta* at the model's own Smart cut, the one the
+    ``cost`` arm prices at).  None reads the served line.  *beta* is the run's
+    balance, F1 with none (:func:`~vtscore.detectors.cost_trend.smart_beta`).
+    Empty lists with either class empty, which leaves Smart on its "not enough
+    points" branch as the app's empty eval set does.
+
+    Deliberately *not* the held-out test split: those labels must never reach
+    the vote order.
     """
-    from vtscore.detectors.cost_trend import average_precision, best_fbeta, fbeta_at_cut  # noqa: PLC0415
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta, fbeta_at_cut, smart_beta  # noqa: PLC0415
 
     out: dict[str, list[float]] = {name: [] for name in WINDOW_READINGS}
     ids = list(good_votes) + list(bad_votes)
     if not model_steps or not good_votes or not bad_votes:
         return out
     labels = np.array([1.0] * len(good_votes) + [0.0] * len(bad_votes))
+    b = smart_beta(beta)
 
     def _read(scores: np.ndarray, kept: np.ndarray, cut: float) -> None:
+        out["fbeta_best"].append(best_fbeta(scores, kept, b))
         out["ap"].append(average_precision(scores, kept))
-        if beta is not None:
-            out["fbeta"].append(fbeta_at_cut(scores, kept, cut, float(beta)))
-            out["fbeta_best"].append(best_fbeta(scores, kept, float(beta)))
+        out["fbeta"].append(fbeta_at_cut(scores, kept, cut, b))
 
     if style_obj is not None or region_aware:
         labelled = {cid: clips_dict[cid] for cid in ids if cid in clips_dict}
@@ -261,9 +269,9 @@ def _heldout_readings(fold_orderings: Any, beta: float | None) -> dict[str, floa
     line's class model pools them (``class_score_model``): what the head does
     on votes it did not train on.  One value per retrain, so a trend over them
     is a history, not a re-scored window.  NaN with no folds or either class
-    missing; ``heldout_fbeta`` NaN with no *beta*.
+    missing; *beta* F1 with none, as Smart's.
     """
-    from vtscore.detectors.cost_trend import average_precision, best_fbeta  # noqa: PLC0415
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta, smart_beta  # noqa: PLC0415
 
     nan = float("nan")
     if not fold_orderings:
@@ -272,7 +280,7 @@ def _heldout_readings(fold_orderings: Any, beta: float | None) -> dict[str, floa
     labels = np.concatenate([np.asarray(lb, dtype=np.float64).ravel() for _, lb in fold_orderings])
     return {
         "heldout_ap": average_precision(scores, labels),
-        "heldout_fbeta": best_fbeta(scores, labels, float(beta)) if beta is not None else nan,
+        "heldout_fbeta": best_fbeta(scores, labels, smart_beta(beta)),
     }
 
 

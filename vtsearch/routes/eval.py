@@ -14,7 +14,7 @@ from vtscore.detectors.labeling_progress import (
     analyze_labeling_progress,
     cached_indicator_history,
     calculate_diversity_level_over_time,
-    calculate_error_cost_over_time,
+    calculate_fbeta_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
     document_labeling_status,
@@ -88,7 +88,9 @@ def labeling_progress():
         abort(400, message="no label history available")
 
     try:
-        return analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes)
+        return analyze_labeling_progress(
+            snapshot_medias(), label_history, good_votes, bad_votes, beta=line_knobs()["beta"]
+        )
     except _CONTEXT_ERRORS:
         raise
     except Exception:
@@ -141,6 +143,8 @@ def _schedule_status_refresh(span_info) -> None:
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
+    # The balance Smart reads its F-beta at (#5134), read here: the worker has no request context.
+    beta = line_knobs()["beta"]
 
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
@@ -152,7 +156,7 @@ def _schedule_status_refresh(span_info) -> None:
         # ``_progress_lock`` and refreshes ``_status_snapshot``; the return
         # value is unused - the next poll reads the snapshot.  The lock is
         # taken only inside the worker, never across the HTTP response.
-        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info)
+        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info, beta=beta)
 
     labeling_status_jobs.start(
         signature,
@@ -204,7 +208,9 @@ def labeling_status_indicator():
         span = tree.span_info() if tree is not None else None
 
         if is_status_cache_fresh(label_history):
-            status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, span_info=span)
+            status = compute_labeling_status(
+                snapshot_medias(), label_history, good_votes, bad_votes, span_info=span, beta=line_knobs()["beta"]
+            )
             status["stale"] = False
             status["stop_rule"] = "lights"
             status["level"] = _stop_level()
@@ -268,7 +274,9 @@ def indicator_score_history(query: dict):
     clips = snapshot_medias()
 
     try:
-        data, complete = cached_indicator_history(metric, clips, label_history, good_votes, bad_votes)
+        data, complete = cached_indicator_history(
+            metric, clips, label_history, good_votes, bad_votes, beta=line_knobs()["beta"]
+        )
         return {"metric": metric, "history": data, "complete": complete}
     except _CONTEXT_ERRORS:
         raise
@@ -279,7 +287,7 @@ def indicator_score_history(query: dict):
         abort(500, message="Score history computation failed")
 
 
-_METRIC_KEY = {"smart": "error_cost", "stable": "stability", "diverse": "diversity"}
+_METRIC_KEY = {"smart": "fbeta", "stable": "stability", "diverse": "diversity"}
 
 
 def _eval_done_payload(job) -> dict:
@@ -329,6 +337,8 @@ def eval_train_and_score(body: dict):
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
+    # Smart's series is an F-beta at the session's balance (#5134): read here, and part of what a cached job answers.
+    beta = line_knobs()["beta"]
 
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
@@ -341,6 +351,7 @@ def eval_train_and_score(body: dict):
         tuple(history),
         tuple(sorted(good_snap)),
         tuple(sorted(bad_snap)),
+        beta,
     )
 
     cached = eval_jobs.cached_for(signature)
@@ -360,7 +371,7 @@ def eval_train_and_score(body: dict):
             update_eval_progress("running", f"Computing {metric}...", 0, n_total)
             try:
                 if metric == "smart":
-                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap)
+                    data = calculate_fbeta_over_time(clips, history, good_snap, bad_snap, beta)
                 elif metric == "stable":
                     data = calculate_prediction_stability_over_time(clips, history)
                 else:

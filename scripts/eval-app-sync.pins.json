@@ -67,16 +67,16 @@
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
   },
   "progress.eval_cached_models": {
-    "app": "8edf8f0a3acbd227223f3c737f2299057d38883ff1f142270d8cbf1748cfc00f",
-    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
+    "app": "4c0d74e44f05750ccba0cd9a17de07feb605dad8bbf1ffd9f242d400f8d10e70",
+    "harness": "b8e2b53ddae2d019fcf1c50ea47764421d76782d5c1bd71d153a92674586f65c"
   },
   "progress.eval_geometry": {
-    "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
-    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
+    "app": "1eea0e84bd42ab0d0d64dc1e66fcb1bb54672792a6fe1a65edcad4340c401932",
+    "harness": "b8e2b53ddae2d019fcf1c50ea47764421d76782d5c1bd71d153a92674586f65c"
   },
   "progress.smart_status": {
-    "app": "204c114a077dd75d1499887d8866faa7ff5842516ce73f7193f7fcb835e533f0",
-    "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
+    "app": "acd562a381d374a87ee0f2bd2aa928dde1f7a2a3f5eacbdea0daf5cc86b64a8e",
+    "harness": "0ff56f97172022dd4b97b0eb2b751ddbb4bcd138ff34acf8506b0ab97843f6a4"
   },
   "progress.span_status": {
     "app": "7ceccf38877df003f38958e91e71ebb167fa4831d91dc22cfaa59dbd562e63c9",

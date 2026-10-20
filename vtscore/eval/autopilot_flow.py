@@ -46,7 +46,7 @@ The phase ordering the app implements, and the harness therefore reproduces:
    held no positive (issue #4282, from the #4222 dry-stop study).  Once the walk
    ends it never resumes.
 3. ``hard`` — the first learned sort.  Refine the boundary until the detector
-   is both *smart* (error cost has levelled off) and *stable* (predictions have
+   is both *smart* (F-beta has stopped rising) and *stable* (predictions have
    stopped flipping).
 4. ``new`` — explore the coverage atlas until *span* goes green too.
 5. ``spot`` — the spot check before Done: the first time all three lights are
@@ -67,6 +67,7 @@ from typing import Any, Literal, Optional
 from vtscore.detectors.cost_trend import (
     SMART_FLAT_THRESHOLD,
     SMART_MIN_POINTS,
+    SMART_RISE_THRESHOLD,
     SMART_SLOPE_T,
     SMART_WINDOW,
     cost_trend,
@@ -112,13 +113,14 @@ MORE_DRY_RUN = 16
 # is owned by ``vtscore.detectors.stability`` and re-exported here, with the
 # Stable constants below, so a study can name every gate from one place.
 
-# ``_compute_smart_status``: the window of recent models the error-cost trend
-# is regressed over, the minimum number of points that makes a trend
-# meaningful, the relative-slope cutoff below which the cost is still falling,
-# and how many standard errors below zero that slope must sit before the
-# decline is believed rather than read as noise (issue #3832).  All four are
-# owned by ``vtscore.detectors.cost_trend`` and re-exported here, with the
-# Stable constants below, so a study can name every gate from one place.
+# ``_compute_smart_status``: the window of recent models the F-beta trend is
+# regressed over, the minimum number of points that makes a trend meaningful,
+# the relative-slope cutoff above which F-beta is still rising (``-
+# SMART_FLAT_THRESHOLD``, the cost's cutoff before #5134 with its sign turned
+# over), and how many standard errors from zero that slope must sit before the
+# rise is believed rather than read as noise (issue #3832).  All four are owned
+# by ``vtscore.detectors.cost_trend`` and re-exported here, with the Stable
+# constants below, so a study can name every gate from one place.
 
 # ``_compute_stable_status``: the flip-rate window and its cutoffs — the
 # confident-flip average must be under 0.5% of the pool, no single recent step
@@ -130,6 +132,7 @@ __all__ = [
     "MIN_PER_CLASS",
     "SMART_FLAT_THRESHOLD",
     "SMART_MIN_POINTS",
+    "SMART_RISE_THRESHOLD",
     "SMART_SLOPE_T",
     "SMART_WINDOW",
     "STABLE_FALLING_RATIO",
@@ -145,30 +148,30 @@ SPAN_YELLOW = 10
 SPAN_GREEN_DEFAULT = 40
 
 
-def smart_detail(recent_error_costs: list[float], good: int, bad: int) -> dict[str, Any]:
+def smart_detail(recent_fbetas: list[float], good: int, bad: int) -> dict[str, Any]:
     """The app's Smart sub-object, *whole*: the light and the numbers behind it.
 
-    *recent_error_costs* are the per-step costs of the last :data:`SMART_WINDOW`
-    cached models, each scored against the **current** labelset (never the
-    held-out test split — the app has no test labels, and using them here would
-    leak into the vote order).  Not a port: the rule is
-    :func:`~vtscore.detectors.cost_trend.smart_status_from_costs`, which the app
-    calls too, so the harness reads the same light as the user.
+    *recent_fbetas* are the last :data:`SMART_WINDOW` cached models' best
+    F-beta at the session's balance, each scored against the **current**
+    labelset (never the held-out test split — the app has no test labels, and
+    using them here would leak into the vote order; issue #5134).  Not a port:
+    the rule is :func:`~vtscore.detectors.cost_trend.rising_status_from_scores`,
+    which the app calls too, so the harness reads the same light as the user.
 
     :func:`smart_status` keeps only ``status``.  This keeps ``slope`` and
     ``slope_t`` as well, which is what lets a study say how *close* a yellow was
     to green rather than only that it was not green (issue #3560).
     """
-    return smart_status_from_costs(recent_error_costs, good, bad)
+    return rising_status_from_scores(recent_fbetas, good, bad)
 
 
-def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status:
-    """The app's ``_compute_smart_status``: has the error cost levelled off?
+def smart_status(recent_fbetas: list[float], good: int, bad: int) -> Status:
+    """The app's ``_compute_smart_status``: has F-beta stopped rising?
 
     The light alone, for callers that only need the phase; :func:`smart_detail`
     is the same call with its margins kept.
     """
-    return smart_detail(recent_error_costs, good, bad)["status"]  # type: ignore[return-value]
+    return smart_detail(recent_fbetas, good, bad)["status"]  # type: ignore[return-value]
 
 
 def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) -> dict[str, Any]:
@@ -236,15 +239,18 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
 #: The Smart gate's arms (#4359): ``"app"`` reads the light; ``"never"`` holds it yellow.
 SMART_GATES = ("app", "never")
 
-#: What the Smart light is read off (#5134).  ``"cost"`` is the app: FPR + FNR of
-#: the last :data:`SMART_WINDOW` models, re-scored on the current votes, green once
-#: it stops falling.  Every other one is a candidate in the objective's units,
-#: green once it stops *rising*
-#: (:func:`~vtscore.detectors.cost_trend.rising_status_from_scores`):
+#: What the Smart light is read off (#5134).  ``"fbeta_best"`` is the app since
+#: #5134: the best F-beta at the session's beta any cut through each of the last
+#: :data:`SMART_WINDOW` models' scores reaches, re-scored on the current votes,
+#: green once it stops rising
+#: (:func:`~vtscore.detectors.cost_trend.rising_status_from_scores`).  The rest
+#: are #5134's A/B arms:
 #:
-#: * :data:`SMART_WINDOW_READINGS`, the same re-scored window in other units: ``ap``
-#:   (average precision), ``fbeta`` (F-beta at the session's beta at each model's own
-#:   Smart cut) and ``fbeta_best`` (the best F-beta any cut reaches);
+#: * ``cost``, the app before #5134: FPR + FNR at each model's own Inclusion 0 cut,
+#:   green once it stops *falling* (:func:`~vtscore.detectors.cost_trend.smart_status_from_costs`);
+#: * the rest of :data:`SMART_WINDOW_READINGS`, the same re-scored window in other
+#:   units, green once it stops rising: ``ap`` (average precision) and ``fbeta``
+#:   (F-beta at each model's own Smart cut);
 #: * :data:`SMART_HISTORY_READINGS`, one value per retrain, kept as a history:
 #:   ``heldout_ap`` and ``heldout_fbeta`` (the same two on the calibration folds'
 #:   held-out scores of the votes) and ``line`` (the labels line's expected F-beta,
@@ -253,10 +259,12 @@ SMART_GATES = ("app", "never")
 #:
 #: The caller hands :meth:`AutopilotFlow.record_step` the readings; none reads the
 #: served line.
-SMART_WINDOW_READINGS: tuple[str, ...] = ("ap", "fbeta", "fbeta_best")
+SMART_WINDOW_READINGS: tuple[str, ...] = ("fbeta_best", "cost", "ap", "fbeta")
 SMART_HISTORY_READINGS: tuple[str, ...] = ("heldout_ap", "heldout_fbeta", "line")
 SMART_READINGS: tuple[str, ...] = (*SMART_WINDOW_READINGS, *SMART_HISTORY_READINGS)
-SMART_SIGNALS: tuple[str, ...] = ("cost", *SMART_READINGS)
+SMART_SIGNALS: tuple[str, ...] = SMART_READINGS
+#: The app's Smart since #5134.
+APP_SMART_SIGNAL = "fbeta_best"
 #: What each reading's trend is recorded as (#5134): the window's relative slope,
 #: its mean, the slope's t, and the newest value.  ``rel <= SMART_RISE_THRESHOLD``
 #: or ``t < SMART_SLOPE_T`` is green, so any threshold on either can be re-read
@@ -530,8 +538,8 @@ def app_has_detector(phase: str, *, more_shown: bool = False) -> bool:
 class AutopilotFlow:
     """Per-trajectory phase state for one simulated Autopilot session.
 
-    Holds the two inputs the indicators need — the Smart window of error costs
-    and the accumulated per-step prediction-flip counts (Stable) — and
+    Holds the two inputs the indicators need — the Smart window of F-beta
+    points and the accumulated per-step prediction-flip counts (Stable) — and
     recomputes the phase after every vote.  The atlas span is read from the
     harness's atlas, which it labels in lock-step with the votes.
 
@@ -542,10 +550,10 @@ class AutopilotFlow:
 
     Note the asymmetry between the two, which is the app's: Stable's flip counts
     are a genuine history (each entry compares two consecutive models and can
-    never be recomputed later), whereas Smart's costs are *not* a history at
+    never be recomputed later), whereas Smart's points are *not* a history at
     all.  The app re-scores its last :data:`SMART_WINDOW` cached models against
     the current labelset on every poll, so the whole window is replaced each
-    step; accumulating one frozen ``(model_t, labelset_t)`` cost per step would
+    step; accumulating one frozen ``(model_t, labelset_t)`` point per step would
     confound model improvement with labelset growth (issue #2923).
     """
 
@@ -564,7 +572,8 @@ class AutopilotFlow:
         done_check: bool = True,
         stop_rule: str = "lights|level",
         stop_cap: int | None = STOP_CAP,
-        smart_signal: str = "cost",
+        smart_signal: str = APP_SMART_SIGNAL,
+        record_readings: bool = False,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
@@ -595,12 +604,15 @@ class AutopilotFlow:
         if smart_gate not in SMART_GATES:
             raise ValueError(f"smart_gate must be one of {SMART_GATES}, got {smart_gate!r}")
         self.smart_gate = smart_gate
-        #: What the Smart light is read off (:data:`SMART_SIGNALS`, #5134): ``"cost"``
-        #: is the app; a reading's light is green once it stops rising.  Its
-        #: inputs come through :meth:`record_step`.
+        #: What the Smart light is read off (:data:`SMART_SIGNALS`, #5134):
+        #: :data:`APP_SMART_SIGNAL` is the app.  Its inputs come through
+        #: :meth:`record_step`.
         if smart_signal not in SMART_SIGNALS:
             raise ValueError(f"smart_signal must be one of {SMART_SIGNALS}, got {smart_signal!r}")
         self.smart_signal = smart_signal
+        #: Whether every reading's trend is kept for the row (#5134's
+        #: ``smart_readings``); off, :attr:`smart_reading_columns` stays NaN.
+        self.record_readings = record_readings
         #: What tells the user they can stop (:data:`STOP_RULES`).  The app's,
         #: ``"lights|level"``, and the level arms read *level_met*, which the
         #: caller passes to :meth:`update` from the step's labels line; without
@@ -641,13 +653,14 @@ class AutopilotFlow:
         #: runs out and the app's machine takes over from ``hard``.
         self.startup = startup
         self.phase: Phase = "good" if startup is None else startup.phase_name()  # type: ignore[assignment]
-        #: The most recent Smart window: the last :data:`SMART_WINDOW` models'
-        #: costs, all against the *current* labelset.  Replaced, never appended.
+        #: The ``cost`` arm's window (#5134): the last :data:`SMART_WINDOW` models'
+        #: FPR + FNR, all against the *current* labelset.  Replaced, never appended.
         self.recent_error_costs: list[float] = []
-        #: #5134's readings: the re-scored window in other units (replaced, as the
-        #: costs are) and the per-retrain histories (appended, the last
-        #: :data:`SMART_WINDOW` finite values kept).  Empty unless the caller hands
-        #: them to :meth:`record_step`.
+        #: The Smart window (#5134): the last :data:`SMART_WINDOW` models' readings
+        #: against the *current* labelset, ``fbeta_best`` the app's (replaced, never
+        #: appended), and the per-retrain histories (appended, the last
+        #: :data:`SMART_WINDOW` finite values kept).  Whatever the caller hands
+        #: :meth:`record_step`.
         self.smart_windows: dict[str, list[float]] = {}
         self.smart_histories: dict[str, list[float]] = {}
         #: Each reading's trend as of the last :meth:`update`, by ``smart_<reading>_<part>``
@@ -694,10 +707,12 @@ class AutopilotFlow:
         #: (:func:`smart_detail` / :func:`stable_detail`); nothing here is a
         #: second derivation that could disagree with the light beside it.
         #:
-        #: Smart is green when ``smart_slope >= SMART_FLAT_THRESHOLD`` **or**
-        #: ``smart_slope_t > -SMART_SLOPE_T`` - a disjunction, which is why both
-        #: are kept rather than one summary distance.  ``smart_slope_t`` is
-        #: ``±inf`` on a window with no residual at all.
+        #: Smart is green when ``smart_slope <= SMART_RISE_THRESHOLD`` **or**
+        #: ``smart_slope_t < SMART_SLOPE_T`` - a disjunction, which is why both
+        #: are kept rather than one summary distance (#5134; under the ``cost``
+        #: arm, ``>= SMART_FLAT_THRESHOLD`` or ``> -SMART_SLOPE_T``).  They are the
+        #: margins of the light the run reads.  ``smart_slope_t`` is ``±inf`` on
+        #: a window with no residual at all.
         self.smart_slope: float = math.nan
         self.smart_slope_t: float = math.nan
         #: Stable is green when the confident average is under
@@ -793,14 +808,16 @@ class AutopilotFlow:
                 return self.phase
         else:
             self._note_more_vote(good_count, bad_count)
-        smart_d = smart_detail(self.recent_error_costs, good_count, bad_count)
+        if self.smart_signal == "cost":
+            # #5134's arm: the light before #5134, FPR + FNR going flat.
+            smart_d = smart_status_from_costs(self.recent_error_costs, good_count, bad_count)
+        else:
+            smart_d = smart_detail(self.smart_reading(self.smart_signal), good_count, bad_count)
         stable_d = stable_detail(self.stability, good_count, bad_count)
         smart: Status = smart_d["status"]
-        self.smart_reading_columns = self._reading_columns(good_count, bad_count)
-        if self.smart_signal != "cost":
-            # #5134's arm: the light is the reading's, green once it stops rising.
-            # ``smart_slope`` / ``smart_slope_t`` below stay the cost window's, the app's.
-            smart = rising_status_from_scores(self.smart_reading(self.smart_signal), good_count, bad_count)["status"]
+        self.smart_reading_columns = (
+            self._reading_columns(good_count, bad_count) if self.record_readings else reading_columns_nan()
+        )
         stable: Status = stable_d["status"]
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
         self.smart, self.stable, self.span = smart, stable, sp
@@ -843,6 +860,8 @@ class AutopilotFlow:
 
     def smart_reading(self, name: str) -> list[float]:
         """Reading *name*'s current window, oldest first (:data:`SMART_READINGS`, #5134)."""
+        if name == "cost":
+            return list(self.recent_error_costs)
         if name in SMART_WINDOW_READINGS:
             return list(self.smart_windows.get(name, []))
         return list(self.smart_histories.get(name, []))

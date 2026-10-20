@@ -57,7 +57,9 @@ from vtscore.eval.example_opening import (
     stratified_split,
 )
 from vtscore.eval.autopilot_flow import (
+    APP_SMART_SIGNAL,
     MORE_DRY_RUN,
+    SMART_HISTORY_READINGS,
     SMART_WINDOW,
     STOP_CAP,
     AutopilotFlow,
@@ -3157,7 +3159,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
-    smart_signal: str = "cost",
+    smart_signal: str = APP_SMART_SIGNAL,
     smart_readings: bool = False,
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
@@ -3622,14 +3624,15 @@ def simulate_voting_iterations(  # noqa: C901
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
         smart_signal: What the Smart light is read off (#5134;
-            :data:`~vtscore.eval.autopilot_flow.SMART_SIGNALS`).  ``"cost"`` (the
-            default) is the app, FPR + FNR going flat; every other is a candidate
-            in the objective's units, green once it stops rising.  Needs the
-            Autopilot flow; the F-beta ones and ``line`` need a balance too.
-        smart_readings: Record every candidate's trend on each row
+            :data:`~vtscore.eval.autopilot_flow.SMART_SIGNALS`).  ``"fbeta_best"``
+            (the default) is the app: each recent model's best F-beta on the
+            current votes at the run's balance (F1 with none), green once it stops
+            rising.  ``"cost"`` is the app before #5134, FPR + FNR going flat; the
+            rest are the A/B's other readings.  Needs the Autopilot flow; ``line``
+            needs a balance too.
+        smart_readings: Record every reading's trend on each row
             (``smart_<reading>_<part>``, #5134) without moving the light, so one
-            run of the app prices them all.  On whenever *smart_signal* is not
-            ``"cost"``.
+            run of the app prices them all.
         stop_rule: What tells the user they can stop (#4878;
             :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
             (the default) is the app: Done once every quality light is green, or
@@ -4399,6 +4402,7 @@ def simulate_voting_iterations(  # noqa: C901
             stop_rule=stop_rule,
             stop_cap=stop_cap,
             smart_signal=smart_signal,
+            record_readings=smart_readings,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4410,12 +4414,14 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
-    if smart_signal != "cost" and flow is None:
+    if smart_signal != APP_SMART_SIGNAL and flow is None:
         raise ValueError(f"smart_signal {smart_signal!r} needs Autopilot's phase machine")
-    if smart_signal in ("fbeta", "fbeta_best", "heldout_fbeta", "line") and beta is None:
-        # The light would never have a window to read.
-        raise ValueError(f"smart_signal {smart_signal!r} needs a balance (beta)")
-    read_smart = smart_readings or smart_signal != "cost"
+    if smart_signal == "line" and beta is None:
+        # The labels line reads no level without a balance, so the light would never have a window.
+        raise ValueError("smart_signal 'line' needs a balance (beta)")
+    # What the flow is handed beyond Smart's own window (#5134): the cost arm's window, and the per-retrain readings.
+    read_cost = smart_readings or smart_signal == "cost"
+    read_history = smart_readings or smart_signal in SMART_HISTORY_READINGS
     if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
         # An arm that waits on the level, with no line to read or no phase to move, would never stop.
         raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
@@ -5427,6 +5433,8 @@ def simulate_voting_iterations(  # noqa: C901
             # step trains one, so the last SMART_WINDOW steps are the same set.
             del recent_steps[:-SMART_WINDOW]
             flow.record_step(
+                # The ``cost`` arm's window, the app before #5134: priced at
+                # SMART_INCLUSION at each model's own cut (#4243).
                 _labelset_error_costs(
                     recent_steps,
                     good_votes,
@@ -5435,14 +5443,16 @@ def simulate_voting_iterations(  # noqa: C901
                     SMART_INCLUSION,
                     region_aware=region_aware,
                     style_obj=style_obj,
-                ),
+                )
+                if read_cost
+                else None,
                 pool_scores,
                 threshold,
                 # Rates are over the haystack the votes came out of, labeled
                 # items included, as the app divides by its whole scored pool.
                 num_pool=len(sim_ids),
-                # #5134's candidates: the same window in the objective's units, and
-                # this retrain's held-out and labels-line readings.
+                # Smart's window (#5134): each model's best F-beta on the current
+                # votes at the run's balance, and the A/B's other units of it.
                 windows=_labelset_window_readings(
                     recent_steps,
                     good_votes,
@@ -5451,14 +5461,13 @@ def simulate_voting_iterations(  # noqa: C901
                     beta,
                     region_aware=region_aware,
                     style_obj=style_obj,
-                )
-                if read_smart
-                else None,
+                ),
+                # The A/B's per-retrain readings: held-out and labels-line.
                 history={
                     **_heldout_readings(details.get("fold_orderings"), beta),
                     "line": stop_level_reading(details.get("find_line"), beta)["expected_fbeta"],
                 }
-                if read_smart
+                if read_history
                 else None,
             )
             flow.update(

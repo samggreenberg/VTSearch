@@ -1,16 +1,18 @@
-"""#5134: Smart in the objective's units - the rising rule, its scorers, and the eval arm.
+"""#5134: Smart in the objective's units - the rising rule, its scorers, and the eval arms.
 
 What these pin:
 
-1. :func:`rising_status_from_scores` is :func:`smart_status_from_costs` with the
-   sign turned over: the same gates, green once the score stops *rising*.
+1. :func:`rising_status_from_scores`, Smart's rule since #5134, is
+   :func:`smart_status_from_costs` with the sign turned over: the same gates,
+   green once the score stops *rising*.
 2. The window scorers are what they say: average precision and F-beta, checked
    against brute force, NaN without both classes.
-3. The flow's ``smart_signal`` arm reads its light off the reading it names, and
-   the app's (``"cost"``) is untouched by readings handed alongside.
+3. The flow reads its light off the reading ``smart_signal`` names: the app's
+   ``fbeta_best`` by default, the ``cost`` arm off the FPR + FNR window, untouched
+   by readings handed alongside.
 4. In the harness, recording the readings moves nothing (same phases, same
-   picks), the reading columns agree with the rule, and an arm's light is the
-   rising rule on its reading.
+   picks), the reading columns agree with the rule, and every arm's light - the
+   app's included - is its rule on its reading.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from vtscore.detectors.cost_trend import (
 )
 from vtscore.detectors.stability import MIN_PER_CLASS
 from vtscore.eval.autopilot_flow import (
+    APP_SMART_SIGNAL,
     SMART_READING_COLUMNS,
     SMART_READINGS,
     SMART_SIGNALS,
@@ -133,16 +136,16 @@ class TestScorers:
         assert out["heldout_ap"] == pytest.approx(average_precision(s, y))
         assert out["heldout_fbeta"] == pytest.approx(best_fbeta(s, y, 1.0))
         assert math.isnan(_heldout_readings([], 1.0)["heldout_ap"])
-        assert math.isnan(_heldout_readings(folds, None)["heldout_fbeta"])
+        # No balance reads F1, as Smart does.
+        assert _heldout_readings(folds, None)["heldout_fbeta"] == pytest.approx(best_fbeta(s, y, 1.0))
 
 
 RISING = [0.3, 0.4, 0.5, 0.6, 0.7]
 FLAT = [0.7] * 5
 
 
-def _flow(signal):
-    flow = AutopilotFlow(smart_signal=signal, done_check=False, stop_rule="lights")
-    return flow
+def _flow(signal, record_readings=True):
+    return AutopilotFlow(smart_signal=signal, done_check=False, stop_rule="lights", record_readings=record_readings)
 
 
 class TestFlowArm:
@@ -151,12 +154,22 @@ class TestFlowArm:
             AutopilotFlow(smart_signal="vibes")
 
     def test_signals(self):
-        assert SMART_SIGNALS[0] == "cost" and set(SMART_SIGNALS[1:]) == set(SMART_READINGS)
+        assert APP_SMART_SIGNAL == "fbeta_best" and SMART_SIGNALS[0] == APP_SMART_SIGNAL
+        assert AutopilotFlow().smart_signal == APP_SMART_SIGNAL
+        assert set(SMART_SIGNALS) == set(SMART_READINGS) and "cost" in SMART_SIGNALS
+
+    @pytest.mark.parametrize("window, light", [(RISING, "yellow"), (FLAT, "green")])
+    def test_the_app_reads_the_best_fbeta_window(self, window, light):
+        flow = AutopilotFlow(done_check=False, stop_rule="lights")
+        # Whatever the cost window says: the app's light is F-beta's since #5134.
+        flow.record_step([0.3] * 4, None, windows={"fbeta_best": window, "ap": FLAT})
+        flow.update(10, 10, 100, None)
+        assert flow.smart == light
 
     @pytest.mark.parametrize("window, light", [(RISING, "yellow"), (FLAT, "green")])
     def test_window_arm_reads_its_window(self, window, light):
         flow = _flow("ap")
-        # A falling cost would hold the app's light yellow; the arm ignores it.
+        # A falling cost would hold the cost arm's light yellow; this arm ignores it.
         flow.record_step([0.9, 0.7, 0.5, 0.3], None, windows={"ap": window, "fbeta": [], "fbeta_best": []})
         flow.update(10, 10, 100, None)
         assert flow.smart == light
@@ -181,7 +194,14 @@ class TestFlowArm:
         assert flow.smart == "yellow"  # the cost is falling
         cols = flow.smart_reading_columns
         assert cols["smart_ap_mean"] == pytest.approx(0.7) and cols["smart_ap_last"] == pytest.approx(0.7)
+        assert cols["smart_cost_last"] == pytest.approx(0.3)
         assert math.isnan(cols["smart_line_slope"])
+
+    def test_columns_nan_unless_recorded(self):
+        flow = _flow("cost", record_readings=False)
+        flow.record_step([0.5] * 4, None, windows={"ap": FLAT})
+        flow.update(10, 10, 100, None)
+        assert all(math.isnan(v) for v in flow.smart_reading_columns.values())
 
     def test_columns_nan_below_the_class_minimum(self):
         flow = _flow("cost")
@@ -222,10 +242,15 @@ def read():
 
 
 def _green(r, name):
-    """The rising rule's light, re-read off a row's reading columns (red/yellow folded together)."""
+    """A reading's light, re-read off a row's reading columns (red/yellow folded together).
+
+    The rising rule for every reading but ``cost``, whose light is the cost rule.
+    """
     slope, t = r[f"smart_{name}_slope"], r[f"smart_{name}_t"]
     if math.isnan(slope):
         return False
+    if name == "cost":
+        return slope >= -SMART_RISE_THRESHOLD or t > -SMART_SLOPE_T
     return slope <= SMART_RISE_THRESHOLD or t < SMART_SLOPE_T
 
 
@@ -256,11 +281,13 @@ class TestHarness:
             assert all(not math.isnan(r[f"smart_{name}_mean"]) for r in late), name
             assert all(0.0 <= r[f"smart_{name}_last"] <= 1.0 for r in late), name
 
-    def test_arm_light_is_the_rising_rule(self):
-        rows = _run(smart_signal="ap")
+    @pytest.mark.parametrize("signal", ["fbeta_best", "ap", "cost"])
+    def test_each_light_is_its_rule_on_its_reading(self, signal, read):
+        """The app's (``fbeta_best``, the default) and two arms', re-read off the recorded columns."""
+        rows = read if signal == APP_SMART_SIGNAL else _run(smart_signal=signal, smart_readings=True)
         checked = 0
         for r in rows:
-            if r["smart"] in ("green", "yellow") and not math.isnan(r["smart_ap_slope"]):
-                assert (r["smart"] == "green") == _green(r, "ap"), r["t"]
+            if r["smart"] in ("green", "yellow") and not math.isnan(r[f"smart_{signal}_slope"]):
+                assert (r["smart"] == "green") == _green(r, signal), r["t"]
                 checked += 1
         assert checked > 10

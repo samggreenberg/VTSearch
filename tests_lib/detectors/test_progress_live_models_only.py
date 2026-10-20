@@ -133,7 +133,7 @@ class TestOnlyTrainedModelsArePlotted:
         good, bad = _votes(10)
         lp.clear_progress_cache()
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
+        series = lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         assert series == []
         with lp._progress_lock:
@@ -150,7 +150,7 @@ class TestOnlyTrainedModelsArePlotted:
         lp.clear_progress_cache()
         _inject_at(clips, history, sorted_at)
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
+        series = lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         assert {e["time_index"] for e in series} == sorted_at
 
@@ -161,20 +161,20 @@ class TestOnlyTrainedModelsArePlotted:
         lp.clear_progress_cache()
         _inject_at(clips, history, {2, 7})
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
+        series = lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         assert [(e["time_index"], e["num_labels"]) for e in series] == [(2, 3), (7, 8)]
 
 
 class TestScoredWhereItIsServed:
-    def test_error_cost_reads_the_patch_rows_not_the_image_vector(self):
+    def test_smart_reads_the_patch_rows_not_the_image_vector(self):
         """A head that fires only on the planted patch must score as the sort ranks it.
 
         Every Good media carries ``TARGET`` in one patch; no image-level vector
-        does.  Scored at production geometry the head clears the cut on exactly
-        the Good media, so both error rates are zero.  Scored on image-level
-        vectors it sees ``IMAGE_DIR`` everywhere, misses every positive, and the
-        FNR would be 1.
+        does.  Scored at production geometry the head ranks exactly the Good
+        media first, so its best F-beta is 1.  Scored on image-level vectors it
+        sees ``IMAGE_DIR`` everywhere, scores every media alike, and no cut
+        separates them: the best it could read is keeping all of them.
         """
         pytest.importorskip("torch")
         clips, history = _clips(), _history(8)
@@ -184,11 +184,10 @@ class TestScoredWhereItIsServed:
         # sigmoid(~0) for anything else.
         _inject_at(clips, history, {7}, threshold=0.9)
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
+        series = lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         assert len(series) == 1
-        assert (series[0]["fpr"], series[0]["fnr"]) == (0.0, 0.0)
-        assert series[0]["error_cost"] == 0.0
+        assert series[0]["fbeta"] == 1.0
 
     def test_stability_predictions_use_the_same_geometry(self):
         """The Stable pool is scored through the serving path too.

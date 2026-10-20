@@ -11,8 +11,8 @@ Covers four routes in ``vtsearch/routes/eval.py``:
 * ``GET  /api/eval/train-and-score/result``      -> :class:`EvalTrainAndScoreResultQuerySchema`
                                                     -> :class:`EvalTrainAndScoreResponseSchema`
 
-The per-step ``error_cost`` / ``stability`` / ``diversity`` lists are
-enumerated as nested schemas (:class:`ErrorCostPointSchema`,
+The per-step ``fbeta`` / ``stability`` / ``diversity`` lists are
+enumerated as nested schemas (:class:`SmartPointSchema`,
 :class:`StabilityPointSchema`, :class:`DiversityPointSchema`).  Each shape is
 built in exactly one place inside ``vtscore.detectors.labeling_progress``, so
 the key sets are fixed and the frontend charts can consume the generated
@@ -26,7 +26,7 @@ component ``$ref`` strings in field metadata, which silently rots the moment
 a schema class is renamed; the single client-side cast is the cheaper trade.
 
 The two train-and-score endpoints share a single response schema that
-declares every metric-specific data key (``error_cost`` / ``stability`` /
+declares every metric-specific data key (``fbeta`` / ``stability`` /
 ``diversity``) and fills in whichever one the requested metric produced;
 its ``unknown = "include"`` only widens what the schema accepts on load.
 """
@@ -46,22 +46,27 @@ _METRIC_VALIDATOR = validate.OneOf(["smart", "stable", "diverse"])
 # ---------------------------------------------------------------------------
 
 
-class ErrorCostPointSchema(Schema):
-    """One step of the error-cost series (``_eval_cached_models``).
+class SmartPointSchema(Schema):
+    """One step of the Smart series (``_eval_cached_models``): the F-beta the indicator regresses.
 
     One point per label step the app **trained a detector for**, not per label
     step: a step whose label set no learned sort ran against carries no model
     and is absent from the series, so ``num_labels`` is not contiguous across
-    points (issue #3757)."""
+    points (issue #3757).  Each point is that step's detector re-scored on the
+    *current* votes, so the whole series moves as votes arrive (#5134; the
+    series was each detector's FPR + FNR before)."""
 
     num_labels = fields.Integer(required=True)
-    error_cost = fields.Float(
+    fbeta = fields.Float(
         required=True,
-        metadata={"description": "``fpr_weight * fpr + fnr_weight * fnr`` for the model trained at this step."},
+        metadata={
+            "description": (
+                "The best F-beta, at the session's balance, any cut through this step's detector's scores "
+                "reaches on the current votes."
+            )
+        },
     )
     time_index = fields.Integer(metadata={"description": "Zero-based index of this step in the label history."})
-    fpr = fields.Float(metadata={"description": "False-positive rate on the held-out eval set."})
-    fnr = fields.Float(metadata={"description": "False-negative rate on the held-out eval set."})
 
 
 class StabilityPointSchema(Schema):
@@ -117,7 +122,7 @@ class DiversityPointSchema(Schema):
 class LabelingProgressResponseSchema(Schema):
     """Response for ``POST /api/labeling-progress``."""
 
-    error_cost_over_time = fields.List(fields.Nested(ErrorCostPointSchema), required=True)
+    fbeta_over_time = fields.List(fields.Nested(SmartPointSchema), required=True)
     stability_over_time = fields.List(fields.Nested(StabilityPointSchema), required=True)
     diversity_level_over_time = fields.List(fields.Nested(DiversityPointSchema), required=True)
     total_labels = fields.Integer(required=True)
@@ -208,7 +213,7 @@ class IndicatorScoreHistoryResponseSchema(Schema):
     """Response for ``GET /api/indicator-score-history``."""
 
     metric = fields.String(required=True, validate=_METRIC_VALIDATOR)
-    #: Whichever of ``ErrorCostPoint`` / ``StabilityPoint`` / ``DiversityPoint``
+    #: Whichever of ``SmartPoint`` / ``StabilityPoint`` / ``DiversityPoint``
     #: matches ``metric``; kept opaque here (see the module docstring).
     history = fields.List(fields.Dict(), required=True)
     # ``false`` when the per-step cache does not yet cover the whole label
@@ -251,7 +256,7 @@ class EvalTrainAndScoreResponseSchema(Schema):
     """Combined response for the start + poll train-and-score routes.
 
     The response shape varies with status (``running`` vs ``done`` vs
-    ``error`` vs ``cancelled``) and metric (``error_cost`` vs
+    ``error`` vs ``cancelled``) and metric (``fbeta`` vs
     ``stability`` vs ``diversity`` data keys). Declared as a permissive
     schema so the metric-specific data key flows through unchanged.
     """
@@ -264,7 +269,7 @@ class EvalTrainAndScoreResponseSchema(Schema):
     metric = fields.String()
     current = fields.Integer()
     total = fields.Integer()
-    error_cost = fields.List(fields.Nested(ErrorCostPointSchema))
+    fbeta = fields.List(fields.Nested(SmartPointSchema))
     stability = fields.List(fields.Nested(StabilityPointSchema))
     diversity = fields.List(fields.Nested(DiversityPointSchema))
     error = fields.String()

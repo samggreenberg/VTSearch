@@ -34,7 +34,7 @@ export type { CleanerInfo } from '../generated/api-client/models/cleaner-info';
 export type { DatasetRegistryEntry } from '../generated/api-client/models/dataset-registry-entry';
 export type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
 export type { FieldOptions } from '../generated/api-client/models/field-options';
-export type { ErrorCostPoint } from '../generated/api-client/models/error-cost-point';
+export type { SmartPoint } from '../generated/api-client/models/smart-point';
 export type { StabilityPoint } from '../generated/api-client/models/stability-point';
 export type { DiversityPoint } from '../generated/api-client/models/diversity-point';
 
@@ -310,4 +310,3 @@ export interface AutoFindTaskInfo {
    *  lacks): the reason. Such a row is idle from its first frame. */
   skipped?: string;
 }
-

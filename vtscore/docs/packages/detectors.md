@@ -771,12 +771,12 @@ Every entry point resolves its cache through the active
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
-| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`); `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines |
+| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines; `smart_threshold` is deprecated and ignored (#5134) |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
-| `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
+| `calculate_fbeta_over_time(..., beta=None)`     | Per-step best F-beta on current votes at the session's balance (Smart's points) |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
-| `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
+| `compute_labeling_status(..., span_info=None, beta=None)` | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
 | `cached_indicator_history(metric, ...)`         | Read one metric's history **without** advancing the cache; returns `(history, complete)` |
 
@@ -784,15 +784,18 @@ Every entry point resolves its cache through the active
 
 `compute_labeling_status` returns three indicators:
 
-- **Smart** - fits a linear regression slope over the most recent 10
-  error-cost values; green when the relative slope is above `-0.015` (cost has
-  leveled off) **or** when the slope is within two standard errors of zero, i.e.
-  the window's step-to-step scatter explains it (a plateaued cost is flat on
+- **Smart** - re-scores the 10 most recent detectors on the current votes and
+  reads each one's best F-beta over every cut, at the session's balance (F1 with
+  none; `best_fbeta`, `smart_beta`). It fits a linear regression slope over those
+  10 points; green when the relative slope is below `+0.015` (F-beta has stopped
+  rising) **or** when the slope is within two standard errors of zero, i.e. the
+  window's step-to-step scatter explains it (a plateaued F-beta is flat on
   average but noisy between retrains). The arithmetic lives in
-  `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
-  is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
-  that inclusion (`smart_cut`), whatever line the balance draws, so one
-  window never mixes models cut under different rules (issue #4243).
+  `vtscore.detectors.cost_trend` (`rising_status_from_scores`), which the eval
+  harness calls too. Cut-free, so one window never mixes models cut under
+  different rules. Until #5134 each point was the detector's FPR + FNR at its
+  own Inclusion 0 cut (`smart_cut`, #4243), green once it stopped falling; that
+  rule is the eval's `cost` arm now.
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only
   **confident** flips count against it - items that sat clear of the cut

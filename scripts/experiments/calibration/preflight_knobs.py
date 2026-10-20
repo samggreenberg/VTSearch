@@ -488,8 +488,12 @@ def probe(C: Any) -> list[str]:
     if C.SMART_GATE != "app":
         rows.append(("smart_gate", C.SMART_GATE, "app (the Smart light gates Hard -> New / Done)"))
     # #5134's arm: what the Smart light reads.  The readings alone move nothing.
-    if C.SMART_SIGNAL != "cost":
-        rows.append(("smart_signal", C.SMART_SIGNAL, "cost (FPR + FNR of the re-scored window, going flat)"))
+    from vtscore.eval.autopilot_flow import APP_SMART_SIGNAL  # noqa: PLC0415
+
+    if C.SMART_SIGNAL != APP_SMART_SIGNAL:
+        rows.append(
+            ("smart_signal", C.SMART_SIGNAL, f"{APP_SMART_SIGNAL} (each recent model's best F-beta, going flat)")
+        )
     if C.STOP_RULE != "lights|level" or C.STOP_LEVEL != 0.5:
         rows.append(
             (
