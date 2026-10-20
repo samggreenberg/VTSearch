@@ -1544,7 +1544,10 @@ verdict and a line of supporting numbers:
   loaded at all. About 5% is in-domain; well above it, the items past the
   yardstick are where a handed-over detector is least reliable. Before
   that first Tune (or after a new vote) the chip shows the share in an
-  "evidence vacuum" and draws no verdict.
+  "evidence vacuum" and draws no verdict. The yardstick is a distance in
+  this server's embedder, so exported labels don't carry it: a detector
+  rebuilt from them on another VTSearch records its own there
+  ([Move a detector](howto/move-a-detector.md)).
 
 If either share is large, the fastest fix is usually to label a few items
 from the flagged region and retrain, rather than to move the Threshold.
