@@ -210,7 +210,8 @@ slides:
   # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
   # #4560) and the model's count corrected below it (#4523); then the app — the
-  # autopilot's rounds and stop, the result pane, and how often its ranges hold.
+  # autopilot's rounds and stop, what a finished test reports, and how often
+  # its ranges hold.
   # The bands and the per-band range it builds on are Spot Check's and Home on
   # the Range's, which open the section. Every figure but the last runs the
   # shipped `LineTest` on a planted pile (`make-test-figs.py`); the last is

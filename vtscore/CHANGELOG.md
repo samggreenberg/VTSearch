@@ -443,6 +443,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
+  one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
+  generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends
+  the test), which `LineTest.ahead` reads back and `as_dict()` carries as `ahead` until a label changes. `draw()`
+  installs the copy whose labels match the ones recorded instead of drawing again: the same picks from the same
+  generator state, so a seeded test deals the same rounds, and reads the same numbers, whether or not anything was
+  dealt ahead. `RoundAhead` is exported from `vtscore.training.thresholds`. Additive: a caller that never deals ahead
+  sees no change but `as_dict()["ahead"]`, always `None`.
+
 - **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
   (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
   `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the

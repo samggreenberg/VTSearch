@@ -653,6 +653,64 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1 })));
   });
 
+  // #5116: the round's last vote used to deal the next round, so its first
+  // pick's fetch started with the user waiting on it.
+  it('on the last pick of a round warms the next round both ways, then the way the vote went', () => {
+    const lineTest = fixture.componentInstance.lineTest;
+    lineTest.start();
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
+    lineTest.vote('good');
+    const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(2), url(4)], [url(1)]]);
+
+    lineTest.vote('bad');
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2 })));
+    TestBed.tick();
+    expect(lineTest.currentId()).toBe(4);
+    expect(lastCall()).toEqual([[url(2)], [url(4)]]);
+  });
+
+  it("shows the next round's first pick from bytes already held (#5116)", async () => {
+    // jsdom has neither fetch's blob path nor object URLs; stub both, as the store's own spec does.
+    let seq = 0;
+    vi.stubGlobal('fetch', () => Promise.resolve({ ok: true, blob: () => Promise.resolve({ size: 1 }) }));
+    Object.assign(URL, { createObjectURL: () => `blob:mock/${++seq}`, revokeObjectURL: () => undefined });
+    const resolve = vi.spyOn(TestBed.inject(MediaPrefetchService), 'resolve');
+    const settle = async () => {
+      for (let i = 0; i < 12; i++) await Promise.resolve();
+    };
+    try {
+      const lineTest = fixture.componentInstance.lineTest;
+      lineTest.start();
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
+      lineTest.vote('good');
+      const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
+      httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+      await settleZoneless(fixture);
+      await settle();
+
+      lineTest.vote('good');
+      httpMock
+        .expectOne('/api/line-test/votes')
+        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2 })));
+      await settleZoneless(fixture);
+      expect(lineTest.currentId()).toBe(2);
+      const shown = resolve.mock.calls.findIndex(([src]) => src === url(2));
+      expect(shown).toBeGreaterThanOrEqual(0);
+      expect(resolve.mock.results[shown].value).toMatch(/^blob:mock\//);
+    } finally {
+      vi.unstubAllGlobals();
+      delete (URL as { createObjectURL?: unknown }).createObjectURL;
+      delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
+    }
+  });
+
   it('warms nothing of the boundary walk while the Autopilot tab is up', () => {
     TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
     TestBed.inject(MediaStateService).selectMedia(2);
@@ -1075,18 +1133,19 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(start).toHaveBeenCalledTimes(1);
     });
 
-    // #5117: a view torn down inside that tick started the panel it had just
-    // destroyed, and the shortcuts listened on with no panel to stop them.
+    // A view left within that tick used to start its last panel anyway: the
+    // shortcuts listened on with no panel to stop them, and every later
+    // spec in the worker met a stray ArrowRight handler that blurred focus.
     it('starts no centre panel once the view is gone', async () => {
       const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
       sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
       fixture.componentInstance.onFindTabChange('autopilot');
       httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
       await settleZoneless(fixture);
+      start.mockClear();
 
       fixture.componentInstance.onFindTabChange('review');
       TestBed.tick();
-      expect(fixture.componentInstance.centerPanel()).toBeTruthy();
       fixture.destroy();
       await new Promise((resolve) => setTimeout(resolve));
       expect(start).not.toHaveBeenCalled();

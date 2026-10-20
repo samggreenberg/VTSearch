@@ -5402,6 +5402,32 @@
         ],
         "type": "object"
       },
+      "LineTestAhead": {
+        "additionalProperties": false,
+        "properties": {
+          "bad": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "good": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bad",
+          "good",
+          "id"
+        ],
+        "type": "object"
+      },
       "LineTestBand": {
         "additionalProperties": false,
         "properties": {
@@ -5759,6 +5785,10 @@
       "LineTestState": {
         "additionalProperties": false,
         "properties": {
+          "ahead": {
+            "$ref": "#/components/schemas/LineTestAhead",
+            "nullable": true
+          },
           "band": {
             "$ref": "#/components/schemas/LineTestRoundBand",
             "nullable": true
@@ -5822,6 +5852,7 @@
           }
         },
         "required": [
+          "ahead",
           "band",
           "bands",
           "beta",
@@ -14598,7 +14629,7 @@
     },
     "/api/line-test/votes": {
       "post": {
-        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).",
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.",
         "operationId": "vote_line_test",
         "requestBody": {
           "content": {

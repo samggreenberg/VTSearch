@@ -566,6 +566,166 @@ class TestThePhaseMachine:
             LineBudgets(alpha=1.0)
 
 
+def _to_last_pick(
+    ids: list[int],
+    line: int,
+    positives: set[int],
+    rounds: int,
+    *,
+    budgets: LineBudgets = DEFAULT_BUDGETS,
+    posteriors: np.ndarray | None = None,
+    seed: int = 42,
+) -> tuple[LineTest, int]:
+    """A test *rounds* rounds in, every pick of the next round voted but its last: ``(test, that pick)``."""
+    test = LineTest.start(ids, line, 1.0, posteriors=posteriors, seed=seed, budgets=budgets)
+    _run(test, positives, rounds=rounds)
+    picks = test.draw()
+    test.record({cid: cid in positives for cid in picks[:-1]})
+    return test, picks[-1]
+
+
+def _tipping(ids: list[int], line: int, positives: set[int]) -> tuple[LineBudgets, int]:
+    """Budgets, and a round, at which the vote on that round's last pick decides whether the matches phase ends.
+
+    The precision range's width after each way the pick can go, from tests
+    restored to those labels, with the target set between the two; the
+    round is taken only where the run to it is the same under that target.
+    """
+    loose = LineBudgets(matches_width=0.01, matches_picks=250)
+    first_pass = sum(1 for b in line_bands(len(ids), line) if b.side == ABOVE)
+    for rounds in range(first_pass, 40):
+        test, last = _to_last_pick(ids, line, positives, rounds, budgets=loose)
+        if test.phase().phase != PHASE_MATCHES:
+            break
+        widths = [
+            LineTest.start(ids, line, 1.0, labels={**test.labels, last: right}).estimates().precision.width
+            for right in (True, False)
+        ]
+        if abs(widths[0] - widths[1]) < 0.005:
+            continue
+        budgets = LineBudgets(matches_width=sum(widths) / 2, matches_picks=250)
+        again, _ = _to_last_pick(ids, line, positives, rounds, budgets=budgets)
+        if again.phase().phase == PHASE_MATCHES and again.labels == test.labels:
+            return budgets, rounds
+    pytest.fail("no round at which the last vote decides the matches phase")
+
+
+class TestDealingAhead:
+    """#5116: with one pick of a round left, the next round is drawn both ways, and the vote installs the one it names."""
+
+    @pytest.mark.parametrize(("model", "rounds"), [(True, 0), (True, 3), (True, 4), (True, 7), (False, 0), (False, 3)])
+    def test_each_way_is_the_round_draw_deals_after_that_vote(self, model, rounds):
+        ids, positives, post = _planted()
+        posteriors = post if model else None
+        test, last = _to_last_pick(ids, 64, positives, rounds, posteriors=posteriors)
+        assert not test.phase().done
+        ahead = test.deal_ahead()
+        assert ahead is not None and ahead.id == last and test.ahead == ahead
+        for right, dealt in ((True, ahead.good), (False, ahead.bad)):
+            # The same test, run without dealing ahead, to the same vote.
+            plain, _ = _to_last_pick(ids, 64, positives, rounds, posteriors=posteriors)
+            plain.record({last: right})
+            assert plain.draw() == dealt
+        test.record({last: last in positives})
+        installed = test.draw()
+        assert installed == (ahead.good if last in positives else ahead.bad)
+        assert all(test.pick_band[cid] == test.band for cid in installed)
+
+    @pytest.mark.parametrize("model", [True, False])
+    def test_a_seeded_test_deals_the_same_rounds_and_reads_the_same_with_or_without_dealing_ahead(self, model):
+        ids, positives, post = _planted()
+        posteriors = post if model else None
+
+        def vote_through(ahead: bool) -> tuple[LineTest, list[tuple[int, ...]]]:
+            """Vote one pick at a time to the end, dealing ahead after each vote or never."""
+            test = LineTest.start(ids, 64, 1.0, posteriors=posteriors, seed=7)
+            dealt, picks = [], test.draw()
+            while picks:
+                dealt.append(picks)
+                for cid in picks:
+                    test.record({cid: cid in positives})
+                    if ahead:
+                        test.deal_ahead()
+                picks = test.draw()
+            return test, dealt
+
+        plain, plain_rounds = vote_through(ahead=False)
+        test, rounds = vote_through(ahead=True)
+        assert rounds == plain_rounds and len(rounds) > 4
+        assert test.labels == plain.labels and test.pick_band == plain.pick_band and test.rounds == plain.rounds
+        assert test.estimates() == plain.estimates() and test.phase() == plain.phase()
+        assert test.as_dict() == plain.as_dict()
+
+    def test_the_two_ways_may_go_to_different_bands(self):
+        ids, positives, _ = _planted(n=400, line=256)
+        budgets, rounds = _tipping(ids, 256, positives)
+        test, last = _to_last_pick(ids, 256, positives, rounds, budgets=budgets)
+        ahead = test.deal_ahead()
+        assert ahead is not None and ahead.good and ahead.bad
+        sides = {
+            band.side
+            for band in test.bands
+            for dealt in (ahead.good, ahead.bad)
+            if test.band_of(dealt[0]) == band.index
+        }
+        assert sides == {ABOVE, BELOW}, "one way ends the matches phase and walks below the line, the other stays above"
+        for right, dealt in ((True, ahead.good), (False, ahead.bad)):
+            plain, _ = _to_last_pick(ids, 256, positives, rounds, budgets=budgets)
+            plain.record({last: right})
+            assert plain.draw() == dealt
+
+    def test_a_vote_that_ends_the_test_deals_nothing_that_way(self):
+        # A line that keeps the whole ranking: once the matches phase ends, so does the test.
+        ids, positives, _ = _planted(n=256, line=256)
+        budgets, rounds = _tipping(ids, 256, positives)
+        test, last = _to_last_pick(ids, 256, positives, rounds, budgets=budgets)
+        ahead = test.deal_ahead()
+        assert ahead is not None and (ahead.good == ()) != (ahead.bad == ())
+        ends = ahead.good == ()
+        test.record({last: ends})
+        assert test.draw() == () and test.phase().phase == PHASE_DONE
+
+    def test_the_down_key_drops_the_round_dealt_ahead_and_the_next_deal_is_the_same(self):
+        ids, positives, post = _planted()
+        test, last = _to_last_pick(ids, 64, positives, 2, posteriors=post)
+        ahead = test.deal_ahead()
+        assert ahead is not None
+        voted = next(cid for cid in test.labels if test.pick_band[cid] == test.band)
+        test.unrecord(voted)
+        assert test.ahead is None and test.as_dict()["ahead"] is None
+        assert test.deal_ahead() is None, "two picks are pending again"
+        test.record({voted: voted in positives})
+        assert test.deal_ahead() == ahead
+        test.record({last: True})
+        assert test.draw() == ahead.good
+
+    def test_a_round_dealt_ahead_is_not_installed_for_other_labels(self):
+        ids, positives, post = _planted()
+        test, last = _to_last_pick(ids, 64, positives, 2, posteriors=post)
+        test.deal_ahead()
+        voted = next(cid for cid in test.labels if test.pick_band[cid] == test.band)
+        # Taken back and voted the other way, with the last pick, in one go: no deal hangs on that.
+        test.unrecord(voted)
+        test.record({voted: voted not in positives, last: True})
+        plain, _ = _to_last_pick(ids, 64, positives, 2, posteriors=post)
+        plain.unrecord(voted)
+        plain.record({voted: voted not in positives, last: True})
+        assert test.draw() == plain.draw()
+
+    def test_nothing_is_dealt_ahead_unless_one_pick_is_left_of_a_running_test(self):
+        ids, positives, post = _planted()
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42)
+        picks = test.draw()
+        assert test.deal_ahead() is None and test.ahead is None
+        test.record({cid: True for cid in picks[:3]})
+        assert test.deal_ahead() is None and test.as_dict()["ahead"] is None
+        assert LineTest.start(ids, 4, 1.0, seed=42).deal_ahead() is None, "nothing to test"
+        done = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42), positives)
+        assert done.deal_ahead() is None
+        resumed = LineTest.start(ids, 64, 1.0, posteriors=post, labels=done.labels)
+        assert resumed.draw() == () and resumed.deal_ahead() is None, "a resumed test has no round to deal ahead of"
+
+
 class TestTheWireShape:
     def test_as_dict_carries_the_phase_the_round_the_bands_and_the_estimates(self):
         ids, positives, post = _planted()
@@ -573,6 +733,13 @@ class TestTheWireShape:
         picks = test.draw()
         d = test.as_dict()
         assert d["phase"] == PHASE_MATCHES and d["round"] == 1 and d["picks"] == list(picks)
+        assert d["ahead"] is None
+        test.record({cid: True for cid in picks[:-1]})
+        ahead = test.deal_ahead()
+        assert ahead is not None
+        assert test.as_dict()["ahead"] == {"id": picks[-1], "good": list(ahead.good), "bad": list(ahead.bad)}
+        test.unrecord(picks[0])
+        d = test.as_dict()
         assert d["band"] == {"index": 3, "side": ABOVE, "lo": 33, "hi": 64}
         assert d["line_count"] == 64 and d["size"] == 600 and d["beta"] == 1.0
         assert len(d["bands"]) == 12 and d["bands"][0]["range"] is None

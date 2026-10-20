@@ -84,6 +84,55 @@ describe('LineTestSessionService (#4524)', () => {
     expect(service.upcoming(10)).toEqual([36, 41, 44]);
   });
 
+  it('with one pick left the next round is upcoming both ways, in turns, then the way the vote went (#5116)', () => {
+    start([1, 2]);
+    service.vote('good');
+    const ahead = { id: 2, good: [7, 8, 9], bad: [20, 21, 22] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [2], labelled: 1, ahead })));
+    expect(service.currentId()).toBe(2);
+    expect(service.upcoming(2)).toEqual([7, 20]);
+    expect(service.upcoming(4)).toEqual([7, 20, 8, 21]);
+    service.vote('bad');
+    // The vote is out and its reply not back: the next round is the one it names.
+    expect(service.upcoming(2)).toEqual([20, 21]);
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [20, 21, 22], round: 2, labelled: 2 })));
+    expect(service.currentId()).toBe(20);
+    expect(service.upcoming(2)).toEqual([21, 22]);
+  });
+
+  it('both ways dealing the same round names its picks once each (#5116)', () => {
+    start([1, 2]);
+    service.vote('good');
+    const ahead = { id: 2, good: [7, 8, 9], bad: [7, 8, 9] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [2], labelled: 1, ahead })));
+    expect(service.upcoming(2)).toEqual([7, 8]);
+  });
+
+  it('the round\'s last unvoted pick comes before the next round when another pick is on screen (#5116)', () => {
+    start([1, 2, 3]);
+    service.vote('good');
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [2, 3], labelled: 1 })));
+    service.vote('good');
+    const ahead = { id: 3, good: [7, 8], bad: [20, 21] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [3], labelled: 2, ahead })));
+    service.show(0);
+    expect(service.upcoming(3)).toEqual([3, 7, 20]);
+  });
+
+  it('a ↓ that lifts a vote leaves the round dealt ahead out, before its reply drops it (#5116)', () => {
+    start([1, 2]);
+    service.vote('good');
+    const ahead = { id: 2, good: [7, 8], bad: [20, 21] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [2], labelled: 1, ahead })));
+    service.navigate('back');
+    expect(service.currentId()).toBe(1);
+    expect(service.upcoming(2)).toEqual([2]);
+    httpMock.expectOne('/api/line-test/unvote').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+    expect(service.upcoming(2)).toEqual([2]);
+  });
+
   it('the round\'s last vote brings the next round, dealt afresh', () => {
     start([1, 2]);
     service.vote('good');

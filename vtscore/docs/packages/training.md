@@ -751,6 +751,21 @@ question for the eval, priced by #4523
   census of a band no larger than a round); `record({id: match})` takes the
   labels; `unrecord(id)` takes one back; `pick_band` records which band each
   pick came from.
+- `deal_ahead()` (#5116) draws the next round before the vote that deals it:
+  once a round has one pick pending, for each way that pick can be voted, a
+  copy of the test records it and `draw()`s, from a copy of the generator at
+  its current state. It returns a `RoundAhead` (`id`, the pending pick;
+  `good` and `bad`, the round each vote would deal, `()` where it ends the
+  test), which `ahead` reads back and `as_dict()` carries as `ahead`, until a
+  label changes. `draw()` then installs the copy whose labels match the ones
+  recorded, with the draws it read the state on, instead of drawing again.
+  Why this is exact: the round used is the uniform draw from the band the
+  allocation rule names for the realized labels, from the generator state
+  `draw()` would have drawn it from, so it is the same picks; a seeded test
+  deals the same rounds and reads the same numbers whether or not anything
+  was dealt ahead, and the other way is discarded unseen. The app calls it
+  after every vote, so a client can fetch the next round's media before the
+  last vote of a round; the eval harness never does.
 - `estimates()` is every number from one set of joint Monte Carlo draws
   (`LineEstimates`): per band, a Beta posterior on the share right under the
   Jeffreys prior (`JEFFREYS`, 1/2) with the unlabelled items drawn binomially
