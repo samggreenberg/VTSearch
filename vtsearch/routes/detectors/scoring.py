@@ -576,6 +576,64 @@ def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int
     }
 
 
+def defer_learned_sort_baseline(
+    det_ctx: Any, ds_ctx: Any, snap: dict, labelset: Any, results: list[dict], threshold: float
+) -> None:
+    """Leave the Evidence verdict's training baseline to be drawn from a learned sort (#5120).
+
+    The Train view's learned sort scores its whole dataset with the current
+    head at every vote, so on the dataset the detector is trained on it holds
+    everything a Find there draws the baseline from: the labels, the scores
+    (*results*, over *snap*) and the line (*threshold*).  Drawing it here would
+    add a distance pass over the dataset to every vote, so the sort only leaves
+    them (:class:`~vtscore.detectors.evidence_baseline.PendingDraw`), to be
+    drawn once the votes stop, or as soon as the evidence route off the training
+    dataset asks for it.  Runs inside the sort's job, whose active dataset is
+    *ds_ctx*.  Never raises: the baseline is a side channel, and the sort's
+    result is what the job is for.
+    """
+    import numpy as np
+
+    from vtscore.detectors.evidence_baseline import PendingDraw, defer_baseline_draw
+    from vtscore.embedding.media_vectors import media_embedding
+
+    if labelset is None or not results or not det_ctx.detector_id:
+        return
+    try:
+        embedder = det_ctx.embedder or None
+        # The stamp names the vectors' width: any scored media's gives it.
+        dim = 0
+        for row in results:
+            media = snap.get(row["id"])
+            emb = None if media is None else media_embedding(media, embedder_name=embedder)
+            if emb is not None:
+                dim = int(np.asarray(emb).shape[-1])
+                break
+        if not dim:
+            return
+        home = _evidence_baseline_home(det_ctx, labelset, embedder or "", dim)
+        if home is None or home["training_id"] != ds_ctx.dataset_id:
+            return
+        defer_baseline_draw(
+            PendingDraw(
+                detector_id=det_ctx.detector_id,
+                path=home["path"],
+                stamp=home["stamp"],
+                dataset_id=home["training_id"],
+                dataset_name=home["training_name"],
+                det_ctx=det_ctx,
+                dataset=ds_ctx,
+                labelset=labelset,
+                medias=snap,
+                results=results,
+                threshold=threshold,
+                embedder=embedder,
+            )
+        )
+    except Exception:  # noqa: BLE001 - see the docstring
+        logger.exception("Could not leave the Evidence baseline of detector %s to be drawn", det_ctx.detector_id)
+
+
 @detector_scoring_bp.route("/api/find/evidence-coverage", methods=["GET"])
 @detector_scoring_bp.response(200, FindEvidenceCoverageResponseSchema)
 def find_evidence_coverage():
@@ -601,18 +659,24 @@ def find_evidence_coverage():
     share is reported and no verdict is drawn.  Returns ``available: False``
     (rather than 4xx) when there is no scored Find run or no resolvable
     labelset, so the Stats modal can simply hide the section.  Its one write:
-    run on the training dataset, it records the baseline on the detector.  See
-    docs/plans/coverage-atlas.md §6.1 (phase v0).
+    run on the training dataset, it records the baseline on the detector; run
+    anywhere else, it first lands one a learned sort there left waiting
+    (:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md
+    §6.1 (phase v0).
     """
-    import numpy as np
-
-    from vtscore.detectors.evidence_baseline import record_baseline, stored_baseline
-    from vtscore.detectors.evidence_coverage import evidence_coverage_report, reference_cutoffs
-    from vtscore.detectors.labelset_training import build_xy_from_labelset
+    from vtscore.detectors.evidence_baseline import (
+        discard_baseline_draw,
+        draw_baseline,
+        flush_baseline_draw,
+        labelset_evidence,
+        record_baseline,
+        scored_queries,
+        stored_baseline,
+    )
+    from vtscore.detectors.evidence_coverage import evidence_coverage_report
     from vtscore.detectors.learned_sort import resolve_active_labelset
     from vtscore.detectors.store import _read_detector
     from vtscore.detectors.training_domain import labelled_media_ids
-    from vtscore.embedding.media_vectors import media_embedding
     from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
@@ -624,62 +688,49 @@ def find_evidence_coverage():
     if labelset is None:
         return _empty_evidence_coverage()
 
-    # (X, y) re-derived from the in-memory label embeddings the detector load
-    # already populated from its saved labelset — cross-user by construction,
-    # nothing persisted.  Good rows are y == 1, Bad (incl. patch-flood
-    # negatives) are y == 0.
-    x_list, y_list, _groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
-    if not x_list:
+    # The labelled evidence, re-derived from the in-memory label embeddings the
+    # detector load already populated from its saved labelset — cross-user by
+    # construction, nothing persisted.  Bad rows include patch-flood negatives.
+    evidence = labelset_evidence(det_ctx, labelset)
+    if evidence is None:
         return _empty_evidence_coverage()
-    x = np.asarray(x_list, dtype=np.float32)
-    y = np.asarray(y_list, dtype=np.float32)
-    pos = x[y == 1.0]
-    neg = x[y == 0.0]
+    pos, neg = evidence
 
     # Query side: every scored item's embedding in the *same* space the labelset
     # was resolved in (``det_ctx.embedder``), with its current predicted class
     # from the frozen score vs the live threshold.
     embedder = det_ctx.embedder or None
-    threshold = det_ctx.threshold
-    snap = snapshot_medias()
-    q_ids: list[int] = []
-    q_vecs: list[Any] = []
-    q_pred: list[bool] = []
-    for cid, score in scores.items():
-        media = snap.get(cid)
-        if media is None:
-            continue
-        emb = media_embedding(media, embedder_name=embedder)
-        if emb is None:
-            continue
-        q_ids.append(cid)
-        q_vecs.append(np.asarray(emb, dtype=np.float32))
-        q_pred.append(score >= threshold)
-    if not q_vecs:
+    q_ids, q_mat, predicted = scored_queries(scores.items(), snapshot_medias(), embedder, det_ctx.threshold)
+    if q_mat is None:
         return _empty_evidence_coverage()
-
-    q_mat = np.stack(q_vecs)
-    predicted = np.asarray(q_pred, dtype=bool)
 
     # The verdict ranks against the training haystack's own distances (#5089).
     # On the dataset the detector was trained on, they are drawn from its scored
     # media less the labelled ones, as this Find calls them, and recorded on the
     # detector, stamped; anywhere else the recorded ones are read, while the
-    # stamp still matches.  A vote since, another embedder or no test on the
-    # training dataset yet leaves no baseline: the share, and no verdict.
+    # stamp still matches.  A learned sort on the training dataset leaves them
+    # to be drawn too (#5120), and a draw it left waiting is landed before the
+    # read.  A vote since with no sort or test after it, or another embedder,
+    # leaves no baseline: the share, and no verdict.
     baseline = None
     home = _evidence_baseline_home(det_ctx, labelset, embedder or "", int(q_mat.shape[1]))
     if home is not None and home["training_id"] == get_active_context().dataset_id:
-        voted = labelled_media_ids(labelset, get_active_context())
-        keep = np.array([cid not in voted for cid in q_ids], dtype=bool)
-        baseline = {
-            **home["stamp"],
-            "dataset_id": home["training_id"],
-            "dataset_name": home["training_name"],
-            **reference_cutoffs(pos, neg, q_mat[keep], predicted[keep]),
-        }
-        record_baseline(home["path"], baseline)
+        # This Find's draw supersedes one a learned sort left waiting.
+        discard_baseline_draw(det_ctx.detector_id)
+        baseline = draw_baseline(
+            home["stamp"],
+            dataset_id=home["training_id"],
+            dataset_name=home["training_name"],
+            pos=pos,
+            neg=neg,
+            query_ids=q_ids,
+            query_matrix=q_mat,
+            predicted_positive=predicted,
+            labelled=labelled_media_ids(labelset, get_active_context()),
+        )
+        record_baseline(home["path"], baseline, det_ctx=det_ctx)
     elif home is not None:
+        flush_baseline_draw(det_ctx.detector_id)
         baseline = stored_baseline(_read_detector(home["path"]), home["stamp"])
 
     report = evidence_coverage_report(pos, neg, q_mat, predicted, baseline=baseline)
