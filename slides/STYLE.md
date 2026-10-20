@@ -419,10 +419,10 @@ is never once shown as a list. So a deck's outline appears *N* + 2 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
 then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1n` in `hold-the-line` —
+**All of those pages are one slide**, numbered `1a … 1o` in `hold-the-line` —
 see *Numbering* in [`README.md`](README.md). The room is being shown the same
 thing again with a different line marked, and the deck should say so rather than
-spending fourteen numbers on it.
+spending fifteen numbers on it.
 
 **The outline's last showing is the last slide, and it says `Conclusion`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
@@ -450,7 +450,7 @@ the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back fourteen times.
+that comes back fifteen times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
