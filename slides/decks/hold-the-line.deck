@@ -15,23 +15,25 @@
 # lettered by signposts (#5097) — the data the experiments run on and how
 # the app does on it, how a user tests a detector on
 # their own pile and how often that test is right, the region-voting idea (whose
-# measured verdict waits for the runs still reporting), documents — logos on
-# scanned pages — ending on how the app does on them, and faces: the consented
-# benchmark the app's face path is measured on (#4699).
+# measured verdict waits for the runs still reporting), the other kinds of media
+# and how a file becomes one the app can search, documents — logos on scanned
+# pages — ending on how the app does on them, and faces: how a face is found, the
+# consented benchmark the app's face path is measured on (#4699), and how it does
+# and for whom.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in their reports, not on the slides or in the notes (see
 # #3246, #3265, #4827).
 #
-# The outline fragment appears fourteen times: once bare, as the opening list,
-# and then once before each section marked with `+at1` … `+at12`. It is one
-# slide shown fourteen ways rather than fourteen slides — `build.py` numbers it
-# 1a…1n — and the last showing, `+end`, is the deck's closing slide: it is the
+# The outline fragment appears fifteen times: once bare, as the opening list,
+# and then once before each section marked with `+at1` … `+at13`. It is one
+# slide shown fifteen ways rather than fifteen slides — `build.py` numbers it
+# 1a…1o — and the last showing, `+end`, is the deck's closing slide: it is the
 # only one that shows "Conclusion", as its marked line. Sections are numbered in
 # Roman numerals (I … XII), slides in Arabic, so the two never read alike.
 #
 # This is the master deck: every fragment a talk might want is named here, and
-# a talk cuts its own manifest from it. Section XII, Instruction, is the one most
+# a talk cuts its own manifest from it. Section XIII, Instruction, is the one most
 # talks cut — it is a how-to for users, not an argument for data scientists — and
 # a talk *for* users moves it up to follow section I instead.
 
@@ -150,7 +152,7 @@ slides:
   # lights (owner, #4872). Last, where the stop fired when it was measured:
   # #3945's sessions, the only stopping numbers committed so far, until a State
   # of the App review's stopping block replaces them (#4611). The ways a run
-  # ends and what the app says moved to section X: one of the three is the
+  # ends and what the app says moved to section XI: one of the three is the
   # documents' dry run, and nobody has heard of documents yet (owner, #4884).
   outline-hold-the-line +at5
   autopilot-smart
@@ -208,7 +210,8 @@ slides:
   # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
   # #4560) and the model's count corrected below it (#4523); then the app — the
-  # autopilot's rounds and stop, the result pane, and how often its ranges hold.
+  # autopilot's rounds and stop, what a finished test reports, and how often
+  # its ranges hold.
   # The bands and the per-band range it builds on are Spot Check's and Home on
   # the Range's, which open the section. Every figure but the last runs the
   # shipped `LineTest` on a planted pile (`make-test-figs.py`); the last is
@@ -250,7 +253,20 @@ slides:
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
 
-  # X — Document(ation): logos on scanned pages. The logo slide opens it
+  # X — Conversion: everything that is not a photo. The
+  # deck had shown two of the app's six media types; this is the other four and
+  # the plumbing between them, so it comes before the two sections that live on
+  # converted media — documents (pages) and faces (crops). The six types, each
+  # with its model and, where it takes one, a typed phrase; the converters
+  # between them, a source a page; then what an import can do to each file
+  # after that, cut it into pieces and tidy each piece. All three are drawn
+  # from the shipped registries (`make-media-figs.py`), so they carry no date.
+  outline-hold-the-line +at10
+  media-types
+  media-convert
+  media-clean
+
+  # XI — Document(ation): logos on scanned pages. The logo slide opens it
   # because it introduces the idea of logo detection before the room is asked
   # to find logos on documents. It is the
   # `book` slide's claim made a second time, in the one domain where a room
@@ -265,7 +281,7 @@ slides:
   # three things the documents changed: the keypoint budget, the shortlist and
   # why a page vector cannot build one, and the votes. Tiles shipped after
   # these slides were drawn (#4378, #4415), and the notes say so.
-  outline-hold-the-line +at10
+  outline-hold-the-line +at11
   logo-grid
   logo-keypoints
   logo-match
@@ -295,16 +311,19 @@ slides:
   # radio (`make-sota-figs.py`, from the committed per-step CSVs).
   sota-documents
 
-  # XI — Person(ification): faces, the third domain, and for now three slides: the
-  # same "Data, Set" card for FHIBE (#4713), Sony's consented face benchmark,
-  # which the pile's identity cells are built from (#4699). The card is drawn
-  # from the release itself, which is owner-only on the GRID, so
-  # `make-data-cards.py --only fhibe` runs there (see `fhibe_media.py`). How a
-  # face is found and matched, where the line goes on faces and how it does
-  # arrive with #4699's first study. FHIBE's terms allow a publication twenty
-  # of its photos; the card's two pages show ten, so count before adding any.
-  outline-hold-the-line +at11
+  # XII — Person(ification): faces, the third domain. First the same "Data,
+  # Set" card for FHIBE (#4713), Sony's consented face benchmark, which the
+  # pile's identity cells are built from (#4699). The card is drawn from the
+  # release itself, which is owner-only on the GRID, so
+  # `make-data-cards.py --only fhibe` runs there (see `fhibe_media.py`). FHIBE's
+  # terms allow a publication twenty of its photos; the card's two pages show
+  # ten, so count before adding any.
+  outline-hold-the-line +at12
   data-set-fhibe
+  # Face Off: how a face is found and matched — the detector's box and five
+  # points, the crop turned upright by them, FaceNet's space. Drawn, not
+  # photographed, so it spends none of the twenty (`make-media-figs.py`).
+  face-find
   # Then Head Start: how the trained head's line is placed, the linear SVM before and after it
   # started from the Goods' average (#4776, #4785). A schematic drawn in faces, so it waits for the
   # room to meet them here; it sat after Pics on a Plane until the owner moved it (2026-10-13). What
@@ -317,14 +336,22 @@ slides:
   # Goods' average (#4384, #4859). Head Start's schematic again, drawn with a typed query instead of faces
   # (`make-many-words-figs.py`).
   many-words
+  # Then how the face path does, as photos, regions and documents end on theirs:
+  # Face Value, the objective at every click from one starting photo, each radio
+  # on its own sessions, from the weak-check study's end-check arm — the face path
+  # as it ships, which the face review of 2026-10-10 predates (`make-sota-figs.py`).
+  # Last, Mind the Gap: for whom. she/her people against he/him, FaceNet
+  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`).
+  sota-faces
+  face-gap
 
-  # XII — Instruction: the tool as a how-to (#4202). Section I shows the same
+  # XIII — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked
   # with a numbered red disc and the numbers keyed down the side, so the pages
   # still work as a handout with nobody talking over them. One session, shot
   # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
   # detector, train it, load a pile it never saw, and Find.
-  outline-hold-the-line +at12
+  outline-hold-the-line +at13
   steps-load-train
   steps-make-detector
   steps-train

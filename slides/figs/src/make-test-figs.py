@@ -1083,13 +1083,13 @@ def _rounds_phases(ax: plt.Axes, test: LineTest, stage: int) -> None:
             ax.text((x0 + x1) / 2, brace_y - 0.55, f"{picks} picks: its budget", ha="center", va="top", fontsize=16)
 
 
-# ── Report Card: what the result pane says ───────────────────────────────────
+# ── Report Card: what a finished Test reports ────────────────────────────────
 
 RESULT_STAGES = 3
 
 
 def result_fig() -> None:
-    """The result pane at Done: the headline ranges, Precision by Number Returned, and Lean the Threshold.
+    """What a finished Test reports: the headline ranges, Precision by Number Returned, and Lean the Threshold.
 
     Three stages: the balance, Right and Found, with the chart of how right
     the top *N* likely are at every band edge (the count axis logarithmic, as
@@ -1097,6 +1097,12 @@ def result_fig() -> None:
     only a planted corpus can show, inside the ranges; and Lean the
     Threshold, the same draws read at the line each radio would draw on this
     corpus.
+
+    The app splits these across two panes (#5100): the headline and the chart
+    are the right-hand result pane, while Lean the Threshold sits with the
+    verdict and its two exits in the centre pane, where the picks were voted.
+    The figure keeps them on one canvas as a schematic, and the notes say
+    which is which.
     """
     _save(RESULT_STAGES, _result_stage, "test-result")
 
@@ -1149,7 +1155,7 @@ def _result_stage(stage: int) -> Figure:
         held = sum(e.precision.holds(_truth_at(e.count)[0]) for e in edges)
         assert held == len(edges), held
         ax.text(1100, true_p[1100 - 6] + 0.06, "planted", ha="center", va="bottom", fontsize=16)
-    # ── stage 3: Lean the Threshold, as the pane's table lays it out ─────────
+    # ── stage 3: Lean the Threshold, the verdict's table ─────────────────────
     if stage >= 3:
         top = 0.305
         fig.text(SIDE_X, top, "Lean the Threshold", ha="left", va="center", fontsize=17, fontweight="bold")

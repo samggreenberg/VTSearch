@@ -4,7 +4,8 @@ Start freezes the ranking off the Find pass's scores and the line at its
 threshold and deals round one; votes land as session votes (provenance
 ``test``, verified in Find mode, never in the labelset) and move the ranges;
 the ↓ key takes one back; a whole round deals the next, until the phase
-machine says done; cancel drops a running test and keeps a finished one; the
+machine says done, and the vote that leaves one pick deals it ahead, both
+ways that pick can go; cancel drops a running test and keeps a finished one; the
 result reads ``stale`` once corrections are folded in and ``moved`` once the
 line no longer keeps the set it measured.
 
@@ -19,7 +20,7 @@ import pytest
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import get_active_detector_context
-from vtscore.training.thresholds import PHASE_DONE, PHASE_MATCHES, PHASE_MISSES, PHASE_NOTHING
+from vtscore.training.thresholds import PHASE_DONE, PHASE_MATCHES, PHASE_MISSES, PHASE_NOTHING, LineTest
 from vtsearch.state import snapshot_medias
 
 
@@ -170,6 +171,47 @@ class TestOneRound:
         client.post("/api/line-test/votes", json=_votes(first["picks"][:2], True))
         second = _start(client)["test"]
         assert second["labelled"] == 0 and second["round"] == 1
+
+
+class TestDealingAhead:
+    """#5116: the vote that leaves one pick deals the next round both ways, and the last vote installs the one it names."""
+
+    def test_the_vote_that_leaves_one_pick_carries_the_next_round_both_ways(self, client, monkeypatch):
+        import vtscore.config  # noqa: PLC0415
+
+        monkeypatch.setattr(vtscore.config, "SPOT_CHECK_SEED", 7)
+        _run_find(client)
+        _plant_big_corpus()
+        test = _start(client)["test"]
+        picks = test["picks"]
+        assert test["ahead"] is None
+        for cid in picks[:3]:
+            assert client.post("/api/line-test/votes", json=_votes([cid], True)).get_json()["test"]["ahead"] is None
+        ahead = client.post("/api/line-test/votes", json=_votes(picks[3:4], True)).get_json()["test"]["ahead"]
+        assert ahead["id"] == picks[4] and len(ahead["good"]) == len(ahead["bad"]) == 5
+        assert not (set(ahead["good"]) | set(ahead["bad"])) & set(picks)
+        assert client.get("/api/line-test").get_json()["test"]["ahead"] == ahead
+
+        test = client.post("/api/line-test/votes", json=_votes(picks[4:], False)).get_json()["test"]
+        assert test["round"] == 2 and test["picks"] == ahead["bad"] and test["ahead"] is None
+        # The round draw() deals for these labels from the same seed, with nothing dealt ahead.
+        plain = LineTest.start(list(range(1, 201)), 64, test["beta"], seed=7)
+        assert list(plain.draw()) == picks
+        plain.record({**{cid: True for cid in picks[:4]}, picks[4]: False})
+        assert list(plain.draw()) == test["picks"]
+
+    def test_the_down_key_drops_the_round_dealt_ahead(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        picks = _start(client)["test"]["picks"]
+        ahead = client.post("/api/line-test/votes", json=_votes(picks[:4], True)).get_json()["test"]["ahead"]
+        assert ahead["id"] == picks[4]
+
+        assert client.post("/api/line-test/unvote", json={"id": picks[0]}).get_json()["test"]["ahead"] is None
+        again = client.post("/api/line-test/votes", json=_votes(picks[:1], True)).get_json()["test"]["ahead"]
+        assert again == ahead, "the same labels and the same generator state deal the same round"
+        test = client.post("/api/line-test/votes", json=_votes(picks[4:], True)).get_json()["test"]
+        assert test["picks"] == ahead["good"]
 
 
 class TestToDone:

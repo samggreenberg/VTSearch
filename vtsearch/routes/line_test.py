@@ -13,7 +13,9 @@ lifecycle for the active detector's Find session:
 * ``POST /api/line-test/votes`` records votes on the round's picks as session
   votes (provenance ``test``, verified in Find mode, never a training label:
   ``find_mode`` keeps them out of the labelset), and deals the next round when
-  the round is whole;
+  the round is whole; once one pick is left it deals that round ahead, both
+  ways the pick can go (``test.ahead``, #5116), so the client can fetch the
+  next round's images before the last vote;
 * ``POST /api/line-test/unvote`` takes one vote of the current round back (the
   ↓ key);
 * ``POST /api/line-test/cancel`` abandons a running test (the votes cast stay
@@ -40,7 +42,9 @@ ones.
 
 from __future__ import annotations
 
+import functools
 import logging
+import threading
 from typing import Any
 
 import numpy as np
@@ -56,6 +60,23 @@ line_test_bp = Blueprint(
     __name__,
     description="Tune's test of the line: draw picks, take the votes, report what the line would ship.",
 )
+
+#: One verb on the test at a time.  The client sends a vote as it is cast, so
+#: a fast voter's last vote of a round can land while the one before is still
+#: dealing ahead (#5116); the sample is not safe to change from two threads,
+#: and the last vote should find the round dealt rather than race the deal.
+_test_lock = threading.Lock()
+
+
+def _one_at_a_time(view):
+    """Run *view* under :data:`_test_lock`."""
+
+    @functools.wraps(view)
+    def locked(*args, **kwargs):
+        with _test_lock:
+            return view(*args, **kwargs)
+
+    return locked
 
 
 def _ranking(det_ctx) -> tuple[list[int], list[float]]:
@@ -142,6 +163,7 @@ def _payload() -> dict[str, Any]:
 
 @line_test_bp.route("/api/line-test", methods=["GET"])
 @line_test_bp.response(200, LineTestResponseSchema)
+@_one_at_a_time
 def get_line_test():
     """The active detector's test of the line (running, else the last finished) and the balance's state."""
     return _payload()
@@ -151,6 +173,7 @@ def get_line_test():
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
 @line_test_bp.alt_response(409, description="No Find pass to test: score the dataset first.")
+@_one_at_a_time
 def start_line_test():
     """Start a test of the line the Find pass drew.
 
@@ -208,6 +231,7 @@ def start_line_test():
             set_vote(cid, "good" if right else "bad", provenance=dict(TEST_PROVENANCE))
             record_vote_provenance(cid, dict(TEST_PROVENANCE))
     test.draw()
+    test.deal_ahead()
     det_ctx.line_test = test
     return _payload()
 
@@ -218,6 +242,7 @@ def start_line_test():
 @line_test_bp.response(200, LineTestResponseSchema)
 @line_test_bp.alt_response(400, description="A vote on an item that is not one of this round's picks.")
 @line_test_bp.alt_response(409, description="No test is running.")
+@_one_at_a_time
 def vote_line_test(body: dict):
     """Record votes on the running test's picks.
 
@@ -226,7 +251,9 @@ def vote_line_test(body: dict):
     labelset like every Find vote.  The test records it against the pick's
     band and the ranges move.  A partial round waits for the rest; once the
     round is whole the next round is dealt, or the test is done.  The vote
-    that finishes it keeps its verdict on the detector (#4526).
+    that finishes it keeps its verdict on the detector (#4526).  The vote
+    that leaves one pick deals the next round ahead, both ways that pick can
+    go (``test.ahead``, #5116); the last vote installs the one it names.
     """
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
@@ -252,6 +279,8 @@ def vote_line_test(body: dict):
     # way through a round; either way this is the vote that finished it.
     if test.phase().phase == PHASE_DONE:
         _keep(det_ctx, test)
+    else:
+        test.deal_ahead()
     return _payload()
 
 
@@ -261,6 +290,7 @@ def vote_line_test(body: dict):
 @line_test_bp.response(200, LineTestResponseSchema)
 @line_test_bp.alt_response(400, description="Not a vote of the current round.")
 @line_test_bp.alt_response(409, description="No test is running.")
+@_one_at_a_time
 def unvote_line_test(body: dict):
     """Take back one vote of the current round (the ↓ key): the pick goes back to pending, and its session vote is lifted."""
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
@@ -282,6 +312,7 @@ def unvote_line_test(body: dict):
 @line_test_bp.route("/api/line-test/cancel", methods=["POST"])
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
+@_one_at_a_time
 def cancel_line_test():
     """Abandon the running test.  Its votes so far stay session votes; a finished test is left as it is."""
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
@@ -297,6 +328,7 @@ def cancel_line_test():
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
 @line_test_bp.alt_response(500, description="The detector file could not be rewritten.")
+@_one_at_a_time
 def forget_line_test():
     """Forget the verdict the detector keeps for this dataset (#4526), so the next start deals a fresh test.
 

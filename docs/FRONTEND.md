@@ -455,7 +455,11 @@ Browser, and clears it with the pair state.
 effect warms the next two images of whichever queue the tab votes through:
 the round's unvoted picks after the one on screen
 (`LineTestSessionService.upcoming`) on Autopilot, the boundary walk on
-Review. The vote piles (`/api/votes`) are read when the view opens, when
+Review. At a round boundary that queue runs on into the next round, which
+the server deals once one pick is left, both ways that pick can go
+(`test.ahead`, #5116): `upcoming` takes the two ways' first picks in turns
+while the pick is unvoted, and the way it went once it is voted, so the
+next round's first image is held before the vote that deals it. The vote piles (`/api/votes`) are read when the view opens, when
 Review opens, and after a scoring pass, a balance change or a pair switch,
 and polled only while Review is up (`syncPiles`): no vote on either tab
 re-reads them. In Find

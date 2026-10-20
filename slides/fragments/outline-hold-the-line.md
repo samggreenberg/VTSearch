@@ -11,10 +11,11 @@
 7. Experimentation
 8. Examination
 9. Region
-10. Document(ation)
-11. Person(ification)
-12. Instruction
-13. <span class="closing">Conclusion</span>
+10. Conversion
+11. Document(ation)
+12. Person(ification)
+13. Instruction
+14. <span class="closing">Conclusion</span>
 
 <!-- **a** — Here's where we're going. First I'll build the tool from nothing.
      The next two sections are about the line: what it's made of, and where it
@@ -49,14 +50,18 @@
 <!-- **j** — Section nine: voting on part of a picture instead of the whole
      thing, and what that does to the line. -->
 
-<!-- **k** — Section ten: documents. Finding logos on scanned pages, the
+<!-- **k** — Section ten: everything that isn't a photo. The other kinds of
+     media, and how a file becomes something the app can search. -->
+
+<!-- **l** — Section eleven: documents. Finding logos on scanned pages, the
      dataset we built for it, and how it does. -->
 
-<!-- **l** — Section eleven: faces. The dataset we measure faces on, and a trick
-     that gets a face detector off to a better start. -->
+<!-- **m** — Section twelve: faces. How a face is found, the dataset we measure
+     them on, a trick that gets a face detector off to a better start, and how
+     it does, and for whom. -->
 
-<!-- **m** — Section twelve: the tool again, as a how-to. Every click numbered.
-     It's the one to hand out. -->
+<!-- **n** — Section thirteen: the tool again, as a how-to. Every click
+     numbered. It's the one to hand out. -->
 
-<!-- **n** — So that's the line: what it's built from, where it goes, and how
+<!-- **o** — So that's the line: what it's built from, where it goes, and how
      to check it. Thanks! Happy to take questions. -->
