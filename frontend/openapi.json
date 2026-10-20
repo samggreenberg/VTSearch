@@ -4157,7 +4157,20 @@
           "available": {
             "type": "boolean"
           },
+          "baseline": {
+            "type": "string"
+          },
+          "baseline_dataset_id": {
+            "type": "string"
+          },
+          "baseline_dataset_name": {
+            "type": "string"
+          },
           "expected_unsupported": {
+            "type": "number"
+          },
+          "frac_beyond": {
+            "nullable": true,
             "type": "number"
           },
           "frac_low_trust": {
@@ -4175,6 +4188,9 @@
           "median_trust": {
             "type": "number"
           },
+          "n_baseline": {
+            "type": "integer"
+          },
           "n_items": {
             "type": "integer"
           },
@@ -4187,6 +4203,10 @@
           "unsupported": {
             "type": "boolean"
           },
+          "z_beyond": {
+            "nullable": true,
+            "type": "number"
+          },
           "z_score": {
             "type": "number"
           }
@@ -4194,16 +4214,22 @@
         "required": [
           "alpha",
           "available",
+          "baseline",
+          "baseline_dataset_id",
+          "baseline_dataset_name",
           "expected_unsupported",
+          "frac_beyond",
           "frac_low_trust",
           "frac_unsupported",
           "k",
           "median_support",
           "median_trust",
+          "n_baseline",
           "n_items",
           "n_neg_labels",
           "n_pos_labels",
           "unsupported",
+          "z_beyond",
           "z_score"
         ],
         "type": "object"
@@ -13639,7 +13665,7 @@
     },
     "/api/find/evidence-coverage": {
       "get": {
-        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load \u2014 so it fires even\nwhen the training haystack was never handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  Returns\n``available: False`` (rather than 4xx) when there is no scored Find run or\nno resolvable labelset, so the Stats modal can simply hide the section.\nPure read; no new state.  See docs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
+        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector.  See\ndocs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
         "operationId": "find_evidence_coverage",
         "responses": {
           "200": {

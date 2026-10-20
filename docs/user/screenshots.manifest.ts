@@ -1486,7 +1486,7 @@ export const SHOTS: Shot[] = [
     id: 'trust-stats',
     embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
     caption:
-      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector's examples than its training data does',
     themes: BOTH,
     clip: { target: '.line-test-result' },
     annotations: [
@@ -1494,7 +1494,7 @@ export const SHOTS: Shot[] = [
       // On the right: the clip is the result pane, and a badge on a chip's
       // left edge would land outside it.
       { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2, at: 'right' },
-      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3, at: 'right' },
+      { target: '.evidence-chip', kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
       await openTune(page, h);
@@ -1507,7 +1507,7 @@ export const SHOTS: Shot[] = [
       const trainId = h.app.named(await h.app.datasets(), TRAIN_DATASET)?.id;
       if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
       await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
-      await page.locator('.domain-chip', { hasText: 'evidence vacuum' }).first().waitFor({ timeout: 120000 });
+      await page.locator('.evidence-chip').first().waitFor({ timeout: 120000 });
       await page.locator('.domain-ref-select').first().scrollIntoViewIfNeeded();
       await h.wait(800);
     },

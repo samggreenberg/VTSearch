@@ -520,7 +520,7 @@ def _empty_evidence_coverage() -> dict:
     """The ``available: False`` report the evidence-coverage endpoint returns
     when there is nothing to measure (no scored Find run, no resolvable
     labelset, or no cached label embeddings)."""
-    from vtscore.detectors.evidence_coverage import DEFAULT_ALPHA, DEFAULT_K
+    from vtscore.detectors.evidence_coverage import BASELINE_NONE, DEFAULT_ALPHA, DEFAULT_K
 
     return {
         "available": False,
@@ -535,7 +535,44 @@ def _empty_evidence_coverage() -> dict:
         "median_support": 1.0,
         "frac_low_trust": 0.0,
         "median_trust": 1.0,
+        "baseline": BASELINE_NONE,
+        "n_baseline": 0,
+        "frac_beyond": None,
+        "z_beyond": None,
+        "baseline_dataset_id": "",
+        "baseline_dataset_name": "",
         "unsupported": False,
+    }
+
+
+def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int) -> dict | None:
+    """Where the Evidence verdict's training baseline (#5089) is drawn or read: ``None`` when it cannot be.
+
+    Returns the baseline's ``stamp``
+    (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
+    file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
+    the dataset the detector was trained on as the overlap check infers it
+    (the loaded dataset holding most of its labels), ``""`` when none is.
+    ``None`` with no embedder name to stamp it with or no detector file.
+    """
+    from vtscore.datasets.registry import get_dataset
+    from vtscore.detectors.evidence_baseline import baseline_stamp
+    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.store import _detector_path
+    from vtscore.state.core import get_active_context
+    from vtsearch.training_domain import infer_training_reference
+
+    active_id = get_active_context().dataset_id
+    stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
+    entry = get_detector(det_ctx.detector_id) or {}
+    if stamp is None or not entry.get("name"):
+        return None
+    training_id, _counts = infer_training_reference(labelset, active_id)
+    return {
+        "stamp": stamp,
+        "path": _detector_path(entry["name"]),
+        "training_id": training_id,
+        "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
     }
 
 
@@ -549,25 +586,34 @@ def find_evidence_coverage():
     *training* dataset loaded with a built atlas, which is absent in a true
     detector handoff (userB has userA's detector JSON, not userA's haystack).
     This asks only what the detector itself carries — its labelset, re-embedded
-    in memory against the active dataset's embedder at load — so it fires even
-    when the training haystack was never handed over.
+    in memory against the active dataset's embedder at load, and the training
+    baseline recorded on it — so it reads even when the training haystack was
+    never handed over.
 
     For every scored item it measures how far the detector's *predicted* class
     sits from the labeled evidence of that class (a conformal support p-value
     ``D``, calibrated against the labelset's own leave-one-out distances) and
     the trust-score ratio ``TS``, then summarises the share of the dataset the
-    detector is calling without supervision behind it.  Returns
-    ``available: False`` (rather than 4xx) when there is no scored Find run or
-    no resolvable labelset, so the Stats modal can simply hide the section.
-    Pure read; no new state.  See docs/plans/coverage-atlas.md §6.1 (phase v0).
+    detector is calling without supervision behind it.  The verdict ranks the
+    same distances against the training haystack's own (#5089,
+    :func:`_evidence_baseline_home`): the votes are picked by active learning, so
+    their own spread fired on most in-domain datasets.  With no baseline the
+    share is reported and no verdict is drawn.  Returns ``available: False``
+    (rather than 4xx) when there is no scored Find run or no resolvable
+    labelset, so the Stats modal can simply hide the section.  Its one write:
+    run on the training dataset, it records the baseline on the detector.  See
+    docs/plans/coverage-atlas.md §6.1 (phase v0).
     """
     import numpy as np
 
-    from vtscore.detectors.evidence_coverage import evidence_coverage_report
+    from vtscore.detectors.evidence_baseline import record_baseline, stored_baseline
+    from vtscore.detectors.evidence_coverage import evidence_coverage_report, reference_cutoffs
     from vtscore.detectors.labelset_training import build_xy_from_labelset
     from vtscore.detectors.learned_sort import resolve_active_labelset
+    from vtscore.detectors.store import _read_detector
+    from vtscore.detectors.training_domain import labelled_media_ids
     from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.state.core import get_active_detector_context
+    from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
     scores = det_ctx.find_scores
@@ -596,6 +642,7 @@ def find_evidence_coverage():
     embedder = det_ctx.embedder or None
     threshold = det_ctx.threshold
     snap = snapshot_medias()
+    q_ids: list[int] = []
     q_vecs: list[Any] = []
     q_pred: list[bool] = []
     for cid, score in scores.items():
@@ -605,13 +652,43 @@ def find_evidence_coverage():
         emb = media_embedding(media, embedder_name=embedder)
         if emb is None:
             continue
+        q_ids.append(cid)
         q_vecs.append(np.asarray(emb, dtype=np.float32))
         q_pred.append(score >= threshold)
     if not q_vecs:
         return _empty_evidence_coverage()
 
-    report = evidence_coverage_report(pos, neg, np.stack(q_vecs), np.asarray(q_pred, dtype=bool))
-    return {"available": True, **report}
+    q_mat = np.stack(q_vecs)
+    predicted = np.asarray(q_pred, dtype=bool)
+
+    # The verdict ranks against the training haystack's own distances (#5089).
+    # On the dataset the detector was trained on, they are drawn from its scored
+    # media less the labelled ones, as this Find calls them, and recorded on the
+    # detector, stamped; anywhere else the recorded ones are read, while the
+    # stamp still matches.  A vote since, another embedder or no test on the
+    # training dataset yet leaves no baseline: the share, and no verdict.
+    baseline = None
+    home = _evidence_baseline_home(det_ctx, labelset, embedder or "", int(q_mat.shape[1]))
+    if home is not None and home["training_id"] == get_active_context().dataset_id:
+        voted = labelled_media_ids(labelset, get_active_context())
+        keep = np.array([cid not in voted for cid in q_ids], dtype=bool)
+        baseline = {
+            **home["stamp"],
+            "dataset_id": home["training_id"],
+            "dataset_name": home["training_name"],
+            **reference_cutoffs(pos, neg, q_mat[keep], predicted[keep]),
+        }
+        record_baseline(home["path"], baseline)
+    elif home is not None:
+        baseline = stored_baseline(_read_detector(home["path"]), home["stamp"])
+
+    report = evidence_coverage_report(pos, neg, q_mat, predicted, baseline=baseline)
+    return {
+        "available": True,
+        **report,
+        "baseline_dataset_id": (baseline or {}).get("dataset_id", ""),
+        "baseline_dataset_name": (baseline or {}).get("dataset_name", ""),
+    }
 
 
 @detector_scoring_bp.route("/api/find/training-domain", methods=["GET"])

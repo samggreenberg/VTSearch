@@ -1748,76 +1748,89 @@ def _find_corpus_columns(
     from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
     from vtscore.eval.find_corpus import (  # noqa: PLC0415
         blank_find_columns,
+        evidence_beyond_pool,
+        evidence_class_counts,
         evidence_flags,
         find_columns,
+        pool_baseline,
         training_domain_flags,
         vote_vectors,
     )
 
-    scored: list[Any] = []
-    if tier == "query":
-        assert find.query_scores is not None  # build_find_corpus refuses a query run without them
-        f_step, (metrics,) = _query_test(
-            find.query_scores,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            beta=beta,
-            calibration_rows=False,
-            line_beta=line_beta,
-            dump_suffix="__find",
+    import numpy as np  # noqa: PLC0415
+
+    def _find_on(
+        ids: list[int], query_scores: "dict[int, float] | None", dump_suffix: str, *, want_scores: bool
+    ) -> tuple[dict[str, Any], "np.ndarray | None", float]:
+        """A Find over *ids* as the click's Test gives it: its metric row, its scores (with *want_scores*) and its cut."""
+        scored: list[Any] = []
+        if tier == "query":
+            assert query_scores is not None  # build_find_corpus refuses a query run without them
+            f_step, (metrics,) = _query_test(
+                query_scores,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        elif tier == "centroid":
+            f_step, (metrics,), _ = _centroid_test(
+                good_votes,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_voting=region_voting,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                beta=beta,
+                calibration_rows=False,
+                line_rule=centroid_line,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        else:
+            assert step is not None
+            out: dict[str, Any] = {}
+            metrics = _evaluate_on_test(
+                step,
+                threshold,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                scored_sink=scored,
+                find_line=details.get("find_line"),
+                beta=details.get("beta"),
+                out=out,
+                dump_suffix=dump_suffix,
+            )
+            f_step, cut = step, float(out.get("find_threshold", threshold))
+        if not want_scores:
+            return metrics, None, cut
+        scores = (
+            scored[0]
+            if scored
+            else np.asarray(
+                _score_media_ids(f_step, find.clips, ids, region_aware=region_aware, style_obj=style_obj),
+                dtype=np.float64,
+            )
         )
-        cut = CENTROID_THRESHOLD
-    elif tier == "centroid":
-        f_step, (metrics,), _ = _centroid_test(
-            good_votes,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
-            beta=beta,
-            calibration_rows=False,
-            line_rule=centroid_line,
-            line_beta=line_beta,
-            dump_suffix="__find",
-        )
-        cut = CENTROID_THRESHOLD
-    else:
-        assert step is not None
-        out: dict[str, Any] = {}
-        metrics = _evaluate_on_test(
-            step,
-            threshold,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            region_aware=region_aware,
-            style_obj=style_obj,
-            scored_sink=scored,
-            find_line=details.get("find_line"),
-            beta=details.get("beta"),
-            out=out,
-            dump_suffix="__find",
-        )
-        f_step, cut = step, float(out.get("find_threshold", threshold))
+        return metrics, np.asarray(scores, dtype=np.float64), cut
+
+    metrics, scores, cut = _find_on(find.ids, find.query_scores, "__find", want_scores=flags_at is not None)
     cols: dict[str, Any] = {**blank_find_columns(), **find_columns(metrics)}
     if flags_at is None:
         return cols
-    import numpy as np  # noqa: PLC0415
-
-    scores = (
-        scored[0]
-        if scored
-        else np.asarray(
-            _score_media_ids(f_step, find.clips, find.ids, region_aware=region_aware, style_obj=style_obj),
-            dtype=np.float64,
-        )
-    )
+    assert scores is not None
     matrix = find.matrix()
     pos, neg = vote_vectors(
         list(good_votes),
@@ -1828,12 +1841,29 @@ def _find_corpus_columns(
         style_obj=style_obj,
         dim=int(matrix.shape[1]),
     )
+    # Predicted as the metric columns flag: a score at or above the Find cut.
+    predicted = scores >= cut
+    # #5089: the haystack the votes came from, its unvoted media found as a Find
+    # there draws it: the Evidence verdict's training baseline, as the app draws
+    # it on the training dataset.
+    voted = set(good_votes) | set(bad_votes)
+    base_ids = [cid for cid in find.pool_ids if cid not in voted]
+    if base_ids:
+        _, base_scores, base_cut = _find_on(base_ids, find.pool_query_scores, "__findpool", want_scores=True)
+        assert base_scores is not None
+        base_matrix, base_predicted = find.pool_matrix(base_ids), base_scores >= base_cut
+    else:
+        base_matrix, base_predicted = matrix[:0], predicted[:0]
     return {
         **cols,
         "flags_at": int(flags_at),
         **training_domain_flags(atlas, matrix, patch_space=region_aware),
-        # Predicted as the metric columns flag: a score at or above the Find cut.
-        **evidence_flags(pos, neg, matrix, scores >= cut),
+        **evidence_flags(
+            pos, neg, matrix, predicted, pool_baseline(pos, neg, base_matrix, base_predicted) if base_ids else None
+        ),
+        **evidence_class_counts(pos, neg, matrix, predicted, prefix="evidence"),
+        **evidence_class_counts(pos, neg, base_matrix, base_predicted, prefix="evidence_pool"),
+        **evidence_beyond_pool(pos, neg, matrix, predicted, base_matrix, base_predicted),
     }
 
 
@@ -4125,6 +4155,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_aware=region_aware,
             query_scores=query_scores,
             foreign_query_scores=find_corpus_scores,
+            pool_ids=sorted(sim_ids),
         )
     find_flag_pending = sorted({int(s) for s in find_flag_steps}) if find is not None and find_flag_steps else []
     blank_find = blank_find_columns()

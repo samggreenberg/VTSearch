@@ -47,6 +47,12 @@ const NO_EVIDENCE = {
   median_support: 1,
   frac_low_trust: 0,
   median_trust: 1,
+  baseline: 'none',
+  n_baseline: 0,
+  baseline_dataset_id: '',
+  baseline_dataset_name: '',
+  frac_beyond: null,
+  z_beyond: null,
   unsupported: false,
 };
 
@@ -245,6 +251,65 @@ describe('LineTestResultComponent (#4524)', () => {
 
       expect(compareAgainst(el)).toBe('drawings');
       expect(el.querySelector('.domain-chip')!.textContent).toContain('largely in-domain');
+    });
+  });
+
+  describe('the Evidence coverage chip (#5089)', () => {
+    const EVIDENCE = {
+      ...NO_EVIDENCE,
+      available: true,
+      n_items: 4000,
+      n_pos_labels: 30,
+      n_neg_labels: 120,
+      frac_unsupported: 0.18,
+      z_score: 37,
+      median_support: 0.4,
+    };
+
+    async function chip(report: object): Promise<HTMLElement> {
+      const el = await show(wireLineTest(wireDone()));
+      httpMock.match('/api/find/stats').forEach((req) => req.flush(STATS));
+      httpMock.expectOne('/api/find/evidence-coverage').flush(report);
+      await settleZoneless(fixture);
+      return el.querySelector('.evidence-chip') as HTMLElement;
+    }
+
+    it('reads the share beyond the training baseline, with its verdict', async () => {
+      const el = await chip({
+        ...EVIDENCE,
+        baseline: 'training',
+        n_baseline: 11000,
+        baseline_dataset_id: 'photos',
+        baseline_dataset_name: 'Photos',
+        frac_beyond: 0.62,
+        z_beyond: 120,
+        unsupported: true,
+      });
+      expect(el.textContent).toContain('62%');
+      expect(el.textContent).toContain('than 95% of Photos');
+      expect(el.textContent).toContain('often calling without support');
+      expect(el.classList).toContain('shifted');
+    });
+
+    it('in-domain, the share sits at alpha and the chip says so', async () => {
+      const el = await chip({
+        ...EVIDENCE,
+        baseline: 'training',
+        n_baseline: 11000,
+        baseline_dataset_name: 'Photos',
+        frac_beyond: 0.05,
+        z_beyond: 0.1,
+      });
+      expect(el.textContent).toContain('5%');
+      expect(el.textContent).toContain('as well covered as its training data');
+      expect(el.classList).not.toContain('shifted');
+    });
+
+    it('without a baseline, shows the share and draws no verdict', async () => {
+      const el = await chip(EVIDENCE);
+      expect(el.textContent).toContain('18%');
+      expect(el.textContent).toContain('no verdict until you run Tune on the dataset the detector was trained on');
+      expect(el.classList).not.toContain('shifted');
     });
   });
 
