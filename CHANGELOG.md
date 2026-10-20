@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
 - **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
   coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
   detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and

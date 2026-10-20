@@ -1385,6 +1385,26 @@ describe('DashboardComponent', () => {
       ]);
     });
 
+    it('sends the user to another dataset or detector on the dataset the detector was trained on (#5142)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12, trained_on: ['d1'] }],
+      );
+      expect(component.findEnabled).toBe(true);
+      expect(component.dashboardHint).toBe('trained-here');
+      expect(hintTexts(el)).toEqual([
+        'You trained this detector on this dataset. Select a different dataset to Tune or Find on, or a different detector.',
+      ]);
+    });
+
+    it('still suggests Tune or Find on a dataset the detector was not trained on (#5142)', () => {
+      renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12, trained_on: ['d0'] }],
+      );
+      expect(component.dashboardHint).toBe('test-or-find');
+    });
+
     it('suggests only Find when several datasets are selected (#4680)', () => {
       const el = renderWith(
         [
