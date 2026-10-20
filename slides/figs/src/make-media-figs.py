@@ -7,16 +7,16 @@ Four line-art schematics, drawn in Embed-time Stories' vocabulary (`make-intro-f
 arrows with their word inside, a wire cube of hollow dots, line-art media) so the room reads them the
 way it read that slide:
 
-* `figs/media-types*.webp`, **Mixed Media** (section X): the six media types, each with the model
+* `figs/media-types*.webp`, **Mixed Media** (section XI): the six media types, each with the model
   that turns it into vectors and, where it has one, a phrase a user could type. Pages: a, images
   alone, as section I met them; b, audio, video and text, which take a typed phrase too; c, documents
   and faces, which do not.
-* `figs/media-convert*.webp`, **Shape Shifters** (section X): the same six, and the converters
+* `figs/media-convert*.webp`, **Shape Shifters** (section XI): the same six, and the converters
   between them. Pages: a, a document's two; b, video's and audio's; c, an image's.
-* `figs/media-clean*.webp`, **Cut and Dried** (section X): what an import can do to each file after
+* `figs/media-clean*.webp`, **Cut and Dried** (section XI): what an import can do to each file after
   that, one row per kind: cut it into pieces, then tidy each piece. Pages: a, the files; b, cut;
   c, cleaned.
-* `figs/face-find*.webp`, **Face Off** (section XII, after the FHIBE card): a photo, the face the
+* `figs/face-find*.webp`, **Face Off** (section XIII, after the FHIBE card): a photo, the face the
   detector finds in it with its five points, the crop turned upright by them, and FaceNet's space,
   where one person's crops land together. Pages a to d, one per step.
 

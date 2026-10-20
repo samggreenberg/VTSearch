@@ -181,7 +181,7 @@ until the first click their lights differ, around click 25 to 30 where the first
   points carry `fbeta` (`SmartPoint`; `fbeta_over_time` on `/api/labeling-progress`).
 - **The harness:** `smart_signal="fbeta_best"` is the default arm; `"cost"` is the light before #5134; the readings
   stay as arms and as `smart_readings` columns.
-- **The deck:** the Diminishing Returns slide's last two stages plot F-beta rising, then flat.
+- **The deck:** the Diminishing Returns slide (`autopilot-smart-trend`, its own slide since #5132) plots F-beta rising, then flat.
 
 ## What this leaves
 

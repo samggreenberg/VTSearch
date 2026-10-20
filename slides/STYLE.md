@@ -394,8 +394,8 @@ without being told.
 **The theme numbers the sections in Roman numerals** — I, II, III — whatever
 the markdown list says. The pages are numbered in Arabic, so a section is a
 different kind of address from a slide, and "section III" can never be heard
-as "slide 3". The PDF's bookmarks follow suit (`III. Inclination`, then
-`14. The Cutting Room` for a slide in it).
+as "slide 3". The PDF's bookmarks follow suit (`IV. Inclination`, then
+`17. The Cutting Room` for a slide in it).
 
 **Then show it again before every section**, with that section's line marked.
 Use the same fragment, and let the manifest do the marking:
@@ -419,10 +419,10 @@ is never once shown as a list. So a deck's outline appears *N* + 2 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
 then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1o` in `hold-the-line` —
+**All of those pages are one slide**, numbered `1a … 1p` in `hold-the-line` —
 see *Numbering* in [`README.md`](README.md). The room is being shown the same
 thing again with a different line marked, and the deck should say so rather than
-spending fifteen numbers on it.
+spending sixteen numbers on it.
 
 **The outline's last showing is the last slide, and it says `Conclusion`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
@@ -450,7 +450,7 @@ the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back fifteen times.
+that comes back sixteen times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that

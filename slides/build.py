@@ -1040,11 +1040,11 @@ def bookmarks(showings: list[Showing], texts: dict[str, str], firsts: list[int])
     """The PDF's bookmarks, in the shape PyMuPDF's `set_toc` takes: `[level, title, page]`.
 
     A showing that marks an outline line opens a section, titled by that line
-    as the slide numbers it — `III. Inclination`, in the Roman numerals the
+    as the slide numbers it — `IV. Inclination`, in the Roman numerals the
     theme prints sections in — and every slide after it sits one level under
     it until the next; a slide before the first section — the title, the
     opening outline — is top-level. A slide's entry leads with its page number
-    the same way, `18. The Cutting Room`, so the sidebar names a slide by the
+    the same way, `17. The Cutting Room`, so the sidebar names a slide by the
     address the room and the presenter use for it; the title slide has none.
     One entry per showing, never per page: a build's reveals are one slide,
     and its entry lands on the first of them.

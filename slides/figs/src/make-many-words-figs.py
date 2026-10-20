@@ -5,7 +5,7 @@ Run from the repo root:
 
     python slides/figs/src/make-many-words-figs.py
 
-**In So Many Words** (section XII, after Running Start) is Head Start's schematic again, drawn for a
+**In So Many Words** (section XIII, after Running Start) is Head Start's schematic again, drawn for a
 detector made from typed text. The user typed "a chair"; the opening voted the text sort's top three
 Good and four from its middle Bad. Both panels show the same plane of photos, the same votes:
 
