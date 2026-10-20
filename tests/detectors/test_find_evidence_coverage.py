@@ -256,6 +256,7 @@ class TestTheBaselineFromTheTrainView:
         # Drawn on A's twenty media less the seven labelled ones.
         assert data["n_baseline"] == len(a_ctx.medias) - 7
         labelset, _ = resolve_active_labelset(get_active_detector_context())
+        assert labelset is not None
         dim = len(next(iter(a_ctx.medias.values()))["embeddings"][DEFAULT_AUDIO_EMBEDDER])
         stamp = baseline_stamp(labelset, DEFAULT_AUDIO_EMBEDDER, dim)
         assert stored_baseline(_read_detector(trained["path"]), stamp) is not None
