@@ -42,6 +42,7 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
     picks_per_round: 5,
     band: { index: 3, side: 'above', lo: 33, hi: 64 },
     picks,
+    ahead: null as unknown as LineTestState['ahead'],
     labelled: 0,
     bands: [
       { index: 0, side: 'above', lo: 1, hi: 8, labelled: 0, right: 0, range: null },

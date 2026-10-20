@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Tune no longer pauses between rounds** (issue #5116). The autopilot deals its picks in rounds of
+  five, and the next round used to be chosen only once the last pick of a round was voted, so every
+  fifth pick waited for the server and then for its image. Now, while you look at a round's last
+  pick, the next round is already chosen for either answer and its first images are loading, so the
+  vote that finishes a round shows the next pick as quickly as any other. Which picks you get, and
+  what the test reports, are exactly as before.
+
 - **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
   #5098). What people get from it is a better detector, not only a verdict on the one they have:
   the view tests the line on a dataset the detector never trained on, then lets you correct its
