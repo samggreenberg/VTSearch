@@ -186,8 +186,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * hand-off, see `AutopilotStateService.startedUntrained`), `fix-votes` for
    * the run's first vote and one hint per phase after it, until the run
    * reaches Done, when the hand-off under the Dashboard button takes over. The
-   * Spot Check step's shows on its picks only: the item on screen as the step
-   * begins is the step before it's. Nothing shows while that hand-off is up.
+   * Spot Check step's is on its first pick, until the check's first vote: the
+   * item on screen as the step begins is the step before it's. Nothing shows
+   * while that hand-off is up.
    */
   private readonly trainHint = computed<VoteHintId | 'fix-votes' | null>(() => {
     const run = this.autopilotRun();
@@ -228,7 +229,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'new':
         return 'keep-voting';
       case 'spot':
-        return this.spotRun.isPick(selected.id) ? 'spot-check' : null;
+        return this.spotRun.fresh() && this.spotRun.isPick(selected.id) ? 'spot-check' : null;
       default:
         return null;
     }

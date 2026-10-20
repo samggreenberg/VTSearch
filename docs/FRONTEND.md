@@ -295,10 +295,8 @@ the mixture's count of the positives left in it. The two counts differ once
 the check's own votes are cast and the line re-drawn.
 Under `advisory` that set is not the one kept, so the line names it rather
 than setting its ranges beside the count as if they described the kept set.
-The check's own result screen (`resultHeadline`, `resultDetail`) words it the
-same way.
 
-**The spot check** (`vt-spot-check-stage`, #4273, walking to the balance's
+**The spot check** (`SpotCheckRunnerService`, #4273, walking to the balance's
 peak since #4413) measures that line, in Train only, and only Autopilot runs
 it: it is Autopilot's **Spot Check** step, phase `spot` in
 `AutopilotStateService`. The state's `spotCheck` says why one is running:
@@ -339,31 +337,35 @@ does not re-sort; the completion hand-off follows the state stream
 vote. The step list shows Spot Check between Explore Diversity and Done; a
 weak check makes it the active step and the list goes back to the step
 underneath when it ends, as it does from Diversity to Boundary.
-**The stage.** While `spotCheck` is set the label view renders the stage in
-place of the centre panel, which stays mounted but hidden, so its keyboard
-and viewer state survive. The stage owns the check's lifecycle against
-`/api/precision-check` and holds a round's votes locally until every pick has
-one, then sends the round whole. It takes the vote keys through
-`KeyboardService.captureVoteKeys`, a claim that routes ←/→ and ↓/↑ to its
-holder and sends nothing to `action$`, so the hidden centre panel never
-votes. Train's Autopilot tab shows no ranked list, so no pick's rank is on
-screen. **Stop check** cancels a running check (as does the stage going away
-under one: Autopilot stopped, the view left); **Continue** ends a finished
-one. Either way `closed` calls `endSpotCheck()` and the view catches up on the
-votes and the line, then advances Autopilot past any item the check voted.
-The walk goes deeper while its F-beta estimate does not fall ("Better so far:
-checking the next 32.") and turns back once it does ("Past the peak: checking
-a shorter list."), and the check is finished when `check.status` is
-`checked`; the result reads "Checked the 32 kept you hadn't voted on: likely
-55–100% right, about half of them found (checked 15)." over "The line keeps
-the top 30 you haven't voted on, where your labels put it: the check informs
-the line and does not move it. The ranges are what the picks say about the 32
-it kept when the check started; …" (#4483). Each round's `voted` event refreshes the piles; a
-finished check has moved the line server-side, so the view re-reads it with
-`GET /api/balance` and installs it over the ranking on screen through
-`SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
+**In the vote flow** (#5136). The check is just another way to feed the
+user the next item, so nothing on screen changes for it: no heading, no
+button to stop it, no result. While `spotCheck` is set the label view's
+advance (`advance()`) asks the component-provided `SpotCheckRunnerService`
+instead of `SortRunnerService.autoSelectNext`, and the centre panel shows its
+picks with the usual keys, undo and ↓ walk. The runner owns the check's
+lifecycle against `/api/precision-check`. It draws the first round as the
+step begins, but the item on screen stays: the next advance shows the first
+pick, as a phase change waits for the next advance. Each vote on a pick is an
+ordinary vote; once every pick of the round carries a label the round goes to
+the check whole, with the labels the picks carry then, so a slip put right
+with ↓ counts as corrected and an undone pick is shown again. That round trip
+is the advance's (`advancePending`, so the voted item stays swiped off), and
+no vote in the step re-sorts. Train's Autopilot tab shows no ranked list, so
+no pick's rank is on screen. Stopping Autopilot (the effect on `spotCheck`)
+or the view going away cancels a running check, first handing it the picks
+already voted this round so they carry its provenance; a pair switch drops it
+(`reset`), and the next advance draws a fresh one. The walk goes deeper while
+its F-beta estimate does not fall and turns back once it does, and the check
+is finished when `check.status` is `checked`. Finished, or refused by the
+server, it ends the step on its own (`ended`): the view calls
+`endSpotCheck()`, catches up on the votes, re-reads the line (a finished
+check may have re-cut it server-side) with `GET /api/balance` through
+`SortRunnerService.refreshLine`, and makes the advance the round owed under
+the step underneath. Toasty's `spot-check` hint is on the check's first pick
+only (`fresh`). No re-sort follows the check's end: a retrain moves the list
 under the result, which is what reports it `stale`, and the owner's model is
-that *later* votes do that. The line draws the same in every state; the state
+that *later* votes do that. The result lives in the balance control, on the
+Manual tab. The line draws the same in every state; the state
 and its likely range live in the balance control, and a stale range differs
 only in its tooltip (`staleNote`).
 
@@ -422,7 +424,7 @@ Browser, and clears it with the pair state.
   a pick is drawn from a band, and the list would show its rank (#4267).
 - `vt-line-test-stage` (centre): the current pick with Good and Bad, the
   round's dots, the phase's prompt, through a `KeyboardService.captureVoteKeys`
-  claim held while it is on screen, as the spot check's stage does in Train.
+  claim held while it is on screen.
   At Done it is the verdict (#5100), with the stale / moved note over it and
   its three exits (**Move to AutoFind**, which sets the detector's autofind
   flag and heads to the Dashboard; **Lean the Threshold**, the per-preset

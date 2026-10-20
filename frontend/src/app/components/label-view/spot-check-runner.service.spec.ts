@@ -87,6 +87,17 @@ describe('SpotCheckRunnerService (#5136)', () => {
     expect(runner.isPick(3)).toBe(true);
     expect(runner.isPick(99)).toBe(false);
     expect(runner.advancePending()).toBe(false);
+    expect(runner.fresh()).toBe(true);
+  });
+
+  it('is fresh until the check has its first vote', () => {
+    started([3, 5]);
+    labels([3], []);
+    expect(runner.fresh()).toBe(false);
+    labels([3, 5], []);
+    runner.advance(5);
+    votesReq().flush(response(running([8, 9], 2)));
+    expect(runner.fresh()).toBe(false);
   });
 
   it('shows the round in draw order, one unlabeled pick per advance', () => {

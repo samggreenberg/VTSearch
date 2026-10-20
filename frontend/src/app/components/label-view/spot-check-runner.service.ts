@@ -59,6 +59,8 @@ export class SpotCheckRunnerService {
   private readonly owed = signal(false);
   /** The start or round in the air, dropped with the check so a late answer cannot revive it. */
   private inFlight: Subscription | null = null;
+  /** A round has gone to the server. */
+  private readonly sent = signal(false);
 
   /**
    * Set by the host: the check ended on its own. *finished* is `true` when it
@@ -70,6 +72,9 @@ export class SpotCheckRunnerService {
 
   /** The next item is a round trip away: the centre keeps the voted item swiped off until it lands (#4307). */
   readonly advancePending = computed(() => this.owed());
+
+  /** No pick of the check has a vote yet: Toasty's `spot-check` hint is for its first (#4807). */
+  readonly fresh = computed(() => this.status() === 'running' && !this.sent() && this.labeledVotes().length === 0);
 
   constructor() {
     // Gone from under a running check (the view left): cancel it, as stopping Autopilot does.
@@ -153,11 +158,13 @@ export class SpotCheckRunnerService {
     this.status.set('idle');
     this.picks.set([]);
     this.owed.set(false);
+    this.sent.set(false);
   }
 
   private send(): void {
     this.status.set('sending');
     this.owed.set(true);
+    this.sent.set(true);
     this.inFlight = this.sortingApi
       .votePrecisionCheck(this.labeledVotes())
       .pipe(this.pairScope.scoped())

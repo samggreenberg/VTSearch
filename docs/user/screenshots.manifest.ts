@@ -428,29 +428,6 @@ async function dropExample(page: Page, h: Helpers): Promise<void> {
 const ROSY = 'Rosy Smileys';
 const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
 
-/**
- * A detector whose labels overlap, for the Spot Check shot: Goods and Bads
- * of the same kind of drawing, so the labels separate weakly and Autopilot
- * runs its weak-separation check (#4496) as soon as its first learned sort
- * lands. Only Autopilot starts a check, and this is the one it starts on
- * entry; ten labels meet `WEAK_CHECK_MIN_VOTES`.
- *
- * One kind, not two: piles that were each half yellow smileys, half yellow
- * faces came out at a separation of 2.3, over the 1.5 that makes a check due,
- * so the shot waited for a check that never came (#4862). Five yellow faces a
- * side measure 0.50 in the app refresh.sh starts and 0.26 after a restart.
- * Ten yellow smileys are no good: 0.13 after a restart, but 2.69 in the
- * process that imported the fixtures, which is the one refresh.sh shoots in
- * (#4892).
- */
-const OVERLAP = 'Overlapping Smileys';
-
-/** The Overlapping Smileys detector's labels: ten yellow faces, none smiling, five in each pile. */
-function overlapVotes(): { good: string[]; bad: string[] } {
-  const faces = framesOf(corpus(TRAIN_DATASET).pictures, 'yellow-face', 10);
-  return { good: faces.slice(0, 5), bad: faces.slice(5) };
-}
-
 type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
 
 /** True if *picture* is a yellow smiley with rosy cheeks (the ROSY detector's target). */
@@ -680,57 +657,6 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
     await h.wait(400);
   }
   throw new Error('testUntilDone: the test is not Done after twenty rounds');
-}
-
-/**
- * The chromium check of the spot check's keys (#4273), run by the `floor-check`
- * shot on every capture: jsdom is not a browser, and key routing is browser
- * semantics (CLAUDE.md). In Autopilot's Spot Check step, → votes the pick on
- * screen Good and moves on, ↓ goes back, ← votes it Bad; none of it may reach
- * the centre panel hidden under the step (a `POST /api/medias/<id>/vote`).
- * Votes are held in the step until a round is whole, so this sends nothing:
- * the recipe's `after` cancels the check.
- */
-async function checkStepKeys(page: Page): Promise<void> {
-  const listVotes: string[] = [];
-  const onRequest = (req: { url(): string; method(): string }) => {
-    if (req.method() === 'POST' && /\/api\/medias\/\d+\/vote$/.test(new URL(req.url()).pathname)) listVotes.push(req.url());
-  };
-  page.on('request', onRequest);
-  try {
-    const dots = page.locator('.pick-dot');
-    if ((await dots.count()) < 2) throw new Error('floor-check: the round has fewer than two picks');
-    /** Wait for the dots to show *votes* with pick *current* on screen; the view repaints a frame after the key. */
-    const expect = async (what: string, votes: (string | null)[], current: number) => {
-      const want = JSON.stringify({ votes, current });
-      const read = () =>
-        page.evaluate(() => {
-          const ds = Array.from(document.querySelectorAll('.pick-dot'));
-          return JSON.stringify({
-            votes: ds.map((d) => d.getAttribute('data-vote')),
-            current: ds.findIndex((d) => d.classList.contains('current')),
-          });
-        });
-      const deadline = Date.now() + 5000;
-      let got = await read();
-      while (got !== want && Date.now() < deadline) {
-        await page.waitForTimeout(50);
-        got = await read();
-      }
-      if (got !== want) throw new Error(`floor-check: ${what}: expected ${want}, got ${got}`);
-    };
-    const rest = Array((await dots.count()) - 1).fill(null) as null[];
-    await page.keyboard.press('ArrowRight');
-    await expect('→ votes the pick Good and moves on', ['good', ...rest], 1);
-    await page.keyboard.press('ArrowDown');
-    await expect('↓ goes back a pick', ['good', ...rest], 0);
-    await page.keyboard.press('ArrowLeft');
-    await expect('← changes it to Bad and moves on', ['bad', ...rest], 1);
-    await page.waitForTimeout(300);
-    if (listVotes.length) throw new Error(`floor-check: the centre panel took a vote: ${listVotes.join(', ')}`);
-  } finally {
-    page.off('request', onRequest);
-  }
 }
 
 /**
@@ -1332,40 +1258,6 @@ export const SHOTS: Shot[] = [
       await h.wait(1200);
     },
     after: async (_page, h) => resetFind(h),
-  },
-  {
-    id: 'floor-check',
-    embeddedIn: `${GUIDE}#how-close-the-line-got`,
-    caption:
-      "Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it",
-    themes: BOTH,
-    clip: { target: 'vt-spot-check-stage' },
-    // Only Autopilot starts a check (there is no Check button), so the shot
-    // enters Autopilot on a detector whose labels overlap (`OVERLAP`), which
-    // runs the weak-separation check at once, and answers the first pick with
-    // the keys, which is the step's chromium check (`checkStepKeys`). The
-    // server draws the picks at random, by design; refresh.sh seeds that draw
-    // (VTSEARCH_SPOT_CHECK_SEED, #4330), so the same pick is framed on every
-    // capture.
-    async recipe(page, h) {
-      await h.app.dropDetectors(OVERLAP);
-      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
-      const det = await h.app.ensureDetector(OVERLAP, train, DETECTOR_TEXT);
-      await h.app.setVotes(train, det, overlapVotes());
-      await h.enterLabelView(TRAIN_DATASET, OVERLAP);
-      await h.leftTab('Autopilot');
-      await page.locator('vt-spot-check-stage .pick-dot').first().waitFor({ timeout: 120000 });
-      await page.locator('vt-spot-check-stage img.image-element').first().waitFor({ timeout: 20000 });
-      await checkStepKeys(page);
-      await page.mouse.move(5, 5);
-      await h.wait(1200);
-    },
-    after: async (_page, h) => {
-      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
-      const det = h.app.named(await h.app.detectors(), OVERLAP);
-      if (det) await h.app.api('/api/precision-check/cancel', { method: 'POST', dataset: train.id, detector: det.id });
-      await h.app.dropDetectors(OVERLAP);
-    },
   },
   {
     id: 'achievements',

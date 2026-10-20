@@ -1084,15 +1084,16 @@ describe('LabelViewComponent', () => {
     votes([1, 3, 4], [5, 6, 7, 8]);
     expect(component.voteHint()).toBe('keep-voting');
 
-    // The Spot Check step's hint is on its picks only (#5136): the item on
-    // screen as the step begins is the step before it's.
+    // The Spot Check step's hint is on its first pick, until the check's
+    // first vote (#5136): the item on screen as the step begins is the step
+    // before it's.
     TestBed.inject(AutopilotStateService).beginSpotCheck('weak');
     TestBed.tick();
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
       balance: wireBalance('unchecked'),
       check: {
         status: 'running', beta: 1, round: 1, rounds: 1, picks_per_round: 1, candidate: 32, start_candidate: 32,
-        picks: [9], labelled: 0, right: 0, range: null, recall: null, fbeta: null,
+        picks: [9, 10], labelled: 0, right: 0, range: null, recall: null, fbeta: null,
       },
     });
     TestBed.tick();
@@ -1101,6 +1102,14 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     expect(component.mediaState.selectedId()).toBe(9);
     expect(component.voteHint()).toBe('spot-check');
+    component.voteState.loadVotes();
+    httpMock.match('/api/votes').forEach((req) =>
+      req.flush({ good: [1, 3, 4, 9], bad: [5, 6, 7, 8], click_times: {}, learned_scores: {} }),
+    );
+    component.onNavigate('forward');
+    TestBed.tick();
+    expect(component.mediaState.selectedId()).toBe(10);
+    expect(component.voteHint()).toBeNull();
   });
 
   describe('changing a label (#4824)', () => {
