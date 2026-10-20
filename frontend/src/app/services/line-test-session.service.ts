@@ -151,7 +151,15 @@ export class LineTestSessionService {
   /**
    * The next *depth* picks a vote will bring on screen, in that order: the
    * unvoted picks after the one shown, wrapping round, as {@link vote} walks
-   * them. What the view warms while the user looks at this one (#5099).
+   * them, then the next round's first picks. What the view warms while the
+   * user looks at this one (#5099).
+   *
+   * The next round is known before the vote that deals it (#5116): once one
+   * pick is left the server deals that round both ways the pick can go
+   * (`test.ahead`). While the pick is unvoted both are upcoming, taken in
+   * turns, since either may come (they are the same picks when both ways go
+   * to the same band); once it has its vote here, the way it went, so the
+   * other's fetch stops as the vote goes out.
    */
   upcoming(depth: number): number[] {
     const picks = this.roundPicks();
@@ -161,6 +169,13 @@ export class LineTestSessionService {
     for (let step = 1; step < picks.length && ids.length < depth; step++) {
       const id = picks[(from + step) % picks.length];
       if (!votes.has(id)) ids.push(id);
+    }
+    const next = this.nextRounds();
+    for (let i = 0; ids.length < depth && next.some((round) => i < round.length); i++) {
+      for (const round of next) {
+        const id = round[i];
+        if (id !== undefined && ids.length < depth && !ids.includes(id)) ids.push(id);
+      }
     }
     return ids;
   }
@@ -220,6 +235,8 @@ export class LineTestSessionService {
     const previous = this.test();
     this.response.set(resp);
     const test = resp.test ?? null;
+    // The next round, dealt ahead (#5116): its metadata is in hand as it is dealt, like its images.
+    if (test?.ahead) this.metadataCache.ensureLoaded([...test.ahead.good, ...test.ahead.bad]);
     const pending = test?.picks ?? [];
     if (!test || !pending.length && !this.roundPicks().length) {
       if (!test || test.phase === 'done' || test.phase === 'nothing') {
@@ -243,6 +260,23 @@ export class LineTestSessionService {
       this.roundVotes.set(new Map());
       this.index.set(0);
     }
+  }
+
+  /**
+   * The rounds the vote on this round's last pick can deal, from the
+   * server's `ahead`: both while that pick is the one unvoted, the one its
+   * vote names once every pick has one, and none while two or more are
+   * unvoted (a ↓ lifted a vote, and the unvote's reply drops `ahead`).
+   */
+  private nextRounds(): number[][] {
+    const ahead = this.test()?.ahead;
+    const picks = this.roundPicks();
+    if (!ahead || !picks.includes(ahead.id)) return [];
+    const votes = this.roundVotes();
+    const unvoted = picks.filter((id) => !votes.has(id));
+    const vote = votes.get(ahead.id);
+    if (vote) return unvoted.length ? [] : [vote === 'good' ? ahead.good : ahead.bad];
+    return unvoted.length === 1 ? [ahead.good, ahead.bad] : [];
   }
 
   /** The first unvoted pick after *from*, wrapping round; null when every pick has a vote. */
