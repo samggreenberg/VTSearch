@@ -252,7 +252,7 @@ slides:
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
 
-  # X — Media(tion): everything that is not a photo. The
+  # X — Conversion: everything that is not a photo. The
   # deck had shown two of the app's six media types; this is the other four and
   # the plumbing between them, so it comes before the two sections that live on
   # converted media — documents (pages) and faces (crops). The six types, each
