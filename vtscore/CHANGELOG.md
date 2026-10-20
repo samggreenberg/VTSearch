@@ -451,6 +451,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The detector registry records the datasets a detector holds labels from** (issue #5142). New
+  `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
+  labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's
+  `trained_on` list of dataset ids: a writer that composed its labels against one dataset adds it while the detector
+  still holds labels there and drops it once the last one is gone; a writer that names no dataset leaves the list
+  alone. The per-vote label sync calls it, and `VoteSnapshot` gains `dataset_id`, the dataset its `medias` belong to.
+  Additive.
 - **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
   one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
   generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends

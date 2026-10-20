@@ -806,7 +806,7 @@ def find_corrections_to_detector():
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
     from vtscore.detectors.labelset_ops import label_sync_write_lock
     from vtscore.detectors.registry import get_detector as reg_get_detector
-    from vtscore.detectors.registry import update_detector
+    from vtscore.detectors.registry import record_detector_training
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
     from vtscore.state.core import _state_lock, get_active_detector_context
 
@@ -905,9 +905,9 @@ def find_corrections_to_detector():
             det_ctx.model = None
             det_ctx.find_eval_stale = True
 
-        import time as _time
-
-        update_detector(reg["id"], num_training=len(merged), last_trained_at=_time.time())
+        # The corrections are labels from this dataset, so the detector is now
+        # trained on it too.
+        record_detector_training(reg["id"], len(merged), dataset_id=snap.dataset_id)
 
         return {
             "ok": True,
