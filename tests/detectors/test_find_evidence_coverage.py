@@ -84,7 +84,9 @@ class TestTheTrainingBaseline:
     @pytest.fixture
     def detector_path(self, client):
         detector_id = TestFindEvidenceCoverage()._setup_find(client)
-        return _detector_path(get_detector(detector_id)["name"])
+        entry = get_detector(detector_id)
+        assert entry is not None
+        return _detector_path(entry["name"])
 
     @staticmethod
     def _away(monkeypatch):
@@ -102,7 +104,9 @@ class TestTheTrainingBaseline:
         assert 0.0 <= data["frac_beyond"] <= 1.0
         # Ranked against itself, the training dataset reads its own spread: no verdict fires.
         assert data["unsupported"] is False
-        stored = _read_detector(detector_path)[EVIDENCE_BASELINE_KEY]
+        data_on_disk = _read_detector(detector_path)
+        assert data_on_disk is not None
+        stored = data_on_disk[EVIDENCE_BASELINE_KEY]
         assert stored["dataset_id"] == data["baseline_dataset_id"]
         assert stored["n_pos"] + stored["n_neg"] == data["n_baseline"]
         assert stored["k"] == data["k"] and stored["alpha"] == data["alpha"]
@@ -118,6 +122,7 @@ class TestTheTrainingBaseline:
     def test_a_stale_baseline_draws_no_verdict(self, client, detector_path, monkeypatch):
         client.get("/api/find/evidence-coverage")
         data = _read_detector(detector_path)
+        assert data is not None
         data[EVIDENCE_BASELINE_KEY]["labels"] = "0" * 32  # as after a vote since
         _write_detector(detector_path, data)
         self._away(monkeypatch)

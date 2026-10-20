@@ -23,6 +23,12 @@ def _labels(*marks: str) -> LabelSet:
     return LabelSet([LabeledElement(md5=f"m{i}", label=label) for i, label in enumerate(marks)])
 
 
+def _stamp(labels: LabelSet, embedder: str = "siglip", dim: int = 768) -> dict:
+    stamp = baseline_stamp(labels, embedder, dim)
+    assert stamp is not None
+    return stamp
+
+
 def _baseline(stamp: dict) -> dict:
     return {**stamp, "dataset_id": "ds", "n_pos": 30, "n_neg": 500, "cut_pos": 0.41, "cut_neg": 0.52}
 
@@ -47,16 +53,16 @@ class TestTheStamp:
 
 class TestReadingItBack:
     def test_a_matching_stamp_reads_the_baseline(self):
-        stamp = baseline_stamp(_labels("good", "bad"), "siglip", 768)
+        stamp = _stamp(_labels("good", "bad"))
         assert stored_baseline({EVIDENCE_BASELINE_KEY: _baseline(stamp)}, stamp) == _baseline(stamp)
 
     def test_a_stale_stamp_reads_nothing(self):
-        old = baseline_stamp(_labels("good", "bad"), "siglip", 768)
-        new = baseline_stamp(_labels("good", "bad", "good"), "siglip", 768)
+        old = _stamp(_labels("good", "bad"))
+        new = _stamp(_labels("good", "bad", "good"))
         assert stored_baseline({EVIDENCE_BASELINE_KEY: _baseline(old)}, new) is None
 
     def test_no_baseline_or_no_stamp_reads_nothing(self):
-        stamp = baseline_stamp(_labels("good", "bad"), "siglip", 768)
+        stamp = _stamp(_labels("good", "bad"))
         assert stored_baseline({}, stamp) is None
         assert stored_baseline(None, stamp) is None
         assert stored_baseline({EVIDENCE_BASELINE_KEY: "junk"}, stamp) is None
@@ -67,7 +73,7 @@ class TestRecordingIt:
     def test_it_keeps_every_other_key_and_writes_once(self, tmp_path):
         path = tmp_path / "birds.json"
         _write_detector(path, {"name": "birds", "labelset": {"labels": []}, "text_query": "a bird"})
-        baseline = _baseline(baseline_stamp(_labels("good", "bad"), "siglip", 768))
+        baseline = _baseline(_stamp(_labels("good", "bad")))
         assert record_baseline(path, baseline) is True
         data = _read_detector(path)
         assert data == {
@@ -81,10 +87,11 @@ class TestRecordingIt:
     def test_a_new_baseline_replaces_the_old(self, tmp_path):
         path = tmp_path / "birds.json"
         _write_detector(path, {"name": "birds"})
-        record_baseline(path, _baseline(baseline_stamp(_labels("good", "bad"), "siglip", 768)))
-        newer = _baseline(baseline_stamp(_labels("good", "bad", "bad"), "siglip", 768))
+        record_baseline(path, _baseline(_stamp(_labels("good", "bad"))))
+        newer = _baseline(_stamp(_labels("good", "bad", "bad")))
         assert record_baseline(path, newer) is True
-        assert _read_detector(path)[EVIDENCE_BASELINE_KEY] == newer
+        data = _read_detector(path)
+        assert data is not None and data[EVIDENCE_BASELINE_KEY] == newer
 
     def test_no_detector_file_writes_nothing(self, tmp_path):
         assert record_baseline(tmp_path / "gone.json", {"cut_pos": 0.1}) is False
