@@ -106,7 +106,8 @@ export interface AutopilotState {
   /**
    * The spot check running inside this run, or null. While one runs the phase
    * is `spot`: the check deals the picks, not the phase's sort, and the view
-   * shows them in the centre pane. Only Autopilot starts a check.
+   * shows them in the centre panel as the next items. Only Autopilot starts a
+   * check.
    */
   spotCheck: SpotCheckKind | null;
   /**

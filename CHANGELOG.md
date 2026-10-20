@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
+  Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
+  going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its
+  picks come up as your next items, in the usual centre panel with the usual keys, and nothing on
+  screen changes for them: the check starts after you vote on the item already in front of you, as
+  Autopilot's other steps do, and when it ends Autopilot carries on. Its result is in the note under
+  the Threshold on the **Manual** tab, and stopping Autopilot ends a check early.
+
 - **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
   coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
   detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
