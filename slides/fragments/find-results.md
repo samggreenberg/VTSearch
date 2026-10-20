@@ -11,9 +11,7 @@
 
 <div class="side">
 
-**Auto-Ingest:**<br><span class="indent">#VTSearch</span>
-
-**Auto-Output:**<br><span class="indent">Email, Dropbox, etc.</span>
+**Auto-Output:**<br><span class="indent">Email</span><br><span class="indent">Dropbox</span><br><span class="indent">VT Tags</span><br><span class="indent">etc.</span>
 
 </div>
 
@@ -25,7 +23,6 @@
 <!-- **b** — here's what comes back: shelves, stacks, people reading. Ten
      thousand photos, no labels, about thirty votes. -->
 
-<!-- **c** — And you don't even have to open the tool. New pictures can flow in
-     on their own, say from a team chat, and a detector set to AutoFind sends
-     what it finds wherever you already look: email, a Dropbox folder,
-     whatever. -->
+<!-- **c** — And you don't even have to open the tool. A detector set to
+     AutoFind sends what it finds wherever you already look: email, a Dropbox
+     folder, VT tags, whatever. -->

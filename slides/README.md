@@ -165,7 +165,7 @@ leaves for it (see *A figure owns the whole slide* in [`STYLE.md`](STYLE.md)):
 
 ![bg fit](figs/book-boundary.webp)
 
-## Judging a Book<br>by its Cover
+## Judge a Book<br>by its Cover
 ```
 
 Figure paths are written relative to `slides/`, not to the fragment — `build.py`
@@ -503,13 +503,6 @@ named frames of the production pile's `book/` folder (`SHEET`; its docstring
 says why not the top of the live ranking). It is
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
-
-And one is staged: `figs/ui-train-loop.webp`, Rock the Vote's last page, is the
-session's last real frame (`.build6`) with Toasty's "your detector is trained"
-hint drawn over it by `figs/src/stop-hint.mjs`, in the app's own markup and
-placement. The real hint waits for every quality light to go green, which takes
-far more votes than this session casts. The harness redraws it on every reshoot;
-`node figs/src/stop-hint.mjs` redraws it on the committed frame alone.
 
 The intro groups are **one session**, shot in the order a user works, from an
 app with nothing in it: import `photos-train` through the Add Dataset dialog, create

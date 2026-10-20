@@ -8,6 +8,9 @@
  *   - `box`       — a red outline round the target, with an optional label pill
  *                   above it (or `at: 'right'` / `'bottom'`)
  *   - `highlight` — the same outline, with everything else dimmed
+ *   - `ring`      — a red ring round the target, its ends fully rounded and
+ *                   its inside `pad` clear of the target: the thing a
+ *                   presenter points at, rather than a control to click
  *   - `step`      — a numbered marker: the outline plus a filled red disc
  *                   carrying `step` (1, 2, 3 …), and an optional label pill
  *                   beside the disc. `at` puts the disc against the target's
@@ -134,13 +137,19 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
       };
       for (const [i, a] of items.entries()) {
         const { x, y, w, h } = a.box;
-        const pad = sizes.pad;
+        const ring = a.kind === 'ring';
+        // A ring's inside, not its outside, clears the target by `pad`, and its
+        // round ends reach out as far as it takes to clear the target's corners.
+        const pad = ring ? sizes.pad + sizes.stroke : sizes.pad;
+        const radius = h / 2 + pad;
+        const inner = radius - sizes.stroke;
+        const reach = ring ? Math.max(0, radius - pad - Math.sqrt(inner * inner - (h / 2) ** 2)) : 0;
         // The outline, `pad` clear of the target, except on a side where that
         // would put it past the viewport's edge (a panel running to the edge of
         // the window): there it is drawn just inside.
-        const left = Math.max(x - pad, sizes.edge);
+        const left = Math.max(x - pad - reach, sizes.edge);
         const top = Math.max(y - pad, sizes.edge);
-        const right = Math.min(x + w + pad, vw - sizes.edge);
+        const right = Math.min(x + w + pad + reach, vw - sizes.edge);
         const bottom = Math.min(y + h + pad, vh - sizes.edge);
         if (right - left < sizes.stroke * 2 || bottom - top < sizes.stroke * 2) {
           throw new Error(`callout ${i + 1} (${a.label ?? a.step ?? a.kind}): its target is off screen`);
@@ -150,7 +159,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
           position: 'absolute',
           left: `${left}px`, top: `${top}px`,
           width: `${right - left}px`, height: `${bottom - top}px`,
-          border: `${sizes.stroke}px solid ${accent}`, borderRadius: `${sizes.radius}px`,
+          border: `${sizes.stroke}px solid ${accent}`, borderRadius: ring ? `${radius}px` : `${sizes.radius}px`,
           boxShadow: a.kind === 'highlight' ? '0 0 0 4000px rgba(0,0,0,0.28)' : 'none',
           boxSizing: 'border-box',
         });

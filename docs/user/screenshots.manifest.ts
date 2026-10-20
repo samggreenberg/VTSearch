@@ -46,11 +46,12 @@ export type Target =
 export interface Annotation {
   target: Target;
   /**
-   * `box` outlines the target; `highlight` also dims everything else; `step`
-   * outlines it and puts a numbered red disc on its corner — the click-by-click
-   * markers (#4202), read in order 1, 2, 3.
+   * `box` outlines the target; `highlight` also dims everything else; `ring`
+   * circles it with fully rounded ends; `step` outlines it and puts a numbered
+   * red disc on its corner — the click-by-click markers (#4202), read in order
+   * 1, 2, 3.
    */
-  kind: 'box' | 'highlight' | 'step';
+  kind: 'box' | 'highlight' | 'ring' | 'step';
   /** The number on a `step` disc. */
   step?: number;
   /**
