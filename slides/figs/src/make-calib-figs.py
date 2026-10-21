@@ -3814,8 +3814,11 @@ FBETA_STAGES = 5
 
 #: How many stages the region-maximum figure reveals in: two photographs cut
 #: into regions; each region's score and the max over them; the corpus of
-#: maxima; the two tail families fitted to it.
-REGION_MAX_STAGES = 4
+#: maxima; the two tail families fitted to it; and the two curves written out.
+#: The formulas are a page of their own so the deck can drop them by dropping
+#: that page (owner, #5171).
+REGION_MAX_STAGES = 5
+REGION_FITS_STAGE = 4
 
 #: The balances the F-beta figure draws, top row first, as (beta, label): the
 #: app's three presets (#4448), F-beta's beta of 1/4, 1 and 4. Symmetric about
@@ -4839,6 +4842,9 @@ def region_max_fig() -> None:
     vote is, why an item's score becomes a maximum, and why a maximum is not
     Gaussian-shaped (#3246).
     """
+    # The key's widest line has to clear the "#" at the histogram's left edge.
+    widest = max(_text_width(text, REGION_KEY_PT) for text in [m for _, m, *_ in REGION_FITS] + [REGION_FITS_Z])
+    assert REGION_KEY_X + widest < REGION_PANEL_X0 - 1.0, widest
     final = _region_max_stage(REGION_MAX_STAGES)
     box = tight_box(final)
     for stage in range(1, REGION_MAX_STAGES):
@@ -4874,16 +4880,22 @@ REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.
 REGION_SCORE_PT = 13
 #: The histogram panel: left edge, floor, and height.
 REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
-#: The two fits on the last page, in the key's order: name, the maths that
-#: tells them apart, which curve, colour and line weight. The Gaussian is thin
-#: and red, the family a maximum is not; the Gumbel thicker and green, the one
-#: it is (owner, #5171).
+#: The two fits, in the key's order: name, the curve's formula, which curve,
+#: colour and line weight. The Gaussian is thin and red, the family a maximum
+#: is not; the Gumbel thicker and green, the one it is (owner, #5171). Both
+#: formulas are in the same z, so the page shows the one thing that differs:
+#: the Gaussian falls off as z² on both sides, the Gumbel fast on the left and
+#: only as e⁻ᶻ on the right. Written as exp(…) so no exponent carries an
+#: exponent of its own, which would set below the type floor.
 REGION_FITS = (
-    ("Gumbel", "max(x₁, …, xₙ)", "gumbel", GREEN, 3.6),
-    ("Gaussian", "(x₁ + … + xₙ) / n", "normal", RED, 1.6),
+    ("Gumbel", "a·exp(−z − e⁻ᶻ)", "gumbel", GREEN, 3.6),
+    ("Gaussian", "a·exp(−z²/2)", "normal", RED, 1.6),
 )
-#: The key's type, and the stretch of line it draws before each name.
-REGION_KEY_PT, REGION_KEY_SEG = 16, 1.0
+REGION_FITS_Z = "z = (x − b) / c"
+#: The key, in the column left of the histogram, under the title notch: where
+#: its lines start, its type, the stretch of line drawn before each name, and
+#: the step between its lines.
+REGION_KEY_X, REGION_KEY_PT, REGION_KEY_SEG, REGION_KEY_STEP = 0.9, 16, 1.0, 0.6
 
 
 def _text_width(text: str, fontsize: float) -> float:
@@ -4892,6 +4904,30 @@ def _text_width(text: str, fontsize: float) -> float:
         TextPath((0, 0), text, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width
         / FLOW_UNIT_PT
     )
+
+
+def _region_fits(ax: plt.Axes, stage: int, x: np.ndarray, curves: dict[str, np.ndarray], top: float) -> None:
+    """The two fitted families over the histogram, and their key, from *top* down.
+
+    Red for the family the slide argues against and green for the one it fits,
+    told apart by weight as well as hue, and the key draws a stretch of each
+    line so neither is told by colour alone (owner, #5171). The key's lines
+    keep their places on the last stage, which writes each curve under its name.
+    """
+    y = top
+    for name, maths, key, colour, weight in REGION_FITS:
+        ax.plot(x, curves[key], color=colour, linewidth=weight, zorder=5 if key == "gumbel" else 4)
+        ax.plot([REGION_KEY_X, REGION_KEY_X + REGION_KEY_SEG], [y, y], color=colour, linewidth=weight,
+                solid_capstyle="butt", zorder=4)  # fmt: skip
+        ax.text(REGION_KEY_X + REGION_KEY_SEG + LABEL_GAP, y, name, ha="left", va="center", fontsize=REGION_KEY_PT,
+                color=INK)  # fmt: skip
+        if stage >= REGION_MAX_STAGES:
+            ax.text(REGION_KEY_X, y - REGION_KEY_STEP, maths, ha="left", va="center", fontsize=REGION_KEY_PT,
+                    color=INK)  # fmt: skip
+        y -= 2.2 * REGION_KEY_STEP
+    if stage >= REGION_MAX_STAGES:
+        ax.text(REGION_KEY_X, y + 0.2 * REGION_KEY_STEP, REGION_FITS_Z, ha="left", va="center",
+                fontsize=REGION_KEY_PT, color=INK)  # fmt: skip
 
 
 def _region_max_stage(stage: int) -> plt.Figure:
@@ -5013,28 +5049,10 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
-    # Red for the family the slide argues against and green for the one it fits,
-    # told apart by weight as well as hue, and the key draws a stretch of each
-    # line so neither is told by colour alone (owner, #5171). Each name carries
-    # the one line of maths that separates them: an average of many draws, and
-    # their maximum.
-    if stage >= REGION_MAX_STAGES:
-        right = panel_x0 + panel_w
-        widths = [_text_width(f"{name}  {maths}", REGION_KEY_PT) for name, maths, *_ in REGION_FITS]
-        text_x = right - max(widths)
-        for k, (name, maths, key, colour, weight) in enumerate(REGION_FITS):
-            curve = gumbel if key == "gumbel" else normal
-            ax.plot(
-                panel_x0 + (xs - lo) / (hi - lo) * panel_w,
-                y_base + curve * sy,
-                color=colour,
-                linewidth=weight,
-                zorder=5 if key == "gumbel" else 4,
-            )
-            y = y_base + panel_h - CAP_16 / 2 - k * (CAP_16 + 2 * LABEL_GAP)
-            ax.plot([text_x - LABEL_GAP - REGION_KEY_SEG, text_x - LABEL_GAP], [y, y], color=colour, linewidth=weight,
-                    solid_capstyle="butt", zorder=4)  # fmt: skip
-            ax.text(text_x, y, f"{name}  {maths}", ha="left", va="center", fontsize=REGION_KEY_PT, color=INK)
+    if stage >= REGION_FITS_STAGE:
+        x = panel_x0 + (xs - lo) / (hi - lo) * panel_w
+        curves = {"gumbel": y_base + gumbel * sy, "normal": y_base + normal * sy}
+        _region_fits(ax, stage, x, curves, y_base + panel_h - CAP_16 / 2)
     return fig
 
 
