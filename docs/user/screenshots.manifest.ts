@@ -597,6 +597,32 @@ async function openTune(page: Page, h: Helpers): Promise<void> {
 }
 
 /**
+ * Record the detector's training baseline for the Evidence verdict (#5089),
+ * as the how-to's reader has it: a Tune on the dataset it was trained on.
+ * Tune's result pane reads the Evidence report at Done, and that report, run
+ * on the training dataset, draws the baseline and records it on the detector.
+ * Both calls go through the API, as the Tune view makes them; testing the
+ * training pile to Done first would change none of what gets recorded.
+ * Without this the chip reads the evidence-vacuum share and no verdict.
+ */
+async function recordEvidenceBaseline(h: Helpers): Promise<void> {
+  const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  if (!train || !det) throw new Error(`no ${TRAIN_DATASET} / ${DETECTOR} to record a baseline with`);
+  await h.app.loadDataset(train);
+  const pair = { dataset: train.id, detector: det.id };
+  await resetFind(h);
+  await h.app.api('/api/find-label', { method: 'POST', body: { detector_id: det.id }, ...pair });
+  const evidence = await h.app.api('/api/find/evidence-coverage', pair);
+  // End the session, as the Train view does on entry, so the presumed votes
+  // the scoring left on the training pile go with it.
+  await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  if (evidence.baseline !== 'training') {
+    throw new Error(`a Tune on ${TRAIN_DATASET} recorded no Evidence baseline (baseline: ${evidence.baseline})`);
+  }
+}
+
+/**
  * Score the test dataset, test the line to Done on Autopilot, then open the
  * Review tab: the ranked result in full, the test's picks in the piles. That
  * is the guide's order (Step 4: click until Done, then open Review), and the
@@ -1389,7 +1415,10 @@ export const SHOTS: Shot[] = [
       { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2, at: 'right' },
       { target: '.evidence-chip', kind: 'step', step: 3, at: 'right' },
     ],
+    // The baseline stays recorded on the detector afterwards, as it would on a
+    // reader's; no other shot shows the Evidence chip.
     async recipe(page, h) {
+      await recordEvidenceBaseline(h);
       await openTune(page, h);
       await testUntilDone(page, h);
       await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
