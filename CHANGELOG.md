@@ -25,6 +25,35 @@ not list every commit. Use `git log` for the full history.
   the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
   the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
 
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
+- **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
+  while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
+  the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
+  words what Autopilot is doing and the next step ("Autopilot is looking for Bads now. Keep
+  clicking."), and a finished run says just that the detector is trained and to click
+  **Dashboard** to put it to work, whatever ended the run. The counts and scores are still in the
+  Autopilot panel and the **Update Sort Example?** dialog.
+
+- **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
+  Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
+  going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its
+  picks come up as your next items, in the usual centre panel with the usual keys, and nothing on
+  screen changes for them: the check starts after you vote on the item already in front of you, as
+  Autopilot's other steps do, and when it ends Autopilot carries on. Its result is in the note under
+  the Threshold on the **Manual** tab, and stopping Autopilot ends a check early.
+
 - **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
   coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
   detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
@@ -1093,6 +1122,11 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
+  When the vote that labeled a dataset's last item also finished training, Toasty said the detector
+  was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click
+  **Dashboard** to put the detector to work.
 
 - **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
   piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on

@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, input, OnDestroy, output,
 import { IconComponent } from '../../icon/icon.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { HintId } from '../../../services/hints.service';
-import { countPhrase } from '../../../utils/count-phrase';
 
 /**
  * The hints that stand over the Good / Bad buttons (#4680, #4807). The host
@@ -12,18 +11,8 @@ import { countPhrase } from '../../../utils/count-phrase';
  */
 export type VoteHintId = Extract<
   HintId,
-  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'spot-check' | 'test-vote'
+  'start-voting' | 'revote' | 'find-goods' | 'find-bads' | 'find-more' | 'keep-voting' | 'test-vote'
 >;
-
-/** What the Train phase hints count: the Goods and Bads so far, against Autopilot's targets. */
-export interface VoteHintCounts {
-  goods: number;
-  goodsNeeded: number;
-  bads: number;
-  badsNeeded: number;
-}
-
-export const NO_VOTE_HINT_COUNTS: VoteHintCounts = { goods: 0, goodsNeeded: 0, bads: 0, badsNeeded: 0 };
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,17 +39,12 @@ export class VotingOverlayComponent implements OnDestroy {
   /** Which of Toasty's hints stands over the buttons, if any (#4680, #4807).
    *  The host decides when, and swaps or drops it as the user votes. */
   readonly hint = input<VoteHintId | null>(null);
-  /** The counts the Train phase hints fill in. */
-  readonly hintCounts = input<VoteHintCounts>(NO_VOTE_HINT_COUNTS);
   readonly voted = output<'good' | 'bad'>();
 
-  readonly goodsNeededPhrase = computed(() => countPhrase(this.hintCounts().goodsNeeded, 'Good', 'Goods'));
-  readonly badsNeededPhrase = computed(() => countPhrase(this.hintCounts().badsNeeded, 'Bad', 'Bads'));
-  /** What `revote` says the item is labeled, and the button and key that change it. The host
-   *  drops the hint the moment the label moves, so these never name the label a vote just set. */
+  /** What `revote` says the item is labeled, and the button that changes it. The host drops
+   *  the hint the moment the label moves, so these never name the label a vote just set. */
   readonly revoteLabel = computed(() => (this.isGood() ? 'Good' : 'Bad'));
   readonly revoteOther = computed(() => (this.isGood() ? 'Bad' : 'Good'));
-  readonly revoteKey = computed(() => (this.isGood() ? 'left' : 'right'));
 
   /** Transient flash classes; signals so the `setTimeout` reset repaints under
    *  zoneless change detection. */

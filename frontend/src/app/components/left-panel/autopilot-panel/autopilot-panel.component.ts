@@ -240,13 +240,11 @@ export class AutopilotPanelComponent implements OnInit {
         if (prev.phase === curr.phase || !this.autopilotState.shouldAnnounceCompletion) return;
         const votes = untracked(() => this.goodVotes().size + this.badVotes().size);
         if (curr.phase === 'done') {
-          this.announceCompletion({
-            kind: 'done',
-            votes,
-            dryRun: curr.dryRunStop ? curr.moreDryRun : undefined,
-            expectedFbeta: !curr.dryRunStop && doneByLevel(curr) ? (curr.expectedFbeta ?? undefined) : undefined,
-            capVotes: !curr.dryRunStop && doneByCap(curr) ? votes : undefined,
-          });
+          // Done with nothing left to label (#5151): the vote that took the
+          // last item, or a check that dealt it, also said Done. "Keep
+          // clicking" would point at items there are none of.
+          const allLabeled = untracked(() => this.remainingUnlabeled) === 0;
+          this.announceCompletion({ kind: allLabeled ? 'all-labeled' : 'done', votes });
         } else if (curr.phase === 'exhausted') {
           this.announceCompletion({ kind: 'all-labeled', votes });
         }

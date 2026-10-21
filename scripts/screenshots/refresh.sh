@@ -22,8 +22,8 @@
 #
 # It also fits the Browse map under VTSEARCH_PROJECTION_SEED, because an
 # unseeded UMAP fit lays the map out differently every time (#4296), and draws
-# the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
-# draw shows the floor-check shot a different pick every time (#4330).
+# Tune's and the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an
+# unseeded draw frames a different pick every time (#4330).
 #
 # And it sets that app's Show Animations to "OS Setting". capture.ts opens every
 # page asking for reduced motion, but the app's default, "Show", overrides that

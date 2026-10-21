@@ -164,7 +164,6 @@
       [disabled]="isVoting() || disabled()"
       [spinningVote]="spinningVote()"
       [hint]="voteHint()"
-      [hintCounts]="voteHintCounts()"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
 

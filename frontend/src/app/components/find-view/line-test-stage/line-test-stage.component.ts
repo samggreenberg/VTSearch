@@ -20,8 +20,8 @@ import { estimatePercent } from '../../../utils/line-test';
 /**
  * The Tune autopilot's centre pane (#4524): the current pick with Good and
  * Bad, the round's dots, the phase's one-line prompt, and ↓ to go back one
- * pick, as the spot-check modal shows a round, but as the view rather than a
- * modal over a list. Before a test exists it says what the pane is waiting on.
+ * pick, as the view rather than a modal over a list. Before a test exists it
+ * says what the pane is waiting on.
  *
  * - **At Done it is the verdict** (#5100): the ranges read in a sentence, and
  *   its three exits, **Move to AutoFind**, **Add Corrections and retrain**

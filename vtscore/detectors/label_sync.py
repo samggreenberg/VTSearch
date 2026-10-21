@@ -195,7 +195,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     entry, path, data, det_ctx = state
 
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
-    from vtscore.detectors.registry import update_detector
+    from vtscore.detectors.registry import record_detector_training
     from vtscore.detectors.store import queue_detector_write
 
     vote_snap = validated_vote_snapshot()
@@ -233,12 +233,13 @@ def _sync_labels_to_loaded_detector_locked() -> None:
 
     entry_id = entry["id"]
     label_count = len(merged)
+    # ``current_ls`` is every label the detector now holds from this dataset.
+    dataset_id = vote_snap.dataset_id
+    labeled_here = len(current_ls) > 0
 
     def _after_write() -> None:
-        import time as _time
-
         _refresh_detector_file_caches(det_ctx, path)
-        update_detector(entry_id, num_training=label_count, last_trained_at=_time.time())
+        record_detector_training(entry_id, label_count, dataset_id=dataset_id, labeled_in_dataset=labeled_here)
 
     # Off the request thread in ``async`` mode (issue #3853): the fsync +
     # rename of a 650 KB file to a busy NFS export is what held the panel

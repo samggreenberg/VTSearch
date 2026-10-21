@@ -731,7 +731,7 @@ describe('AutopilotPanelComponent', () => {
       closeDoneCheck();
       await settleZoneless(fixture);
 
-      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25, expectedFbeta: 0.62 });
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25 });
       const step = component.steps.find((st) => st.state === 'active')!;
       expect(step.phase).toBe('improve');
       expect(step.detail).toBe('Expected F-beta 0.62');
@@ -748,7 +748,6 @@ describe('AutopilotPanelComponent', () => {
       await settleZoneless(fixture);
       expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('All indicators green');
       expect(component.steps.find((st) => st.phase === 'done')!.helpText).toContain('All quality indicators are green');
-      expect(autopilotState.handoff()?.expectedFbeta).toBeUndefined();
     });
   });
 
@@ -765,7 +764,7 @@ describe('AutopilotPanelComponent', () => {
       closeDoneCheck();
       await settleZoneless(fixture);
 
-      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: STOP_CAP_VOTES, capVotes: STOP_CAP_VOTES });
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: STOP_CAP_VOTES });
       const step = component.steps.find((st) => st.state === 'active')!;
       expect(step.phase).toBe('improve');
       expect(step.detail).toBe(`${STOP_CAP_VOTES} votes`);
@@ -787,7 +786,6 @@ describe('AutopilotPanelComponent', () => {
       TestBed.tick();
       closeDoneCheck();
       await settleZoneless(fixture);
-      expect(autopilotState.handoff()?.capVotes).toBeUndefined();
       expect(component.steps.find((st) => st.state === 'active')!.detail).toBe('Expected F-beta 0.62');
     });
   });
@@ -822,7 +820,7 @@ describe('AutopilotPanelComponent', () => {
 
       expect(component.state.phase).toBe('done');
       // 20 Good + 5 Bad: the vote total it went up at.
-      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25, dryRun: undefined });
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25 });
       // No dialog, and nothing on a timer: the user is never moved without asking.
       expect(fixture.nativeElement.querySelector('vt-modal')).toBeNull();
       expect(navigate).not.toHaveBeenCalled();
@@ -855,6 +853,53 @@ describe('AutopilotPanelComponent', () => {
 
       expect(component.state.phase).toBe('exhausted');
       expect(autopilotState.handoff()?.kind).toBe('all-labeled');
+    });
+
+    describe('Done with nothing left to label (#5151)', () => {
+      it('says everything is labeled when the check before Done deals the last item', async () => {
+        fixture.componentRef.setInput('votesLoaded', true);
+        fixture.componentRef.setInput('datasetSize', 26);
+        fixture.componentRef.setInput('goodVotes', goods(20));
+        fixture.componentRef.setInput('badVotes', bads(5));
+        fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+        TestBed.tick();
+        fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
+        TestBed.tick();
+        expect(autopilotState.state.phase).toBe('spot');
+        autopilotState.beginSpotCheck('done');
+        // The check's pick is the one item left, and the user labels it.
+        fixture.componentRef.setInput('badVotes', bads(6));
+        TestBed.tick();
+        autopilotState.endSpotCheck();
+        await settleZoneless(fixture);
+
+        expect(component.state.phase).toBe('done');
+        expect(autopilotState.handoff()).toEqual({ kind: 'all-labeled', votes: 26 });
+      });
+
+      it('says everything is labeled when the vote that takes the last item reaches the cap', async () => {
+        fixture.componentRef.setInput('votesLoaded', true);
+        fixture.componentRef.setInput('datasetSize', STOP_CAP_VOTES);
+        fixture.componentRef.setInput('goodVotes', goods(100));
+        fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 101));
+        fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+        TestBed.tick();
+        expect(autopilotState.state.phase).toBe('new');
+        fixture.componentRef.setInput('badVotes', bads(STOP_CAP_VOTES - 100));
+        await settleZoneless(fixture);
+
+        // Nothing left to check either: straight to Done, no Spot Check.
+        expect(component.state.phase).toBe('done');
+        expect(autopilotState.handoff()).toEqual({ kind: 'all-labeled', votes: STOP_CAP_VOTES });
+      });
+
+      it('still says keep clicking when an item is left', async () => {
+        // reachDone casts 25 votes, so two items stay unlabeled.
+        fixture.componentRef.setInput('datasetSize', 27);
+        reachDone();
+        await settleZoneless(fixture);
+        expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25 });
+      });
     });
 
     it('does not announce again when the user returns to the Train window', async () => {
@@ -1007,7 +1052,7 @@ describe('AutopilotPanelComponent', () => {
         await settleZoneless(fixture);
       }
       expect(component.state.phase).toBe('done');
-      expect(autopilotState.handoff()).toMatchObject({ kind: 'done', dryRun: 16 });
+      expect(autopilotState.handoff()).toMatchObject({ kind: 'done' });
       // Nothing undoes a dry run, so there is no Keep Improving step (#4621).
       expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'done']);
       expect(component.steps.find((st) => st.state === 'active')?.phase).toBe('done');

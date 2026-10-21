@@ -469,6 +469,12 @@
         search. Deselect it, or select it alone with one dataset and click <strong>Train</strong>.
       </vt-toasty-hint>
     }
+    @case ('trained-here') {
+      <vt-toasty-hint hintId="trained-here" [anchor]="datasetAddBtn">
+        You trained this detector on this dataset. Select a different dataset to
+        <strong>Tune</strong> or <strong>Find</strong> on, or a different detector.
+      </vt-toasty-hint>
+    }
     @case ('test-or-find') {
       <vt-toasty-hint hintId="test-or-find" [anchor]="tuneBtn" side="above" reach="right">
         Your detector is trained. Click <strong>Tune</strong> to check it on this dataset and

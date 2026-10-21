@@ -289,6 +289,10 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autofind = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
+    # Ids of the datasets the detector holds labels from (#5142): the
+    # Dashboard sends a user who selects one of them elsewhere to Tune or
+    # Find, since the detector has already seen those items.
+    trained_on = fields.List(fields.String())
     # Stamped the first time a detector trains against a dataset and
     # persisted on the registry entry, so the smart preload predictor and
     # the dashboard's cross-embedder check both see it without having to
