@@ -222,6 +222,7 @@ def list_registered_detectors():
         entry["loaded"] = did in loaded_ids
         entry["autofind"] = entry.get("name", "") in autofind_names
         entry.setdefault("last_trained_at", None)
+        entry.setdefault("trained_on", [])
         entry.setdefault("created_by", "default")
         entry.setdefault("readers", [])
         entry["is_owner"] = entry.get("created_by", "default") == current_user

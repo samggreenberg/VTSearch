@@ -1761,7 +1761,9 @@ time:
   (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, **Tune** or **Find** once the selected detector is trained, and
-  **Find** alone when you have ticked several datasets or detectors.
+  **Find** alone when you have ticked several datasets or detectors. On the
+  dataset you trained the detector on, he asks you to select a different
+  dataset or detector instead: the detector has already seen those items.
 
 While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add

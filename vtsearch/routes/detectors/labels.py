@@ -185,13 +185,13 @@ def save_detector_labels(name: str):
         _write_detector(path, data)
 
     # Also update the detector registry entry if one exists
-    from vtscore.detectors.registry import find_by_name, update_detector
-
-    import time as _time
+    from vtscore.detectors.registry import find_by_name, record_detector_training
 
     reg_entry = find_by_name(name)
     if reg_entry:
-        update_detector(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
+        record_detector_training(
+            reg_entry["id"], len(labelset), dataset_id=snap.dataset_id, labeled_in_dataset=len(current_ls) > 0
+        )
 
     return {
         "success": True,

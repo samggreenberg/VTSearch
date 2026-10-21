@@ -3180,6 +3180,12 @@
           },
           "text_query": {
             "type": "string"
+          },
+          "trained_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [

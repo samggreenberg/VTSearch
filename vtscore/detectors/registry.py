@@ -259,6 +259,43 @@ def update_detector(detector_id: str, **fields: Any) -> bool:
     return _read_modify_write(mutate)
 
 
+def record_detector_training(
+    detector_id: str,
+    num_training: int,
+    *,
+    dataset_id: str = "",
+    labeled_in_dataset: bool = True,
+) -> bool:
+    """Stamp a change to a detector's labels: how many, when, and from where.
+
+    ``trained_on`` lists the ids of the datasets the detector holds labels
+    from (#5142), so the Dashboard can tell the dataset a detector was trained
+    on from one it has never seen without parsing the detector file.  A writer
+    that composed its labels against one dataset passes its *dataset_id*: the
+    id is added while the detector still holds labels there
+    (*labeled_in_dataset*) and dropped once the last one is gone.  A writer
+    that names no dataset (a label import) leaves the list as it is.
+
+    Returns ``True`` if the detector was found.
+    """
+    now = time.time()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
+        for entry in entries:
+            if entry["id"] == detector_id:
+                entry["num_training"] = num_training
+                entry["last_trained_at"] = now
+                if dataset_id:
+                    trained_on = [d for d in entry.get("trained_on") or [] if d != dataset_id]
+                    if labeled_in_dataset:
+                        trained_on.append(dataset_id)
+                    entry["trained_on"] = trained_on
+                return True
+        return False
+
+    return _read_modify_write(mutate)
+
+
 def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
     """Persist the embedder a detector's labels are currently embedded with.
 

@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
 - **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
   while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
   the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
