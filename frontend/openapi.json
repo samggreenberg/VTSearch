@@ -167,6 +167,9 @@
             },
             "type": "array"
           },
+          "autofind_export_enabled": {
+            "type": "boolean"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -364,9 +367,16 @@
           "hide_right_panel": {
             "type": "boolean"
           },
+          "import_alerts_enabled": {
+            "type": "boolean"
+          },
           "import_defaults_by_media_type": {
             "additionalProperties": {},
             "type": "object"
+          },
+          "import_hooks_configured": {
+            "readOnly": true,
+            "type": "boolean"
           },
           "last_embedder_per_media_type": {
             "additionalProperties": {
@@ -7294,6 +7304,9 @@
             },
             "type": "array"
           },
+          "autofind_export_enabled": {
+            "type": "boolean"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -7374,6 +7387,9 @@
             "type": "boolean"
           },
           "hide_right_panel": {
+            "type": "boolean"
+          },
+          "import_alerts_enabled": {
             "type": "boolean"
           },
           "import_defaults_by_media_type": {},

@@ -25,7 +25,7 @@ from typing import Any, Callable
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import admin_overrides, settings
+from vtsearch import admin_overrides, import_hooks, settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
@@ -93,6 +93,9 @@ def _with_effective(data: dict) -> dict:
     _coerce_dict_fields(data)
     for override in admin_overrides.OVERRIDES.values():
         data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
+    # Not an admin override (see :mod:`vtsearch.import_hooks`), so set here:
+    # only whether hooks exist, never what they are.
+    data["import_hooks_configured"] = import_hooks.configured()
     return data
 
 

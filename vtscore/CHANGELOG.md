@@ -468,6 +468,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
+  `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
+  `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
+  is `False`, and one that only records imports can ignore it. Additive; a hook that never reads it is unchanged.
+
 - **The detector registry records the datasets a detector holds labels from** (issue #5142). New
   `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
   labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's

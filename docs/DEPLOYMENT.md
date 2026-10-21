@@ -586,6 +586,8 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_exporter_field_values": {},
   "autofind_on_import": true,
   "autofind_cli_delete_dataset": false,
+  "autofind_export_enabled": true,
+  "import_alerts_enabled": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -617,7 +619,15 @@ An abridged example; the full field list is `UserSettings` in
   These four read through to `data/settings.json` for the `default` user.
   `autofind_on_import` (default `true`) is whether a web import runs them: the
   Add Dataset dialog's **Run AutoFind** checkbox starts from it and each import
-  writes it back.
+  writes it back. `autofind_export_enabled` (default `true`) is whether a web
+  run sends its results to `autofind_exporter`; `false` pauses the export
+  without forgetting the exporter or its configuration.
+- `import_alerts_enabled` (default `true`): whether the user wants to be
+  alerted when an import they started finishes. It reaches the
+  `--on-dataset-imported` hooks as `DatasetImported.notify`; a hook that emails
+  should skip the user when it is `false` (see
+  [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)).
+  Settings › Import Defaults offers it only when hooks are configured.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the
