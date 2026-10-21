@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
+import { TOASTY_FACES } from '../../utils/toasty-faces';
 
 /**
  * Bottom-centre banner shown while the frontend's connection circuit
@@ -21,4 +22,9 @@ import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 })
 export class OfflineBannerComponent {
   connection = inject(ConnectionStateService);
+
+  /** Toasty's sad face, fetched now while the server is up: the hint needs it
+   *  only once the server is gone, and the browser shows an image this page
+   *  has already loaded without asking the server for it again. */
+  private readonly sadFace = Object.assign(new Image(), { src: TOASTY_FACES.sad });
 }
