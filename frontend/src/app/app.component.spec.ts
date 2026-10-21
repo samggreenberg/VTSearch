@@ -141,20 +141,15 @@ describe('AppComponent', () => {
     fixture.componentInstance.isOnLabelView.set(true);
     TestBed.tick();
     const hint = fixture.nativeElement.querySelector('header vt-toasty-hint') as HTMLElement;
-    expect(hint.textContent).toContain('Your detector is trained!');
-    expect(hint.textContent).toContain('Every quality light is green.');
-
-    // A document walk that ran dry says why instead: a hint of its own.
-    autopilot.handoff.set({ kind: 'done', votes: 30, dryRun: 16 });
-    TestBed.tick();
-    const dry = fixture.nativeElement.querySelector('header vt-toasty-hint') as HTMLElement;
-    expect(dry.textContent).toContain('16 of its best matches in a row were not good');
-    expect(dry.textContent).not.toContain('Every quality light is green.');
+    const text = hint.textContent!.replace(/\s+/g, ' ');
+    expect(text).toContain('Your detector is trained! Click Dashboard to put it to work');
+    // What to do next, not why it's done: no scores or counts (#5143).
+    expect(text).not.toMatch(/\d|F-beta|light/);
 
     autopilot.handoff.set({ kind: 'all-labeled', votes: 40 });
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('header vt-toasty-hint')?.textContent).toContain(
-      "You've labeled every item in this dataset!",
+      "You've labeled everything!",
     );
 
     autopilot.handoff.set(null);

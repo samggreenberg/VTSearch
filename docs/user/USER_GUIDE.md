@@ -2244,8 +2244,8 @@ it back on starts every count again from zero.
   how that sort is going (**Update Sort Example?**): one line of
   read-only fields gives how many items you have labelled with it
   (**Clicked**), how many were positive (**Positives**) and the sort
-  itself (**Sort**), and Toasty, below the dialog, says how many
-  positives Autopilot needs before it can move on. On the left,
+  itself (**Sort**), and Toasty, below the dialog, says the sort isn't
+  finding many and what you can do about it. On the left,
   **Continue** (under **Keep clicking:**) carries on with the same sort
   for a set number of labels (the interval grows each time you keep
   it); on the right, **Supply a different sort:** swaps in a new

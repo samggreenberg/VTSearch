@@ -25,6 +25,14 @@ not list every commit. Use `git log` for the full history.
   Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
   change is recorded at its next vote.
 
+- **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
+  while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
+  the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
+  words what Autopilot is doing and the next step ("Autopilot is looking for Bads now. Keep
+  clicking."), and a finished run says just that the detector is trained and to click
+  **Dashboard** to put it to work, whatever ended the run. The counts and scores are still in the
+  Autopilot panel and the **Update Sort Example?** dialog.
+
 - **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
   Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
   going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its

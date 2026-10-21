@@ -1075,11 +1075,9 @@ describe('LabelViewComponent', () => {
     votes([1, 3], []);
     expect(component.labelsHint()).toBe(false);
     expect(component.voteHint()).toBe('find-goods');
-    expect(component.voteHintCounts()).toEqual({ goods: 2, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
 
     votes([1, 3, 4], []);
     expect(component.voteHint()).toBe('find-bads');
-    expect(component.voteHintCounts()).toEqual({ goods: 3, goodsNeeded: 3, bads: 0, badsNeeded: 4 });
 
     votes([1, 3, 4], [5, 6, 7, 8]);
     expect(component.voteHint()).toBe('keep-voting');
@@ -1668,8 +1666,6 @@ describe('LabelViewComponent', () => {
     expect(component.showResortPrompt()).toBe(true);
     expect(component.resortSortClicks).toBe(10);
     expect(component.resortSortPositives).toBe(1);
-    // The hint names Autopilot's Good target (#4721).
-    expect(component.resortPositivesNeeded).toBe(autopilot.state.goodToStart);
 
     // Keeping the sort keeps the tally: the next prompt reports the whole run.
     component.onResortKeep();

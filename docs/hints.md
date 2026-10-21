@@ -17,7 +17,10 @@ error toasts. **Text** is what the bubble says, with the bold words in bold;
 a sentence or two: "You have detectors, but none is selected. Click one…",
 never "Now click a detector". Nothing about the step after that. Only
 `add-dataset` opens with "Start here!": its state is the app's opening state.
-No semicolons: each instruction is its own sentence.
+No semicolons: each instruction is its own sentence. Autopilot's hints are for
+someone who just wants to click (#5143): no counts, targets, scores or metric
+names, and no keyboard shortcuts. Say what Autopilot is doing and what to do
+next, and leave the details to its panel.
 
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
@@ -79,28 +82,19 @@ any run.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `start-voting` | happy | Autopilot picked this item for you. Click **Good**, or press the right arrow key, if it's what you're looking for. Click **Bad**, or press the left arrow key, if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
-| `fix-votes` | happy | Your vote went to **Labels** on the right. Misclicked? Open Labels, click the item, and vote again. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
-| `revote` | happy | You already labeled this item **{label}**. Click **{other}**, or press the {key} arrow key, to change it. Click Autopilot's current step on the left, or press the up arrow key, to go back to its pick. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
-| `find-goods` | happy | Autopilot needs {M Goods} to start training. You've found {N}. Keep voting. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
-| `find-bads` | happy | Your Goods are in. Autopilot needs {M Bads} too, and has {N}. Keep voting. | As `find-goods`, in **Find Initial Bads**. |
-| `find-more` | happy | Autopilot has its first Goods and Bads, and is walking the sort for more Goods. Keep voting. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
-| `keep-voting` | happy | Your detector now retrains on every vote. Keep voting until the lights on the left are all green. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
-| `resort-prompt` | happy | Your {N clicks} {found only K positives}, and Autopilot needs {M} before it can move on. Switch to a different example sort, or keep clicking with this one. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
-| `autopilot-done` | happy | Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | An Autopilot run that started on an untrained detector finishes with every quality light green. The next vote ends it. |
-| `autopilot-done-level` | happy | Your detector is trained! It expects an F-beta of {F} at your balance. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, when the detector's labels line already expects an F-beta of 0.5 at the balance with a quality light still short of green (#4878). The next vote ends it. |
-| `autopilot-done-cap` | happy | Your detector is trained! That's {N} votes, as many as Autopilot asks for. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, when the votes reached Autopilot's cap of 200 with a quality light still short of green and the labels line short of its level (#4903). The next vote ends it. |
-| `autopilot-ran-dry` | happy | Your detector is trained! {N} of its best matches in a row were not good, so it has likely found what it can. Keep voting to sharpen it, or click **Dashboard** to tune it or put it to work. | As `autopilot-done`, on a document dataset, where Autopilot finishes when its best matches run dry rather than on the lights. |
-| `all-labeled` | happy | You've labeled every item in this dataset! Click **Dashboard** to tune or run your detector on another dataset. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
+| `start-voting` | happy | Autopilot picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
+| `fix-votes` | happy | Your vote went to **Labels** on the right, where you can change it. Keep clicking. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
+| `revote` | happy | You already labeled this **{label}**. Click **{other}** to change it, or click Autopilot's step on the left to carry on. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
+| `find-goods` | happy | Autopilot is looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
+| `find-bads` | happy | Autopilot is looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
+| `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
+| `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
+| `resort-prompt` | happy | This example isn't finding many Goods. Try a different one on the right, or click **Continue** to keep going. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
+| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it. |
+| `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
 
-`{M Goods}` and `{M Bads}` are Autopilot's Good and Bad targets ("3 Goods",
-"4 Bads" by default) and `{N}` the labels of that class so far. In `revote`,
-`{label}` is the item's label ("Good" or "Bad"), `{other}` the other one, and
-`{key}` the arrow key that votes it ("left" for Bad, "right" for Good). In
-`resort-prompt`, `{N clicks}` is the votes cast under the current sort,
-`{found only K positives}` how many of them were Good ("found no positives"
-when none), and `{M}` the Good target. In `autopilot-ran-dry`, `{N}` is the
-dry-run length, 16. In `autopilot-done-level`, `{F}` is the F-beta the labels line expects, two decimals. In `autopilot-done-cap`, `{N}` is the vote count at Done (the cap, plus the check before Done).
+In `revote`, `{label}` is the item's label ("Good" or "Bad") and `{other}`
+the other one.
 
 ## Tune view
 

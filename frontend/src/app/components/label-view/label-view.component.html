@@ -81,7 +81,6 @@
       [exhaustedDetail]="exhaustedDetail()"
       [advancePending]="advancePending()"
       [voteHint]="voteHint()"
-      [voteHintCounts]="voteHintCounts()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
     />
@@ -113,8 +112,7 @@
        panel clips, so the hint is placed in the layout instead (#4824). -->
   @if (labelsHint()) {
     <vt-toasty-hint hintId="fix-votes" [anchor]="labelsPanel" side="beside" reach="left">
-      Your vote went to <strong>Labels</strong> on the right. Misclicked? Open Labels, click the item, and
-      vote again.
+      Your vote went to <strong>Labels</strong> on the right, where you can change it. Keep clicking.
     </vt-toasty-hint>
   }
 </div>
@@ -151,7 +149,6 @@
     [currentExampleDisplay]="resortCurrentDisplay"
     [clicksSoFar]="resortSortClicks"
     [positivesSoFar]="resortSortPositives"
-    [positivesNeeded]="resortPositivesNeeded"
     (keepExample)="onResortKeep()"
     (newExample)="onResortNewExample($event)"
     (closed)="onResortClosed()"

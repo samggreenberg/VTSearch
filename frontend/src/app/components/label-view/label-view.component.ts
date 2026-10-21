@@ -4,7 +4,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
-import type { VoteHintCounts, VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
+import type { VoteHintId } from '../center-panel/voting-overlay/voting-overlay.component';
 import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
@@ -241,17 +241,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** `fix-votes`, beside the Labels panel: where the run's first vote went, and how to change one. */
   readonly labelsHint = computed(() => this.trainHint() === 'fix-votes');
 
-  /** The counts the phase hints say: Goods and Bads so far against Autopilot's targets. */
-  readonly voteHintCounts = computed<VoteHintCounts>(() => {
-    const run = this.autopilotRun();
-    return {
-      goods: this.voteState.labelsetGoodCount,
-      goodsNeeded: run.goodToStart,
-      bads: this.voteState.labelsetBadCount,
-      badsNeeded: run.badToStart,
-    };
-  });
-
   /**
    * The item the user picked by hand while the "nothing left" pane was up, or
    * `null`.
@@ -345,8 +334,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  whole run of the sort it is asking about. */
   resortSortClicks = 0;
   resortSortPositives = 0;
-  /** Autopilot's Good target, which the prompt's hint names. */
-  resortPositivesNeeded = 0;
   private resortInterval = 10;
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
@@ -1639,7 +1626,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       } else {
         return; // No example to prompt about
       }
-      this.resortPositivesNeeded = this.autopilotStateService.state.goodToStart;
       this.showResortPrompt.set(true);
     }
   }
