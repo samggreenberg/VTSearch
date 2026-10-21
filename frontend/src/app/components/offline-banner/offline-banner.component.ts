@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ConnectionStateService } from '../../services/connection-state.service';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 
 /**
  * Bottom-centre banner shown while the frontend's connection circuit
@@ -7,13 +8,14 @@ import { ConnectionStateService } from '../../services/connection-state.service'
  * `AppComponent`, outside the login gate so it surfaces even on the login
  * screen. Replaces the per-request "could not reach the server" toasts with
  * a single persistent surface plus a manual Retry — background polling and
- * the SSE stream stay paused until the user reconnects.
+ * the SSE stream stay paused until the user reconnects. Toasty stands over
+ * Retry while it is up (#5149), the one hint shown while the server is gone.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-offline-banner',
   standalone: true,
-  imports: [],
+  imports: [ToastyHintComponent],
   templateUrl: './offline-banner.component.html',
   styleUrl: './offline-banner.component.scss',
 })

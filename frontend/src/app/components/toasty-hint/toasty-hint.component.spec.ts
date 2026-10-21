@@ -6,6 +6,7 @@ import { By } from '@angular/platform-browser';
 import { RectLike, ToastyHintComponent, toastyHintPlacement } from './toasty-hint.component';
 import { ModalComponent } from '../modal/modal.component';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { ConnectionStateService } from '../../services/connection-state.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
@@ -131,6 +132,25 @@ class DialogHostComponent {
   readonly open = signal(false);
 }
 
+/** The offline banner's hint, over a dialog with a hint of its own (#5149). */
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true,
+  imports: [ToastyHintComponent, ModalComponent],
+  template: `
+    <div class="box">
+      <button #target>Retry</button>
+      <vt-toasty-hint hintId="offline" [anchor]="target" aboveDialogs [hideable]="false">Over the dialog.</vt-toasty-hint>
+    </div>
+    <vt-modal [open]="open()" title="Dialog">
+      <vt-toasty-hint hintId="import-dataset">In the dialog.</vt-toasty-hint>
+    </vt-modal>
+  `,
+})
+class AboveDialogsHostComponent {
+  readonly open = signal(false);
+}
+
 describe('ToastyHintComponent in and under a dialog (#4807)', () => {
   let httpMock: HttpTestingController;
 
@@ -178,6 +198,32 @@ describe('ToastyHintComponent in and under a dialog (#4807)', () => {
     fixture.componentInstance.open.set(false);
     await settleZoneless(fixture);
     expect(onView.shown()).toBe(true);
+  });
+
+  it('shows a hint aboveDialogs over an open dialog, and only it while the server is unreachable (#5149)', async () => {
+    TestBed.configureTestingModule({
+      imports: [AboveDialogsHostComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    TestBed.inject(SettingsStateService).load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({});
+    await settleResource();
+    const fixture = TestBed.createComponent(AboveDialogsHostComponent);
+    fixture.componentInstance.open.set(true);
+    await settleZoneless(fixture);
+    const [over, inDialog] = fixture.debugElement
+      .queryAll(By.directive(ToastyHintComponent))
+      .map((d) => d.componentInstance as ToastyHintComponent);
+    expect(over.shown()).toBe(true);
+    expect(inDialog.shown()).toBe(true);
+
+    const connection = TestBed.inject(ConnectionStateService);
+    for (let i = 0; i < 3; i++) connection.recordNetworkFailure();
+    await settleZoneless(fixture);
+    expect(over.shown()).toBe(true);
+    expect(inDialog.shown()).toBe(false);
   });
 
   it('stands at the dialog box when given no anchor, below it and reaching right', async () => {
@@ -285,6 +331,24 @@ describe('ToastyHintComponent', () => {
     req.flush({ hide_all_hints: true });
     TestBed.tick();
     expect(host.classList).toContain('toasty-hint--off');
+  });
+
+  it('offers no Hide boxes on a hint that is not hideable', async () => {
+    TestBed.configureTestingModule({
+      imports: [AboveDialogsHostComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    TestBed.inject(SettingsStateService).load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({});
+    await settleResource();
+    const fixture = TestBed.createComponent(AboveDialogsHostComponent);
+    await settleZoneless(fixture);
+    const host = (fixture.nativeElement as HTMLElement).querySelector('vt-toasty-hint') as HTMLElement;
+    expect(host.querySelector('.toasty-hint__text')?.textContent?.trim()).toBe('Over the dialog.');
+    expect(host.querySelector('.toasty-hint__options')).toBeNull();
+    expect(host.querySelectorAll('input')).toHaveLength(0);
   });
 
   it('brings the hint back when hiding it fails to save', async () => {

@@ -1790,6 +1790,12 @@ none; they can always be cancelled. Only one hint shows at a time: opening any
 dialog hides the hint on the view behind it, and a dialog opened over another
 hides the first one's.
 
+If the app can't reach the server, Toasty stands sadly over the offline
+banner's **Retry** button, over any dialog, and every other hint steps aside
+until the server answers again, since none of their steps could work without
+it. That hint has no hide boxes: nothing can be saved while the server is
+away.
+
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
 **Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
@@ -2261,7 +2267,7 @@ it back on starts every count again from zero.
   load before you can start.
 - **Offline banner.** If the app can't reach the server, a banner reads
   "Can't reach the server. Background updates are paused." with a
-  **Retry** button.
+  **Retry** button, and Toasty over it (see [Toasty's hints](#toastys-hints)).
 - **Toasts.** Transient confirmations and errors appear as toast
   notifications in the corner.
 

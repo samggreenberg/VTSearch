@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
 - **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
   while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
   the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
