@@ -1081,6 +1081,16 @@ const BROWSE_LAYOUT = {
 const BROWSE_ICON_SIZE = 'L';
 const BROWSE_ICON_SCALE = { XS: 0.5, S: 0.75, M: 1, L: 1.6, XL: 2.5, '2XL': 4 }[BROWSE_ICON_SIZE];
 
+/**
+ * How many steps of Browse's "Bigger thumbnails" button the map of Find's
+ * results is shot at. That map has one bin level, so the saved size cannot
+ * coarsen it the way it does the whole pile's; the button draws the same bins
+ * bigger instead, by zooming in, and the photos at the map's edges go out of
+ * the frame for it. One step, and one back afterwards, since the button saves
+ * the size it sets.
+ */
+const BROWSE_RESULTS_SIZE_STEPS = 1;
+
 /** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
 const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
 
@@ -1243,7 +1253,17 @@ async function shootBrowse(page) {
 
   await dialog.getByRole('button', { name: 'Browse', exact: true }).click();
   await openedMap(page, false);
+  const resize = async (label, steps) => {
+    for (let i = 0; i < steps; i++) {
+      await page.locator(`.browse-size-btn[aria-label="${label}"]`).first().click();
+      await page.waitForTimeout(1500);
+    }
+    await page.mouse.move(700, 20);
+    await page.waitForTimeout(2500);
+  };
+  await resize('Bigger thumbnails', BROWSE_RESULTS_SIZE_STEPS);
   await shoot(page, 'ui-vision-find');
+  await resize('Smaller thumbnails', BROWSE_RESULTS_SIZE_STEPS);
 
   // Back to the dialog, closed, and on to the whole pile.
   await page.locator('.browse-back').click();
