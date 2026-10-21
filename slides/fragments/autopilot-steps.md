@@ -2,7 +2,7 @@
 
 ![bg fit](figs/autopilot-steps.webp)
 
-## Flight Plan
+## All Sorts<br>of Sorts
 
 <!-- build: figs/autopilot-steps.build1.webp -->
 

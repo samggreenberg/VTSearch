@@ -248,7 +248,8 @@ slides:
   # known size on its own (#4932: Clopper–Pearson only as the endless-list
   # contrast), what a check says about the line without moving it (#4427,
   # #4452, #4517).
-  # Flight Plan in section VI names it as step A (#4836, #4872).
+  # All Sorts of Sorts (once Flight Plan) in section VI names it as step A
+  # (#4836, #4872, #5171).
   floor-ask
   clopper-pearson
   floor-check

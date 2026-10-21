@@ -528,7 +528,32 @@ def _frame_cell(deck: str, page: int, letter: str) -> str:
     return f'<figure><img src="_build/imgs/{deck}.{page:03d}.png"><figcaption>{letter}</figcaption></figure>'
 
 
-def frame_overview(deck: str, pages: list[int], group: list[int], style: str) -> str:
+def distinct_frames(showings: list[Showing]) -> dict[str, list[list[int]]]:
+    """Each fragment's numbering group as the distinct pictures it shows, each with every page that shows it.
+
+    A fragment shown twice the same way shows the same pictures twice: Lost &
+    Found again before Vision is pages a and b once more, as c and d. Drawn
+    as four frames on the speaker page, the pair the slide is about came out a
+    quarter of the size of a hero, two of them repeats (owner, #5171). So a
+    page is the same picture as an earlier one when it is the same stage of a
+    showing with the same extra classes, and the overview draws it once,
+    captioned with all its letters. The outline's showings differ in the line
+    each marks (`+atN`), so they stay sixteen pictures.
+    """
+    frames: dict[str, list[list[int]]] = {}
+    seen: dict[tuple[str, tuple[str, ...], int], list[int]] = {}
+    for name, extras, _stages, pages in showings:
+        for stage, page in enumerate(pages):
+            key = (name, tuple(extras), stage)
+            if key in seen:
+                seen[key].append(page)
+            else:
+                seen[key] = [page]
+                frames.setdefault(name, []).append(seen[key])
+    return frames
+
+
+def frame_overview(deck: str, pages: list[int], group: list[int], style: str, frames: list[list[int]]) -> str:
     """The floated visual column: this showing's slide, and its sibling frames.
 
     Two shapes, because a group's frames are not all the same kind of thing.
@@ -548,24 +573,33 @@ def frame_overview(deck: str, pages: list[int], group: list[int], style: str) ->
 
     A fragment that renders as one page has no overview at all; it is the hero
     and nothing else.
+
+    *frames* is the group as distinct pictures (`distinct_frames`): a picture
+    the deck shows more than once is drawn once, captioned with every letter
+    it carries.
     """
     hero = pages[-1]
-    if len(group) < 2:
+    if len(frames) < 2:
         return f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png"></figure>\n'
     letters = {page: stage_letter(index) for index, page in enumerate(group)}
+
+    def caption(frame: list[int]) -> str:
+        return ", ".join(letters[page] for page in frame)
+
     if style == "equal":
-        shown, tail = group, ""
+        shown, tail = frames, ""
     else:
         # Every frame but the one drawn big — "earlier" for a real build, "the
         # other showings" for a fragment the deck comes back to — and the big
         # one after them, so the column reads in letter order.
-        shown = [page for page in group if page != hero]
+        big = next(frame for frame in frames if hero in frame)
+        shown = [frame for frame in frames if frame is not big]
         tail = (
             f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png">'
-            f"<figcaption>{letters[hero]}</figcaption></figure>\n"
+            f"<figcaption>{caption(big)}</figcaption></figure>\n"
         )
     cols = frame_columns(len(shown), style)
-    cells = "\n".join(_frame_cell(deck, page, letters[page]) for page in shown)
+    cells = "\n".join(_frame_cell(deck, frame[0], caption(frame)) for frame in shown)
     return f'<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n{tail}'
 
 
@@ -618,7 +652,13 @@ def speaker_label(number: int | None, pages: list[int], group: list[int]) -> str
 
 
 def speaker_page(
-    deck: str, pages: list[int], group: list[int], text: str, number: int | None = None, home: int | None = None
+    deck: str,
+    pages: list[int],
+    group: list[int],
+    text: str,
+    number: int | None = None,
+    home: int | None = None,
+    frames: list[list[int]] | None = None,
 ) -> str:
     """One showing of a fragment as one speaker page: pictures beside notes.
 
@@ -644,7 +684,8 @@ def speaker_page(
     does not turn over, so notes split across two pages are notes half read.
     """
     style = fragment_frame_style(text)
-    visual = frame_overview(deck, pages, group, style)
+    frames = frames if frames is not None else [[page] for page in group]
+    visual = frame_overview(deck, pages, group, style, frames)
     notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
     label = speaker_label(number, pages, group)
     if label and home is not None:
@@ -652,7 +693,7 @@ def speaker_page(
     folio = f'\n\n<div class="speaker-pageno">{label}</div>' if label else ""
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
-        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{visual_shape(len(group), style)}">\n'
+        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{visual_shape(len(frames), style)}">\n'
         f"{visual}"
         '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>" + folio
     )
@@ -799,10 +840,11 @@ def check_speaker_fit(
     the second page at all — and discovering that at `--speaker` time means
     discovering it the evening before the talk.
     """
+    frames = distinct_frames(showings)
     for name, _extras, _stages, pages in showings:
         style = fragment_frame_style(texts[name])
         notes = showing_notes(texts[name], pages, group[name])
-        over = notes_overflow(notes, len(group[name]), style)
+        over = notes_overflow(notes, len(frames[name]), style)
         if not over:
             continue
         characters = math.ceil(over * SPEAKER_W / NOTES_PX_PER_CHAR)
@@ -1250,6 +1292,7 @@ def speaker_bodies(
     """
     numbers = slide_numbers(showings, texts)
     homes = section_homes(showings, texts, list(range(1, len(showings) + 1)))
+    frames = distinct_frames(showings)
     bodies: list[str] = []
     for (name, _extras, _stages, pages), home in zip(showings, homes):
         for number in pages if write else []:
@@ -1259,7 +1302,7 @@ def speaker_bodies(
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name), home))
+        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name), home, frames[name]))
     return bodies
 
 

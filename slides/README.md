@@ -310,7 +310,10 @@ into the speaker's hand sixteen times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with every earlier page of the group as a lettered contact sheet, in letter
-order, and the final stage large under it, beside the notes. The speaker
+order, and the final stage large under it, beside the notes. A picture the
+deck shows more than once the same way (a fragment repeated with the same
+`+class` tokens) is drawn once, captioned with all its letters (`a, c`), so a
+repeat does not shrink the frames it repeats. The speaker
 narrates from the complete picture,
 sees what each advance will put on screen, and refers to them by the letters
 the audience deck prints. Markers never leak into presenter notes.

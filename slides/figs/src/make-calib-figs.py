@@ -4888,7 +4888,10 @@ REGION_KEY_PT, REGION_KEY_SEG = 16, 1.0
 
 def _text_width(text: str, fontsize: float) -> float:
     """How wide *text* sets at *fontsize*, in drawing units."""
-    return TextPath((0, 0), text, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width / FLOW_UNIT_PT
+    return (
+        TextPath((0, 0), text, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width
+        / FLOW_UNIT_PT
+    )
 
 
 def _region_max_stage(stage: int) -> plt.Figure:

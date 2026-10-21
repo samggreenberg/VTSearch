@@ -65,8 +65,8 @@ const LAYER_ID = '__shot_callouts';
  * start.
  */
 const LOOP = {
-  reachX: 16, reachY: 13, square: 2.6, tiltDeg: -2.5,
-  startTurn: 0.31, overshootTurn: 0.09, wobble: 0.045, drift: 0.06,
+  reachX: 18, reachY: 5, square: 2.6, tiltDeg: 0.8,
+  startTurn: 0.31, overshootTurn: 0.09, wobble: 0.04, drift: 0.05,
 };
 
 /** Every visual size, in CSS px, so one knob scales them for a smaller slot. */

@@ -207,7 +207,7 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the steps ───────────────────────────────────────────────────
+# ── All Sorts of Sorts (once Flight Plan): the steps ─────────────────────────
 
 STEPS_STAGES = 4
 
@@ -898,7 +898,7 @@ def _span_xy() -> dict[tuple[int, int], tuple[float, float]]:
 
 
 #: A cell's radius, and the (?) drawn in place of the cell the walk asks next:
-#: the deck's mark for where a step asks, as Flight Plan draws it.
+#: the deck's mark for where a step asks, as All Sorts of Sorts draws it.
 SPAN_CELL_R = 0.13
 
 
@@ -1064,9 +1064,7 @@ def stop_fig() -> None:
     the median session's F-beta at the stop against at the review's budget.
     """
     rows, curves = _stop_rows(), _stop_curves()
-    got = {
-        beta: (round(float(r["km_t_stop"])), round(float(r["median_fbeta_delta"]), 3)) for beta, r in rows.items()
-    }
+    got = {beta: (round(float(r["km_t_stop"])), round(float(r["median_fbeta_delta"]), 3)) for beta, r in rows.items()}
     assert got == EXPECT, got
     _save(STOP_STAGES, lambda stage: _stop_stage(stage, rows, curves), "autopilot-stop")
 

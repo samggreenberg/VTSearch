@@ -122,7 +122,7 @@ FIG_W, FIG_H = 12.8, 7.2
 #: `save()`'s standard reserve.
 NOTCH = (60.0, 42.0, 300.0, 88.0)
 
-# ─────────────────────────────────────────────────────────────────────────────────────── Margin Call
+# ────────────────────────────────────────────────────────────────────────────────── Marginal at Best
 
 #: The plane, in its own units: the whole slide, one unit to 80 slide pixels, so the title notch
 #: (the standard two-line reserve under "Marginal at Best") is x 0.75-4.5, y above 6.85.
@@ -268,6 +268,47 @@ def _tick(ax: plt.Axes, p: np.ndarray) -> None:
             solid_capstyle="round", solid_joinstyle="miter", zorder=6)  # fmt: skip
 
 
+def _margin_line(model: SVC) -> tuple[np.ndarray, np.ndarray]:
+    """The fit's unit normal, and its line's two ends where it leaves the plane."""
+    w = model.coef_[0]
+    norm = float(np.linalg.norm(w))
+    return w / norm, _clip_line(w / norm, -float(model.intercept_[0]) / norm)
+
+
+def _margin_street(ax: plt.Axes, model: SVC) -> None:
+    """Page c's street: the band between the curbs, the curbs dashed, and the votes on them ringed."""
+    w = model.coef_[0]
+    b0 = float(model.intercept_[0])
+    norm = float(np.linalg.norm(w))
+    lower = _clip_line(w / norm, (-1 - b0) / norm)
+    upper = _clip_line(w / norm, (1 - b0) / norm)
+    ax.add_patch(Polygon([lower[0], lower[1], upper[1], upper[0]], closed=True, facecolor=BAND, edgecolor="none",
+                         zorder=1))  # fmt: skip
+    for edge in (lower, upper):
+        ax.plot(edge[:, 0], edge[:, 1], color=BLUE, lw=1.8, ls=(0, (5, 4)), zorder=2)
+    for p in model.support_vectors_:
+        ax.add_patch(Circle(tuple(p), 2.1 * R, facecolor="none", edgecolor=INK, lw=2.0, zorder=5))
+
+
+def _margin_scores(ax: plt.Axes, model: SVC, normal: np.ndarray) -> None:
+    """Page e: every unvoted photo's perpendicular to the line, its right angle, and its score."""
+    direction = np.array([-normal[1], normal[0]])
+    for p in UNVOTED:
+        start, foot = _lane(model, p)
+        ax.plot([start[0], foot[0]], [start[1], foot[1]], color=SOFT, lw=1.6, zorder=2)
+        # The right angle where it meets the line, on the photo's side.
+        toward = (p - foot) / np.linalg.norm(p - foot) * RIGHT_ANGLE
+        along = direction * RIGHT_ANGLE
+        corner = np.array([foot + along, foot + along + toward, foot + toward])
+        ax.plot(corner[:, 0], corner[:, 1], color=SOFT, lw=1.2, zorder=2)
+        s = _score(model, p)
+        ax.text(p[0], p[1] + R + SCORE_DY, f"{s:+.1f}".replace("-", "−"), ha="center", va="bottom",
+                fontsize=LABEL_PT, color=SOFT, zorder=6)  # fmt: skip
+    # Top right: the bottom-right corner is where the slide prints its page number.
+    ax.text(PLANE_W - 0.45, PLANE_H - 0.45, "score = w · x + b", ha="right", va="top", fontsize=20, color=INK,
+            fontweight="bold", zorder=6)  # fmt: skip
+
+
 def _margin_call(stage: int, model: SVC) -> Figure:
     fig = plt.figure(figsize=(FIG_W, FIG_H))
     ax = fig.add_axes((0, 0, 1, 1))
@@ -290,20 +331,9 @@ def _margin_call(stage: int, model: SVC) -> Figure:
 
     # ── c: the widest street, set by the votes on its curb; from d, the line alone ─────────────────
     if stage >= 3:
-        w = model.coef_[0]
-        b0 = float(model.intercept_[0])
-        norm = float(np.linalg.norm(w))
-        normal = w / norm
-        line = _clip_line(normal, -b0 / norm)
+        normal, line = _margin_line(model)
         if stage == 3:
-            lower = _clip_line(normal, (-1 - b0) / norm)
-            upper = _clip_line(normal, (1 - b0) / norm)
-            ax.add_patch(Polygon([lower[0], lower[1], upper[1], upper[0]], closed=True, facecolor=BAND,
-                                 edgecolor="none", zorder=1))  # fmt: skip
-            for edge in (lower, upper):
-                ax.plot(edge[:, 0], edge[:, 1], color=BLUE, lw=1.8, ls=(0, (5, 4)), zorder=2)
-            for p in model.support_vectors_:
-                ax.add_patch(Circle(tuple(p), 2.1 * R, facecolor="none", edgecolor=INK, lw=2.0, zorder=5))
+            _margin_street(ax, model)
         ax.plot(line[:, 0], line[:, 1], color=BLUE, lw=3.4, zorder=3)
 
     # ── d: the photos nobody voted on ────────────────────────────────────────────────────────────
@@ -313,21 +343,7 @@ def _margin_call(stage: int, model: SVC) -> Figure:
 
     # ── e: each scored by its side and its distance, straight across to the line ─────────────────
     if stage >= 5:
-        direction = np.array([-normal[1], normal[0]])
-        for p in UNVOTED:
-            start, foot = _lane(model, p)
-            ax.plot([start[0], foot[0]], [start[1], foot[1]], color=SOFT, lw=1.6, zorder=2)
-            # The right angle where it meets the line, on the photo's side.
-            toward = (p - foot) / np.linalg.norm(p - foot) * RIGHT_ANGLE
-            along = direction * RIGHT_ANGLE
-            corner = np.array([foot + along, foot + along + toward, foot + toward])
-            ax.plot(corner[:, 0], corner[:, 1], color=SOFT, lw=1.2, zorder=2)
-            s = _score(model, p)
-            ax.text(p[0], p[1] + R + SCORE_DY, f"{s:+.1f}".replace("-", "−"), ha="center", va="bottom",
-                    fontsize=LABEL_PT, color=SOFT, zorder=6)  # fmt: skip
-        # Top right: the bottom-right corner is where the slide prints its page number.
-        ax.text(PLANE_W - 0.45, PLANE_H - 0.45, "score = w · x + b", ha="right", va="top", fontsize=20, color=INK,
-                fontweight="bold", zorder=6)  # fmt: skip
+        _margin_scores(ax, model, normal)
     return fig
 
 
