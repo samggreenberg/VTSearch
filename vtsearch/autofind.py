@@ -746,8 +746,8 @@ def run_good_ids(record: dict[str, Any]) -> list[int]:
     """The media ids a Browse of *record*'s Good results lays out, once each.
 
     Every detector's ``hits``, merged: a media two detectors both called Good is
-    one item on the map.  This must name the same set as the Find Results
-    dialog's ``browseIds`` with **Good** picked, or a prepared layout
+    one item on the map.  This must name the same set as the frontend's
+    ``runBrowseIds`` with **Good** picked, or a prepared layout
     (:func:`prep_run_browse`) is not the one its Browse button asks for.
     """
     ids: set[int] = set()
