@@ -1,4 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
+import { ConnectionStateService } from './connection-state.service';
 import { SettingsStateService } from './settings-state.service';
 
 /**
@@ -10,6 +11,8 @@ import { SettingsStateService } from './settings-state.service';
  * one hint is on screen at a time: see `ToastyHintComponent` (#4807).
  */
 export const HINT_IDS = [
+  // Anywhere, over everything else, while the server is unreachable (#5149).
+  'offline',
   // Dashboard, in the order a new user meets them.
   'add-dataset',
   'select-dataset',
@@ -57,12 +60,15 @@ export type HintId = (typeof HINT_IDS)[number];
  * not through here.
  *
  * Whether a hint is *needed* is the caller's business (the Dashboard shows
- * "add a dataset" only while there are none); this service answers only
- * whether the user still wants to see it.
+ * "add a dataset" only while there are none); this service answers whether
+ * the user still wants to see it, and whether `offline` outranks it: while the
+ * server is unreachable that is the only hint, since no step another one
+ * points at can work (#5149).
  */
 @Injectable({ providedIn: 'root' })
 export class HintsService {
   private readonly settingsState = inject(SettingsStateService);
+  private readonly connection = inject(ConnectionStateService);
 
   // Hides already asked for whose PUT has not come back. A box hides its
   // bubble on the click rather than a round-trip later, and a second hide
@@ -79,6 +85,7 @@ export class HintsService {
   isShown(id: HintId): boolean {
     const settings = this.settingsState.settingsSignal();
     if (!settings || settings.hide_all_hints || this.pendingHideAll()) return false;
+    if (id !== 'offline' && this.connection.status() === 'offline') return false;
     return !this.pendingHidden().has(id) && !(settings.hidden_hints ?? []).includes(id);
   }
 

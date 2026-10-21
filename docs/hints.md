@@ -9,8 +9,9 @@ with a condition disjoint from the first. The ids are `HINT_IDS` in
 disagree on the ids, a hint's Toasty, or its text.
 
 **Toasty** is the face the hint shows: **happy** for a next step, **surprised**
-when something needs fixing. No hint uses the **sad** face; that one is for
-error toasts. **Text** is what the bubble says, with the bold words in bold;
+when something needs fixing. Only `offline` uses the **sad** face: the server
+going away is the one thing gone wrong a hint speaks to, and otherwise sad is
+for error toasts. **Text** is what the bubble says, with the bold words in bold;
 `{…}` is filled in at runtime (see the notes under each table).
 
 **What a hint says.** The state that raised it, then the one step to take, in
@@ -25,6 +26,8 @@ next, and leave the details to its panel.
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
 dataset's Stats), which need no help to progress and can always be cancelled.
+The exception is `offline`, which shows wherever the user is when the server
+goes away.
 
 **One at a time.** Only one hint is ever on screen. Each view shows at most
 one (the Dashboard's ladder below, the Train view's vote hint or hand-off, the
@@ -33,7 +36,16 @@ inside a dialog only while that dialog is the topmost one open, and a hint on
 a view only while no dialog is open at all. So opening any dialog, a confirm
 prompt included, hides the view's hint, and stacking a second dialog hides the
 first one's. A dialog's hint stands below its box, reaching right, or beside
-the box's top corner when the box fills the window.
+the box's top corner when the box fills the window. While the server is
+unreachable, `offline` is the only hint (#5149): it shows over any dialog, and
+`HintsService` keeps every other one off, so no hint points at a step that
+can't work.
+
+## Anywhere
+
+| Hint | Toasty | Text | Fires when |
+|---|---|---|---|
+| `offline` | sad | The server isn't answering, so nothing else will work until it's back. Check that it's still running, then click **Retry**. | The offline banner is up: a few requests in a row got no answer, or the browser went offline. Stands over the banner's **Retry**, over any dialog. It has no Hide boxes, since nothing can be saved until the server is back. **Retry** ends it once the server answers. |
 
 ## Dashboard
 

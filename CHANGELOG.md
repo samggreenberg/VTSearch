@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
 - **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
   checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
   sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
