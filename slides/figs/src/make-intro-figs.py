@@ -1570,8 +1570,11 @@ EMBED_WORD = "embed"
 #: say it is a string and not a label the corpus carries.
 QUERY_TEXT = '"book"'
 
-#: The four pages of the build. See `embed_flow_fig`.
+#: The four beats of the drawing, and the first one the deck shows: the pile of
+#: photographs alone was a page of its own until the owner cut it (#5171), so
+#: the slide opens on the pile already going into the cube. See `embed_flow_fig`.
 EMBED_FLOW_STAGES = 4
+EMBED_FLOW_FIRST = 2
 
 #: The block arrows' shaft width and head, in units.
 FLOW_ARROW_W, FLOW_HEAD_W, FLOW_HEAD_L = 0.52, 0.82, 0.38
@@ -1830,8 +1833,10 @@ def embed_flow_fig() -> None:
     comes out as a point in the same space. That is the whole reason the seed
     works, and the deck had been assuming it.
 
-    Four pages, one per beat, because the last beat is the one that carries the
-    argument and it needs the room looking at the cube when it arrives. Every
+    Three pages, one per beat after the first, because the last beat is the
+    one that carries the argument and it needs the room looking at the cube
+    when it arrives. The first beat, the photographs alone, is drawn on every
+    page but never shown by itself (`EMBED_FLOW_FIRST`, #5171). Every
     page is the final drawing with the later beats removed, and nothing moves
     between them (`slides/STYLE.md`) — the shared untrimmed canvas gets that
     for free. The last page does *cover* a little of the cloud, which is the
@@ -1839,11 +1844,11 @@ def embed_flow_fig() -> None:
     the space is crowded, and a gap left open for it three pages early is a
     hole the room would spend those pages wondering about.
     """
-    for stage in range(1, EMBED_FLOW_STAGES):
+    for page, stage in enumerate(range(EMBED_FLOW_FIRST, EMBED_FLOW_STAGES), 1):
         save(
             _embed_flow_stage(stage),
             OUT,
-            f"embed-flow.build{stage}.webp",
+            f"embed-flow.build{page}.webp",
             column=FULL_BLEED,
             tight=False,
         )
@@ -1946,7 +1951,7 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
 # Squaring the Cube — UMAP flattens the cube into the map Browse draws (#5132)
 # ──────────────────────────────────────────────────────────────────────────────
 
-#: Embed-time Stories' second page, with a second arrow out of the cube,
+#: Embed-time Stories' first page, with a second arrow out of the cube,
 #: "flatten", by UMAP, into a flat square holding the same dots in the same
 #: pattern (owner, #5132). Three objects and two arrows do not fit across the
 #: slide at Embed-time Stories' scale, so the drawing is that one at
@@ -1997,7 +2002,7 @@ def _umap_flat() -> np.ndarray:
 def umap_flow_fig() -> None:
     """Photographs into the cube, as Embed-time Stories drew them, and then UMAP out of it, into a square.
 
-    Two pages: the cube as Embed-time Stories' second page left it; then the
+    Two pages: the cube as Embed-time Stories' first page left it; then the
     second arrow and the square, the whole cube flattened, the same sixty dots
     at the same coordinates (`_umap_flat`).
     """
