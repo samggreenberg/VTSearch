@@ -1251,7 +1251,7 @@ export const SHOTS: Shot[] = [
     themes: BOTH,
     clip: { target: '.verdict-card', pad: 8 },
     async recipe(page, h) {
-      await openTest(page, h);
+      await openTune(page, h);
       await testUntilDone(page, h);
       await page.waitForSelector('.line-test-stage .verdict-card .exits', { timeout: 60000 });
       await page.mouse.move(5, 5);
@@ -1401,7 +1401,10 @@ export const SHOTS: Shot[] = [
       if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
       await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
       await page.locator('.evidence-chip').first().waitFor({ timeout: 120000 });
-      await page.locator('.domain-ref-select').first().scrollIntoViewIfNeeded();
+      // The verdict left the result pane (#5100), so the chips sit higher and
+      // the longer Evidence sentence (#5089) runs below the fold: bring the
+      // select to the pane's top so all three callouts fit.
+      await page.locator('.domain-ref-select').first().evaluate((el) => el.scrollIntoView({ block: 'start' }));
       await h.wait(800);
     },
     after: async (_page, h) => resetFind(h),
