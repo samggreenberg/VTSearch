@@ -36,10 +36,10 @@ the result carries:
    **drawings** — largely in-domain".
 3. **Evidence coverage** says how much of the dataset sits farther from the
    detector's labelled examples than 95% of the dataset it was trained on
-   does: "**5%** of this dataset sits farther from the detector's examples
+   does: "**1%** of this dataset sits farther from the detector's examples
    than 95% of **drawings** — as well covered as its training data". About
-   5% is what the training data itself reads, so 5% means the detector
-   knows these pictures as well as the ones it learned from. When the
+   5% is what the training data itself reads, so 1% means the detector
+   knows these pictures at least as well as the ones it learned from. When the
    detector has no record of its training data to measure against (see
    below), the chip shows the share of the dataset in an evidence vacuum,
    "no verdict until you run Tune on the dataset the detector was trained
