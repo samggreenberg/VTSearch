@@ -184,15 +184,18 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // rather than to photograph fewer of the results (#3779). Still inside the
 // twenty minutes the deck says the whole task is worth.
 //
-// A spot check's answers count towards all three: Autopilot serves its picks
+// A spot check's answers count towards all of them: Autopilot serves its picks
 // as its next items (#5136), and they land in the same piles.
 //
-// None of the three is the label count `find` needs. The Book detector is made
-// from a typed query, so on SigLIP it keeps its query's own set until it has 30
-// labels (#4736); the session ended at 36 on 2026-10-14 only because the spot
-// checks' picks count too. `assertTrainedHead` fails the run if it ever ends
-// short (#4890).
-const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
+// `labels` is the count `find` needs, which the piles' targets do not reach on
+// their own. The Book detector is made from a typed query, so on SigLIP it
+// keeps its query's own set until it has 30 labels (#4736, `QUERY_HOLD_LABELS`
+// in `vtscore/detectors/label_quota.py`). The session ended at 36 on 2026-10-14
+// only because a spot check, answered round after round to its end, ran past
+// the targets; served one pick at a time, the targets alone stop it at 28
+// (#5161). `maxVotes` stays above `labels`, so the cap is never what stops it
+// short, and `assertTrainedHead` fails the run if the hold ever moves (#4890).
+const TRAIN_FINAL = { good: 12, bad: 8, labels: 30, maxVotes: 40 };
 
 // The numbered markers on the Instruction frames, scaled for the slot. The
 // app is drawn at about 0.74x on the slide (870 of 1180 CSS px), and the
@@ -799,7 +802,7 @@ async function shootTrainLoop(page) {
   }
   while (
     cast < TRAIN_FINAL.maxVotes
-    && (tally.good < TRAIN_FINAL.good || tally.bad < TRAIN_FINAL.bad)
+    && (tally.good < TRAIN_FINAL.good || tally.bad < TRAIN_FINAL.bad || cast < TRAIN_FINAL.labels)
   ) {
     await answer();
   }
