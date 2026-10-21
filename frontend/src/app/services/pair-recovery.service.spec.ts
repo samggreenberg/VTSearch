@@ -199,6 +199,86 @@ describe('PairRecoveryService', () => {
     });
   });
 
+  // #5159: a detector's positives map lived only in the memory of the process
+  // that built it, so after a restart the backend answers 404 dataset_not_found
+  // for it, and nothing can load it again.
+  describe('on a detector-positives map the server no longer has', () => {
+    function mapGone(id: string): HttpErrorResponse {
+      return new HttpErrorResponse({
+        status: 404,
+        statusText: 'Not Found',
+        error: {
+          code: 404,
+          status: 'Not Found',
+          message: 'This dataset no longer exists (it was deleted); reload the page',
+          error_code: 'dataset_not_found',
+          dataset_id: id,
+        },
+      });
+    }
+
+    beforeEach(() => {
+      router.url = '/browse/__detpos__det1';
+      activeContext.setActivePair('__detpos__det1', '');
+    });
+
+    it('sends the tab to the Dashboard, saying to browse the positives again', async () => {
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(toast.error.mock.calls[0][0].message).toBe("The map of bicycle's positives is gone");
+      expect(toast.error.mock.calls[0][0].detail).toContain(
+        "Browse the detector's positives again from the Dashboard",
+      );
+      expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+      expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(activeContext.datasetId).toBe('');
+    });
+
+    it('says so once for the burst of tiles that find it gone', () => {
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(router.navigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the detector plainly when the registry does not', () => {
+      router.url = '/browse/__detpos__det9';
+      activeContext.setActivePair('__detpos__det9', '');
+      service.absorb(mapGone('__detpos__det9'), 0);
+
+      expect(toast.error.mock.calls[0][0].message).toBe("The map of this detector's positives is gone");
+    });
+
+    it('drops a straggler from a map the tab has already left, without a toast', () => {
+      // Its "deleted; reload the page" would be wrong: nothing was deleted, and
+      // a reload cannot bring the map back.
+      router.url = '/dashboard';
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+
+      router.url = '/browse/__detpos__other';
+      expect(service.absorb(mapGone('__detpos__det1'), 0)).toBe(true);
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('leaves dataset_not_found for an ordinary dataset to the toast, as before', () => {
+      // A really-deleted dataset under an open view is the registry watcher's.
+      router.url = '/browse/ds1';
+      activeContext.setActivePair('ds1', 'det1');
+      expect(service.absorb(mapGone('ds1'), 0)).toBe(false);
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+  });
+
   it('ignores a 409 naming an id outside the active pair', () => {
     // E.g. a `DATASET_OVERRIDE` read of a sibling dataset.
     expect(service.absorb(notLoaded('dataset', 'sibling-ds'), 0)).toBe(false);

@@ -14,6 +14,9 @@ import { ToastService } from './toast.service';
  */
 const RELOAD_COOLDOWN_MS = 60_000;
 
+/** Dataset id prefix of a detector-positives map (`vtscore.detectors.positives_browse`). */
+const POSITIVES_MAP_PREFIX = '__detpos__';
+
 /**
  * Loads the active pair again when the backend turns out to have lost it (#5155).
  *
@@ -35,6 +38,11 @@ const RELOAD_COOLDOWN_MS = 60_000;
  * that lands while a switch or a reload is in flight is expected and absorbed
  * (the #3644 case: a poll landing mid-load). A reload that fails sends the tab
  * to the Dashboard with a message saying to reopen the pair from there.
+ *
+ * A detector-positives map (`/browse/__detpos__<detectorId>`) cannot be loaded
+ * again at all: its context lived only in the memory of the process that built
+ * it, so after a restart the backend answers 404 `dataset_not_found` instead,
+ * and a tab on it goes straight to the Dashboard to browse them again (#5159).
  */
 @Injectable({ providedIn: 'root' })
 export class PairRecoveryService {
@@ -72,6 +80,8 @@ export class PairRecoveryService {
    * interceptor raises no toast for it.
    */
   absorb(err: HttpErrorResponse, sentEpoch: number): boolean {
+    const lostMap = lostPositivesMap(err);
+    if (lostMap) return this.leaveLostPositivesMap(lostMap);
     const { datasetId, modelId } = this.activeContext;
     if (!namesUnloaded(err, datasetId, modelId)) return false;
     // Mid-load: the switch or reload in flight is what will load it. Or the
@@ -123,15 +133,42 @@ export class PairRecoveryService {
     });
   }
 
-  /** The pair cannot be loaded again from here: say so and leave its dead view.
-   *  The pair is cleared once off the view, so reopening it runs the route
-   *  guard's load instead of its already-active fast path. */
+  /** The pair cannot be loaded again from here: say so and leave its dead view. */
   private giveUp(datasetId: string, detectorId: string): void {
     this.toast.error({
       message: `Couldn't load ${this.pairLabel(datasetId, detectorId)} again`,
       detail: 'The server no longer had it loaded, probably after a restart. Reopen it from the Dashboard.',
       dedupKey: reloadToastKey(datasetId, detectorId),
     });
+    this.leaveForDashboard();
+  }
+
+  /**
+   * The server no longer has the positives map *mapId*, so the tab browsing it
+   * goes back to the Dashboard, where the detector's Browse action builds a new
+   * one. Absorbed even off that view, where it can only be a request the view
+   * sent before it was left: the backend's "deleted; reload the page" would be
+   * wrong twice over, since nothing was deleted and a reload cannot bring it back.
+   */
+  private leaveLostPositivesMap(mapId: string): true {
+    const [view, ds] = this.viewSegments();
+    if (this.leaving || view !== 'browse' || ds !== mapId) return true;
+    const detectorId = mapId.slice(POSITIVES_MAP_PREFIX.length);
+    const detector = this.datasetState.detectorById().get(detectorId)?.name || 'this detector';
+    this.toast.error({
+      message: `The map of ${detector}'s positives is gone`,
+      detail:
+        "The server no longer has it, probably after a restart. Browse the detector's positives again from the Dashboard.",
+      dedupKey: `positives-map-lost:${mapId}`,
+    });
+    this.leaveForDashboard();
+    return true;
+  }
+
+  /** Take the tab off its dead view. The pair is cleared once off it, so
+   *  reopening the pair runs the route guard's load instead of its
+   *  already-active fast path. */
+  private leaveForDashboard(): void {
     this.leaving = true;
     this.router
       .navigate(['/dashboard'])
@@ -181,4 +218,14 @@ function namesUnloaded(err: HttpErrorResponse, datasetId: string, detectorId: st
   if (body.error_code === 'dataset_not_loaded') return !!datasetId && body.dataset_id === datasetId;
   if (body.error_code === 'detector_not_loaded') return !!detectorId && body.detector_id === detectorId;
   return false;
+}
+
+/** The positives map *err* says the backend no longer has (its 404
+ *  `dataset_not_found`), or `''` when *err* is anything else. */
+function lostPositivesMap(err: HttpErrorResponse): string {
+  if (err.status !== 404) return '';
+  const body = err.error as { error_code?: unknown; dataset_id?: unknown } | null;
+  if (!body || typeof body !== 'object' || body.error_code !== 'dataset_not_found') return '';
+  const id = body.dataset_id;
+  return typeof id === 'string' && id.startsWith(POSITIVES_MAP_PREFIX) ? id : '';
 }
