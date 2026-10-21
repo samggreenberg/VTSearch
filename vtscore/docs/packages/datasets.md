@@ -576,9 +576,10 @@ its own and lands as its own registry entry with its own
 **When an import ends.** `_run_origin_load_in_background(...,
 on_finished=None)` calls *on_finished* once with a frozen
 `DatasetImported(outcome, dataset_id, name, user, media_type, n_media,
-origin, error)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
-is not reported). The app routes it to the functions an admin names with
-`--on-dataset-imported`.
+origin, error, notify)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
+is not reported). The pipeline leaves `notify` at `True`; the app sets it from
+the user's `import_alerts_enabled` setting and routes the event to the
+functions an admin names with `--on-dataset-imported`.
 
 ---
 

@@ -518,6 +518,20 @@ class UserSettings(BaseModel):
     # detected nothing (no AutoFind detectors, or none for the media type)
     # keeps its dataset, because there the import was the whole point.
     autofind_cli_delete_dataset: bool = False
+    # Whether a web AutoFind run sends its results to ``autofind_exporter``
+    # (#5170). Off pauses the export without forgetting which exporter is
+    # picked or how it is configured, so a user can mute an emailing exporter
+    # and turn it back on later. Only the web app reads it: a command-line
+    # AutoFind still falls back to ``autofind_exporter``, since there the
+    # export is where the run's results go.
+    autofind_export_enabled: bool = True
+    # Whether this user wants the server to alert them when an import they
+    # started finishes (#5170). The alerts are the admin's
+    # ``--on-dataset-imported`` hooks; this reaches them as
+    # ``DatasetImported.notify`` and the hooks decide what to do with it (see
+    # ``vtsearch.import_hooks``). The Settings modal shows it only on a server
+    # with hooks configured.
+    import_alerts_enabled: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

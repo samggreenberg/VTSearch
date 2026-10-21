@@ -236,6 +236,16 @@
             [effectiveSoloMediaType]="effectiveSoloMediaType"
             (defaultsChange)="onImportDefaultsChange($event)"
           ></vt-import-defaults-settings>
+          <!-- Only on a server whose admin named --on-dataset-imported hooks:
+               elsewhere there is no alert to turn off (#5170). -->
+          @if (settings().import_hooks_configured) {
+            <h4 class="subhead">Alerts</h4>
+            <label class="checkbox-row" title="Let this server alert you when an import you started finishes or fails">
+              <input type="checkbox" [ngModel]="settings().import_alerts_enabled" (ngModelChange)="onToggle('import_alerts_enabled', $event)" />
+              Alert me when an import finishes
+              <vt-field-hint-icon hint="This server can tell you, often by email, when an import you started finishes or fails. Untick to ask it not to. The alert is code your server's administrator added, so it is up to that code to honour this."></vt-field-hint-icon>
+            </label>
+          }
         }
 
         <!-- AutoFind -->
@@ -246,6 +256,15 @@
             [autofindExporterFieldValues]="autofindExporterFieldValues"
             (exporterChange)="onAutofindExporterChange($event)"
           ></vt-auto-find-settings>
+          <!-- Pauses the exporter above without forgetting it (#5170); with
+               None picked there is nothing to pause. -->
+          @if (autofindExporter) {
+            <label class="checkbox-row" title="Send each AutoFind run's results to the exporter above">
+              <input type="checkbox" [ngModel]="settings().autofind_export_enabled" (ngModelChange)="onToggle('autofind_export_enabled', $event)" />
+              Export results when AutoFind finishes
+              <vt-field-hint-icon hint="Untick to pause the exporter above without losing its settings: AutoFind results then stay in the app until you tick this again. A command-line AutoFind (python app.py --autodetect) still exports."></vt-field-hint-icon>
+            </label>
+          }
           <h4 class="subhead">Command Line</h4>
           <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
             <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />

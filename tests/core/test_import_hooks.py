@@ -4,17 +4,20 @@
 ``VTSEARCH_ON_DATASET_IMPORTED`` into the functions the load pipeline calls when
 a user's import ends.  What it owes an admin: a bad spec fails at startup
 (loudly on the CLI, as a warning under gunicorn), the flag wins over the env
-var, hooks run in the order named, and one failing hook neither stops the next
-nor fails the import.  The pipeline side (when ``on_finished`` fires, and with
+var, hooks run in the order named, one failing hook neither stops the next
+nor fails the import, and each is told whether the importing user wants alerts.  The pipeline side (when ``on_finished`` fires, and with
 what) is covered in ``tests/datasets/test_load_post_load.py``.
 """
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported, ImportOutcome
-from vtsearch import cli_main, import_hooks
+from vtscore.state.current_user import thread_user
+from vtsearch import cli_main, import_hooks, settings
 
 #: What the module-level hooks below were called with, in call order.
 _calls: list[tuple[str, DatasetImported]] = []
@@ -102,6 +105,55 @@ class TestFire:
         with pytest.raises(import_hooks.HookSpecError):
             import_hooks.configure([f"{_SELF}:second_hook", "no_such_mod:notify"], source=import_hooks.FLAG)
         assert import_hooks.describe() == f"{_SELF}:first_hook (from --on-dataset-imported)"
+
+
+class TestUserCanAskNotToBeAlerted:
+    """A user's ``import_alerts_enabled`` reaches every hook as ``notify`` (#5170).
+
+    The server cannot tell a hook that alerts the user from one that records
+    the import, so it still calls them all and lets each decide.
+    """
+
+    @staticmethod
+    def _turn_alerts_off(user: str) -> None:
+        with thread_user(user):
+            settings.set_import_alerts_enabled(False)
+
+    def test_configured_says_whether_any_hook_is_in_force(self):
+        assert import_hooks.configured() is False
+        import_hooks.configure([f"{_SELF}:first_hook"], source=import_hooks.FLAG)
+        assert import_hooks.configured() is True
+
+    def test_a_user_who_left_alerts_on_is_notified(self):
+        import_hooks.configure([f"{_SELF}:first_hook"], source=import_hooks.FLAG)
+        import_hooks.fire_dataset_imported(_event())
+        assert _calls[0][1].notify is True
+
+    def test_a_user_who_turned_alerts_off_still_reaches_every_hook(self):
+        self._turn_alerts_off("alice")
+        import_hooks.configure([f"{_SELF}:first_hook", f"{_SELF}:second_hook"], source=import_hooks.FLAG)
+        event = _event(FAILED)
+        import_hooks.fire_dataset_imported(event)
+        assert [name for name, _ in _calls] == ["first", "second"]
+        assert [seen for _, seen in _calls] == [dataclasses.replace(event, notify=False)] * 2
+
+    def test_the_setting_is_read_for_the_user_who_imported(self):
+        self._turn_alerts_off("bob")
+        import_hooks.configure([f"{_SELF}:first_hook"], source=import_hooks.FLAG)
+        with thread_user("bob"):  # the worker thread may run as anyone
+            import_hooks.fire_dataset_imported(_event())
+        assert _calls[0][1].user == "alice"
+        assert _calls[0][1].notify is True
+
+    def test_a_settings_read_that_fails_keeps_the_alert(self, monkeypatch, caplog):
+        def broken() -> bool:
+            raise OSError("user_settings.json unreadable")
+
+        monkeypatch.setattr(settings, "get_import_alerts_enabled", broken)
+        import_hooks.configure([f"{_SELF}:first_hook"], source=import_hooks.FLAG)
+        import_hooks.fire_dataset_imported(_event())
+        assert _calls[0][1].notify is True
+        assert "assuming alerts are wanted" in caplog.text
 
 
 class TestEnvironment:

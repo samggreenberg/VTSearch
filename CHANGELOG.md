@@ -481,6 +481,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Turn off the server's alerts for yourself** (issue #5170). A server can be set up to email you (or alert you
+  some other way) when an import you started finishes; Settings › **Import Defaults** now has **Alert me when an
+  import finishes**, shown only on a server that sends such alerts. Untick it and the server's alert code is told
+  you said no. That code is your administrator's, so it has to honour the setting: the
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows how. Settings › **AutoFind** gains **Export
+  results when AutoFind finishes**, which pauses your AutoFind exporter (an emailing one, say) without losing its
+  settings; a command-line AutoFind still exports.
+
 - **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
   50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
   Training-domain overlap check reads, and nothing in the app could build one afterwards. Its **Stats**

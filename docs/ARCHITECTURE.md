@@ -661,7 +661,10 @@ field lists — this document names the tiers and the shape, not every key.
   `autofind_exporter_field_values`, `autofind_on_import` (whether a web
   import runs the AutoFind detectors; the Add Dataset checkbox's memory), and
   `autofind_cli_delete_dataset` (whether a CLI `--autodetect` run deletes the
-  dataset it imported once its detectors have run).
+  dataset it imported once its detectors have run), `autofind_export_enabled`
+  (whether a web AutoFind run sends its results to the exporter), and
+  `import_alerts_enabled` (whether the admin's import hooks are told this user
+  wants alerts, as `DatasetImported.notify`).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,

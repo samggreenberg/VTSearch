@@ -56,6 +56,25 @@ class TestAutofindExport:
         assert "results" in written or "det-a" in json.dumps(written)
 
 
+class TestAutofindExportPaused:
+    """``autofind_export_enabled`` off pauses the export, keeping its config (#5170)."""
+
+    def test_paused_exports_nothing_and_turning_it_back_on_exports_again(self, isolated_settings, tmp_path):
+        out = tmp_path / "autofind_results.json"
+        settings.set_autofind_exporter("server_json_file")
+        settings.set_autofind_exporter_field_values({"server_json_file": {"filepath": str(out)}})
+        settings.set_autofind_export_enabled(False)
+
+        assert run_autofind_export(dict(_SAMPLE_RESULTS)) is None
+        assert not out.exists()
+        assert settings.get_autofind_exporter() == "server_json_file"
+
+        settings.set_autofind_export_enabled(True)
+        status = run_autofind_export(dict(_SAMPLE_RESULTS))
+        assert status is not None and status["success"] is True
+        assert out.exists()
+
+
 class TestAutofindExportOpenUrl:
     """An exporter can send the user to a web page instead of delivering the
     results anywhere; the status block carries the URL to the modal (#2898)."""

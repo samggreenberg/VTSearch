@@ -168,6 +168,8 @@ from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
 
 
 def notify(event: DatasetImported) -> None:
+    if not event.notify:  # the user turned off import alerts
+        return
     address = address_for(event.user)  # VTSearch stores no email addresses
     if event.outcome == SUCCEEDED:
         send(address, f"{event.name} is ready: {event.n_media} {event.media_type} items")
@@ -192,9 +194,19 @@ The event is a frozen `DatasetImported`:
 | `n_media` | Items in the saved dataset; `0` on failure. |
 | `origin` | The importer and parameters the dataset was built from (a copy). |
 | `error` | The message the user was shown; empty on success. |
+| `notify` | `False` when the user turned off import alerts; `True` otherwise. |
 
 Fields may be added; none will be removed or change meaning without a
 `vtscore/CHANGELOG.md` entry.
+
+**Respect `notify` in a hook that alerts the user.** Each user has an
+**Alert me when an import finishes** setting (Settings › Import Defaults),
+which the Settings modal offers only on a server with hooks configured.
+Every hook is still called for every import whatever the user picked,
+because VTSearch cannot tell a hook that alerts the user from one that
+records the import for the admin. So a mailer checks `event.notify`, as
+above, and an audit log ignores it. A hook that never reads it alerts
+everyone, so the setting does nothing on that server.
 
 **Which imports fire it.** The ones a user starts and waits for: the Add
 Dataset dialog's importers, local folder and file uploads, demo datasets,

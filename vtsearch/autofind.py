@@ -22,8 +22,8 @@ The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
 Either way a run ends the same: the results go to the user's AutoFind exporter
-when one is configured (:func:`run_autofind_export`).  A background run's
-results are also held in memory for the user who started it
+when one is configured and not paused (:func:`run_autofind_export`).  A
+background run's results are also held in memory for the user who started it
 (:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
 kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
@@ -640,19 +640,21 @@ def score_autofind(
 def run_autofind_export(response: dict) -> dict | None:
     """Run the configured AutoFind results exporter on *response*.
 
-    Returns ``None`` when no exporter is configured (the common case), or a
-    status dict ``{exporter, success, message?, error?}`` otherwise. Export
+    Returns ``None`` when no exporter is configured (the common case) or the
+    user has paused it (``autofind_export_enabled`` off, #5170), or a status
+    dict ``{exporter, success, message?, error?}`` otherwise. Export
     failures are reported in the status block rather than raised: the scored
     results are valuable on their own, so a misconfigured exporter must not
     sink the whole run.
     """
     from vtsearch.settings import (  # noqa: PLC0415
+        get_autofind_export_enabled,
         get_autofind_exporter,
         get_autofind_exporter_field_values,
     )
 
     exporter_name = get_autofind_exporter()
-    if not exporter_name:
+    if not exporter_name or not get_autofind_export_enabled():
         return None
 
     from vtscore.exporters import get_exporter  # noqa: PLC0415

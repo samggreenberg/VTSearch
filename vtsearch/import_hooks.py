@@ -25,6 +25,13 @@ started.  So a hook that blocks on a slow mail server holds up nothing the user
 can see.  Hooks run in the order they were named.  One that raises is logged
 and the next still runs; the dataset is saved either way.
 
+**Users can ask not to be alerted.**  Each user's ``import_alerts_enabled``
+setting (Settings > Import Defaults, offered only when hooks are configured)
+reaches every hook as :attr:`DatasetImported.notify`.  The hooks are still all
+called: one that emails should skip a user who said no, and one that only
+records imports can ignore it.  The server cannot tell which is which, so it
+leaves that to the hook (#5170).
+
 **Why this is not an** :mod:`~vtsearch.admin_overrides` **entry.** Every knob in
 that registry overrides a persisted setting and is published at
 ``/api/settings``.  This one must never be persisted: a settings file that
@@ -35,6 +42,7 @@ spellings go through :func:`configure` here.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 import pkgutil
@@ -148,8 +156,40 @@ def describe() -> str | None:
     return f"{', '.join(spec for spec, _ in _hooks)} (from {_source})"
 
 
+def configured() -> bool:
+    """Whether any hook is in force; published at ``/api/settings``."""
+    return bool(_hooks)
+
+
+def _wants_alerts(user: str) -> bool:
+    """*user*'s ``import_alerts_enabled`` setting.
+
+    Read under :func:`~vtscore.state.current_user.thread_user` because the
+    hooks run on the import's worker thread, and the event names whose import
+    it was.  A settings read that fails counts as "yes": the admin's hooks ran
+    before this setting existed, so the safe default is what they did then.
+    """
+    from vtscore.state.current_user import thread_user  # noqa: PLC0415
+    from vtsearch.settings import get_import_alerts_enabled  # noqa: PLC0415
+
+    try:
+        with thread_user(user):
+            return bool(get_import_alerts_enabled())
+    except Exception:
+        logger.exception("Could not read import_alerts_enabled for %r; assuming alerts are wanted", user)
+        return True
+
+
 def fire_dataset_imported(event: DatasetImported) -> None:
-    """Call every hook in force with *event*; the load pipeline's ``on_finished``."""
+    """Call every hook in force with *event*; the load pipeline's ``on_finished``.
+
+    Fills in :attr:`~DatasetImported.notify` from the importing user's
+    settings first.  Every hook is called whatever it says: whether a hook
+    alerts or only records is the hook's to know, so muting is its call.
+    """
+    if not _hooks:
+        return
+    event = dataclasses.replace(event, notify=_wants_alerts(event.user))
     for spec, hook in list(_hooks):
         try:
             hook(event)

@@ -230,6 +230,16 @@ class AppSettingsSchema(Schema):
     # Whether a command-line AutoFind deletes the dataset it imported once its
     # detectors have run (#4674); the AutoFind settings tab's checkbox.
     autofind_cli_delete_dataset = fields.Boolean()
+    # Whether a web AutoFind run sends its results to ``autofind_exporter``
+    # (#5170); off pauses the export and keeps the exporter's configuration.
+    autofind_export_enabled = fields.Boolean()
+    # Whether this user wants the server's import hooks to alert them (#5170);
+    # handed to each hook as ``DatasetImported.notify``.
+    import_alerts_enabled = fields.Boolean()
+    # Server-tier: whether an admin named any ``--on-dataset-imported`` hooks.
+    # The Settings modal offers ``import_alerts_enabled`` only when it is
+    # true. The hooks themselves are never published. Read-only.
+    import_hooks_configured = fields.Boolean(dump_only=True)
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -338,6 +348,8 @@ class SettingsUpdateSchema(Schema):
     autofind_exporter_field_values = fields.Raw()
     autofind_on_import = fields.Boolean()
     autofind_cli_delete_dataset = fields.Boolean()
+    autofind_export_enabled = fields.Boolean()
+    import_alerts_enabled = fields.Boolean()
 
     # NB: saved_datasets_dir and detectors_dir are intentionally absent - they
     # are server-tier storage paths for every user, set by the operator in the
