@@ -32,12 +32,8 @@ export const HINT_IDS = [
   'find-bads',
   'find-more',
   'keep-voting',
-  'spot-check',
   'resort-prompt',
   'autopilot-done',
-  'autopilot-done-level',
-  'autopilot-done-cap',
-  'autopilot-ran-dry',
   'all-labeled',
   // Tune view.
   'test-vote',

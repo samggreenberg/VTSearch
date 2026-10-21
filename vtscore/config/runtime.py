@@ -216,7 +216,7 @@ del _seed
 # fresh uniform picks, which is what makes its bound honest.  Set
 # ``VTSEARCH_SPOT_CHECK_SEED`` to an integer and a check over the same
 # candidate deals the same picks every time.  The user-docs screenshot harness
-# (``scripts/screenshots/refresh.sh``) sets it so the ``floor-check`` shot
+# (``scripts/screenshots/refresh.sh``) sets it so a shot of Tune's test
 # frames the same pick on every refresh.
 _seed = os.environ.get("VTSEARCH_SPOT_CHECK_SEED", "").strip()
 SPOT_CHECK_SEED: int | None = int(_seed) if _seed else None

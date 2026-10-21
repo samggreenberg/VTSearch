@@ -25,6 +25,22 @@ not list every commit. Use `git log` for the full history.
   the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
   the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
 
+- **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
+  while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
+  the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
+  words what Autopilot is doing and the next step ("Autopilot is looking for Bads now. Keep
+  clicking."), and a finished run says just that the detector is trained and to click
+  **Dashboard** to put it to work, whatever ended the run. The counts and scores are still in the
+  Autopilot panel and the **Update Sort Example?** dialog.
+
+- **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
+  Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
+  going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its
+  picks come up as your next items, in the usual centre panel with the usual keys, and nothing on
+  screen changes for them: the check starts after you vote on the item already in front of you, as
+  Autopilot's other steps do, and when it ends Autopilot carries on. Its result is in the note under
+  the Threshold on the **Manual** tab, and stopping Autopilot ends a check early.
+
 - **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
   coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
   detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
