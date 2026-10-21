@@ -381,8 +381,11 @@ dataset with the ticked detectors (`DashboardComponent.onAutofind`,
 `AutoFindService.find`), and the Find Results dialog opens as they land. The
 dialog's **Browse** lays the listed items out in Browse through the same
 `BrowseSubsetPrepService` the Tune view's Browse uses, with an origin
-(`?from=results&run=…`) that sends Browse's Back to those results instead of
-to Tune.
+(`?from=results&run=…&sides=…`) that sends Browse's Back to those results instead of
+to Tune. The origin also makes the link stand alone (#5129): opened without the
+in-memory handoff (a reload, a new tab, a link someone was sent), Browse fetches
+the run and lays out the same rows (`runBrowseIds`), for as long as the server
+keeps the run. The old `/find/…` and `/test/…` paths redirect to `/tune/…`.
 
 From the Tune click until the route activates, a bar stands under the button
 in its reason's slot (`DashboardComponent.tuneBar`, #5098). It reads the

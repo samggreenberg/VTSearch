@@ -27,6 +27,7 @@ import { SKIP_ERROR_TOAST } from '../../../interceptors/error.interceptor';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { adaptivePoll } from '../../../services/adaptive-poll';
 import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
+import { runBrowseIds } from '../../../services/browse-subset.service';
 import { ContextSwitchService } from '../../../services/context-switch.service';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -391,11 +392,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   /** The listed rows' media ids, once each: what Browse lays out. A media
    *  two detectors both called Good is one item on the map. */
   get browseIds(): number[] {
-    const ids = new Set<number>();
-    for (const hit of this.displayHits) {
-      if (typeof hit.id === 'number') ids.add(hit.id);
-    }
-    return [...ids];
+    return runBrowseIds(this.data(), this.exportSides);
   }
 
   /** Why Browse is unavailable, or `''` when it isn't. */
@@ -416,6 +413,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
     const datasetId = this.data().dataset_id;
     const runId = this.data().run_id;
     const ids = this.browseIds;
+    const sides = this.exportSides;
     if (this.browseBlocker || !datasetId || !runId || this.browseStarting() || this.browsePrep.preparing()) return;
     // Browse's own build takes over from here: it attaches to a fit the
     // warm-up already started, or finds the map built.
@@ -430,7 +428,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() =>
-        this.browsePrep.start(datasetId, ids, { kind: 'results', runId }, () => this.closed.emit()),
+        this.browsePrep.start(datasetId, ids, { kind: 'results', runId, sides }, () => this.closed.emit()),
       );
   }
 

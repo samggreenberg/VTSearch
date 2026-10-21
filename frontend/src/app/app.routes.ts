@@ -47,6 +47,10 @@ export const routes: Routes = [
         (m) => m.BrowseViewComponent,
       ),
   },
+  // The Tune view's earlier names, so a link saved or sent under one still
+  // opens the same pair (#5129).
+  { path: 'find/:datasetId/:detectorId', redirectTo: 'tune/:datasetId/:detectorId' },
+  { path: 'test/:datasetId/:detectorId', redirectTo: 'tune/:datasetId/:detectorId' },
   // Legacy / malformed paths: bounce to dashboard rather than render a
   // half-pair view.
   { path: 'label', redirectTo: 'dashboard', pathMatch: 'full' },

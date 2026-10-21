@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
+  Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
+  sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same
+  rows (Good, Bad or both, which the link now records), as long as the server still keeps the run: its most recent
+  runs, none from before a restart, each for the user who ran it. Past that it says the results are gone. Old
+  `/find/<dataset>/<detector>` and `/test/<dataset>/<detector>` links now open that pair in Tune instead of the
+  Dashboard.
+
 - **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
   is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
   the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your

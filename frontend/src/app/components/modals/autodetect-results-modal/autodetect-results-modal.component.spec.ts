@@ -444,12 +444,31 @@ describe('AutoDetectResultsModalComponent Browse', () => {
 
     switched.next();
     expect(component.browseStarting()).toBe(false);
-    expect(browsePrep.start).toHaveBeenCalledWith('ds1', [1, 2], { kind: 'results', runId: '_autofind_7' }, expect.any(Function));
+    expect(browsePrep.start).toHaveBeenCalledWith(
+      'ds1',
+      [1, 2],
+      { kind: 'results', runId: '_autofind_7', sides: 'good' },
+      expect.any(Function),
+    );
 
     // The dialog closes only once the map is ready and Browse opens.
     expect(closed).not.toHaveBeenCalled();
     browsePrep.start.mock.calls[0][3]();
     expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  // The browse URL names the picked rows, so a link opened without the
+  // in-memory handoff rebuilds the same map from the run (#5129).
+  it('names the picked rows in the browse origin', () => {
+    component.exportSides = 'bad';
+    component.browse();
+    switched.next();
+    expect(browsePrep.start).toHaveBeenCalledWith(
+      'ds1',
+      [3],
+      { kind: 'results', runId: '_autofind_7', sides: 'bad' },
+      expect.any(Function),
+    );
   });
 
   it('starts nothing when the dataset fails to load', () => {
