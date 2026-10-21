@@ -171,6 +171,11 @@ re-export.
 serialised form compact for legacy consumers that only look at
 `md5` and `label`.
 
+A label import path reads an entry's box through `imported_region_box(label, raw)`
+(same module). It returns the box as a float 4-tuple only for a `"good"` label
+whose value is four numbers, and `None` for anything else, so a hand-edited file
+degrades to an image-level label rather than failing the import.
+
 ### `LabelSet`
 
 `vtscore/datasets/labelset.py`: `LabelSet(elements=None, *,

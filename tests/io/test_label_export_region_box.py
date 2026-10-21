@@ -30,6 +30,17 @@ _BOX = [0.1, 0.2, 0.7, 0.8]
 _FORMATS = [("server_json_file", "labels.json"), ("server_csv_file", "labels.csv")]
 
 
+#: The test medias carry no origin, and Create & Import reads the media type
+#: from the labels' origins, so the voted medias get one for the test.
+_ORIGIN = {"importer": "server_folder", "params": {"path": "/tmp/image_clips", "media_type": "image"}}
+
+
+@pytest.fixture(autouse=True)
+def _voted_medias_have_an_origin(monkeypatch):
+    for mid in (1, 2, 3):
+        monkeypatch.setitem(medias[mid], "origin", _ORIGIN)
+
+
 def _vote_boxed_labelset(client) -> list[dict]:
     """Vote a boxed Good, a plain Good and a Bad; return the export route's labels."""
     assert client.post("/api/medias/1/vote", json={"target": "good", "region_box": _BOX}).status_code == 200

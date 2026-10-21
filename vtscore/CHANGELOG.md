@@ -2226,6 +2226,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A Good's `region_box` survives the CSV labelset round trip** (issue #5130). The `server_csv_file`
+  label importer ignored a `region_box` column, so a boxed Good came back image-level. The exporter now writes
+  `region_box` as a JSON list, includes it in its default label columns, and leaves the column out when no label
+  has a box (every label off a patch dataset). The importer reads it back on Good rows. New `vtscore.datasets.labelset.imported_region_box(label, raw)` is the shared
+  check for an imported entry's box: a float 4-tuple for a `"good"` label whose value is four numbers, else `None`.
+  Additive.
+
 - **Label training and label ingest replay a converter output no clipper touched** (issue #5058).
   `labelset_training._embed_one` replayed a label's unit only when its origin carried a `clipper` key, and
   label ingest only for `clipper` / `clipper_chain`. So a `run_converters_on_folder` output with neither (an

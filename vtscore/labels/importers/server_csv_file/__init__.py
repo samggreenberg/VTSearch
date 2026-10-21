@@ -108,26 +108,26 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
             val = _cell(row, normalised[col])
             if val:
                 entry[col] = val
-    # Parse origin dict from JSON if present
-    if "origin" in normalised:
-        origin_raw = _cell(row, normalised["origin"])
-        if origin_raw:
-            try:
-                origin = json.loads(origin_raw)
-                if isinstance(origin, dict):
-                    entry["origin"] = origin
-            except (json.JSONDecodeError, ValueError):
-                pass
-    if "region_box" in normalised:
-        box_raw = _cell(row, normalised["region_box"])
-        if box_raw:
-            try:
-                box = imported_region_box(label, json.loads(box_raw))
-            except (json.JSONDecodeError, ValueError):
-                box = None
-            if box is not None:
-                entry["region_box"] = list(box)
+    origin = _json_cell(row, normalised, "origin")
+    if isinstance(origin, dict):
+        entry["origin"] = origin
+    box = imported_region_box(label, _json_cell(row, normalised, "region_box"))
+    if box is not None:
+        entry["region_box"] = list(box)
     return entry
+
+
+def _json_cell(row: dict[str, Any], normalised: dict[str, str], field: str) -> Any:
+    """The *field* cell parsed as JSON, or ``None`` when absent, empty or invalid."""
+    if field not in normalised:
+        return None
+    raw = _cell(row, normalised[field])
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
 
 
 def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:
