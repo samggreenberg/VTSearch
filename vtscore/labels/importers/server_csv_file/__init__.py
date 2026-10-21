@@ -18,6 +18,7 @@ import json
 from typing import Any
 
 from vtscore.config import DATA_DIR
+from vtscore.datasets.labelset import imported_region_box
 from vtscore.io import desanitize_csv_cell, read_server_bytes
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
@@ -93,8 +94,9 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
     *normalised* maps lower-cased/stripped header names to the original
     field names.  A row is skipped (returns ``None``) when its ``md5`` or
     ``label`` cell is empty.  Present optional columns are copied through,
-    and an ``origin`` cell is parsed as JSON (a non-object or invalid value
-    is ignored).
+    an ``origin`` cell is parsed as JSON (a non-object or invalid value
+    is ignored), and so is a Good's ``region_box`` cell (anything but a list
+    of four numbers is ignored).
     """
     md5 = _cell(row, normalised["md5"])
     label = _cell(row, normalised["label"]).lower()
@@ -116,6 +118,15 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
                     entry["origin"] = origin
             except (json.JSONDecodeError, ValueError):
                 pass
+    if "region_box" in normalised:
+        box_raw = _cell(row, normalised["region_box"])
+        if box_raw:
+            try:
+                box = imported_region_box(label, json.loads(box_raw))
+            except (json.JSONDecodeError, ValueError):
+                box = None
+            if box is not None:
+                entry["region_box"] = list(box)
     return entry
 
 

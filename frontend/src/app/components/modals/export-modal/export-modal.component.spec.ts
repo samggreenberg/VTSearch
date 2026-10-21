@@ -173,6 +173,7 @@ describe('ExportModalComponent', () => {
       'md5',
       'origin',
       'origin_name',
+      'region_box',
     ]);
     req.flush({ message: 'ok' });
   });
