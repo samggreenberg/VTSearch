@@ -1379,7 +1379,7 @@ export const SHOTS: Shot[] = [
     id: 'trust-stats',
     embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
     caption:
-      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector's examples than its training data does',
+      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector\'s examples than its training data does',
     themes: BOTH,
     clip: { target: '.line-test-result' },
     annotations: [
