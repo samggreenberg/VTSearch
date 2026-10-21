@@ -4874,6 +4874,21 @@ REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.
 REGION_SCORE_PT = 13
 #: The histogram panel: left edge, floor, and height.
 REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
+#: The two fits on the last page, in the key's order: name, the maths that
+#: tells them apart, which curve, colour and line weight. The Gaussian is thin
+#: and red, the family a maximum is not; the Gumbel thicker and green, the one
+#: it is (owner, #5171).
+REGION_FITS = (
+    ("Gumbel", "max(x₁, …, xₙ)", "gumbel", GREEN, 3.6),
+    ("Gaussian", "(x₁ + … + xₙ) / n", "normal", RED, 1.6),
+)
+#: The key's type, and the stretch of line it draws before each name.
+REGION_KEY_PT, REGION_KEY_SEG = 16, 1.0
+
+
+def _text_width(text: str, fontsize: float) -> float:
+    """How wide *text* sets at *fontsize*, in drawing units."""
+    return TextPath((0, 0), text, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width / FLOW_UNIT_PT
 
 
 def _region_max_stage(stage: int) -> plt.Figure:
@@ -4995,28 +5010,28 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
+    # Red for the family the slide argues against and green for the one it fits,
+    # told apart by weight as well as hue, and the key draws a stretch of each
+    # line so neither is told by colour alone (owner, #5171). Each name carries
+    # the one line of maths that separates them: an average of many draws, and
+    # their maximum.
     if stage >= REGION_MAX_STAGES:
-        for curve, colour, dash, name in (
-            (normal, SOFT, (0, (5, 3)), "Fitted Gaussian"),
-            (gumbel, BLUE, (0, ()), "Fitted Gumbel"),
-        ):
+        right = panel_x0 + panel_w
+        widths = [_text_width(f"{name}  {maths}", REGION_KEY_PT) for name, maths, *_ in REGION_FITS]
+        text_x = right - max(widths)
+        for k, (name, maths, key, colour, weight) in enumerate(REGION_FITS):
+            curve = gumbel if key == "gumbel" else normal
             ax.plot(
                 panel_x0 + (xs - lo) / (hi - lo) * panel_w,
                 y_base + curve * sy,
                 color=colour,
-                linewidth=2.6,
-                linestyle=dash,
-                zorder=4,
+                linewidth=weight,
+                zorder=5 if key == "gumbel" else 4,
             )
-            ax.text(
-                panel_x0 + panel_w,
-                y_base + panel_h - (0.0 if colour == BLUE else CAP_16 + LABEL_GAP) - CAP_16,
-                name,
-                ha="right",
-                va="bottom",
-                fontsize=15,
-                color=colour,
-            )
+            y = y_base + panel_h - CAP_16 / 2 - k * (CAP_16 + 2 * LABEL_GAP)
+            ax.plot([text_x - LABEL_GAP - REGION_KEY_SEG, text_x - LABEL_GAP], [y, y], color=colour, linewidth=weight,
+                    solid_capstyle="butt", zorder=4)  # fmt: skip
+            ax.text(text_x, y, f"{name}  {maths}", ha="left", va="center", fontsize=REGION_KEY_PT, color=INK)
     return fig
 
 
@@ -6467,7 +6482,17 @@ def _land_stage(stage: int) -> plt.Figure:
         _land_labels(ax)
     if stage >= 4:
         _land_query(ax)
+    if stage >= LAND_STAGES:
+        # The lightened cells have no row of their own (`LAND_TABLE`), so the key says under it what the
+        # paleness means: the cell has gone part way to the text query's white (owner, #5171).
+        for y, words in zip(LAND_PALE_NOTE_Y, LAND_PALE_NOTE, strict=True):
+            ax.text(MAP_TABLE_X["swatch"], y, words, ha="left", va="center", fontsize=16, color=INK)
     return fig
+
+
+#: The note under Head Count's key on its last page, and its two lines' heights: under the last row.
+LAND_PALE_NOTE = ("Paler shades lean to white:", "the text query's results show")
+LAND_PALE_NOTE_Y = (3.25, 2.7)
 
 
 def _land_cells(ax: plt.Axes, stage: int) -> None:
@@ -6511,9 +6536,9 @@ LAND_TABLE = (
     (2, "count", "Trained head", "Outlier cut"),
     # No row for the band the folds' split decides: a mix of orange and
     # purple returns one or the other, which their own rows already say
-    # (owner, 2026-10-13). None for the text query's hold either: the map's
-    # own name says where the lightened cells are, and the white row says
-    # what they return.
+    # (owner, 2026-10-13). None for the text query's hold either: a note
+    # under the key says the paler cells lean to the white row, whose
+    # results they return (`LAND_PALE_NOTE`).
     (3, "labels", "Trained head", "Fβ peak"),
 )
 

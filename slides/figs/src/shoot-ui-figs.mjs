@@ -1070,6 +1070,17 @@ const BROWSE_LAYOUT = {
   browse_details_metadata_width: 250,
 };
 
+/**
+ * The thumbnail size the Vision frames draw the map at, as Browse's size
+ * pulldown names it (`browse-view.component.ts` `ICON_SIZES`), and that size's
+ * multiple of the default M radius (`HEX_SCALES`). The default M left each
+ * photo a few slide pixels across, too small to make out from the room
+ * (owner, #5171), so the run sets a bigger one for photos, as a user would,
+ * and puts the saved one back afterwards.
+ */
+const BROWSE_ICON_SIZE = 'L';
+const BROWSE_ICON_SCALE = { XS: 0.5, S: 0.75, M: 1, L: 1.6, XL: 2.5, '2XL': 4 }[BROWSE_ICON_SIZE];
+
 /** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
 const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
 
@@ -1121,7 +1132,7 @@ async function openedMap(page, signs = true) {
  * framing out the way the canvas does (`computeFitZoom` and `fitToData` in
  * `browse-canvas/view-transform.ts`): centred on the layout's bounds, at the
  * zoom that just holds them plus a margin of one tile and 5%, with the tile
- * layer picked for the default thumbnail size.
+ * layer picked for the run's thumbnail size (`BROWSE_ICON_SIZE`).
  */
 async function fitScreenPoint(page, meta, [px, py]) {
   const box = await page.locator('vt-browse-canvas .canvas-container').first().boundingBox();
@@ -1130,7 +1141,8 @@ async function fitScreenPoint(page, meta, [px, py]) {
   const dataW = xmax - xmin || 1;
   const dataH = ymax - ymin || 1;
   const pad = 0.05;
-  const targetRadius = 28; // BrowseCanvasComponent.DEFAULT_TARGET_RADIUS, the M size
+  // BrowseCanvasComponent.DEFAULT_TARGET_RADIUS, the M size, scaled to the run's.
+  const targetRadius = 28 * BROWSE_ICON_SCALE;
   let zoom = Math.min(box.width / (dataW * (1 + 2 * pad)), box.height / (dataH * (1 + 2 * pad)));
   for (let i = 0; i < 3; i++) {
     const ideal = Math.log2((meta.base_radius * zoom) / targetRadius);
@@ -1180,7 +1192,8 @@ function bookSign(pklPath) {
  * Rendering is pinned to full effects for the run: headless chromium has no
  * GPU, the app's Auto detection reads that as a slow client and draws the
  * canvas at one pixel per CSS pixel, and the frames are shot at two. The
- * panels are set as `BROWSE_LAYOUT` says; both are put back afterwards.
+ * panels are set as `BROWSE_LAYOUT` says and the photos' thumbnails at
+ * `BROWSE_ICON_SIZE`; all of it is put back afterwards.
  */
 async function shootBrowse(page) {
   // The map is built at import, as Build Browse map now builds it, so the tags
@@ -1201,9 +1214,16 @@ async function shootBrowse(page) {
   await trainedBookDetector();
   const settings = await app.api('/api/settings');
   const restore = Object.fromEntries(
-    ['browse_graphics', ...Object.keys(BROWSE_LAYOUT)].map((key) => [key, settings[key]]),
+    ['browse_graphics', 'browse_icon_size', ...Object.keys(BROWSE_LAYOUT)].map((key) => [key, settings[key]]),
   );
-  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: 'full', ...BROWSE_LAYOUT } });
+  await app.api('/api/settings', {
+    method: 'PUT',
+    body: {
+      browse_graphics: 'full',
+      browse_icon_size: { ...settings.browse_icon_size, image: BROWSE_ICON_SIZE },
+      ...BROWSE_LAYOUT,
+    },
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
 
   await openDashboard(page);

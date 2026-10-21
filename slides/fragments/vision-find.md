@@ -15,3 +15,9 @@
      land together: people reading up here, bedrooms there, shelves down
      below. The odd ones out sit together too, so they're easy to spot. We'll
      come back to that map. -->
+
+<!-- **c** — Remember Find's results from the start? Back then we got 57
+     books, as a list. -->
+
+<!-- **d** — And Browse laid those 57 out as a map: that's the square UMAP
+     makes. Now the same map, for the whole pile. -->

@@ -394,6 +394,13 @@ VISUAL_FRACTION = 0.40
 #: half the size of the hero they replaced, which is the opposite of the point.
 #: The notes lose a little width beside it and get it all back underneath.
 VISUAL_FRACTION_EQUAL = 0.52
+#: Two equal frames stack, one above the other, rather than sitting side by
+#: side: side by side in the 52% column each came out a quarter of the page
+#: across, smaller than a build's hero, so a two-screen slide read as "two
+#: tiny but no large" (owner, #5171). Stacked, the pair is bound by the page's
+#: height instead of the column's width, and this is the widest column whose
+#: two frames and the gap between them still fit SPEAKER_H.
+VISUAL_FRACTION_STACK = 0.47
 VISUAL_W = VISUAL_FRACTION * SPEAKER_W
 VISUAL_GUTTER = 34
 FRAME_GAP = 10
@@ -424,9 +431,11 @@ def frame_columns(count: int, style: str) -> int:
     """How many frames a row of the overview holds.
 
     The two styles want different things from the grid. An **equal-weight**
-    overview *is* the slide — every frame carries its own content — so it goes
-    as wide as it can without leaving a widow: two up to four (a square), three
-    beyond, and it never shrinks itself to buy room for prose.
+    overview *is* the slide — every frame carries its own content — so its
+    frames are as big as the column lets them be, and it never shrinks itself
+    to buy room for prose: a pair stacks (see `VISUAL_FRACTION_STACK`), three
+    and four go in a 2x2 (owner, #5171: three in a row made each a sixth of
+    the page across), and five or more go three to a row.
 
     A **build-up** puts its earlier frames first, in letter order, in the
     smallest square grid that holds them, and its last frame under them as the
@@ -442,7 +451,7 @@ def frame_columns(count: int, style: str) -> int:
     frames that shrink with the build, and only as far as the build forces.
     """
     if style == "equal":
-        return count if count <= 3 else (2 if count == 4 else 3)
+        return 1 if count <= 2 else (2 if count <= 4 else 3)
     return max(1, math.ceil(math.sqrt(count)))
 
 
@@ -452,9 +461,17 @@ def _grid_height(count: int, cols: int, width: float = VISUAL_W) -> float:
     return rows * _cell_height(cell) + (rows - 1) * FRAME_GAP
 
 
-def visual_width(style: str) -> float:
+def visual_shape(frames: int, style: str) -> str:
+    """The visual column's CSS modifier: `build`, `equal`, or `stack` for an equal pair."""
+    return "stack" if style == "equal" and frames == 2 else style
+
+
+VISUAL_FRACTIONS = {"build": VISUAL_FRACTION, "equal": VISUAL_FRACTION_EQUAL, "stack": VISUAL_FRACTION_STACK}
+
+
+def visual_width(style: str, frames: int = 0) -> float:
     """How wide the floated visual column stands, in px. See `frame_overview`."""
-    return (VISUAL_FRACTION_EQUAL if style == "equal" else VISUAL_FRACTION) * SPEAKER_W
+    return VISUAL_FRACTIONS[visual_shape(frames, style)] * SPEAKER_W
 
 
 def _cell_height(width: float) -> float:
@@ -468,7 +485,7 @@ def speaker_visual_height(frames: int, style: str) -> float:
     pictures) and how much is full width (below them), so it has to agree with
     the theme to the pixel rather than approximately.
     """
-    width = visual_width(style)
+    width = visual_width(style, frames)
     if frames < 2:
         return _cell_height(width)
     if style == "equal":
@@ -503,7 +520,7 @@ def notes_lines_used(notes: list[str], visual_height: float, visual_width_px: fl
 
 def notes_overflow(notes: list[str], frames: int, style: str) -> float:
     """Lines by which *notes* miss fitting one speaker page; 0.0 when they fit."""
-    used = notes_lines_used(notes, speaker_visual_height(frames, style), visual_width(style))
+    used = notes_lines_used(notes, speaker_visual_height(frames, style), visual_width(style, frames))
     return max(0.0, used - NOTES_LINES)
 
 
@@ -635,7 +652,7 @@ def speaker_page(
     folio = f'\n\n<div class="speaker-pageno">{label}</div>' if label else ""
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
-        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{style}">\n'
+        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{visual_shape(len(group), style)}">\n'
         f"{visual}"
         '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>" + folio
     )
