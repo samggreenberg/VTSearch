@@ -18,6 +18,7 @@ import {
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ToastService } from '../../services/toast.service';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { PairScopeService } from '../../services/pair-scope.service';
 import { SortRunnerService } from '../../services/sort-runner.service';
 import { adaptivePoll } from '../../services/adaptive-poll';
@@ -96,6 +97,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotStateService = inject(AutopilotStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
+  private pairRecovery = inject(PairRecoveryService);
   private newThingFlows = inject(NewThingFlowsService);
   private sourcePhoto = inject(SourcePhotoService);
   private toast = inject(ToastService);
@@ -663,6 +665,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.reloadForNewPair();
       });
+    // The backend lost the pair and it has been loaded again (#5155): what the
+    // backend held for this session went with it, so start over as above.
+    this.pairRecovery.reloaded$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadForNewPair());
 
     this.autopilotStateService.state$
       .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))

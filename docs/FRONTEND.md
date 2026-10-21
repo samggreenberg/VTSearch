@@ -546,6 +546,7 @@ The ones worth knowing before changing anything:
 | `ActiveContextService` | The active (dataset, detector) pair, split into intent/active layers ([§6](#6-the-active-datasetdetector-context)) |
 | `ContextSwitchService` | Drives a pair change end to end: intent → load → promote to active |
 | `ActiveContextWatcherService` | Reacts when an active id disappears from the registry (deleted elsewhere) |
+| `PairRecoveryService` | Loads the active pair again when the backend has lost it (a restart), so an open Train/Tune view comes back instead of 409ing ([§6](#6-the-active-datasetdetector-context)) |
 | `ProgressEventsService` | The single `EventSource` over `/api/events`, fanned out per channel |
 | `ConnectionStateService` | Online/offline, and the probe that reopens the circuit breaker |
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
@@ -788,6 +789,22 @@ Finally, `ActiveContextWatcherService` watches the registry against the active
 pair and, when an id disappears (deleted from another tab, the CLI, or another
 session), clears the affected half, toasts, and bounces off any now-broken
 view.
+
+`PairRecoveryService` covers the other way a pair goes missing: still
+registered, but no longer loaded, because the backend restarted under an open
+tab (#5155). Every request then answers 409 `dataset_not_loaded` /
+`detector_not_loaded`, and nothing else would load the pair again: the guard
+let the view in long ago, and polls skip a failed tick. `errorInterceptor`
+hands it each failed response; a 409 naming the active pair, with no switch in
+flight and the tab on that pair's `/label` or `/tune` view, starts
+`ContextSwitchService.reloadActivePair()`, and its `reloaded$` makes the view
+run its pair-change reset. The reload loads the dataset *before* the detector,
+because the detector load resolves its dataset from the request's
+`X-Dataset-Id`, which during a reload names the unloaded dataset. A 409 that
+lands mid-switch or mid-reload, or for a request sent before the last reload
+landed, is absorbed without a toast; one off the pair views still toasts. A
+reload that fails, or a pair lost again within a minute of one, sends the tab
+to the Dashboard with a message saying to reopen it.
 
 ---
 

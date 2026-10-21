@@ -1123,6 +1123,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A server restart no longer leaves an open Train or Tune tab dead** (issue #5155). A restarted server
+  has nothing loaded, so every request from a tab already open on a dataset and detector failed under a
+  red *Detector is not loaded* toast, and the cure, back to the Dashboard to open the queue again, was
+  nowhere on screen. The tab now loads them again on its own, says so in a toast, and starts the view
+  over once they are in. If they can't be loaded, it goes back to the Dashboard and says to reopen them
+  from there.
+
 - **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
   When the vote that labeled a dataset's last item also finished training, Toasty said the detector
   was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click

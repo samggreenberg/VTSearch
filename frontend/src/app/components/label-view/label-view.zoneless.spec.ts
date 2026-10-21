@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { Subject } from 'rxjs';
 
 import { LabelViewComponent } from './label-view.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
@@ -17,6 +18,7 @@ import { EmbedderCapabilityService } from '../../services/embedder-capability.se
 import type { EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { KeyboardService } from '../../services/keyboard.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
@@ -148,13 +150,18 @@ describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
   let fixture: ComponentFixture<LabelViewComponent>;
   let httpMock: HttpTestingController;
+  /** Fired by hand where a test needs "the backend lost the pair and it has
+   *  been loaded again" (#5155). */
+  let pairReloaded: Subject<void>;
 
   beforeEach(async () => {
+    pairReloaded = new Subject<void>();
     await configureZoneless({
       imports: [LabelViewComponent],
       providers: [
         ...provideHttpTesting(),
         provideRouter([]),
+        { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
       ],
     }).compileComponents();
 
@@ -1877,6 +1884,28 @@ describe('LabelViewComponent', () => {
       // the busy flag itself — otherwise the overlay would hang forever.
       expect(component.sortState.sortBusy).toBe(false);
       expect(component.sortState.sortOrder ?? []).toEqual([]);
+    });
+
+    // #5155: a restart takes the backend's session state with it, so once the
+    // lost pair is loaded again the view starts over on it as on a switch.
+    it('cancels an in-flight scoring run and starts over when the lost pair is loaded again', () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+
+      component.onModelSelected('det1');
+      const staleScore = httpMock.expectOne('/api/find-label');
+      expect(component.sortState.sortBusy).toBe(true);
+
+      pairReloaded.next();
+      flushDetectorRegistry();
+
+      expect(staleScore.cancelled).toBe(true);
+      expect(component.sortState.sortBusy).toBe(false);
+      // Same pair as before: nothing switched, the view reloaded in place.
+      expect(activeContext.datasetId).toBe('ds1');
+      TestBed.tick();
+      expect(httpMock.match('/api/medias/ids').length).toBe(1);
     });
 
     it('clears the centre viewer selection, and repaints, when the pair changes', async () => {

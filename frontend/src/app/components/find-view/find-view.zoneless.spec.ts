@@ -2,9 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { Subject } from 'rxjs';
 
 import { FindViewComponent } from './find-view.component';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
@@ -200,11 +202,17 @@ describe('FindViewComponent (pair-switch supersession)', () => {
   let fixture: ComponentFixture<FindViewComponent>;
   let httpMock: HttpTestingController;
   let activeContext: ActiveContextService;
+  let pairReloaded: Subject<void>;
 
   beforeEach(async () => {
+    pairReloaded = new Subject<void>();
     await configureZoneless({
       imports: [FindViewComponent],
-      providers: [...provideHttpTesting(), provideRouter([])],
+      providers: [
+        ...provideHttpTesting(),
+        provideRouter([]),
+        { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
+      ],
     }).compileComponents();
 
     activeContext = TestBed.inject(ActiveContextService);
@@ -280,6 +288,20 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortOrder?.map((s) => s.id)).toEqual([1]);
     expect(sortState.threshold).toBe(0.5);
     expect(sortState.sortBusy).toBe(false);
+  });
+
+  // #5155: a restart takes the backend's session state with it, so once the
+  // lost pair is loaded again Tune re-scores it as on a switch.
+  it('cancels the scoring run and scores again when the lost pair is loaded again', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const staleScore = httpMock.expectOne('/api/find-label');
+
+    pairReloaded.next();
+
+    expect(staleScore.cancelled).toBe(true);
+    expect(activeContext.datasetId).toBe('ds1');
+    expect(httpMock.match('/api/find-label').length).toBe(1);
   });
 
   // #4555: Tune opens on the Autopilot tab, and the test of the line starts
