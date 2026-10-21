@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
+  is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
+  the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your
+  votes, at your balance, stop rising, and its progress chart plots that F-beta. Measured on 2,160 sessions, the two
+  lights go green at the same clicks, and sessions end with the same F-beta; the change is so that every light speaks
+  the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
+  the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
+
 - **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
   up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
   over any open dialog. Every other hint steps aside until the server answers again, so Toasty no

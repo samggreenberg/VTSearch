@@ -19,7 +19,7 @@ import math
 import numpy as np
 import pytest
 
-from vtscore.detectors.cost_trend import smart_status_from_costs
+from vtscore.detectors.cost_trend import rising_status_from_scores
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import (
     BAD_TARGET,
@@ -47,6 +47,8 @@ from vtscore.eval.autopilot_flow import (
 #: A real plateaued window from the #3832 dice reproduction; see
 #: ``tests_lib/detectors/test_cost_trend_rule.py``.
 PLATEAU_WINDOW = [0.861, 0.832, 0.861, 0.861, 0.861, 0.887, 0.755, 0.669, 0.699, 0.857]
+#: The same plateau as F-beta points, Smart's since #5134: the cost's mirror around its mean.
+PLATEAU_FBETAS = [round(2 * sum(PLATEAU_WINDOW) / len(PLATEAU_WINDOW) - c, 3) for c in PLATEAU_WINDOW]
 
 
 def _sim_clips(n=160, dim=16):
@@ -242,32 +244,35 @@ class TestDetectorVisibility:
 
 
 class TestSmartStatus:
-    """The wrapper only; the rule is pinned in ``test_cost_trend_rule.py``."""
+    """The wrapper only; the rule is pinned in ``test_cost_trend_rule.py`` and ``test_smart_signal_5134.py``.
+
+    Since #5134 the window is each model's best F-beta, green once it stops rising.
+    """
 
     def test_red_below_five_per_class(self):
-        assert smart_status([0.5, 0.4, 0.3], MIN_PER_CLASS - 1, 9) == "red"
-        assert smart_status([0.5, 0.4, 0.3], 9, MIN_PER_CLASS - 1) == "red"
+        assert smart_status([0.3, 0.4, 0.5], MIN_PER_CLASS - 1, 9) == "red"
+        assert smart_status([0.3, 0.4, 0.5], 9, MIN_PER_CLASS - 1) == "red"
 
     def test_yellow_without_enough_history(self):
-        assert smart_status([0.5, 0.4], 9, 9) == "yellow"
+        assert smart_status([0.4, 0.5], 9, 9) == "yellow"
 
-    def test_yellow_while_the_error_cost_is_still_falling(self):
-        assert smart_status([0.9, 0.7, 0.5, 0.3], 9, 9) == "yellow"
+    def test_yellow_while_fbeta_is_still_rising(self):
+        assert smart_status([0.3, 0.5, 0.7, 0.9], 9, 9) == "yellow"
 
-    def test_green_once_the_error_cost_levels_off(self):
-        assert smart_status([0.30, 0.30, 0.30, 0.30], 9, 9) == "green"
+    def test_green_once_fbeta_levels_off(self):
+        assert smart_status([0.70, 0.70, 0.70, 0.70], 9, 9) == "green"
 
-    def test_green_when_the_cost_is_rising(self):
-        assert smart_status([0.2, 0.3, 0.4, 0.5], 9, 9) == "green"
+    def test_green_when_fbeta_is_falling(self):
+        assert smart_status([0.5, 0.4, 0.3, 0.2], 9, 9) == "green"
 
     def test_it_is_the_shared_rule_and_not_a_copy_of_it(self):
         """Same inputs, same light as ``/api/labeling-status`` shows the user."""
-        for costs in ([0.9, 0.7, 0.5, 0.3], [0.3] * 6, PLATEAU_WINDOW):
-            assert smart_status(costs, 9, 9) == smart_status_from_costs(costs, 9, 9)["status"]
+        for fbetas in ([0.3, 0.5, 0.7, 0.9], [0.7] * 6, PLATEAU_FBETAS):
+            assert smart_status(fbetas, 9, 9) == rising_status_from_scores(fbetas, 9, 9)["status"]
 
     def test_a_noisy_plateau_does_not_hold_the_simulated_user_in_hard(self):
         """The #3832 flap, at the level the harness reads it."""
-        assert smart_status(PLATEAU_WINDOW, 9, 9) == "green"
+        assert smart_status(PLATEAU_FBETAS, 9, 9) == "green"
 
 
 def _entry(flips: int, confident: int | None = None, *, unlabeled: int = 500, pool: int = 1000) -> dict:
@@ -409,35 +414,38 @@ class TestAutopilotFlow:
         assert flow.stability == []
 
     def test_smart_window_is_replaced_not_accumulated(self):
-        """Each step re-scores the whole window; costs must never pile up.
+        """Each step re-scores the whole window; points must never pile up.
 
-        The app's ``_eval_cached_models`` returns one cost per *cached model*
+        The app's ``_eval_cached_models`` returns one point per *cached model*
         against the current labelset, so a step's window is the new truth about
         every model in it - appending would regress over stale (model_t,
         labelset_t) pairs and confound model change with labelset growth
-        (issue #2923).
+        (issue #2923).  So for the app's F-beta window (#5134) and the ``cost``
+        arm's alike.
         """
         flow = AutopilotFlow()
-        flow.record_step([0.5, 0.4, 0.3], None)
+        flow.record_step([0.5, 0.4, 0.3], None, windows={"fbeta_best": [0.5, 0.6, 0.7]})
         assert flow.recent_error_costs == [0.5, 0.4, 0.3]
+        assert flow.smart_reading("fbeta_best") == [0.5, 0.6, 0.7]
         # Re-scoring the same three models against a grown labelset moved every
         # point, and added the fourth model's.
-        flow.record_step([0.44, 0.36, 0.28, 0.26], None)
+        flow.record_step([0.44, 0.36, 0.28, 0.26], None, windows={"fbeta_best": [0.56, 0.64, 0.72, 0.74]})
         assert flow.recent_error_costs == [0.44, 0.36, 0.28, 0.26]
+        assert flow.smart_reading("fbeta_best") == [0.56, 0.64, 0.72, 0.74]
 
     def test_empty_window_leaves_smart_short_of_points(self):
         """No usable eval set reads as "not enough points", as in the app."""
         flow = AutopilotFlow()
-        flow.record_step([0.3, 0.2, 0.1], None)
-        flow.record_step([], None)
-        assert flow.recent_error_costs == []
-        assert smart_status(flow.recent_error_costs, 9, 9) == "yellow"
+        flow.record_step(None, None, windows={"fbeta_best": [0.7, 0.7, 0.7]})
+        flow.record_step(None, None, windows={"fbeta_best": []})
+        assert flow.smart_reading("fbeta_best") == []
+        assert smart_status(flow.smart_reading("fbeta_best"), 9, 9) == "yellow"
 
     def test_span_drives_the_new_to_spot_transition(self):
         """All green reaches the check before Done first: the app checks the line, then reports Done."""
         flow = AutopilotFlow()
         flow.more_done = True
-        flow.recent_error_costs = [0.3] * 4
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
         flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
         assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "spot"
@@ -445,7 +453,7 @@ class TestAutopilotFlow:
     def _all_green(self, **kw) -> AutopilotFlow:
         flow = AutopilotFlow(**kw)
         flow.more_done = True
-        flow.recent_error_costs = [0.3] * 4
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
         flow.stability = [_entry(0)] * 6
         flow.update(9, 9, 500, {"level": 40, "depth": 100})
         return flow
@@ -459,9 +467,9 @@ class TestAutopilotFlow:
         assert flow.end_spot_check() == "done"
         assert flow.done_checked
         # A later return of every light to green does not check again.
-        flow.recent_error_costs = [0.9, 0.5, 0.3, 0.2]
+        flow.smart_windows = {"fbeta_best": [0.2, 0.5, 0.7, 0.8]}
         assert flow.update(12, 12, 494, {"level": 40, "depth": 100}) != "spot"
-        flow.recent_error_costs = [0.3] * 4
+        flow.smart_windows = {"fbeta_best": [0.7] * 4}
         assert flow.update(12, 13, 493, {"level": 40, "depth": 100}) == "done"
 
     def test_a_skipped_check_goes_straight_on_to_done(self):
@@ -494,7 +502,7 @@ class TestStopRules:
     def _flow(self, rule: str, *, smart_flat: bool = True) -> AutopilotFlow:
         flow = AutopilotFlow(stop_rule=rule, done_check=False)
         flow.more_done = True
-        flow.recent_error_costs = [0.3] * 4 if smart_flat else [0.9, 0.6, 0.4, 0.2]
+        flow.smart_windows = {"fbeta_best": [0.7] * 4 if smart_flat else [0.2, 0.4, 0.6, 0.9]}
         flow.stability = [_entry(0)] * 6
         return flow
 
@@ -529,7 +537,7 @@ class TestStopRules:
     def test_the_level_stops_hard_too_and_runs_the_check_before_done(self):
         flow = AutopilotFlow(stop_rule="level")
         flow.more_done = True
-        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.smart_windows = {"fbeta_best": [0.2, 0.4, 0.6, 0.9]}
         flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, self.SHORT, level_met=False) == "hard"
         assert flow.update(9, 10, 499, self.SHORT, level_met=True) == "spot"
@@ -558,7 +566,7 @@ class TestStopCap:
     def _flow(self, rule: str = "lights|level", **kw) -> AutopilotFlow:
         flow = AutopilotFlow(stop_rule=rule, **kw)
         flow.more_done = True
-        flow.recent_error_costs = [0.9, 0.6, 0.4, 0.2]
+        flow.smart_windows = {"fbeta_best": [0.2, 0.4, 0.6, 0.9]}
         flow.stability = [_entry(0)] * 6
         return flow
 

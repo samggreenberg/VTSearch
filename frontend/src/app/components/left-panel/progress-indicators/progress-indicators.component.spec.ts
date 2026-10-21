@@ -106,7 +106,7 @@ describe('ProgressIndicatorsComponent', () => {
   });
 
   it('should expose smart tooltip explaining the meaning', () => {
-    expect(component.smartTooltip).toContain('Smart: the model fits your votes consistently.');
+    expect(component.smartTooltip).toContain("Smart: the detector's F-beta on your votes has stopped rising.");
   });
 
   it('should expose stable tooltip explaining the meaning', () => {
@@ -125,15 +125,15 @@ describe('ProgressIndicatorsComponent', () => {
       total_count: 0,
       smart: {
         status: 'yellow',
-        reason: 'Error cost is still declining. Keep labeling.',
-        slope: -0.05,
-        slope_t: -3.1,
+        reason: 'F-beta is still rising. Keep labeling.',
+        slope: 0.05,
+        slope_t: 3.1,
         drift_within_noise: false,
       },
       stable: { status: '' },
       span: { status: '' },
     });
-    expect(component.smartTooltip).toBe('Smart: the model fits your votes consistently.');
+    expect(component.smartTooltip).toBe("Smart: the detector's F-beta on your votes has stopped rising.");
   });
 
   it('should include live subtext in stable tooltip when available', () => {
@@ -150,12 +150,12 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.stablePlateau).toBe(false);
   });
 
-  it('should say so in the smart tooltip when the cost drift is within the noise', () => {
+  it('should say so in the smart tooltip when the F-beta drift is within the noise', () => {
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
       total_count: 0,
-      smart: { status: 'green', slope: -0.02, slope_t: -1.2, drift_within_noise: true },
+      smart: { status: 'green', slope: 0.02, slope_t: 1.2, drift_within_noise: true },
       stable: { status: '' },
       span: { status: '' },
     });
@@ -192,7 +192,7 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should render tooltip text on the indicator buttons', () => {
     const buttons = fixture.nativeElement.querySelectorAll('.labeling-indicator');
-    expect(buttons[0].getAttribute('title')).toContain('Smart: the model fits your votes consistently.');
+    expect(buttons[0].getAttribute('title')).toContain("Smart: the detector's F-beta on your votes has stopped rising.");
     expect(buttons[1].getAttribute('title')).toContain('Stable: predictions stopped shifting between retrains.');
     expect(buttons[2].getAttribute('title')).toContain('Diverse: your votes cover the dataset broadly.');
   });

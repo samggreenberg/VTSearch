@@ -1,14 +1,18 @@
-"""The one weighted-FPR/FNR definition, and the two tiers that score through it.
+"""The one weighted-FPR/FNR definition, and the two Smart tiers that score through one rule.
 
 Issue #3414: the shipped Smart indicator
 (:func:`vtscore.detectors.labeling_progress._score_step`) and the eval
-harness's window scorer
-(:func:`vtscore.eval.step_trainers._labelset_error_costs`) used to carry
-independent hand copies of the same FP/FN counting loop, with nothing in
-``scripts/check-eval-app-sync.py`` pinning them together.  Both now delegate to
-:func:`vtscore.training.thresholds.weighted_error_cost`, so the parity test
-below is a check on the *plumbing* rather than on two copies of the arithmetic staying in
-step - which is the point: a delegation cannot drift.
+harness's window scorer used to carry independent hand copies of the same
+FP/FN counting loop, with nothing in ``scripts/check-eval-app-sync.py`` pinning
+them together.  Both then delegated to
+:func:`vtscore.training.thresholds.weighted_error_cost`.  Since #5134 Smart reads
+each model's best F-beta instead, and both tiers delegate to
+:func:`vtscore.detectors.cost_trend.best_fbeta`
+(``_score_step`` and :func:`vtscore.eval.step_trainers._labelset_window_readings`),
+so the parity test below is a check on the *plumbing* rather than on two copies
+of the arithmetic staying in step - which is the point: a delegation cannot
+drift.  ``weighted_error_cost`` stays for the eval's ``cost`` arm and the
+calibration metrics.
 """
 
 from __future__ import annotations
@@ -69,19 +73,19 @@ class TestWeightedErrorCost:
 
 
 class TestAppAndHarnessScoreAlike:
-    """One model, one labelset, one cost - through both tiers' plumbing."""
+    """One model, one labelset, one Smart point - through both tiers' plumbing (#5134)."""
 
     @staticmethod
     def _clips(values):
         return {cid: {"id": cid, "embeddings": {"emb": np.array([v], np.float32)}} for cid, v in values.items()}
 
-    @pytest.mark.parametrize("inclusion", [-2, 0, 3])
-    def test_score_step_matches_labelset_error_costs(self, inclusion):
+    @pytest.mark.parametrize("beta", [0.25, 1.0, 4.0])
+    def test_score_step_matches_labelset_window_readings(self, beta):
         torch = pytest.importorskip("torch")
 
         from vtscore.detectors.labeling_progress import _build_eval_rows, _score_step
         from vtscore.eval.step_model import StepModel
-        from vtscore.eval.step_trainers import _labelset_error_costs
+        from vtscore.eval.step_trainers import _labelset_window_readings
 
         # A 1-D sigmoid ranker both tiers can run: the app side calls the torch
         # module directly, the harness side goes through StepModel.predict.
@@ -96,29 +100,22 @@ class TestAppAndHarnessScoreAlike:
                 x = torch.tensor(np.asarray(embs), dtype=torch.float32)
                 return torch.sigmoid(net(x)).squeeze(1).numpy()
 
-        # Two of each class, one of them on the wrong side of the cut, so the
-        # cost is neither 0 nor saturated and both error kinds are exercised.
+        # Two of each class, one Bad ranked above a Good, so no cut reaches an
+        # F-beta of 1 and the best one depends on the beta.
         values = {1: 0.9, 2: 0.2, 3: 0.1, 4: 0.8}
         good, bad = {1: None, 2: None}, {3: None, 4: None}
         clips = self._clips(values)
         threshold = 0.5
 
-        harness = _labelset_error_costs(
-            [(StepModel(predict, net, "test", "cpu"), threshold)], good, bad, clips, inclusion
-        )
+        harness = _labelset_window_readings(
+            [(StepModel(predict, net, "test", "cpu"), threshold)], good, bad, clips, beta
+        )["fbeta_best"]
 
         eval_set = _build_eval_rows(clips, good, bad)
         assert eval_set is not None
         eval_rows, eval_labels = eval_set
-        wf, wn = inclusion_cost_weights(inclusion)
-        step = {
-            "model": net,
-            "threshold": threshold,
-            "smart_threshold": threshold,
-            "good_ids": list(good),
-            "bad_ids": list(bad),
-        }
-        app = _score_step(step, eval_rows, eval_labels, wf, wn, 0)
+        step = {"model": net, "threshold": threshold, "good_ids": list(good), "bad_ids": list(bad)}
+        app = _score_step(step, eval_rows, eval_labels, beta, 0)
 
-        assert app["error_cost"] == pytest.approx(harness[0], abs=1e-4)
-        assert (app["fpr"], app["fnr"]) == (0.5, 0.5)
+        assert app["fbeta"] == pytest.approx(harness[0], abs=1e-4)
+        assert 0.0 < app["fbeta"] < 1.0

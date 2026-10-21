@@ -38,7 +38,7 @@ import numpy as np
 import pytest
 
 from vtscore.eval.autopilot_flow import (
-    SMART_FLAT_THRESHOLD,
+    SMART_RISE_THRESHOLD,
     SMART_SLOPE_T,
     STABLE_FALLING_RATIO,
     STABLE_MAX_THRESHOLD,
@@ -145,16 +145,17 @@ class TestMarginsAgreeWithTheLights:
     previous click."""
 
     def test_smart_green_means_one_of_its_two_gates_cleared(self, rows):
+        # Since #5134 the window is F-beta, green once it stops rising.
         for r in rows:
             if r["smart"] != "green" or not _fit(r, "smart_slope"):
                 continue
-            assert r["smart_slope"] >= SMART_FLAT_THRESHOLD or r["smart_slope_t"] > -SMART_SLOPE_T, r
+            assert r["smart_slope"] <= SMART_RISE_THRESHOLD or r["smart_slope_t"] < SMART_SLOPE_T, r
 
     def test_smart_yellow_with_a_fitted_window_means_neither_cleared(self, rows):
         for r in rows:
             if r["smart"] != "yellow" or not _fit(r, "smart_slope"):
                 continue
-            assert r["smart_slope"] < SMART_FLAT_THRESHOLD and r["smart_slope_t"] <= -SMART_SLOPE_T, r
+            assert r["smart_slope"] > SMART_RISE_THRESHOLD and r["smart_slope_t"] >= SMART_SLOPE_T, r
 
     def test_stable_green_means_all_three_of_its_gates_cleared(self, rows):
         for r in rows:

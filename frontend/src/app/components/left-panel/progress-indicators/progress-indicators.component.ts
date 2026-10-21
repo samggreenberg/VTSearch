@@ -117,16 +117,16 @@ export class ProgressIndicatorsComponent {
     return '';
   }
 
-  /** Set when Smart is green only because the cost's downward drift is smaller
-   *  than its step-to-step scatter (#3832). */
+  /** Set when Smart is green only because F-beta's upward drift is smaller
+   *  than its step-to-step scatter (#3832, #5134). */
   get smartDriftWithinNoise(): boolean {
     return this.labelingStatus()?.smart['drift_within_noise'] === true;
   }
 
   get smartTooltip(): string {
-    const meaning = 'Smart: the model fits your votes consistently.';
+    const meaning = "Smart: the detector's F-beta on your votes has stopped rising.";
     const drift = this.smartDriftWithinNoise
-      ? ' The cost still drifts down, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
+      ? ' F-beta still drifts up, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
       : '';
     return `${meaning}${drift}`;
   }

@@ -23,6 +23,7 @@ them here drops it.
 
 from __future__ import annotations
 
+from vtscore.eval.autopilot_flow import SMART_READING_COLUMNS
 from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS
 
 
@@ -172,6 +173,13 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: How close Smart and Stable came to firing, as opposed to whether they
     #: did (issue #3560).  Declared just above.
     *STOPPING_MARGIN_COLUMNS,
+    #: #5134's Smart candidates in the objective's units, ``smart_<reading>_<part>``
+    #: (:data:`~vtscore.eval.autopilot_flow.SMART_READING_COLUMNS`): each reading's
+    #: window trend as the rising rule reads it - relative slope, mean, the slope's
+    #: t and the newest value.  NaN unless the run records them
+    #: (``smart_readings``, or a ``smart_signal`` arm), and where too few points or
+    #: votes to fit.
+    *SMART_READING_COLUMNS,
     "app_trained",
     #: Which detector a Test at this click gives (#4643): ``centroid`` - the
     #: Goods' centroid, under the label quota (from the first Good until the

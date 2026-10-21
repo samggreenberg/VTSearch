@@ -2,22 +2,40 @@
 
 Smart asks one question: *is the detector still getting better?*  It is
 answered by re-scoring the last :data:`SMART_WINDOW` cached models against the
-current labelset and looking at the trend of their error costs.  This module
-holds every constant and every line of that arithmetic, and both consumers call
-it rather than copying it:
+current labelset and looking at the trend of their F-beta, at the session's
+balance: green once it stops rising (issue #5134).  This module holds every
+constant and every line of that arithmetic, and both consumers call it rather
+than copying it:
 
 * :func:`vtscore.detectors.labeling_progress._compute_smart_status` (the app's
   ``/api/labeling-status`` indicator, which gates Autopilot's ``hard`` phase),
 * :func:`vtscore.eval.autopilot_flow.smart_status` (the harness's simulated
   user, which has to stop where the app stops for a study to mean anything).
 
+What a point is (issue #5134)
+-----------------------------
+
+Each point is one cached model's **best F-beta on the current votes**
+(:func:`best_fbeta`): its scores over every voted media, every cut through them,
+the best F-beta at the session's beta (:data:`SMART_NO_BALANCE_BETA` for a
+caller with no balance).  Cut-free, so it reads the ranking alone and cannot
+move when the served line switches rule.  Until #5134 a point was the model's
+``FPR + FNR`` at its own Inclusion 0 cut, green once it stopped *falling*: the
+last place the app priced a detector off the objective.  The A/B that retired it
+(``docs/experiments/2026-10-20-smart-fbeta-5134``) found the two lights green at
+the same clicks; the owner chose F-beta so that every light speaks the
+objective's units.  The cost rule (:func:`smart_status_from_costs`,
+:func:`smart_cut`) stays as the eval's ``cost`` arm.
+
 Two conditions, not one, and the second is the one from issue #3832
 ----------------------------------------------------------------------
 
 Green needs the trend to be **flat**, and the rule has always measured that as
-a least-squares slope normalised by the window's mean cost, green above
-:data:`SMART_FLAT_THRESHOLD`.  That half is unchanged: a decline shallower than
-1.5% of the mean per step is not worth another click.
+a least-squares slope normalised by the window's mean, green below
+:data:`SMART_RISE_THRESHOLD` (the cost rule: above :data:`SMART_FLAT_THRESHOLD`).
+A rise shallower than 1.5% of the mean per step is not worth another click.
+The rest of this section was written for the cost; it holds for F-beta with
+every sign turned over.
 
 What was missing is any notion of *how noisy the window is*.  On a category the
 embedding cannot separate - the #3831 dice pool, where the label is a die's
@@ -51,13 +69,20 @@ make the light depend on when the page was loaded and would have to be threaded
 through the harness's per-step trajectory as well.  A noise model gets the same
 flapping away without a hidden variable.
 
-What a cost is priced at (issue #4243)
---------------------------------------
+What a cost was priced at (issue #4243; the eval's ``cost`` arm since #5134)
+--------------------------------------------------------------------------
 
 Every cost in the window is ``FPR + FNR`` at :data:`SMART_INCLUSION`, measured
 at each model's own cut for that inclusion (:func:`smart_cut`), whatever
 Inclusion or precision floor the user has set.  Both callers take the weight and
 the cut from here, so what Smart measures cannot depend on which tier asked.
+
+The A/B's other readings (issue #5134)
+--------------------------------------
+
+:func:`average_precision` and :func:`fbeta_at_cut` score the same window the
+other ways #5134 priced (``vtscore.eval.autopilot_flow.SMART_SIGNALS``), read by
+the same rising rule, :func:`rising_status_from_scores`.
 """
 
 from __future__ import annotations
@@ -66,6 +91,8 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
+
+import numpy as np
 
 from vtscore.detectors.stability import MIN_PER_CLASS
 
@@ -236,3 +263,120 @@ def smart_cut(
     if cut is None or not math.isfinite(cut):
         return served_threshold
     return float(cut)
+
+
+#: The flatness cutoff with its sign turned over, for a score that should rise
+#: (issue #5134): a window whose least-squares slope gains less than 1.5% of its
+#: mean per model has stopped going up.
+SMART_RISE_THRESHOLD = -SMART_FLAT_THRESHOLD
+
+#: The beta Smart scores at for a caller with no balance (the app always sets
+#: one, #4413): F1.
+SMART_NO_BALANCE_BETA = 1.0
+
+
+def smart_beta(beta: float | None) -> float:
+    """The beta Smart's F-beta is read at: the session's balance, or :data:`SMART_NO_BALANCE_BETA` with none."""
+    return SMART_NO_BALANCE_BETA if beta is None else float(beta)
+
+
+def rising_status_from_scores(scores: Sequence[float], good: int, bad: int) -> dict[str, Any]:
+    """The Smart indicator over one window of F-beta points, oldest first (issue #5134).
+
+    The app's rule since #5134, on :func:`best_fbeta` points; the eval's other
+    readings (#5134's AP and cut F-beta) go through it too.  The window,
+    per-class minimum and trend-and-scatter test of :func:`smart_status_from_costs`
+    (#3832) with the sign turned over: green once the window's relative slope
+    is below :data:`SMART_RISE_THRESHOLD`, or its rise is within
+    :data:`SMART_SLOPE_T` standard errors of nothing.  ``drift_within_noise``
+    marks the second kind of green.  Non-finite entries (a model that could not
+    be scored) are dropped before the window is cut.
+    """
+    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+        return {
+            "status": "red",
+            "reason": f"Need at least {MIN_PER_CLASS} good and {MIN_PER_CLASS} bad. Currently {good}g, {bad}b.",
+        }
+
+    window = [float(s) for s in scores if math.isfinite(float(s))][-SMART_WINDOW:]
+    if len(window) < SMART_MIN_POINTS:
+        return {"status": "yellow", "reason": "Not enough valid model steps in recent history to assess trend."}
+
+    trend = cost_trend(window)
+    extras: dict[str, Any] = {
+        "slope": round(trend.relative_slope, 4),
+        "slope_t": round(trend.t_stat, 2) if math.isfinite(trend.t_stat) else trend.t_stat,
+        "drift_within_noise": False,
+    }
+    if trend.relative_slope <= SMART_RISE_THRESHOLD:
+        return {"status": "green", "reason": "F-beta has stopped rising. You can likely stop labeling.", **extras}
+    if trend.t_stat < SMART_SLOPE_T:
+        extras["drift_within_noise"] = True
+        return {
+            "status": "green",
+            "reason": (
+                "F-beta has stopped rising: it drifts up, but by less than it bounces around "
+                "between retrains. You can likely stop labeling."
+            ),
+            **extras,
+        }
+    return {"status": "yellow", "reason": "F-beta is still rising. Keep labeling.", **extras}
+
+
+def _scored(scores: Any, labels: Any) -> tuple[np.ndarray, np.ndarray]:
+    s = np.asarray(scores, dtype=np.float64).ravel()
+    y = np.asarray(labels, dtype=np.float64).ravel() >= 0.5
+    n = min(s.size, y.size)
+    s, y = s[:n], y[:n]
+    ok = np.isfinite(s)
+    return s[ok], y[ok]
+
+
+def average_precision(scores: Any, labels: Any) -> float:
+    """Average precision of *scores* against *labels* (``1.0`` Good); NaN without both classes.
+
+    Best first, ties broken by position (a stable sort): the mean, over the
+    Goods, of the precision of the set down to each one.
+    """
+    s, y = _scored(scores, labels)
+    n_pos = int(y.sum())
+    if n_pos == 0 or n_pos == y.size:
+        return math.nan
+    order = np.argsort(-s, kind="stable")
+    hits = y[order]
+    tp = np.cumsum(hits)
+    precision = tp / np.arange(1, hits.size + 1)
+    return float(precision[hits].sum() / n_pos)
+
+
+def fbeta_at_cut(scores: Any, labels: Any, cut: float, beta: float) -> float:
+    """F-*beta* of the items at or above *cut* (the codebase's ``>=``); NaN without both classes."""
+    s, y = _scored(scores, labels)
+    n_pos = int(y.sum())
+    if n_pos == 0 or n_pos == y.size:
+        return math.nan
+    kept = s >= cut
+    tp = float((kept & y).sum())
+    b2 = float(beta) ** 2
+    return (1.0 + b2) * tp / (b2 * n_pos + float(kept.sum()))
+
+
+def best_fbeta(scores: Any, labels: Any, beta: float) -> float:
+    """The best F-*beta* any cut through *scores* reaches; NaN without both classes.
+
+    Cut-free, so it reads the ranking alone: every set from the top down, at
+    the session's balance.
+    """
+    s, y = _scored(scores, labels)
+    n_pos = int(y.sum())
+    if n_pos == 0 or n_pos == y.size:
+        return math.nan
+    order = np.argsort(-s, kind="stable")
+    tp = np.cumsum(y[order])
+    k = np.arange(1, s.size + 1)
+    # A cut falls only between distinct scores: keep the last item of each run of ties.
+    sorted_s = s[order]
+    ends = np.append(sorted_s[1:] != sorted_s[:-1], True)
+    b2 = float(beta) ** 2
+    f = (1.0 + b2) * tp[ends] / (b2 * n_pos + k[ends])
+    return float(f.max())

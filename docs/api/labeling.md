@@ -213,13 +213,15 @@ POST /api/labeling-progress
 Requires at least one good vote, one bad vote, and label history (400
 otherwise). Synchronous: it first advances the per-step model cache over the
 whole label history (training any steps not yet cached), so it can be slow on a
-long history. The error-cost and stability series cover only the steps a
+long history. The F-beta and stability series cover only the steps a
 detector was trained for (see the note under
 [Indicator score history](#indicator-score-history)); diversity covers every
-step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
-would draw at Inclusion 0, whatever the balance is.
+step. Each `fbeta` is the best F-beta, at the detector's balance, any cut
+through that step's detector's scores reaches on the current votes: the points
+Smart waits to stop rising (#5134; each point was the detector's FPR + FNR
+before).
 
-→ `{total_labels, total_medias, error_cost_over_time, stability_over_time,
+→ `{total_labels, total_medias, fbeta_over_time, stability_over_time,
 diversity_level_over_time}`, each series a list of per-step points keyed by
 `num_labels`.
 
@@ -321,7 +323,7 @@ the data inline.
 
 → `{"job_id": "...", "status": "running", "current": 0, "total": 10}`, or
 (cached / `wait=true`) `{"job_id": "...", "status": "done", "metric": "smart",
-"error_cost": [...]}`. The metric-specific key is `error_cost` (smart),
+"fbeta": [...]}`. The metric-specific key is `fbeta` (smart),
 `stability` (stable), or `diversity` (diverse).
 
 ### Poll train-and-score result

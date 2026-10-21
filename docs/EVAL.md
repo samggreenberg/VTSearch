@@ -326,8 +326,8 @@ A light is a threshold test, and a study that records only the answer cannot say
 
 | column | the gate it feeds | green when |
 |---|---|---|
-| `smart_slope` | error-cost flatness | `>= SMART_FLAT_THRESHOLD` (−0.015) |
-| `smart_slope_t` | that slope against the window's own scatter (#3832) | `> -SMART_SLOPE_T` (−2.0) |
+| `smart_slope` | F-beta flatness (#5134; the cost's before) | `<= SMART_RISE_THRESHOLD` (+0.015) |
+| `smart_slope_t` | that slope against the window's own scatter (#3832) | `< SMART_SLOPE_T` (2.0) |
 | `stable_confident_flip_rate` | confident-flip average over the pool | `< STABLE_RATE_THRESHOLD` (0.005) |
 | `stable_max_confident_flip_rate` | its worst single step in the window | `< STABLE_MAX_THRESHOLD` (0.01) |
 | `stable_flip_rate_early` / `stable_flip_rate_late` | the raw rate having stopped falling | not (`late >= 0.005` and `late < STABLE_FALLING_RATIO × early`) |
@@ -336,6 +336,22 @@ A light is a threshold test, and a study that records only the answer cannot say
 Smart's two are a **disjunction** — either clears it — so neither alone says a run was held; Stable's three and Span's one are conjunctive. Every value is read off the dict the rule itself built (`autopilot_flow.smart_detail` / `stable_detail`), so a margin can never disagree with the light beside it, and `NaN` means the rule **declined to fit** one — below `MIN_PER_CLASS` votes of either class, under three model steps for Smart, under five entries for Stable — never "far from green".
 
 **These cost nothing to record and cannot be back-filled.** The rules fit all of it on every step already, because the vote order depends on the lights they produce; before #3560 the numbers were discarded and only the three-way status kept. But unlike `phase` and the lights, a finished study's cells *cannot* be enriched with them — the slope and flip-rate windows are per-step state the run threw away — so this half, and only this half, needs a re-run to answer on an old grid. `stopping.has_margins()` is the guard, and every margin function returns an empty frame rather than a table of zeros on a frame that predates them.
+
+##### Smart in the objective's units (#5134)
+
+Since #5134 Smart reads each of the last 10 models' **best F-beta on the current votes**, at the run's balance (F1 with none), and goes green once it stops **rising**: the trend-and-scatter test (#3832) with its sign turned over (`cost_trend.rising_status_from_scores`, `SMART_RISE_THRESHOLD` +0.015). Until then it read each model's FPR + FNR at its own Inclusion 0 cut, green once it stopped falling. `AutopilotFlow(smart_signal=)` (`simulate_voting_iterations(smart_signal=)`, `CALIB_SMART_SIGNAL`) keeps the A/B's readings as arms; `"fbeta_best"`, the default, is the app ([the A/B](experiments/2026-10-20-smart-fbeta-5134/REPORT.md)).
+
+| reading | what one point is | kept as |
+|---|---|---|
+| `fbeta_best` (the app) | the best F-beta at the run's beta any cut through one cached model's scores on the current votes reaches | the window, re-scored each step |
+| `cost` (the app before #5134) | FPR + FNR of that model at its own Inclusion 0 cut, green once it stops *falling* | the window |
+| `ap` | average precision of that model on the current votes | the window |
+| `fbeta` | F-beta at the run's beta at that model's own Inclusion 0 cut | the window |
+| `heldout_ap` | AP of the calibration folds' held-out scores of the votes | one value per retrain, the last `SMART_WINDOW` kept |
+| `heldout_fbeta` | the best F-beta of those scores | per retrain |
+| `line` | the labels line's expected F-beta (`stop_level_reading`) | per retrain, from the first one whose class model cuts |
+
+None reads the served line. `smart_readings=True` (`CALIB_SMART_READINGS=1`) records every reading's trend on each row without moving the light: `smart_<reading>_slope` (relative slope), `_mean`, `_t` and `_last` (the newest point). Green is `slope <= 0.015` or `t < 2` (for `cost`: `slope >= -0.015` or `t > -2`), so any threshold can be re-read offline, and `slope * mean` is the slope in the reading's own units. `NaN` means not recorded, or too few points or votes to fit. `smart_slope` / `smart_slope_t` are the margins of the light the run reads. `line` needs a balance.
 
 `stopping.margins()` / `summarise_margins()` / `margin_table()` report them per run over its **held** steps (everything before its first fire, or the whole trajectory when it never fired — a converged run sits at a comfortable margin for the rest of its budget and would otherwise swamp the steps that actually held it), and within those only over the stretch that waits on each gate: Smart's and Stable's over Hard, Span's over New. One sign convention throughout: **positive means the gate is satisfied with that much room, negative means the run is short by that much**, whichever way the underlying inequality points. Beside each margin is the share of those steps the gate was satisfied at, pooled over runs, which is what separates a flap from a wall, and `stable_block_warmup` / `stable_block_avg` / `stable_block_max` / `stable_block_falling` attribute Stable's not-green Hard steps to Stable not measuring yet or to one of its three gates in the rule's own short-circuit order.
 

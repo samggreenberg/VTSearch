@@ -100,7 +100,7 @@ class TestCachedIndicatorHistory:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, _history(4), good, bad)
+        lp.calculate_fbeta_over_time(clips, _history(4), good, bad)
         # More votes have landed since the last background refresh.
         data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad)
 
@@ -114,7 +114,7 @@ class TestCachedIndicatorHistory:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad)
+        lp.calculate_fbeta_over_time(clips, history, good, bad)
         cache = _active_cache()
         with pytest.warns(DeprecationWarning, match="inclusion_value"):
             _, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 5)
@@ -135,7 +135,7 @@ class TestCachedIndicatorHistory:
         history = _history(8)
         good, bad = _votes(8)
         lp.clear_progress_cache()
-        lp.calculate_error_cost_over_time(clips, history, good, bad)
+        lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         holding = threading.Event()
         release = threading.Event()
@@ -172,7 +172,7 @@ class TestSeriesCoverTrainedStepsOnly:
         lp.clear_progress_cache()
         _inject_models(history)
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad)
+        lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         for metric in ("smart", "stable", "diverse"):
             data, complete = lp.cached_indicator_history(metric, clips, history, good, bad)
@@ -191,7 +191,7 @@ class TestSeriesCoverTrainedStepsOnly:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad)
+        lp.calculate_fbeta_over_time(clips, history, good, bad)
 
         for metric in ("smart", "stable"):
             data, complete = lp.cached_indicator_history(metric, clips, history, good, bad)

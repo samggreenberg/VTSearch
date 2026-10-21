@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
-  ErrorCostPoint,
+  SmartPoint,
   StabilityPoint,
   DiversityPoint,
 } from '../models/api.models';
@@ -117,7 +117,8 @@ export class ChartsService {
     ctx.fillText('No data available', 20, height / 2);
   }
 
-  renderErrorCostChart(canvas: HTMLCanvasElement, data: ErrorCostPoint[]): void {
+  /** Smart's series (#5134): each detector's best F-beta on the current votes, which Smart waits to stop rising. */
+  renderSmartChart(canvas: HTMLCanvasElement, data: SmartPoint[]): void {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const palette = this.resolvePalette();
@@ -132,20 +133,20 @@ export class ChartsService {
     const chartHeight = canvas.height - top - this.padding.bottom;
 
     const numLabels = data.map((d) => d.num_labels);
-    const errorCosts = data.map((d) => d.error_cost);
+    const fbetas = data.map((d) => d.fbeta);
     const maxLabels = Math.max(...numLabels);
-    const maxCost = Math.max(...errorCosts);
-    const minCost = Math.min(...errorCosts);
+    const maxF = Math.max(...fbetas);
+    const minF = Math.min(...fbetas);
 
     const xScale = (val: number) => left + (val / maxLabels) * chartWidth;
     const yScale = (val: number) =>
-      top + chartHeight - ((val - minCost) / (maxCost - minCost || 1)) * chartHeight;
+      top + chartHeight - ((val - minF) / (maxF - minF || 1)) * chartHeight;
 
     this.drawAxes(ctx, canvas.width, canvas.height, palette.border);
     this.drawGrid(ctx, canvas.width, canvas.height, palette.borderSubtle);
 
     const xs = numLabels.map(xScale);
-    const ys = errorCosts.map(yScale);
+    const ys = fbetas.map(yScale);
     this.drawLine(ctx, xs, ys, palette.accent);
 
     ctx.fillStyle = palette.textSecondary;
@@ -156,15 +157,15 @@ export class ChartsService {
     ctx.save();
     ctx.translate(15, canvas.height / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText('Error Cost', 0, 0);
+    ctx.fillText('F-beta', 0, 0);
     ctx.restore();
 
     ctx.textAlign = 'center';
     ctx.fillText('0', left, canvas.height - this.padding.bottom + 15);
     ctx.fillText(maxLabels.toString(), left + chartWidth, canvas.height - this.padding.bottom + 15);
     ctx.textAlign = 'right';
-    ctx.fillText(maxCost.toFixed(2), left - 5, top + 5);
-    ctx.fillText(minCost.toFixed(2), left - 5, top + chartHeight + 5);
+    ctx.fillText(maxF.toFixed(2), left - 5, top + 5);
+    ctx.fillText(minF.toFixed(2), left - 5, top + chartHeight + 5);
   }
 
   renderStabilityChart(canvas: HTMLCanvasElement, data: StabilityPoint[]): void {

@@ -18,26 +18,26 @@ describe('ChartsService', () => {
     expect(service).toBeTruthy();
   });
 
-  describe('renderErrorCostChart', () => {
+  describe('renderSmartChart', () => {
     it('should handle empty data', () => {
       const canvas = createMockCanvas();
-      expect(() => service.renderErrorCostChart(canvas, [])).not.toThrow();
+      expect(() => service.renderSmartChart(canvas, [])).not.toThrow();
     });
 
     it('should render with valid data', () => {
       const canvas = createMockCanvas();
       const data = [
-        { num_labels: 5, error_cost: 0.8 },
-        { num_labels: 10, error_cost: 0.5 },
-        { num_labels: 15, error_cost: 0.3 },
+        { num_labels: 5, fbeta: 0.3 },
+        { num_labels: 10, fbeta: 0.5 },
+        { num_labels: 15, fbeta: 0.6 },
       ];
-      expect(() => service.renderErrorCostChart(canvas, data)).not.toThrow();
+      expect(() => service.renderSmartChart(canvas, data)).not.toThrow();
     });
 
     it('should handle single data point', () => {
       const canvas = createMockCanvas();
-      const data = [{ num_labels: 5, error_cost: 0.5 }];
-      expect(() => service.renderErrorCostChart(canvas, data)).not.toThrow();
+      const data = [{ num_labels: 5, fbeta: 0.5 }];
+      expect(() => service.renderSmartChart(canvas, data)).not.toThrow();
     });
   });
 

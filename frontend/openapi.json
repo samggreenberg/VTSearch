@@ -3659,35 +3659,6 @@
         },
         "type": "object"
       },
-      "ErrorCostPoint": {
-        "additionalProperties": false,
-        "properties": {
-          "error_cost": {
-            "description": "``fpr_weight * fpr + fnr_weight * fnr`` for the model trained at this step.",
-            "type": "number"
-          },
-          "fnr": {
-            "description": "False-negative rate on the held-out eval set.",
-            "type": "number"
-          },
-          "fpr": {
-            "description": "False-positive rate on the held-out eval set.",
-            "type": "number"
-          },
-          "num_labels": {
-            "type": "integer"
-          },
-          "time_index": {
-            "description": "Zero-based index of this step in the label history.",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "error_cost",
-          "num_labels"
-        ],
-        "type": "object"
-      },
       "EvalTrainAndScoreCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3737,9 +3708,9 @@
           "error": {
             "type": "string"
           },
-          "error_cost": {
+          "fbeta": {
             "items": {
-              "$ref": "#/components/schemas/ErrorCostPoint"
+              "$ref": "#/components/schemas/SmartPoint"
             },
             "type": "array"
           },
@@ -5120,9 +5091,9 @@
             },
             "type": "array"
           },
-          "error_cost_over_time": {
+          "fbeta_over_time": {
             "items": {
-              "$ref": "#/components/schemas/ErrorCostPoint"
+              "$ref": "#/components/schemas/SmartPoint"
             },
             "type": "array"
           },
@@ -5141,7 +5112,7 @@
         },
         "required": [
           "diversity_level_over_time",
-          "error_cost_over_time",
+          "fbeta_over_time",
           "stability_over_time",
           "total_labels",
           "total_medias"
@@ -7446,6 +7417,27 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SmartPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "fbeta": {
+            "description": "The best F-beta, at the session's balance, any cut through this step's detector's scores reaches on the current votes.",
+            "type": "number"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "time_index": {
+            "description": "Zero-based index of this step in the label history.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fbeta",
+          "num_labels"
+        ],
         "type": "object"
       },
       "SortCollapsedResponse": {
