@@ -22,8 +22,8 @@ The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
 Either way a run ends the same: the results go to the user's AutoFind exporter
-when one is configured and not paused (:func:`run_autofind_export`).  A background run's
-results are also held in memory for the user who started it
+when one is configured and not paused (:func:`run_autofind_export`).  A
+background run's results are also held in memory for the user who started it
 (:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
 kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
