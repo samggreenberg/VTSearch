@@ -150,6 +150,55 @@ describe('PairRecoveryService', () => {
     expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
   });
 
+  // #5158: Browse shows a dataset alone, with the active detector riding along,
+  // so its URL names only the dataset.
+  describe('on the Browse view', () => {
+    it('loads the pair again for a 409 naming its dataset, whatever the query string', () => {
+      router.url = '/browse/ds1?subset=1';
+      expect(service.absorb(notLoaded('dataset', 'ds1'), 0)).toBe(true);
+      expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads the pair again for a 409 naming the detector riding along', () => {
+      router.url = '/browse/ds1';
+      expect(service.absorb(notLoaded('detector', 'det1'), 0)).toBe(true);
+      expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the dataset alone, as the view does', () => {
+      router.url = '/browse/ds1';
+      service.absorb(notLoaded('dataset', 'ds1'), 0);
+      landReload();
+
+      expect(toast.info.mock.calls[0][0].message).toBe('The server had lost o365_better; loading it again');
+      expect(toast.success.mock.calls[0][0].message).toBe('o365_better is loaded again');
+    });
+
+    it('loads a dataset browsed with no detector active', () => {
+      router.url = '/browse/ds1';
+      activeContext.setActivePair('ds1', '');
+
+      expect(service.absorb(notLoaded('dataset', 'ds1'), 0)).toBe(true);
+      expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+      expect(toast.info.mock.calls[0][0].message).toContain('lost o365_better;');
+    });
+
+    it('leaves a 409 to the ordinary toast when the tab browses some other dataset', () => {
+      router.url = '/browse/other-ds';
+      expect(service.absorb(notLoaded('dataset', 'ds1'), 0)).toBe(false);
+      expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
+    });
+
+    it('sends the tab to the Dashboard when the reload fails', () => {
+      router.url = '/browse/ds1';
+      service.absorb(notLoaded('dataset', 'ds1'), 0);
+      reloads[0].complete();
+
+      expect(toast.error.mock.calls[0][0].message).toBe("Couldn't load o365_better again");
+      expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+  });
+
   it('ignores a 409 naming an id outside the active pair', () => {
     // E.g. a `DATASET_OVERRIDE` read of a sibling dataset.
     expect(service.absorb(notLoaded('dataset', 'sibling-ds'), 0)).toBe(false);
