@@ -13,12 +13,14 @@ import { PulldownControlService } from '../../services/pulldown-control.service'
 import { DashboardSortService } from '../../services/dashboard-sort.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { SortState, sortRowsByColumn } from '../../utils/sort-rows';
 import { clusterImportSiblings } from '../../utils/import-siblings';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { isPairCompatible } from '../../utils/context-compat';
+import { isSoloMediaType } from '../../utils/solo-media-type';
 
 type PulldownKind = 'dataset' | 'detector';
 
@@ -79,6 +81,7 @@ export class ContextPulldownComponent implements OnInit {
   private dashboardSort = inject(DashboardSortService);
   private dashSelection = inject(DashboardSelectionService);
   private runningJobs = inject(RunningJobsService);
+  private settingsState = inject(SettingsStateService);
   private cdr = inject(ChangeDetectorRef);
 
   readonly kind = input<PulldownKind>('dataset');
@@ -86,7 +89,7 @@ export class ContextPulldownComponent implements OnInit {
   readonly menuRef = viewChild<ElementRef<HTMLDivElement>>('menuRef');
 
   open = false;
-  /** True on the browse (VTSBrowser) and Test views, where the
+  /** True on the browse (VTSBrowser) and Tune views, where the
    *  dataset/detector pair is fixed for the duration of the view. The
    *  pulldown then renders display-only: it still shows the active label
    *  but the trigger is disabled, so the pair can only be switched from the
@@ -219,7 +222,7 @@ export class ContextPulldownComponent implements OnInit {
       this.rebuildRows();
     });
 
-    // Lock the pulldown (display-only) on the browse / Test views. Seed from
+    // Lock the pulldown (display-only) on the browse / Tune views. Seed from
     // the current URL, then track navigations. Mirrors the router-URL view
     // detection in `AppComponent`.
     this.updateLocked(this.router.url);
@@ -233,10 +236,10 @@ export class ContextPulldownComponent implements OnInit {
     this.rebuildRows();
   }
 
-  /** Recompute {@link locked} from a URL. The browse and Test views pin the
+  /** Recompute {@link locked} from a URL. The browse and Tune views pin the
    *  active pair; the dashboard and label views leave the pulldown live. */
   private updateLocked(url: string): void {
-    const locked = url.startsWith('/browse') || url.startsWith('/test');
+    const locked = url.startsWith('/browse') || url.startsWith('/tune');
     if (locked === this.locked) return;
     this.locked = locked;
     // A menu open when we navigate into a locked view must close.
@@ -285,7 +288,7 @@ export class ContextPulldownComponent implements OnInit {
    * Idempotent; calling on an already-open menu just re-focuses.
    */
   openMenu(): void {
-    // Display-only on the browse / Test views: no dropdown, no add-new. The
+    // Display-only on the browse / Tune views: no dropdown, no add-new. The
     // trigger button is also `disabled`, but this guard covers the programmatic
     // open path (`pulldownControl.openSignal$`) which bypasses the button.
     if (this.locked) return;
@@ -433,6 +436,12 @@ export class ContextPulldownComponent implements OnInit {
     // The active state renders a `vt-icon` check in the template; this getter
     // only covers the loaded (●) / unloaded (○) dot for inactive rows.
     return row.loaded ? '●' : '○';
+  }
+
+  /** Whether a row names its media type: not on a server locked to that one
+   *  type, where every row would say the same (#5106). */
+  showRowType(row: PulldownRow): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, row.mediaType);
   }
 
   glyphTitle(row: PulldownRow): string {

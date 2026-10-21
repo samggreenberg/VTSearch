@@ -73,7 +73,7 @@ PRESETS: dict[str, str] = {"b025": "¼", "b1": "1", "b4": "4"}
 #: The review's betas, as its table writes them.
 SUMMARY_BETA = {"b025": "0.25", "b1": "1.0", "b4": "4.0"}
 #: (line, label, colour, line width, bold label), in build order. ``today`` is `TODAY_CSV`'s, ``oracle`` is
-#: `ORACLE_SUMMARY`'s; the rest are `BUILDUP_CSV` rungs. b2 is named for what the room met in section III, the
+#: `ORACLE_SUMMARY`'s; the rest are `BUILDUP_CSV` rungs. b2 is named for what the room met in section IV, the
 #: line at expected F-beta's peak, not for what it is fitted from (owner, #4884: "what does 'the labels line'
 #: mean?").
 LINES: tuple[tuple[str, str, str, float, bool], ...] = (

@@ -8,7 +8,7 @@ import { DatasetStateService } from '../../../services/dataset-state.service';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
-import { estimate, wireDone, wireLineTest, wireTest } from '../../../testing/line-test';
+import { wireDone, wireLineTest, wireTest } from '../../../testing/line-test';
 import { wireBalance } from '../../../testing/line-balance';
 import type { LineTestResponse } from '../../../generated/api-client/models/line-test-response';
 
@@ -47,6 +47,12 @@ const NO_EVIDENCE = {
   median_support: 1,
   frac_low_trust: 0,
   median_trust: 1,
+  baseline: 'none',
+  n_baseline: 0,
+  baseline_dataset_id: '',
+  baseline_dataset_name: '',
+  frac_beyond: null,
+  z_beyond: null,
   unsupported: false,
 };
 
@@ -139,60 +145,28 @@ describe('LineTestResultComponent (#4524)', () => {
     const notes = Array.from(el.querySelectorAll('.result-note')).map((n) => n.textContent!).join(' ');
     expect(notes).toContain('no class model, so nothing estimates the matches below the top 72');
     expect(notes).not.toContain("detector's own estimate");
-    const verdict = el.querySelector('.verdict')!.textContent!;
-    expect(verdict).toContain('with about half of them found. That is');
-    expect(verdict).not.toContain('of all the matches');
   });
 
-  it('at Done shows the verdict with its exits, reads the checks, and lets the Threshold lean on the presets', async () => {
-    const presets = [
-      { beta: 0.25, count: 31, precision: estimate(0.9, 0.75, 1), recall: estimate(0.3, 0.2, 0.4), fbeta: estimate(0.5, 0.4, 0.6), found: 'about a quarter of them found' },
-      { beta: 1, count: 64, precision: estimate(0.75, 0.55, 0.95), recall: estimate(0.5, 0.3, 0.7), fbeta: estimate(0.6, 0.45, 0.78), found: 'about half of them found' },
-      { beta: 4, count: 128, precision: estimate(0.5, 0.35, 0.65), recall: estimate(0.8, 0.6, 0.95), fbeta: estimate(0.7, 0.55, 0.85), found: 'about three quarters of them found' },
-    ];
-    const el = await show(wireLineTest(wireDone(), { presets }));
+  it('at Done reads the checks, and leaves the verdict and its exits to the centre pane (#5100)', async () => {
+    const el = await show(wireLineTest(wireDone(), { stale: true }));
     flushChecks();
     await settleZoneless(fixture);
 
-    expect(el.querySelector('.verdict')!.textContent).toContain('likely 55–95% of them are right, with about half of them found');
-    const exits = Array.from(el.querySelectorAll('.exit-btn')).map((b) => b.textContent!.trim());
-    expect(exits).toEqual(['Move to AutoFind', 'Add Corrections and retrain']);
-
-    const rows = Array.from(el.querySelectorAll('.presets tbody tr')) as HTMLElement[];
-    expect(rows.length).toBe(3);
-    expect(rows.map((r) => r.querySelector('.preset-btn')!.textContent!.trim())).toEqual(['False Positives', 'Between', 'False Negatives']);
-    expect(rows[1].classList.contains('current')).toBe(true);
-    expect((rows[1].querySelector('.preset-btn') as HTMLButtonElement).disabled).toBe(true);
-    expect(rows[0].textContent).toContain('128');
-    expect(rows[0].textContent).toContain('35–65%');
-
-    const leaned: number[] = [];
-    fixture.componentInstance.lean.subscribe((b) => leaned.push(b));
-    (rows[0].querySelector('.preset-btn') as HTMLButtonElement).click();
-    expect(leaned).toEqual([4]);
-
-    const moved: number[] = [];
-    fixture.componentInstance.moveToAutoFind.subscribe(() => moved.push(1));
-    (el.querySelector('.exit-btn.btn--primary') as HTMLButtonElement).click();
-    expect(moved.length).toBe(1);
+    expect(el.querySelector('.headline-value')).not.toBeNull();
+    expect(el.querySelector('.verdict')).toBeNull();
+    expect(el.querySelector('.exit-btn')).toBeNull();
+    expect(el.querySelector('.presets')).toBeNull();
+    // The out-of-date note stands over the verdict instead.
+    expect(el.querySelector('.stale-note')).toBeNull();
 
     // The Stats modal's 2×2, under the result.
     expect(el.querySelector('.confusion')).not.toBeNull();
     expect(el.textContent).toContain('45 checked by hand');
   });
 
-  it('says the result is stale after corrections, and that the line moved, offering a new test', async () => {
-    let el = await show(wireLineTest(wireDone(), { stale: true }));
-    flushChecks();
-    await settleZoneless(fixture);
+  it('says a running test is stale after corrections', async () => {
+    const el = await show(wireLineTest(wireTest(), { stale: true }));
     expect(el.querySelector('.stale-note')!.textContent).toContain('Out of date');
-
-    el = await show(wireLineTest(wireDone(), { moved: true, line_count: 128 }));
-    expect(el.querySelector('.stale-note')!.textContent).toContain('measured the top 64');
-    const again: number[] = [];
-    fixture.componentInstance.testAgain.subscribe(() => again.push(1));
-    (el.querySelector('.stale-note button') as HTMLButtonElement).click();
-    expect(again.length).toBe(1);
   });
 
   it('says when a test resumed from the picks the detector keeps (#4526)', async () => {
@@ -277,6 +251,65 @@ describe('LineTestResultComponent (#4524)', () => {
 
       expect(compareAgainst(el)).toBe('drawings');
       expect(el.querySelector('.domain-chip')!.textContent).toContain('largely in-domain');
+    });
+  });
+
+  describe('the Evidence coverage chip (#5089)', () => {
+    const EVIDENCE = {
+      ...NO_EVIDENCE,
+      available: true,
+      n_items: 4000,
+      n_pos_labels: 30,
+      n_neg_labels: 120,
+      frac_unsupported: 0.18,
+      z_score: 37,
+      median_support: 0.4,
+    };
+
+    async function chip(report: object): Promise<HTMLElement> {
+      const el = await show(wireLineTest(wireDone()));
+      httpMock.match('/api/find/stats').forEach((req) => req.flush(STATS));
+      httpMock.expectOne('/api/find/evidence-coverage').flush(report);
+      await settleZoneless(fixture);
+      return el.querySelector('.evidence-chip') as HTMLElement;
+    }
+
+    it('reads the share beyond the training baseline, with its verdict', async () => {
+      const el = await chip({
+        ...EVIDENCE,
+        baseline: 'training',
+        n_baseline: 11000,
+        baseline_dataset_id: 'photos',
+        baseline_dataset_name: 'Photos',
+        frac_beyond: 0.62,
+        z_beyond: 120,
+        unsupported: true,
+      });
+      expect(el.textContent).toContain('62%');
+      expect(el.textContent).toContain('than 95% of Photos');
+      expect(el.textContent).toContain('often calling without support');
+      expect(el.classList).toContain('shifted');
+    });
+
+    it('in-domain, the share sits at alpha and the chip says so', async () => {
+      const el = await chip({
+        ...EVIDENCE,
+        baseline: 'training',
+        n_baseline: 11000,
+        baseline_dataset_name: 'Photos',
+        frac_beyond: 0.05,
+        z_beyond: 0.1,
+      });
+      expect(el.textContent).toContain('5%');
+      expect(el.textContent).toContain('as well covered as its training data');
+      expect(el.classList).not.toContain('shifted');
+    });
+
+    it('without a baseline, shows the share and draws no verdict', async () => {
+      const el = await chip(EVIDENCE);
+      expect(el.textContent).toContain('18%');
+      expect(el.textContent).toContain('no verdict until you run Tune on the dataset the detector was trained on');
+      expect(el.classList).not.toContain('shifted');
     });
   });
 

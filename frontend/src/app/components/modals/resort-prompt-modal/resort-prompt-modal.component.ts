@@ -14,7 +14,6 @@ import {
 } from '../../../services/datasource-importers-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ImporterInfo } from '../../../models/api.models';
-import { countPhrase } from '../../../utils/count-phrase';
 
 interface BrowseItem {
   key: string;
@@ -50,8 +49,6 @@ export class ResortPromptModalComponent {
   readonly clicksSoFar = input(0);
   /** How many of those labels were positive. */
   readonly positivesSoFar = input(0);
-  /** Positives Autopilot needs to finish its first phase (its Good target). */
-  readonly positivesNeeded = input(0);
   readonly closed = output<void>();
   readonly keepExample = output<void>();
   readonly newExample = output<ResortResult>();
@@ -63,12 +60,6 @@ export class ResortPromptModalComponent {
       ? `“${this.currentExampleDisplay()}”`
       : this.currentExampleDisplay(),
   );
-  /** The sort's record as Toasty tells it: "10 clicks", "found only 1 positive". */
-  readonly clicksPhrase = computed(() => countPhrase(this.clicksSoFar(), 'click', 'clicks'));
-  readonly foundPhrase = computed(() => {
-    const n = this.positivesSoFar();
-    return n === 0 ? 'found no positives' : `found only ${countPhrase(n, 'positive', 'positives')}`;
-  });
 
   view: ModalView = 'prompt';
   pendingText = '';

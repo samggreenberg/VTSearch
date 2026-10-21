@@ -3,8 +3,8 @@
 
     python slides/figs/src/make-sota-figs.py
 
-Writes `figs/sota-photos.webp` and `figs/sota-documents.webp`, each with one build
-stage. Both slides have the same two panels, so the room reads the second the
+Writes `figs/sota-photos.webp`, `figs/sota-regions.webp` and
+`figs/sota-documents.webp`, each with one build stage, and `figs/sota-faces.webp`. Both slides have the same two panels, so the room reads the second the
 way it read the first:
 
 * **left** — the returned set's F-beta over a session, one line per radio,
@@ -33,6 +33,17 @@ replicates, from the committed per-step CSVs of three runs of the app's own
 path, one per radio: the document-logo review at beta 1
 (`2026-10-03-state-of-the-app-document-logo-4457`), and the runs that shipped
 the recall end (#4458) and the precision end (#4479).
+
+The face slide, Face Value, draws the left panel alone, from one starting photo:
+FHIBE's 562 people, FaceNet on aligned crops, 150 votes. It reads the end-check
+arm of the weak-check study (`2026-10-11-weak-check-faces-4778`), not the face
+review of 2026-10-10: that arm is the face path as it ships (crops turned upright,
+the head started from the Goods' centroid, no prompted check), which the review
+predates, and the face-gap study re-ran today's app and reproduced it exactly
+(`2026-10-12-face-gap-4780`). Its committed `curves.csv` is the objective at every
+vote and `ab.csv` the set after the end-of-run check. Neither carries the
+precision-recall path, so the slide has no right panel; the notes quote the set at
+50 clicks, which `ab.csv` does carry.
 
 **Nothing here is a guess**, as in `make-logo-line-fig.py`: `EXPECT` pins the
 numbers the presenter notes quote, and `main` fails if the reports or CSVs say
@@ -81,6 +92,16 @@ TEXT_QUERY = "typed query"
 #: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
+
+#: The face path as it ships (module docstring): the weak-check study's end-check arm.
+FACE_REPORT = EXPERIMENTS / "2026-10-11-weak-check-faces-4778"
+#: Per starting-photo count and radio, the objective at every vote, today's app (`control`) and the
+#: arm; and the arm's set after the end-of-run check and at 25 and 50 clicks.
+FACE_CURVES, FACE_AB = FACE_REPORT / "curves.csv", FACE_REPORT / "ab.csv"
+#: The slide's sessions start from one photo, as FHIBE's card says the job does.
+FACE_K = 1
+#: The votes a face session runs: the face review's 150.
+FACE_VOTES = 150
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -149,6 +170,19 @@ EXPECT = {
     ("regions", 4.0, "kept"): 94,
     ("regions", 0.25, "precision"): 0.79,
     ("regions", 4.0, "recall"): 0.80,
+    ("faces", 0.25, "text"): 0.32,
+    ("faces", 1.0, "text"): 0.53,
+    ("faces", 4.0, "text"): 0.64,
+    ("faces", 0.25, "at50"): 0.90,
+    ("faces", 1.0, "at50"): 0.81,
+    ("faces", 4.0, "at50"): 0.83,
+    ("faces", 0.25, "after"): 0.92,
+    ("faces", 1.0, "after"): 0.82,
+    ("faces", 4.0, "after"): 0.84,
+    ("faces", 0.25, "precision"): 0.95,
+    ("faces", 4.0, "recall"): 0.86,
+    ("faces", 0.25, "kept"): 2,
+    ("faces", 4.0, "kept"): 7,
 }
 
 plt.rcParams.update(
@@ -293,10 +327,53 @@ def doc_data() -> dict[float, dict]:
     return out
 
 
-def _check(photos: dict, docs: dict, regions: dict) -> None:
+def face_data(curves: Path = FACE_CURVES, ab: Path = FACE_AB) -> dict[float, dict]:
+    """Per radio, from `FACE_K` photos: the arm's objective at every vote, at 50 clicks and after the check.
+
+    Shaped as `photo_data`'s, so the slide draws with `photo_figure`'s left panel: ``text`` is the
+    example sort's own set, which the session shows from the starting photo until the app shows a
+    detector (vote 1 in `curves.csv`), and is drawn at click 0. ``precision``, ``recall`` and ``kept``
+    are the set at 50 clicks (``kept`` a mean, rounded), the last point `ab.csv` reads one at.
+    """
+    by_vote: dict[float, dict[int, float]] = {}
+    with curves.open() as f:
+        for row in csv.DictReader(f):
+            if int(row["K"]) == FACE_K:
+                by_vote.setdefault(float(row["beta"]), {})[int(row["vote"])] = float(row["arm"])
+    ends: dict[float, dict[str, str]] = {}
+    with ab.open() as f:
+        for row in csv.DictReader(f):
+            if int(row["K"]) == FACE_K:
+                ends[float(row["beta"])] = row
+    votes = list(range(1, FACE_VOTES + 1))
+    if (
+        set(by_vote) != {0.25, 1.0, 4.0}
+        or set(ends) != set(by_vote)
+        or any(sorted(v) != votes for v in by_vote.values())
+    ):
+        raise SystemExit(f"make-sota-figs: {curves} and {ab} do not carry every radio at every vote")
+    out = {}
+    for beta, curve in by_vote.items():
+        row = ends[beta]
+        out[beta] = {
+            "text": curve[1],
+            "curve_t": [0, *votes],
+            "curve_f": [curve[1], *(curve[v] for v in votes)],
+            "clicks": list(PHOTO_CLICKS),
+            "f": [curve[c] for c in PHOTO_CLICKS],
+            "at50": curve[50],
+            "after": float(row["arm_after_check"]),
+            "precision": float(row["arm_precision_50"]),
+            "recall": float(row["arm_recall_50"]),
+            "kept": int(round(float(row["arm_returned_50"]))),
+        }
+    return out
+
+
+def _check(photos: dict, docs: dict, regions: dict, faces: dict) -> None:
     got = {}
     for (path, beta, key), want in EXPECT.items():
-        data = {"photos": photos, "documents": docs, "regions": regions}[path]
+        data = {"photos": photos, "documents": docs, "regions": regions, "faces": faces}[path]
         value = data[beta]["f"][DOC_CLICKS] if key == "f50" else data[beta][key]
         got[(path, beta, key)] = value if isinstance(want, int) else round(value, 2)
     wrong = {k: (got[k], EXPECT[k]) for k in EXPECT if got[k] != EXPECT[k]}
@@ -463,6 +540,7 @@ def _f_panel(
     grid_step: float = 0.1,
     major: float = 0.2,
     top: float = 1.0,
+    rect: tuple[float, float, float, float] = LEFT_AXES,
 ) -> plt.Axes:
     """The returned set's F-beta over a session, one line per radio, labelled at its end.
 
@@ -470,7 +548,7 @@ def _f_panel(
     slide draws, rather than at 0: the panel is read for its shape (#4533). Its
     numbers come every *major*, as the precision axis's beside it do.
     """
-    ax = fig.add_axes(LEFT_AXES)
+    ax = fig.add_axes(rect)
     ax.set_xlim(*xlim)
     ax.set_ylim(floor, top)
     ax.set_xticks(xticks)
@@ -605,9 +683,41 @@ def region_figure(data: dict[float, dict], stage: int) -> Figure:
     return photo_figure(data, stage)
 
 
+#: Face Value's one panel: Photo Finish's left panel at the same height, widened to the
+#: slide, since there is no precision-recall panel to share it with.
+FACE_AXES = (LEFT_AXES[0], PANEL_BOTTOM, RIGHT_AXES[0] + RIGHT_AXES[2] - LEFT_AXES[0] - 0.08, PANEL_HEIGHT)
+
+
+def face_figure(data: dict[float, dict]) -> Figure:
+    """Face Value: Photo Finish's left panel, from one starting photo, with the step to after the check."""
+    fig = plt.figure(figsize=FIG_SIZE)
+    lines = {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
+
+    def marks(ax: plt.Axes, _ends: dict) -> None:
+        for beta, _label, _w in RADIOS:
+            d = data[beta]
+            _mark(ax, [0, *PHOTO_CLICKS, PHOTO_CHECK_X], [d["text"], *d["f"], d["after"]])
+
+    ax = _f_panel(
+        fig,
+        lines,
+        (0, PHOTO_CHECK_X + 4),
+        [0, 25, 50, 100, 150, PHOTO_CHECK_X],
+        "Clicks, then the spot check",
+        _floor(lines),
+        marks,
+        PHOTO_GRID_STEP,
+        top=_top(lines, {}),
+        rect=FACE_AXES,
+    )
+    ax.set_xticklabels(["start\nphoto", "25", "50", "100", "150", END_LABEL])
+    return fig
+
+
 def main() -> int:
-    photos, docs, regions = photo_data(), doc_data(), photo_data(REGION_PATH)
-    _check(photos, docs, regions)
+    photos, docs, regions, faces = photo_data(), doc_data(), photo_data(REGION_PATH), face_data()
+    _check(photos, docs, regions, faces)
+    save(face_figure(faces), OUT, "sota-faces.webp", column=FULL_BLEED, tight=False)
     for stem, build, data in (
         ("sota-photos", photo_figure, photos),
         ("sota-documents", doc_figure, docs),

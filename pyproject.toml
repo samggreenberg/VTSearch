@@ -99,7 +99,8 @@ dependencies = [
     "soxr",
     "sentencepiece",
     "protobuf",
-    "Pillow",
+    # The floor is a CVE pin (CVE-2026-112395..112899 at 12.3.0).
+    "Pillow>=13.0.0",
     # SigLIP-L image embedder: loads open_clip's ``ViT-SO400M-14-SigLIP-384``
     # checkpoint so its 1152-d vectors match galleries embedded by open_clip
     # itself. ``timm`` (vision backbones) and ``ftfy`` (text cleanup) are

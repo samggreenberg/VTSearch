@@ -108,6 +108,7 @@ SAVED_DATASETS_DIR  # noqa: F821 - vtscore.datasets.registry default dir
 DETECTORS_DIR  # noqa: F821 - vtscore.detectors.store default dir
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 - downloader size budget constant
 CUT_FALLBACK_KINDS  # noqa: F821 - vtscore.eval.cut_rules, the enumerated fallback reasons
+HELDOUT_READINGS  # noqa: F821 - vtscore.eval.step_trainers, the held-out Smart reading keys an eval arm emits
 
 # ---------------------------------------------------------------------------
 # Public ``vtscore`` API with no *internal* caller. Each is exported from
@@ -252,6 +253,8 @@ schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked
 old_switch_off  # noqa: F821 - installs a CoreConfig with the retired hide_ingest_eta switch off
 scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch directory
 tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
+quiet_forever  # noqa: F821 - holds the evidence-baseline draw waiting so only a read lands it
+quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the sort ends
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body

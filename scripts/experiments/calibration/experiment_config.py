@@ -1180,6 +1180,13 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: #5134: what the Smart light is read off.  Unset = the app (``fbeta_best``: each
+#: recent model's best F-beta on the current votes, going flat); ``CALIB_SMART_SIGNAL=cost``
+#: is the app before #5134 (FPR + FNR going flat), ``ap|fbeta|heldout_ap|heldout_fbeta|line``
+#: the A/B's other readings.  ``CALIB_SMART_READINGS=1`` records every reading's trend
+#: on each row without moving the light.
+SMART_SIGNAL = os.environ.get("CALIB_SMART_SIGNAL", "").strip().lower() or "fbeta_best"
+SMART_READINGS = os.environ.get("CALIB_SMART_READINGS", "").strip().lower() in ("1", "true", "yes", "on")
 #: What tells the user they can stop (#4878): unset = the app (``lights|level``,
 #: every light green or the labels line's expected F-beta at ``CALIB_STOP_LEVEL``,
 #: the app's 0.5); ``CALIB_STOP_RULE=lights`` is the app before #4878, ``level``
@@ -1315,6 +1322,11 @@ QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", 
 #: is the arm before (the head from the quota), any other count an arm.
 _QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
 QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
+#: Issue #4800: under the quota on a patch space, once the typed query has missed (a Good,
+#: and a Bad before the Goods quota), such a run's Test gives the Goods'
+#: centroid in place of the query's set, as the app's does.  On (the default) is the app;
+#: ``CALIB_QUERY_MISS=0`` is the arm before (the typed query's set until the quota).
+QUERY_MISS: bool = os.environ.get("CALIB_QUERY_MISS", "1").strip() not in ("0", "off", "false")
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
@@ -1411,12 +1423,15 @@ PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").re
 #: on.  Unset = off.
 RANK_FRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_RANK_FRAME_STEPS", "").replace(",", " ").split())
 
-#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
-#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
-#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  **On by
+#: default since #5092**; ``CALIB_CELLS_GZIP=0`` writes plain text.  A COCO
+#: Better cell's main frame is ~3.3 MB as text and ~180 KB gzipped; #4184's
+#: 5,040 cells needed ~19 GB plain on a volume with 7 GB free.  Every study
+#: launcher opted in, but the State of the App review itself did not, and its
+#: 2026-10-16 run wrote 84 GB of plain cells and filled the 1 TB volume (#4953).
 #: ``_cells_paths`` reads both spellings, so every analyzer that goes through
-#: it is unaffected.
-CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
+#: it is unaffected; ``gzip_cells.py`` converts a finished run in place.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "1") == "1"
 
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)

@@ -54,6 +54,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 //   .btn--cancel      subtle, link-weight cancel/close (no fill, small)
 //   .btn--toolbar     compact outline button for toolbars / panel action rows
 //   .btn--sm          compact size modifier
+//   .btn--lg          large size modifier (a dialog's lead call to action)
 //
 // Combine variant + size as needed: `class="btn btn--primary btn--sm"`.
 
@@ -134,6 +135,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   &--sm {
     padding: var(--space-2xs) var(--space-md);
     font-size: var(--font-sm);
+  }
+
+  // Size modifier: the one large action a dialog leads with, set apart from
+  // its footer (the Find Results dialog's Browse, #5102). The size of the
+  // Dashboard's Train / Tune / Find buttons.
+  &--lg {
+    padding: var(--space-md) var(--space-2xl);
+    font-size: var(--font-xl);
   }
 
   // Compact outline button for toolbars and panel action rows: tighter

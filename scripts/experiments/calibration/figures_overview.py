@@ -30,7 +30,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_paths import main_frame_files
+from _cells_paths import main_frame_files, open_frame
 
 from study_paths import require_study_dir
 
@@ -126,9 +126,9 @@ def load(exp: str):
     rows = []
     for path in main_frame_files(cells):
         try:
-            with open(path, newline="") as fh:
+            with open_frame(path) as fh:
                 rows.extend(list(csv.DictReader(fh)))
-        except (OSError, csv.Error):
+        except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz
             continue
     return rows
 

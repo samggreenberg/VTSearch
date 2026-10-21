@@ -33,6 +33,7 @@ import pandas as pd
 from _cells_paths import (
     SIDE_FRAME_SUFFIXES,  # noqa: F401 - re-exported; callers import it from here
     main_frame_files,
+    open_frame,  # noqa: F401 - re-exported; callers import it from here
     side_frame_files,  # noqa: F401 - re-exported; callers import it from here
 )
 

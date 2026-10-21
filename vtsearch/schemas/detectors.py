@@ -289,6 +289,10 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autofind = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
+    # Ids of the datasets the detector holds labels from (#5142): the
+    # Dashboard sends a user who selects one of them elsewhere to Tune or
+    # Find, since the detector has already seen those items.
+    trained_on = fields.List(fields.String())
     # Stamped the first time a detector trains against a dataset and
     # persisted on the registry entry, so the smart preload predictor and
     # the dashboard's cross-embedder check both see it without having to
@@ -1116,8 +1120,8 @@ class FindEvidenceCoverageResponseSchema(Schema):
     k = fields.Integer(required=True)
     alpha = fields.Float(required=True)
     # Share with support p-value D < alpha — an evidence vacuum for the predicted
-    # class — its expectation under the well-supported null (= alpha), and the
-    # binomial z of the excess.
+    # class, calibrated on the votes' own spread — alpha, and the binomial z of
+    # the excess.  Reported, but no longer what the verdict reads (#5089).
     frac_unsupported = fields.Float(required=True)
     expected_unsupported = fields.Float(required=True)
     z_score = fields.Float(required=True)
@@ -1126,8 +1130,20 @@ class FindEvidenceCoverageResponseSchema(Schema):
     # the median TS.
     frac_low_trust = fields.Float(required=True)
     median_trust = fields.Float(required=True)
-    # Headline: the vacuum excess is both statistically clear and practically
-    # large (z > 3 and frac_unsupported >= 2*alpha).
+    # What the verdict ranks against (#5089): "training" when the detector's
+    # training haystack gave a baseline (drawn here on the training dataset, or
+    # recorded on the detector there), "none" when it did not.  n_baseline is
+    # the training items it was drawn from, and baseline_dataset_* the dataset.
+    baseline = fields.String(required=True)
+    n_baseline = fields.Integer(required=True)
+    baseline_dataset_id = fields.String(required=True)
+    baseline_dataset_name = fields.String(required=True)
+    # Share farther from its predicted class's votes than 95% of the training
+    # haystack's items called that class, and its binomial z; null with no baseline.
+    frac_beyond = fields.Float(required=True, allow_none=True)
+    z_beyond = fields.Float(required=True, allow_none=True)
+    # Headline: that excess is both statistically clear and practically large
+    # (z_beyond > 3 and frac_beyond >= 2*alpha); always false with no baseline.
     unsupported = fields.Boolean(required=True)
 
 

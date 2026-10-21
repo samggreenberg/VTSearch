@@ -3180,6 +3180,12 @@
           },
           "text_query": {
             "type": "string"
+          },
+          "trained_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -3653,35 +3659,6 @@
         },
         "type": "object"
       },
-      "ErrorCostPoint": {
-        "additionalProperties": false,
-        "properties": {
-          "error_cost": {
-            "description": "``fpr_weight * fpr + fnr_weight * fnr`` for the model trained at this step.",
-            "type": "number"
-          },
-          "fnr": {
-            "description": "False-negative rate on the held-out eval set.",
-            "type": "number"
-          },
-          "fpr": {
-            "description": "False-positive rate on the held-out eval set.",
-            "type": "number"
-          },
-          "num_labels": {
-            "type": "integer"
-          },
-          "time_index": {
-            "description": "Zero-based index of this step in the label history.",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "error_cost",
-          "num_labels"
-        ],
-        "type": "object"
-      },
       "EvalTrainAndScoreCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3731,9 +3708,9 @@
           "error": {
             "type": "string"
           },
-          "error_cost": {
+          "fbeta": {
             "items": {
-              "$ref": "#/components/schemas/ErrorCostPoint"
+              "$ref": "#/components/schemas/SmartPoint"
             },
             "type": "array"
           },
@@ -4157,7 +4134,20 @@
           "available": {
             "type": "boolean"
           },
+          "baseline": {
+            "type": "string"
+          },
+          "baseline_dataset_id": {
+            "type": "string"
+          },
+          "baseline_dataset_name": {
+            "type": "string"
+          },
           "expected_unsupported": {
+            "type": "number"
+          },
+          "frac_beyond": {
+            "nullable": true,
             "type": "number"
           },
           "frac_low_trust": {
@@ -4175,6 +4165,9 @@
           "median_trust": {
             "type": "number"
           },
+          "n_baseline": {
+            "type": "integer"
+          },
           "n_items": {
             "type": "integer"
           },
@@ -4187,6 +4180,10 @@
           "unsupported": {
             "type": "boolean"
           },
+          "z_beyond": {
+            "nullable": true,
+            "type": "number"
+          },
           "z_score": {
             "type": "number"
           }
@@ -4194,16 +4191,22 @@
         "required": [
           "alpha",
           "available",
+          "baseline",
+          "baseline_dataset_id",
+          "baseline_dataset_name",
           "expected_unsupported",
+          "frac_beyond",
           "frac_low_trust",
           "frac_unsupported",
           "k",
           "median_support",
           "median_trust",
+          "n_baseline",
           "n_items",
           "n_neg_labels",
           "n_pos_labels",
           "unsupported",
+          "z_beyond",
           "z_score"
         ],
         "type": "object"
@@ -5088,9 +5091,9 @@
             },
             "type": "array"
           },
-          "error_cost_over_time": {
+          "fbeta_over_time": {
             "items": {
-              "$ref": "#/components/schemas/ErrorCostPoint"
+              "$ref": "#/components/schemas/SmartPoint"
             },
             "type": "array"
           },
@@ -5109,7 +5112,7 @@
         },
         "required": [
           "diversity_level_over_time",
-          "error_cost_over_time",
+          "fbeta_over_time",
           "stability_over_time",
           "total_labels",
           "total_medias"
@@ -5373,6 +5376,32 @@
           "labelled",
           "lo",
           "right"
+        ],
+        "type": "object"
+      },
+      "LineTestAhead": {
+        "additionalProperties": false,
+        "properties": {
+          "bad": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "good": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bad",
+          "good",
+          "id"
         ],
         "type": "object"
       },
@@ -5733,6 +5762,10 @@
       "LineTestState": {
         "additionalProperties": false,
         "properties": {
+          "ahead": {
+            "$ref": "#/components/schemas/LineTestAhead",
+            "nullable": true
+          },
           "band": {
             "$ref": "#/components/schemas/LineTestRoundBand",
             "nullable": true
@@ -5796,6 +5829,7 @@
           }
         },
         "required": [
+          "ahead",
           "band",
           "bands",
           "beta",
@@ -7383,6 +7417,27 @@
             "type": "number"
           }
         },
+        "type": "object"
+      },
+      "SmartPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "fbeta": {
+            "description": "The best F-beta, at the session's balance, any cut through this step's detector's scores reaches on the current votes.",
+            "type": "number"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "time_index": {
+            "description": "Zero-based index of this step in the label history.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fbeta",
+          "num_labels"
+        ],
         "type": "object"
       },
       "SortCollapsedResponse": {
@@ -13639,7 +13694,7 @@
     },
     "/api/find/evidence-coverage": {
       "get": {
-        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load \u2014 so it fires even\nwhen the training haystack was never handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  Returns\n``available: False`` (rather than 4xx) when there is no scored Find run or\nno resolvable labelset, so the Stats modal can simply hide the section.\nPure read; no new state.  See docs/plans/coverage-atlas.md \u00a76.1 (phase v0).",
+        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector; run\nanywhere else, it first lands one a learned sort there left waiting\n(:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md\n\u00a76.1 (phase v0).",
         "operationId": "find_evidence_coverage",
         "responses": {
           "200": {
@@ -14572,7 +14627,7 @@
     },
     "/api/line-test/votes": {
       "post": {
-        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).",
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).  The vote\nthat leaves one pick deals the next round ahead, both ways that pick can\ngo (``test.ahead``, #5116); the last vote installs the one it names.",
         "operationId": "vote_line_test",
         "requestBody": {
           "content": {
@@ -16818,7 +16873,23 @@
     },
     "/api/votes": {
       "get": {
+        "description": "``scope=verified`` limits every per-item field to the ids the human has\nverified this Find session; Find's Review tab polls that (#5115).",
         "operationId": "get_votes",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "verified"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -16829,6 +16900,9 @@
               }
             },
             "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -17095,7 +17169,7 @@
       "name": "precision_check"
     },
     {
-      "description": "Test mode's test of the line: draw picks, take the votes, report what the line would ship.",
+      "description": "Tune's test of the line: draw picks, take the votes, report what the line would ship.",
       "name": "line_test"
     },
     {

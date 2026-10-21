@@ -65,7 +65,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import objective
-from _cells_paths import main_frame_files
+from _cells_paths import main_frame_files, open_frame
 
 from study_paths import require_study_dir
 
@@ -274,9 +274,9 @@ def main() -> int:
     unreadable: list[str] = []
     for path in paths:
         try:
-            with open(path, newline="") as fh:
+            with open_frame(path) as fh:
                 got = list(csv.DictReader(fh))
-        except (OSError, csv.Error):
+        except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz
             unreadable.append(Path(path).name)
             continue
         if not got:

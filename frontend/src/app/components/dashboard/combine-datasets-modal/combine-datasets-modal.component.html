@@ -27,7 +27,9 @@
         <thead>
           <tr>
             <th class="col-name">Dataset</th>
-            <th class="col-type">Type</th>
+            @if (showTypeColumn) {
+              <th class="col-type">Type</th>
+            }
             <th class="col-num">#&nbsp;Items</th>
             <th class="col-actions" aria-label="Remove from combine"></th>
           </tr>
@@ -38,12 +40,14 @@
               <td class="col-name">
                 <span class="dataset-name" [title]="row.pkl_path">{{ row.name }}</span>
               </td>
-              <td class="col-type">
-                @if (mediaTypeIcon(row.media_type)) {
-                  <vt-icon [icon]="mediaTypeIcon(row.media_type)" [size]="14"></vt-icon>
-                }
-                {{ mediaTypeLabel(row.media_type) }}
-              </td>
+              @if (showTypeColumn) {
+                <td class="col-type">
+                  @if (mediaTypeIcon(row.media_type)) {
+                    <vt-icon [icon]="mediaTypeIcon(row.media_type)" [size]="14"></vt-icon>
+                  }
+                  {{ mediaTypeLabel(row.media_type) }}
+                </td>
+              }
               <td class="col-num">{{ row.num_items | number }}</td>
               <td class="col-actions">
                 <button
@@ -60,13 +64,15 @@
         <tfoot>
           <tr>
             <td class="col-name">{{ rows.length }} datasets</td>
-            <td class="col-type">
-              @if (sharedMediaType) {
-                {{ mediaTypeLabel(sharedMediaType) }}
-              } @else {
-                <span class="mismatch-warning">mismatched</span>
-              }
-            </td>
+            @if (showTypeColumn) {
+              <td class="col-type">
+                @if (sharedMediaType) {
+                  {{ mediaTypeLabel(sharedMediaType) }}
+                } @else {
+                  <span class="mismatch-warning">mismatched</span>
+                }
+              </td>
+            }
             <td class="col-num">{{ totalItems | number }}</td>
             <td class="col-actions"></td>
           </tr>

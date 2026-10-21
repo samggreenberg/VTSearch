@@ -10,7 +10,7 @@ import type { ProgressEvent } from '../models/api.models';
 import type { ProjectionMeta } from '../models/projection.models';
 
 /**
- * Orchestrates the Test view's **Browse** buttons, and the Find Results
+ * Orchestrates the Tune view's **Browse** buttons, and the Find Results
  * dialog's (#4615): build the ephemeral subset projection (a UMAP fit over just
  * those items) *while the user is still where they clicked*, showing progress
  * there, and navigate to the browse view only once the map is ready.

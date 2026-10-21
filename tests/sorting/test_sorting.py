@@ -904,7 +904,7 @@ class TestEvalTrainAndScoreAsync:
         data = resp.get_json()
         assert data["status"] == "done"
         assert data["metric"] == "smart"
-        assert "error_cost" in data
+        assert "fbeta" in data
 
     def test_async_polls_to_done(self, client):
         from tests.conftest import _wait_for_job

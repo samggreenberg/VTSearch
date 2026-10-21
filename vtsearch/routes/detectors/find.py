@@ -574,7 +574,7 @@ def _score_with_cold_detector(
             on_progress=_on_label,
             beta=beta,
             # A Find hands the detector out: under the label quota it is the
-            # Goods' centroid, as Test and AutoFind give (#4643), or a
+            # Goods' centroid, as Tune and AutoFind give (#4643), or a
             # typed-query detector's own query (#4758).
             label_quota=True,
             text_query=detector_text_query(dc["detector_data"]),

@@ -9,7 +9,7 @@ import { ChartsService } from '../../../services/charts.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import {
-  ErrorCostPoint,
+  SmartPoint,
   StabilityPoint,
   DiversityPoint,
 } from '../../../models/api.models';
@@ -43,7 +43,7 @@ export class ProgressModalComponent implements OnInit {
   // plain fields froze the modal on "Loading indicator history…" forever.
   readonly analyzing = signal(true);
   readonly analysisProgress = signal(0);
-  readonly chartData = signal<ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[]>([]);
+  readonly chartData = signal<SmartPoint[] | StabilityPoint[] | DiversityPoint[]>([]);
   readonly emptyHistory = signal(false);
   /** True once we've fallen back to the async train-and-score job, which
    *  swaps the brief "loading" line for a real progress bar + Cancel. */
@@ -120,7 +120,7 @@ export class ProgressModalComponent implements OnInit {
           }
           this.analyzing.set(false);
           this.chartData.set(
-            (res.history || []) as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[],
+            (res.history || []) as SmartPoint[] | StabilityPoint[] | DiversityPoint[],
           );
           this.emptyHistory.set(this.chartData().length === 0);
         },
@@ -232,7 +232,7 @@ export class ProgressModalComponent implements OnInit {
     this.analyzing.set(false);
     this.runningJob.set(false);
     if (this.metric() === 'smart') {
-      this.chartData.set((res.error_cost || []) as ErrorCostPoint[]);
+      this.chartData.set((res.fbeta || []) as SmartPoint[]);
     } else if (this.metric() === 'stable') {
       this.chartData.set((res.stability || []) as StabilityPoint[]);
     } else {
@@ -246,11 +246,11 @@ export class ProgressModalComponent implements OnInit {
 
   private renderChart(
     canvas: HTMLCanvasElement,
-    data: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[],
+    data: SmartPoint[] | StabilityPoint[] | DiversityPoint[],
   ): void {
     switch (this.metric()) {
       case 'smart':
-        this.chartsService.renderErrorCostChart(canvas, data as ErrorCostPoint[]);
+        this.chartsService.renderSmartChart(canvas, data as SmartPoint[]);
         break;
       case 'stable':
         this.chartsService.renderStabilityChart(canvas, data as StabilityPoint[]);

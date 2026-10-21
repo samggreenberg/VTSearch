@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} acq_origin={cfg.ACQ_ORIGIN} acq_target_p={cfg.ACQ_TARGET_P} smart_gate={cfg.SMART_GATE} smart_signal={cfg.SMART_SIGNAL}{'+readings' if cfg.SMART_READINGS else ''} stop_rule={cfg.STOP_RULE}@{cfg.STOP_LEVEL:g} stop_cap={cfg.STOP_CAP} label_quota={cfg.LABEL_QUOTA} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} more_walk={cfg.MORE_WALK} new_walk={cfg.NEW_WALK} band_share={cfg.BAND_SHARE or 'off'} early_check={cfg.EARLY_CHECK or 'off'} labels_scale={cfg.LABELS_SCALE or 'raw'} labels_scale_shadow={cfg.LABELS_SCALE_SHADOW or 'off'} sigma_floor={cfg.SIGMA_FLOOR} split_rounding={cfg.SPLIT_ROUNDING} line_bad={cfg.LINE_BAD or _LL.BAD_COMPONENT} line_bound_margin={cfg.LINE_BOUND_MARGIN or _LL._BOUND_MARGIN} "
         f"seed_examples={cfg.SEED_EXAMPLES or 'off'} stratify_target={cfg.STRATIFY_TARGET} "
@@ -421,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         f"head_count_recall_z={_recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
+        f"query_miss={'on' if cfg.QUERY_MISS else 'off'} "
         f"find_corpus={cfg.FIND_CORPUS or 'off'} find_mix={(cfg.FIND_MIX or 'only') if cfg.FIND_CORPUS else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
@@ -590,6 +591,8 @@ def main(argv: list[str] | None = None) -> int:
                 acq_origin=cfg.ACQ_ORIGIN,
                 acq_target_p=cfg.ACQ_TARGET_P,
                 smart_gate=cfg.SMART_GATE,
+                smart_signal=cfg.SMART_SIGNAL,
+                smart_readings=cfg.SMART_READINGS,
                 stop_rule=cfg.STOP_RULE,
                 stop_level=cfg.STOP_LEVEL,
                 stop_cap=cfg.STOP_CAP,
@@ -637,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
                 query_vector=query_vec,
                 query_tier=cfg.QUERY_TIER,
                 **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
+                query_miss=cfg.QUERY_MISS,
                 **(
                     {}
                     if find_medias is None

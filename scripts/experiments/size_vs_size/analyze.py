@@ -424,9 +424,8 @@ def main() -> int:
     prepare = json.loads((args.exp / "results" / "prepare_info.json").read_text())
     cells = cfg.array_cells(run_cells._categories_by_dataset(prepare))
     done = {
-        int(p.stem.split("_")[1])
-        for p in (args.exp / "results" / "cells").glob("task_[0-9]*.csv")
-        if "__" not in p.stem
+        int(p.name.split(".")[0].split("_")[1])  # task_NNNN.csv or task_NNNN.csv.gz
+        for p in _cells_io.main_frame_files(args.exp / "results" / "cells")
     }
     grid = pd.DataFrame(cells)
     grid["done"] = [i in done for i in range(len(cells))]

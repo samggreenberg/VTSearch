@@ -41,6 +41,21 @@ def count_labels_held(labelset: LabelSet, ctx: DatasetContext) -> int:
     )
 
 
+def labelled_media_ids(labelset: LabelSet, ctx: DatasetContext) -> set[int]:
+    """The ids of *ctx*'s media that *labelset*'s Good / Bad elements name, matched as :func:`count_labels_held` does."""
+    from vtscore.state.media_lookup import cached_media_lookups, resolve_media_ids
+
+    origin_lookup, md5_lookup, _names = cached_media_lookups(ctx)
+    if not origin_lookup and not md5_lookup:
+        return set()
+    return {
+        int(cid)
+        for elem in labelset.elements
+        if elem.label in ("good", "bad")
+        for cid in resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup)
+    }
+
+
 def labels_held_by_dataset(labelset: LabelSet, contexts: Iterable[DatasetContext]) -> dict[str, int]:
     """:func:`count_labels_held` for each of *contexts*, keyed by dataset id."""
     return {ctx.dataset_id: count_labels_held(labelset, ctx) for ctx in contexts}

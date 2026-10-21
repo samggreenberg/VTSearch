@@ -106,7 +106,8 @@ export interface AutopilotState {
   /**
    * The spot check running inside this run, or null. While one runs the phase
    * is `spot`: the check deals the picks, not the phase's sort, and the view
-   * shows them in the centre pane. Only Autopilot starts a check.
+   * shows them in the centre panel as the next items. Only Autopilot starts a
+   * check.
    */
   spotCheck: SpotCheckKind | null;
   /**
@@ -120,19 +121,14 @@ export interface AutopilotState {
 
 /**
  * Toasty's hand-off when a run that trained the detector ends (#4680): `done`
- * when every quality light went green (or a document walk ran dry, with
- * `dryRun` set to the run of misses; or the labels line reached Done's level
- * with a light short of green, with `expectedFbeta` set, #4878), `all-labeled`
- * when nothing is left to label. `votes` is the vote total it was raised at;
- * any vote or undo after that drops it.
+ * when the run reaches Done, whatever said so (#5143: the hint says what to do
+ * next, not why), `all-labeled` when nothing is left to label, Done or not
+ * (#5151: "keep clicking" with nothing to click is wrong). `votes` is the
+ * vote total it was raised at; any vote or undo after that drops it.
  */
 export interface AutopilotHandoff {
   kind: 'done' | 'all-labeled';
   votes: number;
-  dryRun?: number;
-  expectedFbeta?: number;
-  /** Done came from the click cap (#4903): the vote count it stopped at. */
-  capVotes?: number;
 }
 
 /** Every quality light green: what said Done before the level could (#4878). */

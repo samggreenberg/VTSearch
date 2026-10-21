@@ -222,6 +222,7 @@ def list_registered_detectors():
         entry["loaded"] = did in loaded_ids
         entry["autofind"] = entry.get("name", "") in autofind_names
         entry.setdefault("last_trained_at", None)
+        entry.setdefault("trained_on", [])
         entry.setdefault("created_by", "default")
         entry.setdefault("readers", [])
         entry["is_owner"] = entry.get("created_by", "default") == current_user
@@ -921,6 +922,10 @@ def unload_detector_route(detector_id: str):
         from vtscore.detectors.store import flush_detector_writes
 
         flush_detector_writes(_detector_path(entry.get("name", "")))
+    # The Evidence baseline a learned sort left waiting (#5120), for the same reason.
+    from vtscore.detectors.evidence_baseline import flush_baseline_draw
+
+    flush_baseline_draw(detector_id)
 
     unregister_detector_context(detector_id)
     remove_loaded_detector_id(detector_id)

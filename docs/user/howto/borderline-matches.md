@@ -1,7 +1,7 @@
 # Catch the borderline matches
 
 Every detector draws a line: pictures above it are matches, pictures below
-are not. Some real matches always land just under the line. Test already
+are not. Some real matches always land just under the line. Tune already
 shows you pictures from both sides of it, and moving the **Threshold**
 toward **False Positives** moves the line down to let the next band of
 pictures in. This page shows how to review the pictures near the line, move
@@ -9,7 +9,7 @@ the Threshold, and see what that costs you.
 
 It picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
-over `drawings-new` with **Test**. The red numbers in each screenshot show
+over `drawings-new` with **Tune**. The red numbers in each screenshot show
 where to click, in order.
 
 ## How the Threshold moves the line
@@ -36,16 +36,16 @@ the **Autopilot** tab found on it:
   collection yet. A Threshold that keeps a different count moves the line
   straight away.
 - **Tested · likely 55–80% right, about half of them found (checked 32) ·
-  48 kept** - the Test autopilot has measured it with random picks from
+  48 kept** - the Tune autopilot has measured it with random picks from
   either side of the line, and the note says how much of what it keeps is
   likely right and how much of what the collection holds it likely found;
-  see [Testing a detector](../USER_GUIDE.md#testing-a-detector).
+  see [Tuning a detector](../USER_GUIDE.md#tuning-a-detector).
   Moving the Threshold after a test reads *tested at another line* until you
   test again. The check Train ran measured the training collection, so it is
   not shown here.
 
 The Threshold is frozen while a test phase runs: moving the line would move
-the picks' bands under them. Test starts its test as soon as it has scored,
+the picks' bands under them. Tune starts its test as soon as it has scored,
 so answer the picks until **Done!**, as the guide's first search does, and
 the Threshold is yours again.
 
@@ -122,9 +122,9 @@ same whether you checked near the line or not.
 
 Point at the chart to read the curve at any band edge; with the pointer off
 it, the line under the chart reads it at the Line. **Lean the Threshold**,
-under the verdict, puts the same reading in a table: what each balance would
-keep, the share right and the share found, and a click on one moves the
-Threshold there.
+under the verdict in the middle of the screen, puts the same reading in a
+table: what each balance would keep, the share right and the share found, and
+a click on one moves the Threshold there.
 
 ## Where the setting goes
 

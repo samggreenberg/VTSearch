@@ -1,36 +1,42 @@
 # (thresh)Hold The Line — advances in VTSearch calibration.
 # Mildly technical audience with no prior exposure to VTSearch: the opening
-# third builds the tool, and lands on the one object the whole talk is about —
-# a line through a ranking that decides twice, what comes back and what you are
-# asked next. That first third is deliberately click-by-click — make a
-# detector, answer questions, run it over media nobody voted on — because a
-# room that has not seen the tool cannot be told about a threshold inside it.
+# builds the tool, deliberately click-by-click — make a detector, answer
+# questions, run it over media nobody voted on, look at what came back —
+# because a room that has not seen the tool cannot be told about a threshold
+# inside it. Then what is under the hood (#5132): a photo as a vector, a
+# detector as a boundary through them, the linear SVM that draws it and how
+# fast it is, landing on the one object the whole talk is about — a line
+# through a ranking that decides twice, what comes back and what you are asked
+# next.
 #
 # Then the ideas, in order: the three the line is built from — held-out
 # scores, the unlabeled corpus, and the mixture fit — and the fit that joins
 # them, then the axis the *user* sets — F-beta, the three-radio balance that asks which mistake they mind
 # more (#4413, #4448), and the line the labels draw at its peak (#4452). Then
 # the places the loop never asks about, the steps Autopilot takes and when it
-# says stop (#4610), the data the experiments run on and how
+# says stop (#4610), Browse — the whole pile as a map, how UMAP flattens it,
+# lettered by signposts (#5097) — the data the experiments run on and how
 # the app does on it, how a user tests a detector on
 # their own pile and how often that test is right, the region-voting idea (whose
-# measured verdict waits for the runs still reporting), documents — logos on
-# scanned pages — ending on how the app does on them, and faces: the consented
-# benchmark the app's face path is measured on (#4699).
+# measured verdict waits for the runs still reporting), the other kinds of media
+# and how a file becomes one the app can search, documents — logos on scanned
+# pages — ending on how the app does on them, and faces: how a face is found, the
+# consented benchmark the app's face path is measured on (#4699), and how it does
+# and for whom.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in their reports, not on the slides or in the notes (see
 # #3246, #3265, #4827).
 #
-# The outline fragment appears thirteen times: once bare, as the opening list,
-# and then once before each section marked with `+at1` … `+at11`. It is one
-# slide shown thirteen ways rather than thirteen slides — `build.py` numbers it
-# 1a…1m — and the last showing, `+end`, is the deck's closing slide: it is the
+# The outline fragment appears sixteen times: once bare, as the opening list,
+# and then once before each section marked with `+at1` … `+at14`. It is one
+# slide shown sixteen ways rather than sixteen slides — `build.py` numbers it
+# 1a…1p — and the last showing, `+end`, is the deck's closing slide: it is the
 # only one that shows "Conclusion", as its marked line. Sections are numbered in
-# Roman numerals (I … XI), slides in Arabic, so the two never read alike.
+# Roman numerals (I … XIV), slides in Arabic, so the two never read alike.
 #
 # This is the master deck: every fragment a talk might want is named here, and
-# a talk cuts its own manifest from it. Section XI, Instruction, is the one most
+# a talk cuts its own manifest from it. Section XIV, Instruction, is the one most
 # talks cut — it is a how-to for users, not an argument for data scientists — and
 # a talk *for* users moves it up to follow section I instead.
 
@@ -58,11 +64,24 @@ slides:
   # Drawing the Line, the Find screen scrolled to the line, was cut here
   # (owner, 2026-10-13: too technical this early, and the Test flow has moved
   # on since it was shot); the line is first met on Pics on a Plane.
+  # Lost & Found, Find's results in the tool as a list and then as a map, moved
+  # here from Vision (owner, #5132): it is the tool as the user meets it.
+  vision-find
+
+  # II — Decision: under the hood (owner, #5132). How a photo and a phrase
+  # become vectors; a detector as a boundary through them, retrained on every
+  # vote; then the boundary itself, a linear SVM: what it fits, and how fast it
+  # is to fit after every click and to run over the whole pile
+  # (`make-svm-figs.py`). Pics on a Plane's last two pages, the line's two jobs,
+  # are what Calibration opens on.
+  outline-hold-the-line +at2
   embed-flow
   vote-boundary
+  svm-margin
+  svm-speed
 
-  # II — Calibration: how to threshold a model without reusing the data that
-  # trained it. The three ideas the labels line (section III) is built from,
+  # III — Calibration: how to threshold a model without reusing the data that
+  # trained it. The three ideas the labels line (section IV) is built from,
   # and only those (#4670): the folds' held-out scores are its class model; the
   # unlabeled corpus is where it counts the matches; EM is how it fits that
   # corpus. Then three ways of putting them together, naive to nuanced (owner,
@@ -73,11 +92,11 @@ slides:
   # Autopilot asks, shape the Good bump and the corpus say how big it is,
   # ending on the two numbers the line is drawn from. It uses no beta, so it is here
   # rather than beside the line it feeds: turning it into a line takes the
-  # user's preference, which is section III. The other rules that once
+  # user's preference, which is section IV. The other rules that once
   # stacked on these — the anchored EM, rank transfer, the 70/30 split — are in
   # the appendix: measured in F-beta, none of them beat cross-calibration
   # (#4582, #4583), and none draws today's line.
-  outline-hold-the-line +at2
+  outline-hold-the-line +at3
   xcal
   gmm-idea
   gmm-em
@@ -85,11 +104,11 @@ slides:
   anchored-gmm
   labels-fit
 
-  # III — Inclination: the user's preference, worked into the line (owner,
+  # IV — Inclination: the user's preference, worked into the line (owner,
   # #4833: first define the preference, then use it to calibrate). Why a line
   # needs one, what F1 and F-beta are (#4517), F-beta's peak and the
   # three-radio balance that sets its beta (#4413, #4448), then the line the
-  # labels draw at its expected peak (#4452), from section II's Curvey and
+  # labels draw at its expected peak (#4452), from section III's Curvey and
   # InDiscrete fit. Then why the labels are what the line is drawn from: they
   # are all Find has (#4517). Then
   # the line before the labels can draw one, the outlier cut, and
@@ -100,10 +119,10 @@ slides:
   # #4835). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after Conclusion.
-  # A Cut Above stays last: Autopilot asks where the fit on Just How You Like It puts
+  # A Cut Above stays last: Autopilot asks where the fit on Twin Peaks puts
   # even odds (#3546, #4632), so it has to follow the slides that draw that
   # fit and say where the line lands beside it.
-  outline-hold-the-line +at3
+  outline-hold-the-line +at4
   inclusion-rank
   fbeta-metrics
   fbeta-maps
@@ -115,7 +134,7 @@ slides:
   # too few Goods (#4603, #4759, #4786): needles are rare and a first sort is
   # weak, so the matches are a few outliers above the bulk, not a hump (owner,
   # #4835). After Transfer Student, because both slides lean on the radios
-  # and on the fit on Just How You Like It to say what the count stands in for.
+  # and on the fit on Twin Peaks to say what the count stands in for.
   out-standing
   # Head Count: every labelset in hand, Goods up and Bads across: the quota, the text query's
   # hold, and the band where the folds' split decides, from the shipped quota, fold split and hold
@@ -124,7 +143,7 @@ slides:
   lay-of-the-land
   inclusion-acq
 
-  # IV — Exploration: the Coverage Atlas, how autopilot decides what to ask
+  # V — Exploration: the Coverage Atlas, how autopilot decides what to ask
   # when the answer is not "whatever is nearest the line". It follows Inclination
   # because A Cut Above has just said the threshold decides what gets asked, and
   # the honest reading of these four is "and here is the half of that the
@@ -135,30 +154,47 @@ slides:
   # structure also does, and the atlas doing it on that very room (#4517).
   # A Likely Story, how calibrated the atlas's typicality score is, was cut:
   # too technical about a feature the app rarely uses (owner, #4872).
-  outline-hold-the-line +at4
+  outline-hold-the-line +at5
   atlas-blindspot
   atlas-cells
   atlas-depth
   atlas-far
 
-  # V — Navigation: Autopilot from end to end (#4610). Sections III and IV are
+  # VI — Navigation: Autopilot from end to end (#4610). Sections IV and V are
   # the two ways it asks; this is the order it asks them in, and when it tells
   # the user they can stop. One slide per light first — Smart, Stable, Span,
   # each drawn by the shipped rule on a planted session
-  # (`make-autopilot-figs.py`) — then the steps, whose "until" column names those
-  # lights (owner, #4872). Last, where the stop fired when it was measured:
-  # #3945's sessions, the only stopping numbers committed so far, until a State
-  # of the App review's stopping block replaces them (#4611). The ways a run
-  # ends and what the app says moved to section IX: one of the three is the
+  # (`make-autopilot-figs.py`); Smart takes two, the idea in Spanish classes and
+  # then the retrain chart (owner, #5132) — then the steps, whose "until" column names those
+  # lights (owner, #4872). Last, where the stop fired: today's app with Smart on
+  # F-beta, #5134's shipped arm read at the review's 150 clicks (#5141), until
+  # the next State of the App review's stopping block replaces it. The ways a run
+  # ends and what the app says moved to section XII: one of the three is the
   # documents' dry run, and nobody has heard of documents yet (owner, #4884).
-  outline-hold-the-line +at5
+  outline-hold-the-line +at6
   autopilot-smart
+  autopilot-smart-trend
   autopilot-stable
   autopilot-span
   autopilot-steps
   autopilot-stop
 
-  # VI — Experimentation: the photographs the experiments run on. Every dataset
+  # VII — Vision: Browse (#5097). Mission showed Find's results as a map
+  # (Lost & Found); this is the map itself. First how it is made: UMAP flattens
+  # Embed-time Stories' cube into a square (owner, #5132, `make-intro-figs.py`).
+  # Then the whole pile as a map, zoomed in twice on where the books landed,
+  # each frame lettered by a finer layer of signposts; one tile opened, showing
+  # the tags every photo was given; and how Toponymy names a region from those
+  # tags. The pile is `photos-all`, all of COCO val2017 the training pile does
+  # not hold, because a map of 240 photographs is a dozen tiles under two layers
+  # of signs (`shoot-ui-figs.mjs`'s `browse` group, `make-signpost-figs.py`).
+  outline-hold-the-line +at7
+  vision-umap
+  vision-map
+  vision-tile
+  vision-names
+
+  # VIII — Experimentation: the photographs the experiments run on. Every dataset
   # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
   # else made, a slide of what they do not give you, then what we built from
   # them, in the same card — COCO into COCO Better (`coco_better` in code;
@@ -167,7 +203,7 @@ slides:
   # The figures are generated from the config the pile builds against, so a
   # rebuilt dataset is a re-run of the figure scripts rather than an edit here —
   # but the presenter notes carry numbers too, and those are hand-written.
-  outline-hold-the-line +at6
+  outline-hold-the-line +at8
   data-set-coco
   data-coco-better-complement
   data-coco-problems
@@ -185,19 +221,20 @@ slides:
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos
 
-  # VII — Examination: the Test button (#4594, #4598), how a user finds out
-  # what section VI just measured, on their own pile. It follows Experimentation
-  # because its last slide grades the Test on the COCO Better sessions the room
+  # IX — Examination: the Tune button (#4594, #4598; Test until #5098), how a user finds out
+  # what section VIII just measured, on their own pile. It follows Experimentation
+  # because its last slide grades Tune's test on the COCO Better sessions the room
   # has just met. The question and its two rules; the background, one idea a
   # slide — stratified bands, one band's Beta posterior, the joint Monte Carlo
   # draws, the prior borrowed from neighbouring bands above the line (#4539,
   # #4560) and the model's count corrected below it (#4523); then the app — the
-  # autopilot's rounds and stop, the result pane, and how often its ranges hold.
+  # autopilot's rounds and stop, what a finished test reports, and how often
+  # its ranges hold.
   # The bands and the per-band range it builds on are Spot Check's and Home on
   # the Range's, which open the section. Every figure but the last runs the
   # shipped `LineTest` on a planted pile (`make-test-figs.py`); the last is
   # #4560's shipped summary.
-  outline-hold-the-line +at7
+  outline-hold-the-line +at9
   # First the check Autopilot runs on the pile you trained on (owner, #4835:
   # moved here from Inclination, since it measures the line rather than
   # drawing it): the question the line cannot answer before anyone checks
@@ -205,13 +242,13 @@ slides:
   # known size on its own (#4932: Clopper–Pearson only as the endless-list
   # contrast), what a check says about the line without moving it (#4427,
   # #4452, #4517).
-  # Flight Plan in section V names it as step A (#4836, #4872).
+  # Flight Plan in section VI names it as step A (#4836, #4872).
   floor-ask
   clopper-pearson
   floor-check
   # Weak Spot: when the labels separate weakly, Autopilot runs Spot Check
   # early (#4496), past the opening and never on faces (#4799). After Spot
-  # Check, which it calls. Then Test, the same question on a pile the
+  # Check, which it calls. Then Tune's test, the same question on a pile the
   # detector never saw.
   weak-spot
   test-question
@@ -224,9 +261,9 @@ slides:
   test-result
   test-coverage
 
-  # VIII — Region: the region vote in the app, what a patch is and the model
+  # X — Region: the region vote in the app, what a patch is and the model
   # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
-  outline-hold-the-line +at8
+  outline-hold-the-line +at10
   voting-modes
   patches
   evt-gumbel
@@ -234,7 +271,20 @@ slides:
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
 
-  # IX — Document(ation): logos on scanned pages. The logo slide opens it
+  # XI — Conversion: everything that is not a photo. The
+  # deck had shown two of the app's six media types; this is the other four and
+  # the plumbing between them, so it comes before the two sections that live on
+  # converted media — documents (pages) and faces (crops). The six types, each
+  # with its model and, where it takes one, a typed phrase; the converters
+  # between them, a source a page; then what an import can do to each file
+  # after that, cut it into pieces and tidy each piece. All three are drawn
+  # from the shipped registries (`make-media-figs.py`), so they carry no date.
+  outline-hold-the-line +at11
+  media-types
+  media-convert
+  media-clean
+
+  # XII — Document(ation): logos on scanned pages. The logo slide opens it
   # because it introduces the idea of logo detection before the room is asked
   # to find logos on documents. It is the
   # `book` slide's claim made a second time, in the one domain where a room
@@ -249,7 +299,7 @@ slides:
   # three things the documents changed: the keypoint budget, the shortlist and
   # why a page vector cannot build one, and the votes. Tiles shipped after
   # these slides were drawn (#4378, #4415), and the notes say so.
-  outline-hold-the-line +at9
+  outline-hold-the-line +at12
   logo-grid
   logo-keypoints
   logo-match
@@ -257,7 +307,7 @@ slides:
   logo-stages
   logo-tiles
   logo-votes
-  # Then the same "Data, Set" card as section VI, for the document sources and
+  # Then the same "Data, Set" card as section VIII, for the document sources and
   # FullMarks, built from the FullMarks datasheet.
   data-set-fullmarks-sources
   data-fullmarks-problems
@@ -271,7 +321,7 @@ slides:
   # beat every Bad by a margin (#4479) — a schematic on the shipped constants.
   logo-line
   logo-balance
-  # Cleared to Land, section V's last word on Autopilot, told here because one
+  # Cleared to Land, section VI's last word on Autopilot, told here because one
   # of its three endings is the documents' own (owner, #4884): every light
   # green on photos, a dry run of best matches on documents, every item voted.
   autopilot-done
@@ -279,16 +329,19 @@ slides:
   # radio (`make-sota-figs.py`, from the committed per-step CSVs).
   sota-documents
 
-  # X — Person(ification): faces, the third domain, and for now three slides: the
-  # same "Data, Set" card for FHIBE (#4713), Sony's consented face benchmark,
-  # which the pile's identity cells are built from (#4699). The card is drawn
-  # from the release itself, which is owner-only on the GRID, so
-  # `make-data-cards.py --only fhibe` runs there (see `fhibe_media.py`). How a
-  # face is found and matched, where the line goes on faces and how it does
-  # arrive with #4699's first study. FHIBE's terms allow a publication twenty
-  # of its photos; the card's two pages show ten, so count before adding any.
-  outline-hold-the-line +at10
+  # XIII — Person(ification): faces, the third domain. First the same "Data,
+  # Set" card for FHIBE (#4713), Sony's consented face benchmark, which the
+  # pile's identity cells are built from (#4699). The card is drawn from the
+  # release itself, which is owner-only on the GRID, so
+  # `make-data-cards.py --only fhibe` runs there (see `fhibe_media.py`). FHIBE's
+  # terms allow a publication twenty of its photos; the card's two pages show
+  # ten, so count before adding any.
+  outline-hold-the-line +at13
   data-set-fhibe
+  # Face Off: how a face is found and matched — the detector's box and five
+  # points, the crop turned upright by them, FaceNet's space. Drawn, not
+  # photographed, so it spends none of the twenty (`make-media-figs.py`).
+  face-find
   # Then Head Start: how the trained head's line is placed, the linear SVM before and after it
   # started from the Goods' average (#4776, #4785). A schematic drawn in faces, so it waits for the
   # room to meet them here; it sat after Pics on a Plane until the owner moved it (2026-10-13). What
@@ -301,14 +354,22 @@ slides:
   # Goods' average (#4384, #4859). Head Start's schematic again, drawn with a typed query instead of faces
   # (`make-many-words-figs.py`).
   many-words
+  # Then how the face path does, as photos, regions and documents end on theirs:
+  # Face Value, the objective at every click from one starting photo, each radio
+  # on its own sessions, from the weak-check study's end-check arm — the face path
+  # as it ships, which the face review of 2026-10-10 predates (`make-sota-figs.py`).
+  # Last, Mind the Gap: for whom. she/her people against he/him, FaceNet
+  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`).
+  sota-faces
+  face-gap
 
-  # XI — Instruction: the tool as a how-to (#4202). Section I shows the same
+  # XIV — Instruction: the tool as a how-to (#4202). Section I shows the same
   # session as an argument; this shows it as instructions, every click marked
   # with a numbered red disc and the numbers keyed down the side, so the pages
   # still work as a handout with nobody talking over them. One session, shot
   # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
   # detector, train it, load a pile it never saw, and Find.
-  outline-hold-the-line +at11
+  outline-hold-the-line +at14
   steps-load-train
   steps-make-detector
   steps-train
@@ -335,7 +396,7 @@ slides:
   # Experimentation (#4563): only β ¼ separates, which is an answer to a question
   # rather than a slide to walk a room through.
   follow-suit
-  # Then the line rules that stacked on section II's ideas and did not last,
+  # Then the line rules that stacked on section III's ideas and did not last,
   # moved out of Calibration (#4670); the blend went back there as the naive
   # combining (owner, 2026-10-13), and Above Average after it, as the step to
   # Curvey & InDiscrete (owner, #4833), leaving its anchored EM here. Measured in

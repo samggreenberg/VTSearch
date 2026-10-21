@@ -3,6 +3,7 @@
 
     python slides/figs/src/coco_fixture.py photos-train    # -> prints the path
     python slides/figs/src/coco_fixture.py photo-regions
+    python slides/figs/src/coco_fixture.py photos-all      # the Vision pile
 
 The deck's running example is **book** (see `make-book-figs.py` for why), so
 the screenshots have to be a real session hunting books, and that needs a
@@ -123,7 +124,18 @@ PLANS = {
 #: frames are struck out of the candidate list before the second plan chooses,
 #: which leaves `photos-prod` the next-best frames of each category rather than
 #: a reshuffle.
-DISJOINT_FROM = {"photos-prod": "photos-train"}
+DISJOINT_FROM = {"photos-prod": "photos-train", "photos-all": "photos-train"}
+
+#: Corpora that take *every* usable frame rather than a quota per category.
+#:
+#: `photos-all` is the Vision section's pile: all of val2017 that `photos-train`
+#: does not hold, about 4,800 photographs. Browse is a way to look over a pile
+#: too big to scroll, and a map of `photos-prod`'s 240 is a dozen tiles with two
+#: layers of signposts, which shows the room neither the map nor the naming.
+#: A frame is filed under the category whose largest box covers most of it,
+#: `book` first as in `_roster`; frames COCO left unannotated have no category
+#: to file them under and are left out.
+WHOLE = {"photos-all"}
 
 
 def ensure_corpus() -> Path:
@@ -188,6 +200,28 @@ def _roster(plan: dict[str, int], reserved: frozenset[str] = frozenset()) -> dic
     return roster
 
 
+def _whole_roster(reserved: frozenset[str] = frozenset()) -> dict[str, list[str]]:
+    """Every annotated frame not in *reserved*, filed by its largest box (see `WHOLE`)."""
+    data = json.loads(ANNOTATIONS.read_text())
+    names = {c["id"]: c["name"] for c in data["categories"]}
+    frames = {i["id"]: i for i in data["images"]}
+    share: dict[int, dict[str, float]] = {}
+    for ann in data["annotations"]:
+        frame = frames[ann["image_id"]]
+        cell = share.setdefault(ann["image_id"], {})
+        name = names[ann["category_id"]]
+        cell[name] = max(cell.get(name, 0.0), ann["area"] / (frame["width"] * frame["height"]))
+    roster: dict[str, list[str]] = {}
+    for image_id in sorted(share):
+        file = frames[image_id]["file_name"]
+        if file in reserved:
+            continue
+        cell = share[image_id]
+        category = "book" if "book" in cell else max(sorted(cell), key=cell.__getitem__)
+        roster.setdefault(category, []).append(file)
+    return roster
+
+
 def category_order(plan: str, category: str) -> list[str]:
     """A plan's frames for one category, most *about* that category first.
 
@@ -215,7 +249,9 @@ def build_fixture(name: str) -> Path:
     if root.is_dir() and any(root.iterdir()):
         return root
     ensure_corpus()
-    for category, files in _roster(PLANS[name], _reserved_for(name)).items():
+    reserved = _reserved_for(name)
+    roster = _whole_roster(reserved) if name in WHOLE else _roster(PLANS[name], reserved)
+    for category, files in roster.items():
         folder = root / category.replace(" ", "-")
         folder.mkdir(parents=True, exist_ok=True)
         for file in files:
@@ -225,6 +261,7 @@ def build_fixture(name: str) -> Path:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in PLANS:
-        raise SystemExit(f"usage: coco_fixture.py {{{'|'.join(PLANS)}}}")
+    corpora = [*PLANS, *sorted(WHOLE)]
+    if len(sys.argv) != 2 or sys.argv[1] not in corpora:
+        raise SystemExit(f"usage: coco_fixture.py {{{'|'.join(corpora)}}}")
     print(build_fixture(sys.argv[1]))

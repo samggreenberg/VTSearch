@@ -4,7 +4,7 @@ import type { LineTestResponse } from '../../../generated/api-client/models/line
 import { IconComponent } from '../../icon/icon.component';
 import { estimatePercent, lineTestPhase, widthLight, type LineTestLight, type LineTestPhase } from '../../../utils/line-test';
 
-/** One step of the Test autopilot as the panel draws it, in the shape of Train's `StepDisplay`. */
+/** One step of the Tune autopilot as the panel draws it, in the shape of Train's `StepDisplay`. */
 export interface TestStepDisplay {
   phase: LineTestPhase;
   label: string;
@@ -25,7 +25,7 @@ const STEPS: readonly { phase: LineTestPhase; label: string }[] = [
 const LIGHT_WORDS: Record<LineTestLight, string> = { red: 'Red.', yellow: 'Yellow.', green: 'Green.' };
 
 /**
- * The Test autopilot's phase panel (#4524), in the shape of Train's
+ * The Tune autopilot's phase panel (#4524), in the shape of Train's
  * `vt-autopilot-panel`: Score, Check the matches, Check the misses, Done,
  * each with one light. The phase is the server's
  * (`vtscore.training.thresholds.line_phase`), read off the last
@@ -138,7 +138,7 @@ export class LineTestPanelComponent {
         );
       }
       case 'done':
-        return light('green', 'The ranges have stopped moving usefully. Read the result on the right.');
+        return light('green', 'The ranges have stopped moving usefully. Read the verdict in the centre.');
       default:
         return null;
     }

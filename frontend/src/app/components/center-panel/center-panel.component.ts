@@ -18,16 +18,12 @@ import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.com
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
-import {
-  NO_VOTE_HINT_COUNTS,
-  VoteHintCounts,
-  VoteHintId,
-  VotingOverlayComponent,
-} from './voting-overlay/voting-overlay.component';
+import { VoteHintId, VotingOverlayComponent } from './voting-overlay/voting-overlay.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
+import { isSoloMediaType } from '../../utils/solo-media-type';
 
 /** The viewers the pane can show an item in. */
 export type CenterViewer = 'audio' | 'image' | 'video' | 'text' | 'document';
@@ -112,8 +108,6 @@ export class CenterPanelComponent implements OnDestroy {
    * on a detector with no labels yet, then says what each phase is after.
    */
   readonly voteHint = input<VoteHintId | null>(null);
-  /** The counts the Train phase hints fill in. */
-  readonly voteHintCounts = input<VoteHintCounts>(NO_VOTE_HINT_COUNTS);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -377,6 +371,12 @@ export class CenterPanelComponent implements OnDestroy {
 
   get mediaType(): string {
     return this.media()?.media_type || 'audio';
+  }
+
+  /** Whether the metadata grid has a Media Type row: not on a server locked to
+   *  the item's type, where it could be nothing else (#5106). */
+  get showMediaTypeField(): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.mediaType);
   }
 
   /**

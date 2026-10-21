@@ -465,6 +465,56 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     expect(cancelledDetectorTaskIds).toEqual([]);
   });
 
+  it('reloadActivePair loads both halves again, dataset first, though the registry reads loaded (#5155)', () => {
+    // After a restart the registry snapshot still says loaded; the backend has
+    // neither half.
+    activeContext.setActivePair('d1', 'm1');
+    datasets = [makeDataset('d1', { loaded: true })];
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+
+    let emitted = false;
+    switcher.reloadActivePair().subscribe({ next: () => (emitted = true) });
+
+    expect(switcher.switching).toBe(true);
+    expect(loadRegisteredSubjects.has('d1')).toBe(true);
+    // The detector load would name the still-unloaded dataset in its
+    // X-Dataset-Id and 409 (#3139), so it waits for the dataset.
+    expect(loadDetectorSubjects.has('m1')).toBe(false);
+
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: 'task-d1' });
+    loadRegisteredSubjects.get('d1')!.complete();
+    loadingTasks$.next([makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'loading' })]);
+    expect(loadDetectorSubjects.has('m1')).toBe(false);
+    loadingTasks$.next([makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'idle' })]);
+    expect(loadDetectorSubjects.has('m1')).toBe(true);
+    expect(emitted).toBe(false);
+
+    loadDetectorSubjects.get('m1')!.next({ ok: true, task_id: 'task-m1' });
+    loadDetectorSubjects.get('m1')!.complete();
+    detectorLoadingTasks$.next([makeLoadingTask({ detector_id: 'm1', task_id: 'task-m1', status: 'idle' })]);
+
+    expect(emitted).toBe(true);
+    expect(switcher.switching).toBe(false);
+    expect(activeContext.datasetId).toBe('d1');
+    expect(activeContext.modelId).toBe('m1');
+  });
+
+  it('reloadActivePair skips the detector and completes without emitting when the dataset reload fails', () => {
+    activeContext.setActivePair('d1', 'm1');
+    datasets = [makeDataset('d1', { loaded: true })];
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+
+    let emitted = false;
+    let completed = false;
+    switcher.reloadActivePair().subscribe({ next: () => (emitted = true), complete: () => (completed = true) });
+    loadRegisteredSubjects.get('d1')!.error(new Error('load failed'));
+
+    expect(loadDetectorSubjects.has('m1')).toBe(false);
+    expect(emitted).toBe(false);
+    expect(completed).toBe(true);
+    expect(switcher.switching).toBe(false);
+  });
+
   it('promotes intent to active via the completion observable returned to the route guard', () => {
     datasets = [makeDataset('d1', { loaded: true })];
     detectors = [makeDetector('m1', { detector_loaded: true })];

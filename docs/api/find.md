@@ -6,11 +6,11 @@ Endpoints for running detectors against data: multi-dataset **Find**, the
 active-dataset **Find Label** / **Auto-Detect** flows, and their evaluation
 stats and cancel companions.
 
-**Naming.** The app's **Test** view (`/test/:datasetId/:detectorId`) is the
+**Naming.** The app's **Tune** view (`/tune/:datasetId/:detectorId`) is the
 caller of Find Label, the find stats, corrections and queues, and the test of
 the line below. These routes, their fields (`find_mode`, `find_scores`) and
-the `find` SSE channel keep the view's former name, Find (#4525), so "Find
-mode" and "the Find pass" on this page mean the Test view's session.
+the `find` SSE channel keep the view's first name, Find (#4525), so "Find
+mode" and "the Find pass" on this page mean the Tune view's session.
 The Dashboard's **Find** button is something else: it starts a background
 AutoFind per ticked dataset
 ([`POST /api/datasets/registry/{dataset_id}/autofind`](datasets.md#run-autofind-on-a-registered-dataset)).
@@ -260,7 +260,7 @@ POST /api/line-test/forget
 
 **All but `GET` require** `X-Detector-Id`.
 
-Test mode's test of the line the Find pass drew (#4524; the design is
+Tune's test of the line the Find pass drew (#4524; the design is
 [*The test sample*](../../vtscore/docs/packages/training.md#the-test-sample-linetest-linebudgets-line_phase-found_words), the statistics
 `vtscore/training/thresholds/line_test.py`). The question is *if this line
 went to AutoFind, what share of what it ships would be right, and what share of
@@ -275,7 +275,8 @@ band design valid.
 Every verb returns the same body: `{balance, threshold, line_count, test,
 stale, moved, presets}`. `test` (`null` before a test) holds the `phase` and
 its `report`, the round (`round`, `picks_per_round`, the `band` being dealt
-and its `picks`), every band's tallies in `bands`, the joint `estimates`
+and its `picks`), the next round dealt ahead (`ahead`, below), every band's
+tallies in `bands`, the joint `estimates`
 (precision, recall and F-beta as `{point, lo, hi}` ranges, the plain-language
 `found`, the positives either side of the line, and `at_edges`), the `budgets`
 the phases run to, `kept_at` and `class_model`.
@@ -298,6 +299,16 @@ the phases run to, `kept_at` and `class_model`.
   the rest, and a whole round deals the next. The vote that finishes the test
   keeps its verdict on the detector. **400** for an id that is not one of the
   round's picks; **409** with no test running.
+
+  The vote that leaves one pick of a running test deals the next round
+  ahead (#5116): `test.ahead` is `{id, good, bad}`, `id` that last pick and
+  `good` / `bad` the round a match / a miss on it would deal (`[]` where
+  that vote ends the test; the same picks when both votes send the next
+  round to the same band). The vote on `id` installs the one it names,
+  exactly the round the test would have drawn after it, and the other is
+  discarded. It is for fetching the next round's media during the last
+  pick, not for showing it. `ahead` is `null` otherwise, and an `unvote`
+  that puts a second pick back drops it.
 - **`unvote`** takes `{"id": 412}` and takes one vote of the current round
   back (the ↓ key): the pick returns to `picks` and its session vote is
   lifted. **400** for a vote not of this round.

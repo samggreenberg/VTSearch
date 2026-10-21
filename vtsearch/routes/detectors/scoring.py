@@ -81,7 +81,7 @@ def _abort_if_find_cancelled() -> None:
     """
     if find_progress.is_cancelled:
         find_idle()
-        abort(409, message="Test cancelled")
+        abort(409, message="Tune cancelled")
 
 
 def _keep_line_ranking(results: list[dict], threshold: float) -> float:
@@ -520,7 +520,7 @@ def _empty_evidence_coverage() -> dict:
     """The ``available: False`` report the evidence-coverage endpoint returns
     when there is nothing to measure (no scored Find run, no resolvable
     labelset, or no cached label embeddings)."""
-    from vtscore.detectors.evidence_coverage import DEFAULT_ALPHA, DEFAULT_K
+    from vtscore.detectors.evidence_coverage import BASELINE_NONE, DEFAULT_ALPHA, DEFAULT_K
 
     return {
         "available": False,
@@ -535,8 +535,110 @@ def _empty_evidence_coverage() -> dict:
         "median_support": 1.0,
         "frac_low_trust": 0.0,
         "median_trust": 1.0,
+        "baseline": BASELINE_NONE,
+        "n_baseline": 0,
+        "frac_beyond": None,
+        "z_beyond": None,
+        "baseline_dataset_id": "",
+        "baseline_dataset_name": "",
         "unsupported": False,
     }
+
+
+def _evidence_baseline_home(det_ctx: Any, labelset: Any, embedder: str, dim: int) -> dict | None:
+    """Where the Evidence verdict's training baseline (#5089) is drawn or read: ``None`` when it cannot be.
+
+    Returns the baseline's ``stamp``
+    (:func:`~vtscore.detectors.evidence_baseline.baseline_stamp`), the detector
+    file's ``path`` it is recorded in, and ``training_id`` / ``training_name``,
+    the dataset the detector was trained on as the overlap check infers it
+    (the loaded dataset holding most of its labels), ``""`` when none is.
+    ``None`` with no embedder name to stamp it with or no detector file.
+    """
+    from vtscore.datasets.registry import get_dataset
+    from vtscore.detectors.evidence_baseline import baseline_stamp
+    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.store import _detector_path
+    from vtscore.state.core import get_active_context
+    from vtsearch.training_domain import infer_training_reference
+
+    active_id = get_active_context().dataset_id
+    stamp = baseline_stamp(labelset, embedder or (get_dataset(active_id) or {}).get("embedder", "") or "", dim)
+    entry = get_detector(det_ctx.detector_id) or {}
+    if stamp is None or not entry.get("name"):
+        return None
+    training_id, _counts = infer_training_reference(labelset, active_id)
+    return {
+        "stamp": stamp,
+        "path": _detector_path(entry["name"]),
+        "training_id": training_id,
+        "training_name": (get_dataset(training_id) or {}).get("name", "") or "" if training_id else "",
+    }
+
+
+def defer_learned_sort_baseline(
+    det_ctx: Any, ds_ctx: Any, snap: dict, labelset: Any, results: list[dict], threshold: float
+) -> None:
+    """Leave the Evidence verdict's training baseline to be drawn from a learned sort (#5120).
+
+    The Train view's learned sort scores its whole dataset with the current
+    head at every vote, so on the dataset the detector is trained on it holds
+    everything a Find there draws the baseline from: the labels, the scores
+    (*results*, over *snap*) and the line (*threshold*).  Drawing it here would
+    add a distance pass over the dataset to every vote, so the sort only leaves
+    them (:class:`~vtscore.detectors.evidence_baseline.PendingDraw`), to be
+    drawn once the votes stop, or as soon as the evidence route off the training
+    dataset asks for it.  Only while the sort's head is the one a Find would
+    score with (:func:`~vtscore.detectors.model_loading.cached_head_is_current`):
+    under the label quota a Find trains the Goods' centroid instead (#4643), and
+    its line is not the sort's.  Runs inside the sort's job, whose active
+    dataset is *ds_ctx*.  Never raises: the baseline is a side channel, and the
+    sort's result is what the job is for.
+    """
+    import numpy as np
+
+    from vtscore.detectors.evidence_baseline import PendingDraw, defer_baseline_draw
+    from vtscore.detectors.learned_sort import resolve_active_text_query
+    from vtscore.detectors.model_loading import cached_head_is_current
+    from vtscore.embedding.media_vectors import media_embedding
+
+    if labelset is None or not results or not det_ctx.detector_id:
+        return
+    try:
+        if not cached_head_is_current(det_ctx, labelset, resolve_active_text_query(det_ctx)):
+            return
+        embedder = det_ctx.embedder or None
+        # The stamp names the vectors' width: any scored media's gives it.
+        dim = 0
+        for row in results:
+            media = snap.get(row["id"])
+            emb = None if media is None else media_embedding(media, embedder_name=embedder)
+            if emb is not None:
+                dim = int(np.asarray(emb).shape[-1])
+                break
+        if not dim:
+            return
+        home = _evidence_baseline_home(det_ctx, labelset, embedder or "", dim)
+        if home is None or home["training_id"] != ds_ctx.dataset_id:
+            return
+        defer_baseline_draw(
+            PendingDraw(
+                detector_id=det_ctx.detector_id,
+                path=home["path"],
+                stamp=home["stamp"],
+                dataset_id=home["training_id"],
+                dataset_name=home["training_name"],
+                det_ctx=det_ctx,
+                dataset=ds_ctx,
+                labelset=labelset,
+                medias=snap,
+                results=results,
+                threshold=threshold,
+                embedder=embedder,
+            )
+        )
+    except Exception:  # noqa: BLE001 - see the docstring
+        logger.exception("Could not leave the Evidence baseline of detector %s to be drawn", det_ctx.detector_id)
 
 
 @detector_scoring_bp.route("/api/find/evidence-coverage", methods=["GET"])
@@ -549,25 +651,40 @@ def find_evidence_coverage():
     *training* dataset loaded with a built atlas, which is absent in a true
     detector handoff (userB has userA's detector JSON, not userA's haystack).
     This asks only what the detector itself carries — its labelset, re-embedded
-    in memory against the active dataset's embedder at load — so it fires even
-    when the training haystack was never handed over.
+    in memory against the active dataset's embedder at load, and the training
+    baseline recorded on it — so it reads even when the training haystack was
+    never handed over.
 
     For every scored item it measures how far the detector's *predicted* class
     sits from the labeled evidence of that class (a conformal support p-value
     ``D``, calibrated against the labelset's own leave-one-out distances) and
     the trust-score ratio ``TS``, then summarises the share of the dataset the
-    detector is calling without supervision behind it.  Returns
-    ``available: False`` (rather than 4xx) when there is no scored Find run or
-    no resolvable labelset, so the Stats modal can simply hide the section.
-    Pure read; no new state.  See docs/plans/coverage-atlas.md §6.1 (phase v0).
+    detector is calling without supervision behind it.  The verdict ranks the
+    same distances against the training haystack's own (#5089,
+    :func:`_evidence_baseline_home`): the votes are picked by active learning, so
+    their own spread fired on most in-domain datasets.  With no baseline the
+    share is reported and no verdict is drawn.  Returns ``available: False``
+    (rather than 4xx) when there is no scored Find run or no resolvable
+    labelset, so the Stats modal can simply hide the section.  Its one write:
+    run on the training dataset, it records the baseline on the detector; run
+    anywhere else, it first lands one a learned sort there left waiting
+    (:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md
+    §6.1 (phase v0).
     """
-    import numpy as np
-
+    from vtscore.detectors.evidence_baseline import (
+        discard_baseline_draw,
+        draw_baseline,
+        flush_baseline_draw,
+        labelset_evidence,
+        record_baseline,
+        scored_queries,
+        stored_baseline,
+    )
     from vtscore.detectors.evidence_coverage import evidence_coverage_report
-    from vtscore.detectors.labelset_training import build_xy_from_labelset
     from vtscore.detectors.learned_sort import resolve_active_labelset
-    from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.state.core import get_active_detector_context
+    from vtscore.detectors.store import _read_detector
+    from vtscore.detectors.training_domain import labelled_media_ids
+    from vtscore.state.core import get_active_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
     scores = det_ctx.find_scores
@@ -578,40 +695,58 @@ def find_evidence_coverage():
     if labelset is None:
         return _empty_evidence_coverage()
 
-    # (X, y) re-derived from the in-memory label embeddings the detector load
-    # already populated from its saved labelset — cross-user by construction,
-    # nothing persisted.  Good rows are y == 1, Bad (incl. patch-flood
-    # negatives) are y == 0.
-    x_list, y_list, _groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
-    if not x_list:
+    # The labelled evidence, re-derived from the in-memory label embeddings the
+    # detector load already populated from its saved labelset — cross-user by
+    # construction, nothing persisted.  Bad rows include patch-flood negatives.
+    evidence = labelset_evidence(det_ctx, labelset)
+    if evidence is None:
         return _empty_evidence_coverage()
-    x = np.asarray(x_list, dtype=np.float32)
-    y = np.asarray(y_list, dtype=np.float32)
-    pos = x[y == 1.0]
-    neg = x[y == 0.0]
+    pos, neg = evidence
 
     # Query side: every scored item's embedding in the *same* space the labelset
     # was resolved in (``det_ctx.embedder``), with its current predicted class
     # from the frozen score vs the live threshold.
     embedder = det_ctx.embedder or None
-    threshold = det_ctx.threshold
-    snap = snapshot_medias()
-    q_vecs: list[Any] = []
-    q_pred: list[bool] = []
-    for cid, score in scores.items():
-        media = snap.get(cid)
-        if media is None:
-            continue
-        emb = media_embedding(media, embedder_name=embedder)
-        if emb is None:
-            continue
-        q_vecs.append(np.asarray(emb, dtype=np.float32))
-        q_pred.append(score >= threshold)
-    if not q_vecs:
+    q_ids, q_mat, predicted = scored_queries(scores.items(), snapshot_medias(), embedder, det_ctx.threshold)
+    if q_mat is None:
         return _empty_evidence_coverage()
 
-    report = evidence_coverage_report(pos, neg, np.stack(q_vecs), np.asarray(q_pred, dtype=bool))
-    return {"available": True, **report}
+    # The verdict ranks against the training haystack's own distances (#5089).
+    # On the dataset the detector was trained on, they are drawn from its scored
+    # media less the labelled ones, as this Find calls them, and recorded on the
+    # detector, stamped; anywhere else the recorded ones are read, while the
+    # stamp still matches.  A learned sort on the training dataset leaves them
+    # to be drawn too (#5120), and a draw it left waiting is landed before the
+    # read.  A vote since with no sort or test after it, or another embedder,
+    # leaves no baseline: the share, and no verdict.
+    baseline = None
+    home = _evidence_baseline_home(det_ctx, labelset, embedder or "", int(q_mat.shape[1]))
+    if home is not None and home["training_id"] == get_active_context().dataset_id:
+        # This Find's draw supersedes one a learned sort left waiting.
+        discard_baseline_draw(det_ctx.detector_id)
+        baseline = draw_baseline(
+            home["stamp"],
+            dataset_id=home["training_id"],
+            dataset_name=home["training_name"],
+            pos=pos,
+            neg=neg,
+            query_ids=q_ids,
+            query_matrix=q_mat,
+            predicted_positive=predicted,
+            labelled=labelled_media_ids(labelset, get_active_context()),
+        )
+        record_baseline(home["path"], baseline, det_ctx=det_ctx)
+    elif home is not None:
+        flush_baseline_draw(det_ctx.detector_id)
+        baseline = stored_baseline(_read_detector(home["path"]), home["stamp"])
+
+    report = evidence_coverage_report(pos, neg, q_mat, predicted, baseline=baseline)
+    return {
+        "available": True,
+        **report,
+        "baseline_dataset_id": (baseline or {}).get("dataset_id", ""),
+        "baseline_dataset_name": (baseline or {}).get("dataset_name", ""),
+    }
 
 
 @detector_scoring_bp.route("/api/find/training-domain", methods=["GET"])
@@ -671,7 +806,7 @@ def find_corrections_to_detector():
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
     from vtscore.detectors.labelset_ops import label_sync_write_lock
     from vtscore.detectors.registry import get_detector as reg_get_detector
-    from vtscore.detectors.registry import update_detector
+    from vtscore.detectors.registry import record_detector_training
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
     from vtscore.state.core import _state_lock, get_active_detector_context
 
@@ -700,7 +835,7 @@ def find_corrections_to_detector():
 
         initial = det_ctx.find_initial_labels
         if not initial:
-            abort(400, message="No Test run to take corrections from. Score the dataset first.")
+            abort(400, message="No Tune run to take corrections from. Score the dataset first.")
 
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
@@ -770,9 +905,9 @@ def find_corrections_to_detector():
             det_ctx.model = None
             det_ctx.find_eval_stale = True
 
-        import time as _time
-
-        update_detector(reg["id"], num_training=len(merged), last_trained_at=_time.time())
+        # The corrections are labels from this dataset, so the detector is now
+        # trained on it too.
+        record_detector_training(reg["id"], len(merged), dataset_id=snap.dataset_id)
 
         return {
             "ok": True,

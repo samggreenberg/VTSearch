@@ -56,7 +56,16 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import (
+    APP_SMART_SIGNAL,
+    MORE_DRY_RUN,
+    SMART_HISTORY_READINGS,
+    SMART_WINDOW,
+    STOP_CAP,
+    AutopilotFlow,
+    app_has_detector,
+    reading_columns_nan,
+)
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -76,7 +85,7 @@ from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -90,8 +99,13 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_cut_step,
+    _centroid_goods,
     _centroid_step,
+    _head_step,
+    _heldout_readings,
     _labelset_error_costs,
+    _labelset_window_readings,
     _query_step,
     _score_pool,
     _train_and_calibrate,
@@ -125,6 +139,7 @@ from vtscore.training.thresholds import (
     head_count_serves,
     STOP_LEVEL,
     stop_level_met,
+    stop_level_reading,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -1745,76 +1760,89 @@ def _find_corpus_columns(
     from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
     from vtscore.eval.find_corpus import (  # noqa: PLC0415
         blank_find_columns,
+        evidence_beyond_pool,
+        evidence_class_counts,
         evidence_flags,
         find_columns,
+        pool_baseline,
         training_domain_flags,
         vote_vectors,
     )
 
-    scored: list[Any] = []
-    if tier == "query":
-        assert find.query_scores is not None  # build_find_corpus refuses a query run without them
-        f_step, (metrics,) = _query_test(
-            find.query_scores,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            beta=beta,
-            calibration_rows=False,
-            line_beta=line_beta,
-            dump_suffix="__find",
+    import numpy as np  # noqa: PLC0415
+
+    def _find_on(
+        ids: list[int], query_scores: "dict[int, float] | None", dump_suffix: str, *, want_scores: bool
+    ) -> tuple[dict[str, Any], "np.ndarray | None", float]:
+        """A Find over *ids* as the click's Test gives it: its metric row, its scores (with *want_scores*) and its cut."""
+        scored: list[Any] = []
+        if tier == "query":
+            assert query_scores is not None  # build_find_corpus refuses a query run without them
+            f_step, (metrics,) = _query_test(
+                query_scores,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        elif tier == "centroid":
+            f_step, (metrics,), _ = _centroid_test(
+                good_votes,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_voting=region_voting,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                beta=beta,
+                calibration_rows=False,
+                line_rule=centroid_line,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        else:
+            assert step is not None
+            out: dict[str, Any] = {}
+            metrics = _evaluate_on_test(
+                step,
+                threshold,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                scored_sink=scored,
+                find_line=details.get("find_line"),
+                beta=details.get("beta"),
+                out=out,
+                dump_suffix=dump_suffix,
+            )
+            f_step, cut = step, float(out.get("find_threshold", threshold))
+        if not want_scores:
+            return metrics, None, cut
+        scores = (
+            scored[0]
+            if scored
+            else np.asarray(
+                _score_media_ids(f_step, find.clips, ids, region_aware=region_aware, style_obj=style_obj),
+                dtype=np.float64,
+            )
         )
-        cut = CENTROID_THRESHOLD
-    elif tier == "centroid":
-        f_step, (metrics,), _ = _centroid_test(
-            good_votes,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
-            beta=beta,
-            calibration_rows=False,
-            line_rule=centroid_line,
-            line_beta=line_beta,
-            dump_suffix="__find",
-        )
-        cut = CENTROID_THRESHOLD
-    else:
-        assert step is not None
-        out: dict[str, Any] = {}
-        metrics = _evaluate_on_test(
-            step,
-            threshold,
-            find.clips,
-            find.ids,
-            target_category,
-            inclusion,
-            region_aware=region_aware,
-            style_obj=style_obj,
-            scored_sink=scored,
-            find_line=details.get("find_line"),
-            beta=details.get("beta"),
-            out=out,
-            dump_suffix="__find",
-        )
-        f_step, cut = step, float(out.get("find_threshold", threshold))
+        return metrics, np.asarray(scores, dtype=np.float64), cut
+
+    metrics, scores, cut = _find_on(find.ids, find.query_scores, "__find", want_scores=flags_at is not None)
     cols: dict[str, Any] = {**blank_find_columns(), **find_columns(metrics)}
     if flags_at is None:
         return cols
-    import numpy as np  # noqa: PLC0415
-
-    scores = (
-        scored[0]
-        if scored
-        else np.asarray(
-            _score_media_ids(f_step, find.clips, find.ids, region_aware=region_aware, style_obj=style_obj),
-            dtype=np.float64,
-        )
-    )
+    assert scores is not None
     matrix = find.matrix()
     pos, neg = vote_vectors(
         list(good_votes),
@@ -1825,12 +1853,29 @@ def _find_corpus_columns(
         style_obj=style_obj,
         dim=int(matrix.shape[1]),
     )
+    # Predicted as the metric columns flag: a score at or above the Find cut.
+    predicted = scores >= cut
+    # #5089: the haystack the votes came from, its unvoted media found as a Find
+    # there draws it: the Evidence verdict's training baseline, as the app draws
+    # it on the training dataset.
+    voted = set(good_votes) | set(bad_votes)
+    base_ids = [cid for cid in find.pool_ids if cid not in voted]
+    if base_ids:
+        _, base_scores, base_cut = _find_on(base_ids, find.pool_query_scores, "__findpool", want_scores=True)
+        assert base_scores is not None
+        base_matrix, base_predicted = find.pool_matrix(base_ids), base_scores >= base_cut
+    else:
+        base_matrix, base_predicted = matrix[:0], predicted[:0]
     return {
         **cols,
         "flags_at": int(flags_at),
         **training_domain_flags(atlas, matrix, patch_space=region_aware),
-        # Predicted as the metric columns flag: a score at or above the Find cut.
-        **evidence_flags(pos, neg, matrix, scores >= cut),
+        **evidence_flags(
+            pos, neg, matrix, predicted, pool_baseline(pos, neg, base_matrix, base_predicted) if base_ids else None
+        ),
+        **evidence_class_counts(pos, neg, matrix, predicted, prefix="evidence"),
+        **evidence_class_counts(pos, neg, base_matrix, base_predicted, prefix="evidence_pool"),
+        **evidence_beyond_pool(pos, neg, matrix, predicted, base_matrix, base_predicted),
     }
 
 
@@ -2785,6 +2830,11 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+#: How many media a priced centroid's probe scores at a time (#4800): a region run's
+#: every box at once is several GB over the pool, and each media scores alone.
+PROBE_CHUNK = 2048
+
+
 def _centroid_line_variant_rows(
     variants: list[tuple[str, float]],
     ident: dict[str, Any],
@@ -2798,6 +2848,7 @@ def _centroid_line_variant_rows(
     region_aware: bool,
     style_obj: Any,
     voted: "set[int] | None" = None,
+    query_scores: "dict[int, float] | None" = None,
 ) -> list[dict[str, Any]]:
     """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
 
@@ -2809,31 +2860,89 @@ def _centroid_line_variant_rows(
     (:data:`CENTROID_LINE_CORPORA`, #4779): ``pool`` is every media of the cell,
     the voted ones included, as the app's labelled collection holds them;
     ``unvoted`` leaves out *voted*.
+
+    In a typed-query run (*query_scores*, #4800) the rule
+    :data:`QUERY_LINE_VARIANT` is the typed query's own set with its line at
+    *beta* (:func:`_query_test`), so both of the sets a Find could give under
+    the quota are priced at every balance.  A centroid rule needs a Good and
+    the query rule a typed query: a click without one has no such row.
+
+    Every centroid variant of a click is the same head cut at another line, so
+    the click scores its media once, with the unit probe
+    :func:`~vtscore.detectors.centroid_head.fit_centroid` draws every line from
+    (:data:`PROBE_CHUNK` media at a time), and each variant draws its line off
+    those scores and reads its withheld half's off them too
+    (:func:`~vtscore.eval.step_trainers._centroid_cut_step`, #4800).  It is the
+    same set :func:`_centroid_test` gives, without its two passes a variant
+    over a region run's every box.
     """
+    from vtscore.detectors.centroid_head import centroid_head, fit_centroid, goods_centroid  # noqa: PLC0415
+
     out: list[dict[str, Any]] = []
+    goods: list[Any] = []
+    probe: dict[int, float] = {}
+
+    def probe_scores(ids: list[int]) -> list[float]:
+        """The unit probe's score of each of *ids*, scoring only the media no earlier variant has."""
+        todo = [cid for cid in dict.fromkeys(ids) if cid not in probe]
+        step = _head_step(centroid_head(goods_centroid(goods), 0.0, scale=1.0))
+        for i in range(0, len(todo), PROBE_CHUNK):
+            chunk = todo[i : i + PROBE_CHUNK]
+            got = _score_media_ids(step, clips_dict, chunk, region_aware=region_aware, style_obj=style_obj)
+            probe.update(zip(chunk, (float(s) for s in got)))
+        return [probe[cid] for cid in ids]
+
     for spec, beta in variants:
+        if spec == QUERY_LINE_VARIANT:
+            if query_scores is None:
+                continue
+            _qstep, q_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=beta,
+            )
+            out.extend(
+                {**ident, **mr, "beta": beta, "detector_tier": "query", "gmm_variant": centroid_line_tag(spec, beta)}
+                for mr in q_rows
+            )
+            continue
+        if not good_votes:
+            continue
+        if not goods:
+            goods = _centroid_goods(
+                good_votes, clips_dict, target_category, region_voting=region_voting, style_obj=style_obj
+            )
         rule, _, corpus = spec.partition("~")
-        line_ids = None
+        line_ids = list(test_ids)
         if corpus == "pool":
             line_ids = list(clips_dict)
         elif corpus == "unvoted":
             line_ids = [i for i in clips_dict if i not in (voted or set())]
-        _step, metric_rows, _cal = _centroid_test(
-            good_votes,
+        _head, _thr, line = fit_centroid(goods, lambda _probe, ids=line_ids: probe_scores(ids), rule=rule, beta=beta)
+        test_scores = dict(zip(test_ids, probe_scores(list(test_ids)), strict=True))
+        metrics = _evaluate_on_test(
+            _centroid_cut_step(test_scores, line.cut),
+            CENTROID_THRESHOLD,
             clips_dict,
             test_ids,
             target_category,
             inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
             beta=beta,
-            calibration_rows=False,
-            line_rule=rule,
-            line_beta=beta,
-            line_ids=line_ids,
         )
-        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(spec, beta)} for mr in metric_rows)
+        out.append(
+            {
+                **ident,
+                **metrics,
+                "beta": beta,
+                "detector_tier": "centroid",
+                "gmm_variant": centroid_line_tag(spec, beta),
+            }
+        )
     return out
 
 
@@ -2892,6 +3001,10 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
 #: labelled collection today) and the cell's media less the voted ones (``unvoted``).
 CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
 
+#: The variant ``query@<beta>`` (#4800): in a typed-query run, the typed query's own set with
+#: its line at that balance, priced on the same clicks as the centroid's lines.
+QUERY_LINE_VARIANT = "query"
+
 #: The ``gmm_variant`` tag of the head's rows at a click where the typed query holds (#4736):
 #: Test gives the query's set there, so the head's line is what it would have given.
 QUERY_HOLD_HEAD_TAG = "hold:head"
@@ -2900,10 +3013,14 @@ QUERY_HOLD_HEAD_TAG = "hold:head"
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
 
+    ``query@<beta>`` (:data:`QUERY_LINE_VARIANT`, #4800) is the typed query's
+    own set, which takes no corpus.
+
     Raises:
         ValueError: On a rule outside
-            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, a
-            balance that is not a positive number, or a repeated variant.
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES` and
+            :data:`QUERY_LINE_VARIANT`, a balance that is not a positive
+            number, or a repeated variant.
     """
     if spec is None:
         return []
@@ -2918,13 +3035,13 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
             beta = float("nan")
         if (
             not sep
-            or rule not in CENTROID_LINE_RULES
+            or not (rule in CENTROID_LINE_RULES or (rule == QUERY_LINE_VARIANT and not tilde))
             or (tilde and corpus not in CENTROID_LINE_CORPORA)
             or not (math.isfinite(beta) and beta > 0)
         ):
             raise ValueError(
                 f"a centroid line variant is '<rule>[~<corpus>]@<beta>' with rule in {CENTROID_LINE_RULES} "
-                f"and corpus in {CENTROID_LINE_CORPORA}; got {item!r}"
+                f"and corpus in {CENTROID_LINE_CORPORA}, or '{QUERY_LINE_VARIANT}@<beta>'; got {item!r}"
             )
         rule = spec
         if (rule, beta) in out:
@@ -3042,6 +3159,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
+    smart_signal: str = APP_SMART_SIGNAL,
+    smart_readings: bool = False,
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
     stop_cap: Optional[int] = STOP_CAP,
@@ -3099,6 +3218,7 @@ def simulate_voting_iterations(  # noqa: C901
     query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
+    query_miss: bool = True,
     find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
     find_corpus_scores: Optional[Mapping[int, float]] = None,
     find_mix: "float | str | None" = None,
@@ -3267,7 +3387,11 @@ def simulate_voting_iterations(  # noqa: C901
             "centroid_line:<rule>@<beta>"`` so a production read skips it.
             The centroid never picks, so these rows change nothing else, and
             Autopilot's opening reads no balance, so a variant's balance prices
-            the line a user at that balance would see on these clicks.
+            the line a user at that balance would see on these clicks.  In a
+            typed-query run, where Test gives the typed query's set under the
+            quota, the same rows price the centroid there all the same, from
+            the first Good, and ``"query@<beta>"`` adds the typed query's set
+            at that balance from the first vote (#4800).
         handover_shadow: Price a hand-over rule on the same session (#4776):
             at every click Test gives the trained head, also a row of what the
             Goods' centroid would give there, scored as the centroid's rows
@@ -3324,6 +3448,16 @@ def simulate_voting_iterations(  # noqa: C901
             untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
             priced on the same session.  Picks never change: the head is
             trained and asks either way.  Inert where *query_tier* is.
+        query_miss: Whether such a run's Test gives the Goods' centroid in
+            place of the typed query's set once the query has missed on a
+            patch space, as the app's does (#4800,
+            :func:`~vtscore.detectors.label_quota.query_missed`): under the
+            quota, a Good in hand and a Bad before the Goods quota, on a run
+            whose media carry a patch grid (*region_aware*).
+            ``True`` - the default - is the app; ``False`` is the arm before
+            (the typed query's set until the quota).  The click's untagged row
+            is then the centroid's (``detector_tier = "centroid"``).  Picks
+            never change.  Inert where *query_tier* is.
         find_corpus: A second corpus to Find on at every click (#4960,
             :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
             run's embedder, whose cell of the same name as *target_category*
@@ -3489,6 +3623,16 @@ def simulate_voting_iterations(  # noqa: C901
         smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
+        smart_signal: What the Smart light is read off (#5134;
+            :data:`~vtscore.eval.autopilot_flow.SMART_SIGNALS`).  ``"fbeta_best"``
+            (the default) is the app: each recent model's best F-beta on the
+            current votes at the run's balance (F1 with none), green once it stops
+            rising.  ``"cost"`` is the app before #5134, FPR + FNR going flat; the
+            rest are the A/B's other readings.  Needs the Autopilot flow; ``line``
+            needs a balance too.
+        smart_readings: Record every reading's trend on each row
+            (``smart_<reading>_<part>``, #5134) without moving the light, so one
+            run of the app prices them all.
         stop_rule: What tells the user they can stop (#4878;
             :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
             (the default) is the app: Done once every quality light is green, or
@@ -4035,6 +4179,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_aware=region_aware,
             query_scores=query_scores,
             foreign_query_scores=find_corpus_scores,
+            pool_ids=sorted(sim_ids),
         )
     find_flag_pending = sorted({int(s) for s in find_flag_steps}) if find is not None and find_flag_steps else []
     blank_find = blank_find_columns()
@@ -4256,6 +4401,8 @@ def simulate_voting_iterations(  # noqa: C901
             good_dry_run=flow_good_dry_run,
             stop_rule=stop_rule,
             stop_cap=stop_cap,
+            smart_signal=smart_signal,
+            record_readings=smart_readings,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4267,6 +4414,14 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if smart_signal != APP_SMART_SIGNAL and flow is None:
+        raise ValueError(f"smart_signal {smart_signal!r} needs Autopilot's phase machine")
+    if smart_signal == "line" and beta is None:
+        # The labels line reads no level without a balance, so the light would never have a window.
+        raise ValueError("smart_signal 'line' needs a balance (beta)")
+    # What the flow is handed beyond Smart's own window (#5134): the cost arm's window, and the per-retrain readings.
+    read_cost = smart_readings or smart_signal == "cost"
+    read_history = smart_readings or smart_signal in SMART_HISTORY_READINGS
     if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
         # An arm that waits on the level, with no line to read or no phase to move, would never stop.
         raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
@@ -4628,6 +4783,8 @@ def simulate_voting_iterations(  # noqa: C901
             # margin cannot disagree with the light above it; NaN where no phase
             # machine ran, or where the rule itself declined to fit one.
             **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
+            # #5134's Smart candidates: NaN unless the run reads them.
+            **(flow.smart_reading_columns if flow is not None else reading_columns_nan()),
             "app_trained": 1
             if (flow is None or app_has_detector(flow.phase, more_shown=more_walk == "detector"))
             else 0,
@@ -4877,9 +5034,8 @@ def simulate_voting_iterations(  # noqa: C901
                 )
                 for mr in c_rows:
                     rows.append({**c_ident, **mr, **c_bands, **c_find, **c_timing})
-                if query_on:
-                    # The centroid is not what Test gives here, so its lines are not priced.
-                    continue
+                # In a typed-query run the centroid is not what Test gives, but it is
+                # priced all the same when asked: the set a fallback would give (#4800).
                 rows.extend(
                     _centroid_line_variant_rows(
                         line_variants,
@@ -4893,6 +5049,7 @@ def simulate_voting_iterations(  # noqa: C901
                         region_aware=region_aware,
                         style_obj=style_obj,
                         voted=set(good_votes) | set(bad_votes),
+                        query_scores=query_scores,
                     )
                 )
             continue
@@ -5083,8 +5240,10 @@ def simulate_voting_iterations(  # noqa: C901
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
-        # the quota too while the query holds on a single-vector space (#4736).
-        query = centroid and query_on
+        # the quota too while the query holds on a single-vector space (#4736), but the
+        # centroid once the query has missed on a patch space (#4800).
+        missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
+        query = centroid and query_on and not missed
         held = (
             query_on
             and not centroid
@@ -5099,7 +5258,7 @@ def simulate_voting_iterations(  # noqa: C901
         # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
         scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
-        if centroid and query_scores is not None:
+        if query and query_scores is not None:
             centroid_step, c_rows = _query_test(
                 query_scores,
                 clips_dict,
@@ -5274,6 +5433,8 @@ def simulate_voting_iterations(  # noqa: C901
             # step trains one, so the last SMART_WINDOW steps are the same set.
             del recent_steps[:-SMART_WINDOW]
             flow.record_step(
+                # The ``cost`` arm's window, the app before #5134: priced at
+                # SMART_INCLUSION at each model's own cut (#4243).
                 _labelset_error_costs(
                     recent_steps,
                     good_votes,
@@ -5282,12 +5443,32 @@ def simulate_voting_iterations(  # noqa: C901
                     SMART_INCLUSION,
                     region_aware=region_aware,
                     style_obj=style_obj,
-                ),
+                )
+                if read_cost
+                else None,
                 pool_scores,
                 threshold,
                 # Rates are over the haystack the votes came out of, labeled
                 # items included, as the app divides by its whole scored pool.
                 num_pool=len(sim_ids),
+                # Smart's window (#5134): each model's best F-beta on the current
+                # votes at the run's balance, and the A/B's other units of it.
+                windows=_labelset_window_readings(
+                    recent_steps,
+                    good_votes,
+                    bad_votes,
+                    clips_dict,
+                    beta,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                ),
+                # The A/B's per-retrain readings: held-out and labels-line.
+                history={
+                    **_heldout_readings(details.get("fold_orderings"), beta),
+                    "line": stop_level_reading(details.get("find_line"), beta)["expected_fbeta"],
+                }
+                if read_history
+                else None,
             )
             flow.update(
                 len(good_votes),
@@ -5632,7 +5813,8 @@ def simulate_voting_iterations(  # noqa: C901
                     **timing_cols,
                 }
             )
-        if centroid and line_variants and not query:
+        if centroid and line_variants:
+            # A typed-query run prices the centroid here too, beside its query's own set (#4800).
             rows.extend(
                 _centroid_line_variant_rows(
                     line_variants,
@@ -5642,6 +5824,7 @@ def simulate_voting_iterations(  # noqa: C901
                     test_ids,
                     target_category,
                     inclusion,
+                    query_scores=query_scores,
                     region_voting=region_voting,
                     region_aware=region_aware,
                     style_obj=style_obj,
@@ -5810,6 +5993,7 @@ def simulate_voting_iterations(  # noqa: C901
             "span_depth": -1,
             "span_target": -1,
             **{col: float("nan") for col in STOPPING_MARGIN_COLUMNS},
+            **reading_columns_nan(),
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,

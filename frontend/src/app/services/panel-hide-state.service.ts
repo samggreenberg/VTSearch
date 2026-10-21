@@ -9,7 +9,7 @@ const SETTING_KEY = {
 } as const;
 
 /**
- * Whether Train and Test fold each side panel to its strip (#4673): the
+ * Whether Train and Tune fold each side panel to its strip (#4673): the
  * `hide_left_panel` / `hide_right_panel` settings, one per side, shared by
  * both views.
  *

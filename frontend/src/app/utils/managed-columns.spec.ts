@@ -196,14 +196,20 @@ describe('ManagedColumns: drag-reorder', () => {
   it('onColDragStart is suppressed mid-resize (preventDefault, no drag begun)', () => {
     const mc = make();
     // Simulate an in-flight resize by starting one on a real table.
-    startResizeOn(mc);
-    let prevented = false;
-    mc.onColDragStart(
-      { dataTransfer: fakeDataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
-      'name',
-    );
-    expect(prevented).toBe(true);
-    expect(mc.dragCol).toBeNull();
+    const table = startResizeOn(mc);
+    try {
+      let prevented = false;
+      mc.onColDragStart(
+        { dataTransfer: fakeDataTransfer(), preventDefault: () => (prevented = true) } as unknown as DragEvent,
+        'name',
+      );
+      expect(prevented).toBe(true);
+      expect(mc.dragCol).toBeNull();
+    } finally {
+      // End the resize and drop its table: both outlive the file otherwise (#5117).
+      mc.onResizeEnd();
+      table.remove();
+    }
   });
 
   it('onColDragOver marks the hovered column as the drop target', () => {

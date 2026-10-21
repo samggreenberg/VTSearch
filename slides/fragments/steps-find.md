@@ -9,7 +9,7 @@
 
 1. Tick the new photos
 2. Tick the detector
-3. **Test**
+3. **Tune**
 
 <!-- build: figs/ui-steps-find.build1.webp -->
 
@@ -18,7 +18,7 @@
 
 </div>
 
-<!-- **a** — Tick the new pile and the detector, and this time hit Test. It
+<!-- **a** — Tick the new pile and the detector, and this time hit Tune. It
      scores every photo, then offers a few random picks to vote on, so you know
      how far to trust it. -->
 

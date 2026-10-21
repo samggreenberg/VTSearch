@@ -12,6 +12,58 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
+  cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
+  balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
+  sign turned over, `SMART_RISE_THRESHOLD`), `best_fbeta`, `smart_beta`, `SMART_NO_BALANCE_BETA`. Each point was the
+  detector's FPR + FNR at its own Inclusion 0 cut, green once it stopped falling; the A/B found the two a tie
+  (`docs/experiments/2026-10-20-smart-fbeta-5134`). **Breaking:** `labeling_progress.calculate_error_cost_over_time`
+  is replaced by `calculate_fbeta_over_time(..., beta=None)`, whose points are `{time_index, num_labels, fbeta}`;
+  `analyze_labeling_progress` returns `fbeta_over_time` in place of `error_cost_over_time`; `compute_labeling_status`,
+  `cached_indicator_history` and `analyze_labeling_progress` take `beta=`. `inject_live_model(smart_threshold=)` is
+  deprecated and ignored, and the cache keeps no Smart cut. `smart_status_from_costs`, `smart_cut` and
+  `SMART_INCLUSION` stay for the eval's `cost` arm.
+- **The eval harness has Smart's readings as arms** (issue #5134). `AutopilotFlow(smart_signal=, record_readings=)`
+  (`SMART_SIGNALS`, `APP_SMART_SIGNAL` = `fbeta_best`, the app; `cost`, the app before; `ap`, `fbeta`, `heldout_ap`,
+  `heldout_fbeta`, `line`) and `record_step(windows=, history=)`; `simulate_voting_iterations(smart_signal=,
+  smart_readings=)`; `step_trainers._labelset_window_readings` scores Smart's window. Every row gains
+  `smart_<reading>_{slope,mean,t,last}` (`SMART_READING_COLUMNS`), NaN unless `smart_readings`. The default arm's
+  Smart is the app's F-beta light.
+- **A learned sort leaves the Evidence verdict's training baseline to be drawn once the votes stop** (issue #5120).
+  The baseline was drawn only by the evidence route on the training dataset, after a Find there.
+  `vtscore.detectors.evidence_baseline` now holds the draw both share (`scored_queries`, `labelset_evidence`,
+  `draw_baseline`), and a deferred one: `PendingDraw` carries a sort's labels, scores and line and draws them when the
+  detector has not moved on since, `defer_baseline_draw` draws it on a timer once a detector's sorts have been quiet for
+  `DRAW_QUIET_SECONDS` (a newer one replaces it), `flush_baseline_draw` lands it at once, `discard_baseline_draw` drops
+  it, and a normal exit lands any still waiting. `record_baseline` takes `det_ctx=`, re-pointing that context's cached
+  labelset after the write so it does not read as an outside edit. Additive.
+- **The Evidence coverage verdict ranks against the training haystack, not the votes' own spread** (issue #5089).
+  `evidence_coverage_report` drew `unsupported` from the share with support p-value `D < alpha`, `D` ranked against the
+  labelset's leave-one-out distances; active learning picks the votes, so on #4739's bench it fired on 81-83% of
+  in-domain runs by vote 150, and below 20 votes of a class it could not fire at all. It now takes `baseline`, the
+  training haystack's `reference_cutoffs` (per predicted class, the distance past 95% of the haystack's media called
+  that class), and draws `unsupported` from the share beyond them (`frac_beyond`, `z_beyond`; `beyond_reference`):
+  in-domain it fires on 1 of 4,320 runs at vote 150, and on the 22% screens mix and on screens alone on 99.6-100% of
+  runs from vote 10 (`docs/experiments/2026-10-19-evidence-chip-5089`). Without a baseline `unsupported` is `False`;
+  `frac_unsupported`, `z_score` and `median_support` keep their meaning. New module `vtscore.detectors.evidence_baseline`
+  stamps the cuts (embedder, width, labelset signature, k, alpha) for the detector JSON (`evidence_baseline`) and refuses
+  a stale stamp; `training_domain.labelled_media_ids` names a labelset's media in a dataset. The eval harness's Find
+  corpus ranks against the sim pool's unvoted media (`find_corpus.pool_baseline`, `FindCorpus.pool_ids`), and its flag
+  rows gain `evidence_frac_beyond` and the counts behind the shares (`evidence_n*`, `evidence_pool_n*`,
+  `evidence_n_{pos,neg}_beyond_pool`; `unsupported_counts`, `reference_vacuum_counts`).
+- **On a patch space a typed-query detector gives the Goods' centroid once its query has missed** (issue #4800).
+  Under the label quota, a detector made from a typed query gives that query's own set (#4758). On a patch space,
+  once a Bad comes before the Goods quota with a Good in hand (`label_quota.query_missed`: 1-2 Goods and 1-15 Bads,
+  `QUERY_MISS_BADS`), it now gives the Goods' centroid instead, until the quota. `_query_tier` gives the centroid there only
+  where a Good resolved; `cached_head_is_current` takes a cached centroid there and refuses a cached query head. A
+  single-vector space, and an embedder the registry does not know, keep the query. On the Region path (COCO
+  Better, DINOv3 learning on SigLIP's typed query, 864 sessions) Find's mean F-beta gains
+  +0.011 / +0.009 / +0.012 over votes 1-10 and +0.0053 / +0.0038 / +0.0047 over 1-50 at beta 1/4, 1 and 4
+  (every seed; `docs/experiments/2026-10-19-region-missed-query-4800`). The eval harness follows (`query_miss`,
+  `CALIB_QUERY_MISS=0` is the arm before). Its priced centroid lines (`centroid_line_variants`) score a click's
+  media once and draw every line off that pass (`step_trainers._centroid_cut_step`), the same sets as before, and
+  `query@<beta>` prices the typed query's own set beside them in a typed-query run.
+
 - **Above beta 1 the head's count line keeps 1.3x what stands out at beta 4, and reaches deeper where a held-out Good
   sits below it** (issue #5039). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods the labels
   line is the head's count (#4786, #4798). Its count now grows as `beta ** HEAD_COUNT_RECALL_EXPONENT` (0.18925) above
@@ -415,6 +467,30 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **The detector registry records the datasets a detector holds labels from** (issue #5142). New
+  `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
+  labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's
+  `trained_on` list of dataset ids: a writer that composed its labels against one dataset adds it while the detector
+  still holds labels there and drops it once the last one is gone; a writer that names no dataset leaves the list
+  alone. The per-vote label sync calls it, and `VoteSnapshot` gains `dataset_id`, the dataset its `medias` belong to.
+  Additive.
+- **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
+  one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
+  generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends
+  the test), which `LineTest.ahead` reads back and `as_dict()` carries as `ahead` until a label changes. `draw()`
+  installs the copy whose labels match the ones recorded instead of drawing again: the same picks from the same
+  generator state, so a seeded test deals the same rounds, and reads the same numbers, whether or not anything was
+  dealt ahead. `RoundAhead` is exported from `vtscore.training.thresholds`. Additive: a caller that never deals ahead
+  sees no change but `as_dict()["ahead"]`, always `None`.
+
+- **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
+  (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
+  `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the
+  media whose rows have all been scored. A detector's train scores its haystack with its final head and each
+  calibration fold model before the detector's own pass, so this is how the app's Find bar counts all of them. The
+  hook is per thread, `None` reports nothing, and the outer callback comes back when the block exits.
+  `_forward_sigmoid_chunked` takes an optional `on_rows` (rows scored so far, per chunk). Additive.
 
 - **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
   (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:

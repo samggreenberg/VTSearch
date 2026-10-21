@@ -949,6 +949,28 @@ class TestSaveLabels:
         assert "good" in label_values
         assert "bad" in label_values
 
+    def test_save_labels_records_the_dataset_trained_on(self, client):
+        """The saved votes are the active dataset's, so the registry entry
+        lists it as one the detector was trained on (#5142)."""
+        from vtscore.detectors.registry import get_detector
+        from vtscore.state import get_active_context
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        client.post(f"/api/medias/{next(iter(medias))}/vote", json={"target": "good"})
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "SavedHere", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        assert client.post("/api/detectors/SavedHere/labels").status_code == 200
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        assert entry["trained_on"] == [get_active_context().dataset_id]
+
     def test_save_labels_nonexistent_model(self, client):
         res = client.post("/api/detectors/nonexistent/labels")
         assert res.status_code == 404
@@ -2047,6 +2069,40 @@ class TestVoteSyncsToLoadedModel:
         assert entry is not None
         assert entry["num_training"] == 1
         assert entry.get("last_trained_at") is not None
+
+    def test_vote_records_the_dataset_trained_on(self, client):
+        """A vote puts its dataset on the entry's ``trained_on``, which the
+        registry listing carries, and taking the last vote there back takes
+        the dataset off again (#5142)."""
+        from vtscore.detectors.registry import get_detector
+        from vtscore.state import get_active_context
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "TrainedOn", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+        dataset_id = get_active_context().dataset_id
+        assert dataset_id
+
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        assert entry["trained_on"] == [dataset_id]
+        listed = client.get("/api/detectors/registry").get_json()["detectors"]
+        assert next(d for d in listed if d["id"] == detector_id)["trained_on"] == [dataset_id]
+
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "none"})
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        assert entry["trained_on"] == []
 
     def test_vote_toggle_off_updates_model(self, client):
         """Toggling a vote off should update the model labelset to reflect removal."""

@@ -230,15 +230,12 @@ def run_learned_sort(
     """
     from vtscore.concurrency.stalls import PhaseClock
     from vtscore.config.core_config import _retired_inclusion
-    from vtscore.detectors.cost_trend import smart_cut
     from vtscore.detectors.labeling_progress import inject_live_model
     from vtscore.detectors.labelset_training import labelset_train_and_score
     from vtscore.detectors.training import train_and_score
     from vtscore.state import update_learned_scores
     from vtscore.state.core import (
         _empty_detector_context,
-        detector_line_inclusion,
-        recut_detector_threshold,
         thread_dataset_context,
         thread_detector_context,
     )
@@ -287,14 +284,9 @@ def run_learned_sort(
         if model is not None and model_matches_local_votes(
             labelset, has_cross_dataset, local_good, local_bad, good, bad
         ):
-            # Smart scores every model at its own Inclusion 0 cut, not at the
-            # line it was served with (issue #4243).  The re-cut reads the
-            # estimator this training run just parked on *det_ctx*.  The line
-            # was served at Inclusion 0 with no balance, and at no inclusion at
-            # all under one, where it keeps a set (#4272, #4413).
-            served_inclusion = detector_line_inclusion(det_ctx, beta_value)
-            smart_threshold = smart_cut(threshold, served_inclusion, lambda k: recut_detector_threshold(det_ctx, k))
-            inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold, beta=beta_value)
+            # Smart reads each cached model's best F-beta over every cut (#5134),
+            # so it needs the model and the balance its line was drawn at, no cut.
+            inject_live_model(good, bad, model, threshold, beta=beta_value)
         clock.mark("inject_live_model")
 
         if det_ctx is not _empty_detector_context and model is not None:

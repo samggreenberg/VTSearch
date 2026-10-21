@@ -60,6 +60,14 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   readonly trainableModelName = input<string | null>(null);
   /** Disable interactive buttons (used during Find scoring). */
   readonly disabled = input(false);
+  /**
+   * Find mode: how many unverified items sit above / below the cutoff, the
+   * two faces of the left work queue. The Find view counts them over its
+   * frozen ranking (#5115): in Find the vote piles carry the verified items
+   * only, so they no longer hold the presumptions to count.
+   */
+  readonly unverifiedGoodCount = input(0);
+  readonly unverifiedBadCount = input(0);
   readonly mediaSelected = output<number>();
   readonly mediaVoted = output<{
     id: number;
@@ -161,14 +169,14 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     return this.badIds().filter((id) => verified.has(id));
   }
 
-  /** Find mode: count of unverified goods (the left work queue above the cutoff). */
-  get unverifiedGoodCount(): number {
-    return this.goodIds().length - this.goodDisplayIds.length;
+  /** Find mode: the full good set, verified and unverified, which Browse / To Dataset / Export act on. */
+  get findGoodTotal(): number {
+    return this.goodDisplayIds.length + this.unverifiedGoodCount();
   }
 
-  /** Find mode: count of unverified bads (the left work queue below the cutoff). */
-  get unverifiedBadCount(): number {
-    return this.badIds().length - this.badDisplayIds.length;
+  /** Find mode: the full bad set, verified and unverified, which Export acts on. */
+  get findBadTotal(): number {
+    return this.badDisplayIds.length + this.unverifiedBadCount();
   }
 
   ngOnInit(): void {

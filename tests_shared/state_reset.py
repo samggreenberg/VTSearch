@@ -241,6 +241,11 @@ def reset_shared_state(medias_snapshot) -> None:
 
     reset_label_sync_for_tests()
 
+    # Same for an Evidence baseline a learned sort left to be drawn (#5120).
+    from vtscore.detectors.evidence_baseline import reset_baseline_draws_for_tests
+
+    reset_baseline_draws_for_tests()
+
     # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
     # test can't suppress a rehydrate in the next one.
     from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests

@@ -23,6 +23,7 @@ them here drops it.
 
 from __future__ import annotations
 
+from vtscore.eval.autopilot_flow import SMART_READING_COLUMNS
 from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS
 
 
@@ -172,6 +173,13 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: How close Smart and Stable came to firing, as opposed to whether they
     #: did (issue #3560).  Declared just above.
     *STOPPING_MARGIN_COLUMNS,
+    #: #5134's Smart candidates in the objective's units, ``smart_<reading>_<part>``
+    #: (:data:`~vtscore.eval.autopilot_flow.SMART_READING_COLUMNS`): each reading's
+    #: window trend as the rising rule reads it - relative slope, mean, the slope's
+    #: t and the newest value.  NaN unless the run records them
+    #: (``smart_readings``, or a ``smart_signal`` arm), and where too few points or
+    #: votes to fit.
+    *SMART_READING_COLUMNS,
     "app_trained",
     #: Which detector a Test at this click gives (#4643): ``centroid`` - the
     #: Goods' centroid, under the label quota (from the first Good until the
@@ -371,8 +379,9 @@ FIND_CORPUS_COLUMNS: tuple[str, ...] = (
 #: embedder, which the app refuses (#3329), and with no atlas (a non-Autopilot
 #: strategy).  ``evidence_*`` is the Evidence coverage chip,
 #: :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` from the
-#: votes' vectors and the Find cut.  ``shift_shifted`` / ``evidence_unsupported``
-#: are the reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
+#: votes' vectors and the Find cut, its verdict ranked against the sim pool's
+#: unvoted media (#5089).  ``shift_shifted`` / ``evidence_unsupported`` are the
+#: reports' headline verdicts as 1 / 0.  NaN off a snapshot click.
 FIND_FLAG_COLUMNS: tuple[str, ...] = (
     "flags_at",
     "shift_frac_atypical",
@@ -382,6 +391,25 @@ FIND_FLAG_COLUMNS: tuple[str, ...] = (
     "evidence_z",
     "evidence_unsupported",
     "evidence_frac_low_trust",
+    #: The share the Evidence verdict reads: farther from its class's votes
+    #: than 95% of the training haystack's media called that class (#5089).
+    "evidence_frac_beyond",
+    #: The counts behind the Evidence share, by predicted class, and the same
+    #: counts over the unvoted sim pool found as a Find there draws it: the
+    #: haystack the votes came from, an in-domain baseline (#5089).
+    "evidence_n",
+    "evidence_n_pred_pos",
+    "evidence_n_pos_unsupported",
+    "evidence_n_neg_unsupported",
+    "evidence_pool_n",
+    "evidence_pool_n_pred_pos",
+    "evidence_pool_n_pos_unsupported",
+    "evidence_pool_n_neg_unsupported",
+    #: The Find corpus's predicted positives / negatives farther from their
+    #: class's votes than 95% of the unvoted pool's media called that class:
+    #: the support p-value calibrated on the training haystack (#5089).
+    "evidence_n_pos_beyond_pool",
+    "evidence_n_neg_beyond_pool",
 )
 
 

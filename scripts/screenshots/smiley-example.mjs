@@ -115,11 +115,11 @@ export function framesOf(pictures, cat, n) {
  * Thirty labels. Fewer is not a detector anyone would ship, and the count is
  * load-bearing twice over:
  *
- * - **The Test shots need a trained head.** `Yellow Smileys` is made from a
+ * - **The Tune shots need a trained head.** `Yellow Smileys` is made from a
  *   typed query on SigLIP, and such a detector gives its query's own set until
  *   it has `QUERY_HOLD_LABELS` (30) labels (#4736,
  *   `vtscore/detectors/label_quota.py`). On `drawings-new` that set keeps one
- *   picture, so Test has nothing to test and every recipe that waits for its
+ *   picture, so Tune has nothing to test and every recipe that waits for its
  *   result times out (#4862). `tests_lib/meta/test_smiley_example.py` holds the
  *   baseline to the hold.
  * - **`autopilot-progress`**: Autopilot moves through its phases on vote

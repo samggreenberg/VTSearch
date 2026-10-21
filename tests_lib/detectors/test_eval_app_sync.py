@@ -442,7 +442,7 @@ class TestTheSmartAndStablePlumbingIsPinned:
 
     `progress.smart_status` and `progress.stable_status` pin one-line wrappers
     over the shared rules, which left what feeds those rules unwatched: which
-    models Smart re-scores, against what, at what price, and which items Stable
+    models Smart re-scores, against what, at which balance, and which items Stable
     compares, at which cut, against which baseline.  Each probe makes a
     throwaway logic edit to one pinned symbol in a copy of the two files and
     asserts the gate names the side that moved.
@@ -455,7 +455,7 @@ class TestTheSmartAndStablePlumbingIsPinned:
         ("progress.eval_cached_models", "app", APP, "_model_step_indices"),
         ("progress.eval_cached_models", "app", APP, "_build_eval_rows"),
         ("progress.eval_cached_models", "app", APP, "_smart_status_uncached"),
-        ("progress.eval_cached_models", "harness", "vtscore/eval/step_trainers.py", "_labelset_error_costs"),
+        ("progress.eval_cached_models", "harness", "vtscore/eval/step_trainers.py", "_labelset_window_readings"),
         ("progress.step_stability", "app", APP, "_compute_step_stability"),
         ("progress.step_stability", "harness", "vtscore/eval/autopilot_flow.py", "AutopilotFlow.record_step"),
     ]
@@ -538,6 +538,8 @@ class TestTheFindCorpusFlagsArePinned:
         ("find.evidence_coverage", "harness", HARNESS, "evidence_flags"),
         ("find.evidence_coverage", "harness", HARNESS, "vote_vectors"),
         ("find.evidence_coverage", "harness", HARNESS, "FindCorpus.matrix"),
+        ("find.evidence_coverage", "harness", HARNESS, "pool_baseline"),
+        ("find.evidence_coverage", "harness", HARNESS, "FindCorpus.pool_matrix"),
     ]
 
     @staticmethod

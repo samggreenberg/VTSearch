@@ -12,6 +12,7 @@ import { provideRouter, Router } from '@angular/router';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 
 /**
  * Zoneless staleness canary for the center panel.
@@ -372,6 +373,42 @@ describe('CenterPanelComponent', () => {
     expect(text).toContain('test.wav');
     expect(text).toContain('MD5');
     expect(text).toContain('abc123');
+  });
+
+  describe('the Media Type row (#5106)', () => {
+    const labels = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.metadata-label') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+
+    /** Show the metadata grid for the audio item on a server with `settings`
+     *  (the tray's open state is itself a setting, `show_metadata`). The
+     *  settings GET is an `rxResource`, so drain a macrotask and tick to issue
+     *  it before flushing (see the keyboard canary above). */
+    async function showWith(settings: object): Promise<void> {
+      fixture.componentRef.setInput('media', mockMedia);
+      TestBed.inject(SettingsStateService).load();
+      await new Promise<void>((resolve) => setTimeout(resolve));
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush({ show_metadata: true, ...settings });
+      await settleZoneless(fixture);
+    }
+
+    it('shows on a server open to every type', async () => {
+      await showWith({});
+      expect(labels()).toContain('Media Type');
+    });
+
+    it("drops out on a server locked to the item's type, where it could be nothing else", async () => {
+      await showWith({ solo_media_type: 'audio' });
+      expect(labels()).not.toContain('Media Type');
+      expect(labels()).toContain('MD5');
+    });
+
+    it('stays for an item of a type the lock does not account for', async () => {
+      await showWith({ solo_media_type: 'image' });
+      expect(labels()).toContain('Media Type');
+    });
   });
 
   it('should send vote request on castVote', () => {

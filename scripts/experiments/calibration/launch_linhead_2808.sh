@@ -212,8 +212,8 @@ status)
   echo "CALIB_EXP=$CALIB_EXP"
   squeue -u "$USER" -o "%.12i %.20j %.9P %.8T %.11M %R" | grep -E "lin2808|JOBID" || echo "(no lin2808 jobs queued)"
   for arm in "${ARM_ORDER[@]}"; do
-    n=$(find "$CALIB_EXP/results/$arm/cells" -name '*.csv' -size +0 2>/dev/null | wc -l)
-    z=$(find "$CALIB_EXP/results/$arm/cells" -name '*.csv' -size 0 2>/dev/null | wc -l)
+    n=$(find "$CALIB_EXP/results/$arm/cells" -name 'task_*.csv*' ! -name '*__*' -size +0 2>/dev/null | wc -l)
+    z=$(find "$CALIB_EXP/results/$arm/cells" -name 'task_*.csv*' ! -name '*__*' -size 0 2>/dev/null | wc -l)
     echo "  $arm: $n non-empty cells, $z ZERO-BYTE (resume counts those as done - delete before resuming)"
   done
   ;;

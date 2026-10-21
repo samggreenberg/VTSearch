@@ -7,6 +7,7 @@ import { BrowseViewComponent } from './browse-view.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -38,9 +39,13 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   let subsetHandoff: { datasetId: string; ids: number[] } | null;
   let navigate: ReturnType<typeof vi.fn>;
   let openResults: ReturnType<typeof vi.fn>;
+  /** Fired by hand where a test needs "the backend lost the dataset and it has
+   *  been loaded again" (#5158). */
+  let pairReloaded: Subject<void>;
 
   beforeEach(async () => {
     metaSubject = new Subject<ProjectionMeta>();
+    pairReloaded = new Subject<void>();
     query = {};
     subsetHandoff = null;
     navigate = vi.fn(() => Promise.resolve(true));
@@ -60,6 +65,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       setProjectionId: noop,
       setContentVersion: noop,
       clear: noop,
+      // What the canvas reads once a test takes the view to `ready`: no tile
+      // ever arrives, so it paints an empty map.
+      tileLoaded$: new Subject(),
+      getTile: () => null,
+      getCached: () => null,
+      prefetch: noop,
     };
     const activeContextStub = makeActiveContextStub({
       pair$: EMPTY,
@@ -110,6 +121,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: ProjectionApiService, useValue: projectionStub },
         { provide: TileCacheService, useValue: tileCacheStub },
         { provide: ActiveContextService, useValue: activeContextStub },
+        { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
         { provide: DatasetsRegistryApiService, useValue: datasetsStub },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         { provide: SettingsStateService, useValue: settingsStub },
@@ -534,13 +546,101 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.volume()).toBe(1);
   });
 
+  // #5158: a restart takes the dataset, and the pyramid held in memory with it.
+  // Loading the dataset again does not bring the pyramid back (tiles go on
+  // failing until something asks for a build), so the view must re-resolve
+  // its projection, whose build restores the persisted layout.
+  describe('when the lost dataset is loaded again (#5158)', () => {
+    let metas: Subject<ProjectionMeta>[];
+    let build: ReturnType<typeof vi.fn>;
+
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    beforeEach(() => {
+      // One subject per meta fetch, so each answer reaches only the request
+      // it belongs to.
+      metas = [];
+      build = vi.fn(() => of({ status: 'ready', projection_id: 'p1' }));
+      const api = TestBed.inject(ProjectionApiService);
+      api.getMeta = vi.fn(() => {
+        const meta = new Subject<ProjectionMeta>();
+        metas.push(meta);
+        return meta.asObservable();
+      });
+      api.build = build as unknown as ProjectionApiService['build'];
+    });
+
+    /** Answer the latest meta fetch. Taken first: an answer can start the next. */
+    function answer(meta: ProjectionMeta): void {
+      const latest = metas[metas.length - 1];
+      latest.next(meta);
+      latest.complete();
+    }
+
+    it('asks for the projection again, rebuilding it from what the server kept', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(metas.length).toBe(1);
+
+      pairReloaded.next();
+      await settleZoneless(fixture);
+      // Started over: the canvas is down and the meta asked for afresh.
+      expect(component.status()).toBe('loading');
+      expect(metas.length).toBe(2);
+
+      // The reloaded dataset has no pyramid in memory yet, so the view asks
+      // for a build, which answers from the layout persisted beside the
+      // dataset without a fit.
+      answer({ status: 'idle' } as ProjectionMeta);
+      await settleZoneless(fixture);
+      expect(build).toHaveBeenCalledTimes(1);
+      expect(metas.length).toBe(3);
+
+      answer(ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.revealed()).toBe(false);
+    });
+
+    it('re-fits a subset from the ids in hand, which a pair change would not', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
+      const api = TestBed.inject(ProjectionApiService);
+      const buildSubset = vi.fn(() => of({ status: 'building', job_id: 'j1' }));
+      api.buildSubset = buildSubset as unknown as ProjectionApiService['buildSubset'];
+
+      await settleZoneless(fixture);
+      answer(ready);
+      await settleZoneless(fixture);
+
+      pairReloaded.next();
+      await settleZoneless(fixture);
+      answer({ status: 'idle' } as ProjectionMeta);
+      await settleZoneless(fixture);
+
+      expect(buildSubset).toHaveBeenCalledWith([1, 2]);
+      expect(fixture.componentInstance.status()).toBe('building');
+    });
+  });
+
   describe("a Find run's results (#4615)", () => {
     beforeEach(() => {
       query = { subset: '1', from: 'results', run: '_autofind_7' };
       subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
     });
 
-    it('goes Back to the Dashboard and reopens those results, not to Test', async () => {
+    it('goes Back to the Dashboard and reopens those results, not to Tune', async () => {
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.subset).toBe(true);
@@ -566,12 +666,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       expect(fixture.componentInstance.errorMessage()).toContain('Open the Find results again');
     });
 
-    it('keeps Back to Test for a Test-view subset', async () => {
+    it('keeps Back to Tune for a Tune-view subset', async () => {
       query = { subset: '1' };
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.resultsRunId).toBe('');
-      expect(component.backTarget).toBe('Test');
+      expect(component.backTarget).toBe('Tune');
       expect(component.countNoun).toBe('positives');
       expect(component.canVerify).toBe(true);
     });

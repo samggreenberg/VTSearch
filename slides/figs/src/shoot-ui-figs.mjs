@@ -4,17 +4,19 @@
  *   node slides/figs/src/shoot-ui-figs.mjs            # every shot
  *   node slides/figs/src/shoot-ui-figs.mjs train-loop # one group
  *
- * Five groups, and the first four are one continuous session rather than
+ * Six groups, and the first four are one continuous session rather than
  * unrelated frames — they are the deck's click-by-click introduction to the
  * tool, and they are shot in the order a user does them:
  *
  *   steps          `figs/ui-steps-*[.buildN].webp`         — the same session,
  *                                                            numbered (#4202)
  *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
- *                                                            then name the concept
- *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly,
- *                                                            then a staged stop
+ *                                                            then name the concept,
+ *                                                            ringed
+ *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
  *   find           `figs/ui-find*.webp`                    — score unseen media
+ *   browse         `figs/ui-vision-*[.buildN].webp`       — Find's results, then
+ *                                                            the whole pile, as a map
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
  *
  * The session starts from an app with nothing in it. Both piles of photographs
@@ -78,11 +80,11 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
-import { clearStopHint, drawStopHint } from './stop-hint.mjs';
 import {
   appClient,
   BOOK_DETECTOR,
   BOOK_TEXT,
+  BROWSE_DATASET,
   corpusPath,
   framesOf,
   HERO_REGION,
@@ -182,8 +184,8 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // rather than to photograph fewer of the results (#3779). Still inside the
 // twenty minutes the deck says the whole task is worth.
 //
-// A spot check's answers count towards all three (`answerSpotCheck`): they are
-// votes, and they land in the same piles.
+// A spot check's answers count towards all three: Autopilot serves its picks
+// as its next items (#5136), and they land in the same piles.
 //
 // None of the three is the label count `find` needs. The Book detector is made
 // from a typed query, so on SigLIP it keeps its query's own set until it has 30
@@ -207,7 +209,7 @@ const CALLOUT_SCALE = 1.3;
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
 
-// The Test view's layout for the Instruction section's Review frame, as the
+// The Tune view's layout for the Instruction section's Review frame, as the
 // settings a user would have after dragging the two dividers and picking a
 // thumbnail size. That frame's subject is the ranking in the left column, and
 // at the app's defaults that column was the narrowest of the three, its
@@ -222,7 +224,7 @@ const GRID_ROWS = 3;
 // loop in this layout. (It was drawn for `ui-find-line`, the same screen
 // scrolled to the line, a slide the deck cut as too technical that early;
 // owner, 2026-10-13.)
-// Both side panels open: Train and Test fold them to a strip by default
+// Both side panels open: Train and Tune fold them to a strip by default
 // (#4673), and every slide is of what is in them.
 const PANELS_OPEN = { hide_left_panel: false, hide_right_panel: false };
 const FIND_LAYOUT = {
@@ -352,8 +354,7 @@ const wanted = (id) => only.length === 0 || only.includes(id);
  * this script started has `hide_all_hints` set (`ensureApp`), so a frame is
  * what a user who ticked Hide all hints sees (#4807); this rule is the backstop
  * for an app the caller pointed it at. Toasty floats over the page, so hiding
- * him moves nothing else. The one Toasty on a slide is the train loop's last
- * page, where he is the subject, and `stop-hint.mjs` draws him there itself.
+ * him moves nothing else.
  */
 const STILL_CSS =
   '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
@@ -599,7 +600,9 @@ async function shootMakeDetector(page) {
   if (named !== BOOK_DETECTOR) {
     throw new Error(`the dialog named the detector ${named}, not ${BOOK_DETECTOR} (book-example.mjs)`);
   }
-  await shoot(page, 'ui-make-detector');
+  // A red ring round the phrase, so the presenter has something to point at
+  // when they say "that's all we need" (#5132).
+  await shootNumbered(page, 'ui-make-detector', [{ target: '.example-panel input.form-input', kind: 'ring' }]);
   await shootNumbered(page, 'ui-steps-make-detector', [
     step(2, '.example-panel input.form-input'),
     step(3, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
@@ -624,14 +627,10 @@ async function shootMakeDetector(page) {
  * largest box in it is a book (see `coco_fixture._roster`). So the piles that
  * grow through the build are the piles a person would have produced, and the
  * one thing a staged screenshot cannot show — that the tool asks about items
- * it cannot call, and is sometimes told no — is visible in them.
- *
- * Null when Autopilot's spot check stood over the item and nothing was cast:
- * the caller answers the check (`answerSpotCheck`) and asks again, about
- * whatever is served once it closes.
+ * it cannot call, and is sometimes told no — is visible in them. A spot
+ * check's picks are served the same way (#5136), and answered the same way.
  */
 async function voteServed(page) {
-  // The centre's own viewer: the spot check draws its picks in another.
   const viewer = page.locator(CENTRE_ITEM).first();
   // Read the served item only once the viewer has stopped changing. The button
   // is chosen from this alt, so a read taken mid-swap decides the vote from one
@@ -656,27 +655,12 @@ async function voteServed(page) {
   if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
-  // The check starts when a retrain lands or every light goes green, which is
-  // at no moment this script chooses (#4556): it can be up already, or come up
-  // while the click waits. Either way it hides the centre panel, so the click
-  // finds no button and nothing is cast.
-  if (await spotCheckOpen(page)) return null;
-  const cast = await page
-    .locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`)
-    .first()
-    .click()
-    .then(
-      () => true,
-      async (err) => {
-        if (await spotCheckOpen(page)) return false;
-        throw err;
-      }
-    );
-  if (!cast) return null;
+  await page.locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`).first().click();
   // Autopilot serves the next item as soon as the vote lands, and retrains
   // after it: the re-sort is scheduled, not awaited (`scheduleLearnedSort`).
-  // So the served item *changing* is the vote done, and the retrain — the
-  // thing that can open the spot check — is still to come.
+  // So the served item *changing* is the vote done, and the retrain is still
+  // to come. When a spot check's round ends, the next item waits on the
+  // server dealing the next round, inside the same wait.
   await page
     .waitForFunction(
       ({ sel, prev }) => document.querySelector(sel)?.alt !== prev,
@@ -716,75 +700,8 @@ async function assertVoted(filename, good) {
   }
 }
 
-/** The item in the Label view's centre, as against a spot-check pick. */
+/** The item in the Label view's centre. */
 const CENTRE_ITEM = 'vt-center-panel img.image-element';
-const SPOT_CHECK = 'vt-spot-check-stage';
-
-const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) > 0;
-
-/**
- * Answer Autopilot's spot check, if it has one open, as truthfully as the loop
- * votes; the answers, Good as true, in the order they were given.
- *
- * Autopilot runs the check itself, as its Spot Check step: when the labels
- * separate weakly (#4496), from the tenth vote once a retrain lands, and once
- * before Done, when every light goes green; moments this script does not
- * choose (#4556). Its picks are the loop's question asked in the centre pane
- * in place of the served item, and its answers are ordinary votes, so it is
- * answered the same way — by the
- * pick's file name, one at a time, round after round until the walk ends —
- * and its votes join the piles the last page shows. That is the session a
- * user has. Cancelling would not be: the check stays due, and comes back.
- *
- * It is not photographed. The train-loop slide's subject is one question
- * repeated, and a frame of the check would need a slide of its own saying why
- * Autopilot asks, which the intro has no room to make.
- *
- * Unlike the centre, a pick cannot be swapped under the read: the check moves
- * to another only when it is voted, so the name read is the pick the click
- * answers.
- */
-async function answerSpotCheck(page) {
-  const stage = page.locator(SPOT_CHECK);
-  if (!(await stage.count())) return [];
-  log('autopilot opened a spot check; answering it');
-  const pick = stage.locator('.pick-stage img.image-element');
-  const answers = [];
-  for (let guard = 0; guard < 400 && (await stage.count()); guard++) {
-    // A refused start or a lost round is not something to photograph around.
-    const error = stage.locator('.error-text');
-    if (await error.count()) throw new Error(`the spot check failed: ${(await error.first().textContent()).trim()}`);
-    if (await stage.locator('.check-result').count()) {
-      log(`spot check: ${(await stage.locator('.check-result-headline').textContent()).trim()}`);
-      await stage.getByRole('button', { name: 'Continue', exact: true }).click();
-      break;
-    }
-    // Nothing to read while it draws a round; and a pick's file name, never
-    // the viewer's placeholder, as in `voteServed`.
-    const name = (await pick.count()) ? await pick.first().getAttribute('alt') : null;
-    if (!/^[^/\s]+\/[^/]+\.\w+$/.test(name || '')) {
-      await page.waitForTimeout(500);
-      continue;
-    }
-    const good = isBook(name);
-    await stage.locator(good ? '.btn-good' : '.btn-bad').click();
-    answers.push({ name, good });
-    // On to the next pick; or, on a round's last, the round goes to the server
-    // with the pick still on screen, and the next round or the result replaces it.
-    await page.waitForFunction(
-      ({ sel, prev }) => {
-        const m = document.querySelector(sel);
-        if (!m || m.querySelector('.check-result, .error-text')) return true;
-        return m.querySelector('.pick-stage img.image-element')?.alt !== prev;
-      },
-      { sel: SPOT_CHECK, prev: name },
-      { timeout: 120000 }
-    );
-  }
-  await stage.waitFor({ state: 'detached', timeout: 30000 });
-  for (const { name, good } of answers) await assertVoted(name, good);
-  return answers.map((a) => a.good);
-}
 
 /**
  * Watch the page's learned sorts, so the train loop can wait for the last
@@ -869,22 +786,11 @@ async function shootTrainLoop(page) {
   ]);
 
   let cast = 0;
-  let checked = 0;
   const tally = { good: 0, bad: 0 };
-  const count = (good) => {
-    tally[good ? 'good' : 'bad']++;
-    cast++;
-  };
-  const answerCheck = async () => {
-    const answers = await answerSpotCheck(page);
-    answers.forEach(count);
-    checked += answers.length;
-  };
-  // One vote on the centre item, answering whatever spot check is in its way.
+  // One vote on the centre item, a spot check's pick or not.
   const answer = async () => {
-    let good;
-    while ((good = await voteServed(page)) === null) await answerCheck();
-    count(good);
+    tally[(await voteServed(page)) ? 'good' : 'bad']++;
+    cast++;
   };
   for (const stage of TRAIN_STAGES) {
     while (cast < stage) await answer();
@@ -897,25 +803,14 @@ async function shootTrainLoop(page) {
   ) {
     await answer();
   }
-  // The last vote's retrain is still to land, and it can open the check: the
-  // last page is the session once it is still, not a frame before a dialog.
+  // The last vote's retrain is still to land: the last page is the session
+  // once it is still.
   await sorts.settled();
-  while (await spotCheckOpen(page)) {
-    await answerCheck();
-    await sorts.settled();
-  }
   sorts.stop();
-  log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
+  log(`train loop: ${cast} votes — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
   await assertVoteColumns(page);
-  await shoot(page, 'ui-train-loop.build6');
-  // The last page is staged: Toasty saying the detector is trained, over the
-  // frame just shot, because the real hand-off waits for far more votes than
-  // this session casts (`stop-hint.mjs`, #4833).
-  await drawStopHint(page);
-  await page.waitForTimeout(200);
   await shoot(page, 'ui-train-loop');
-  await clearStopHint(page);
 }
 
 /** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */
@@ -966,17 +861,17 @@ async function shootFind(page) {
   await shootNumbered(page, 'ui-steps-find.build1', [
     step(1, datasetRow(TEST_DATASET)),
     step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Test')),
+    step(3, dashButton('Tune')),
   ]);
 
-  // Test, not Find: since #4525 the Find button runs AutoFind and opens no view.
+  // Tune, not Find: since #4525 the Find button runs AutoFind and opens no view.
   // Its scoring pass says which detector the labels gave (`label_quota`).
   const [scored] = await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/find-label',
       { timeout: 300000 },
     ),
-    page.getByRole('button', { name: 'Test', exact: true }).click(),
+    page.getByRole('button', { name: 'Tune', exact: true }).click(),
   ]);
   assertTrainedHead((await scored.json()).label_quota);
   await page.waitForSelector('.panel-right', { timeout: 300000 });
@@ -984,7 +879,7 @@ async function shootFind(page) {
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 })
     .catch(() => {});
-  // Test opens on its Autopilot tab, which hides the ranking (#4524); the
+  // Tune opens on its Autopilot tab, which hides the ranking (#4524); the
   // slides show the ranking, on the Review tab.
   await page.locator('.left-tab[title^="Review"]').first().click();
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
@@ -1004,12 +899,12 @@ async function shootFind(page) {
 }
 
 /**
- * Fail the run unless Test scored with the session's trained head (#4890).
+ * Fail the run unless Tune scored with the session's trained head (#4890).
  *
  * The deck says the ranking `find` shows is a real trained head's, and
  * `ui-steps-find` frames it. Under the label quota, or under the typed query's
  * hold (#4736), the detector is its typed query's own set instead, with a note
- * under the Test view's tabs saying so; `TRAIN_FINAL` stops the session on
+ * under the Tune view's tabs saying so; `TRAIN_FINAL` stops the session on
  * vote counts, not on that. *quota* is the scoring pass's `label_quota`.
  */
 function assertTrainedHead(quota) {
@@ -1020,7 +915,7 @@ function assertTrainedHead(quota) {
     : '';
   const as = { query: "its typed query's own set", centroid: "the Goods' centroid", none: 'nothing' }[quota?.tier];
   throw new Error(
-    `find: Test scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
+    `find: Tune scored the detector as ${as ?? (quota?.tier ? `tier ${quota.tier}` : 'an unknown detector')}, not a trained head (${counts}${why}): ` +
       'raise TRAIN_FINAL so the train loop ends with one',
   );
 }
@@ -1125,6 +1020,298 @@ async function shootRegionVoting(page) {
   await shoot(page, 'ui-region-voting');
 }
 
+// ── browse ───────────────────────────────────────────────────────────────────
+
+/**
+ * The Book detector's votes, for a `browse` run that has no session to take
+ * them from.
+ *
+ * In a full run the Vision frames use the detector the train loop just voted
+ * on, as a user would: they come after it in the deck. A run of `browse` alone
+ * starts from an empty app, so it puts votes of the same size on the same pile
+ * through the API — none of the Vision slides shows voting, so none of them
+ * claims these were cast by hand. Enough of them to clear the label quota and
+ * the typed query's hold (#4736), so Find runs a trained head as it does after
+ * the session; Goods are books the deck would call books (`isBook`), Bads the
+ * near-misses the session's own Bad pile fills with.
+ */
+const BROWSE_STAGED_VOTES = {
+  good: 18,
+  bad: { laptop: 3, tv: 3, keyboard: 2, 'cell-phone': 2, clock: 2, chair: 2, vase: 1, dog: 1, bus: 1, pizza: 1 },
+};
+
+/**
+ * How far the two zoomed frames of the whole-pile map are from its fit, in
+ * wheel notches. A notch is a factor of √2 at the app's default two notches
+ * per level, so 4 notches is two levels and 10 five. A sign is drawn from a
+ * level and a half before its own to two and a half past it (`sign-layout.ts`),
+ * and the pile's four layers of signs sit 1.8 levels apart, so the fit (about
+ * level 1.2) letters the two hedged layers, 4 notches the second and third,
+ * and 10 the finest alone. Fewer than 10 and the books' sign is hidden under
+ * its parent's, which names nearly the same photos from nearly the same spot.
+ */
+const BROWSE_ZOOM_NOTCHES = [4, 10];
+
+/** How many notches the map steps back out before a tile is opened (`shootBrowse`). */
+const BROWSE_TILE_BACK = 3;
+
+/**
+ * The Browse panels for the run, as a user would drag them. The Selection
+ * panel stays empty in every frame, so it is narrowed to its least and the map
+ * gets the width; the tile panel, which is the last frame's subject, is
+ * widened, with room in its details column for a photo's tags on a few lines.
+ */
+const BROWSE_LAYOUT = {
+  browse_panel_width: 260,
+  browse_details_panel_width: 540,
+  browse_details_metadata_width: 250,
+};
+
+/** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
+const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
+
+/** The Book detector, trained: the session's if it ran, else staged. */
+async function trainedBookDetector() {
+  const train = await app.ensureDataset(TRAIN_DATASET, 'siglip');
+  const existed = app.named(await app.detectors(), BOOK_DETECTOR);
+  const detector = await app.ensureDetector(BOOK_DETECTOR, train, BOOK_TEXT);
+  if (!existed) {
+    const meta = await app.mediaIndex(train, detector);
+    await app.setVotes(train, detector, {
+      good: framesOf(meta, 'book', BROWSE_STAGED_VOTES.good, isBook),
+      bad: Object.entries(BROWSE_STAGED_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
+    });
+  }
+  return detector;
+}
+
+/**
+ * Wait for Browse to show a finished, lettered map, then clear the frame.
+ *
+ * Finished means the cover that hides the map until its first tiles have
+ * painted is gone, and lettered means the signpost toggle is enabled: names
+ * arrive after the map, and a shot taken between the two is a map with no
+ * signs on it. Only a whole pile's map is waited on for them (*signs*): a map
+ * of Find's few dozen results is too small for Toponymy to find regions in,
+ * so it has none to wait for. The docked tile panel opens
+ * empty, holding a third of the window for a tile nobody has right-clicked;
+ * closed, the map gets that width. The pointer goes to the top bar, because a
+ * tile under it is drawn enlarged.
+ */
+async function openedMap(page, signs = true) {
+  await page.waitForURL(/\/browse\//, { timeout: 600000, waitUntil: 'commit' });
+  // The cover is only mounted once the map is: before that its absence means
+  // nothing, so wait for the map first and then for the cover to lift.
+  await page.waitForSelector('.browse-content', { timeout: 600000 });
+  await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 600000 });
+  if (signs) await page.waitForSelector('.browse-signposts button:not([disabled])', { timeout: 600000 });
+  const close = page.locator('.browse-details .bin-popup-close');
+  if (await close.count()) await close.first().click();
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+}
+
+/**
+ * Where a projection-space point is on screen with the map at its fit.
+ *
+ * The canvas draws no DOM for its tiles or its signs, so the harness works the
+ * framing out the way the canvas does (`computeFitZoom` and `fitToData` in
+ * `browse-canvas/view-transform.ts`): centred on the layout's bounds, at the
+ * zoom that just holds them plus a margin of one tile and 5%, with the tile
+ * layer picked for the default thumbnail size.
+ */
+async function fitScreenPoint(page, meta, [px, py]) {
+  const box = await page.locator('vt-browse-canvas .canvas-container').first().boundingBox();
+  if (!box) throw new Error('no Browse canvas');
+  const [xmin, ymin, xmax, ymax] = meta.bounds;
+  const dataW = xmax - xmin || 1;
+  const dataH = ymax - ymin || 1;
+  const pad = 0.05;
+  const targetRadius = 28; // BrowseCanvasComponent.DEFAULT_TARGET_RADIUS, the M size
+  let zoom = Math.min(box.width / (dataW * (1 + 2 * pad)), box.height / (dataH * (1 + 2 * pad)));
+  for (let i = 0; i < 3; i++) {
+    const ideal = Math.log2((meta.base_radius * zoom) / targetRadius);
+    const level = Math.max(0, Math.min(meta.levels.length - 1, Math.round(ideal)));
+    const r = meta.base_radius / 2 ** level;
+    zoom = Math.min(box.width / (dataW + 2 * (r + dataW * pad)), box.height / (dataH + 2 * (r + dataH * pad)));
+  }
+  return {
+    x: box.x + box.width / 2 + (px - (xmin + xmax) / 2) * zoom,
+    y: box.y + box.height / 2 + (py - (ymin + ymax) / 2) * zoom,
+    centre: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  };
+}
+
+/**
+ * The sign the zoomed frames close in on: the region holding the most books.
+ *
+ * Books are the deck's running example, but no sign on this map says book: in
+ * COCO a book is mostly a shelf in a living room. So the zooms go where the
+ * books landed, which takes knowing which photos each region holds; the app
+ * saves a sign and its anchor, not its members, and `make-signpost-figs.py`
+ * works them out again (its `--where`), so the frames and What's in a Name
+ * are about the same region.
+ */
+function bookSign(pklPath) {
+  const out = execFileSync('python', [join(FIGS, 'src', 'make-signpost-figs.py'), pklPath, '--where'], {
+    cwd: REPO,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  return JSON.parse(out.trim().split('\n').pop());
+}
+
+/**
+ * The Vision section: Find's results as a map, then the whole pile, closer
+ * and closer, then one tile opened.
+ *
+ * One Find run over `photos-all` with the trained Book detector. Its results
+ * dialog is the first frame — a list of file names, which is the thing Browse
+ * is the answer to — and its Browse button the second, on the results' own
+ * map. Then the pile's map from its row's ⋯ menu, at fit and at two zooms
+ * centred on where the books landed (`bookSign`), so each frame is lettered by a finer
+ * layer of signposts than the last; and last a right-click on a tile there,
+ * with the panel's details showing the tags each photo was given, which are
+ * what the signposts are named from.
+ *
+ * Rendering is pinned to full effects for the run: headless chromium has no
+ * GPU, the app's Auto detection reads that as a slow client and draws the
+ * canvas at one pixel per CSS pixel, and the frames are shot at two. The
+ * panels are set as `BROWSE_LAYOUT` says; both are put back afterwards.
+ */
+async function shootBrowse(page) {
+  // The map is built at import, as Build Browse map now builds it, so the tags
+  // the signposts are named from are saved in the dataset with it, where
+  // `make-signpost-figs.py` reads them. Embedding 4,700 photographs on the two
+  // threads `ensureApp` gives the app takes most of an hour. The dataset is
+  // registered before its map is fitted, and a build asked for meanwhile would
+  // fit a second one, so a fresh import is waited out rather than asked.
+  const fresh = !app.named(await app.datasets(), BROWSE_DATASET);
+  const pile = await app.ensureDataset(BROWSE_DATASET, 'siglip', [], { build_projection: 'true' }, 3 * 3600000);
+  if (fresh) {
+    await app.waitFor(`the ${BROWSE_DATASET} map built at import`, async () => {
+      const meta = await app.api('/api/projection/meta', { dataset: pile.id });
+      return meta.status === 'ready' && meta.has_labels;
+    }, 3600000);
+  }
+  await app.ensureProjection(pile);
+  await trainedBookDetector();
+  const settings = await app.api('/api/settings');
+  const restore = Object.fromEntries(
+    ['browse_graphics', ...Object.keys(BROWSE_LAYOUT)].map((key) => [key, settings[key]]),
+  );
+  await app.api('/api/settings', { method: 'PUT', body: { browse_graphics: 'full', ...BROWSE_LAYOUT } });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
+  await openDashboard(page);
+  await selectOnly(page, 'tr[vt-dataset-card]', BROWSE_DATASET);
+  await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  const dialog = page.locator('vt-modal').filter({ hasText: 'Find Results' });
+  await dialog.locator('.results-table').waitFor({ timeout: 600000 });
+  // The dialog opens on the first exporter, Send by Email, whose two empty
+  // required addresses draw red and take the room the list needs. A user
+  // sending the list on picks somewhere and fills it in; this one picks a file.
+  await dialog.locator('.export-row select').selectOption({ label: BROWSE_EXPORT.exporter });
+  await dialog.locator(`#adr-${BROWSE_EXPORT.field}`).fill(BROWSE_EXPORT.value);
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(1500);
+  await shoot(page, 'ui-vision-find.build1');
+
+  await dialog.getByRole('button', { name: 'Browse', exact: true }).click();
+  await openedMap(page, false);
+  await shoot(page, 'ui-vision-find');
+
+  // Back to the dialog, closed, and on to the whole pile.
+  await page.locator('.browse-back').click();
+  await dialog.locator('.results-table').waitFor({ timeout: 60000 });
+  await dialog.locator('.form-actions .btn', { hasText: 'Close' }).click();
+  await openDashboard(page);
+  const row = page
+    .locator('tr[vt-dataset-card]')
+    .filter({ has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${BROWSE_DATASET}\\s*$`) }) })
+    .first();
+  await row.locator('.overflow-btn').first().click();
+  await page.locator('.context-menu .menu-item', { hasText: 'Browse dataset' }).first().click();
+  await openedMap(page);
+  await shoot(page, 'ui-vision-map.build1');
+
+  // Closer, twice, on the books. The wheel zooms about the pointer, which holds
+  // the books' sign where it was at the fit; a drag then brings it to the
+  // centre, about which the second zoom's notches close in.
+  const meta = await app.api('/api/projection/meta', { dataset: pile.id });
+  const sign = bookSign(app.named(await app.datasets(), BROWSE_DATASET).pkl_path);
+  log(`browse: closing in on "${sign.text}"`);
+  const at = await fitScreenPoint(page, meta, [sign.x, sign.y]);
+  await page.mouse.move(at.x, at.y);
+  for (let i = 0; i < BROWSE_ZOOM_NOTCHES[0]; i++) {
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(250);
+  }
+  await page.waitForTimeout(1500);
+  await page.mouse.down();
+  await page.mouse.move((at.x + at.centre.x) / 2, (at.y + at.centre.y) / 2, { steps: 10 });
+  await page.mouse.move(at.centre.x, at.centre.y, { steps: 10 });
+  await page.mouse.up();
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+  await shoot(page, 'ui-vision-map.build2');
+
+  await page.mouse.move(at.centre.x, at.centre.y);
+  for (let i = BROWSE_ZOOM_NOTCHES[0]; i < BROWSE_ZOOM_NOTCHES[1]; i++) {
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(250);
+  }
+  await page.mouse.move(700, 20);
+  await page.waitForTimeout(3000);
+  await shoot(page, 'ui-vision-map');
+
+  // One tile, opened: the nearest one under the books' sign, with its details
+  // on. At the last zoom a tile is one photo, and a one-photo tile opens with
+  // no grid of its contents, so the map steps back first to where a tile holds
+  // a handful. The sign's anchor is a photo, but its pill sits over the tiles
+  // around it and a tile is a cell of the grid, not a point, so the
+  // right-click walks out from the anchor until a tile answers.
+  await page.mouse.move(at.centre.x, at.centre.y);
+  for (let i = 0; i < BROWSE_TILE_BACK; i++) {
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(250);
+  }
+  await page.waitForTimeout(2500);
+  let opened = false;
+  for (const [dx, dy] of [[0, 0], [0, 30], [30, 30], [-30, 30], [0, 60], [30, 0], [-30, 0], [0, -30]]) {
+    await page.mouse.click(at.centre.x + dx, at.centre.y + dy, { button: 'right' });
+    opened = await page.waitForSelector('.bin-popup-entry', { timeout: 4000 }).then(() => true, () => false);
+    if (opened) break;
+  }
+  if (!opened) throw new Error('no tile answered a right-click under the books\' sign');
+  // The details column's toggle is remembered, so it may already be on.
+  const details = page.locator('.browse-details button[aria-label="Show metadata"]');
+  if (await details.count()) await details.first().click();
+  await page.locator('.bin-popup-entry').first().hover();
+  await page.waitForSelector('.bin-popup-preview-img', { timeout: 10000 });
+  await page.waitForTimeout(1500);
+  // The details name the folder the pile was imported from, which is this
+  // checkout's path; shown as `shownPath` shows it, as the import frames do.
+  const real = corpusPath(BROWSE_DATASET);
+  await page.evaluate(({ real, shown }) => {
+    const walk = document.createTreeWalker(document.querySelector('.browse-details'), NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      if (node.nodeValue.includes(real)) node.nodeValue = node.nodeValue.split(real).join(shown);
+    }
+  }, { real, shown: shownPath(BROWSE_DATASET) });
+  await shoot(page, 'ui-vision-tile');
+
+  await app.api('/api/settings', { method: 'PUT', body: restore });
+
+  // What's in a Name, drawn from the container the app saved the pile and its
+  // map into, so the figure names the region these frames close in on.
+  execFileSync('python', [join(FIGS, 'src', 'make-signpost-figs.py'), app.named(await app.datasets(), BROWSE_DATASET).pkl_path], {
+    cwd: REPO,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -1159,6 +1346,10 @@ async function ensureApp() {
       VTSEARCH_DATA_DIR: APP_DATA_DIR,
       VTSEARCH_MODELS_DIR: process.env.VTSEARCH_MODELS_DIR || join(REPO, 'data', 'models'),
       VTSEARCH_TORCH_THREADS: '2',
+      // The Browse map seeded, as refresh.sh seeds it (#4296): an unseeded fit
+      // lays the Vision pile out differently every run, and What's in a Name
+      // can only find the app's regions again under the seed they were fit by.
+      VTSEARCH_PROJECTION_SEED: process.env.VTSEARCH_PROJECTION_SEED || '0',
     },
     stdio: 'ignore',
     detached: false,
@@ -1235,6 +1426,7 @@ try {
   }, STILL_CSS);
   if (intro) await shootSession(page);
   // After the session, so its datasets never sit on the session's dashboards.
+  if (wanted('browse')) await shootBrowse(page);
   if (wanted('region-voting')) await shootRegionVoting(page);
 } finally {
   await browser.close();

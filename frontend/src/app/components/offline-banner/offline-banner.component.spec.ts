@@ -4,8 +4,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { OfflineBannerComponent } from './offline-banner.component';
 import { ConnectionStateService } from '../../services/connection-state.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { settleZoneless } from '../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
@@ -68,6 +69,26 @@ describe('OfflineBannerComponent (zoneless)', () => {
     connection.recordSuccess();
     await settleZoneless(fixture);
     expect(banner()).toBeNull();
+  });
+
+  it('stands Toasty over Retry once the settings load, with no Hide boxes (#5149)', async () => {
+    TestBed.inject(SettingsStateService).load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush({});
+    await settleResource();
+    await tripOffline();
+
+    const hint = banner()!.querySelector('vt-toasty-hint') as HTMLElement;
+    expect(hint.classList).not.toContain('toasty-hint--off');
+    expect(hint.querySelector('img')?.getAttribute('src')).toBe('toasty-sad.png');
+    expect(hint.querySelector('.toasty-hint__text')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      "The server isn't answering, so nothing else will work until it's back. Check that it's still running, then click Retry.",
+    );
+    expect(hint.querySelector('input')).toBeNull();
+
+    connection.recordSuccess();
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
   it('reflects the in-flight Retry probe in the button, then clears on recovery', async () => {

@@ -17,6 +17,88 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
+  is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
+  the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your
+  votes, at your balance, stop rising, and its progress chart plots that F-beta. Measured on 2,160 sessions, the two
+  lights go green at the same clicks, and sessions end with the same F-beta; the change is so that every light speaks
+  the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
+  the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
+
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
+- **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
+  while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
+  the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
+  words what Autopilot is doing and the next step ("Autopilot is looking for Bads now. Keep
+  clicking."), and a finished run says just that the detector is trained and to click
+  **Dashboard** to put it to work, whatever ended the run. The counts and scores are still in the
+  Autopilot panel and the **Update Sort Example?** dialog.
+
+- **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
+  Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
+  going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its
+  picks come up as your next items, in the usual centre panel with the usual keys, and nothing on
+  screen changes for them: the check starts after you vote on the item already in front of you, as
+  Autopilot's other steps do, and when it ends Autopilot carries on. Its result is in the note under
+  the Threshold on the **Manual** tab, and stopping Autopilot ends a check early.
+
+- **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
+  coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
+  detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
+  taken straight to another dataset showed the vacuum share and "no verdict until you run Tune…". The Train view's
+  re-sort now leaves the yardstick to be recorded once the answers pause, and at once when the chip is read on
+  another dataset or the detector is unloaded. Under the label quota, where Tune scores the Goods' centroid rather
+  than the Train view's head, a Tune is still what records it.
+
+- **Tune no longer pauses between rounds** (issue #5116). The autopilot deals its picks in rounds of
+  five, and the next round used to be chosen only once the last pick of a round was voted, so every
+  fifth pick waited for the server and then for its image. Now, while you look at a round's last
+  pick, the next round is already chosen for either answer and its first images are loading, so the
+  vote that finishes a round shows the next pick as quickly as any other. Which picks you get, and
+  what the test reports, are exactly as before.
+
+- **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
+  #5098). What people get from it is a better detector, not only a verdict on the one they have:
+  the view tests the line on a dataset the detector never trained on, then lets you correct its
+  calls, lean its Threshold, or move it to AutoFind. The button, its view (now at `/tune/…`; an old
+  `/test/…` link lands on the Dashboard), Settings, Toasty's hints and the guide all say Tune; the
+  test of the line inside it keeps its name. From the click until the view opens, a bar under the
+  button follows the dataset and detector loads the view waits for, where only the icon used to
+  waggle.
+
+- **A server locked to one media type stops naming it everywhere** (issue #5106). With
+  `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
+  the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
+  every item. Those fields now drop out, as do Settings' per-type tab bars under Scroll Style and
+  Browser. A dataset or detector of another type, kept from before the lock, still shows its type, and
+  brings its table's Type column back.
+
+- **A Find or AutoFind run's bar moves while its detectors work, and counts items, not detectors**
+  (issue #5101). The bar on a dataset's row counted finished detectors, so a run with one detector
+  read `0/1 detectors done` and sat at zero until it ended. It now fills through each detector's
+  train, its calibration passes and its scoring pass, averaged over the run's detectors, and the
+  line beside it counts what the first unfinished detector is doing: `12/40 labels` while its labels
+  resolve, then `3,000/5,000 images` (or clips, documents, …) for each pass over the dataset.
+
+- **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
+  Tune view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
+  reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
+  Threshold** table, with a note over them when the result is out of date or the line has moved.
+  They used to sit part-way down the narrow result pane on the right, which now keeps the numbers
+  behind the verdict and can be folded away without hiding it.
+
 - **A server that trusts session cookies no longer signs them with the key printed in the source**
   (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
   anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
@@ -1040,6 +1122,37 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **A server restart no longer leaves an open Train or Tune tab dead** (issue #5155). A restarted server
+  has nothing loaded, so every request from a tab already open on a dataset and detector failed under a
+  red *Detector is not loaded* toast, and the cure, back to the Dashboard to open the queue again, was
+  nowhere on screen. The tab now loads them again on its own, says so in a toast, and starts the view
+  over once they are in. If they can't be loaded, it goes back to the Dashboard and says to reopen them
+  from there.
+
+- **A server restart no longer leaves an open Browse map half dead** (issue #5158). Tiles the browser
+  had already cached went on painting, so the map looked alive, but every new tile a pan or zoom asked
+  for failed without a word and stayed blank. The tab now loads the dataset again on its own, as Train
+  and Tune do, and redraws the map from the layout saved with the dataset, without fitting it again. A
+  map of a Find run's results is fitted again from its items.
+
+- **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
+  When the vote that labeled a dataset's last item also finished training, Toasty said the detector
+  was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click
+  **Dashboard** to put the detector to work.
+
+- **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
+  piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on
+  a 50,000-item dataset, most of a remote link's bandwidth for as long as you kept voting. They now
+  carry only the items you checked, a few KB, and the *Unverified Good* / *Unverified Bad* counts
+  come from the ranking already on screen.
+
+- **Voting in Tune keeps up with you, as it does in Train** (issue #5099). The Tune autopilot now loads
+  the next two picks' images while you look at the current one, so a vote shows the next pick at once
+  rather than waiting for its download. No vote on either Tune tab re-downloads the full vote list any
+  more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
+  refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
+  that fails to load is no longer requested again and again.
 
 - **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
   When an import converted PDFs (their text, or their pages as images) and did not clip the result, a

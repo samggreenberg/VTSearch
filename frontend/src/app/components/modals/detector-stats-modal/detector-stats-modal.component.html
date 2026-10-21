@@ -38,16 +38,18 @@
         }
       </ul>
     } @else {
-      <p class="verdict-empty">Untested. To test it, tick it and a dataset it never trained on in the Dashboard, then click Test.</p>
+      <p class="verdict-empty">Untested. To test it, tick it and a dataset it never trained on in the Dashboard, then click Tune.</p>
     }
 
     <h3 class="section-title">Creation</h3>
     <table class="data-table stats-table">
       <tbody>
-        <tr>
-          <td class="stat-label" title="The media type this detector operates on">Media type</td>
-          <td class="stat-value">{{ (stats.media_type | titlecase) || '-' }}</td>
-        </tr>
+        @if (showMediaType) {
+          <tr>
+            <td class="stat-label" title="The media type this detector operates on">Media type</td>
+            <td class="stat-value">{{ (stats.media_type | titlecase) || '-' }}</td>
+          </tr>
+        }
         <tr>
           <td class="stat-label" title="The embedder this detector uses">Embedder</td>
           <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>

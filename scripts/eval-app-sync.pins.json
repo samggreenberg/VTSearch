@@ -45,7 +45,7 @@
   },
   "detectors.label_quota_centroid": {
     "app": "95fcadc095dc1709f1ebf4932db0f8dce5a1310f66b1d242696066b05135f283",
-    "harness": "5923b7ff1c978b52472b28e042e60fb42211b4baa933ff4fc9537997fc312740"
+    "harness": "ce1c3abb4ce50db7c825c7791e64c0f7308073af9226ae125693979c1885aee4"
   },
   "detectors.label_quota_default": {
     "app": "4d14903a40db804b6f13729d7f7ab34107c09094a09741be50badff5bb004f57"
@@ -55,8 +55,8 @@
     "harness": "f2fe62e06191eea6aeab70b1c52281ef276778c4012544803164aed217be9f1b"
   },
   "find.evidence_coverage": {
-    "app": "d758f2812b3e1d3964b6176d752cabaf923ca68415cc27173fb31d4c97757100",
-    "harness": "74f8e68002a0501889892ca3d6fd39bd7b255e8b2ee7f4581c745b92fd186d38"
+    "app": "6f23b3c170584d57bf6dbd4ba98005b36faf2380611d5968b8e091993c40fdf7",
+    "harness": "70d48d5b55d66cd51672b51310ac8c63b1e235bf67f4325cfa56b2f00d3f8b76"
   },
   "find.training_domain": {
     "app": "2cf0948e253d6e7a1563fbf955fc86c7f7556649f6d80a7abd14674ba25046bd",
@@ -67,16 +67,16 @@
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
   },
   "progress.eval_cached_models": {
-    "app": "8edf8f0a3acbd227223f3c737f2299057d38883ff1f142270d8cbf1748cfc00f",
-    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
+    "app": "4c0d74e44f05750ccba0cd9a17de07feb605dad8bbf1ffd9f242d400f8d10e70",
+    "harness": "b8e2b53ddae2d019fcf1c50ea47764421d76782d5c1bd71d153a92674586f65c"
   },
   "progress.eval_geometry": {
-    "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
-    "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
+    "app": "1eea0e84bd42ab0d0d64dc1e66fcb1bb54672792a6fe1a65edcad4340c401932",
+    "harness": "b8e2b53ddae2d019fcf1c50ea47764421d76782d5c1bd71d153a92674586f65c"
   },
   "progress.smart_status": {
-    "app": "204c114a077dd75d1499887d8866faa7ff5842516ce73f7193f7fcb835e533f0",
-    "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
+    "app": "acd562a381d374a87ee0f2bd2aa928dde1f7a2a3f5eacbdea0daf5cc86b64a8e",
+    "harness": "0ff56f97172022dd4b97b0eb2b751ddbb4bcd138ff34acf8506b0ab97843f6a4"
   },
   "progress.span_status": {
     "app": "7ceccf38877df003f38958e91e71ebb167fa4831d91dc22cfaa59dbd562e63c9",
@@ -88,7 +88,7 @@
   },
   "progress.step_stability": {
     "app": "5ad8df5e622e6e7c23d408dbaaeb7dc9a81be35f1ffde40e4db48b3e9d7223e4",
-    "harness": "1574f6f0889a2b5274b75c53e6cd5fa430a2090089c89e4c5a0fcc9c2fccce69"
+    "harness": "a728c283d50fc91a9e70046d14a5bb3a578201465014cafbf5f08878724eda48"
   },
   "thresholds.balance_default": {
     "app": "15f91c543aa7ddff60f9cd0dfaeb5cb31f4d92be569dc7c111a172fb4f7ef46a",

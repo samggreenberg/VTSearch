@@ -11,8 +11,8 @@
 <!-- build: figs/test-question.build3.webp -->
 
 <!-- **a** — Spot Check grades the line on the photos we trained on. Is the
-     detector any good on photos it's never seen? That's Test: pick a new
-     pile. Here the line kept 32 of 2,048, and the pile's made up, so we know
+     detector any good on photos it's never seen? That's Tune's test: pick a
+     new pile. Here the line kept 32 of 2,048, and the pile's made up, so we know
      the answers. -->
 
 <!-- **b** — First, Right: of the 32 it kept, how many are matches? That's what
