@@ -124,7 +124,12 @@ see [`concepts.md`](../concepts.md) - which is also why
 `vtscore.config.DATA_DIR / "detector_registry.json"` (`REGISTRY_PATH`).
 Each entry is a flat dict with `id` (uuid hex), `name`, `media_type`,
 `num_training`, `text_query`, `media_example`, `examples`, `created_by`,
-`created_at`, `embedder`, `embedder_type`, `readers`.
+`created_at`, `embedder`, `embedder_type`, `readers`; once its labels
+change it also carries `last_trained_at` and `trained_on`, the ids of the
+datasets it holds labels from. `record_detector_training(detector_id,
+num_training, *, dataset_id="", labeled_in_dataset=True)` stamps all
+three: a writer that composed its labels against one dataset passes its
+id, which stays listed while the detector holds labels there.
 `register_detector(*, name, media_type, ...)` is keyword-only and
 returns the new entry. Mutation is
 guarded by a module-level `RLock`; reads return deep copies so callers
@@ -141,7 +146,7 @@ registry.unregister_detector(entry["id"])
 
 CRUD: `list_detectors`, `get_detector`, `register_detector`,
 `unregister_detector`, `rename_detector`, `update_detector`,
-`find_by_name`. Loaded-set tracking:
+`record_detector_training`, `find_by_name`. Loaded-set tracking:
 `add_loaded_detector_id` / `remove_loaded_detector_id` /
 `is_detector_loaded` / `get_loaded_detector_ids`. Mode flag:
 `is_find_mode` / `set_find_mode`. Access control:

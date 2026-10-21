@@ -9,8 +9,9 @@ with a condition disjoint from the first. The ids are `HINT_IDS` in
 disagree on the ids, a hint's Toasty, or its text.
 
 **Toasty** is the face the hint shows: **happy** for a next step, **surprised**
-when something needs fixing. No hint uses the **sad** face; that one is for
-error toasts. **Text** is what the bubble says, with the bold words in bold;
+when something needs fixing. Only `offline` uses the **sad** face: the server
+going away is the one thing gone wrong a hint speaks to, and otherwise sad is
+for error toasts. **Text** is what the bubble says, with the bold words in bold;
 `{…}` is filled in at runtime (see the notes under each table).
 
 **What a hint says.** The state that raised it, then the one step to take, in
@@ -25,6 +26,8 @@ next, and leave the details to its panel.
 **Where hints are.** On the path from an empty Dashboard to a detector's
 results, and its detours; not on optional side trips (Settings, Help, a
 dataset's Stats), which need no help to progress and can always be cancelled.
+The exception is `offline`, which shows wherever the user is when the server
+goes away.
 
 **One at a time.** Only one hint is ever on screen. Each view shows at most
 one (the Dashboard's ladder below, the Train view's vote hint or hand-off, the
@@ -33,7 +36,16 @@ inside a dialog only while that dialog is the topmost one open, and a hint on
 a view only while no dialog is open at all. So opening any dialog, a confirm
 prompt included, hides the view's hint, and stacking a second dialog hides the
 first one's. A dialog's hint stands below its box, reaching right, or beside
-the box's top corner when the box fills the window.
+the box's top corner when the box fills the window. While the server is
+unreachable, `offline` is the only hint (#5149): it shows over any dialog, and
+`HintsService` keeps every other one off, so no hint points at a step that
+can't work.
+
+## Anywhere
+
+| Hint | Toasty | Text | Fires when |
+|---|---|---|---|
+| `offline` | sad | The server isn't answering, so nothing else will work until it's back. Check that it's still running, then click **Retry**. | The offline banner is up: a few requests in a row got no answer, or the browser went offline. Stands over the banner's **Retry**, over any dialog. It has no Hide boxes, since nothing can be saved until the server is back. **Retry** ends it once the server answers. |
 
 ## Dashboard
 
@@ -57,7 +69,8 @@ table's "Click **+** to add one": Toasty is saying it.
 | `train` | happy | Your new detector has no training labels yet. Click **Train** to teach it with Good and Bad examples. | One detector with no training labels is selected, beside one dataset, so Train is enabled. |
 | `train-one-dataset` | surprised | You selected {N} datasets, but a new detector trains on one at a time. Select just one, then click **Train**. | Several datasets are selected with one detector that has no labels and no typed description, so nothing is enabled. |
 | `untrained-detector` | surprised | **{detector}** has no training labels yet, so it can't search. Deselect it, or select it alone with one dataset and click **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Tune and Find are off. |
-| `test-or-find` | happy | Your detector is trained. Click **Tune** to check it on this dataset and correct what it gets wrong, or **Find** to collect its matches. | One trained detector and one dataset are selected, so Tune is enabled. |
+| `trained-here` | happy | You trained this detector on this dataset. Select a different dataset to **Tune** or **Find** on, or a different detector. | One detector and one dataset are selected, so Tune is enabled, and the detector holds labels from that dataset: its Train votes or Tune corrections there (#5142). Tune and Find would show it items it has already seen. Stands by the datasets' **+**. |
+| `test-or-find` | happy | Your detector is trained. Click **Tune** to check it on this dataset and correct what it gets wrong, or **Find** to collect its matches. | One trained detector and one dataset it holds no labels from are selected, so Tune is enabled. |
 | `find` | happy | You selected several datasets or detectors, so only **Find** is on. Click it to run each detector on each dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Tune is not. |
 
 `{media}` is "images, sounds or other media", or the one media type's plural
@@ -89,8 +102,8 @@ any run.
 | `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
 | `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
 | `resort-prompt` | happy | This example isn't finding many Goods. Try a different one on the right, or click **Continue** to keep going. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
-| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it. |
-| `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item before it finishes. The next vote ends it. |
+| `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it. |
+| `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item, before it finishes or as it reaches Done (#5151): with nothing left to label, this one takes over from `autopilot-done`. The next vote ends it. |
 
 In `revote`, `{label}` is the item's label ("Good" or "Bad") and `{other}`
 the other one.

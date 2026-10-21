@@ -10,6 +10,7 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { ConnectionStateService } from '../../services/connection-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { provideZoneless } from '../../testing/zoneless-testbed';
@@ -1385,6 +1386,26 @@ describe('DashboardComponent', () => {
       ]);
     });
 
+    it('sends the user to another dataset or detector on the dataset the detector was trained on (#5142)', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12, trained_on: ['d1'] }],
+      );
+      expect(component.findEnabled).toBe(true);
+      expect(component.dashboardHint).toBe('trained-here');
+      expect(hintTexts(el)).toEqual([
+        'You trained this detector on this dataset. Select a different dataset to Tune or Find on, or a different detector.',
+      ]);
+    });
+
+    it('still suggests Tune or Find on a dataset the detector was not trained on (#5142)', () => {
+      renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12, trained_on: ['d0'] }],
+      );
+      expect(component.dashboardHint).toBe('test-or-find');
+    });
+
     it('suggests only Find when several datasets are selected (#4680)', () => {
       const el = renderWith(
         [
@@ -1548,6 +1569,33 @@ describe('DashboardComponent', () => {
       await loadSettings({ hide_all_hints: true });
       expect(component.hintOnShow).toBe(false);
       expect(reasons()).toEqual(['hidden', 'visible', 'visible']);
+    });
+
+    it('steps its hint aside while the server is unreachable, and the reasons come back (#5149)', async () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
+      );
+      const reasons = () =>
+        [...el.querySelectorAll('.btn-disabled-reason')].map((r) => (r as HTMLElement).style.visibility);
+      await loadSettings({});
+      expect(component.hintOnShow).toBe(true);
+
+      const connection = TestBed.inject(ConnectionStateService);
+      for (let i = 0; i < 3; i++) connection.recordNetworkFailure();
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      // Still the step the state calls for, but Toasty is at the offline banner.
+      expect(component.dashboardHint).toBe('train');
+      expect(component.hintOnShow).toBe(false);
+      expect(el.querySelector('vt-toasty-hint')?.classList).toContain('toasty-hint--off');
+      expect(reasons()).toEqual(['hidden', 'visible', 'visible']);
+
+      connection.recordSuccess();
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      expect(component.hintOnShow).toBe(true);
+      expect(el.querySelector('vt-toasty-hint')?.classList).not.toContain('toasty-hint--off');
     });
 
     it('does not point at Train when Train is disabled (media type mismatch)', () => {

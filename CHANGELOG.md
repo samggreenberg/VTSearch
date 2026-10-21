@@ -25,6 +25,19 @@ not list every commit. Use `git log` for the full history.
   the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
   the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
 
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
 - **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
   while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
   the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
@@ -1109,6 +1122,11 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
+  When the vote that labeled a dataset's last item also finished training, Toasty said the detector
+  was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click
+  **Dashboard** to put the detector to work.
 
 - **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
   piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on

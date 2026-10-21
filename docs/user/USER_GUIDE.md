@@ -1532,7 +1532,10 @@ verdict and a line of supporting numbers:
   loaded at all. About 5% is in-domain; well above it, the items past the
   yardstick are where a handed-over detector is least reliable. Before
   that first Tune (or after a new vote) the chip shows the share in an
-  "evidence vacuum" and draws no verdict.
+  "evidence vacuum" and draws no verdict. The yardstick is a distance in
+  this server's embedder, so exported labels don't carry it: a detector
+  rebuilt from them on another VTSearch records its own there
+  ([Move a detector](howto/move-a-detector.md)).
 
 If either share is large, the fastest fix is usually to label a few items
 from the flagged region and retrain, rather than to move the Threshold.
@@ -1758,7 +1761,9 @@ time:
   (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, **Tune** or **Find** once the selected detector is trained, and
-  **Find** alone when you have ticked several datasets or detectors.
+  **Find** alone when you have ticked several datasets or detectors. On the
+  dataset you trained the detector on, he asks you to select a different
+  dataset or detector instead: the detector has already seen those items.
 
 While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add
@@ -1789,6 +1794,12 @@ Dialogs off the path (Settings, Help, a dataset's Stats, and the like) have
 none; they can always be cancelled. Only one hint shows at a time: opening any
 dialog hides the hint on the view behind it, and a dialog opened over another
 hides the first one's.
+
+If the app can't reach the server, Toasty stands sadly over the offline
+banner's **Retry** button, over any dialog, and every other hint steps aside
+until the server answers again, since none of their steps could work without
+it. That hint has no hide boxes: nothing can be saved while the server is
+away.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
@@ -2261,7 +2272,7 @@ it back on starts every count again from zero.
   load before you can start.
 - **Offline banner.** If the app can't reach the server, a banner reads
   "Can't reach the server. Background updates are paused." with a
-  **Retry** button.
+  **Retry** button, and Toasty over it (see [Toasty's hints](#toastys-hints)).
 - **Toasts.** Transient confirmations and errors appear as toast
   notifications in the corner.
 
