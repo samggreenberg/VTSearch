@@ -1110,6 +1110,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
+  When the vote that labeled a dataset's last item also finished training, Toasty said the detector
+  was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click
+  **Dashboard** to put the detector to work.
+
 - **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
   piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on
   a 50,000-item dataset, most of a remote link's bandwidth for as long as you kept voting. They now

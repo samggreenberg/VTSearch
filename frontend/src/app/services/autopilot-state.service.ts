@@ -122,7 +122,8 @@ export interface AutopilotState {
 /**
  * Toasty's hand-off when a run that trained the detector ends (#4680): `done`
  * when the run reaches Done, whatever said so (#5143: the hint says what to do
- * next, not why), `all-labeled` when nothing is left to label. `votes` is the
+ * next, not why), `all-labeled` when nothing is left to label, Done or not
+ * (#5151: "keep clicking" with nothing to click is wrong). `votes` is the
  * vote total it was raised at; any vote or undo after that drops it.
  */
 export interface AutopilotHandoff {
