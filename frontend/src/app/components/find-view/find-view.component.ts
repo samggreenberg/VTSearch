@@ -30,6 +30,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { PairScopeService } from '../../services/pair-scope.service';
 import {
   MediaPrefetchService,
@@ -100,6 +101,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   private dialog = inject(VtDialogService);
   private ngZone = inject(NgZone);
   private activeContext = inject(ActiveContextService);
+  private pairRecovery = inject(PairRecoveryService);
   private activeDetector = inject(ActiveDetectorService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
@@ -508,6 +510,11 @@ export class FindViewComponent implements OnInit, OnDestroy {
         }
         this.reloadForNewPair();
       });
+    // The backend lost the pair and it has been loaded again (#5155): what the
+    // backend held for this session went with it, so start over as above.
+    this.pairRecovery.reloaded$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadForNewPair());
   }
 
   private reloadForNewPair(): void {
