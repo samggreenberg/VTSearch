@@ -1130,6 +1130,12 @@ not list every commit. Use `git log` for the full history.
   over once they are in. If they can't be loaded, it goes back to the Dashboard and says to reopen them
   from there.
 
+- **A server restart no longer leaves an open Browse map half dead** (issue #5158). Tiles the browser
+  had already cached went on painting, so the map looked alive, but every new tile a pan or zoom asked
+  for failed without a word and stayed blank. The tab now loads the dataset again on its own, as Train
+  and Tune do, and redraws the map from the layout saved with the dataset, without fitting it again. A
+  map of a Find run's results is fitted again from its items.
+
 - **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
   When the vote that labeled a dataset's last item also finished training, Toasty said the detector
   was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click

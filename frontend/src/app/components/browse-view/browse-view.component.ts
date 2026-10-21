@@ -21,6 +21,7 @@ import { ProjectionApiService } from '../../services/projection-api.service';
 import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-until';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -76,6 +77,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private projectionApi = inject(ProjectionApiService);
   private tileCache = inject(TileCacheService);
   private activeContext = inject(ActiveContextService);
+  private pairRecovery = inject(PairRecoveryService);
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private settingsState = inject(SettingsStateService);
@@ -619,13 +621,26 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!this.subset) {
       this.activeContext.pair$
         .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe(() => {
-          if (this.initialLoadStarted) {
-            this.loadProjection();
-          } else {
-            this.maybeStartInitialLoad();
-          }
-        });
+        .subscribe(() => this.reloadProjection());
+    }
+    // The backend lost the dataset and it has been loaded again (#5158). A
+    // load does not bring the pyramid back into memory, so tiles go on 404ing
+    // until something asks for a build: re-resolve the projection as on a pair
+    // change, whose build restores the persisted layout (or re-fits a subset
+    // from the ids in hand). Unlike a pair change this holds in subset mode,
+    // since the ids are the same ones that produced the lost layout.
+    this.pairRecovery.reloaded$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadProjection());
+  }
+
+  /** Re-resolve the projection from scratch, or start the gated first load if
+   *  it has not run yet (see {@link initialLoadStarted}). */
+  private reloadProjection(): void {
+    if (this.initialLoadStarted) {
+      this.loadProjection();
+    } else {
+      this.maybeStartInitialLoad();
     }
   }
 

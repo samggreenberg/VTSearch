@@ -22,13 +22,16 @@ const RELOAD_COOLDOWN_MS = 60_000;
  * request, so each one answers 409 `dataset_not_loaded` / `detector_not_loaded`.
  * Nothing else loads it again: the route guard let the view in long ago, and
  * the polls just skip a failed tick. The view sat dead under a red toast until
- * the reviewer went back to the Dashboard and reopened the queue.
+ * the reviewer went back to the Dashboard and reopened the queue. An open
+ * Browse tab went the same way, only quietly: its tiles opt out of the toast,
+ * so the map just stopped filling in (#5158).
  *
  * {@link errorInterceptor} hands this service every failed response. A 409 that
  * names the active pair, while no switch is loading it and the tab is on that
- * pair's view, starts a reload ({@link ContextSwitchService.reloadActivePair});
- * once it lands, {@link reloaded$} fires and the view starts over as on a pair
- * change, since whatever the backend held for the session went with it. A 409
+ * pair's view (Train or Tune, or Browse on its dataset), starts a reload
+ * ({@link ContextSwitchService.reloadActivePair}); once it lands,
+ * {@link reloaded$} fires and the view starts over as on a pair change, since
+ * whatever the backend held for the session went with it. A 409
  * that lands while a switch or a reload is in flight is expected and absorbed
  * (the #3644 case: a poll landing mid-load). A reload that fails sends the tab
  * to the Dashboard with a message saying to reopen the pair from there.
@@ -48,7 +51,7 @@ export class PairRecoveryService {
   private lastReloadAt = Number.NEGATIVE_INFINITY;
 
   private readonly reloadedSubject = new Subject<void>();
-  /** Fires when a reload lands. Train and Tune reset on it as on a pair change. */
+  /** Fires when a reload lands. Train, Tune and Browse reset on it as on a pair change. */
   readonly reloaded$ = this.reloadedSubject.asObservable();
 
   /**
@@ -138,14 +141,27 @@ export class PairRecoveryService {
       .finally(() => (this.leaving = false));
   }
 
-  /** Whether the tab is on the Train or Tune view of this pair. */
+  /**
+   * Whether the tab is on a view of this pair: Train or Tune of both halves, or
+   * Browse of the dataset. Browse shows a dataset alone and carries the active
+   * detector along (`browseContextGuard`), so its URL names no detector, but
+   * the reload brings that half back too, as the guard had it loaded (#5158).
+   */
   private onPairView(datasetId: string, detectorId: string): boolean {
-    const [, view, ds, det] = this.router.url.split('?')[0].split('/');
+    const [view, ds, det] = this.viewSegments();
+    if (view === 'browse') return ds === datasetId;
     return (view === 'label' || view === 'tune') && ds === datasetId && det === detectorId;
   }
 
+  /** The route's view and its id segments, query string dropped. */
+  private viewSegments(): string[] {
+    return this.router.url.split('?')[0].split('/').slice(1);
+  }
+
+  /** The pair as the view names it: Browse by its dataset alone. */
   private pairLabel(datasetId: string, detectorId: string): string {
     const dataset = this.datasetState.datasetById().get(datasetId)?.name || datasetId;
+    if (!detectorId || this.viewSegments()[0] === 'browse') return dataset;
     const detector = this.datasetState.detectorById().get(detectorId)?.name || detectorId;
     return `${dataset} · ${detector}`;
   }
