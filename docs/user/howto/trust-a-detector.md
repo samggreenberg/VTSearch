@@ -61,13 +61,22 @@ The two checks answer the same question from different ends:
   dataset. Its yardstick is how far the training data sat from those
   examples, which the detector records on the dataset it was trained on:
   as you train it there, shortly after your last answer, and whenever you
-  run **Tune** there. So it works afterwards even when you don't have the
-  training data, as with a detector someone sends you. A share well above
-  5% means many calls are guesses. Each answer changes the examples, so
-  the yardstick is measured again as the list re-sorts. Until a detector
-  has three Good and four Bad answers, training it records none, since
-  Tune then scores it another way; run **Tune** on the training data for a
-  verdict.
+  run **Tune** there. So it works afterwards on this VTSearch even when the
+  training data isn't loaded. A share well above 5% means many calls are
+  guesses. Each answer changes the examples, so the yardstick is measured
+  again as the list re-sorts. Until a detector has three Good and four Bad
+  answers, training it records none, since Tune then scores it another
+  way; run **Tune** on the training data for a verdict.
+
+  The yardstick does not travel with exported labels. When you
+  [move a detector to another VTSearch](move-a-detector.md), the file
+  says only which pictures were marked Good or Bad, so the other end can
+  rebuild the detector with any embedder; a distance measured in one
+  embedder means nothing in another. The detector made from that file
+  records its own yardstick the first time you run **Tune** there on the
+  dataset holding most of its examples. That dataset then stands in for
+  its training data, so the verdict is only as good as its likeness to
+  the data the detector was first trained on.
 
 The first check also runs earlier, on its own: the moment you pick a detector
 and a dataset, before you test anything. When its verdict is *likely domain

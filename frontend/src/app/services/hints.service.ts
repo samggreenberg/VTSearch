@@ -25,6 +25,7 @@ export const HINT_IDS = [
   'train',
   'train-one-dataset',
   'untrained-detector',
+  'trained-here',
   'test-or-find',
   'find',
   // Train view.

@@ -364,6 +364,21 @@ class TestCorrectionsToDetector:
         assert by_md5[medias[bad_item]["md5"]] == "good"
         assert data["num_labels"] == len(labels)
 
+    def test_corrections_mark_the_dataset_trained_on(self, client):
+        """The corrections are labels from the tuned dataset, so the registry
+        entry lists it as one the detector was trained on (#5142)."""
+        from vtscore.detectors.registry import get_detector
+        from vtscore.state import get_active_context
+
+        detector_id = self._setup_find(client)
+        self._make_two_corrections(client)
+
+        assert client.post("/api/find/corrections-to-detector").status_code == 200
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        assert entry["trained_on"] == [get_active_context().dataset_id]
+
     def test_session_frozen_and_marked_stale(self, client):
         """The Find session is NOT reset: votes / verified / find baseline hold,
         the cached head is invalidated for the next scoring pass, and the

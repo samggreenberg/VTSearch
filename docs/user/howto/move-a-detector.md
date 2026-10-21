@@ -68,6 +68,11 @@ server can reach them, and added to that dataset. Answers whose pictures it
 can reach neither way are kept, but play no part until a dataset holding
 those pictures is loaded.
 
+Only the answers travel, so the other end can use a different embedder.
+What VTSearch measured from them stays behind, including the yardstick behind
+**Evidence coverage**: the new detector records its own the first time you
+run **Tune** there (see [Decide how far to trust a detector](trust-a-detector.md#step-2-read-the-two-trust-checks)).
+
 **Trained** takes files exported from VTSearch, which record where each picture
 came from. To bring in answers made some other way, see
 [Add labels you already have](import-labels.md).

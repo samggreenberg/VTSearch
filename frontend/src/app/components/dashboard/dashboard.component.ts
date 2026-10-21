@@ -83,6 +83,7 @@ type DashboardHintId = Extract<
   | 'train'
   | 'train-one-dataset'
   | 'untrained-detector'
+  | 'trained-here'
   | 'test-or-find'
   | 'find'
 >;
@@ -1415,8 +1416,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (pickedDatasets.length === 0) return 'wait-for-import';
     if (!this.findMediaTypesMatch()) return 'mismatch';
     if (this.showTrainHint) return 'train';
-    // Tune takes one dataset and one detector; Find takes any number.
-    if (this.findEnabled) return 'test-or-find';
+    // Tune takes one dataset and one detector; Find takes any number. On the
+    // dataset the detector was trained on, both would show it items it has seen.
+    if (this.findEnabled) return this.selectionTrainedHere ? 'trained-here' : 'test-or-find';
     if (this.autofindEnabled) return 'find';
     // Nothing runs: a ticked detector has nothing to score with (#4758). One
     // detector under several datasets needs the datasets narrowed to train it;
@@ -1459,6 +1461,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get selectedDatasetCount(): number {
     return this.resolvedSelectedDatasets.length;
+  }
+
+  /** Whether the one ticked detector holds labels from the one ticked dataset
+   *  (#5142), which the server lists as the detector's `trained_on`. */
+  private get selectionTrainedHere(): boolean {
+    const datasets = this.resolvedSelectedDatasets;
+    const models = this.resolvedSelectedModels;
+    if (datasets.length !== 1 || models.length !== 1) return false;
+    return (models[0].trained_on ?? []).includes(datasets[0].id);
   }
 
   /** The first ticked detector with nothing to score with (#4758), for Toasty. */

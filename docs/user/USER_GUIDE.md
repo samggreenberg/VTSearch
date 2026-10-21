@@ -1532,7 +1532,10 @@ verdict and a line of supporting numbers:
   loaded at all. About 5% is in-domain; well above it, the items past the
   yardstick are where a handed-over detector is least reliable. Before
   that first Tune (or after a new vote) the chip shows the share in an
-  "evidence vacuum" and draws no verdict.
+  "evidence vacuum" and draws no verdict. The yardstick is a distance in
+  this server's embedder, so exported labels don't carry it: a detector
+  rebuilt from them on another VTSearch records its own there
+  ([Move a detector](howto/move-a-detector.md)).
 
 If either share is large, the fastest fix is usually to label a few items
 from the flagged region and retrain, rather than to move the Threshold.
@@ -1758,7 +1761,9 @@ time:
   (it has nothing to search with);
 - **Train** once a new detector with no labels is selected beside a matching
   dataset, **Tune** or **Find** once the selected detector is trained, and
-  **Find** alone when you have ticked several datasets or detectors.
+  **Find** alone when you have ticked several datasets or detectors. On the
+  dataset you trained the detector on, he asks you to select a different
+  dataset or detector instead: the detector has already seen those items.
 
 While one of his hints is up, the reason under a disabled **Train**, **Tune**
 or **Find** button is hidden, and so is an empty table's "Click **+** to add

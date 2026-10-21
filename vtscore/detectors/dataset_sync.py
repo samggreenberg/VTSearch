@@ -518,6 +518,9 @@ class VoteSnapshot(NamedTuple):
     # under the same lock so verified/unverified export filters stay atomic
     # with good_votes/bad_votes.  Empty outside Find mode.
     verified_ids: dict[int, None]
+    # Id of the dataset ``medias`` belongs to: where a labelset composed from
+    # this snapshot was trained (``record_detector_training``).
+    dataset_id: str = ""
 
 
 def validated_vote_snapshot() -> VoteSnapshot:
@@ -579,7 +582,7 @@ def validated_vote_snapshot() -> VoteSnapshot:
         # match the active dataset) is the race / stale-state scenario and
         # is the only one we refuse to compose for.
         if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
-            return VoteSnapshot(snap, {}, {}, {}, {}, safe=False, verified_ids={})
+            return VoteSnapshot(snap, {}, {}, {}, {}, safe=False, verified_ids={}, dataset_id=ds_ctx.dataset_id)
         return VoteSnapshot(
             snap,
             dict(det_ctx.good_votes),
@@ -588,4 +591,5 @@ def validated_vote_snapshot() -> VoteSnapshot:
             dict(det_ctx.vote_provenance),
             safe=True,
             verified_ids=dict(det_ctx.verified_ids),
+            dataset_id=ds_ctx.dataset_id,
         )
