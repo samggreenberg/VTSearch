@@ -247,7 +247,7 @@ STEP_HEADS = ("Sort", "Question", "Stopping")
 STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
 #: The Question column is the point of the slide, so it takes every inch the
 #: Sort and Stopping columns leave it (owner, #4884).
-NAME_X, SORT_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.0, 4.2, 9.3, 9.65
+NAME_X, SORT_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.2, 4.4, 9.35, 9.7
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
 QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
