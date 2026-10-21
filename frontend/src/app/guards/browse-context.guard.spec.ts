@@ -92,6 +92,14 @@ describe('browseContextGuard', () => {
     expect(applySpy).not.toHaveBeenCalled();
   });
 
+  it('names a __detpos__ map on a reload, which arrives with no active pair (#5159)', () => {
+    // So the view's requests carry the map's id: the server answers from it, or
+    // with the 404 that PairRecoveryService turns into a trip to the Dashboard.
+    expect(runGuard('__detpos__abc')).toBe(true);
+    expect(activeContext.datasetId).toBe('__detpos__abc');
+    expect(activeContext.modelId).toBe('');
+  });
+
   it('redirects + toasts when the dataset id is not in the registry', async () => {
     setRegistry([]);
     const result = await resolveGuard(runGuard('missing'));

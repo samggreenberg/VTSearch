@@ -1136,6 +1136,13 @@ not list every commit. Use `git log` for the full history.
   and Tune do, and redraws the map from the layout saved with the dataset, without fitting it again. A
   map of a Find run's results is fitted again from its items.
 
+- **A map of a detector's positives no longer goes quietly blank after a server restart** (issue #5159).
+  That map lives only in the server's memory, so a restart loses it for good, and an open tab on it
+  went on painting the tiles the browser had cached while every new one stayed blank, with nothing
+  saying why. The tab now goes back to the Dashboard and says to browse the detector's positives again
+  from there. Reloading the page on such a map now does the same, instead of a *Dataset is empty*
+  error, and reloading one the server still has shows it.
+
 - **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
   When the vote that labeled a dataset's last item also finished training, Toasty said the detector
   was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click

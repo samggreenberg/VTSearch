@@ -546,7 +546,7 @@ The ones worth knowing before changing anything:
 | `ActiveContextService` | The active (dataset, detector) pair, split into intent/active layers ([§6](#6-the-active-datasetdetector-context)) |
 | `ContextSwitchService` | Drives a pair change end to end: intent → load → promote to active |
 | `ActiveContextWatcherService` | Reacts when an active id disappears from the registry (deleted elsewhere) |
-| `PairRecoveryService` | Loads the active pair again when the backend has lost it (a restart), so an open Train, Tune or Browse view comes back instead of 409ing ([§6](#6-the-active-datasetdetector-context)) |
+| `PairRecoveryService` | Loads the active pair again when the backend has lost it (a restart), so an open Train, Tune or Browse view comes back instead of 409ing; sends a lost detector-positives map back to the Dashboard ([§6](#6-the-active-datasetdetector-context)) |
 | `ProgressEventsService` | The single `EventSource` over `/api/events`, fanned out per channel |
 | `ConnectionStateService` | Online/offline, and the probe that reopens the circuit breaker |
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
@@ -783,7 +783,9 @@ otherwise holds activation on `ContextSwitchService.applyActivePair(...)`. An
 
 `browseContextGuard` is the dataset-only variant, with one carve-out:
 ephemeral detector-positive contexts (`__detpos__<id>`) are built server-side,
-are deliberately absent from the registry, and skip the checks.
+are deliberately absent from the registry, and skip the checks. The guard
+still makes the map the active dataset, so a reload names it as the
+Dashboard's Browse action does.
 
 Finally, `ActiveContextWatcherService` watches the registry against the active
 pair and, when an id disappears (deleted from another tab, the CLI, or another
@@ -809,6 +811,15 @@ lands mid-switch or mid-reload, or for a request sent before the last reload
 landed, is absorbed without a toast; one off the pair views still toasts. A
 reload that fails, or a pair lost again within a minute of one, sends the tab
 to the Dashboard with a message saying to reopen it.
+
+A detector-positives map has nothing to load it again from: its context lived
+only in the memory of the process that built it. After a restart the backend
+answers 404 `dataset_not_found` for its id, not 409, so `PairRecoveryService`
+answers that 404 apart (#5159): with the tab on `/browse/__detpos__<id>`, it
+goes to the Dashboard with a message saying to browse the detector's positives
+again from there. The 404 is absorbed off that view too, where it can only be
+a request sent before the tab left. `dataset_not_found` for any other dataset
+is untouched.
 
 ---
 
