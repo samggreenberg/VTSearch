@@ -1131,6 +1131,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
+  Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the
+  file, so a detector moved with **Server JSON File** or **Server CSV File** and rebuilt with
+  **Trained → Create & Import** taught its Goods whole-image: a different detector from the one
+  exported. The file now carries each Good's box, and both **Create & Import** and **Import labels**
+  read it back.
+
 - **A server restart no longer leaves an open Train or Tune tab dead** (issue #5155). A restarted server
   has nothing loaded, so every request from a tab already open on a dataset and detector failed under a
   red *Detector is not loaded* toast, and the cure, back to the Dashboard to open the queue again, was

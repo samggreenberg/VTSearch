@@ -62,7 +62,7 @@ entry-point group; discovery and name-clash rules are in
 | Name               | Display name      | Notes                                                                          |
 |--------------------|-------------------|--------------------------------------------------------------------------------|
 | `server_json_file` | Server JSON File  | Reads a `LabelSet`-format JSON file on the server filesystem.                  |
-| `server_csv_file`  | Server CSV File   | Reads a CSV with `md5,label` columns (optional `origin_name`, `filename`, `category`, JSON `origin`) from the server filesystem. |
+| `server_csv_file`  | Server CSV File   | Reads a CSV with `md5,label` columns (optional `origin_name`, `filename`, `category`, JSON `origin`, and a Good's JSON `region_box`) from the server filesystem. |
 
 ### Custom-importer skeleton
 

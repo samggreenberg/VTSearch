@@ -18,6 +18,7 @@ import json
 from typing import Any
 
 from vtscore.config import DATA_DIR
+from vtscore.datasets.labelset import imported_region_box
 from vtscore.io import desanitize_csv_cell, read_server_bytes
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
@@ -93,8 +94,9 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
     *normalised* maps lower-cased/stripped header names to the original
     field names.  A row is skipped (returns ``None``) when its ``md5`` or
     ``label`` cell is empty.  Present optional columns are copied through,
-    and an ``origin`` cell is parsed as JSON (a non-object or invalid value
-    is ignored).
+    an ``origin`` cell is parsed as JSON (a non-object or invalid value
+    is ignored), and so is a Good's ``region_box`` cell (anything but a list
+    of four numbers is ignored).
     """
     md5 = _cell(row, normalised["md5"])
     label = _cell(row, normalised["label"]).lower()
@@ -106,17 +108,26 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
             val = _cell(row, normalised[col])
             if val:
                 entry[col] = val
-    # Parse origin dict from JSON if present
-    if "origin" in normalised:
-        origin_raw = _cell(row, normalised["origin"])
-        if origin_raw:
-            try:
-                origin = json.loads(origin_raw)
-                if isinstance(origin, dict):
-                    entry["origin"] = origin
-            except (json.JSONDecodeError, ValueError):
-                pass
+    origin = _json_cell(row, normalised, "origin")
+    if isinstance(origin, dict):
+        entry["origin"] = origin
+    box = imported_region_box(label, _json_cell(row, normalised, "region_box"))
+    if box is not None:
+        entry["region_box"] = list(box)
     return entry
+
+
+def _json_cell(row: dict[str, Any], normalised: dict[str, str], field: str) -> Any:
+    """The *field* cell parsed as JSON, or ``None`` when absent, empty or invalid."""
+    if field not in normalised:
+        return None
+    raw = _cell(row, normalised[field])
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return None
 
 
 def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:

@@ -94,6 +94,70 @@ class TestCsvLabelRoundTrip:
         assert imported[0]["filename"] == "'quoted.wav"
 
 
+class TestCsvRegionBoxRoundTrip:
+    """A Good's drawn box survives the CSV, written as a JSON list (issue #5130)."""
+
+    _COLUMNS = ["label", "md5", "origin_name", "region_box"]
+
+    def test_box_survives_round_trip(self, tmp_path):
+        labels = [
+            {"label": "good", "md5": "a", "origin_name": "a.png", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            {"label": "good", "md5": "b", "origin_name": "b.png"},
+            {"label": "bad", "md5": "c", "origin_name": "c.png"},
+        ]
+
+        imported = _export_then_import(labels, tmp_path, columns=self._COLUMNS)
+
+        assert [e.get("region_box") for e in imported] == [[0.1, 0.2, 0.7, 0.8], None, None]
+
+    def test_box_is_written_as_json(self, tmp_path):
+        filepath = tmp_path / "labels.csv"
+        ServerCsvResultsExporter().export_labelset(
+            {
+                "labels": [{"label": "good", "md5": "a", "region_box": [0.0, 0.25, 0.5, 1.0]}],
+                "selected_columns": ["md5", "region_box"],
+            },
+            {"filepath": str(filepath)},
+        )
+        with open(filepath, newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        assert rows == [["md5", "region_box", "origin"], ["a", "[0.0, 0.25, 0.5, 1.0]", ""]]
+
+    def test_column_is_left_out_when_no_label_has_a_box(self, tmp_path):
+        filepath = tmp_path / "labels.csv"
+        ServerCsvResultsExporter().export_labelset(
+            {"labels": [{"label": "good", "md5": "a"}], "selected_columns": self._COLUMNS},
+            {"filepath": str(filepath)},
+        )
+        with open(filepath, newline="", encoding="utf-8") as f:
+            header = next(csv.reader(f))
+        assert header == ["label", "md5", "origin_name", "origin"]
+
+    def test_default_columns_carry_the_box(self, tmp_path):
+        """A labelset export with no ``selected_columns`` keeps the box too."""
+        filepath = tmp_path / "labels.csv"
+        ServerCsvResultsExporter().export_labelset(
+            {"labels": [{"label": "good", "md5": "a", "region_box": [0.1, 0.2, 0.3, 0.4]}]},
+            {"filepath": str(filepath)},
+        )
+        assert _parse_csv_bytes(filepath.read_bytes())[0]["region_box"] == [0.1, 0.2, 0.3, 0.4]
+
+    def test_importer_ignores_a_box_on_a_bad_row(self):
+        """No-votes are image-level, so a hand-edited box on one is dropped."""
+        csv_text = 'md5,label,region_box\na,bad,"[0.1, 0.2, 0.3, 0.4]"\n'
+
+        assert _parse_csv_bytes(csv_text.encode()) == [{"md5": "a", "label": "bad"}]
+
+    def test_importer_ignores_a_malformed_box(self):
+        csv_text = 'md5,label,region_box\na,good,"[0.1, 0.2]"\nb,good,not json\nc,good,"[true, 0, 1, 1]"\n'
+
+        assert _parse_csv_bytes(csv_text.encode()) == [
+            {"md5": "a", "label": "good"},
+            {"md5": "b", "label": "good"},
+            {"md5": "c", "label": "good"},
+        ]
+
+
 class TestCsvImporterRaggedRows:
     def test_short_row_does_not_crash(self):
         """``csv.DictReader`` fills missing trailing cells with ``None``."""

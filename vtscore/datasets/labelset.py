@@ -113,6 +113,21 @@ class LabeledElement:
         )
 
 
+def imported_region_box(label: str, raw: Any) -> tuple[float, float, float, float] | None:
+    """The drawn box an imported label entry carries, or ``None``.
+
+    For the label-import paths, which read ``region_box`` from a file that may
+    have been edited by hand.  A box is kept only on a ``"good"`` label (no-votes
+    are image-level) and only when it is four numbers; anything else reads as no
+    box rather than failing the import.
+    """
+    if label != "good" or not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in raw):
+        return None
+    return (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
+
+
 class LabelSet:
     """An ordered collection of :class:`LabeledElement` instances.
 

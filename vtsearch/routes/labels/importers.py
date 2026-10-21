@@ -65,6 +65,7 @@ from flask_smorest import Blueprint
 
 logger = logging.getLogger(__name__)
 
+from vtscore.datasets.labelset import imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.errors import error_response
@@ -123,11 +124,14 @@ def _apply_labels(
             skipped += 1
             continue
 
+        # A Good's drawn box decides which patch it pools to, so it rides along.
+        region_box = imported_region_box(label, entry.get("region_box"))
         try:
             for cid in cids:
                 apply_label(
                     cid,
                     label,
+                    region_box=region_box,
                     provenance=read_provenance(entry.get("metadata")) or {"flow": "import"},
                 )
         except Exception as exc:

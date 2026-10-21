@@ -68,7 +68,7 @@ class ServerCsvResultsExporter(ResultsExporter):
 
     #: Base columns for label exports (used when no selected_columns provided).
     #: ``origin`` is always appended as the last column (not listed here).
-    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
+    _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category", "region_box"]
 
     def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Write one CSV row per hit, across all detectors."""
@@ -162,7 +162,9 @@ class ServerCsvResultsExporter(ResultsExporter):
         """Export labels with user-selected columns.
 
         The ``origin`` column is always written as the last column so
-        that the CSV can be re-imported without data loss.
+        that the CSV can be re-imported without data loss.  A Good's
+        ``region_box`` is written as a JSON list, and its column is left out
+        when no label has a box (every label off a patch dataset).
         """
         labels = results.get("labels", [])
         columns: list[str] = list(results.get("selected_columns") or self._LABEL_BASE_COLUMNS)
@@ -171,6 +173,8 @@ class ServerCsvResultsExporter(ResultsExporter):
         if "origin" in columns:
             columns.remove("origin")
         columns.append("origin")
+        if "region_box" in columns and not any(entry.get("region_box") is not None for entry in labels):
+            columns.remove("region_box")
 
         total_rows = 0
 
@@ -183,9 +187,9 @@ class ServerCsvResultsExporter(ResultsExporter):
                 for col in columns:
                     if col in entry:
                         val = entry[col]
-                        # Serialize dicts (e.g. origin) as JSON so they
-                        # survive the CSV round-trip.
-                        if isinstance(val, dict):
+                        # Serialize dicts (origin) and lists (region_box) as
+                        # JSON so they survive the CSV round-trip.
+                        if isinstance(val, (dict, list)):
                             row.append(json.dumps(val, sort_keys=True))
                         else:
                             cell = str(val if val is not None else "")

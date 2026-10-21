@@ -28,6 +28,7 @@ from vtsearch.state import (
     get_active_detector_context,
     resolve_media_ids,
 )
+from vtscore.datasets.labelset import imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.utils.hits import build_media_hit, hit_custom_metadata
 
@@ -576,12 +577,8 @@ def import_labels(body: dict):
             skipped += 1
             continue
 
-        # Round-trip region_box on good-vote imports.  ``LabeledElement.from_dict``
-        # already coerces list↔tuple, so we just check shape and pass through.
-        rb_raw = entry.get("region_box") if label == "good" else None
-        region_box: tuple[float, float, float, float] | None = None
-        if isinstance(rb_raw, (list, tuple)) and len(rb_raw) == 4 and all(isinstance(v, (int, float)) for v in rb_raw):
-            region_box = (float(rb_raw[0]), float(rb_raw[1]), float(rb_raw[2]), float(rb_raw[3]))
+        # Round-trip region_box on good-vote imports.
+        region_box = imported_region_box(label, entry.get("region_box"))
 
         for cid in cids:
             # Importing a labelset is a bulk action, not consecutive individual
