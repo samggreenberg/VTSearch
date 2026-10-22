@@ -215,7 +215,7 @@ def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict
     }
 
     if trend.relative_slope >= SMART_FLAT_THRESHOLD:
-        return {"status": "green", "reason": "Error cost has leveled off. You can likely stop labeling.", **extras}
+        return {"status": "green", "reason": "Error cost has leveled off.", **extras}
     if trend.t_stat > -SMART_SLOPE_T:
         # Falling on the fit, but by less than the window's own step-to-step
         # scatter: the trend is not distinguishable from noise, and calling it
@@ -226,8 +226,7 @@ def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict
         return {
             "status": "green",
             "reason": (
-                "Error cost has leveled off: it drifts down, but by less than it bounces around "
-                "between retrains. You can likely stop labeling."
+                "Error cost has leveled off: it drifts down, but by less than it bounces around between retrains."
             ),
             **extras,
         }
@@ -309,15 +308,12 @@ def rising_status_from_scores(scores: Sequence[float], good: int, bad: int) -> d
         "drift_within_noise": False,
     }
     if trend.relative_slope <= SMART_RISE_THRESHOLD:
-        return {"status": "green", "reason": "F-beta has stopped rising. You can likely stop labeling.", **extras}
+        return {"status": "green", "reason": "F-beta has stopped rising.", **extras}
     if trend.t_stat < SMART_SLOPE_T:
         extras["drift_within_noise"] = True
         return {
             "status": "green",
-            "reason": (
-                "F-beta has stopped rising: it drifts up, but by less than it bounces around "
-                "between retrains. You can likely stop labeling."
-            ),
+            "reason": ("F-beta has stopped rising: it drifts up, but by less than it bounces around between retrains."),
             **extras,
         }
     return {"status": "yellow", "reason": "F-beta is still rising. Keep labeling.", **extras}

@@ -12,6 +12,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart's green reasons drop "You can likely stop labeling."** (issue #5137).
+  `cost_trend.rising_status_from_scores` and `smart_status_from_costs` return the same statuses and numbers; their
+  green `reason` now says only what the rule read (F-beta stopped rising, or the error cost levelled off, and whether
+  within the noise). Stopping is the phase machine's `done`.
+
 - **Demo downloads fall back to mirrors.** `download_file_with_progress` (and so `download_file_atomic` and every
   demo downloader built on them) now tries the canonical URL first, then each mirror its `downloader.core._MIRRORS`
   entry lists, restarting the file for each. A source is abandoned after `_FAILOVER_AFTER_ATTEMPTS` (3) attempts that
