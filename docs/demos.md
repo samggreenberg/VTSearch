@@ -153,6 +153,26 @@ The tables below are generated from the demo-dataset registry (each media type's
 > the photos are pinned in `vtscore/media/assets/celebrity_together.json`
 > (rebuilt by `scripts/build_celebrity_together_manifest.py`) and each variant
 > downloads only its own; (M) reuses what (S) already fetched.
+>
+> **Celebrity Together's provenance and terms.** Treat it as a demo for
+> experimenting with, not a dataset to publish results on or pass along:
+>
+> - *Source:* its authors (Zhong, Arandjelović & Zisserman, ECCV 2018
+>   workshops) gathered the photos with Google Image Search, querying pairs of
+>   celebrity names. They are agency and press photos (some carry Getty Images
+>   or similar watermarks), and the files carry no credit or copyright
+>   metadata.
+> - *Availability:* the authors no longer distribute it: its page says it is
+>   "no longer available from this website". The demo downloads from
+>   `Juoguessr/celebritytogether` on Hugging Face, an anonymous re-upload with
+>   no dataset card and no license, which may vanish.
+> - *License:* neither the authors nor the mirror state one.
+> - *Who is in it:* not only celebrities. 30% of the boxed faces in the demo's
+>   3,600 photos are people the dataset labels "unknown" (bystanders, or
+>   celebrities outside its 2,622 names), half the photos hold one, and about
+>   one face in eight the app finds has no box in the dataset at all.
+> - *What the demo keeps:* the dataset names its faces by box. The demo keeps
+>   only one name per photo.
 
 
 ## Document
