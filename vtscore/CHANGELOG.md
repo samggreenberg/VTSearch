@@ -12,6 +12,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A converted demo load no longer embeds its source media** (issue #5176). `load_demo_dataset` now passes
+  `MediaType.load_demo_source(skip_embedding=True)` whenever a converter is set, as it already did for a clipper: the
+  converter replaces every loaded media, and the framework embed stage embeds its outputs. An override that honours
+  `skip_embedding` skips that wasted pass; its `embedder` may then belong to the converter's target type. The load's
+  `AdaptiveLoadPacer` paces a conversion (status `"converting"`) as its own `convert` phase within step 2, after
+  `load`, so the bar keeps moving through it. Additive.
 - **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
   cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
   balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
