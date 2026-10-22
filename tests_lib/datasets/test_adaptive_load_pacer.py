@@ -265,3 +265,84 @@ def test_calibrated_terms_still_replace_only_the_observed_phase(clock):
     assert pacer._terms["load"] == pytest.approx(20.0)
     assert pacer._terms["embed"] == pytest.approx(TERMS["embed"])
     assert pacer._terms["finalize"] == pytest.approx(TERMS["finalize"])
+
+
+def test_conversion_after_load_keeps_the_bar_moving(clock):
+    # #5176: a converted demo loads its source media (status "loading") and then
+    # converts it (status "converting"), both on step 2. Sharing one phase, the
+    # load drove its fraction to 1 and the whole conversion then ran on a parked
+    # bar. Conversion gets its own sub-range of step 2, after the load.
+    tracker, pacer = _make(TERMS)
+    pacer.update("loading", "Loading 600 images", 600, 600, step=2)
+    after_load = _overall(tracker)
+    clock.advance(1.0)
+    pacer.update("converting", "Converting 600 items", 0, 600, step=2)
+    assert _overall(tracker) == pytest.approx(after_load)
+    clock.advance(1.0)
+    pacer.update("converting", "Converting", 300, 600, step=2)
+    mid_convert = _overall(tracker)
+    clock.advance(1.0)
+    pacer.update("converting", "Converting", 600, 600, step=2)
+    end_convert = _overall(tracker)
+    assert after_load < mid_convert < end_convert < 1.0
+    # Unpriced by the cost model, the conversion is budgeted like the embed
+    # phase after it, so half of it covers a real stretch of the bar.
+    assert pacer._terms["convert"] == pytest.approx(TERMS["embed"])
+    assert mid_convert - after_load > 0.1
+    assert tracker.get()["step"] == 2
+
+
+def test_converted_load_sequence_is_monotone_and_ends_at_one(clock):
+    # The full converted-demo order: load the sources, convert them, load the
+    # target's embedding model (step 2 again), embed the outputs, finalize.
+    tracker, pacer = _make(TERMS)
+    seen, steps = [], []
+
+    def push(status, cur, tot, step):
+        pacer.update(status, status, cur, tot, step=step)
+        seen.append(_overall(tracker))
+        steps.append(tracker.get()["step"])
+        clock.advance(0.7)
+
+    push("downloading", 50, 100, 1)
+    push("downloading", 100, 100, 1)
+    push("loading", 300, 600, 2)
+    push("loading", 600, 600, 2)
+    push("converting", 200, 600, 2)
+    push("converting", 600, 600, 2)
+    push("loading", 0, 0, 2)
+    push("loading", 50, 107, 2)
+    push("loading", 107, 107, 2)
+    push("embedding", 350, 700, 3)
+    push("embedding", 700, 700, 3)
+    pacer.update("loading", "finalize", 1000, 1000, step=4)
+    seen.append(_overall(tracker))
+    steps.append(tracker.get()["step"])
+
+    assert all(b >= a - 1e-9 for a, b in zip(seen, seen[1:]))
+    assert steps == sorted(steps)
+    assert seen[-1] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_a_load_that_never_converts_keeps_its_pacing(clock):
+    # The convert term is seeded only when a conversion starts, so a plain
+    # load's phases split the bar exactly as before.
+    tracker, pacer = _make(TERMS)
+    pacer.update("loading", "decode", 1, 2, step=2)
+    assert pacer._terms["convert"] == 0.0
+    assert _overall(tracker) == pytest.approx(0.5 * 5 / 35, rel=1e-6)
+
+
+def test_pseudo_terms_conversion_moves_the_bar(clock):
+    # Static-profile terms (no cost-model row: e.g. the face type) take the same
+    # embed-sized prior, so the observation keeps a sane ratio.
+    tracker, pacer = _make_pseudo(PSEUDO_TERMS)
+    pacer.update("loading", "images", 10, 10, step=2)
+    after_load = _overall(tracker)
+    pacer.update("converting", "c", 0, 100, step=2)
+    clock.advance(30.0)
+    pacer.update("converting", "c", 50, 100, step=2)
+    mid = _overall(tracker)
+    clock.advance(30.0)
+    pacer.update("converting", "c", 100, 100, step=2)
+    assert after_load < mid < _overall(tracker) < 1.0

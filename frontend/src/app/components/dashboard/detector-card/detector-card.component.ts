@@ -14,6 +14,7 @@ import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/contex
 import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import type { LineTestVerdict } from '../../../generated/api-client/models/line-test-verdict';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 
@@ -33,6 +34,7 @@ import { verdictLine, verdictTitle } from '../../../utils/line-test';
 })
 export class DetectorCardComponent {
   private readonly loadingTasksSvc = inject(DashboardLoadingTasksService);
+  private readonly mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   readonly detector = input<any>(undefined);
   readonly currentUser = input('');
@@ -299,6 +301,12 @@ export class DetectorCardComponent {
 
   formatDate(timestamp: number | null): string {
     return formatTimestamp(timestamp);
+  }
+
+  /** The Type cell's icon, as the media-type registry serves it (the
+   *  dashboard loads it), so every type gets one, not a hardcoded few (#5178). */
+  get typeIcon(): string {
+    return this.mediaTypeCaps.iconFor(this.detector()?.media_type);
   }
 
   capitalizeType(type: string | undefined): string {

@@ -32,7 +32,7 @@
   @case ('revote') {
     <vt-toasty-hint hintId="revote" [anchor]="voteButtons" side="above" reach="right">
       You already labeled this <strong>{{ revoteLabel() }}</strong>. Click <strong>{{ revoteOther() }}</strong>
-      to change it, or click Autopilot's step on the left to carry on.
+      to change it, or Autopilot's step on the left to carry on.
     </vt-toasty-hint>
   }
   @case ('find-goods') {
@@ -57,7 +57,7 @@
   }
   @case ('test-vote') {
     <vt-toasty-hint hintId="test-vote" [anchor]="voteButtons" side="above" reach="right">
-      Tune tests your detector's line with picks from both sides of it, in random order. Vote
+      <strong>Tune</strong> tests your detector's line with picks from both sides of it. Vote
       <strong>Good</strong> or <strong>Bad</strong> on each.
     </vt-toasty-hint>
   }

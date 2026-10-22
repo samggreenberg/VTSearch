@@ -120,7 +120,7 @@ describe('VotingOverlayComponent', () => {
     fixture.componentRef.setInput('isGood', true);
     await settleZoneless(fixture);
     expect(text()).toContain('You already labeled this Good. Click Bad to change it');
-    expect(text()).toContain("or click Autopilot's step on the left to carry on.");
+    expect(text()).toContain("or Autopilot's step on the left to carry on.");
 
     fixture.componentRef.setInput('isGood', false);
     fixture.componentRef.setInput('isBad', true);
