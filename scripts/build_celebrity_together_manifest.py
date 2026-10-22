@@ -64,6 +64,8 @@ _LABELS_FILE = "imdb_v1.1.mat"
 #: Bytes read to find a JPEG's size.  The frame header sits after any EXIF block,
 #: which is usually far smaller; a photo whose header lies past it is read whole.
 _HEADER_BYTES = 16384
+#: Photos read between saves of ``--heights-cache``, so an interrupted run keeps most of its reads.
+_CACHE_EVERY = 256
 
 
 class Face(NamedTuple):
@@ -114,15 +116,15 @@ class PhotoHeights:
         return self._heights[photo]
 
     def prefetch(self, photos: list[str]) -> None:
-        """Read every unknown photo's height, several at a time."""
+        """Read every unknown photo's height, several at a time, saving the cache as it goes."""
         todo = [p for p in dict.fromkeys(photos) if p not in self._heights]
-        if not todo:
-            return
         with ThreadPoolExecutor(max_workers=CELEBRITY_TOGETHER_DOWNLOAD_WORKERS) as pool:
-            for photo, height in zip(todo, pool.map(self._read_height, todo)):
-                self._heights[photo] = height
-        if self._cache_path is not None:
-            self._cache_path.write_text(json.dumps(self._heights))
+            for start in range(0, len(todo), _CACHE_EVERY):
+                chunk = todo[start : start + _CACHE_EVERY]
+                for photo, height in zip(chunk, pool.map(self._read_height, chunk)):
+                    self._heights[photo] = height
+                if self._cache_path is not None:
+                    self._cache_path.write_text(json.dumps(self._heights))
 
     @staticmethod
     def _read_height(photo: str) -> int:
@@ -136,18 +138,25 @@ class PhotoHeights:
 
 
 def _get(url: str, *, ranged: bool) -> bytes:
-    """GET *url* (its first :data:`_HEADER_BYTES` when *ranged*), waiting out rate limits."""
+    """GET *url* (its first :data:`_HEADER_BYTES` when *ranged*), waiting out rate limits and dropped connections."""
     import requests  # noqa: PLC0415
 
     headers = {"Range": f"bytes=0-{_HEADER_BYTES - 1}"} if ranged else {}
     attempts = 8
     for attempt in range(1, attempts + 1):
-        response = requests.get(url, headers=headers, timeout=60)
-        if response.status_code not in (429, 500, 502, 503, 504):
-            response.raise_for_status()
-            return response.content
+        wait = 15.0 * attempt
+        try:
+            response = requests.get(url, headers=headers, timeout=60)
+        except (requests.ConnectionError, requests.Timeout):
+            if attempt == attempts:
+                raise
+        else:
+            if response.status_code not in (429, 500, 502, 503, 504):
+                response.raise_for_status()
+                return response.content
+            wait = float(response.headers.get("Retry-After") or wait)
         if attempt < attempts:
-            time.sleep(float(response.headers.get("Retry-After") or 15 * attempt))
+            time.sleep(wait)
     raise RuntimeError(f"{url} kept answering with a retryable status after {attempts} attempts")
 
 
