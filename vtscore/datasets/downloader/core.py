@@ -318,22 +318,77 @@ UCF101_FULL_URL = "https://huggingface.co/datasets/quchenyuan/UCF101-ZIP/resolve
 KTH_BASE_URL = "https://www.csc.kth.se/cvap/actions/"
 KTH_ACTIONS = ("walking", "jogging", "running", "boxing", "handwaving", "handclapping")
 
+
+def _wayback(timestamp: str, captured_url: str) -> str:
+    """The Wayback Machine's raw copy (``id_``: the bytes as captured, no
+    rewritten HTML) of *captured_url* at *timestamp*."""
+    return f"https://web.archive.org/web/{timestamp}id_/{captured_url}"
+
+
+def _hf(repo_path: str) -> str:
+    return f"https://huggingface.co/datasets/{repo_path}"
+
+
 # Fallback sources for a canonical download URL, tried in order once it fails
 # (unreachable, a dead status, or an HTML page where the archive should be).
 # The canonical host always goes first: a mirror is only ever someone else's
-# re-upload, and the canonical copy needs nothing a user may lack.  Each entry
-# must serve the *byte-identical* file — a switch restarts the file from zero
-# rather than resuming, but the extracted tree still has to match what the
-# loader expects — so note the evidence beside it.
+# copy, and the canonical one needs nothing a user may lack.  Each entry must
+# serve the *byte-identical* file — a switch restarts the file from zero rather
+# than resuming, but the extracted tree still has to match what the loader
+# expects — so each notes its evidence.  Hugging Face copies come before the
+# Wayback Machine, which is slow (5-15 MB/s) and itself often unavailable.
+# Every entry was checked on 2026-10-22: an HF copy by its LFS sha256 against
+# TFDS's recorded checksum or the canonical file's own; a Wayback copy by the
+# sha1 its capture index records against the canonical file's.
 _MIRRORS: dict[str, tuple[str, ...]] = {
     # cs.stanford.edu refused every connection on 2026-10-22.  Five independent
     # HF re-uploads share these LFS sha256s (51c682d2… / 99da1a0d…), and the
     # zips hold the full VG_100K/ (64,346) + VG_100K_2/ (43,903) JPEG trees.
-    VISUAL_GENOME_IMAGES_URL: ("https://huggingface.co/datasets/jn12/VisualGenome/resolve/main/images.zip",),
-    VISUAL_GENOME_IMAGES2_URL: ("https://huggingface.co/datasets/jn12/VisualGenome/resolve/main/images2.zip",),
-    # ai.stanford.edu went down with it.  sha256 c40f74a1… matches the checksum
-    # TFDS records for the original aclImdb_v1.tar.gz (84,125,825 B).
-    IMDB_URL: ("https://huggingface.co/datasets/NolanChai/aclImdb_v1/resolve/main/aclImdb_v1.tar.gz",),
+    VISUAL_GENOME_IMAGES_URL: (_hf("jn12/VisualGenome/resolve/main/images.zip"),),
+    VISUAL_GENOME_IMAGES2_URL: (_hf("jn12/VisualGenome/resolve/main/images2.zip"),),
+    VISUAL_GENOME_OBJECTS_URL: (
+        _hf("jn12/VisualGenome/resolve/main/objects.json.zip"),  # sha256 efa45606…, the canonical's
+        _wayback("20240428141401", VISUAL_GENOME_OBJECTS_URL),
+    ),
+    # ai.stanford.edu went down with it.  sha256 c40f74a1… is TFDS's.
+    IMDB_URL: (_hf("NolanChai/aclImdb_v1/resolve/main/aclImdb_v1.tar.gz"),),
+    CALTECH101_URL: (_hf("HuggingFaceM4/Caltech-101/resolve/main/caltech-101.zip"),),  # sha256 33123475…, TFDS's
+    CALTECH256_URL: (_hf("xingslong/caltech256/resolve/main/256_ObjectCategories.tar"),),  # sha256 08ff01b0…
+    FOOD101_URL: (
+        _hf("xingslong/food-101/resolve/main/food-101.tar.gz"),  # sha256 d97d15e4…, TFDS's
+        _wayback("20260101011658", "https://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"),
+    ),
+    # www.robots.ox.ac.uk redirects to thor.robots.ox.ac.uk, the host the
+    # captures were taken from (and Oxford Buildings' too, which has no copy).
+    OXFORD_FLOWERS_URL: (
+        _hf("namhai2803/Flower102/resolve/main/102flowers.tgz"),  # sha256 2d01ecc8…, TFDS's
+        _wayback("20250416134905", "https://thor.robots.ox.ac.uk/flowers/102/102flowers.tgz"),
+    ),
+    OXFORD_FLOWERS_LABELS_URL: (
+        _wayback("20260220095026", "https://thor.robots.ox.ac.uk/flowers/102/imagelabels.mat"),
+    ),
+    PLACES365_URL: (_wayback("20250814074200", "https://data.csail.mit.edu/places/places365/val_256.tar"),),
+    PLACES365_LABELS_FILELIST_URL: (
+        _wayback("20240805220520", "https://data.csail.mit.edu/places/places365/filelist_places365-standard.tar"),
+    ),
+    ROXFORD_GND_URL: (_wayback("20210624021917", ROXFORD_GND_URL),),
+    ENRICO_SCREENSHOTS_URL: (_wayback("20240708033546", ENRICO_SCREENSHOTS_URL),),
+    BBC_NEWS_URL: (_wayback("20260929074115", BBC_NEWS_URL),),
+    REUTERS21578_URL: (
+        _hf("ucirvine/reuters21578/resolve/main/data/reuters21578.tar.gz"),  # sha256 3bae43c9…
+        _wayback("20240423115758", "https://kdd.ics.uci.edu/databases/reuters21578/reuters21578.tar.gz"),
+    ),
+    **{
+        f"{KTH_BASE_URL}{action}.zip": (_wayback(timestamp, f"{KTH_BASE_URL}{action}.zip"),)
+        for action, timestamp in (
+            ("walking", "20251208114458"),
+            ("jogging", "20251118053436"),
+            ("running", "20251208114623"),
+            ("boxing", "20251118054547"),
+            ("handwaving", "20251118132933"),
+            ("handclapping", "20251118063514"),
+        )
+    },
 }
 # Attempts a source gets before falling over to the next one, while it has not
 # sent a single byte.  A host that is refusing or black-holing connections is
@@ -920,8 +975,10 @@ _HTML_SIGNATURES = (b"<", b"<!", b"{")
 def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) -> None:
     """Check that a downloaded file looks like a genuine archive.
 
-    Deletes the file and raises ``RuntimeError`` with a user-friendly
-    message when the content does not match the expected format.
+    Deletes the file and raises :class:`InvalidArchiveError` (a
+    ``RuntimeError``) with a user-friendly message when the content does not
+    match the expected format.  A name that is no archive format (a mirrored
+    ``.mat`` or ``.pkl``) is only checked not to be an HTML page.
     """
     suffix = archive_name.lower()
     try:
@@ -944,6 +1001,8 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
     elif suffix.endswith(".tar"):
         # For plain tar we just check it doesn't look like HTML/text
         ok = not any(header.startswith(sig) for sig in _HTML_SIGNATURES)
+    else:
+        ok = not header.startswith(b"<")
 
     if not ok:
         archive_path.unlink(missing_ok=True)

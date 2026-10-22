@@ -21,8 +21,11 @@ not list every commit. Use `git log` for the full history.
   ai.stanford.edu stopped answering, and the Visual Genome and IMDB demos failed with "Couldn't reach
   cs.stanford.edu". A demo whose file has a known mirror still tries its original host first, then, after three
   failed connections (or at once, if the host says the file is gone or serves a web page instead), downloads the
-  same file from the mirror. The progress line says when it switches. Mirrors so far: Visual Genome's two image zips
-  and IMDB, each on Hugging Face, with no sign-in needed.
+  same file from the mirror. The progress line says when it switches. Visual Genome, IMDB, Caltech-101,
+  Caltech-256, Food-101, Oxford Flowers and Reuters-21578 have a copy on Hugging Face (no sign-in needed);
+  Places365, Oxford Buildings' labels, Enrico, BBC News and KTH Actions, and some of the first group as a last
+  resort, have the Internet Archive's Wayback Machine. Each copy was checked to be the same file, byte for byte.
+  Oxford Buildings' image archive has no copy anywhere, so that demo still needs its home server.
 
 - **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
   Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or

@@ -1475,13 +1475,46 @@ class TestMirrorFallback:
         canonical file's name, so a typo can't point a demo somewhere odd."""
         from vtscore.datasets.downloader import core as dl_core
 
+        from urllib.parse import urlparse
+
         assert dl_core._MIRRORS, "the table should not be empty"
         for canonical, mirrors in dl_core._MIRRORS.items():
-            name = canonical.rsplit("/", 1)[-1]
+            name = urlparse(canonical).path.rsplit("/", 1)[-1]
             for mirror in mirrors:
                 assert mirror.startswith("https://"), mirror
                 assert dl_core._host(mirror) != dl_core._host(canonical), mirror
-                assert mirror.rsplit("/", 1)[-1] == name, mirror
+                assert urlparse(mirror).path.rsplit("/", 1)[-1] == name, mirror
+
+    def test_every_kth_action_has_its_own_mirror(self):
+        """KTH's per-action URLs are built at call time, so the table must hold
+        exactly the strings ``download_kth`` builds."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        for action in dl_core.KTH_ACTIONS:
+            url = f"{dl_core.KTH_BASE_URL}{action}.zip"
+            (mirror,) = dl_core._MIRRORS[url]
+            assert mirror.startswith("https://web.archive.org/web/") and mirror.endswith(f"id_/{url}"), mirror
+
+    def test_an_html_page_in_place_of_a_non_archive_fails_over(self, tmp_path, monkeypatch):
+        """A mirrored ``.mat`` / ``.pkl`` is no archive to check the magic of,
+        but an HTML page in its place is still a failed source."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        canonical = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
+        mirror = dl_core._wayback("20260220095026", "https://thor.robots.ox.ac.uk/flowers/102/imagelabels.mat")
+        monkeypatch.setitem(dl_core._MIRRORS, canonical, (mirror,))
+        html, mat = b"<html>maintenance</html>", b"MATLAB 5.0 MAT-file"
+        plan = {
+            canonical: [_FakeResponse([html], headers={"content-length": str(len(html))})],
+            mirror: [_FakeResponse([mat], headers={"content-length": str(len(mat))})],
+        }
+        requested = self._install(monkeypatch, plan)
+
+        dest = tmp_path / ".dl_abcd1234_imagelabels.mat"
+        dl_core.download_file_with_progress(canonical, dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == mat
+        assert requested == [canonical, mirror]
 
 
 class TestFetchTextWithRetry:
