@@ -12,6 +12,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Demo downloads fall back to mirrors.** `download_file_with_progress` (and so `download_file_atomic` and every
+  demo downloader built on them) now tries the canonical URL first, then each mirror its `downloader.core._MIRRORS`
+  entry lists, restarting the file for each. A source is abandoned after `_FAILOVER_AFTER_ATTEMPTS` (3) attempts that
+  never received a byte, at once on a non-retryable status or 401/403, or when it serves something other than the
+  archive its filename names (a host that is mid-transfer keeps the full retry budget). When every source fails, one
+  `RemoteUnreachableError` gives each one's reason in order. A URL with no mirrors behaves exactly as before.
+  `_validate_archive` now raises `InvalidArchiveError`, a `RuntimeError` subclass, so existing handlers still catch
+  it.
+
 - **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
   cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
   balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
