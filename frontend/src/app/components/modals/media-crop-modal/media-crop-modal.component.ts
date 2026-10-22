@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, OnDestroy, OnInit, output } from '@angular/core';
 
+import { mediaItemWord } from '../../../utils/media-words';
 import { ModalComponent } from '../../modal/modal.component';
 import { ToastyHintComponent } from '../../toasty-hint/toasty-hint.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
@@ -42,6 +43,11 @@ export class MediaCropModalComponent implements OnInit, OnDestroy {
     if (this.fileUrl) {
       URL.revokeObjectURL(this.fileUrl);
     }
+  }
+
+  /** "image", "audio clip", …: what Toasty's hint calls the example. */
+  get mediaItemWord(): string {
+    return mediaItemWord(this.mediaType());
   }
 
   get cropSupported(): boolean {
