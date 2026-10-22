@@ -320,7 +320,10 @@ fresh. `converter_name` loads the source type and converts it (cached
 under a separate key). The package root also re-exports the raw
 downloaders behind some demos (`download_esc50`, `download_cifar10`,
 `download_ucf101_subset`, `download_20newsgroups`) and the generic
-`download_file_with_progress` (`vtscore/datasets/downloader/`). Unknown names raise `ValueError`. The actual download / embedding is delegated to each
+`download_file_with_progress` (`vtscore/datasets/downloader/`), which
+resumes a dropped transfer and, for a demo URL in the downloader's mirror
+table (`_MIRRORS` in `downloader/core.py`), falls back to its mirrors when the
+canonical host fails. Unknown names raise `ValueError`. The actual download / embedding is delegated to each
 `MediaType.load_demo_source` implementation, so adding a new demo
 dataset is a media-tier concern.
 

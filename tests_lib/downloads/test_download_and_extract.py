@@ -1319,6 +1319,204 @@ class TestRetryableStatusExhaustion:
         assert str(excinfo.value).startswith("archive.org kept returning a bad-gateway error (HTTP 502)")
 
 
+class TestMirrorFallback:
+    """A canonical URL with registered ``_MIRRORS`` falls over to them in order
+    once it fails outright, and only then (Visual Genome: cs.stanford.edu down)."""
+
+    CANONICAL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
+    MIRROR = "https://huggingface.co/datasets/jn12/VisualGenome/resolve/main/images.zip"
+    ZIP_BYTES = b"PK\x03\x04" + b"\x00" * 60
+
+    @classmethod
+    def _install(cls, monkeypatch, plan):
+        """Register MIRROR for CANONICAL and patch ``requests.Session.get`` to
+        serve, per URL, the next entry of *plan[url]*: a response, or an
+        exception to raise.  Returns the URLs requested, in order."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        monkeypatch.setitem(dl_core._MIRRORS, cls.CANONICAL, (cls.MIRROR,))
+        requested = []
+
+        def fake_get(self, url, *args, **kwargs):
+            requested.append(url)
+            outcome = plan[url].pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(requests.Session, "get", fake_get)
+        monkeypatch.setattr(dl_core.time, "sleep", lambda *a, **k: None)
+        return requested
+
+    def _mirror_ok(self):
+        return _FakeResponse([self.ZIP_BYTES], headers={"content-length": str(len(self.ZIP_BYTES))})
+
+    def test_an_unreachable_canonical_fails_over_early(self, tmp_path, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        refused = [requests.exceptions.ConnectionError("refused") for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        requested = self._install(monkeypatch, {self.CANONICAL: refused, self.MIRROR: [self._mirror_ok()]})
+
+        reported = []
+        dest = tmp_path / "images.zip"
+        dl_core.download_file_with_progress(self.CANONICAL, dest, on_progress=lambda *a: reported.append(a))
+
+        assert dest.read_bytes() == self.ZIP_BYTES
+        # A host that never answered gets the short budget, not the full ladder.
+        assert requested == [self.CANONICAL] * dl_core._FAILOVER_AFTER_ATTEMPTS + [self.MIRROR]
+        # ...and its retry notices count against that budget, not the full one.
+        retries = [a[1] for a in reported if "Connection interrupted" in a[1]]
+        assert retries and all(m.endswith(f"/{dl_core._FAILOVER_AFTER_ATTEMPTS})...") for m in retries)
+        assert any("cs.stanford.edu is unavailable - switching to mirror huggingface.co" in a[1] for a in reported)
+
+    def test_a_dead_status_fails_over_at_once(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        requested = self._install(
+            monkeypatch,
+            {self.CANONICAL: [_FakeResponse([], status_code=404)], self.MIRROR: [self._mirror_ok()]},
+        )
+
+        dest = tmp_path / "images.zip"
+        dl_core.download_file_with_progress(self.CANONICAL, dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == self.ZIP_BYTES
+        assert requested == [self.CANONICAL, self.MIRROR]
+
+    def test_an_html_page_in_place_of_the_archive_fails_over(self, tmp_path, monkeypatch):
+        """A dead host that redirects to its homepage answers 200 with HTML."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        html = b"<!DOCTYPE html><html>moved</html>"
+        requested = self._install(
+            monkeypatch,
+            {
+                self.CANONICAL: [_FakeResponse([html], headers={"content-length": str(len(html))})],
+                self.MIRROR: [self._mirror_ok()],
+            },
+        )
+
+        dest = tmp_path / ".dl_abcd1234_vg_images.zip"
+        dl_core.download_file_with_progress(self.CANONICAL, dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == self.ZIP_BYTES
+        assert requested == [self.CANONICAL, self.MIRROR]
+
+    def test_a_canonical_mid_transfer_keeps_its_full_budget(self, tmp_path, monkeypatch):
+        """Switching restarts the file, so a host that is serving bytes is
+        resumed rather than abandoned after the short failover budget."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        payload = b"PK" + b"y" * 510
+        chunks = [payload[:256], payload[256:]]
+        partial = {"content-length": "256", "Content-Range": "bytes 256-511/512"}
+        plan = {
+            self.CANONICAL: [
+                _FakeResponse(chunks, headers={"content-length": "512"}, fail_after_chunks=1),
+                *[
+                    _FakeResponse(chunks[1:], status_code=206, headers=partial, fail_after_chunks=0)
+                    for _ in range(dl_core._FAILOVER_AFTER_ATTEMPTS)
+                ],
+                _FakeResponse(chunks[1:], status_code=206, headers=partial),
+            ],
+            self.MIRROR: [],
+        }
+        requested = self._install(monkeypatch, plan)
+
+        dest = tmp_path / "images.zip"
+        dl_core.download_file_with_progress(self.CANONICAL, dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == payload
+        assert set(requested) == {self.CANONICAL}
+        assert len(requested) == dl_core._FAILOVER_AFTER_ATTEMPTS + 2
+
+    def test_every_source_failing_names_each_host(self, tmp_path, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        refused = [requests.exceptions.ConnectionError("refused") for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        mirror_gone = _FakeResponse([], status_code=404)
+        self._install(monkeypatch, {self.CANONICAL: refused, self.MIRROR: [mirror_gone]})
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.download_file_with_progress(self.CANONICAL, tmp_path / "images.zip", on_progress=lambda *a: None)
+
+        message = str(excinfo.value)
+        assert message.startswith("Couldn't download images.zip from cs.stanford.edu or its mirror (huggingface.co).")
+        assert f"Couldn't reach cs.stanford.edu: the connection failed, on all {dl_core._FAILOVER_AFTER_ATTEMPTS}" in (
+            message
+        )
+        assert excinfo.value.url == self.CANONICAL
+        assert isinstance(excinfo.value.__cause__, requests.HTTPError)
+
+    def test_a_url_without_mirrors_fails_as_before(self, tmp_path, monkeypatch):
+        """No registered mirror: the full budget, and the error is unwrapped."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        url = "https://example.com/data.zip"
+        refused = [requests.exceptions.ConnectionError("refused") for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        requested = self._install(monkeypatch, {url: refused})
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.download_file_with_progress(url, tmp_path / "data.zip", on_progress=lambda *a: None)
+
+        assert len(requested) == dl_core._MAX_DOWNLOAD_ATTEMPTS
+        assert str(excinfo.value).startswith("Couldn't reach example.com:")
+
+    def test_registered_mirrors_are_https_on_another_host_with_the_same_filename(self):
+        """Every table entry is an HTTPS URL on a different host that keeps the
+        canonical file's name, so a typo can't point a demo somewhere odd."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        from urllib.parse import urlparse
+
+        assert dl_core._MIRRORS, "the table should not be empty"
+        for canonical, mirrors in dl_core._MIRRORS.items():
+            name = urlparse(canonical).path.rsplit("/", 1)[-1]
+            for mirror in mirrors:
+                assert mirror.startswith("https://"), mirror
+                assert dl_core._host(mirror) != dl_core._host(canonical), mirror
+                assert urlparse(mirror).path.rsplit("/", 1)[-1] == name, mirror
+
+    def test_every_kth_action_has_its_own_mirror(self):
+        """KTH's per-action URLs are built at call time, so the table must hold
+        exactly the strings ``download_kth`` builds."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        for action in dl_core.KTH_ACTIONS:
+            url = f"{dl_core.KTH_BASE_URL}{action}.zip"
+            (mirror,) = dl_core._MIRRORS[url]
+            assert mirror.startswith("https://web.archive.org/web/") and mirror.endswith(f"id_/{url}"), mirror
+
+    def test_an_html_page_in_place_of_a_non_archive_fails_over(self, tmp_path, monkeypatch):
+        """A mirrored ``.mat`` / ``.pkl`` is no archive to check the magic of,
+        but an HTML page in its place is still a failed source."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        canonical = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
+        mirror = dl_core._wayback("20260220095026", "https://thor.robots.ox.ac.uk/flowers/102/imagelabels.mat")
+        monkeypatch.setitem(dl_core._MIRRORS, canonical, (mirror,))
+        html, mat = b"<html>maintenance</html>", b"MATLAB 5.0 MAT-file"
+        plan = {
+            canonical: [_FakeResponse([html], headers={"content-length": str(len(html))})],
+            mirror: [_FakeResponse([mat], headers={"content-length": str(len(mat))})],
+        }
+        requested = self._install(monkeypatch, plan)
+
+        dest = tmp_path / ".dl_abcd1234_imagelabels.mat"
+        dl_core.download_file_with_progress(canonical, dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == mat
+        assert requested == [canonical, mirror]
+
+
 class TestFetchTextWithRetry:
     """Manifest/index fetches share the transfer's retry budget and error shape.
 
