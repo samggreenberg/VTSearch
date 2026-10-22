@@ -1288,7 +1288,7 @@ describe('DashboardComponent', () => {
       await loadSettings({});
       expect(component.dashboardHint).toBe('add-dataset');
       expect(hintTexts(el)).toEqual([
-        'Start here! Click + to add a dataset: the images or other media you want to search.',
+        'Start here! Click + to add a dataset of the images or other media you want to search.',
       ]);
       expect(el.querySelector('vt-toasty-hint')?.classList).not.toContain('toasty-hint--off');
     });
@@ -1297,7 +1297,7 @@ describe('DashboardComponent', () => {
       const el = renderWith();
       await loadSettings({ solo_media_type: 'image' });
       expect(hintTexts(el)).toEqual([
-        'Start here! Click + to add a dataset: the images you want to search.',
+        'Start here! Click + to add a dataset of the images you want to search.',
       ]);
     });
 
@@ -1376,7 +1376,7 @@ describe('DashboardComponent', () => {
         [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
       );
       expect(component.dashboardHint).toBe('mismatch');
-      expect(hintTexts(el)[0]).toContain('The detector you selected is for a different kind of media than your dataset');
+      expect(hintTexts(el)[0]).toContain('The selected dataset and detector are different kinds of media');
     });
 
     it('suggests Tune or Find once a trained detector and its dataset are selected (#4680)', () => {
@@ -1549,7 +1549,7 @@ describe('DashboardComponent', () => {
       expect(component.autofindEnabled).toBe(false);
       expect(component.dashboardHint).toBe('untrained-detector');
       expect(hintTexts(el)).toEqual([
-        'Blank has no training labels yet. Deselect it, or select it alone with one dataset and click Train.',
+        'Blank has no training labels yet. Select it and one dataset to Train.',
       ]);
     });
 

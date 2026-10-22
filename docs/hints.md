@@ -19,10 +19,14 @@ a sentence or two: "You have detectors, but none is selected. Select one…",
 never "Now click a detector". Nothing about the step after that, and nothing
 the step already says: picking where a dataset comes from *is* filling in
 **Add Dataset**'s form, so its hint doesn't also say "fill in the form" (#5175).
-Leave out a "so …" clause that the next sentence makes plain, and a purpose
-that the button's name already gives (**Continue**, not "**Continue** to keep
-going"). Only
+Leave out a "so …" clause that the next sentence makes plain ("has no
+training labels yet, so it can't search"). Only
 `add-dataset` opens with "Start here!": its state is the app's opening state.
+**Bold is for buttons**, tabs included: every one a hint names is bold, by the
+label it carries (**Move to AutoFind**, not "move it to **AutoFind**").
+Nothing else is bold, so a detector's or a dataset's name stays plain. **Good**
+and **Bad** stay bold when they name a vote ("You already labeled this
+**Good**"): they are the buttons' own words.
 No semicolons: each instruction is its own sentence. Autopilot's hints are for
 someone who just wants to click (#5143): no counts, targets, scores or metric
 names, and no keyboard shortcuts. Say what Autopilot is doing and what to do
@@ -50,7 +54,7 @@ can't work.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `offline` | sad | The server isn't answering. Check that it's still running, then click **Retry**. | The offline banner is up: a few requests in a row got no answer, or the browser went offline. Stands over the banner's **Retry**, over any dialog. It has no Hide boxes, since nothing can be saved until the server is back. **Retry** ends it once the server answers. |
+| `offline` | sad | The server isn't answering. Check it's still running, then click **Retry**. | The offline banner is up: a few requests in a row got no answer, or the browser went offline. Stands over the banner's **Retry**, over any dialog. It has no Hide boxes, since nothing can be saved until the server is back. **Retry** ends it once the server answers. |
 
 ## Dashboard
 
@@ -63,17 +67,17 @@ table's "Click **+** to add one": Toasty is saying it.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `add-dataset` | happy | Start here! Click **+** to add a dataset: the {media} you want to search. | There are no datasets, and none is importing. |
+| `add-dataset` | happy | Start here! Click **+** to add a dataset of the {media} you want to search. | There are no datasets, and none is importing. |
 | `select-dataset` | happy | You have datasets, but none is selected. Select one, or click **+** to add another. | There are datasets, but none is selected. |
-| `mixed-datasets` | surprised | The datasets you selected hold different kinds of media. Select datasets of one kind. | The selected datasets hold more than one media type. |
+| `mixed-datasets` | surprised | The selected datasets hold different kinds of media. Select datasets of one kind. | The selected datasets hold more than one media type. |
 | `add-detector` | happy | You need a detector to do the searching. Click **+** to add one. | There are no detectors. |
-| `empty-detector-tab` | happy | The {tab} tab is empty. Click **{other}** for your detectors, or **+** to make a new one. | There are detectors, but the open tab (Drafts or AutoFind) lists none of them, so none is selected. Stands under the tab bar. |
+| `empty-detector-tab` | happy | The **{tab}** tab is empty. Click **{other}** for your detectors, or **+** to make a new one. | There are detectors, but the open tab (Drafts or AutoFind) lists none of them, so none is selected. Stands under the tab bar. |
 | `select-detector` | happy | You have detectors, but none is selected. Select one, or click **+** to make a new one. | The open detector tab lists detectors, but none is selected. |
-| `mismatch` | surprised | The detector you selected is for a different kind of media than your dataset. Select ones that match, or click **+** to make one that does. | The selected datasets and detectors are not all one media type. |
+| `mismatch` | surprised | The selected dataset and detector are different kinds of media. Select ones that match, or click **+** to add a new one. | The selected datasets and detectors are not all one media type. |
 | `wait-for-import` | happy | Your dataset is still importing. Select it when it joins the table. | A detector is selected and the only dataset is still importing, so there is no dataset row to select yet. |
 | `train` | happy | Your new detector has no training labels yet. Click **Train** to teach it. | One detector with no training labels is selected, beside one dataset, so Train is enabled. |
 | `train-one-dataset` | surprised | You selected {N} datasets, but a new detector trains on one at a time. Select just one, then click **Train**. | Several datasets are selected with one detector that has no labels and no typed description, so nothing is enabled. |
-| `untrained-detector` | surprised | **{detector}** has no training labels yet. Deselect it, or select it alone with one dataset and click **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Tune and Find are off. |
+| `untrained-detector` | surprised | {detector} has no training labels yet. Select it and one dataset to **Train**. | Several detectors are selected and one of them has no labels and no typed description (#4758), so Tune and Find are off. |
 | `trained-here` | happy | You trained this detector on this dataset. Select a different dataset or detector to **Tune** or **Find**. | One detector and one dataset are selected, so Tune is enabled, and the detector holds labels from that dataset: its Train votes or Tune corrections there (#5142). Tune and Find would show it items it has already seen. Stands by the datasets' **+**. |
 | `test-or-find` | happy | Your detector is trained. Click **Tune** to check it on this dataset, or **Find** to collect its matches. | One trained detector and one dataset it holds no labels from are selected, so Tune is enabled. |
 | `find` | happy | You selected several datasets or detectors, so only **Find** is on. Click it to run each detector on each dataset. | Several datasets or detectors are selected, each detector with labels or a typed description (#4758), so Find is enabled but Tune is not. |
@@ -106,7 +110,7 @@ any run.
 | `find-bads` | happy | Autopilot is looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
 | `find-more` | happy | Autopilot is looking for more Goods now. Keep clicking. | As `find-goods`, in the **More** walk: a document dataset, or a More target. |
 | `keep-voting` | happy | Autopilot is sharpening your detector now. Keep clicking. | As `find-goods`, in **Refine Boundary** or **Explore Diversity**, until the run reaches Done. |
-| `resort-prompt` | happy | This example isn't finding many Goods. Try a different one on the right, or click **Continue**. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
+| `resort-prompt` | happy | This example isn't finding many Goods. Try a different one or keep clicking. | The **Update Sort Example?** prompt is up, below its dialog: Autopilot is still finding its first positives (**Find Initial Goods**) by a text or media example, and that sort has had ten votes (half as many again after each **Continue**) without enough, or the run has reached Autopilot's 200-vote cap without them (once, #4903). Answering the prompt ends it, and so does opening its media picker. |
 | `autopilot-done` | happy | Your detector is trained! Click **Dashboard** to put it to work, or keep clicking to sharpen it. | An Autopilot run that started on an untrained detector reaches Done with items still unlabeled, whatever said so: every quality light green, the labels line's expected level (#4878), the vote cap (#4903), or a document walk run dry. The next vote ends it. |
 | `all-labeled` | happy | You've labeled everything! Click **Dashboard** to put your detector to work. | An Autopilot run that started on an untrained detector labels every item, before it finishes or as it reaches Done (#5151): with nothing left to label, this one takes over from `autopilot-done`. The next vote ends it. |
 
@@ -117,9 +121,9 @@ the other one.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `test-vote` | happy | Tune tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
-| `test-done` | happy | The test is done. Move the detector to **AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
-| `review` | happy | Every item is here, best match first. Click one to check it with Good or Bad, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
+| `test-vote` | happy | **Tune** tests your detector's line with picks from both sides of it. Vote **Good** or **Bad** on each. | The test's first round is on the stage and no pick has been voted yet. The first vote ends it. Stands over **Good** / **Bad**. |
+| `test-done` | happy | The test is done. Click **Move to AutoFind** if the verdict is good enough, or open the **Review** tab to check the list yourself. | The test reached Done. Stands by the stage's verdict, which has taken the centre pane (#5100). |
+| `review` | happy | Every item is here, best match first. Click one to check it with **Good** or **Bad**, or **Export** to send the matches on. | The **Review** tab is open on a scored dataset and no item has been checked yet. The first check ends it. Stands under the tab. |
 
 ## Dialogs
 
@@ -130,10 +134,12 @@ Each fires while its dialog is open and on top.
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `import-dataset` | happy | Pick where your {media} come from, then click **Import**. | **Add Dataset** is open. Its picker's "Select what type of dataset to add." line hides while this is up. |
-| `new-detector` | happy | Describe what you're looking for, or give an example, then click **Create**. | **New Detector** is open on its main view (not its media picker). |
-| `use-example` | happy | **OK** uses the whole file. **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
+| `new-detector` | happy | Describe what you're looking for or give an example. | **New Detector** is open on its main view (not its media picker). |
+| `use-example` | happy | **OK** uses the whole {item}. **OK but Crop** lets you mark just the part you mean. | **Use This Example?** is open; the crop view carries its own instructions. |
 | `find-results` | happy | These are the detector's matches in {dataset}. **Export** sends them on. **Browse** lays them out as a map. | **Find Results** is open. |
 | `export-results` | happy | Pick which items and columns to include, then where they go. | **Export Results** is open (the Tune view's export; a detector's own export has no hint). |
 
-`{media}` is as on the Dashboard. `{dataset}` is the dataset Find ran on, by
+`{media}` is as on the Dashboard. `{item}` is one item of the example's media
+type ("image", "audio clip", …), or "file" when it has none. `{dataset}` is
+the dataset Find ran on, by
 name.

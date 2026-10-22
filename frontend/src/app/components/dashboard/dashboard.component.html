@@ -406,8 +406,8 @@
   @switch (dashboardHint) {
     @case ('add-dataset') {
       <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
-        Start here! Click <strong>+</strong> to add a dataset: the {{ addDatasetMedia }} you want to
-        search.
+        Start here! Click <strong>+</strong> to add a dataset of the {{ addDatasetMedia }} you want
+        to search.
       </vt-toasty-hint>
     }
     @case ('select-dataset') {
@@ -418,7 +418,7 @@
     }
     @case ('mixed-datasets') {
       <vt-toasty-hint hintId="mixed-datasets" [anchor]="datasetAddBtn" face="surprised">
-        The datasets you selected hold different kinds of media. Select datasets of one kind.
+        The selected datasets hold different kinds of media. Select datasets of one kind.
       </vt-toasty-hint>
     }
     @case ('add-detector') {
@@ -428,8 +428,8 @@
     }
     @case ('empty-detector-tab') {
       <vt-toasty-hint hintId="empty-detector-tab" [anchor]="detectorTabBar">
-        The {{ detectorTabLabel }} tab is empty. Click <strong>{{ otherDetectorTabLabel }}</strong> for your
-        detectors, or <strong>+</strong> to make a new one.
+        The <strong>{{ detectorTabLabel }}</strong> tab is empty. Click
+        <strong>{{ otherDetectorTabLabel }}</strong> for your detectors, or <strong>+</strong> to make a new one.
       </vt-toasty-hint>
     }
     @case ('select-detector') {
@@ -440,8 +440,8 @@
     }
     @case ('mismatch') {
       <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn" face="surprised">
-        The detector you selected is for a different kind of media than your dataset. Select ones
-        that match, or click <strong>+</strong> to make one that does.
+        The selected dataset and detector are different kinds of media. Select ones that match, or
+        click <strong>+</strong> to add a new one.
       </vt-toasty-hint>
     }
     @case ('wait-for-import') {
@@ -462,8 +462,8 @@
     }
     @case ('untrained-detector') {
       <vt-toasty-hint hintId="untrained-detector" [anchor]="trainBtn" side="above" reach="right" face="surprised">
-        <strong>{{ untrainedDetectorName }}</strong> has no training labels yet. Deselect it, or
-        select it alone with one dataset and click <strong>Train</strong>.
+        {{ untrainedDetectorName }} has no training labels yet. Select it and one dataset to
+        <strong>Train</strong>.
       </vt-toasty-hint>
     }
     @case ('trained-here') {

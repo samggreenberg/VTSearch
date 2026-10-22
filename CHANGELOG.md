@@ -17,10 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
-- **Toasty's hints are shorter** (issue #5175). Hints no longer repeat what their step already says or explain
-  what the next sentence makes plain. **Add Dataset**'s now says "Pick where your images or other media come from,
-  then click **Import**.", since picking the source *is* filling in the form. Seventeen others lost a clause like
-  this, and "images, sounds or other media" is now "images or other media".
+- **Toasty's hints are shorter, and bold every button they name** (issue #5175). Hints no longer repeat what
+  their step already says or explain what the next sentence makes plain. **Add Dataset**'s now says "Pick where your
+  images or other media come from, then click **Import**.", since picking the source *is* filling in the form, and
+  **New Detector**'s just "Describe what you're looking for or give an example." Most hints on the path are
+  shorter, "images, sounds or other media" is now "images or other media", and **Use This Example?** names the
+  example's kind ("**OK** uses the whole image."). A button or tab a hint names is in bold, under the label it
+  carries: the Tune view's verdict hint says **Move to AutoFind**, and **Tune** and the Review tab's **Good** /
+  **Bad** are bold now too. A detector's name no longer is.
 
 - **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
   (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw

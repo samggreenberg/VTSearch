@@ -4,8 +4,8 @@
   (closed)="onCancel()">
   @if (view === 'confirm') {
   <vt-toasty-hint hintId="use-example">
-    <strong>OK</strong> uses the whole file. <strong>OK but Crop</strong> lets you mark just the part you
-    mean.
+    <strong>OK</strong> uses the whole {{ mediaItemWord }}. <strong>OK but Crop</strong> lets you mark just
+    the part you mean.
   </vt-toasty-hint>
     <div class="preview">
       @switch (mediaType()) {
