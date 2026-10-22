@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
 - **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
   stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
   only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
