@@ -201,11 +201,13 @@ class TestShippedManifest:
         assert all(d.slice_end is not None and d.slice_end <= shortest for d in variants)
 
     def test_photos_are_mirror_paths_and_never_repeat(self):
+        """No photo twice, even filed under two folders: the app finds a demo photo by its filename."""
         from vtscore.media.image._demo_sources import celebrity_together_photos
 
         photos = [p for listed in celebrity_together_photos().values() for p in listed]
         assert all(re.fullmatch(r"n\d+/[0-9a-f]{32}\.jpg", p) for p in photos)
-        assert len(photos) == len(set(photos))
+        filenames = [p.rsplit("/", 1)[1] for p in photos]
+        assert len(filenames) == len(set(filenames))
 
     def test_names_the_repo_the_downloader_reads(self):
         from vtscore.datasets.downloader.core import CELEBRITY_TOGETHER_REPO_ID

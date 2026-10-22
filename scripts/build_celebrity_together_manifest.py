@@ -20,8 +20,10 @@ picks ``--per-person`` photos where
 Picks are deterministic: each person's candidates are taken in filename order
 (the filenames are MD5 hex, so that order is a fixed shuffle), and people take
 turns, one photo per turn, so a photo holding two of the demo's people goes to
-whichever reaches it first and never appears twice.  The order within a person
-is the order the demo slices in, so (S)'s photos are the first of (M)'s.
+whichever reaches it first and never appears twice.  A photo is its filename:
+the mirror files some photos under two folders (the dataset found them by two
+people's searches), and such a photo is still picked once.  The order within a
+person is the order the demo slices in, so (S)'s photos are the first of (M)'s.
 
 Usage::
 
@@ -149,6 +151,11 @@ def _get(url: str, *, ranged: bool) -> bytes:
     raise RuntimeError(f"{url} kept answering with a retryable status after {attempts} attempts")
 
 
+def _filename(photo: str) -> str:
+    """A mirror path's ``<md5>.jpg``: the photo's identity, whichever folder holds it."""
+    return photo.rsplit("/", 1)[-1]
+
+
 def build(per_person: int, min_face: float, max_face_frac: float, heights: PhotoHeights) -> dict[str, list[str]]:
     """Pick *per_person* photos for every demo person (module docstring)."""
     from huggingface_hub import hf_hub_download  # noqa: PLC0415
@@ -166,7 +173,7 @@ def build(per_person: int, min_face: float, max_face_frac: float, heights: Photo
     for (person, photo), found in boxes.items():
         if len(found) == 1 and found[0].short_side >= min_face and photo in on_mirror:
             candidates[person][photo] = found[0].height
-    queues = {person: sorted(candidates[person]) for person in CELEBRITY_TOGETHER_CATEGORIES}
+    queues = {person: sorted(candidates[person], key=_filename) for person in CELEBRITY_TOGETHER_CATEGORIES}
 
     # Read heights ahead in bulk: most people need about twice their quota of
     # candidates, and one photo at a time would be one round trip each.
@@ -183,12 +190,12 @@ def build(per_person: int, min_face: float, max_face_frac: float, heights: Photo
                     raise SystemExit(f"{person} has only {len(picks[person])} usable photos; need {per_person}")
                 photo = queue[cursor[person]]
                 cursor[person] += 1
-                if photo in taken:
+                if _filename(photo) in taken:
                     continue
                 heights.prefetch(queue[cursor[person] - 1 : cursor[person] + 31])
                 if candidates[person][photo] <= max_face_frac * heights[photo]:
                     break
-            taken.add(photo)
+            taken.add(_filename(photo))
             picks[person].append(photo)
     return picks
 
