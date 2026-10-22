@@ -1,11 +1,13 @@
 """Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Places365."""
 
 import os
+import re
 import shutil
 import tarfile
 import uuid
 import zipfile
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
@@ -478,6 +480,85 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
         max_workers=_core.OPENLOGO_DOWNLOAD_WORKERS,
     )
     return extract_dir
+
+
+#: A Celebrity Together photo's path on the mirror, under ``images/``.  The
+#: manifest is shipped, so this only stops a damaged one writing outside the
+#: demo's directory.
+_CELEBRITY_TOGETHER_PHOTO = re.compile(r"n\d+/[0-9a-f]{32}\.jpg")
+
+
+def download_celebrity_together(
+    photos: Iterable[str],
+    on_progress: Optional[ProgressCallback] = None,
+) -> Path:
+    """Download the named Celebrity Together photos (the Celebrities in Context demo).
+
+    *photos* are paths under the mirror's ``images/`` folder
+    (``n<id>/<md5>.jpg``), normally a slice of the demo's pinned manifest.  The
+    mirror holds the full dataset only as an 11 GB tar, so the photos are
+    fetched one file each, several at a time, and only those not already on
+    disk: loading (M) after (S) costs only the photos (M) adds.  Each lands via
+    :func:`~vtscore.datasets.downloader.core.download_file_atomic`, so an
+    interrupted load leaves no truncated photo behind to be taken for a cached
+    one.
+
+    Args:
+        photos: Mirror-relative photo paths.
+        on_progress: Optional progress callback. Falls back to the
+            the calling thread's progress sink when ``None``.
+
+    Returns:
+        Path to the ``celebrity_together/images/`` directory the paths are
+        relative to.
+
+    Raises:
+        ValueError: If a path is not of the mirror's ``n<id>/<md5>.jpg`` form.
+        RuntimeError: If any photo still failed after its retries.  The ones
+            that arrived are kept, so loading again fetches only the rest.
+    """
+    if on_progress is None:
+        on_progress = resolve_progress_callback()
+
+    images_dir = _core.DATA_DIR / "celebrity_together" / "images"
+    wanted = sorted(set(photos))
+    bad = [p for p in wanted if not _CELEBRITY_TOGETHER_PHOTO.fullmatch(p)]
+    if bad:
+        raise ValueError(f"Not a Celebrity Together photo path: {bad[0]!r}")
+    missing = [p for p in wanted if not (images_dir / p).is_file()]
+    if not missing:
+        return images_dir
+
+    total = len(missing)
+    label = "Downloading celebrity photos"
+    on_progress("downloading", f"{label}...", 0, total)
+
+    def forward_retries(status: str, message: str, current: int, total_bytes: int) -> None:
+        # One photo's byte-level progress means nothing beside the photo count;
+        # its retry notices ("Connection interrupted - retrying ...") explain a
+        # stall, so they pass through.
+        if not message.startswith("Downloading "):
+            on_progress(status, message, 0, 0)
+
+    def fetch(photo: str) -> None:
+        url = _core.CELEBRITY_TOGETHER_FILE_URL.format(photo)
+        _core.download_file_atomic(url, images_dir / photo, 0, forward_retries)
+
+    failures: list[tuple[str, BaseException]] = []
+    with ThreadPoolExecutor(max_workers=_core.CELEBRITY_TOGETHER_DOWNLOAD_WORKERS) as pool:
+        futures = {pool.submit(fetch, photo): photo for photo in missing}
+        for done, future in enumerate(as_completed(futures), 1):
+            exc = future.exception()
+            if exc is not None:
+                failures.append((futures[future], exc))
+            on_progress("downloading", label, done, total)
+    if failures:
+        photo, exc = failures[0]
+        raise RuntimeError(
+            f"{len(failures):,} of {total:,} celebrity photos failed to download (first: {photo}: {exc}). "
+            f"The rest are kept; load the demo again to fetch the missing ones."
+        ) from exc
+    return images_dir
 
 
 def _rico_icons_snapshot(allow_patterns: list[str], what: str, on_progress: ProgressCallback) -> Path:
