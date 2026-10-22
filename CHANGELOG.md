@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
+  stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
+  only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
+  `-v` or `VTSEARCH_LOG_LEVEL=INFO` still shows it.
+
 - **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
   Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
   sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same

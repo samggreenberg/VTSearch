@@ -150,8 +150,9 @@ def main() -> None:
             print(f"{_hms(e['t'])}Z  {e['msg']}")
     else:
         print(
-            "no `diagnostics config` line: this log predates it, so the "
-            "thresholds it was written at are unknown -- read every absence with that in mind."
+            "no `diagnostics config` line: either every bar was at its shipped default "
+            "(the line is INFO then, #5174) or this log predates it -- if the latter, "
+            "the thresholds it was written at are unknown, so read every absence with that in mind."
         )
 
     counts: dict[str, int] = {}
