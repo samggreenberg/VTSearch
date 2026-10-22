@@ -22,8 +22,8 @@ The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
 
 Either way a run ends the same: the results go to the user's AutoFind exporter
-when one is configured (:func:`run_autofind_export`).  A background run's
-results are also held in memory for the user who started it
+when one is configured and not paused (:func:`run_autofind_export`).  A
+background run's results are also held in memory for the user who started it
 (:func:`get_autofind_run`), so the browser can show them in the Find Results
 dialog.  They are hit lists, never vectors, and only the most recent runs are
 kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
@@ -243,6 +243,141 @@ def plan_autofind(snap: dict, *, detector_name: str = "", detector_ids: list[str
 
 
 # ---------------------------------------------------------------------------
+# Progress
+# ---------------------------------------------------------------------------
+
+#: Where a detector's slice of a background run's bar is split (#5101): its cold
+#: train fills the first part as its labels resolve, the calibration passes (the
+#: final head's, then each fold model's, each over every media) the next, and
+#: its own scoring pass the rest.  Rough shares of the wall clock; the ETA is
+#: measured off the bar's actual pace, so it does not lean on them.
+_TRAIN_END = 0.3
+_CALIBRATE_END = 0.8
+
+
+class _DetectorProgress:
+    """One detector's part of a :class:`RunProgress`.
+
+    Its methods are the sinks the detector's phases report to, in order: the
+    cold train (:meth:`train`), every scoring pass the train and the detector
+    make (:meth:`scoring_pass`), the start of the detector's own pass
+    (:meth:`begin_scoring`), and its end (:meth:`finish`).
+    """
+
+    def __init__(self, run: RunProgress) -> None:
+        self._run = run
+        self.phase = "train"
+        self.message = ""
+        self.current = 0
+        self.total = 0
+        self._passes = 0
+
+    def fraction(self) -> float:
+        """How far through its slice of the bar this detector is, in ``[0, 1]``."""
+        within = self.current / self.total if self.total > 0 else 0.0
+        if self.phase == "done":
+            return 1.0
+        if self.phase == "score":
+            return _CALIBRATE_END + (1.0 - _CALIBRATE_END) * within
+        if self.phase == "calibrate":
+            # How many passes a train makes depends on its labels (none for a
+            # cached head, fewer folds on few votes), so the expected count
+            # caps the slice rather than promising it; scoring takes over at
+            # the slice's end whatever was left.
+            done = max(self._passes - 1 + within, 0.0) / self._run.expected_passes
+            return _TRAIN_END + (_CALIBRATE_END - _TRAIN_END) * min(done, 1.0)
+        return _TRAIN_END * within
+
+    def train(self, _status: str, message: str = "", current: int = 0, total: int = 0, **_kwargs: Any) -> None:
+        """The cold train's sink (:func:`resolve_or_train_detector`'s *on_progress*): its label count."""
+        with self._run.lock:
+            if self.phase != "train":
+                return
+            if total > 0 and current >= total:
+                # The last label is in; the head and its folds are fitted next,
+                # which has no count of its own.
+                self.phase = "calibrate"
+                current = total = 0
+            self.message, self.current, self.total = message, current, total
+            self._run.publish()
+
+    def scoring_pass(self, done: int, total: int) -> None:
+        """The :func:`~vtscore.detectors.training.scoring_progress` sink: one pass over every media."""
+        with self._run.lock:
+            if self.phase == "train":
+                self.phase = "calibrate"
+            if self.phase == "calibrate":
+                if done == 0:
+                    self._passes += 1
+                self.message = "Calibrating the threshold…"
+            elif self.phase == "score":
+                self.message = "Scoring every item…"
+            else:
+                return
+            self.current, self.total = done, total
+            self._run.publish()
+
+    def begin_scoring(self) -> None:
+        """The head is in hand: the passes from here on are the detector's own."""
+        with self._run.lock:
+            self.phase = "score"
+            self.message, self.current, self.total = "Scoring every item…", 0, 0
+            self._run.publish()
+
+    def finish(self) -> None:
+        """The detector is scored, or failed, or was cancelled: its slice is full."""
+        with self._run.lock:
+            self.phase = "done"
+            self._run.publish()
+
+
+class RunProgress:
+    """A background run's bar, merged from its detectors' progress (#5101).
+
+    The bar is the mean of the detectors' :meth:`_DetectorProgress.fraction`,
+    so it moves while a detector trains and calibrates, not only as each one
+    finishes.  The count beside it is what the first unfinished detector is
+    doing - its labels while they resolve, then the media of the scoring pass
+    it is on - so the line names a real count rather than one blended across
+    detectors running at once.
+    """
+
+    def __init__(self, tracker: Any, n_detectors: int, message: str) -> None:
+        from vtscore.state import get_calibrate_count  # noqa: PLC0415
+
+        self.lock = threading.Lock()
+        self._tracker = tracker
+        self._message = message
+        # A cold train scores the dataset with its final head, then once per
+        # calibration fold model.
+        self.expected_passes = get_calibrate_count() + 1
+        self._detectors = [_DetectorProgress(self) for _ in range(max(n_detectors, 1))]
+        with self.lock:
+            self.publish()
+
+    def detector(self, index: int) -> _DetectorProgress:
+        """The sinks for the *index*-th detector of the run's plan."""
+        return self._detectors[index]
+
+    def publish(self) -> None:
+        """Push the merged bar to the task row.  Called with :attr:`lock` held."""
+        overall = sum(d.fraction() for d in self._detectors) / len(self._detectors)
+        shown = next((d for d in self._detectors if d.phase != "done"), self._detectors[-1])
+        # One step, paced by ``within``: the tracker publishes the merged
+        # fraction as ``overall`` (kept monotonic, with its ETA) while
+        # ``current``/``total`` stay the shown detector's real count.
+        self._tracker.update(
+            "loading",
+            shown.message or self._message,
+            shown.current,
+            shown.total,
+            step=1,
+            total_steps=1,
+            within=overall,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
 
@@ -257,6 +392,7 @@ def score_detector(
     *,
     check_cancelled: Callable[[], None] = find_progress.check_cancelled,
     on_progress: Callable[..., None] | None = None,
+    on_scoring: Callable[[], None] | None = None,
     use_loaded_context: bool = True,
 ) -> tuple[str, dict] | None:
     """Train (or reuse) one detector and score every media in *snap*.
@@ -267,6 +403,8 @@ def score_detector(
     :func:`~vtscore.detectors.training.score_rows_with_model` - the app's one
     definition of what a head scores a media at - so a patch head is pooled
     over its media's rows exactly as ``/api/find-label`` does (issue #3544).
+    *on_scoring* fires once the head is in hand, just before that pass, so a
+    caller can tell it from the passes the train made on the way.
 
     Returns ``None`` when the detector could not be trained or scoring failed
     (logged), so one broken detector does not sink the run.
@@ -306,6 +444,8 @@ def score_detector(
             from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
 
             rows = scoring_rows_for_snap(snap, query_space)
+        if on_scoring is not None:
+            on_scoring()
         scores, _best_row = score_rows_with_model(mlp, rows)
 
         positive_hits = []
@@ -376,7 +516,7 @@ def score_autofind(
     *,
     check_cancelled: Callable[[], None] = find_progress.check_cancelled,
     on_progress: Callable[..., None] | None = None,
-    on_detector_done: Callable[[int, int], None] | None = None,
+    run_progress: RunProgress | None = None,
     use_loaded_context: bool = True,
 ) -> dict[str, Any]:
     """Score *snap* with every detector in *plan*; return the auto-detect results dict.
@@ -389,12 +529,13 @@ def score_autofind(
     Detectors run in a small thread pool.  *check_cancelled* is polled by every
     worker before it trains and again as each result is collected, and raises
     :class:`CancelledError` out of this function; *on_progress* is forwarded to each cold train (see
-    :func:`~vtscore.detectors.model_loading.resolve_or_train_detector`), and
-    *on_detector_done* ``(done, total)`` fires as each detector's result is
-    collected.  The returned dict is the ``POST /api/auto-detect`` body without
+    :func:`~vtscore.detectors.model_loading.resolve_or_train_detector`).  A
+    *run_progress* takes each detector's progress instead - its train, every
+    scoring pass it makes, and its finish - and merges them into one bar.  The
+    returned dict is the ``POST /api/auto-detect`` body without
     ``auto_export``.
     """
-    from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
+    from vtscore.detectors.training import scoring_progress, scoring_rows_for_snap  # noqa: PLC0415
     from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
     from vtscore.state.current_user import get_current_user, thread_user  # noqa: PLC0415
@@ -438,25 +579,35 @@ def score_autofind(
     # default user's calibration settings; replay the caller's.
     user = get_current_user()
 
-    def _score_as_caller(name: str, data: dict, entry: dict | None) -> tuple[str, dict] | None:
-        with thread_user(user):
-            return score_detector(
-                name,
-                data,
-                entry,
-                plan.media_type,
-                snap,
-                row_stacks[det_embedders[name]],
-                check_cancelled=check_cancelled,
-                on_progress=on_progress,
-                use_loaded_context=use_loaded_context,
-            )
+    def _score_as_caller(index: int, name: str, data: dict, entry: dict | None) -> tuple[str, dict] | None:
+        progress = run_progress.detector(index) if run_progress is not None else None
+        # The scoring hook is per thread, so each worker counts its own passes.
+        with thread_user(user), scoring_progress(progress.scoring_pass if progress is not None else None):
+            try:
+                return score_detector(
+                    name,
+                    data,
+                    entry,
+                    plan.media_type,
+                    snap,
+                    row_stacks[det_embedders[name]],
+                    check_cancelled=check_cancelled,
+                    on_progress=progress.train if progress is not None else on_progress,
+                    on_scoring=progress.begin_scoring if progress is not None else None,
+                    use_loaded_context=use_loaded_context,
+                )
+            finally:
+                if progress is not None:
+                    progress.finish()
 
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=worker_cap) as pool:
-        futures = [pool.submit(_score_as_caller, name, data, entry) for name, data, entry in plan.detectors]
+        futures = [
+            pool.submit(_score_as_caller, index, name, data, entry)
+            for index, (name, data, entry) in enumerate(plan.detectors)
+        ]
         try:
-            for done, future in enumerate(futures, start=1):
+            for future in futures:
                 outcome = future.result()
                 # Workers only poll on entry, so a cancel that lands while the
                 # last detector trains would otherwise be ignored.
@@ -464,8 +615,6 @@ def score_autofind(
                 if outcome is not None:
                     name, result = outcome
                     results[name] = result
-                if on_detector_done is not None:
-                    on_detector_done(done, len(futures))
         except CancelledError:
             # Drop the queued workers (already-running ones finish their current
             # detector, the queued ones bail at their entry poll).
@@ -491,19 +640,21 @@ def score_autofind(
 def run_autofind_export(response: dict) -> dict | None:
     """Run the configured AutoFind results exporter on *response*.
 
-    Returns ``None`` when no exporter is configured (the common case), or a
-    status dict ``{exporter, success, message?, error?}`` otherwise. Export
+    Returns ``None`` when no exporter is configured (the common case) or the
+    user has paused it (``autofind_export_enabled`` off, #5170), or a status
+    dict ``{exporter, success, message?, error?}`` otherwise. Export
     failures are reported in the status block rather than raised: the scored
     results are valuable on their own, so a misconfigured exporter must not
     sink the whole run.
     """
     from vtsearch.settings import (  # noqa: PLC0415
+        get_autofind_export_enabled,
         get_autofind_exporter,
         get_autofind_exporter_field_values,
     )
 
     exporter_name = get_autofind_exporter()
-    if not exporter_name:
+    if not exporter_name or not get_autofind_export_enabled():
         return None
 
     from vtscore.exporters import get_exporter  # noqa: PLC0415
@@ -597,8 +748,8 @@ def run_good_ids(record: dict[str, Any]) -> list[int]:
     """The media ids a Browse of *record*'s Good results lays out, once each.
 
     Every detector's ``hits``, merged: a media two detectors both called Good is
-    one item on the map.  This must name the same set as the Find Results
-    dialog's ``browseIds`` with **Good** picked, or a prepared layout
+    one item on the map.  This must name the same set as the frontend's
+    ``runBrowseIds`` with **Good** picked, or a prepared layout
     (:func:`prep_run_browse`) is not the one its Browse button asks for.
     """
     ids: set[int] = set()
@@ -736,17 +887,7 @@ def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list
     n_detectors = len(plan.detectors)
     # Picked detectors may be drafts, so they are not called AutoFind ones.
     noun = "AutoFind detector" if detector_ids is None else "detector"
-    running_message = f"Running {n_detectors} {noun}{'s' if n_detectors != 1 else ''}…"
-    tracker.update("loading", running_message, 0, n_detectors)
-
-    def _on_detector_done(done: int, total: int) -> None:
-        tracker.update("loading", f"Scored {done} of {total} {noun}s…", done, total)
-
-    def _on_train_progress(_status: str, message: str = "", *_args: Any, **_kwargs: Any) -> None:
-        # A cold train's own phases ("Resolving 40 label origins…") are the
-        # slow part of a run; show them without disturbing the detector count.
-        snapshot = tracker.get()
-        tracker.update("loading", message or running_message, snapshot["current"], snapshot["total"])
+    progress = RunProgress(tracker, n_detectors, f"Running {n_detectors} {noun}{'s' if n_detectors != 1 else ''}…")
 
     def run() -> None:
         try:
@@ -755,8 +896,7 @@ def start_autofind_task(ctx: DatasetContext, *, trigger: str, detector_ids: list
                     plan,
                     snap,
                     check_cancelled=tracker.check_cancelled,
-                    on_progress=_on_train_progress,
-                    on_detector_done=_on_detector_done,
+                    run_progress=progress,
                     use_loaded_context=False,
                 )
                 auto_export = run_autofind_export(response)

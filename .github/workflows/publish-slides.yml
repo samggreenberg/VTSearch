@@ -1,7 +1,7 @@
 # Republish the rendered slide decks whenever the slide sources change on dev.
 #
-# This is the repository's only workflow, and it deliberately tests nothing:
-# `./run-tests.sh` is still the whole gate (see CLAUDE.md). All this does is
+# Like publish-sota.yml, the repository's other workflow, this deliberately
+# tests nothing: `./run-tests.sh` is still the whole gate (see CLAUDE.md). All this does is
 # render the decks and push the PDFs to the rolling `slides-latest` release, so
 # the newest deck has a stable URL that does not require cloning the repo and
 # running Marp. The rendering and upload logic lives in scripts/publish-slides.sh
@@ -15,11 +15,10 @@ on:
       - 'slides/**'
       - 'scripts/publish-slides.sh'
       - '.github/workflows/publish-slides.yml'
-  # Note: GitHub only offers the "Run workflow" button for workflows present on
-  # the *default* branch, which here is `main`. Until a release sweeps this file
-  # there, manual dispatch is unavailable and scripts/publish-slides.sh is the
-  # way to publish by hand. The push trigger above is unaffected -- it fires
-  # from `dev`, where the file already is.
+  # GitHub offers the "Run workflow" button only for workflows present on the
+  # *default* branch, `main`. This file is there, so manual dispatch works; the
+  # push trigger above fires from `dev` regardless. From a laptop,
+  # scripts/publish-slides.sh publishes by hand without GitHub Actions at all.
   workflow_dispatch:
 
 permissions:

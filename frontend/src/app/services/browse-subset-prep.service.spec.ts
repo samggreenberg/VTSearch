@@ -33,6 +33,7 @@ describe('BrowseSubsetPrepService', () => {
 
   function meta(overrides: Partial<ProjectionMeta>): ProjectionMeta {
     return {
+      status: 'idle',
       projection_id: 'p',
       bounds: [0, 0, 1, 1],
       base_radius: 1,
@@ -88,6 +89,17 @@ describe('BrowseSubsetPrepService', () => {
     });
     expect(subsetHandoff.take()).toEqual({ datasetId: DS, ids: IDS });
     expect(service.preparing()).toBe(false);
+  });
+
+  // Run and rows ride the URL, so the link rebuilds without the handoff (#5129).
+  it("puts a Find run's id and picked rows in the browse URL", () => {
+    buildProvider = () => of({ status: 'ready' });
+
+    service.start(DS, IDS, { kind: 'results', runId: '_autofind_7', sides: 'both' });
+
+    expect(router.navigate).toHaveBeenCalledWith(['/browse', DS], {
+      queryParams: { subset: 1, from: 'results', run: '_autofind_7', sides: 'both' },
+    });
   });
 
   it('holds the user in Find with a whole-job bar until the build lands', async () => {

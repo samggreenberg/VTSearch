@@ -4,7 +4,7 @@ Provides a generic file-browser API so the frontend can let users navigate
 the server filesystem and pick files instead of having to type paths
 by hand.
 
-Migrated to ``flask_smorest`` so the route is described in
+Built on ``flask_smorest`` so the route is described in
 ``/api/openapi.json``. Schema-level
 failures (e.g. unparseable query params) surface as 422 with the
 standard ``errors`` envelope; handler-level rejects (path traversal,

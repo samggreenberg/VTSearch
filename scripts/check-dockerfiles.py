@@ -4,7 +4,11 @@ Both checks ask whether vtsearch/ and vtscore/ are both in the image layer yet
 (via COPY vtsearch/, COPY vtscore/, or a full COPY . .) when a RUN step needs
 them:
 
-- a RUN that executes Python, which would fail to import the missing package;
+- a RUN that executes Python, which would fail to import the missing package.
+  Any ``python``, ``python3`` or ``python3.12`` command counts, by any path
+  (``/opt/venv/bin/python3``) and inside ``sh -c``. Two command segments are
+  exempt because they cannot need the project: a package-manager install that
+  merely names ``python3`` packages, and ``python3 -m venv``;
 - a RUN that pip-installs the local project ``.``, editable or not, directly or
   through a requirements file that forwards to it. setuptools maps only the
   top-level packages it finds at install time, so a package that first arrives
@@ -31,6 +35,23 @@ _PIP_INSTALL = re.compile(r"\bpip[0-9.]*\s+install\b", re.IGNORECASE)
 
 # The local project as a pip target: `.`, `./`, `.[dev,agpl]`.
 _PROJECT = re.compile(r"\./?(\[[^\]]*\])?")
+
+# A Python interpreter as a command word: `python`, `python3`, `python3.12`,
+# `/opt/venv/bin/python3`. `\b` would miss `python3` (no boundary between
+# `n` and `3`); the lookarounds instead reject package and variable names such
+# as `python3-venv`, `python3.12-venv`, `python-dotenv` and `PYTHONUNBUFFERED`.
+_PYTHON = re.compile(r"(?<![\w.-])python[0-9.]*(?![\w.-])", re.IGNORECASE)
+
+# Command segments that name Python without running project code: a system
+# package install (`apt-get install -y python3 python3-venv`) and venv creation.
+_PYTHON_EXEMPT = re.compile(
+    r"\b(?:apt-get|apt|yum|dnf)\b.*\binstall\b|\bapk\b.*\badd\b|-m\s+venv\b",
+    re.IGNORECASE,
+)
+
+# Shell command separators. Splitting ignores quoting, so `sh -c '...'` bodies
+# are split too, which is what both checks want.
+_SEPARATORS = re.compile(r"&&|\|\||;|\|")
 
 
 def _instructions(path: Path) -> Iterator[tuple[int, str, str]]:
@@ -108,9 +129,14 @@ def _installs_project(tokens: list[str], args: dict[str, str], base: Path, seen:
     return False
 
 
+def _run_executes_python(text: str) -> bool:
+    """True when any command segment of the RUN *text* runs a Python interpreter."""
+    return any(_PYTHON.search(command) and not _PYTHON_EXEMPT.search(command) for command in _SEPARATORS.split(text))
+
+
 def _run_installs_project(text: str, args: dict[str, str], context: Path) -> bool:
     """True when any ``pip install`` in the RUN *text* installs the local project."""
-    for command in re.split(r"&&|\|\||;|\|", text):
+    for command in _SEPARATORS.split(text):
         match = _PIP_INSTALL.search(command)
         if not match:
             continue
@@ -163,7 +189,7 @@ def _check(path: Path, context: Path = _REPO) -> list[str]:
         if not upper.startswith("RUN ") or copied_full or (copied_vtsearch and copied_vtscore):
             continue
 
-        if re.search(r"\bpython\b", text, re.IGNORECASE):
+        if _run_executes_python(text):
             errors.append(
                 f"{path}:{lineno}: RUN executes Python before vtsearch/ and vtscore/ are both COPY'd\n  {first}"
             )

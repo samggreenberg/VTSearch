@@ -9,6 +9,11 @@ from __future__ import annotations
 
 import pytest
 
+
+def _a_hook(event) -> None:
+    """A stand-in ``--on-dataset-imported`` hook; never called here."""
+
+
 # Flask API routes
 # ---------------------------------------------------------------------------
 
@@ -285,6 +290,29 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["autofind_cli_delete_dataset"] is True
         assert client.get("/api/settings").get_json()["autofind_cli_delete_dataset"] is True
+
+    @pytest.mark.parametrize("key", ["autofind_export_enabled", "import_alerts_enabled"])
+    def test_alert_switches_round_trip(self, client, key):
+        """On unless the user turns them off (#5170); plain boolean PUTs."""
+        assert client.get("/api/settings").get_json()[key] is True
+        res = client.put("/api/settings", json={key: False})
+        assert res.status_code == 200
+        assert res.get_json()[key] is False
+        assert client.get("/api/settings").get_json()[key] is False
+
+    def test_import_hooks_configured_is_published_read_only(self, client):
+        """Whether the admin named hooks, never which (#5170); a PUT cannot set it."""
+        from vtsearch import import_hooks
+
+        assert client.get("/api/settings").get_json()["import_hooks_configured"] is False
+        res = client.put("/api/settings", json={"import_hooks_configured": True})
+        assert res.status_code == 200
+        assert res.get_json()["import_hooks_configured"] is False
+
+        import_hooks.configure([f"{__name__}:_a_hook"], source=import_hooks.FLAG)
+        data = client.get("/api/settings").get_json()
+        assert data["import_hooks_configured"] is True
+        assert not any(__name__ in str(value) for value in data.values())
 
     def test_autofind_exporter_excluded_from_defaults(self, client):
         res = client.get("/api/settings/defaults")
@@ -970,17 +998,11 @@ class TestSettingsUpdateAtomicity:
         assert data["theme"] == "dark"
         assert data["show_metadata"] is True
 
-    def test_directory_traversal_400_leaves_earlier_keys_untouched(self, client, tmp_path, monkeypatch):
-        import vtscore.security.path_validation as paths_mod
+    def test_unknown_exporter_400_leaves_earlier_keys_untouched(self, client):
         from vtsearch import settings as settings_mod
 
         client.put("/api/settings", json={"volume": 0.25})
-        base = tmp_path / "base"
-        base.mkdir()
-        monkeypatch.setattr(paths_mod, "get_file_access_base_dir", lambda: base)
-        res = client.put(
-            "/api/settings",
-            json={"volume": 0.9, "detectors_dir": str(tmp_path / "outside")},
-        )
+        res = client.put("/api/settings", json={"volume": 0.9, "autofind_exporter": "no_such_exporter"})
         assert res.status_code == 400
+        assert "Unknown exporter" in res.get_json()["message"]
         assert settings_mod.get_volume() == 0.25

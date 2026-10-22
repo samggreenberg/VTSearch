@@ -354,13 +354,16 @@ POST /api/settings-importers/import/{importer_name}
 
 **Form or Body:** importer-specific fields.
 
-Applies the imported settings key by key through the `vtsearch.settings`
-setters, as a settings-source sync does, not through `PUT /api/settings`: an
-unknown key or an invalid value is skipped silently rather than failing the
-import.
+Applies the imported settings that are the user's own, each through the
+checks `PUT /api/settings` runs (see [Settings](settings.md#update-settings)),
+as a settings-source sync does. A server-tier key (`detectors_dir`,
+`solo_media_type`, …), an unknown key, or a value that fails validation is
+skipped rather than failing the import.
 
-→ `{success, message, keys}`, `keys` listing every key the importer returned,
-applied or skipped.
+→ `{"success": true, "message": "Imported 5 setting(s) via ...", "keys": ["volume", ...], "skipped": ["detectors_dir"]}`
+
+`keys` lists the settings actually applied; `skipped` lists the rest of the
+file's keys, which `message` also names.
 
 ### List settings exporters
 

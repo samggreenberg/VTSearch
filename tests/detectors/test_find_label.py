@@ -1,7 +1,7 @@
 """Tests for POST /api/find-label and the auto-detect / multi-find pipelines.
 
 After the detector→detector migration, every "model" used by
-find-label is a detector.  Its MLP is trained on demand from the
+find-label is a detector.  Its head is trained on demand from the
 labelset stored on disk.
 """
 

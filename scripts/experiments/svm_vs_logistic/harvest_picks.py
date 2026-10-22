@@ -18,7 +18,7 @@ COLS = ["dataset", "embedder", "category", "seed", "style", "t", "phase", "picke
 
 def main() -> int:
     arm = Path(sys.argv[1])
-    files = sorted((arm / "results" / "cells").glob("task_*__picks.csv"))
+    files = sorted((arm / "results" / "cells").glob("task_*__picks.csv*"))
     frames = [pd.read_csv(f, usecols=lambda c: c in COLS) for f in files if f.stat().st_size > 0]
     df = pd.concat(frames, ignore_index=True)
     df.to_csv(arm / "picks_all.csv.gz", index=False)

@@ -1,11 +1,15 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DuplicatesModalComponent } from '../duplicates-modal/duplicates-modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
+import { ProgressEventsService } from '../../../services/progress-events.service';
+import type { LoadingTask } from '../../../models/api.models';
 import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,6 +21,8 @@ import { apiErrorMessage } from '../../../utils/api-error';
 })
 export class DatasetStatsModalComponent implements OnInit {
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private progressEvents = inject(ProgressEventsService);
+  private destroyRef = inject(DestroyRef);
 
   readonly datasetId = input('');
   readonly datasetName = input('');
@@ -28,6 +34,9 @@ export class DatasetStatsModalComponent implements OnInit {
    *  Age-Off row the same way the grid gates its Age-Off column — except
    *  a dataset that already carries an expiry always shows it. */
   readonly serverSetsAgeOff = input(false);
+  /** The server's one media type when it is locked to one. Gates the Type row
+   *  as the grid gates its Type column; see {@link showMediaType}. */
+  readonly soloMediaType = input<string | null>(null);
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
@@ -39,10 +48,24 @@ export class DatasetStatsModalComponent implements OnInit {
   /** Child Duplicates modal (issue #2697), opened from the Duplicate-groups row. */
   readonly showDuplicates = signal(false);
 
+  /** A coverage-atlas build is on (#4995): from the Build click, or stats
+   *  that report one running, until a re-read of the stats says it ended.
+   *  Disables the Build button. */
+  readonly atlasBuilding = signal(false);
+  /** The Build POST has not answered: until it does, a task channel with
+   *  nothing running on this dataset means "not started", not "finished". */
+  private atlasRequestPending = false;
+  private statsRereadPending = false;
+  private latestTasks: LoadingTask[] = [];
+
   ngOnInit(): void {
+    this.progressEvents.loadingTasks$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((tasks) => {
+      this.latestTasks = tasks;
+      this.checkAtlasBuild();
+    });
     this.datasetsRegistryApi.getDatasetStats(this.datasetId()).subscribe({
       next: (data) => {
-        this.stats.set(data);
+        this.applyStats(data);
         this.loading.set(false);
       },
       error: (err) => {
@@ -54,6 +77,67 @@ export class DatasetStatsModalComponent implements OnInit {
 
   close(): void {
     this.closed.emit();
+  }
+
+  private applyStats(data: DatasetRegistryStatsResponse): void {
+    this.stats.set(data);
+    this.atlasBuilding.set(!!data.coverage_atlas?.building);
+  }
+
+  /** The Coverage atlas row shows only for a loaded dataset without an atlas:
+   *  one past the auto-build threshold, or whose build was cancelled. */
+  get showAtlasRow(): boolean {
+    const atlas = this.stats()?.coverage_atlas;
+    return !!atlas && !atlas.built;
+  }
+
+  /** The item count past which loading skips the build, when this dataset is
+   *  past it (the reason it has no atlas); `null` otherwise. */
+  get atlasSkipThreshold(): number | null {
+    const s = this.stats();
+    const threshold = s?.coverage_atlas?.auto_build_threshold;
+    return s && threshold != null && s.num_items > threshold ? threshold : null;
+  }
+
+  /** Start the build. Its progress shows on the dataset's Dashboard row, as
+   *  any loading task's does; this window only waits for it to end. */
+  buildAtlas(): void {
+    if (this.atlasBuilding()) return;
+    this.atlasBuilding.set(true);
+    this.atlasRequestPending = true;
+    this.datasetsRegistryApi.buildCoverageAtlas(this.datasetId()).subscribe({
+      next: () => {
+        this.atlasRequestPending = false;
+        this.checkAtlasBuild();
+      },
+      // The error interceptor toasts the server's reason (say, the dataset
+      // was unloaded meanwhile); the button comes back for a retry.
+      error: () => {
+        this.atlasRequestPending = false;
+        this.atlasBuilding.set(false);
+      },
+    });
+  }
+
+  /** While a build is on, re-read the stats whenever no task keyed to this
+   *  dataset is running: the build's row has ended, or has not shown up yet.
+   *  The stats decide which, so a build still running keeps the button
+   *  disabled until the next snapshot. */
+  private checkAtlasBuild(): void {
+    if (!this.atlasBuilding() || this.atlasRequestPending || this.statsRereadPending) return;
+    const id = this.datasetId();
+    if (this.latestTasks.some((t) => t.dataset_id === id && t.status !== 'idle')) return;
+    this.statsRereadPending = true;
+    this.datasetsRegistryApi.getDatasetStats(id).subscribe({
+      next: (data) => {
+        this.statsRereadPending = false;
+        this.applyStats(data);
+      },
+      error: () => {
+        this.statsRereadPending = false;
+        this.atlasBuilding.set(false);
+      },
+    });
   }
 
   get fileTypes(): { ext: string; label: string; count: number }[] {
@@ -70,6 +154,12 @@ export class DatasetStatsModalComponent implements OnInit {
    *  "(unknown)" and not ".(unknown)". */
   private fileTypeLabel(ext: string): string {
     return ext.startsWith('(') ? ext : `.${ext}`;
+  }
+
+  /** Whether the Type row shows: not on a server locked to the dataset's
+   *  type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
   }
 
   /** Media type as the grid renders it: capitalized, `-` when unset. */

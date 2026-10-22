@@ -103,7 +103,7 @@ def main() -> int:
         else:
             A, C = load(chk, src, args.workers), load(nochk, src, args.workers)
         with ProcessPoolExecutor(args.workers) as pool:
-            files = glob.glob(f"{chk}/*__picks.csv")
+            files = glob.glob(f"{chk}/*__picks.csv*")
             fc = {k: (g if args.by == "goods" else v, n) for got in pool.map(first_check, files, chunksize=16)
                   for k, g, n, v in got}  # fmt: skip
         keys = sorted(set(A) & set(C) & set(fc))

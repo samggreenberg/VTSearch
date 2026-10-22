@@ -314,6 +314,13 @@ def load_demo_dataset(
     # with a deferred-embed placeholder and let _apply_clipper produce the
     # vectors. Mirrors the regular import pipeline, which skips parent embedding
     # whenever a clipper is specified.
+    #
+    # A converter discards the loaded media just the same: it replaces every
+    # source item with its outputs, which leave unembedded for the framework
+    # embed stage. Embedding the sources first was a whole extra pass (an
+    # image→face demo ran FaceNet over every full photo, weights download
+    # included) that filled most of the progress bar before any conversion
+    # began, leaving the real work to crawl along its last few percent (#5176).
     clipper_applied = bool(_effective_clipper(clipper_name, media_type_id))
     external_dir = mt.load_demo_source(
         source=source,
@@ -325,7 +332,7 @@ def load_demo_dataset(
         embedder=embedder,
         slice_frac_start=slice_frac_start,
         slice_frac_end=slice_frac_end,
-        skip_embedding=clipper_applied,
+        skip_embedding=clipper_applied or bool(converter_name),
     )
 
     # Stamp the demo origin on all medias

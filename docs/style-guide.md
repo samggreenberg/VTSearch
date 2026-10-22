@@ -227,12 +227,14 @@ The full taxonomy is `.btn` plus optional variant + optional size. Always start 
 <button class="btn btn--toolbar">Import Labels</button>
 <button class="btn btn--sm">Compact</button>
 <button class="btn btn--primary btn--sm">Compact primary</button>
+<button class="btn btn--primary btn--lg">Lead action</button>
 ```
 
 Rules:
 
 - **Default size** for prominent actions (modal footers, top-of-panel actions).
 - **`.btn--sm`** for inline actions inside cards and rows.
+- **`.btn--lg`** for the one action a dialog leads with, set apart in its body rather than among the footer's buttons (the Find Results dialog's **Browse**): `--space-md` / `--space-2xl` padding and `--font-xl`, the size of the Dashboard's Train / Tune / Find. At most one per dialog.
 - **`.btn--cancel`** for low-weight cancel/close affordances next to progress bars.
 - **`.btn--toolbar`** for compact outline buttons in toolbars and panel action rows (the right-panel Import Labels / Add Corrections / Export cluster, the image-view-controls strip): tighter padding, `--font-xs`, a muted resting color, `white-space: nowrap`, and a hover that promotes the border to `--accent`.
 - **This list is the whole taxonomy.** There is no `--xs`, `--ghost`, or `--icon-square`; if you need a size or treatment that isn't here, add it to `_components.scss` (and to this list) rather than inventing a class name that no rule matches.
@@ -274,7 +276,7 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
   <!-- default slot → .modal-body -->
   <p class="info-text">Pick a file to import labels from.</p>
 
-  <div modal-footer>
+  <div class="form-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Cancel</button>
     <button class="btn btn--primary" (click)="submit()">Import</button>
   </div>
@@ -290,7 +292,7 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 | `box` (signal) | The dialog box element (`.modal-content`), for projected content that places itself against the box rather than inside it, as the resort prompt's Toasty hint does below it. |
 | `closed` (output) | Fired by the `×`, a backdrop click, and Escape. Wire it to whatever tears the dialog down. |
 | default `<ng-content>` | Projected into `.modal-body` (the only scrollable region). |
-| `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a plain `<div modal-footer>`. |
+| `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a `<div class="form-actions" modal-footer>`. The wrapper must be a direct child of `<vt-modal>`, or the one root of a direct-child `@if`: projection only looks at top-level content, so a `[modal-footer]` nested inside a form `<div>` is never projected and renders in the scrolling body instead. |
 | `[modal-footer-start]` slot | Projected at the left end of the footer row, with the actions still on the right. For one secondary affordance that would otherwise sit alone on a half-empty line just above the buttons: the **Advanced ▾** disclosure in New Detector and Add Dataset. The block it opens stays at the foot of the body. Put the attribute on the element itself (one root per `@if`), not on a wrapper. |
 
 **Why the component and not the markup.** `vt-modal` supplies `cdkTrapFocus` with auto-capture (focus moves into the dialog on open, Tab cycles inside it, focus returns to the trigger on close), `role="dialog"`, `aria-modal="true"`, the `aria-label`, backdrop-click dismissal, and Escape handling that closes **only the topmost** modal (stacked flows like New Detector → media-crop would otherwise all collapse on one keypress). Hand-copied markup silently drops every one of those - it is an accessibility regression, not a styling shortcut.
@@ -298,7 +300,7 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 Spacing inside modals (the shared classes already do this - do not redo it in your content):
 - `.modal-content` already has `padding: var(--space-2xl)` - **do not** wrap your projected content in a padding div.
 - `.modal-header` and `.modal-body` already have `margin-bottom: var(--space-xl)` - **do not** add it again.
-- `.modal-footer` is a right-aligned, vertically centred flex row with `gap: var(--space-md)`, so buttons projected into `[modal-footer]` need no wrapper layout of their own, and a `[modal-footer-start]` element is pushed to the left end by an auto margin. Give the `<div modal-footer>` no top margin: it would push the buttons off-centre from a start-slot item beside them.
+- `.modal-footer` is a right-aligned, vertically centred flex row with `gap: var(--space-md)`, and a `[modal-footer-start]` element is pushed to the left end by an auto margin. That row lays out the projected wrapper, not the buttons inside it, so the wrapper takes the shared `.form-actions` class (`_components.scss`), which gives its buttons the same right-aligned `gap: var(--space-md)`. Do not redeclare `.form-actions` in a component, and give the wrapper no top margin: it would push the buttons off-centre from a start-slot item beside them.
 - `.modal-content` uses `--shadow-lg` and `--radius-xl`, and is a flex column so the body is the only scrolling region - the header and footer stay pinned when content overflows.
 
 **Width scale.** A dialog that needs a fixed width picks one of the three
@@ -400,7 +402,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 **Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). The same folder tabs, smaller, over a bordered content box: the active tab's background matches `.view-tab-content` and it drops its bottom edge, so it opens into the box, with the accent edge along its top. Inactive tabs are `--bg-hover`, and hover lights their text and edge (`--border-secondary`) but leaves the fill, since a step toward the panel would look like the active tab. The strip's bottom border is the box's top edge; with no strip, the box keeps its own. Use when the tabs sit *inside* a panel and own a bordered content box (the AutoFind and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
-**The left panel's strip - `.left-tabs` / `.left-tab`** (`left-panel.component.scss`) is the one horizontal strip that isn't a shared primitive: Train's **Manual** / **Autopilot** and Test's **Autopilot** / **Review**, kept local because it swaps in short labels under the panel's `left-panel` container query. It is drawn as the same folder tabs, splitting the panel's width equally. It sits on the panel rather than on a surface, so it takes `.view-tab`'s fills and hover: inactive tabs `--bg-hover`, and the active one `--bg-panel`, so it opens into the tab panel below. Active class: `.active`.
+**The left panel's strip - `.left-tabs` / `.left-tab`** (`left-panel.component.scss`) is the one horizontal strip that isn't a shared primitive: Train's **Manual** / **Autopilot** and Tune's **Autopilot** / **Review**, kept local because it swaps in short labels under the panel's `left-panel` container query. It is drawn as the same folder tabs, splitting the panel's width equally. It sits on the panel rather than on a surface, so it takes `.view-tab`'s fills and hover: inactive tabs `--bg-hover`, and the active one `--bg-panel`, so it opens into the tab panel below. Active class: `.active`.
 
 Note the state-class inconsistency: `.tab` and `.left-tab` take `.active`, while `.side-tab` and `.view-tab` take `--active` modifiers. Match the primitive you're using.
 
@@ -464,7 +466,7 @@ The dashboard's dataset/detector rows (`vt-dataset-card`, `vt-detector-card`) re
 
 ### 2.12 Pane divider
 
-`.pane-divider` is the draggable rule between resizable layout panes (Test, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
+`.pane-divider` is the draggable rule between resizable layout panes (Tune, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
 
 ### 2.13 Motion and misc utilities
 
@@ -474,7 +476,7 @@ Global classes that any component can apply. All animations here are silenced by
 |-------|------------|
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
-| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Test buttons, in-flight import/export submits). |
+| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Tune buttons, in-flight import/export submits). |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 
@@ -635,7 +637,7 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 |---------|----------------|-------------|
 | The trained ranker (the product's core object) | **detector** | model |
 | Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
-| Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
+| Testing a detector's line on a dataset it never trained on, and correcting it there | **Tune** (the Dashboard button and its view); the measurement inside it is *the test* | Test (as the button or view) |
 | Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoFind** (the detector tab, and the runs it starts on every import and from the CLI) / **AutoFind** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
 | The mascot | **King Toasty** ("Toasty" in running text) | Searchy, or any other name |
@@ -645,11 +647,11 @@ login logo, `/logo.svg`, the favicons, and the hint and toast faces in
 `utils/toasty-faces.ts`) is the crowned toast holding the magnifying glass. A new
 face or pose is a variant of that drawing, never a different one.
 
-`Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep
-them stable. The Test view's code is still named `find` (#4525), as the Train
+`Train`, `Tune` and `Find` are the three flow verbs surfaced to users; keep
+them stable. The Tune view's code is still named `find` (#4525, #5098), as the Train
 view's is `label`; that is an internal identifier and exempt. Meaning-bearing
 distinctions are *not* drift and stay as-is: `Verified Good` vs. `Good` (a
-real Test-view state), and `Positives`/`Negatives` inside the
+real Tune-view state), and `Positives`/`Negatives` inside the
 detector-stats table (standard ML terminology in that context).
 
 ---

@@ -16,7 +16,7 @@ import pytest
 from vtscore.host_seams import HostSeams, restore_host_seams
 
 #: Training epochs for the whole test session (production default is 200; 30 is
-#: enough for the tiny MLP heads to converge on the small test fixtures).
+#: enough for the tiny epoch-trained heads to converge on the small test fixtures).
 #: Re-asserted per test by :func:`reset_shared_state` because
 #: ``test_torch_config.py`` reloads ``vtscore.config``, which resets every
 #: module-level constant to its import-time value — and a leaked 200 silently
@@ -240,6 +240,11 @@ def reset_shared_state(medias_snapshot) -> None:
     from vtscore.labels.sync import reset_label_sync_for_tests
 
     reset_label_sync_for_tests()
+
+    # Same for an Evidence baseline a learned sort left to be drawn (#5120).
+    from vtscore.detectors.evidence_baseline import reset_baseline_draws_for_tests
+
+    reset_baseline_draws_for_tests()
 
     # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
     # test can't suppress a rehydrate in the next one.

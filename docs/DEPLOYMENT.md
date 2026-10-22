@@ -114,10 +114,18 @@ cloud or multi-homed host that is every interface, not just loopback.
   it, so a gunicorn deployment runs the default single-user provider unless
   you install another in code (`vtsearch.auth.set_login_provider`).
 - **Set `VTSEARCH_SECRET_KEY` to a random value.** The default is a constant
-  visible in the source. `TrivialLoginProvider`'s session cookie is only
-  integrity-protected by that key, so with the default anyone can forge a
-  cookie naming any user — and therefore read that user's `data/<username>/`
-  subtree.
+  visible in the source, and the signed session cookie is only
+  integrity-protected by that key. Two features trust what the cookie says:
+  `--login trivial` keeps the username in it, and Sign in with HuggingFace
+  (live whenever `HF_OAUTH_CLIENT_ID` is set, under any login provider) keeps
+  its OAuth `state` and PKCE verifier there. When either is active and the
+  variable is unset, startup replaces the default with a random key for that
+  process and logs a warning, so nobody can forge a cookie from the source —
+  but sessions then end at every restart. That is safe with the single worker
+  `gunicorn.conf.py` runs; a deployment with more than one worker **must** set
+  the variable, or each worker rejects the cookies the others signed.
+  Single-user mode without HuggingFace sign-in trusts no cookie and keeps the
+  default.
 - **Let the OS be the real boundary.** In single-user mode the only limit on
   file access is what the process account can read and write, so run VTSearch
   as an unprivileged, dedicated user (or in a container) whose only writable
@@ -411,6 +419,12 @@ that misses in `user_settings.json` falls through to `data/settings.json`, which
 is what lets the CLI's `--settings` flat file and single-user deployments keep
 working.
 
+**Only the operator sets the server tier.** No user's own write reaches it:
+`PUT /api/settings` drops server-tier keys, and a settings import or a
+settings-source sync skips them, so a file a user imports can neither repoint
+the storage directories nor lift an operator lock. Change these keys here, or
+through their CLI flag or environment variable.
+
 #### Server tier — `data/settings.json`
 
 ```json
@@ -439,7 +453,8 @@ working.
 ```
 
 - `saved_datasets_dir`, `detectors_dir`: infrastructure directories
-  (overridable for custom data layouts).
+  (overridable here for custom data layouts; the Settings dialog shows them
+  read-only).
 - `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings`:
   concurrency gates for dataset loading. The download gate covers the
   bandwidth/disk-bound import phase; the embed gate covers CPU/GPU-bound
@@ -478,10 +493,10 @@ working.
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
   `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
-- `autopilot_only`: keeps **Train** and **Test** on their Autopilot tabs. Train
-  loses its Manual tab and Test its Review tab, and neither view shows a tab
+- `autopilot_only`: keeps **Train** and **Tune** on their Autopilot tabs. Train
+  loses its Manual tab and Tune its Review tab, and neither view shows a tab
   bar, so users only see the guided flow. Train starts in Autopilot whatever a
-  user's own `autopilot_enabled` preference says. With Test's Review tab gone,
+  user's own `autopilot_enabled` preference says. With Tune's Review tab gone,
   its Browse / To Dataset / Export actions for unverified matches are gone too.
   Autopilot needs a first sort to start from, and on a dataset that can't search by
   text that has to be an example item, which the New Detector dialog
@@ -491,8 +506,10 @@ working.
   boundary. Also settable with `--autopilot-only` / `VTSEARCH_AUTOPILOT_ONLY`.
 - `solo_media_type`: narrows the whole instance to one media type. The importer
   and new-detector flows hide their media-type pickers and lock to it, the
-  converter picker filters to converters that output it, and media-type steps
-  in tabbed UIs are skipped. `null` shows everything. Users cannot change it;
+  converter picker filters to converters that output it, media-type steps
+  in tabbed UIs are skipped, and fields that could only name it (Find Results,
+  the metadata panes, the Dashboard's Type columns) are hidden. `null` shows
+  everything. Users cannot change it;
   also settable with `--solo-media-type` / `VTSEARCH_SOLO_MEDIA_TYPE`, either of
   which wins for the process lifetime.
 - `projection_n_neighbors`, `projection_min_dist`: UMAP knobs for the VTSBrowse
@@ -569,6 +586,8 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_exporter_field_values": {},
   "autofind_on_import": true,
   "autofind_cli_delete_dataset": false,
+  "autofind_export_enabled": true,
+  "import_alerts_enabled": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -600,7 +619,15 @@ An abridged example; the full field list is `UserSettings` in
   These four read through to `data/settings.json` for the `default` user.
   `autofind_on_import` (default `true`) is whether a web import runs them: the
   Add Dataset dialog's **Run AutoFind** checkbox starts from it and each import
-  writes it back.
+  writes it back. `autofind_export_enabled` (default `true`) is whether a web
+  run sends its results to `autofind_exporter`; `false` pauses the export
+  without forgetting the exporter or its configuration.
+- `import_alerts_enabled` (default `true`): whether the user wants to be
+  alerted when an import they started finishes. It reaches the
+  `--on-dataset-imported` hooks as `DatasetImported.notify`; a hook that emails
+  should skip the user when it is `false` (see
+  [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)).
+  Settings › Import Defaults offers it only when hooks are configured.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the
@@ -826,7 +853,7 @@ evaluation, sorting, voting) works fully offline.
 |----------|---------|-------------|
 | `VTSEARCH_DATA_DIR` | `<repo root>/data` | **Relocates the entire data directory** (settings, per-user dirs, model cache, embeddings, detectors, media, demo downloads). The default is anchored to the *repository root*, not the current working directory, so a systemd unit or cron job started from elsewhere still finds existing state. This is the one variable most production deployments need: point it at a persistent volume outside the checkout so a redeploy never touches user state. |
 | `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | HuggingFace model cache. Split it out from the data dir when several instances should share one ~4.1 GB model download. Read independently of `VTSEARCH_DATA_DIR`, so setting only this variable works even with the data dir unset. |
-| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
+| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**). Left unset with `--login trivial` or `HF_OAUTH_CLIENT_ID` in force, startup swaps in a random per-process key and warns; see [Security](#security). |
 | `VTSEARCH_PORT` | `5000` | Bind port for the **dev server** (`python app.py`); `--port` wins over it. Gunicorn ignores this — use `VTSEARCH_BIND` below. |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
@@ -847,7 +874,7 @@ evaluation, sorting, voting) works fully offline.
 | `VTSEARCH_SUPPORT_EMAIL` | unset (persisted `support_email`, else the built-in project address) | Env-var form of `--support-email`: the Help modal's "Email us" recipient. |
 | `VTSEARCH_ON_DATASET_IMPORTED` | unset | Env-var form of `--on-dataset-imported`: comma-separated `module:function` hooks called when a web import succeeds or fails ([EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). A spec that fails to load is reported on stdout and none of the variable's hooks are installed. Deliberately not a setting: nothing in the settings file can name code to run. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Env-var form of `--semantic-only` (`1`/`true`/`yes`/`on`): only Semantic embedders are offered or accepted. |
-| `VTSEARCH_AUTOPILOT_ONLY` | unset | Env-var form of `--autopilot-only` (`1`/`true`/`yes`/`on`): Train and Test show only their Autopilot tabs. |
+| `VTSEARCH_AUTOPILOT_ONLY` | unset | Env-var form of `--autopilot-only` (`1`/`true`/`yes`/`on`): Train and Tune show only their Autopilot tabs. |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Env-var form of `--dataset-max-age-days`: new datasets expire this many days out. Positive integers only. |
 | `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Env-var form of `--solo-media-type`: lock the instance to one registered media type (`python app.py --list-media-types`). |
 | `VTSEARCH_SOLO_EMBEDDERS` | unset | Env-var form of the repeatable `--solo-embedder`, as comma-separated `TYPE=EMBEDDER` pairs (`image=siglip,audio=clap`). A per-process fallback that a user's own choice overrides, not a lock. |
@@ -1117,10 +1144,13 @@ then read the log around the `stall:` line.
 every stall in a log.
 
 **Every run records the bars it is using**, as a `diagnostics config:` line at
-startup, at WARNING so a stock deployment has it too. Without it a log cannot
-be read honestly after the fact: "no slow requests" means *nothing was slow*
-and *the bar was a second* equally well. The analyzer prints that line first,
-and says so when a log lacks it.
+startup. Without it a log cannot be read honestly after the fact: "no slow
+requests" means *nothing was slow* and *the bar was a second* equally well. The
+line goes out at WARNING, so a stock log level keeps it, whenever a bar is off
+its shipped default: `VTSEARCH_DIAGNOSE=1`, or any threshold variable set by
+hand. With every bar stock it drops to INFO, so a normal start stays quiet; a
+WARNING-level log without the line was written at the shipped defaults of its
+build. The analyzer prints that line first, and says so when a log lacks it.
 
 For what the app cannot see — NFS latency on the mount every vote writes to,
 and major faults on the app process — run

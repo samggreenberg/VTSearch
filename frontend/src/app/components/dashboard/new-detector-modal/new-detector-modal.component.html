@@ -1,7 +1,7 @@
 <vt-modal [open]="true" [title]="modalTitle" [showCloseButton]="false" (closed)="close()">
   @if (view() === 'main') {
   <vt-toasty-hint hintId="new-detector">
-    Describe what you're looking for in a few words, or give an example, then click <strong>Create</strong>.
+    Describe what you're looking for or give an example.
   </vt-toasty-hint>
     <div class="tab-bar" role="tablist">
       <button type="button" class="tab" role="tab"
@@ -360,7 +360,7 @@
           <!-- The detector's balance (#4665), asked for on this form because
                Autopilot has no Threshold control of its own: it is kept on the
                detector and Autopilot runs at it. It starts on the user's last
-               pick, so it waits under Advanced (#4717); Manual and Test can
+               pick, so it waits under Advanced (#4717); Manual and Tune can
                move it later. -->
           <div class="form-group">
             <vt-balance [value]="beta()" [formLabel]="true" (valueChange)="pickBeta($event)" />
@@ -406,7 +406,7 @@
   }
 
   @if (view() === 'main') {
-    <div modal-footer>
+    <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()" title="Discard this detector and close the dialog">Cancel</button>
       @if (tab === 'blank') {
         <button class="btn btn--primary" [disabled]="!canSubmitBlank" (click)="submit()"

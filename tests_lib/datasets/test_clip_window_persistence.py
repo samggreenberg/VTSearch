@@ -1,6 +1,6 @@
 """Library-tier tests for clip windows surviving the pickle round-trip.
 
-A clipped or windowed media's playback window lives in four *top-level* fields
+A clipped or windowed media's playback window lives in *top-level* fields
 (``provenance.CLIP_WINDOW_FIELDS``): every player seeks to ``clip_start`` and
 loops within ``[clip_start, clip_end]``, the audio waveform is sliced by the
 same pair, and ``display_metadata`` renders them as the "Clip …" rows.  The
@@ -111,6 +111,13 @@ class TestClipWindowSurvivesPickleRoundTrip:
         out = _round_trip(_media("image", clip_box=[10, 20, 110, 120]), tmp_path)
 
         assert out["clip_box"] == [10, 20, 110, 120]
+
+    def test_video_clip_box_keeps_the_frame_it_was_measured_on(self, tmp_path: Path):
+        """The player scales the box by ``clip_box_frame``, so it reloads with it (#5032)."""
+        out = _round_trip(_media("video", clip_box=[0, 60, 720, 420], clip_box_frame=[720, 480]), tmp_path)
+
+        assert out["clip_box"] == [0, 60, 720, 420]
+        assert out["clip_box_frame"] == [720, 480]
 
     def test_window_persists_through_a_thin_load(self, tmp_path: Path):
         out = _round_trip(_archive_member_media(clip_start=5.0, clip_end=15.0), tmp_path, thin=True)

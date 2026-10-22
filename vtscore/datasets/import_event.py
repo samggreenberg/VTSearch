@@ -7,6 +7,9 @@ server admin names with ``--on-dataset-imported`` (see
 :mod:`vtsearch.import_hooks`), which is how a deployment sends an email, posts
 to a chat channel, or does anything else when a user's import completes.
 
+The pipeline leaves :attr:`DatasetImported.notify` at its default; the app
+fills it in from the importing user's settings before calling the hooks.
+
 The event is a frozen value rather than the live ``DatasetContext`` on purpose.
 A hook reads what it needs to tell someone about the import; it never reaches
 into the dataset's in-memory state, so that state stays free to change, and a
@@ -49,6 +52,12 @@ class DatasetImported:
     :param origin: The importer and parameters the dataset was built from (a
         copy, so a hook cannot change the dataset's recorded origin).
     :param error: The message the user was shown; empty on success.
+    :param notify: Whether :attr:`user` wants to hear about their imports.
+        ``False`` when they turned off import alerts in their settings.  A
+        hook that alerts the user should then send nothing; a hook that only
+        records the import can ignore it.  Every hook is still called either
+        way: the server cannot tell an alert from a record, so the hook
+        decides.
     """
 
     outcome: ImportOutcome
@@ -59,3 +68,4 @@ class DatasetImported:
     n_media: int
     origin: dict[str, Any] = field(default_factory=dict)
     error: str = ""
+    notify: bool = True

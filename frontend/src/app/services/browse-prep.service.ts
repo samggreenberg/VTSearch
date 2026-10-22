@@ -219,7 +219,7 @@ export class BrowsePrepService {
   private handleMeta(datasetId: string, meta: ProjectionMeta): PollStep {
     if (!this.isCurrent(datasetId)) return 'stop';
 
-    if (meta.point_count > 0) {
+    if ((meta.point_count ?? 0) > 0) {
       this.finish(datasetId);
       return 'stop';
     }

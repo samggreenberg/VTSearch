@@ -1394,6 +1394,31 @@ def main() -> int:  # noqa: C901
             V.opening_view(["cost", "precision"], hide=["auroc"]) == {"hide": ["auroc"]},
         )
 
+        # A page whose datasets mean nothing pooled opens on each of them (#4959).
+        ok &= refuses("opening its datasets any way but each or all", default_dataset="some")
+        ok &= _check(
+            "a page of several datasets can open on each, and the pool, the default, is not written",
+            V.opening_view(["f1"], dataset="each") == {"dataset": "each"}
+            and V.opening_view(["f1"], dataset="all") == {},
+        )
+        each = tmp / "each.html"
+        V.build_viewer(main_df, each, arms=ARMS, runs_budget_mb=0.25, default_dataset="each")
+        ok &= _check(
+            "...at build time", _payload(each).get("view", {}).get("dataset") == "each", str(_payload(each).get("view"))
+        )
+        reskinned = tmp / "each_reskin.html"
+        shutil.copyfile(out, reskinned)
+        V.reskin(reskinned, default_dataset="each")
+        V.reskin(reskinned)
+        ok &= _check(
+            "...and by a reskin, which a plain reskin then keeps",
+            _payload(reskinned).get("view", {}).get("dataset") == "each",
+            str(_payload(reskinned).get("view")),
+        )
+        V.reskin(reskinned, default_dataset="")
+        ok &= _check("'' drops it, restoring the original payload", blob(reskinned) == blob(out))
+        ok &= _check("the template opens on each dataset when the view says so", 'VIEW.dataset === "each"' in shell)
+
         ok &= _beta_checks(tmp)
         ok &= _stop_checks(tmp)
         ok &= _pooled_checks(tmp)

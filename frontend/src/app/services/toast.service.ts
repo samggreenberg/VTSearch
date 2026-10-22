@@ -115,8 +115,10 @@ export class ToastService {
   private readonly seenTaskKeys = new Set<string>();
   private readonly autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
+  private readonly progressEvents = inject(ProgressEventsService);
+
   constructor() {
-    const progressEvents = inject(ProgressEventsService);
+    const progressEvents = this.progressEvents;
 
     progressEvents.loadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'dataset'));
     progressEvents.detectorLoadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'detector'));
@@ -133,6 +135,10 @@ export class ToastService {
       const key = `sse:${kind}:${t.task_id}`;
       if (this.seenTaskKeys.has(key)) continue;
       this.seenTaskKeys.add(key);
+      // A failed import stays on the channel until dismissed (#4973), so a
+      // page load replays every one still undismissed. Its dashboard row says
+      // so; a toast is for news, which a failure that predates this connection isn't.
+      if (kind === 'dataset' && this.progressEvents.failedBeforeConnect(t.task_id)) continue;
       // A background AutoFind reports on the dataset channel too, but it is not
       // a load: name what actually failed.
       const message = t.autofind ? 'AutoFind failed' : kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed';

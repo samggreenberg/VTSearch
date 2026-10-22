@@ -1025,8 +1025,8 @@ class TestLiveModelReuse:
         step = _prog_cache().steps[2]
         assert step["model"] is live_model, "Should reuse the injected live model"
         assert step["threshold"] == live_threshold, "Should use the injected threshold"
-        # No Smart cut was injected, so Smart scores the model at its served line.
-        assert step["smart_threshold"] == live_threshold
+        # Smart reads no cut since #5134, so the step keeps none.
+        assert "smart_threshold" not in step
 
     def test_non_matching_label_set_gets_no_model(self, client):
         """A live model keyed to another label set must not be adopted.
@@ -1104,7 +1104,9 @@ class TestLiveModelReuse:
         # A live model should have been injected for the current vote set
         key = (frozenset(good_votes), frozenset(bad_votes))
         assert key in _prog_cache().live_models, "learned-sort should inject the live model"
-        model, threshold, smart_threshold, beta = _prog_cache().live_models[key]
+        # The model, its line, and the balance the line was drawn at: Smart reads
+        # each model's best F-beta over every cut since #5134, so no cut of its own.
+        model, threshold, beta = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
         # The balance the line was drawn at rides along, so Stable never compares
@@ -1112,12 +1114,6 @@ class TestLiveModelReuse:
         from vtscore.state import get_beta
 
         assert beta == get_beta()
-        # Under a balance the line keeps a set, not an inclusion (#4272), so Smart
-        # re-cuts the model at its own Inclusion 0 cut (#4243).
-        from vtscore.detectors.cost_trend import SMART_INCLUSION
-        from vtscore.state.core import get_active_detector_context, recut_detector_threshold
-
-        assert smart_threshold == recut_detector_threshold(get_active_detector_context(), SMART_INCLUSION)
 
     def test_live_model_stability_computed(self, client):
         """When a live model is reused, stability should still be computed."""

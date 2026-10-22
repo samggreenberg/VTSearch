@@ -31,7 +31,7 @@ describe('line-test helpers (#4524)', () => {
     expect(lineTestPhase(wireLineTest(wireDone()))).toBe('done');
   });
 
-  describe('the balance control\'s state line in Test', () => {
+  describe('the balance control\'s state line in Tune', () => {
     it('is absent before a line is drawn', () => {
       expect(testLineState(null, null)).toBeNull();
     });

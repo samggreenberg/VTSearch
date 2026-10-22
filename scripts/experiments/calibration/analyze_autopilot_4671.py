@@ -12,6 +12,16 @@ Reads the nine arms ``launch_autopilot_4671.sh`` wrote under ``--base`` (``ctl_*
 * ``paired_curve.csv`` - the paired difference in the objective at every vote, with its SE.
 * ``REPORT_autopilot.md`` - the machine summary; ``provenance.json``; ``figures/``.
 
+``--arms`` reads a subset (``ctl`` always among them): #4739's legs run ``ctl`` and ``nowalk`` only.
+
+On arms run with a second corpus to Find on (#4960, ``CALIB_FIND_CORPUS``; #4739's legs), the ``find_*`` columns
+are read the same way, every run at every vote, paired by (category, seed), into ``find_curves.csv`` (the objective
+and AP on that corpus, and how many it returns), the ``find_objective`` / ``find_ap`` / ``find_n_flagged`` rows of
+``paired.csv``, ``find_paired_curve.csv`` (the paired difference in the Find objective at every vote), and
+``flags.csv``: per arm and snapshot click, the share of runs each domain-shift flag fires in, with the atypical and
+unsupported shares' means. Before a run shows a detector the Find corpus is read at the typed query's own set there,
+off the run's own typed-query rows, as the in-corpus read takes ``text_baseline.csv``'s.
+
 **Every run counts at every vote** (#4631; owner 2026-10-09). Until a run shows a detector, Find returns the
 typed query's own set at today's per-preset line (#4603), and that is what the run scores. After the hand-over it
 scores the last line shown. The single number per arm is the session mean, the area under the curve divided by
@@ -49,6 +59,63 @@ ARMS: tuple[tuple[str, str, dict[str, str]], ...] = (
     ("nowalk", "New on the Hard pick, no atlas walk", {"startup_schedule": "app", "new_walk": "hard"}),
 )
 WINDOWS = ((1, 150), (1, 50), (51, 150), (1, 25))
+#: The flag columns the snapshot clicks carry (#4960): each headline verdict, and the share behind it.
+FLAGS = (
+    ("shift", "shift_shifted", "shift_frac_atypical"),
+    ("evidence", "evidence_unsupported", "evidence_frac_unsupported"),
+)
+
+
+def has_find(frame: pd.DataFrame) -> bool:
+    """Whether *frame*'s runs Found on a second corpus (#4960)."""
+    return "find_n_flagged" in frame.columns and bool(frame["find_n_flagged"].notna().any())
+
+
+def find_anchor(frame: pd.DataFrame, metric: str) -> dict[tuple, float]:
+    """Per cell, *metric* on the Find corpus before a detector shows: the typed query's own set there.
+
+    The in-corpus read fills those votes from ``text_baseline.csv``; the Find corpus has no baseline file, so it
+    reads the run's own typed-query rows (``detector_tier == "query"``, #4758), the same set on that corpus, at
+    the first one. A run with none (no typed query) leaves those votes NaN, as a cell missing from the baseline is.
+    """
+    if "detector_tier" not in frame.columns:
+        return {}
+    q = frame[frame["detector_tier"] == "query"].sort_values("t").drop_duplicates(CELL)
+    return {tuple(k): float(v) for k, v in zip(q[CELL].itertuples(index=False), q[metric], strict=True)}
+
+
+def find_premise_failures(frames: dict[str, pd.DataFrame], preset: str) -> list[str]:
+    """The paired arms of *preset* must Find on one corpus, drawn one way, or none of them may."""
+    seen: dict[str, tuple] = {}
+    for name, frame in frames.items():
+        if not name.endswith(f"_{preset}"):
+            continue
+        corpus = tuple(sorted({str(v) for v in frame.get("find_corpus", pd.Series(dtype=str)).fillna("")}))
+        mix = tuple(sorted({str(v) for v in frame.get("find_mix", pd.Series(dtype=str)).fillna("")}))
+        seen[name] = (has_find(frame), corpus, mix)
+    if len(set(seen.values())) > 1:
+        return [f"{preset}: the arms Find on different corpora: " + "; ".join(f"{n} {v}" for n, v in seen.items())]
+    return []
+
+
+def flag_rows(frame: pd.DataFrame) -> list[dict]:
+    """Per snapshot click, the share of runs each flag fires in and the mean share behind it (#4960)."""
+    if "flags_at" not in frame.columns:
+        return []
+    snap = frame.dropna(subset=["flags_at"]).drop_duplicates([*CELL, "flags_at"])
+    out = []
+    for at, g in snap.groupby("flags_at"):
+        row: dict = {"flags_at": int(at), "runs": int(len(g))}
+        for name, verdict, share in FLAGS:
+            read = g[verdict].dropna()
+            row[f"{name}_runs"] = int(len(read))
+            row[f"{name}_fires"] = float(read.mean()) if len(read) else np.nan
+            row[f"{name}_{share.split('_', 1)[1]}"] = float(g[share].mean()) if g[share].notna().any() else np.nan
+        row["evidence_frac_low_trust"] = (
+            float(g["evidence_frac_low_trust"].mean()) if g["evidence_frac_low_trust"].notna().any() else np.nan
+        )
+        out.append(row)
+    return out
 
 
 def premise_failures(arm: str, frame: pd.DataFrame, knobs: dict[str, set[str]], want: dict[str, str], beta: float):
@@ -80,8 +147,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--out", required=True)
     ap.add_argument("--horizon", type=int, default=150)
     ap.add_argument("--seeds", help="comma-separated seeds to read (an interim read); default all")
+    ap.add_argument("--arms", default=",".join(a for a, *_ in ARMS), help="the arms to read; ctl must be one")
     ap.add_argument("--no-figures", action="store_true")
     args = ap.parse_args(argv)
+    wanted = {a.strip() for a in args.arms.split(",") if a.strip()}
+    unknown = wanted - {a for a, *_ in ARMS}
+    if unknown or "ctl" not in wanted:
+        ap.error(f"--arms must name ctl and only known arms; got {sorted(wanted)}")
+    arms = tuple(a for a in ARMS if a[0] in wanted)
     base, out = Path(args.base), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
@@ -95,7 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     frames: dict[str, pd.DataFrame] = {}
     provs: dict[str, dict] = {}
     for p, beta in PRESETS.items():
-        for arm, _label, want in ARMS:
+        for arm, _label, want in arms:
             name = f"{arm}_{p}"
             if not (base / name / "results" / "cells").is_dir():
                 failures.append(f"{name}: no cells dir")
@@ -111,6 +184,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             failures += premise_failures(name, frame, logged_knobs(base / name), want, beta)
             frames[name] = frame
     failures += [f"baseline: {m}" for m in baseline_mismatches(raw, frames)]
+    for p in PRESETS:
+        failures += find_premise_failures(frames, p)
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]
@@ -121,14 +196,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     grid = grid.reset_index(drop=True)
     lines += [f"Grid: {len(grid)} cells.", ""]
 
-    curve_rows, pair_rows, pcurve_rows = [], [], []
+    curve_rows, pair_rows, pcurve_rows, find_pcurve_rows = [], [], [], []
+    find_curve_rows: list[pd.DataFrame] = []
+    flags: list[dict] = []
     for p, beta in PRESETS.items():
         tag = beta_tag(beta)
         obj_anchor = text_fbeta(bl, f"text_line_precision_{tag}", f"text_line_recall_{tag}", beta)
         ap_anchor = {tuple(k): float(v) for k, v in bl.groupby(CELL)["text_AP"].mean().items()}
         sets = text_set(raw, f"text_line_precision_{tag}", f"text_line_recall_{tag}", f"text_line_fpr_{tag}")
         mats: dict[str, dict[str, pd.DataFrame]] = {}
-        for arm, label, _want in ARMS:
+        find_mats: dict[str, dict[str, pd.DataFrame]] = {}
+        for arm, label, _want in arms:
             name = f"{arm}_{p}"
             if name not in frames:
                 continue
@@ -169,27 +247,51 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             )
             if lost:
                 lines.append(f"- {name}: {lost} cells lost (unreadable, zero-byte or missing); read on what is present")
+            if has_find(frame):
+                # #4960: the second corpus, read as the in-corpus columns are; F-beta off the rows (NaN with no positive).
+                fgot = {
+                    key: filled_matrix(frame, cells, {}, H, metric=col, baseline_metric=find_anchor(frame, col))[0]
+                    for key, col in (
+                        ("objective", "find_fbeta"),
+                        ("ap", "find_average_precision"),
+                        ("n_flagged", "find_n_flagged"),
+                    )
+                }
+                find_mats[arm] = fgot
+                fm, fk = fgot["objective"], fgot["n_flagged"]
+                find_curve_rows.append(
+                    pd.DataFrame(
+                        {
+                            "t": fm.columns.astype(int),
+                            "objective": fm.mean(axis=0).to_numpy(),
+                            "objective_se": (fm.std(axis=0, ddof=1) / np.sqrt(fm.notna().sum(axis=0))).to_numpy(),
+                            "ap": fgot["ap"].mean(axis=0).to_numpy(),
+                            "returned_median": fk.median(axis=0).to_numpy(),
+                            "returned_mean": fk.mean(axis=0).to_numpy(),
+                            "returned_none": (fk < 0.5).mean(axis=0).to_numpy(),
+                            "runs": fm.notna().sum(axis=0).to_numpy(),
+                            "runs_counted": fk.notna().sum(axis=0).to_numpy(),
+                        }
+                    ).assign(preset=p, beta=beta, arm=arm, label=label)
+                )
+                flags += [{"preset": p, "arm": arm, **r} for r in flag_rows(frame)]
         if "ctl" not in mats:
             continue
-        for arm, label, _want in ARMS[1:]:
+        for arm, label, _want in arms[1:]:
             if arm not in mats:
                 continue
             for metric in ("objective", "ap"):
                 for r in paired_rows(mats["ctl"][metric], mats[arm][metric]):
                     pair_rows.append({"preset": p, "arm": arm, "label": label, "metric": metric, **r})
-            a, b = mats["ctl"]["objective"], mats[arm]["objective"]
-            idx = a.index.intersection(b.index)
-            d = b.loc[idx] - a.loc[idx]
-            pcurve_rows.append(
-                pd.DataFrame(
-                    {
-                        "t": d.columns.astype(int),
-                        "delta": d.mean(axis=0).to_numpy(),
-                        "se": (d.std(axis=0, ddof=1) / np.sqrt(d.notna().sum(axis=0))).to_numpy(),
-                        "n": d.notna().sum(axis=0).to_numpy(),
-                    }
-                ).assign(preset=p, arm=arm)
-            )
+            if "ctl" in find_mats and arm in find_mats:
+                # The returned count too: on a corpus with no positive (`only` on a foreign dataset) it is the read.
+                for metric in ("objective", "ap", "n_flagged"):
+                    for r in paired_rows(find_mats["ctl"][metric], find_mats[arm][metric]):
+                        pair_rows.append({"preset": p, "arm": arm, "label": label, "metric": f"find_{metric}", **r})
+                find_pcurve_rows.append(
+                    paired_curve(find_mats["ctl"]["objective"], find_mats[arm]["objective"], p, arm)
+                )
+            pcurve_rows.append(paired_curve(mats["ctl"]["objective"], mats[arm]["objective"], p, arm))
 
     curve = pd.concat(curve_rows, ignore_index=True) if curve_rows else pd.DataFrame()
     pairs = pd.DataFrame(pair_rows)
@@ -197,6 +299,15 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     curve.to_csv(out / "curves.csv", index=False, float_format="%.6g")
     pairs.to_csv(out / "paired.csv", index=False, float_format="%.6g")
     pcurve.to_csv(out / "paired_curve.csv", index=False, float_format="%.6g")
+    fcurve = pd.concat(find_curve_rows, ignore_index=True) if find_curve_rows else pd.DataFrame()
+    flag_frame = pd.DataFrame(flags)
+    if not fcurve.empty:
+        fcurve.to_csv(out / "find_curves.csv", index=False, float_format="%.6g")
+        flag_frame.to_csv(out / "flags.csv", index=False, float_format="%.6g")
+    if find_pcurve_rows:
+        pd.concat(find_pcurve_rows, ignore_index=True).to_csv(
+            out / "find_paired_curve.csv", index=False, float_format="%.6g"
+        )
 
     lines += ["## Session means (every run, every vote)", ""]
     lines += [
@@ -224,12 +335,70 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             star = "**" if r["resolvable"] else ""
             cells_.append(f"{star}{r['mean']:+.3f}{star} ± {r['se']:.3f}")
         lines.append(f"| {p} | {arm} | {metric} | " + " | ".join(cells_) + " |")
+    lines += find_report(fcurve, flag_frame, H)
     (out / "REPORT_autopilot.md").write_text("\n".join(lines).rstrip("\n") + "\n")
     print("\n".join(lines))
 
     if not args.no_figures and not curve.empty:
         figures(curve, pcurve, out / "figures")
     return 1 if failures else 0
+
+
+def paired_curve(a: pd.DataFrame, b: pd.DataFrame, preset: str, arm: str) -> pd.DataFrame:
+    """``b - a`` at every vote on the runs both measured, with its SE: one arm against the control."""
+    idx = a.index.intersection(b.index)
+    d = b.loc[idx] - a.loc[idx]
+    return pd.DataFrame(
+        {
+            "t": d.columns.astype(int),
+            "delta": d.mean(axis=0).to_numpy(),
+            "se": (d.std(axis=0, ddof=1) / np.sqrt(d.notna().sum(axis=0))).to_numpy(),
+            "n": d.notna().sum(axis=0).to_numpy(),
+        }
+    ).assign(preset=preset, arm=arm)
+
+
+def find_report(fcurve: pd.DataFrame, flag_frame: pd.DataFrame, horizon: int) -> list[str]:
+    """The report's #4960 sections: the Find corpus's session means, and the flag table; nothing without one."""
+    if fcurve.empty:
+        return []
+    lines = [
+        "",
+        "## Find on the second corpus (every run, every vote; #4960)",
+        "",
+        "Objective NaN where the corpus holds no positive: read the returned count there.",
+        "",
+        "| preset | arm | objective 1-150 | 1-50 | 51-150 | AP 1-150 | returned (median) 1-150 | returning none |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for (p, arm), c in fcurve.groupby(["preset", "arm"], sort=False):
+        w = c[(c["t"] >= 1) & (c["t"] <= horizon)]
+        e = c[(c["t"] >= 1) & (c["t"] <= 50)]
+        late = c[(c["t"] >= 51) & (c["t"] <= horizon)]
+        lines.append(
+            f"| {p} | {arm} | {w['objective'].mean():.3f} | {e['objective'].mean():.3f} | "
+            f"{late['objective'].mean():.3f} | {w['ap'].mean():.3f} | {w['returned_median'].mean():.1f} "
+            f"| {w['returned_none'].mean():.0%} |"
+        )
+    if flag_frame.empty:
+        return [*lines, "", "No snapshot click carried the domain-shift flags (`CALIB_FIND_FLAGS_AT`)."]
+    lines += [
+        "",
+        "## Domain-shift flags against the second corpus, at the snapshot clicks (#4960)",
+        "",
+        "Share of runs each flag fires in; the shares behind them are means over runs. "
+        "The training-domain overlap is NaN on a patch embedder, which the app refuses.",
+        "",
+        "| preset | arm | click | runs | overlap fires | atypical share | evidence fires | unsupported share "
+        "| low-trust share |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for r in flag_frame.itertuples(index=False):
+        lines.append(
+            f"| {r.preset} | {r.arm} | {r.flags_at} | {r.runs} | {r.shift_fires:.0%} | {r.shift_frac_atypical:.3f} "
+            f"| {r.evidence_fires:.0%} | {r.evidence_frac_unsupported:.3f} | {r.evidence_frac_low_trust:.3f} |"
+        )
+    return lines
 
 
 def figures(curve: pd.DataFrame, pcurve: pd.DataFrame, figdir: Path) -> None:

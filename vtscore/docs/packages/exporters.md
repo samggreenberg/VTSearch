@@ -188,12 +188,12 @@ wherever it renders an exporter's fields.
 | Name | Payloads | Target | Notes |
 |------|----------|--------|-------|
 | `server_json_file` | `find_results`, `labelset` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports the `{YYYYMMDD-HHMMSS}` / `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` / `{detector_name}` / `{username}` template variables in the path; default path under `DATA_DIR` |
-| `server_csv_file` | `find_results`, `labelset` | Writes a CSV file to the server filesystem | Atomic write; auto-detects which optional clip columns (`clip_start`, `clip_end`, `clip_box`) are present; cells beginning with `=`/`+`/`-`/`@`/`\t`/`\r` are quote-prefixed to defeat formula injection |
+| `server_csv_file` | `find_results`, `labelset` | Writes a CSV file to the server filesystem | Atomic write; auto-detects which optional clip columns (`clip_start`, `clip_end`, `clip_box`) are present; a labelset's `origin` and a Good's `region_box` are written as JSON, and the `region_box` column only when some label has a box; cells beginning with `=`/`+`/`-`/`@`/`\t`/`\r` are quote-prefixed to defeat formula injection |
 | `webhook` | `find_results`, `labelset` | `POST`s the payload dict as JSON to a URL | Optional `Authorization` header (`auth_header`, a `password`-type field), 30s timeout, redirects disabled; SSRF-guarded twice - the `url` field is validated at normalisation and the POST goes through `vtscore.security.url_validation.guarded_session` |
 | `open_url` | `find_results`, `labelset` | Formats the labelset into a URL and returns it as `open_url` for the browser to open in a new tab | `opens_url = True`. No network call server-side; substitutes `{ids}` / `{count}` into a user-supplied template, URL-encoding the joined identifiers. Truncates to `max_items` (reported in the message) and refuses a URL over ~2000 characters. The one results-carrying built-in that does not stream |
 | `email_smtp` | `find_results`, `labelset` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | `find_results`, `labelset` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
-| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle (zip) per trained detector | `hidden_from_picker = True`, CLI-only. Default path `data/{detector_name}-detector.zip`. See below - it is the one exporter that consumes detectors rather than results |
+| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle (zip) per trained detector | `hidden_from_picker = True`, CLI-only. Default path `{DATA_DIR}/{detector_name}-detector.zip`. See below - it is the one exporter that consumes detectors rather than results |
 
 The Payloads column is not a declaration anywhere in the source: each
 exporter's `supported_payloads` is derived from the methods it overrides,
@@ -201,8 +201,10 @@ so the column is a reading of the code rather than a second copy of it.
 
 `hidden_from_picker = True` keeps an exporter out of the generic
 picker UI. The `gui` exporter is special-cased by the frontend; the
-`portable_detector` exporter is hidden because the GUI has its own
-dedicated portable-export modal.
+`portable_detector` exporter is hidden because it needs the trained
+head that only the CLI produces (a single saved detector's bundle comes
+from `POST /api/detectors/<id>/portable-bundle`, which has no GUI menu
+item).
 
 ### `portable_detector` is shaped differently
 

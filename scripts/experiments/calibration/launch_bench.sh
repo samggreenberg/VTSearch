@@ -183,9 +183,9 @@ status)
   echo "=== cells written ==="
   # `! -name '*__*'`: run_cells.py writes five side frames beside each cell's
   # main frame, so an unfiltered count reports six times the cells that exist.
-  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l
+  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l
   echo "=== zero-byte cells (resume would SKIP these) ==="
-  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l
+  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' -size 0 2>/dev/null | wc -l
   ;;
 
 *)

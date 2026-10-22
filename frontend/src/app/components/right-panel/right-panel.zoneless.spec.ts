@@ -15,8 +15,9 @@ import { provideHttpTesting } from '../../testing/test-providers';
  * and replaced those mirrors with `computed`s over its getters. This drives the
  * vote state through the production channel (`applyOptimisticState`, the same
  * signal write a vote click makes) and asserts the rendered DOM repaints with NO
- * manual `detectChanges()` — the Find-mode Browse action enables only when
- * `goodIds().length > 0`, so a stale mirror would leave it disabled.
+ * manual `detectChanges()` — the Find-mode Browse action enables only when the
+ * good set (verified goods plus the view's unverified count) is non-empty, so
+ * a stale mirror would leave it disabled.
  */
 describe('RightPanelComponent (zoneless votes canary)', () => {
   let fixture: ComponentFixture<RightPanelComponent>;
@@ -31,7 +32,8 @@ describe('RightPanelComponent (zoneless votes canary)', () => {
     fixture = TestBed.createComponent(RightPanelComponent);
     httpMock = TestBed.inject(HttpTestingController);
     // Find mode renders the good bucket with the Browse/To-Dataset/Export
-    // actions whose disabled state reads the `goodIds()` computed.
+    // actions whose disabled state reads the `goodIds()` / `verifiedIds()`
+    // computeds and the unverified count input.
     fixture.componentRef.setInput('mode', 'find');
     fixture.componentRef.setInput('medias', [
       { id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} },
@@ -74,13 +76,33 @@ describe('RightPanelComponent (zoneless votes canary)', () => {
     expect(btn!.disabled).toBe(true);
 
     // Production channel: an optimistic good vote writes the goodVotes signal
-    // (the same path a vote click takes), with no HTTP.
-    TestBed.inject(VoteStateService).applyOptimisticState(1, 'good');
+    // (the same path a vote click takes) and the view marks the item verified
+    // (`FindViewComponent.onMediaVoted`), with no HTTP.
+    const voteState = TestBed.inject(VoteStateService);
+    voteState.applyOptimisticState(1, 'good');
+    voteState.setOptimisticVerified(1, true);
     await settleZoneless(fixture);
 
-    // The `goodIds()` computed updated and the getter-bound `[disabled]`
-    // repainted with no manual pump. A stale mirror would keep it disabled.
+    // The computeds updated and the getter-bound `[disabled]` repainted with
+    // no manual pump. A stale mirror would keep it disabled.
     expect(browseButton()!.disabled).toBe(false);
+  });
+
+  it('takes the unverified counts from the view, not the vote piles (#5115)', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    expect(browseButton()!.disabled).toBe(true);
+
+    // Find reads only the verified votes, so the unverified goods come from the
+    // view's count over the ranking: Browse acts on them with nothing verified.
+    fixture.componentRef.setInput('unverifiedGoodCount', 1234);
+    fixture.componentRef.setInput('unverifiedBadCount', 56);
+    await settleZoneless(fixture);
+
+    expect(browseButton()!.disabled).toBe(false);
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('1,234 Unverified Good');
+    expect(text).toContain('56 Unverified Bad');
   });
 });
 

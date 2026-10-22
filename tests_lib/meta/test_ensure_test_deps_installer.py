@@ -27,6 +27,7 @@ import pytest
 
 HOOKS = Path(__file__).resolve().parents[2] / ".claude" / "hooks"
 INSTALLER = HOOKS / "ensure-test-deps.sh"
+PRUNE = HOOKS / "prune-stale-dist-info.py"
 
 pytestmark = pytest.mark.skipif(shutil.which("sha256sum") is None, reason="the hook hashes itself with sha256sum")
 
@@ -68,7 +69,7 @@ class Sandbox:
             exe.write_text(body)
             exe.chmod(0o755)
         self.log.touch()
-        script_hash = hashlib.sha256(INSTALLER.read_bytes()).hexdigest()[:12]
+        script_hash = hashlib.sha256(INSTALLER.read_bytes() + PRUNE.read_bytes()).hexdigest()[:12]
         self.marker = self.markers / f".vtsearch-deps-installed-{script_hash}"
 
     def run(self, **extra_env: str) -> subprocess.CompletedProcess:
@@ -119,6 +120,24 @@ class TestInstallsIntoThePythonInUse:
         """The stub enables the user site, so the one conditional install runs as well."""
         sandbox.run()
         assert any(" --user " in c for c in sandbox.pip_installs())
+
+
+class TestPrunesAfterTheLastInstall:
+    def test_the_prune_runs_after_every_pip_install(self, sandbox):
+        """The stale dist-info it deletes is left by the installs, so it must follow all of them (#5153)."""
+        sandbox.run()
+        calls = sandbox.calls()
+        prune = [n for n, c in enumerate(calls) if c == f"python {PRUNE}"]
+        installs = [n for n, c in enumerate(calls) if c.startswith("python -m pip install")]
+        assert len(prune) == 1, calls
+        assert installs and prune[0] > max(installs), calls
+
+    def test_an_edit_to_the_prune_invalidates_the_marker(self, sandbox):
+        """The marker hashes the prune too: a fixed prune must re-run on a long-lived container."""
+        installer_only = hashlib.sha256(INSTALLER.read_bytes()).hexdigest()[:12]
+        assert not sandbox.marker.name.endswith(installer_only)
+        sandbox.run()
+        assert sandbox.marker.exists()
 
 
 class TestMarker:

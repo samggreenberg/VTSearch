@@ -5,7 +5,7 @@ synthetic data; no real model downloads or embeddings required.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -535,12 +535,13 @@ class TestEvalLearnedSort:
 class TestEvalLearnedSortBalance:
     """``--mode learned`` cuts where the app does: the labels line at the default balance (#4971)."""
 
-    def _overlapping_clips(self, n_a=20, n_b=60, sep=0.6, dim=16):
+    def _overlapping_clips(self, n_a=40, n_b=120, sep=0.6, dim=16):
         """Two categories that overlap enough for the balance to move the line.
 
         On cleanly separated clusters every cut lands in the same gap, so the
         Inclusion 0 cut and the labels line would agree and a test comparing
-        them could not tell one from the other.
+        them could not tell one from the other.  Only the simulation half is
+        trained on (#5003), so the pool is twice the 80 media that half holds.
         """
         rng = np.random.RandomState(42)
         medias = {}
@@ -562,7 +563,7 @@ class TestEvalLearnedSortBalance:
         calls: list[dict] = []
 
         def _spy(clips, good, bad, **kw):
-            calls.append({"good": dict(good), "bad": dict(bad), **kw})
+            calls.append({"clips": dict(clips), "good": dict(good), "bad": dict(bad), **kw})
             return real(clips, good, bad, **kw)
 
         with patch("vtscore.detectors.training.train_and_score", _spy):
@@ -577,8 +578,9 @@ class TestEvalLearnedSortBalance:
         medias = self._overlapping_clips()
         lm, call = self._run_capturing_votes(medias)
 
-        _, labels_line, _ = train_and_score(medias, call["good"], call["bad"], beta=DEFAULT_BETA)
-        _, inclusion_cut, _ = train_and_score(medias, call["good"], call["bad"])
+        sim = call["clips"]
+        _, labels_line, _ = train_and_score(sim, call["good"], call["bad"], beta=DEFAULT_BETA)
+        _, inclusion_cut, _ = train_and_score(sim, call["good"], call["bad"])
         # The data has to tell the two cuts apart, or this test proves nothing.
         assert inclusion_cut != pytest.approx(labels_line)
         assert lm.threshold == pytest.approx(labels_line)
@@ -590,7 +592,7 @@ class TestEvalLearnedSortBalance:
         medias = self._overlapping_clips()
         lm, call = self._run_capturing_votes(medias, beta="off")
 
-        _, inclusion_cut, _ = train_and_score(medias, call["good"], call["bad"])
+        _, inclusion_cut, _ = train_and_score(call["clips"], call["good"], call["bad"])
         assert call["beta"] is None
         assert lm.threshold == pytest.approx(inclusion_cut)
         assert lm.beta is None
@@ -642,6 +644,122 @@ class TestEvalLearnedSortBalance:
         ):
             run_eval(dataset_ids=["esc50_s"], mode="learned", beta="off")
         assert seen == ["off"]
+
+
+class TestEvalLearnedSortHoldout:
+    """The test half never reaches ``train_and_score`` and is scored by its model (#5003)."""
+
+    def _clips(self, n_a=24, n_b=56, dim=16):
+        rng = np.random.RandomState(5)
+        medias = {}
+        for media_id in range(1, n_a + n_b + 1):
+            category, mean = ("cat_a", 0.8) if media_id <= n_a else ("cat_b", -0.8)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": rng.normal(mean, 1.0, dim).astype(np.float32)},
+                "category": category,
+                "media_type": "image",
+            }
+        return medias
+
+    def _run_spying(self, medias, **kwargs):
+        """Run on the real trainer and scorer, recording what each was handed."""
+        from vtscore.detectors import training
+
+        real_train, real_score = training.train_and_score, training.score_media_with_model
+        trained: list[dict] = []
+        scored: list[dict] = []
+
+        def _train_spy(clips, good, bad, **kw):
+            out = real_train(clips, good, bad, **kw)
+            trained.append({"ids": set(clips), "good": set(good), "bad": set(bad), "model": out[2]})
+            return out
+
+        def _score_spy(model, clips, embedder_name=None):
+            scored.append({"ids": set(clips), "model": model})
+            return real_score(model, clips, embedder_name)
+
+        with (
+            patch("vtscore.detectors.training.train_and_score", _train_spy),
+            patch("vtscore.detectors.training.score_media_with_model", _score_spy),
+        ):
+            results = eval_learned_sort(medias, [EvalQuery("category a", "cat_a")], seed=42, **kwargs)
+        assert len(results) == 1 and len(trained) == 1 and len(scored) == 1
+        return results[0], trained[0], scored[0]
+
+    def test_trainer_never_receives_a_test_item(self):
+        medias = self._clips()
+        lm, trained, scored = self._run_spying(medias)
+
+        test_ids = scored["ids"]
+        assert test_ids and not (trained["ids"] & test_ids)
+        # The two halves partition the pool, and the votes come from the simulation half.
+        assert trained["ids"] | test_ids == set(medias)
+        votes = trained["good"] | trained["bad"]
+        assert votes <= trained["ids"]
+        # Its unvoted rest is the haystack the threshold is fitted on.
+        assert trained["ids"] - votes
+        assert lm.num_test == len(test_ids)
+        assert lm.num_train == len(votes)
+
+    def test_test_half_is_scored_with_the_returned_model(self):
+        _, trained, scored = self._run_spying(self._clips())
+        assert trained["model"] is not None
+        assert scored["model"] is trained["model"]
+
+    def test_fractions_size_the_halves(self):
+        # 24 positives, 56 negatives: simulation halves of 12 and 28, votes of 3 and 7.
+        lm, trained, scored = self._run_spying(self._clips(), sim_fraction=0.5, train_fraction=0.25)
+        assert len(trained["ids"]) == 40 and len(scored["ids"]) == 40
+        assert len(trained["good"]) == 3 and len(trained["bad"]) == 7
+        assert lm.num_train == 10 and lm.num_test == 40
+
+    def test_metrics_read_the_scores_of_the_held_out_half(self):
+        """The prediction for a test item is its score under the returned model, cut at the threshold."""
+        model = object()
+        medias = self._clips()
+        seen: list[object] = []
+
+        def _fake_train(clips, good, bad, **_kw):
+            # Scores for the simulation half that would make every test item wrong if read.
+            return [{"id": cid, "score": 0.0} for cid in clips], 0.5, model
+
+        def _fake_score(m, clips, _embedder_name=None):
+            seen.append(m)
+            return [{"id": cid, "score": 1.0 if clips[cid]["category"] == "cat_a" else 0.0} for cid in clips]
+
+        with (
+            patch("vtscore.detectors.training.train_and_score", _fake_train),
+            patch("vtscore.detectors.training.score_media_with_model", _fake_score),
+        ):
+            results = eval_learned_sort(medias, [EvalQuery("a", "cat_a")], seed=1)
+        assert seen == [model]
+        assert results[0].f1 == pytest.approx(1.0)
+        assert results[0].accuracy == pytest.approx(1.0)
+
+    def test_no_model_passes_nothing(self):
+        def _fake_train(clips, good, bad, **_kw):
+            return [], 0.5, None
+
+        scorer = MagicMock()
+        with (
+            patch("vtscore.detectors.training.train_and_score", _fake_train),
+            patch("vtscore.detectors.training.score_media_with_model", scorer),
+        ):
+            results = eval_learned_sort(self._clips(), [EvalQuery("a", "cat_a")], seed=1)
+        scorer.assert_not_called()
+        assert results[0].recall == 0.0
+
+    def test_a_structural_dataset_is_refused_before_training(self):
+        medias = self._clips()
+        called = []
+        with (
+            patch("vtscore.training.structural_similarity.snapshot_is_structural", return_value=True),
+            patch("vtscore.detectors.training.train_and_score", lambda *a, **k: called.append(1)),
+        ):
+            with pytest.raises(ValueError, match="structural"):
+                eval_learned_sort(medias, [EvalQuery("a", "cat_a")])
+        assert called == []
 
 
 # =====================================================================
@@ -1071,13 +1189,15 @@ class TestEvalLearnedSortFailures:
         return medias
 
     def test_empty_test_set_is_skipped(self):
-        """With ``train_fraction=1.0`` every media lands in the train split, so
+        """With ``sim_fraction=1.0`` every media lands in the simulation half, so
         the held-out test set is empty and the category is skipped before any
         model is trained."""
         medias = self._two_by_two_clips()
         queries = [EvalQuery("category a", "cat_a")]
-        results = eval_learned_sort(medias, queries, train_fraction=1.0, seed=42)
+        with patch("vtscore.detectors.training.train_and_score") as trainer:
+            results = eval_learned_sort(medias, queries, sim_fraction=1.0, seed=42)
         assert results == []
+        trainer.assert_not_called()
 
     def test_absent_category_is_skipped(self):
         """A query whose target category has zero positives (fewer than 2

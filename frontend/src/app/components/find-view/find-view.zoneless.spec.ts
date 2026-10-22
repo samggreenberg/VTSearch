@@ -2,9 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { Subject } from 'rxjs';
 
 import { FindViewComponent } from './find-view.component';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
@@ -76,7 +78,7 @@ describe('FindViewComponent (zoneless canary)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'audio' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -200,11 +202,17 @@ describe('FindViewComponent (pair-switch supersession)', () => {
   let fixture: ComponentFixture<FindViewComponent>;
   let httpMock: HttpTestingController;
   let activeContext: ActiveContextService;
+  let pairReloaded: Subject<void>;
 
   beforeEach(async () => {
+    pairReloaded = new Subject<void>();
     await configureZoneless({
       imports: [FindViewComponent],
-      providers: [...provideHttpTesting(), provideRouter([])],
+      providers: [
+        ...provideHttpTesting(),
+        provideRouter([]),
+        { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
+      ],
     }).compileComponents();
 
     activeContext = TestBed.inject(ActiveContextService);
@@ -241,7 +249,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'image' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -282,7 +290,21 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
-  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // #5155: a restart takes the backend's session state with it, so once the
+  // lost pair is loaded again Tune re-scores it as on a switch.
+  it('cancels the scoring run and scores again when the lost pair is loaded again', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const staleScore = httpMock.expectOne('/api/find-label');
+
+    pairReloaded.next();
+
+    expect(staleScore.cancelled).toBe(true);
+    expect(activeContext.datasetId).toBe('ds1');
+    expect(httpMock.match('/api/find-label').length).toBe(1);
+  });
+
+  // #4555: Tune opens on the Autopilot tab, and the test of the line starts
   // the moment the scoring pass lands, with no click. It used to wait for one:
   // the pass's `finalize` (which drops the busy flag) runs only after its
   // `next` returns, so the start, asked for from `next`, still saw the pass
@@ -418,7 +440,7 @@ describe('FindViewComponent (balance supersession)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'audio' }]),
       );
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -573,7 +595,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
       httpMock
         .match('/api/medias/ids')
         .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -593,7 +615,11 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     });
   });
 
+  /** The boundary walk is the Review tab's queue; Autopilot warms the test's round. */
+  const toReview = () => fixture.componentInstance.onFindTabChange('review');
+
   it('warms the next two items of the boundary walk, alternating sides', () => {
+    toReview();
     TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
     // The walk's seed is the marginal positive, so `below` is served next.
     TestBed.inject(MediaStateService).selectMedia(2);
@@ -605,6 +631,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
   });
 
   it('retargets when an item is verified with the same item on screen', () => {
+    toReview();
     TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
     TestBed.inject(MediaStateService).selectMedia(2);
     (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
@@ -617,6 +644,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
   });
 
   it('retargets when the cutoff moves', () => {
+    toReview();
     const sortState = TestBed.inject(SortStateService);
     sortState.setSortResults(ranking, 0.5);
     TestBed.inject(MediaStateService).selectMedia(2);
@@ -630,6 +658,171 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     TestBed.tick();
 
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
+  });
+
+  // #5099: the Tune autopilot's stage shows the round's picks one at a time,
+  // and used to fetch each only once it was on screen.
+  it("warms the test's next two unvoted picks on the Autopilot tab, and moves on with a vote", () => {
+    const lineTest = fixture.componentInstance.lineTest;
+    lineTest.start();
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1, 4, 2] })));
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(1), url(4)], [url(3)]]);
+
+    lineTest.vote('good');
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1, 4, 2], labelled: 1 })));
+  });
+
+  // #5116: the round's last vote used to deal the next round, so its first
+  // pick's fetch started with the user waiting on it.
+  it('on the last pick of a round warms the next round both ways, then the way the vote went', () => {
+    const lineTest = fixture.componentInstance.lineTest;
+    lineTest.start();
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
+    lineTest.vote('good');
+    const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
+    httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(2), url(4)], [url(1)]]);
+
+    lineTest.vote('bad');
+    TestBed.tick();
+    expect(lastCall()).toEqual([[url(4), url(2)], [url(1)]]);
+    httpMock
+      .expectOne('/api/line-test/votes')
+      .flush(wireLineTest(wireTest({ picks: [4, 2], round: 2, labelled: 2 })));
+    TestBed.tick();
+    expect(lineTest.currentId()).toBe(4);
+    expect(lastCall()).toEqual([[url(2)], [url(4)]]);
+  });
+
+  it("shows the next round's first pick from bytes already held (#5116)", async () => {
+    // jsdom has neither fetch's blob path nor object URLs; stub both, as the store's own spec does.
+    let seq = 0;
+    vi.stubGlobal('fetch', () => Promise.resolve({ ok: true, blob: () => Promise.resolve({ size: 1 }) }));
+    Object.assign(URL, { createObjectURL: () => `blob:mock/${++seq}`, revokeObjectURL: () => undefined });
+    const resolve = vi.spyOn(TestBed.inject(MediaPrefetchService), 'resolve');
+    const settle = async () => {
+      for (let i = 0; i < 12; i++) await Promise.resolve();
+    };
+    try {
+      const lineTest = fixture.componentInstance.lineTest;
+      lineTest.start();
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [3, 1] })));
+      lineTest.vote('good');
+      const ahead = { id: 1, good: [2, 4], bad: [4, 2] };
+      httpMock.expectOne('/api/line-test/votes').flush(wireLineTest(wireTest({ picks: [1], labelled: 1, ahead })));
+      await settleZoneless(fixture);
+      await settle();
+
+      lineTest.vote('good');
+      httpMock
+        .expectOne('/api/line-test/votes')
+        .flush(wireLineTest(wireTest({ picks: [2, 4], round: 2, labelled: 2 })));
+      await settleZoneless(fixture);
+      expect(lineTest.currentId()).toBe(2);
+      const shown = resolve.mock.calls.findIndex(([src]) => src === url(2));
+      expect(shown).toBeGreaterThanOrEqual(0);
+      expect(resolve.mock.results[shown].value).toMatch(/^blob:mock\//);
+    } finally {
+      vi.unstubAllGlobals();
+      delete (URL as { createObjectURL?: unknown }).createObjectURL;
+      delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
+    }
+  });
+
+  it('warms nothing of the boundary walk while the Autopilot tab is up', () => {
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    TestBed.inject(MediaStateService).selectMedia(2);
+    TestBed.tick();
+    expect(lastCall()).toEqual([[], []]);
+  });
+});
+
+/**
+ * #5099: in Find, `/api/votes` carries every item's presumed label, megabytes
+ * on a large dataset. Only the Review tab shows the piles, so only it polls
+ * them, and no single vote re-reads them.
+ */
+describe('FindViewComponent reading the vote piles (#5099)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let voteState: VoteStateService;
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    voteState = TestBed.inject(VoteStateService);
+    vi.spyOn(voteState, 'loadVotes');
+    vi.spyOn(voteState, 'startPolling');
+    vi.spyOn(voteState, 'stopPolling');
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
+      httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    }
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    voteState.stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('reads only the verified votes (#5115)', () => {
+    vi.mocked(voteState.loadVotes).mockClear();
+    fixture.componentInstance.onFindTabChange('review');
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    // The one-off read and the poll's first tick, both scoped.
+    const reads = httpMock.match((req) => req.url === '/api/votes');
+    expect(reads.length).toBeGreaterThan(0);
+    for (const req of reads) {
+      expect(req.request.urlWithParams).toBe('/api/votes?scope=verified');
+      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+    }
+  });
+
+  it('reads them once as the view opens on Autopilot, and does not poll them there', () => {
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    expect(voteState.startPolling).not.toHaveBeenCalled();
+  });
+
+  it('reads them afresh and polls them while Review is up, and stops on the way back', () => {
+    vi.mocked(voteState.loadVotes).mockClear();
+    fixture.componentInstance.onFindTabChange('review');
+    expect(voteState.loadVotes).toHaveBeenCalledTimes(1);
+    expect(voteState.startPolling).toHaveBeenCalledTimes(1);
+
+    vi.mocked(voteState.stopPolling).mockClear();
+    fixture.componentInstance.onFindTabChange('autopilot');
+    expect(voteState.stopPolling).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-read them after a Review vote: the POST's reply and the verified move cover the item", () => {
+    fixture.componentInstance.onFindTabChange('review');
+    vi.mocked(voteState.loadVotes).mockClear();
+    voteState.applyOptimisticState(1, 'good');
+    fixture.componentInstance.onMediaVoted({ id: 1, vote: 'good' });
+    expect(voteState.loadVotes).not.toHaveBeenCalled();
+    expect(voteState.verifiedIds.has(1)).toBe(true);
   });
 });
 
@@ -663,7 +856,7 @@ describe('FindViewComponent ↓ then ↑ (#4306)', () => {
       httpMock
         .match('/api/medias/ids')
         .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -741,7 +934,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
     for (let i = 0; i < 3; i++) {
       await settleResource();
       httpMock.match('/api/medias/ids').forEach((req) => req.flush(ids.map((id) => ({ id, media_type: 'image' }))));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8, ...PANELS_OPEN }));
@@ -829,6 +1022,32 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.queueEmpty()).toBe(true);
     });
 
+    it('count the unverified items on each face of the line for the right panel (#5115)', async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 2, bad: 2 });
+
+      // A verified item leaves its face's count, whichever way it was voted.
+      const voteState = TestBed.inject(VoteStateService);
+      voteState.setOptimisticVerified(2, true);
+      voteState.setOptimisticVerified(4, true);
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 1, bad: 1 });
+
+      // The counts follow the line, with no re-read of the votes.
+      sortState.setSortResults(ranking, 0.3, lineBalance('unchecked'));
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 2, bad: 0 });
+
+      // And reach the panel: the Find piles carry no presumptions to count.
+      await settleZoneless(fixture);
+      const text = (fixture.nativeElement as HTMLElement).querySelector('vt-right-panel')!.textContent!;
+      expect(text).toContain('2 Unverified Good');
+      expect(text).toContain('0 Unverified Bad');
+    });
+
+    it('hand Browse / To Dataset / Export nothing before a scoring pass (#5115)', () => {
+      expect(view().unverifiedGoodIds()).toEqual([]);
+      expect(fixture.componentInstance.unverifiedCounts()).toEqual({ good: 0, bad: 0 });
+    });
+
     it.each(BALANCE_STATES)('hand Browse / To Dataset / Export the positives above the line when %s', (status) => {
       sortState.setSortResults(ranking, 0.5, lineBalance(status));
       expect(view().unverifiedGoodIds()).toEqual([1, 2]);
@@ -884,7 +1103,6 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(text).not.toContain('Checked');
       // Find tests the balance Train set: it offers no spot check to set one (#4317).
       expect(row.querySelector('.balance-check-btn')).toBeNull();
-      expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-stage')).toBeNull();
     });
 
     it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
@@ -919,7 +1137,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       const el = fixture.nativeElement as HTMLElement;
       const hint = () => el.querySelector('vt-line-test-stage vt-toasty-hint');
       expect(hint()?.getAttribute('hintId')).toBe('test-vote');
-      expect(hint()?.textContent).toContain('picks from both sides of your detector');
+      expect(hint()?.textContent).toContain('line with picks from both sides of it');
 
       // The first pick voted: the explanation has done its job.
       fixture.componentInstance.lineTest.response.set(
@@ -931,7 +1149,10 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       fixture.componentInstance.lineTest.response.set(wireLineTest(wireTest({ phase: 'done', picks: [] })));
       await settleZoneless(fixture);
       expect(hint()?.getAttribute('hintId')).toBe('test-done');
-      expect(hint()?.textContent).toContain('Read the verdict on the right');
+      expect(hint()?.textContent).toContain('Click Move to AutoFind');
+      // The verdict and its exits are the stage's now (#5100), not the result pane's.
+      expect(el.querySelector('vt-line-test-stage .verdict-card .exits')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-result .exits')).toBeNull();
     });
 
     it("has Toasty explain the Review tab until an item is checked (#4807)", async () => {
@@ -953,7 +1174,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(fixture.componentInstance.reviewHint()).toBe(false);
     });
 
-    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // #4555: Tune opens on Autopilot, which has no centre panel, so the one
     // Review makes is not the one the view opened with; each must be started
     // (its settings, the shortcuts), or Review's keys do nothing.
     it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {
@@ -971,6 +1192,24 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       await flushInit(ranking.map(({ id }) => id));
       expect(start).toHaveBeenCalledTimes(1);
     });
+
+    // A view left within that tick used to start its last panel anyway: the
+    // shortcuts listened on with no panel to stop them, and every later
+    // spec in the worker met a stray ArrowRight handler that blurred focus.
+    it('starts no centre panel once the view is gone', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      start.mockClear();
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      fixture.destroy();
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(start).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -984,7 +1223,7 @@ describe('FindViewComponent folding the side panels (#4673)', () => {
     for (let i = 0; i < 3; i++) {
       await settleResource();
       httpMock.match('/api/medias/ids').forEach((req) => req.flush([{ id: 1, media_type: 'image' }]));
-      httpMock.match('/api/votes').forEach((req) =>
+      httpMock.match('/api/votes?scope=verified').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock

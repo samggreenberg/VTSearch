@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Experimentation's "Up and Up": what the work since the first rule bought, in the score the user sets (#4668, #4835).
+"""Experimentation's "Up and Up": what the work since the first rule bought, in the score the user sets (#4668, #4835, #5171).
 
 Run from the repo root, once both studies' curve CSVs are committed:
 
@@ -7,32 +7,31 @@ Run from the repo root, once both studies' curve CSVs are committed:
 
 The owner wanted a slide whose takeaway is "the score they care about improved over and over" (2026-10-08). #4668
 ran the F-beta era as a cumulative build-up on one set of sessions (COCO Better, the user's pool at 1%, 144 cells x 5
-seeds a preset), each change added to the one before, and the owner picked the slide that draws two of its steps at
-beta 1/4:
+seeds a preset), each change added to the one before. The slide compares its two ends, the old mechanics against the
+new (owner, #5171): cross-calibration in red, the losing arm, and today's app in green, the measured win. The rung
+between them, the labels line at the preset (b2), was drawn too until the owner cut it: one step of a build-up read
+as a third contender.
 
-- the labels line at the preset (#4452), which lifts the second half of the session;
-- today's app, which since #4603 includes the text query's own line, lifting the opening, where no detector is on
-  screen yet.
-
-Cross-calibration (rung b1) and the labels line (b2) are #4668's, measured 2026-10-08. Today's app moves every week,
-so its line is the same rung re-run on today's app (#4835, `analyze_upandup_4835.py`): on 2026-10-08 it handed over
-from the text query near vote 23 and dipped; the query's hold (#4736) keeps the text query's set on screen to 30.
+Cross-calibration (rung b1) is #4668's, measured 2026-10-08. Today's app moves every week, so its line is the same
+rung re-run on today's app (#4835, `analyze_upandup_4835.py`): on 2026-10-08 it handed over from the text query near
+vote 23 and dipped; the query's hold (#4736) keeps the text query's set on screen to 30.
 
 One panel per preset, the objective (F-beta of the withheld half above the line the app shows) over votes, filled
 from the text query's set until a detector shows. The x axis runs from the text query through every 25 votes to
-150, then to the session's end after the spot check, "∞", as Photo Finish's does (owner, #4835). b1 and b2 ran no
-check, so their lines stop at 150. One slide, six pages (owner, #4884: the three radios are frames of one slide).
+150, then to the session's end after the spot check, "∞", as Photo Finish's does (owner, #4835). b1 ran no
+check, so its line stops at 150. One slide, five pages (owner, #4884: the three radios are frames of one slide).
 At beta 1/4, a build, each page adding a line:
 
-- a: cross-calibration (rung b1), grey;
-- b: plus the line at F-beta's peak (b2, the labels line), dark;
-- c: today's app, the deck's blue;
-- d: the text query's own sort cut where an oracle would cut it, dashed: the best F-beta any cut of that ranking
-  reaches, which no session sees (owner, #4884: not a fair comparison, since the sessions' lines got no oracle,
-  but it is unfair against us). It takes no votes, so it is flat, and it stops where the sessions' votes do.
+- a: cross-calibration (rung b1), red;
+- b: today's app, green;
+- c: the text query's own sort cut where an oracle would cut it, grey and dashed: the best F-beta any cut of that
+  ranking reaches, which no session sees (owner, #4884: not a fair comparison, since the sessions' lines got no
+  oracle, but it is unfair against us). It takes no votes, so it is flat, and it stops where the sessions' votes do.
 
-Then the beta 1 and beta 4 panels whole, one page each. Every session line carries its own click-0 dot: b1 and b2
-start at the text query's old line (the mixture midpoint), today's app at its own.
+Then the beta 1 and beta 4 panels whole, one page each (owner, #5171). Every session line carries its own click-0
+dot: b1 starts at the text query's old line (the mixture midpoint), today's app at its own. The oracle is the same
+ranking as that old line, so the gap between them at click 0 is calibration alone: the midpoint let through a median
+of about 4,250 photos at precision 0.01 (#4668's `returned_curve.csv`).
 
 The oracle is the State of the App review of 2026-10-16's (`ORACLE_SUMMARY`): its text sort's `oracle_fbeta`, on
 the same bench at every class and size, 45 seeds a preset. The sort is the typed query's embedding against the
@@ -72,15 +71,15 @@ ORACLE_EXPECT = {"b025": 0.557, "b1": 0.449, "b4": 0.564}
 PRESETS: dict[str, str] = {"b025": "¼", "b1": "1", "b4": "4"}
 #: The review's betas, as its table writes them.
 SUMMARY_BETA = {"b025": "0.25", "b1": "1.0", "b4": "4.0"}
+#: The deck's palette (`make-calib-figs.py`, `slides/STYLE.md`): red the losing arm, green a measured win; the
+#: oracle is a reference rather than an arm, so it takes no hue.
+RED, GREEN, GREY = "#b91c1c", "#0d8a5f", "#8a929e"
 #: (line, label, colour, line width, bold label), in build order. ``today`` is `TODAY_CSV`'s, ``oracle`` is
-#: `ORACLE_SUMMARY`'s; the rest are `BUILDUP_CSV` rungs. b2 is named for what the room met in section III, the
-#: line at expected F-beta's peak, not for what it is fitted from (owner, #4884: "what does 'the labels line'
-#: mean?").
+#: `ORACLE_SUMMARY`'s, ``b1`` is a `BUILDUP_CSV` rung. Each session line's name is in its own hue.
 LINES: tuple[tuple[str, str, str, float, bool], ...] = (
-    ("b1", "cross-calibration", "#8a929e", 2.6, False),
-    ("b2", "+ line at Fβ's peak", "#3d4450", 2.8, False),
-    ("today", "today's app", "#2F6DB5", 3.6, True),
-    ("oracle", "text query, oracle's cut", INK, 2.2, False),
+    ("b1", "cross-calibration", RED, 2.8, False),
+    ("today", "today's app", GREEN, 3.6, True),
+    ("oracle", "text query, oracle's cut", GREY, 2.4, False),
 )
 #: The reference, not a session: dashed, and drawn under the sessions' lines.
 DASHED = {"oracle"}
@@ -89,10 +88,9 @@ DASHED = {"oracle"}
 PAGES: tuple[tuple[str, int, str], ...] = (
     ("b025", 1, "up-and-up.build1"),
     ("b025", 2, "up-and-up.build2"),
-    ("b025", 3, "up-and-up.build3"),
-    ("b025", 4, "up-and-up"),
-    ("b1", 4, "up-and-up-b1"),
-    ("b4", 4, "up-and-up-b4"),
+    ("b025", 3, "up-and-up"),
+    ("b1", 3, "up-and-up-b1"),
+    ("b4", 3, "up-and-up-b4"),
 )
 YLIM = (0.0, 0.7)
 #: The last vote the sessions ran to, and where the end after the check is drawn: past it, as on Photo Finish
@@ -151,7 +149,7 @@ def read_curves(preset: str) -> dict[str, Curve]:
     pts: dict[str, list[tuple[int, float]]] = {}
     with _need(BUILDUP_CSV).open() as f:
         for row in csv.DictReader(f):
-            if row["preset"] == preset and row["rung"] in ("b1", "b2"):
+            if row["preset"] == preset and row["rung"] == "b1":
                 pts.setdefault(row["rung"], []).append((int(row["t"]), float(row["mean"])))
     end = None
     with _need(TODAY_CSV).open() as f:
@@ -221,8 +219,8 @@ def _figure(curves: dict[str, Curve], beta_name: str, shown: int) -> Figure:
         else:
             ax.plot(xs, ys, color=colour, lw=lw, solid_capstyle="round", zorder=3 + i)
             ax.plot([0], [float(y[0])], marker="o", color=colour, markersize=9, zorder=6, clip_on=False)
-        ax.text(ends[i][0] + 4, lab[i], label, color=colour if bold else INK, fontweight="bold" if bold else "normal",
-                ha="left", va="center", clip_on=False)  # fmt: skip
+        ax.text(ends[i][0] + 4, lab[i], label, color=INK if name in DASHED else colour,
+                fontweight="bold" if bold else "normal", ha="left", va="center", clip_on=False)  # fmt: skip
     return fig
 
 

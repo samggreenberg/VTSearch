@@ -259,7 +259,7 @@ drawn*, not *who was driving*, and the two come apart — a user can pick the
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `check`, `test`, `unknown` | Which UI flow drove the vote (`check` is a spot-check pick, `test` a Test-mode pick that never trains). |
+| `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `check`, `test`, `unknown` | Which UI flow drove the vote (`check` is a spot-check pick, `test` a Tune test pick that never trains). |
 | `phase` | `good`, `bad`, `more`, `hard`, `new` | Autopilot phase; ignored unless `flow` is `autopilot`. |
 | `select_mode` | `top`, `hard`, `new` | How the item was drawn off the ranking. |
 | `sort_kind` | `learned`, `text`, `load` | Which ranking the user was looking at. |
@@ -376,10 +376,11 @@ ranking** on datasets past 20 k items. Page until `has_more` is `false` (or
 until `offset + results.length == total`) when you need the whole order.
 
 The full ranking is held server-side in a process-global LRU cache of the 8
-most recent sorts, holding at most 2 000 000 rows across them
-(`SORT_CACHE_MAX_ROWS`). The newest sort always stays, so on a dataset of a
-million items or more an older sort's token can expire after one or two newer
-sorts. Nothing is persisted: it holds only the lightweight
+most recent sorts, holding at most 8 000 000 rows across them
+(`SORT_CACHE_MAX_ROWS`). The newest sort always stays. On a dataset of up to a
+million items all eight are kept; past that fewer are (four on two million
+items, only the newest on eight million or more), so an older sort's token can
+expire after fewer newer sorts. Nothing is persisted: it holds only the lightweight
 `{id, score}` / `{id, similarity}` rows, never embeddings or model weights.
 
 ### Sort page
@@ -413,7 +414,7 @@ X-Dataset-Id: <the face dataset's id>
 ```
 
 One window of a ranking of face crops **grouped by the photo each face was cut
-from** (issue #4751): the server half of Train and Test's **Collapse to photos**.
+from** (issue #4751): the server half of Train and Tune's **Collapse to photos**.
 The photo is found as an item of the Image dataset the same multi-dataset
 import produced, as [`GET /api/medias/<id>/source`](#resolve-a-derived-items-source)
 finds it. Takes the `sort_token` of any sort, including
@@ -889,6 +890,15 @@ can exceed `good.length` / `bad.length`. They fall back to the session vote
 counts when no detector context is active. `good_region_boxes` maps media id
 (as a string) to the normalised `[x0, y0, x1, y1]` box of a good vote cast by
 drawing on the image; only good votes that carry a box appear.
+
+**Query:**
+- `?scope=all` (default): every vote the pair holds.
+- `?scope=verified`: only the `verified` ids. `good`, `bad`, `click_times`,
+  `learned_scores` and `good_region_boxes` are limited to them; the labelset
+  counts are unchanged. In Find every other item carries the detector's
+  presumed label, which the client places by the frozen ranking and the
+  cutoff, so the full scope there is a megabyte or more on a large dataset.
+  Find's Review tab polls this scope (#5115). Any other value is a 422.
 
 ### Clear votes
 

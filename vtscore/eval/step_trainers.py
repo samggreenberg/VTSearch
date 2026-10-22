@@ -125,8 +125,9 @@ def _labelset_error_costs(
 ) -> list[float]:
     """Weighted FPR/FNR of **every** recent model on the current labelled set.
 
-    Feeds the Smart indicator.  Reproduces ``labeling_progress._eval_cached_models``
-    /``_score_step`` - and shares their arithmetic, via
+    Feeds Smart's ``cost`` arm, the app's light before #5134 (the app reads
+    :func:`_labelset_window_readings`' ``fbeta_best`` since).  It reproduced
+    ``labeling_progress._eval_cached_models`` / ``_score_step`` - and shared their arithmetic, via
     :func:`~vtscore.training.thresholds.weighted_error_cost`, so only the input
     plumbing differs: every model in the window is re-scored against the
     *current* labelset — the only ground truth the app has — with its own cached
@@ -191,6 +192,98 @@ def _labelset_error_costs(
     return costs
 
 
+#: What :func:`_labelset_window_readings` reads off a re-scored window of models (#5134):
+#: ``fbeta_best`` is the app's Smart, the rest the A/B's other units.
+WINDOW_READINGS: tuple[str, ...] = ("fbeta_best", "ap", "fbeta")
+
+
+def _labelset_window_readings(
+    model_steps: list[tuple[Any, float]],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    beta: float | None,
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+) -> dict[str, list[float]]:
+    """The Smart window (#5134): each recent model re-scored on the current votes, in the objective's units.
+
+    Feeds the Smart indicator.  Reproduces ``labeling_progress._eval_cached_models``
+    / ``_score_step``: every model in the window is re-scored against the
+    *current* labelset - the only ground truth the app has - in the arm's own
+    scoring geometry (issue #3757; see :func:`_labelset_error_costs`), and read
+    as ``fbeta_best``, the best F-*beta* any cut through its scores reaches
+    (:func:`~vtscore.detectors.cost_trend.best_fbeta`), the app's point.  Beside
+    it, per model and oldest first, the A/B's other units: ``ap`` (average
+    precision) and ``fbeta`` (F-*beta* at the model's own Smart cut, the one the
+    ``cost`` arm prices at).  None reads the served line.  *beta* is the run's
+    balance, F1 with none (:func:`~vtscore.detectors.cost_trend.smart_beta`).
+    Empty lists with either class empty, which leaves Smart on its "not enough
+    points" branch as the app's empty eval set does.
+
+    Deliberately *not* the held-out test split: those labels must never reach
+    the vote order.
+    """
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta, fbeta_at_cut, smart_beta  # noqa: PLC0415
+
+    out: dict[str, list[float]] = {name: [] for name in WINDOW_READINGS}
+    ids = list(good_votes) + list(bad_votes)
+    if not model_steps or not good_votes or not bad_votes:
+        return out
+    labels = np.array([1.0] * len(good_votes) + [0.0] * len(bad_votes))
+    b = smart_beta(beta)
+
+    def _read(scores: np.ndarray, kept: np.ndarray, cut: float) -> None:
+        out["fbeta_best"].append(best_fbeta(scores, kept, b))
+        out["ap"].append(average_precision(scores, kept))
+        out["fbeta"].append(fbeta_at_cut(scores, kept, cut, b))
+
+    if style_obj is not None or region_aware:
+        labelled = {cid: clips_dict[cid] for cid in ids if cid in clips_dict}
+        for step, threshold in model_steps:
+            assert step.torch_model is not None
+            scored_ids, scored = score_sim_set_with_model(
+                step.torch_model, region_aware, labelled, None, sorted(labelled), style_obj
+            )
+            by_id = dict(zip(scored_ids, scored, strict=True))
+            mask = np.array([cid in by_id for cid in ids])
+            scores = np.array([by_id[cid] for cid in ids if cid in by_id], dtype=np.float64)
+            _read(scores, labels[mask], threshold)
+        return out
+
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in ids])
+    for step, threshold in model_steps:
+        _read(np.asarray(step.predict(embs), dtype=np.float64).ravel(), labels, threshold)
+    return out
+
+
+#: The Smart candidates read once per retrain off its calibration folds (#5134).
+HELDOUT_READINGS: tuple[str, ...] = ("heldout_ap", "heldout_fbeta")
+
+
+def _heldout_readings(fold_orderings: Any, beta: float | None) -> dict[str, float]:
+    """#5134's held-out candidates: AP and best F-*beta* of the votes' held-out scores at this retrain.
+
+    The calibration folds' held-out scores of the votes, pooled as the labels
+    line's class model pools them (``class_score_model``): what the head does
+    on votes it did not train on.  One value per retrain, so a trend over them
+    is a history, not a re-scored window.  NaN with no folds or either class
+    missing; *beta* F1 with none, as Smart's.
+    """
+    from vtscore.detectors.cost_trend import average_precision, best_fbeta, smart_beta  # noqa: PLC0415
+
+    nan = float("nan")
+    if not fold_orderings:
+        return {"heldout_ap": nan, "heldout_fbeta": nan}
+    scores = np.concatenate([np.asarray(sc, dtype=np.float64).ravel() for sc, _ in fold_orderings])
+    labels = np.concatenate([np.asarray(lb, dtype=np.float64).ravel() for _, lb in fold_orderings])
+    return {
+        "heldout_ap": average_precision(scores, labels),
+        "heldout_fbeta": best_fbeta(scores, labels, smart_beta(beta)),
+    }
+
+
 def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
     """Build a coverage atlas over *embeddings* for the autopilot New phase.
 
@@ -237,19 +330,21 @@ def _train_and_calibrate(
     *haystack_X* (an ``(N, D)`` matrix of the simulation set's whole-image
     vectors) switches the ``gp_*`` path to the **rank-transferred** cut
     (:func:`_rank_transferred_threshold`); ``None`` leaves every path on its
-    raw-score rule.  It is ignored by the app path, whose shipped estimator
+    raw-score rule.  It is ignored by the app path, whose fold-anchored cut
     already transfers by rank.
 
     *fold_anchored* (``gp_*`` path only, issue #3959) makes the GP path hand
     back its own calibration fold models and held-out orderings, drawn on the
-    app's splits, so the shipped fold-anchored estimator can run on the GP's
+    app's splits, so the app's fold-anchored estimator can run on the GP's
     posteriors (see :func:`_gp_train_and_calibrate`).
 
     *head* selects the head on both production paths (see :data:`HEADS`):
-    ``"linear_svm"`` (the default, :data:`PRODUCTION_HEAD`) trains the head the
-    live detector has, ``"linear"`` the logistic head it replaced, ``"mlp"`` the
-    legacy auto-sized hidden layer.  It is ignored by the standalone SVM path,
-    which fits its own estimator rather than a head.
+    ``"linear_svm_prior"`` (the default, :data:`PRODUCTION_HEAD`) trains the head
+    the live detector has, the linear SVM started from the Goods' centroid;
+    ``"linear_svm"`` the plain SVM, ``"linear"`` the logistic head the SVM
+    replaced and ``"mlp"`` the legacy auto-sized hidden layer are named arms.
+    It is ignored by the standalone SVM path, which fits its own estimator
+    rather than a head.
 
     Dispatches on *trainer*: :data:`~vtscore.eval.step_model.APP_TRAINER`
     (``"app"``) runs the app's own pipeline (see
@@ -348,14 +443,16 @@ def _app_train_and_calibrate(
 
     Numerically identical to the pre-trainer harness at ``head="mlp"``.
 
-    At ``head="linear_svm"`` (the default, :data:`PRODUCTION_HEAD`) this trains
-    the live detector's head: production pins the linear SVM on every fit (see
-    ``vtscore.training.mlp.LINEAR_SVM_HEAD``), so the reported thresholds and
-    costs are the shipped detector's.  ``head="linear"`` (the logistic head the
-    SVM replaced) and ``head="mlp"`` (the small-MLP candidate #2781 measured)
-    are the named legacy arms.  Everything *around* the head mirrors the
-    production ``_train_and_score_xy`` / ``train_and_threshold`` pipeline
-    whichever is chosen:
+    At ``head="linear_svm_prior"`` (the default, :data:`PRODUCTION_HEAD`) this
+    trains the live detector's head: production pins the linear SVM started
+    from the Goods' centroid on every fit (see
+    ``vtscore.training.mlp.LINEAR_SVM_PRIOR_HEAD``), so the reported thresholds
+    and costs are the shipped detector's.  ``head="linear_svm"`` (the plain
+    SVM), ``head="linear"`` (the logistic head the SVM replaced) and
+    ``head="mlp"`` (the small-MLP candidate #2781 measured) are named arms.
+    Everything *around* the head mirrors the production
+    ``_train_and_score_xy`` / ``train_and_threshold`` pipeline whichever is
+    chosen:
 
     Good votes region-pool their ground-truth box when *region_voting* is on
     (and the media supports it); Bad votes always train on the whole-image
@@ -410,8 +507,10 @@ def _app_train_and_calibrate(
     hidden_dim = resolve_hidden_dim(head, n_labels)
     t_xcal = time.monotonic()
     # The folds' orderings *and* models ride out in ``details`` unconditionally:
-    # the shipped safe threshold anchors on the fold models' held-out scores, so
-    # they are an input to the baseline arm, not study-only extras.
+    # the app's line is drawn from them (the labels' line from the held-out
+    # orderings; its fold-anchored fallback from each fold model's haystack
+    # scores, anchored by those orderings), so they are an input to the
+    # baseline arm, not study-only extras.
     holdouts: list[list[int]] = []
     folds = calibration_folds(
         X_list,
@@ -480,10 +579,22 @@ def _centroid_step(
     :func:`~vtscore.detectors.centroid_head.centroid_cut`'s rule and balance
     (#4732); ``None`` is the app's rule.
     """
-    import torch  # noqa: PLC0415
-
     from vtscore.detectors.centroid_head import fit_centroid_head  # noqa: PLC0415
 
+    goods = _centroid_goods(good_votes, clips_dict, target_category, region_voting=region_voting, style_obj=style_obj)
+    head, _threshold = fit_centroid_head(goods, lambda h: score(_head_step(h)), rule=line_rule, beta=line_beta)
+    return _head_step(head)
+
+
+def _centroid_goods(
+    good_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    region_voting: bool,
+    style_obj: Any = None,
+) -> list[np.ndarray]:
+    """The Good vectors :func:`_centroid_step`'s centroid is the mean of, in *good_votes*' order."""
     goods: list[np.ndarray] = []
     for vid in good_votes:
         if style_obj is not None:
@@ -491,17 +602,52 @@ def _centroid_step(
             goods.append(np.asarray(style_obj.good_vec(clips_dict[vid], box), dtype=np.float32))
         else:
             goods.append(np.asarray(good_training_vec(clips_dict[vid], target_category, region_voting)))
+    return goods
 
-    def _as_step(head: Any) -> StepModel:
-        def predict(X_test: Any) -> np.ndarray:
-            with torch.no_grad():
-                t = torch.tensor(np.asarray(X_test), dtype=torch.float32)
-                return torch.sigmoid(head(t)).squeeze(1).cpu().numpy()
 
-        return StepModel(predict=predict, torch_model=head, backend="centroid", device="cpu")
+def _head_step(head: Any) -> StepModel:
+    """A centroid head (``Linear(D, 1)``) as a step: ``sigmoid(head(x))`` on vectors, the head for a style's pool."""
+    import torch  # noqa: PLC0415
 
-    head, _threshold = fit_centroid_head(goods, lambda h: score(_as_step(h)), rule=line_rule, beta=line_beta)
-    return _as_step(head)
+    def predict(X_test: Any) -> np.ndarray:
+        with torch.no_grad():
+            t = torch.tensor(np.asarray(X_test), dtype=torch.float32)
+            return torch.sigmoid(head(t)).squeeze(1).cpu().numpy()
+
+    return StepModel(predict=predict, torch_model=head, backend="centroid", device="cpu")
+
+
+def _centroid_cut_step(probe_scores: dict[int, float], cut: float) -> StepModel:
+    """A centroid head cut at *cut*, scored by id off its probe's scores (#4800).
+
+    *probe_scores* are a unit-scale, uncut centroid head's scores per media
+    (``sigmoid(cosine)`` of its best row, as
+    :func:`~vtscore.detectors.centroid_head.fit_centroid` probes them).  The
+    head :func:`~vtscore.detectors.centroid_head.centroid_head` builds at *cut*
+    scores ``sigmoid(scale * (cosine - cut))`` on that same row, so each media's
+    score is read off its probe score with no second pass over its rows, as
+    :func:`_query_step` reads the typed query's.  A score outside ``(0, 1)``
+    (the scorer's sentinel for a media it could not score) is kept as it is.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_LOGIT_SCALE  # noqa: PLC0415
+
+    ids = list(probe_scores)
+    p = np.asarray([probe_scores[cid] for cid in ids], dtype=np.float64)
+    ok = (p > 0.0) & (p < 1.0)
+    cos = np.zeros_like(p)
+    cos[ok] = np.log(p[ok]) - np.log1p(-p[ok])
+    scores = np.where(ok, 1.0 / (1.0 + np.exp(-CENTROID_LOGIT_SCALE * (cos - float(cut)))), p)
+
+    def predict(_X: Any) -> np.ndarray:
+        raise RuntimeError("a priced centroid's step scores media by id (StepModel.id_scores), not by vector")
+
+    return StepModel(
+        predict=predict,
+        torch_model=None,
+        backend="centroid",
+        device="cpu",
+        id_scores={cid: float(sc) for cid, sc in zip(ids, scores, strict=True)},
+    )
 
 
 def _query_step(
@@ -635,8 +781,9 @@ def _style_train_and_calibrate(
         details["neg_score_rows"] = [score_rows_by_group[("b", vid)] for vid in bad_votes]
     else:
         # Same fold work as the metrics branch, minus the study extras: the
-        # shipped safe threshold anchors on the fold models, so they ride out
-        # in ``details`` on every path (see :func:`_safe_threshold_for_step`).
+        # app's line is drawn from the folds (the labels' line and its
+        # fold-anchored fallback), so they ride out in ``details`` on every
+        # path (see :func:`_safe_threshold_for_step`).
         holdouts: list[list[int]] = []
         folds = calibration_folds(
             X_list,
@@ -749,9 +896,9 @@ def _calibrate_with_details(
             details["fold_count_data"] = {
                 "orderings": orderings,
                 # The **untrimmed** fold models, so the #3116 anchored arm can
-                # re-fit production's rule at every K.  `details["fold_models"]`
+                # re-fit the fold-anchored rule at every K.  `details["fold_models"]`
                 # is deliberately cut to the live count so nothing downstream
-                # can accidentally widen the shipped threshold's own fit.
+                # can accidentally widen the live line's own fit.
                 "models": list(fold_models),
                 "seconds": fold_seconds,
                 # Everything in the calibration wall clock that is *not* a fold
@@ -954,7 +1101,7 @@ def _gp_train_and_calibrate(
     sizes, same stratified draws off ``RandomState(calibration_seed)``),
     with a GP fitted in place of the torch head on each fold.  The fold models
     and their held-out orderings go back in *details* under the keys the app
-    path uses, so the shipped fold-anchored estimator
+    path uses, so the app's fold-anchored estimator
     (:func:`vtscore.eval.voting_iterations._safe_threshold_for_step`) fits each
     fold's mixture on **that fold GP's own** haystack scores, anchored by its
     held-out votes, and carries the cut to the final GP by quantile.  No raw

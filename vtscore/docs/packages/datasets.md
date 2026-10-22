@@ -171,6 +171,11 @@ re-export.
 serialised form compact for legacy consumers that only look at
 `md5` and `label`.
 
+A label import path reads an entry's box through `imported_region_box(label, raw)`
+(same module). It returns the box as a float 4-tuple only for a `"good"` label
+whose value is four numbers, and `None` for anything else, so a hand-edited file
+degrades to an image-level label rather than failing the import.
+
 ### `LabelSet`
 
 `vtscore/datasets/labelset.py`: `LabelSet(elements=None, *,
@@ -233,6 +238,11 @@ mutation as the result. **Folder and pickle loaders never call an
 embedder**: items without a pre-computed vector leave unembedded, and
 the framework embed stage
 (`vtscore/datasets/stages/embedding.py::embed_missing`) fills them in.
+Before it embeds anything, an import (that stage, and the CLI's import
+embed pass) checks every vector filed under a registered embedder's name
+against the width that embedder declares, so a plugin importer's own
+`{name: vector}` entries are held to the same rule as the folder and
+`.npz` paths (`MismatchedVectorError` on a mismatch).
 
 ### Folder loader
 
@@ -254,7 +264,7 @@ media), `on_progress`, and hooks that short-circuit work the caller has
 already done (keys are relative paths or basenames; an ambiguous
 basename raises `ValueError`):
 
-- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them.
+- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename; `content_embedder_name` names the embedder that produced them. Each vector is validated on adoption (float32, 1-D, finite), and one filed under a registered embedder's name must have the width that embedder declares, or the load raises `MismatchedVectorError`.
 - `content_md5s: dict[str, str]`: reuse a pre-computed MD5.
 - `custom_metadata_map: dict[str, dict[str, Any]]`: attach `custom_metadata`; nested `"md5"` and `"embedding"` keys take priority over both the above.
 
@@ -310,7 +320,10 @@ fresh. `converter_name` loads the source type and converts it (cached
 under a separate key). The package root also re-exports the raw
 downloaders behind some demos (`download_esc50`, `download_cifar10`,
 `download_ucf101_subset`, `download_20newsgroups`) and the generic
-`download_file_with_progress` (`vtscore/datasets/downloader/`). Unknown names raise `ValueError`. The actual download / embedding is delegated to each
+`download_file_with_progress` (`vtscore/datasets/downloader/`), which
+resumes a dropped transfer and, for a demo URL in the downloader's mirror
+table (`_MIRRORS` in `downloader/core.py`), falls back to its mirrors when the
+canonical host fails. Unknown names raise `ValueError`. The actual download / embedding is delegated to each
 `MediaType.load_demo_source` implementation, so adding a new demo
 dataset is a media-tier concern.
 
@@ -510,9 +523,10 @@ whose source cannot be named is a group of its own), and raises
 `SourceNotLoadedError` naming a sibling that is registered but not loaded.
 Access-control helpers
 (`can_user_access`, `is_owner`, `list_datasets_for_user`,
-`set_readers`) implement multi-user visibility rules; library-only
-consumers without users can ignore them and treat every dataset as
-visible.
+`update_readers`, and its `(ok, err)` form `set_readers`) implement
+multi-user visibility rules; library-only consumers without users can
+ignore them and treat every dataset as visible. `update_readers` returns
+a `ReadersUpdate` (see [security.md](security.md#readers-updates)).
 
 ---
 
@@ -542,8 +556,8 @@ limit is re-read on every `acquire()`) that drive dataset loading:
 
 | Gate              | Limit source                                              | Phase covered                                       |
 |-------------------|-----------------------------------------------------------|-----------------------------------------------------|
-| `_download_gate`  | `CoreConfig.max_concurrent_dataset_downloads`             | Importer's download / import step (bandwidth-bound) |
-| `_embed_gate`     | `CoreConfig.max_concurrent_dataset_embeddings`            | Embedding + post-load (CPU/GPU/RAM-bound)           |
+| `_download_gate`  | `get_setting("max_concurrent_dataset_downloads")`         | Importer's download / import step (bandwidth-bound) |
+| `_embed_gate`     | `get_setting("max_concurrent_dataset_embeddings")`        | Embedding + post-load (CPU/GPU/RAM-bound)           |
 
 A load acquires the download gate first, switches to the embed gate
 on the importer's first `"embedding"` progress event, and runs
@@ -551,7 +565,7 @@ post-load steps (clipping, dedup, coverage atlas)
 under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
 gates directly; they're driven by the load orchestrator and read
-their limits from `CoreConfig`.
+their limits with `vtscore.config.get_setting`.
 
 **Several datasets from one import** (`load_multi.py`). A multi-dataset
 load runs the importer's acquire phase once, under the download gate,
@@ -565,9 +579,10 @@ its own and lands as its own registry entry with its own
 **When an import ends.** `_run_origin_load_in_background(...,
 on_finished=None)` calls *on_finished* once with a frozen
 `DatasetImported(outcome, dataset_id, name, user, media_type, n_media,
-origin, error)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
-is not reported). The app routes it to the functions an admin names with
-`--on-dataset-imported`.
+origin, error, notify)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
+is not reported). The pipeline leaves `notify` at `True`; the app sets it from
+the user's `import_alerts_enabled` setting and routes the event to the
+functions an admin names with `--on-dataset-imported`.
 
 ---
 

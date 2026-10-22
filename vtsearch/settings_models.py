@@ -335,9 +335,9 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
-    # Lock Train and Test to their **Autopilot** tabs (#4666).  An operator who
+    # Lock Train and Tune to their **Autopilot** tabs (#4666).  An operator who
     # wants users on the guided flow only can drop Train's Manual tab and
-    # Test's Review tab; the tab bars then do not render at all, so the left
+    # Tune's Review tab; the tab bars then do not render at all, so the left
     # pane is just the Autopilot panel.  A UI simplification, not a permission
     # boundary: the backend serves the same routes either way.  Set with the
     # ``--autopilot-only`` CLI flag / ``VTSEARCH_AUTOPILOT_ONLY`` env var
@@ -465,7 +465,7 @@ class UserSettings(BaseModel):
     hide_all_hints: bool = False
     hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
-    # Whether Train and Test open with each side panel folded to a thin
+    # Whether Train and Tune open with each side panel folded to a thin
     # strip (#4673). The left folds only on the Autopilot tab, where the
     # centre already serves every pick; Manual and Review keep their list.
     # The right folds on every tab. Both default to hidden, leaving the
@@ -518,6 +518,20 @@ class UserSettings(BaseModel):
     # detected nothing (no AutoFind detectors, or none for the media type)
     # keeps its dataset, because there the import was the whole point.
     autofind_cli_delete_dataset: bool = False
+    # Whether a web AutoFind run sends its results to ``autofind_exporter``
+    # (#5170). Off pauses the export without forgetting which exporter is
+    # picked or how it is configured, so a user can mute an emailing exporter
+    # and turn it back on later. Only the web app reads it: a command-line
+    # AutoFind still falls back to ``autofind_exporter``, since there the
+    # export is where the run's results go.
+    autofind_export_enabled: bool = True
+    # Whether this user wants the server to alert them when an import they
+    # started finishes (#5170). The alerts are the admin's
+    # ``--on-dataset-imported`` hooks; this reaches them as
+    # ``DatasetImported.notify`` and the hooks decide what to do with it (see
+    # ``vtsearch.import_hooks``). The Settings modal shows it only on a server
+    # with hooks configured.
+    import_alerts_enabled: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

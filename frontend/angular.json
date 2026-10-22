@@ -12,7 +12,7 @@
       },
       "root": "",
       "sourceRoot": "src",
-      "prefix": "app",
+      "prefix": "vt",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
@@ -75,7 +75,7 @@
                 //
                 // Still eager on purpose: @angular/cdk a11y (~9kB), reached
                 // via `vt-modal` inside the always-rendered `vt-dialog-host`.
-                // Dropping it would cost the focus trap on all ~24 dialogs,
+                // Dropping it would cost the focus trap on all 23 dialogs,
                 // and deferring the dialog host would put a chunk fetch in
                 // front of every confirm()/prompt().
                 //
@@ -101,19 +101,13 @@
             },
             "test": {
               // Build configuration used only by the unit-test target. Mirrors
-              // `development` but pins its OWN polyfills, decoupled from the base
-              // production build (which dropped zone.js entirely at the zoneless flip).
-              //
-              // The polyfills array is now EMPTY: Phase 5 finished migrating
-              // every fixture-creating spec to the zoneless `TestBed`
-              // (`provideZonelessChangeDetection()` via the `provideZoneless()`
-              // helper), so no spec relies on zone-based change detection or
-              // needs `NgZone` from the default TestBed any more. The
-              // fakeAsync/tick bridge (zone.js/testing + the Angular
-              // vitest-patch plugin) was already removed earlier in Phase 5 —
-              // every spec uses native async + Vitest fake timers. zone.js is
-              // gone from the app end to end (prod build, test build, and
-              // package.json).
+              // `development` and sets its OWN polyfills, decoupled from the base
+              // build's. The array is empty: every fixture-creating spec runs on
+              // the zoneless `TestBed` (`provideZonelessChangeDetection()` via the
+              // `provideZoneless()` helper), so no spec relies on zone-based change
+              // detection or needs `NgZone`, and specs use native async + Vitest
+              // fake timers rather than fakeAsync/tick. zone.js is absent from the
+              // app end to end (prod build, test build, and package.json).
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
@@ -144,14 +138,12 @@
           "builder": "@angular/build:unit-test",
           "options": {
             "tsConfig": "tsconfig.spec.json",
-            // Point at a dedicated `test` build configuration (below) instead of
+            // Point at the dedicated `test` build configuration (above) instead of
             // `development`, so the test polyfills are decoupled from the
             // production build. The @angular/build:unit-test builder has no
             // `polyfills` option of its own; it inherits them from this
-            // buildTarget. The base production build dropped "zone.js" at the
-            // zoneless flip; the
-            // test build still pins its own "zone.js" for the default-TestBed
-            // specs (Phase 5), so the two cannot drift.
+            // buildTarget. Both builds carry an empty polyfills array: the app
+            // and its specs are zoneless.
             "buildTarget": "frontend:build:test",
             "runner": "vitest",
             "runnerConfig": "vitest.config.ts",

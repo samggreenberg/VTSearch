@@ -1,6 +1,6 @@
 """Flask routes for the Sync Sources API.
 
-Migrated to ``flask_smorest`` so these routes appear in
+Built on ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
 Endpoints
@@ -147,8 +147,8 @@ def sync_settings_from_source():
 # A detector's binding is persisted on its registry entry and resolved by
 # :func:`vtscore.labels.binding.resolve_labelset_source` (explicit binding >
 # deployment default > none), so these routes work on any registered
-# detector, loaded or not.  The ``<detector_name>`` path segment takes the
-# detector's id (what the routes always resolved it by) or its name.
+# detector, loaded or not.  The ``<detector_ref>`` path segment takes the
+# detector's id or, failing that, its name.
 # ---------------------------------------------------------------------------
 
 
@@ -199,11 +199,11 @@ def _registered_detector(detector_ref: str) -> dict:
     return entry
 
 
-@sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source", methods=["GET"])
+@sync_sources_bp.route("/api/detectors/<detector_ref>/labelset-source", methods=["GET"])
 @sync_sources_bp.response(200, DetectorLabelsetSourceSchema)
 @sync_sources_bp.alt_response(403, description="Access denied for the current user.")
 @sync_sources_bp.alt_response(404, description="Detector not found.")
-def get_detector_labelset_source(detector_name: str):
+def get_detector_labelset_source(detector_ref: str):
     """Return the labelset source a detector syncs with, or null.
 
     ``field_values`` carries the detector's own values, and only for its
@@ -214,7 +214,7 @@ def get_detector_labelset_source(detector_name: str):
     from vtscore.state.core import get_detector_context
     from vtsearch.auth import get_current_user
 
-    entry = _registered_detector(detector_name)
+    entry = _registered_detector(detector_ref)
     user = get_current_user()
     if not can_user_access_detector(entry["id"], user):
         abort(403, message="You do not have access to this detector")
@@ -269,13 +269,13 @@ def _validated_binding(entry: dict, source, field_values: dict) -> dict:
     return own
 
 
-@sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source", methods=["PUT"])
+@sync_sources_bp.route("/api/detectors/<detector_ref>/labelset-source", methods=["PUT"])
 @sync_sources_bp.arguments(SetSyncSourceRequestSchema)
 @sync_sources_bp.response(200, OkMessageSchema)
 @sync_sources_bp.alt_response(400, description="A field value is missing or not allowed.")
 @sync_sources_bp.alt_response(403, description="Only the detector's creator can change where it syncs.")
 @sync_sources_bp.alt_response(404, description="Unknown detector or labelset source.")
-def set_detector_labelset_source(body: dict, detector_name: str):
+def set_detector_labelset_source(body: dict, detector_ref: str):
     """Set, clear, or opt a detector out of its labelset source.
 
     A body of ``{}`` (or an empty ``source_name``) clears the detector's own
@@ -292,7 +292,7 @@ def set_detector_labelset_source(body: dict, detector_name: str):
     from vtscore.labels.sync import reconcile_labelset_source
     from vtsearch.auth import get_current_user
 
-    entry = _registered_detector(detector_name)
+    entry = _registered_detector(detector_ref)
     if not is_detector_owner(entry["id"], get_current_user()):
         abort(403, message="Only the detector's creator can change where it syncs")
 
@@ -319,11 +319,11 @@ def set_detector_labelset_source(body: dict, detector_name: str):
     return {"ok": True, "message": message}
 
 
-@sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source/sync", methods=["POST"])
+@sync_sources_bp.route("/api/detectors/<detector_ref>/labelset-source/sync", methods=["POST"])
 @sync_sources_bp.response(200, SyncFromLabelsetSourceResponseSchema)
 @sync_sources_bp.alt_response(403, description="Access denied for the current user.")
 @sync_sources_bp.alt_response(404, description="Detector not found.")
-def sync_detector_labelset_from_source(detector_name: str):
+def sync_detector_labelset_from_source(detector_ref: str):
     """Pull the labels at the detector's labelset source into it now.
 
     Labels the source holds and the detector lacks are added, and where the
@@ -334,7 +334,7 @@ def sync_detector_labelset_from_source(detector_name: str):
     from vtscore.labels.sync import sync_from_labelset_source
     from vtsearch.auth import get_current_user
 
-    entry = _registered_detector(detector_name)
+    entry = _registered_detector(detector_ref)
     if not can_user_access_detector(entry["id"], get_current_user()):
         abort(403, message="You do not have access to this detector")
 

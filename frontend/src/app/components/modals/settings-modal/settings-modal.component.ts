@@ -57,6 +57,15 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   readonly settings = signal<AppSettings>({ volume: 50 });
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
+  /** The media types the per-type tab bars (Scroll Style, Browser) offer: just
+   *  the server's one type when it is locked to one (#5106), so a bar with
+   *  nothing to switch to drops out, as it does for a lone registered type. */
+  readonly tabMediaTypes = computed(() => {
+    const solo = this.effectiveSoloMediaType;
+    const all = this.mediaTypes();
+    const only = solo ? all.filter((mt) => mt.type_id === solo) : [];
+    return only.length ? only : all;
+  });
   /** All registered embedders, keyed by media-type id, used to populate
    *  the per-mediaType "Solo embedder" dropdowns under Appearance. */
   readonly embeddersByType = signal<Record<string, EmbedderInfo[]>>({});
@@ -139,7 +148,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
           list.sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default));
         }
         this.embeddersByType.set(byType);
-        const mediaTypes = this.mediaTypes();
+        const mediaTypes = this.tabMediaTypes();
         if (mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab();
           if (preselected && mediaTypes.some((mt) => mt.type_id === preselected)) {

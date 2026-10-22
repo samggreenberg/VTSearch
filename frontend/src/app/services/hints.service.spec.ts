@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 
+import { ConnectionStateService } from './connection-state.service';
 import { HintsService } from './hints.service';
 import { SettingsStateService } from './settings-state.service';
 import { provideHttpTesting } from '../testing/test-providers';
@@ -55,6 +56,26 @@ describe('HintsService', () => {
     second.flush({ hidden_hints: ['train', 'add-dataset', 'add-detector'] });
     expect(hints.isShown('add-dataset')).toBe(false);
     expect(hints.isShown('add-detector')).toBe(false);
+  });
+
+  it('shows only the offline hint while the server is unreachable (#5149)', async () => {
+    await loadSettings({});
+    const connection = TestBed.inject(ConnectionStateService);
+    for (let i = 0; i < 3; i++) connection.recordNetworkFailure();
+    expect(connection.isOffline).toBe(true);
+    expect(hints.isShown('offline')).toBe(true);
+    expect(hints.isShown('train')).toBe(false);
+    expect(hints.isShown('import-dataset')).toBe(false);
+
+    connection.recordSuccess();
+    expect(hints.isShown('train')).toBe(true);
+  });
+
+  it('keeps the offline hint off too when every hint is hidden', async () => {
+    await loadSettings({ hide_all_hints: true });
+    const connection = TestBed.inject(ConnectionStateService);
+    for (let i = 0; i < 3; i++) connection.recordNetworkFailure();
+    expect(hints.isShown('offline')).toBe(false);
   });
 
   it('lets Show All in Settings bring a hidden hint back', async () => {

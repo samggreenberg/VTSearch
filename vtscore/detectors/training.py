@@ -6,7 +6,7 @@ by detector route handlers and test helpers.
 This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
 vote) and :func:`train_detector_from_origins` (the **library-tier**
-re-derivation of an MLP from a saved labelset, for embedders driving
+re-derivation of a detector head from a saved labelset, for embedders driving
 ``vtscore`` directly; the app does not call it - see that function's
 "Who calls this" note). Both build on the generic
 :mod:`vtscore.training` primitives but layer in the patch-region max-
@@ -16,7 +16,9 @@ pool and origin-based file resolution that are detector-specific.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -34,7 +36,7 @@ log = logging.getLogger(__name__)
 def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
     """Resolve the score embedder (structural ▸ patch ▸ text) for the medias in *snap*.
 
-    The detector MLP trains and scores against this embedder's vectors (the v3
+    The detector head trains and scores against this embedder's vectors (the v3
     routing table).  Derived from the embedder names *those* medias carry
     rather than the active context, since :func:`_score_all_media` /
     :func:`_build_vote_xy` may be handed an arbitrary snapshot (a test fixture,
@@ -225,14 +227,20 @@ def _fused_threshold(
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
 ) -> float:
-    """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
+    """The line: the labels' line under a balance, then the fold-anchored cut, then the schedule blend.
 
-    Scores the haystack (*rows*, the ``(media, score row)`` matrix
-    :func:`scoring_rows_for_snap` built for the snapshot) through each
-    calibration fold model, so
-    each fold's anchored mixture is fitted on that fold model's own score scale
-    with that fold's *held-out* votes as anchors, then carries the per-fold cuts
-    to the final model in quantile space
+    The labels' line (:func:`_labels_line`, #4452) is the line under a
+    balance; the fold-anchored cut is the line with no balance and the
+    fallback where the labels support no class model, and the schedule blend
+    answers where no folds form (see "The line is drawn at an operating point"
+    below).
+
+    For the fold-anchored cut it scores the haystack (*rows*, the
+    ``(media, score row)`` matrix :func:`scoring_rows_for_snap` built for the
+    snapshot) through each calibration fold model, so each fold's anchored
+    mixture is fitted on that fold model's own score scale with that fold's
+    *held-out* votes as anchors, then carries the per-fold cuts to the final
+    model in quantile space
     (:func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`).  This is
     the estimator the 2026-08-05 deep-regime run picked over both pure
     cross-calibration and the schedule-blended GMM - see
@@ -275,8 +283,8 @@ def _fused_threshold(
 
     Falls back to the schedule blend
     (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) when there
-    are no usable folds - the "dataset too small to fit the population
-    estimator" case of the plan's decision rule 1.  The x-cal side of that
+    are no usable folds - the "label set too small to form calibration folds"
+    case.  The x-cal side of that
     blend is then :data:`~vtscore.training.thresholds.NO_GOOD_THRESHOLD`
     ("we never computed a cut, so admit nothing"), which is what the pre-fusion
     pure-GMM branch fed it.
@@ -537,12 +545,13 @@ def train_and_threshold(
        cut and the fold models.
     2. Full-data model training.  The operating point never reaches the model;
        only the cut in step 3 reads it.
-    3. The fold-anchored population threshold whenever *snap* is provided -
-       see :func:`_safe_threshold`.  It is fitted on the per-media scores
-       :func:`_score_all_media` produces - region max-pooled on a patch
-       dataset - so it sees the distribution the threshold will actually cut.
-       Without a *snap* there is no haystack to fuse and the cross-calibration
-       cut ships alone.
+    3. The line whenever *snap* (or *haystack*) gives a haystack to score:
+       the labels' line at the balance, with the fold-anchored cut and the
+       schedule blend as fallbacks - see :func:`_fused_threshold`.  It is
+       fitted on the per-media scores :func:`_score_all_media` produces -
+       region max-pooled on a patch dataset - so it sees the distribution the
+       threshold will actually cut.  Without a haystack there is nothing to fit
+       on and the cross-calibration cut ships alone.
 
     The balance is *det_ctx*'s own (:func:`vtscore.state.detector_beta`:
     the balance the detector keeps, seeded on first read; #4665), or with no
@@ -769,9 +778,12 @@ def train_and_threshold(
             beta=beta,
         )
     elif det_ctx is not None:
-        # Safe thresholds off: no population estimator to re-cut on a slide,
-        # and no ranking for a balance to keep a set of.
+        # No haystack scored: no population estimator or labels' line to
+        # re-cut on a balance change, and no ranking for a balance to keep a
+        # set of.  A line an earlier retrain parked belongs to a model this
+        # one replaced, so it goes too.
         det_ctx.anchored_cut_cache = None
+        det_ctx.labels_line = None
         det_ctx.line_ranking = None
         det_ctx.gate_passed = None
 
@@ -986,7 +998,7 @@ def _build_vote_xy(
 
     *embedder_name* is the detector's primary embedder; when ``None`` the
     dataset score precedence for *clips_dict* is used (the pre-per-detector
-    behaviour).  Either way the MLP trains in the same space
+    behaviour).  Either way the head trains in the same space
     :func:`_score_all_media` scores against.
 
     All three patch behaviours above - the Good vote's region pool, the Bad
@@ -1036,7 +1048,9 @@ def _build_vote_xy(
     return X_list, y_list, groups, score_rows
 
 
-def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.ndarray:
+def _forward_sigmoid_chunked(
+    model: nn.Sequential, matrix: np.ndarray, on_rows: Callable[[int], None] | None = None
+) -> np.ndarray:
     """``sigmoid(model(matrix))`` as float64, upcasting a float16 matrix chunk-wise.
 
     The flattened patch matrix is stored float16 (see
@@ -1047,10 +1061,13 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
     bounds that copy at ``ROW_CHUNK`` rows.
 
     :func:`~vtscore.utils.scores.sigmoid_to_finite_array` replaces NaN/±Inf
-    with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
+    with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised head cannot
     leak non-finite floats into the JSON response.  The downstream segmented
     max-pool then incidentally drops sentinels in favour of any real score (in
     ``[0, 1]``) for the same media.
+
+    *on_rows*, when given, is called with the number of rows scored so far
+    after each chunk.
     """
     import torch  # noqa: PLC0415
 
@@ -1063,6 +1080,8 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
             block = np.ascontiguousarray(matrix[start : start + ROW_CHUNK])
             chunk = torch.from_numpy(block).to(device=device, dtype=torch.float32)
             out[start : start + chunk.shape[0]] = sigmoid_to_finite_array(model(chunk))
+            if on_rows is not None:
+                on_rows(start + chunk.shape[0])
     return out
 
 
@@ -1167,7 +1186,7 @@ def scoring_rows_for_snap(
         if has_regions:
             # One row per (media, score row) pair, built once and cached on the
             # dataset context (the patch vectors never change between votes -
-            # only the MLP weights do), so online retraining no longer rebuilds
+            # only the head's weights do), so online retraining no longer rebuilds
             # a multi-million-row matrix on every vote.
             return ScoringRows(*get_region_matrix_for_snap(snapshot))
         ids, matrix = get_embedding_matrix_for_snap(snapshot, resolved)
@@ -1211,17 +1230,59 @@ def scoring_rows_for_snap(
     return rows
 
 
+_scoring_progress = threading.local()
+
+
+@contextmanager
+def scoring_progress(callback: Callable[[int, int], None] | None) -> Iterator[None]:
+    """Report every scoring pass this thread makes to *callback* ``(media_done, media_total)``.
+
+    Each :func:`score_rows_with_model` call inside the block is one pass over
+    its rows: *callback* fires with ``(0, n)`` as the pass starts and again
+    after each ``ROW_CHUNK`` block, ``media_done`` counting the media whose
+    rows have all been scored, ending at ``(n, n)``.  A detector's train scores
+    its whole haystack several times over (the final head, then each
+    calibration fold model) before its own scoring pass, so this is how a
+    caller can count those passes in media rather than only see them as time
+    gone by (issue #5101).
+
+    The hook is per thread, so detectors scored in parallel each report to
+    their own callback; ``None`` reports nothing, and the previous callback is
+    restored when the block exits.
+    """
+    previous = getattr(_scoring_progress, "callback", None)
+    _scoring_progress.callback = callback
+    try:
+        yield
+    finally:
+        _scoring_progress.callback = previous
+
+
 def score_rows_with_model(model: nn.Sequential, rows: ScoringRows) -> tuple[list[float], list[int]]:
     """Forward *rows* through *model* and max-pool them down to one score per media.
 
     Returns ``(scores_per_media, best_row_index_per_media)``; the winning row's
-    index is what surfaces the best-match overlay in the UI.
+    index is what surfaces the best-match overlay in the UI.  The pass reports
+    to the thread's :func:`scoring_progress` callback, if one is set.
     """
     from vtscore.embedding.matrix import segmented_max_pool  # noqa: PLC0415
 
     if not rows.ids:
         return [], []
-    flat_scores = _forward_sigmoid_chunked(model, rows.matrix)
+    report = getattr(_scoring_progress, "callback", None)
+    on_rows: Callable[[int], None] | None = None
+    if report is not None:
+        n_media = len(rows.ids)
+        n_rows = int(rows.matrix.shape[0])
+
+        def _on_rows(done: int) -> None:
+            # A media's rows are contiguous, so the media of the next unscored
+            # row is the count of media finished before it.
+            report(n_media if done >= n_rows else int(rows.media_index[done]), n_media)
+
+        on_rows = _on_rows
+        report(0, n_media)
+    flat_scores = _forward_sigmoid_chunked(model, rows.matrix, on_rows)
     return segmented_max_pool(flat_scores, rows.media_index, rows.region_index, len(rows.ids))
 
 
@@ -1504,7 +1565,7 @@ def train_and_score(
             fitted estimators on.
         beta: The balance to cut at, F-beta's beta in ``[0.25, 4]``, or
             ``None`` (the default) for no balance: the Inclusion 0 cut.  Under
-            a balance the line keeps the set the balance keeps (#4413; see
+            a balance the line is the labels' line at it (#4413, #4452; see
             :func:`_fused_threshold`).
 
     Returns:
@@ -1512,9 +1573,13 @@ def train_and_score(
 
         - ``results`` is a list of ``{"id": int, "score": float}`` dicts, sorted
           by score in descending order (highest confidence first).
-        - ``threshold`` is the decision boundary as a float: the fold-anchored
-          population cut fitted on ``clips_dict``'s score distribution (see
-          :func:`_fused_threshold`).
+        - ``threshold`` is the decision boundary as a float, the line drawn on
+          ``clips_dict``'s score distribution (see :func:`_fused_threshold`):
+          at *beta*, the labels' line; with no balance, or labels that support
+          no class model, the fold-anchored cut at Inclusion 0, and the
+          schedule blend where no folds form.  On a structural dataset the
+          verification gate's boundary replaces it
+          (:func:`~vtscore.training.structural_similarity.maybe_structural_rerank`).
         - ``model`` is the trained ``nn.Sequential`` model (``None`` when
           training was not possible).
     """
@@ -1609,8 +1674,9 @@ def train_detector_from_origins(
     ``POST /api/detectors/registry/load`` ->
     :func:`vtscore.detectors.labelset_training.train_from_labelset` ->
     :func:`train_and_threshold`, which is handed the active dataset's medias
-    as a haystack and therefore ships the **fold-anchored** cut, exactly as a
-    freshly trained detector does (pinned by
+    as a haystack and therefore draws the line a freshly trained detector
+    draws - the labels' line at the detector's balance, the fold-anchored cut
+    where the labels support no class model (pinned by
     ``tests/detectors/test_load_time_threshold_provenance.py``).  So the plain
     cross-calibration cut below is what a *library* caller with no haystack
     gets - it is not the threshold a resumed VTSearch session starts on
@@ -1624,7 +1690,7 @@ def train_detector_from_origins(
         embedder_name: Name of the embedder the detector was originally
             trained with. Passed through to :func:`embed_file` so every
             re-embedded media is encoded by the same model that produced
-            the saved vectors - otherwise the MLP trains on a mix of
+            the saved vectors - otherwise the head trains on a mix of
             embedder outputs and learns garbage. Pass ``""`` only when you
             genuinely want the media type's default embedder (e.g. a
             brand-new detector with no recorded embedder yet).

@@ -5,8 +5,11 @@
 #   bash launch_pile.sh              # prefetch + submit all three dataset jobs
 #   bash launch_pile.sh coco_val     # just one dataset's job
 #   VTS_GPU_NODE=rack7n03 bash launch_pile.sh visual_genome_m   # pin the device
-#   VTS_BUILD_ARGS=--force bash launch_pile.sh vg_scale         # REBUILD, not fill
-#   VTS_MAX_BEHIND=0 bash launch_pile.sh vg_scale   # build from an OLD checkout
+#   VTS_BUILD_ARGS=--force bash launch_pile.sh coco_better      # REBUILD, not fill
+#   VTS_MAX_BEHIND=0 bash launch_pile.sh coco_better   # build from an OLD checkout
+#
+# A dataset must be in pile_config.DATASETS: the retired `vg_scale` is not, so
+# it can be neither filled nor rebuilt (#4038).
 #
 # Weights are prefetched in a separate CPU step because parallel GPU jobs would
 # otherwise race to populate the same shared HF cache (see prefetch_models.py).

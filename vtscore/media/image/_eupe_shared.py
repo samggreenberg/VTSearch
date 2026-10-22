@@ -8,7 +8,7 @@ embedders that share the same backbone but differ in what they expose:
   storage, no region search.
 - ``eupe_patch``  - same CLS vector plus a per-patch grid + HAC region
   tree; ~30× slower per image and ~100× more storage, but enables region
-  similarity and region-aware MLP scoring.
+  similarity and region-aware detector scoring.
 
 EUPE's weights mirror at ``facebook/EUPE-ViT-B`` are **ungated** (no HF
 token needed), but the **outputs** are bound by Meta's FAIR Noncommercial

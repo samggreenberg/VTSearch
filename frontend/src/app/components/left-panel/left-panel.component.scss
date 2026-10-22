@@ -109,7 +109,7 @@
 
   &:disabled {
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: var(--opacity-disabled);
   }
 }
 
@@ -136,7 +136,7 @@
 .left-panel.collapsed-autopilot {
   align-items: center;
 
-  // Test's strip is one button the height and width of the pane.
+  // Tune's strip is one button the height and width of the pane.
   vt-side-panel-toggle {
     align-self: stretch;
   }
@@ -204,7 +204,7 @@
   flex-shrink: 0;
 }
 
-// The Goods'-centroid note under Test's tabs (#4643), and the note Train's
+// The Goods'-centroid note under Tune's tabs (#4643), and the note Train's
 // Autopilot tab shows in place of its panel when the Autopilot-only lock leaves
 // no Manual to fall back to (#4666).
 .find-detector-note,

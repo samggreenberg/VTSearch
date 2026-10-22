@@ -208,14 +208,11 @@ def rebuildable(datasets: list[str] | None = None) -> int:
     and fine (#3299). A canary that names a different path than the build is not
     a canary.
 
-    A banded dataset goes one question further, via
-    :func:`pilebuild.loaders.vg_band._vocab_drift`: not only "would a rebuild
-    run?" but "would a rebuild produce *this*?". A repair that restores the
-    former while quietly changing the latter is the expensive kind, and it is
-    invisible from the built cell.
+    It answers "would a rebuild run?", not "would a rebuild produce *this*?":
+    no loader's ``check()`` re-derives a cell's contents.
 
-    Deliberately does not parse the multi-GB sources (VG's ``objects.json``,
-    the COCO zip). A canary nobody runs is worth nothing, and the way to make
+    Deliberately does not parse the multi-GB sources (the COCO zips, the LVIS
+    annotations). A canary nobody runs is worth nothing, and the way to make
     it run is to keep it cheap enough to sit in front of every build.
     """
     for bad in [d for d in (datasets or []) if d not in pc.DATASETS]:

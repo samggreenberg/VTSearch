@@ -61,8 +61,12 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
    * re-run against a restarted app finds it on disk and unloaded, and every call
    * after this one 409s with `dataset_not_loaded`. Idempotent means idempotent
    * across restarts too.
+   *
+   * *options* are further importer fields, as the Add Dataset dialog's Advanced
+   * section sends them (`build_projection: 'true'` is its Build Browse map now),
+   * and *wait* how long the import may take, for a pile bigger than the usual.
    */
-  async function ensureDataset(name, embedder, extra = []) {
+  async function ensureDataset(name, embedder, extra = [], options = {}, wait = undefined) {
     const existing = named(await datasets(), name);
     if (existing) {
       log(`dataset ${name} exists (${existing.num_items} items)`);
@@ -83,9 +87,10 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
         // The optional region / instance embedders, as the Add Dataset
         // dialog's Advanced section sends them: the whole trio, primary first.
         ...(extra.length ? { embedders: [embedder, ...extra] } : {}),
+        ...options,
       },
     });
-    const row = await waitFor(`dataset ${name}`, async () => named(await datasets(), name));
+    const row = await waitFor(`dataset ${name}`, async () => named(await datasets(), name), wait);
     log(`imported ${name} (${row.num_items} items)`);
     return row;
   }
@@ -112,7 +117,6 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
             name,
             media_type: 'image',
             text_query: text,
-            trainable: true,
             ...(embedderType ? { embedder_type: embedderType } : {}),
           },
         })

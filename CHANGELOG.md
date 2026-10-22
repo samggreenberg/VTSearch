@@ -17,6 +17,177 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Demos load from a mirror when their home server is down.** On 2026-10-22 Stanford's cs.stanford.edu and
+  ai.stanford.edu stopped answering, and the Visual Genome and IMDB demos failed with "Couldn't reach
+  cs.stanford.edu". A demo whose file has a known mirror still tries its original host first, then, after three
+  failed connections (or at once, if the host says the file is gone or serves a web page instead), downloads the
+  same file from the mirror. The progress line says when it switches. Visual Genome, IMDB, Caltech-101,
+  Caltech-256, Food-101, Oxford Flowers and Reuters-21578 have a copy on Hugging Face (no sign-in needed);
+  Places365, Oxford Buildings' labels, Enrico, BBC News and KTH Actions, and some of the first group as a last
+  resort, have the Internet Archive's Wayback Machine. Each copy was checked to be the same file, byte for byte.
+  Oxford Buildings' image archive has no copy anywhere, so that demo still needs its home server.
+
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
+- **Toasty's hints are shorter, and bold every button they name** (issue #5175). Hints no longer repeat what
+  their step already says or explain what the next sentence makes plain. **Add Dataset**'s now says "Pick where your
+  images or other media come from, then click **Import**.", since picking the source *is* filling in the form, and
+  **New Detector**'s just "Describe what you're looking for or give an example." Most hints on the path are
+  shorter, "images, sounds or other media" is now "images or other media", and **Use This Example?** names the
+  example's kind ("**OK** uses the whole image."). A button or tab a hint names is in bold, under the label it
+  carries: the Tune view's verdict hint says **Move to AutoFind**, and **Tune** and the Review tab's **Good** /
+  **Bad** are bold now too. A detector's name no longer is.
+
+- **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
+  stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
+  only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
+  `-v` or `VTSEARCH_LOG_LEVEL=INFO` still shows it.
+
+- **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
+  Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
+  sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same
+  rows (Good, Bad or both, which the link now records), as long as the server still keeps the run: its most recent
+  runs, none from before a restart, each for the user who ran it. Past that it says the results are gone. Old
+  `/find/<dataset>/<detector>` and `/test/<dataset>/<detector>` links now open that pair in Tune instead of the
+  Dashboard.
+
+- **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
+  is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
+  the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your
+  votes, at your balance, stop rising, and its progress chart plots that F-beta. Measured on 2,160 sessions, the two
+  lights go green at the same clicks, and sessions end with the same F-beta; the change is so that every light speaks
+  the score you set with the balance. `POST /api/labeling-progress` returns `fbeta_over_time`, and the Smart points of
+  the indicator history and train-and-score results carry `fbeta` in place of `error_cost`, `fpr` and `fnr`.
+
+- **Toasty points at Retry when the server goes away** (issue #5149). While the offline banner is
+  up, a sad Toasty stands over its **Retry** button and says to check that the server is running,
+  over any open dialog. Every other hint steps aside until the server answers again, so Toasty no
+  longer tells you to click **Train** or vote while nothing can reach the server.
+
+- **Back from Train, Toasty no longer suggests Tune or Find on the dataset you trained on** (issue #5142). Tune
+  checks a detector on items it never trained on, so the Dashboard's "Click **Tune** to check it on this dataset"
+  sent a user straight back to the items they had just voted on. With a detector and the dataset it holds labels
+  from selected, Toasty now says "You trained this detector on this dataset. Select a different dataset to **Tune**
+  or **Find** on, or a different detector." The server records which datasets each detector holds labels from (its
+  Train votes, and Tune's **Add Corrections**), so the hint holds after a reload too. A detector trained before this
+  change is recorded at its next vote.
+
+- **Autopilot's hints say what to do, not the numbers behind it** (issue #5143). Toasty's hints
+  while Autopilot trains a detector used to count Goods and Bads against Autopilot's targets, name
+  the arrow keys, and finish on an F-beta, a vote count or a dry-run length. Now each says in plain
+  words what Autopilot is doing and the next step ("Autopilot is looking for Bads now. Keep
+  clicking."), and a finished run says just that the detector is trained and to click
+  **Dashboard** to put it to work, whatever ended the run. The counts and scores are still in the
+  Autopilot panel and the **Update Sort Example?** dialog.
+
+- **Autopilot's Spot Check is just its next items** (issue #5136). The check used to take over the
+  Train view's centre pane with its own heading, a **Stop check** button, notes on how its walk was
+  going and a screen of numbers at the end, and it cut in on the item you were looking at. Now its
+  picks come up as your next items, in the usual centre panel with the usual keys, and nothing on
+  screen changes for them: the check starts after you vote on the item already in front of you, as
+  Autopilot's other steps do, and when it ends Autopilot carries on. Its result is in the note under
+  the Threshold on the **Manual** tab, and stopping Autopilot ends a check early.
+
+- **A detector trained in the Train view carries its Evidence yardstick without a Tune** (issue #5120). The Evidence
+  coverage verdict ranks a dataset against how far the training data sat from the detector's examples, which the
+  detector recorded only when Tune ran on the dataset it was trained on. A detector trained in the Train view and
+  taken straight to another dataset showed the vacuum share and "no verdict until you run Tune…". The Train view's
+  re-sort now leaves the yardstick to be recorded once the answers pause, and at once when the chip is read on
+  another dataset or the detector is unloaded. Under the label quota, where Tune scores the Goods' centroid rather
+  than the Train view's head, a Tune is still what records it.
+
+- **Tune no longer pauses between rounds** (issue #5116). The autopilot deals its picks in rounds of
+  five, and the next round used to be chosen only once the last pick of a round was voted, so every
+  fifth pick waited for the server and then for its image. Now, while you look at a round's last
+  pick, the next round is already chosen for either answer and its first images are loading, so the
+  vote that finishes a round shows the next pick as quickly as any other. Which picks you get, and
+  what the test reports, are exactly as before.
+
+- **The Dashboard's Test button is now Tune, and a bar fills under it while it opens** (issue
+  #5098). What people get from it is a better detector, not only a verdict on the one they have:
+  the view tests the line on a dataset the detector never trained on, then lets you correct its
+  calls, lean its Threshold, or move it to AutoFind. The button, its view (now at `/tune/…`; an old
+  `/test/…` link lands on the Dashboard), Settings, Toasty's hints and the guide all say Tune; the
+  test of the line inside it keeps its name. From the click until the view opens, a bar under the
+  button follows the dataset and detector loads the view waits for, where only the icon used to
+  waggle.
+
+- **A server locked to one media type stops naming it everywhere** (issue #5106). With
+  `--solo-media-type` set, Find Results still said "Media Type: image", and so did the metadata panes,
+  the Dashboard's Type columns, the stats windows, the combine dialogs and the top-bar pulldowns, on
+  every item. Those fields now drop out, as do Settings' per-type tab bars under Scroll Style and
+  Browser. A dataset or detector of another type, kept from before the lock, still shows its type, and
+  brings its table's Type column back.
+
+- **A Find or AutoFind run's bar moves while its detectors work, and counts items, not detectors**
+  (issue #5101). The bar on a dataset's row counted finished detectors, so a run with one detector
+  read `0/1 detectors done` and sat at zero until it ended. It now fills through each detector's
+  train, its calibration passes and its scoring pass, averaged over the run's detectors, and the
+  line beside it counts what the first unfinished detector is doing: `12/40 labels` while its labels
+  resolve, then `3,000/5,000 images` (or clips, documents, …) for each pass over the dataset.
+
+- **A finished test puts its verdict in the middle of the screen** (issue #5100). At Done, the
+  Tune view's centre pane, which used to say only *Test done*, now holds the verdict: the sentence
+  reading the ranges, **Move to AutoFind** and **Add Corrections and retrain**, and the **Lean the
+  Threshold** table, with a note over them when the result is out of date or the line has moved.
+  They used to sit part-way down the narrow result pane on the right, which now keeps the numbers
+  behind the verdict and can be folded away without hiding it.
+
+- **A server that trusts session cookies no longer signs them with the key printed in the source**
+  (issue #5002). With `VTSEARCH_SECRET_KEY` unset, the session cookie was signed with a constant
+  anyone could read, so anyone could forge a `--login trivial` username or a HuggingFace sign-in's
+  OAuth state. When `--login trivial` or `HF_OAUTH_CLIENT_ID` is in force and the variable is unset,
+  startup now uses a random key for that process and logs a warning: sessions end at a restart, and
+  a deployment with more than one gunicorn worker must set the variable. Single-user mode without
+  HuggingFace sign-in is unchanged.
+
+- **A detector with too few labels for a trained head reports the set it actually keeps** (issue
+  #5048). Under the label quota a detector scores as its Goods' centroid or, if it was made from a
+  typed query, as that query's set. Its balance used to report a count of 32 (128 above a balance of
+  1) whatever its line kept, and a headless `--autodetect` run said it "exports its top 32" while it
+  exported everything over the line. Both now count what the line keeps.
+
+- **A "reference files in place" import of PDFs shows the right part of each converted item, and stores
+  less** (issue #5041). When an import converted files (a PDF's text, a PDF's pages as images) and then cut
+  them with a clipper, a reference import showed every sentence as the PDF's whole text and every tile as
+  the whole page. An item a cleanup gate changed also kept both its cleaned copy and its Original inside the
+  dataset. Such items now keep only how they were made, are rebuilt from the source file on demand, and
+  match what a copying import of the same folder shows. If the PDF is edited after import, they show nothing
+  (and the server log names the file) rather than other content. When a detector is trained from labels on
+  such items by re-reading their source files, each label now embeds the item's own text or tile; it used
+  to embed the raw PDF file read as text.
+
+- **A failed import stays on the dashboard until you dismiss it** (issue #4973). A dataset import
+  that failed showed a "Failed" row in the datasets table, but the row went the next time the page
+  reloaded or another dataset started loading, leaving no trace of the dataset that never arrived.
+  It now stays until you click **Dismiss**, through reloads, other loads and other tabs (a server
+  restart clears it). The row also says what the import was reading and when it failed, and a copy
+  button puts the error, source, task id and times on the clipboard for a bug report. On a shared
+  server only the user who started the import sees its failure. Reloading the page no longer
+  re-announces failures from before the reload in a toast: their rows already say so. Other
+  failures (loading an existing dataset, say) clear after 30 seconds: their dataset row is still
+  there.
+
+- **Loading a SIFT/VLAD collection is ~2.5x faster** (issue #4996). Each image used to be decoded
+  and run through SIFT twice: once for its search vector, then again for the points the geometric
+  check matches. One detection now gives both. On 300 synthetic 1280×960 images on a 4-core CPU, the
+  embedding step takes 27 s with `sift_vlad` (was 73–80 s) and 48 s with `sift_vlad_doc` (was
+  109–118 s). Rankings are unchanged: the vectors, points and page tiles are identical.
+
+- **A "reference files in place" import no longer stores a second copy of the items its cleanup gates
+  changed** (issue #4992). A trimmed recording, an edge-trimmed photo or a whitespace-cleaned document used to
+  keep both its cleaned copy and its original inside the dataset, so a reference import of a folder where the
+  gates fire often stored about twice what it would without them. Such an item now keeps only how it was made:
+  its cleaned version and its Original are rebuilt from the source file on demand, and match what a copying
+  import of the same folder would show. If the source file is edited after import, the item shows nothing
+  (and the server log names the file) rather than the edited file. Text in reference imports is now clipped
+  and cleaned at all: until now the sentence clippers and cleanup gates silently skipped it.
+
 - **Transcribing audio and reading text from images load their model once, not once per file** (issue
   #4979). The Audio → Text (Whisper) and Image → Text (OCR) converters loaded their model for every file
   they converted, so a folder of 500 clips read the Whisper checkpoint (about 145 MB for `base`, 3 GB for
@@ -340,6 +511,30 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
+  and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~86 / ~259 MB), taken from the
+  Celebrity Together dataset's red-carpet, event and press photos. Unlike the VGGFace2 Faces demo, whose photos are
+  framed on one face, each photo shows the scene around the person, usually with other people in it, so the face
+  path has to find the faces first: load it with the **Images → Faces** converter. A photo is labelled with the
+  person it was picked for; anyone else in it is unlabelled. Each variant downloads only its own photos, and (M)
+  reuses the ones (S) already fetched.
+
+- **Turn off the server's alerts for yourself** (issue #5170). A server can be set up to email you (or alert you
+  some other way) when an import you started finishes; Settings › **Import Defaults** now has **Alert me when an
+  import finishes**, shown only on a server that sends such alerts. Untick it and the server's alert code is told
+  you said no. That code is your administrator's, so it has to honour the setting: the
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows how. Settings › **AutoFind** gains **Export
+  results when AutoFind finishes**, which pauses your AutoFind exporter (an emailing one, say) without losing its
+  settings; a command-line AutoFind still exports.
+
+- **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
+  50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
+  Training-domain overlap check reads, and nothing in the app could build one afterwards. Its **Stats**
+  window now shows **Coverage atlas: Not built** with a **Build** button; the build's progress shows on the
+  dataset's dashboard row, and the line goes once the atlas is built. Clicking **Build** while a build is
+  already running no longer starts a second one, and a finished build's row now clears at once instead of
+  sitting at its last progress for a few seconds.
 
 - **Cleanup choices can be saved as an import default** (issue #4991). The Add Dataset dialog already
   remembered a media type's embedder, clipper and converters. If you untick a cleanup gate that is on by
@@ -983,6 +1178,77 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
+  Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
+  none. Both now draw the icon the server's media-type registry names, the same one the importer and
+  Settings show, so audio rows also switch from a music note to the app's usual speaker. Face's own icon,
+  everywhere it appears, is now a head-and-shoulders portrait in a photo frame instead of a smiley.
+
+- **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
+  Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the
+  file, so a detector moved with **Server JSON File** or **Server CSV File** and rebuilt with
+  **Trained → Create & Import** taught its Goods whole-image: a different detector from the one
+  exported. The file now carries each Good's box, and both **Create & Import** and **Import labels**
+  read it back.
+
+- **A server restart no longer leaves an open Train or Tune tab dead** (issue #5155). A restarted server
+  has nothing loaded, so every request from a tab already open on a dataset and detector failed under a
+  red *Detector is not loaded* toast, and the cure, back to the Dashboard to open the queue again, was
+  nowhere on screen. The tab now loads them again on its own, says so in a toast, and starts the view
+  over once they are in. If they can't be loaded, it goes back to the Dashboard and says to reopen them
+  from there.
+
+- **A server restart no longer leaves an open Browse map half dead** (issue #5158). Tiles the browser
+  had already cached went on painting, so the map looked alive, but every new tile a pan or zoom asked
+  for failed without a word and stayed blank. The tab now loads the dataset again on its own, as Train
+  and Tune do, and redraws the map from the layout saved with the dataset, without fitting it again. A
+  map of a Find run's results is fitted again from its items.
+
+- **A map of a detector's positives no longer goes quietly blank after a server restart** (issue #5159).
+  That map lives only in the server's memory, so a restart loses it for good, and an open tab on it
+  went on painting the tiles the browser had cached while every new one stayed blank, with nothing
+  saying why. The tab now goes back to the Dashboard and says to browse the detector's positives again
+  from there. Reloading the page on such a map now does the same, instead of a *Dataset is empty*
+  error, and reloading one the server still has shows it.
+
+- **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
+  When the vote that labeled a dataset's last item also finished training, Toasty said the detector
+  was trained and to keep clicking to sharpen it. Now it says you've labeled everything and to click
+  **Dashboard** to put the detector to work.
+
+- **Tune's Review tab stops re-downloading every item's label while you vote** (issue #5115). The
+  piles it refreshes every two seconds carried the detector's call on every item: over a megabyte on
+  a 50,000-item dataset, most of a remote link's bandwidth for as long as you kept voting. They now
+  carry only the items you checked, a few KB, and the *Unverified Good* / *Unverified Bad* counts
+  come from the ranking already on screen.
+
+- **Voting in Tune keeps up with you, as it does in Train** (issue #5099). The Tune autopilot now loads
+  the next two picks' images while you look at the current one, so a vote shows the next pick at once
+  rather than waiting for its download. No vote on either Tune tab re-downloads the full vote list any
+  more: on a large dataset that list ran to megabytes and held up the next image. The Review tab
+  refreshes its piles when you open it, and keeps them current while it is open. A preloaded image
+  that fails to load is no longer requested again and again.
+
+- **Labels on a PDF's converted text or pages train and import from the right content** (issue #5058).
+  When an import converted PDFs (their text, or their pages as images) and did not clip the result, a
+  detector trained from those labels by re-reading the source files embedded the raw PDF, read as text or
+  as an image. Pulling such labelled items into another dataset skipped them without a word. Training now
+  uses each item's own text or page, and pulling the items in brings in that text or page. If a PDF has
+  changed since the import and the page can no longer be found, the item is left out rather than brought
+  in as the whole PDF.
+
+- **An anamorphic video plays its letterbox crop whole, and previews at its true shape** (issue #5032). A
+  video with non-square pixels, such as a 720×480 DVD rip shown at 16:9, lost about 15% of its picture
+  off the right edge once Letterbox Crop cropped its bars, and its grid thumbnail was squeezed to 3:2. The
+  player now crops only the bars, and the thumbnail has the shape the video plays at. A dataset needs
+  importing again to pick this up: one imported before keeps its old crop and thumbnail.
+
+- **A letterbox-cropped video plays cropped** (issue #4993). Letterbox Crop records the picture it keeps
+  rather than re-encoding the file, and the embedder and grid thumbnail were cropped to it, but the
+  player showed the full padded frame, so an item previewed without its black bars and played with them.
+  The player now shows the same picture, with its controls along the cropped picture's bottom edge. This
+  needs a Chromium-based browser (Chrome, Edge); other browsers play the full frame, as before.
+
 - **Deleting several datasets or detectors from the Dashboard reports failures in one toast** (issue
   #4984). A bulk delete used to leave each failed row to the generic per-request error toast, so a batch
   of 20 with 3 failures never said "3 of 20". Now it waits for every delete to answer, then refreshes the
@@ -995,12 +1261,36 @@ not list every commit. Use `git log` for the full history.
   too busy to answer in time is usually one with jobs running. The spinners now hold through a failed
   answer and clear only after three in a row, about 15 seconds.
 
+- **A Good/Bad click on a label set's item no longer snaps back for up to 10 seconds** (issue #4985). The
+  label set's Good and Bad piles are read from the server by a background poll and again after every
+  click. When a poll that read the server before the click came back after the read the click triggered,
+  the clicked item jumped back to its old pile until the next poll, which could be 10 seconds away once
+  the poll had slowed. A read now applies only when no newer read has already been applied.
+
+- **An MP3, FLAC, OGG or M4A sound is served as what it is** (issue #4981). An imported sound keeps its
+  original file, but the server labelled every one `audio/wav` and offered it for download as
+  `media_N.wav`. Browsers play it anyway, so nothing looked wrong, but a download of an MP3 saved as a
+  `.wav` and a strict client could refuse it. The type and file extension now come from the file itself;
+  clips cut from a sound are WAV and still say so.
+
 - **Cleanup settings chosen at import are kept when a label is rebuilt** (issue #4963). Silence Trim,
   Edge Trim, Blank Frame Trim and Letterbox Crop, in Add Dataset's Advanced block, take settings, but the
   import did not record them. Whenever a label was rebuilt from its source file (training from a saved
   label set, or bringing labels into another dataset), the gate ran at its default settings rather than
   the chosen ones, so the label's vector could differ from the one the dataset embedded. The settings
   are now recorded and reused, and an item's Derived Via line lists them.
+
+- **A user can no longer change server-wide settings by importing or syncing a settings file** (issue #4965).
+  `PUT /api/settings` ignores the operator's settings, but a settings import, or a settings source the user
+  chose, applied every key in the file. In a multi-user deployment that let any user repoint the dataset and
+  detector directories for everyone, lift an operator lock (`solo_media_type`, `semantic_only`,
+  `autopilot_only`, `hidden_plugins`), or change the deployment's default sources. Imports and syncs now apply
+  only the user's own settings, through the same checks as `PUT`, so an unknown exporter or embedder is
+  skipped too. The import reports what it skipped. An imported `beta`, `calibrate_count` or
+  `calibration_fraction` now updates loaded detectors as a `PUT` does; before, they kept stale thresholds
+  until the next retrain. **`PUT /api/settings` no longer writes `saved_datasets_dir` or `detectors_dir`.**
+  Like every other server-wide setting, they are set in `data/settings.json`; the Settings dialog only ever
+  showed them read-only.
 
 - **A server without a GPU no longer holds up to 4 GB of a document collection's old pages** (issue #4941).
   To make a Good fast on a GPU, each shortlisted page's keypoint descriptors stay on the GPU between

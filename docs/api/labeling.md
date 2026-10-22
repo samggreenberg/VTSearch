@@ -95,7 +95,7 @@ detector's.
 | `checkable` | Whether a spot check can start on this line (#4489): `false` with no ranking to walk - a structural (`sift_vlad` / `sift_vlad_doc`) detector, whose line is the verification gate's boundary rather than a cut on a ranking, or a detector not yet trained on this dataset - or with nothing in it left unvoted. `POST /api/precision-check/start` refuses those with a **409**, so Autopilot runs no check there. |
 | `separation` | The labels' d' (#4496): how many spreads apart the labels line's Good and Bad score components sit, the spread the line was cut with. When the calibration folds scored the held-out Goods no higher than the Bads, it is the folds' own gap, 0 or below (#4899), though the line is drawn from the head's in-sample scores. `null` before a retrain has drawn the labels' line. |
 | `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and no check has ended yet (finished or closed): it is due once at most (#4909). Autopilot runs the check. Never `true` in Find, while a check runs, or on a face detector (`media_type` `face`, #4799: there the check costs the session and finds nothing); `separation` is still reported. |
-| `done_check_due` | `true` when Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25 votes. Autopilot reads it once every quality light is green, and skips the check when it is `false` (a weak-separation check just ran, or the session was re-entered right after its own check). Never `true` in Find, while a check runs, or where `checkable` is `false`; unlike `check_due` it is read on face detectors too. |
+| `done_check_due` | `true` when Autopilot's check before Done should run (`done_check_due`): no check has ended in the last 25 votes. Autopilot reads it once Done is due (every quality light green, the labels line's level met, or the 200-vote cap), and skips the check when it is `false` (a weak-separation check just ran, or the session was re-entered right after its own check). Never `true` in Find, while a check runs, or where `checkable` is `false`; unlike `check_due` it is read on face detectors too. |
 | `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first, not a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
 | `threshold` | The line: the labels' cut at this beta. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the ranking the detector last scored, voted items included. `null` before a retrain has scored one. |
@@ -213,13 +213,15 @@ POST /api/labeling-progress
 Requires at least one good vote, one bad vote, and label history (400
 otherwise). Synchronous: it first advances the per-step model cache over the
 whole label history (training any steps not yet cached), so it can be slow on a
-long history. The error-cost and stability series cover only the steps a
+long history. The F-beta and stability series cover only the steps a
 detector was trained for (see the note under
 [Indicator score history](#indicator-score-history)); diversity covers every
-step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
-would draw at Inclusion 0, whatever the balance is.
+step. Each `fbeta` is the best F-beta, at the detector's balance, any cut
+through that step's detector's scores reaches on the current votes: the points
+Smart waits to stop rising (#5134; each point was the detector's FPR + FNR
+before).
 
-→ `{total_labels, total_medias, error_cost_over_time, stability_over_time,
+→ `{total_labels, total_medias, fbeta_over_time, stability_over_time,
 diversity_level_over_time}`, each series a list of per-step points keyed by
 `num_labels`.
 
@@ -321,7 +323,7 @@ the data inline.
 
 → `{"job_id": "...", "status": "running", "current": 0, "total": 10}`, or
 (cached / `wait=true`) `{"job_id": "...", "status": "done", "metric": "smart",
-"error_cost": [...]}`. The metric-specific key is `error_cost` (smart),
+"fbeta": [...]}`. The metric-specific key is `fbeta` (smart),
 `stability` (stable), or `diversity` (diverse).
 
 ### Poll train-and-score result

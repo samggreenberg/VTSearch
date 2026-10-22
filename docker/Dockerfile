@@ -121,11 +121,14 @@ USER 1000
 
 EXPOSE 5000
 
-# OMP/MKL thread limits are already set in app.py; repeating here
-# ensures they apply even if someone imports vtsearch as a library.
-# VTSEARCH_SERVER_INIT=1 runs the model-load / preload / settings-sync
-# sequence when gunicorn imports app.py (since the __main__ block is
-# skipped under a WSGI server).
+# OMP/MKL default to one thread for any process in the image that does
+# not start through app.py (a library import, a one-off script). The
+# server overrides them: app.py sets both to its CPU allocation (or to
+# VTSEARCH_TORCH_THREADS) before torch/numpy load.
+# VTSEARCH_SERVER_INIT=1 runs the model-load / embedder-preload sequence
+# when gunicorn imports app.py (since the __main__ block is skipped under
+# a WSGI server). Per-user settings sync is not part of it: that runs
+# lazily on each user's first settings access.
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
     PYTHONUNBUFFERED=1 \

@@ -25,8 +25,7 @@ def _load_embeddings_dict(media_info: dict[str, Any]) -> dict[str, Any] | None:
     A v3 pickle carries the dict under ``embeddings`` (one entry per bound
     embedder); a legacy single-vector pickle carries only the singular
     ``embedding`` plus the recorded ``embedder`` name, which is re-keyed into a
-    one-entry dict here (the Phase 2c migration — the singular key never enters
-    the in-memory media).  Returns ``None`` when no usable vector is present.
+    one-entry dict here (the singular key never enters the in-memory media).  Returns ``None`` when no usable vector is present.
     """
     embs = media_info.get("embeddings")
     if isinstance(embs, dict) and embs:
@@ -496,11 +495,12 @@ def load_dataset_from_pickle(
 
     If media bytes are not stored inline in the pickle, the function attempts to
     load them from the companion directory entry in the pickle. Medias for which
-    no bytes can be resolved - or whose ``embedding`` field is missing or
-    ``None`` - are silently skipped (a warning is printed to stdout after
-    loading).  Skipping ``None`` embeddings is important: ``np.array(None)``
-    yields a 0-d ``dtype=object`` array that downstream consumers cannot
-    distinguish from a real vector until they crash.
+    no bytes can be resolved - or that carry no usable vector (an empty or
+    missing ``embeddings`` dict, and no legacy singular ``embedding``) - are
+    silently skipped (a warning is printed to stdout after loading).
+    Skipping vectorless medias is important: ``np.array(None)`` yields a 0-d
+    ``dtype=object`` array that downstream consumers cannot distinguish from
+    a real vector until they crash.
 
     The ``medias`` dict is cleared before loading begins.
 

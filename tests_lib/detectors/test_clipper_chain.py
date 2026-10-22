@@ -628,3 +628,280 @@ class TestEmbedResolvedLabelFlatConverter:
         embedding = _embed_resolved_label(src, "image", origin, "")
         assert embedding is not None
         assert captured["bytes"] == b"RAWPDF"  # whole-file fallback
+
+
+class _FakeDoc2Text:
+    """Deterministic converter stand-in: one text output per page."""
+
+    name = "doc2txt"
+    source_type = "document"
+    target_type = "text"
+
+    def convert_normalized(self, media, params):
+        src = (media.get("media_bytes") or b"").decode()
+        return [{"filename": f"page_{i}.txt", "media_string": f"{src} page {i}.", "duration": 0} for i in range(3)]
+
+
+def _payload(output: dict) -> bytes:
+    """A converter output's content, as the replay hands it back."""
+    return output["media_string"].encode("utf-8") if "media_string" in output else output["media_bytes"]
+
+
+class TestBareConverterOriginCallers:
+    """Label training and label ingest embed a converter's output, not its source (#5058).
+
+    The origin is what ``run_converters_on_folder`` stamps when the import ran
+    no clipper: a flat converter recipe with no ``clipper`` / ``clipper_chain``
+    key.  Both callers used to gate the replay on those keys, so they embedded
+    the resolved file - the source PDF - whole.
+    """
+
+    @pytest.fixture(params=[_FakeDoc2Image(), _FakeDoc2Text()], ids=["document2image", "document2text"])
+    def converter(self, request, monkeypatch):
+        fake = request.param
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == fake.name else None)
+        return fake
+
+    @pytest.fixture
+    def embedded(self, monkeypatch) -> list[bytes]:
+        """Every payload handed to ``embed_file``, in order."""
+        from vtscore.detectors import resolver as resolver_module
+
+        calls: list[bytes] = []
+
+        def fake_embed_file(path, media_type, embedder_name="", **_kwargs):
+            calls.append(path.read_bytes())
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+        return calls
+
+    @staticmethod
+    def _origin(converter, folder) -> tuple[dict, bytes]:
+        """A bare converter origin for page 2 of ``folder/doc.pdf``, and that page's payload."""
+        from vtscore.datasets.clipper_chain import _content_hash
+
+        (folder / "doc.pdf").write_bytes(b"PDF")
+        output = converter.convert_normalized({"media_bytes": b"PDF"}, {})[2]
+        origin = {
+            "importer": "converter",
+            "params": {
+                "converter": converter.name,
+                "source_file": "doc.pdf",
+                "source_path": str(folder / "doc.pdf"),
+                "parent_importer": "server_folder",
+                "parent_path": str(folder),
+                "converter_out_index": "2",
+                "converter_n_out": "3",
+                "converter_content_hash": _content_hash(output),
+            },
+        }
+        return origin, _payload(output)
+
+    def test_labelset_training_embeds_the_output(self, tmp_path, converter, embedded):
+        from vtscore.datasets.labelset import LabeledElement
+        from vtscore.detectors.labelset_training import _embed_one
+
+        origin, page = self._origin(converter, tmp_path)
+        elem = LabeledElement(md5="ff" * 16, label="good", origin=origin, origin_name="doc.pdf→page_2")
+
+        result = _embed_one(elem, media_type=converter.target_type, embedder_name="")
+
+        assert result is not None
+        assert embedded == [page]
+
+    def test_labelset_training_keeps_a_page_box_off_the_source(self, tmp_path, monkeypatch, embedded):
+        """A box drawn on a rendered page can't be patch-pooled on the PDF; the
+        label trains on the page's image-level vector instead, and the box stays
+        final so a retrain doesn't redo the replay."""
+        from vtscore.datasets.labelset import LabeledElement
+        from vtscore.detectors import labelset_training as lt
+
+        fake = _FakeDoc2Image()
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == fake.name else None)
+        monkeypatch.setattr(lt, "_patch_embedder", lambda **_kwargs: object())
+
+        def no_pool(*_args, **_kwargs):
+            raise AssertionError("the patch path must not run on the converter's source file")
+
+        monkeypatch.setattr(lt, "_patch_pooled_from_file", no_pool)
+        origin, page = self._origin(fake, tmp_path)
+        box = (0.0, 0.0, 0.5, 0.5)
+        elem = LabeledElement(md5="ff" * 16, label="good", origin=origin, origin_name="doc.pdf→page_2", region_box=box)
+
+        result = lt._embed_one(elem, media_type="image", embedder_name="")
+
+        assert result is not None
+        assert result.region_box == box
+        assert embedded == [page]
+
+    def test_labelset_training_replays_a_converter_only_chain(self, tmp_path, monkeypatch, embedded):
+        """A chain whose only step is a converter stamps no legacy ``clipper``
+        key either; the trail alone has to send it to the replay."""
+        from vtscore.datasets.clipper_chain import _content_hash
+        from vtscore.datasets.labelset import LabeledElement
+        from vtscore.detectors.labelset_training import _embed_one
+
+        fake = _FakeDoc2Image()
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == fake.name else None)
+        (tmp_path / "doc.pdf").write_bytes(b"PDF")
+        step = {
+            "kind": "converter",
+            "name": fake.name,
+            "params": {},
+            "out_index": 2,
+            "n_out": 3,
+            "content_hash": _content_hash({"media_bytes": b"PDF|page2"}),
+        }
+        origin = {"importer": "server_folder", "params": {"path": str(tmp_path), "clipper_chain": json.dumps([step])}}
+        elem = LabeledElement(md5="ff" * 16, label="good", origin=origin, origin_name="doc.pdf")
+
+        assert _embed_one(elem, media_type="image", embedder_name="") is not None
+        assert embedded == [b"PDF|page2"]
+
+    def test_ingest_stores_the_output(self, tmp_path, converter, embedded):
+        from vtscore.datasets.ingest import ingest_missing_medias
+
+        origin, page = self._origin(converter, tmp_path)
+        medias: dict[int, dict] = {}
+        entry = {"md5": content_md5(page), "label": "good", "origin": origin, "origin_name": "doc.pdf→page_2"}
+
+        assert ingest_missing_medias([entry], medias) == 1
+
+        [media] = medias.values()
+        assert media["media_type"] == converter.target_type
+        assert media["media_bytes"] == page
+        assert media["md5"] == content_md5(page)
+        assert media["file_size"] == len(page)
+        assert embedded == [page]
+
+    def test_ingest_skips_an_output_it_cannot_rebuild(self, tmp_path, converter, embedded):
+        """When the source changed since the import, no output matches the
+        recorded page, and the resolver falls back to embedding the source
+        whole.  Ingest must not store that source as the item."""
+        from vtscore.datasets.ingest import ingest_missing_medias
+
+        origin, page = self._origin(converter, tmp_path)
+        (tmp_path / "doc.pdf").write_bytes(b"EDITED")
+        medias: dict[int, dict] = {}
+        entry = {"md5": content_md5(page), "label": "good", "origin": origin, "origin_name": "doc.pdf→page_2"}
+
+        assert ingest_missing_medias([entry], medias) == 0
+        assert medias == {}
+        assert embedded == [b"EDITED"]
+
+
+class TestVideoUnitEmbed:
+    """A video label re-embeds its own window, as the dataset did (#4994).
+
+    Video clippers cut by metadata, so a unit is the parent file plus a
+    ``clip_start`` / ``clip_end``.  Both the trail replay and the legacy-keys
+    fallback have to hand that window to the embedder with the path.
+    """
+
+    @staticmethod
+    def _record_embeds(monkeypatch) -> list[tuple]:
+        from vtscore.detectors import resolver as resolver_module
+
+        calls: list[tuple] = []
+
+        def fake_embed_file(path, media_type, embedder_name="", *, extra_fields=None):
+            calls.append((path, media_type, extra_fields))
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+        return calls
+
+    def test_tiled_trail_replays_to_its_tile(self, tmp_path, monkeypatch):
+        """The replay probes the source's length, as the loader did, so the
+        tiling clipper cuts the same tiles and the trail's pick is found.
+        Without it every tiled trail came back ``None`` and the resolver fell
+        back to embedding the whole video."""
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips, parse_trail, replay_chain_on_file
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
+        from vtscore.media.video import decode
+
+        monkeypatch.setattr(decode, "probe", lambda path: decode.VideoInfo(duration=6.0, fps=10.0))
+        calls = self._record_embeds(monkeypatch)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+
+        # What the loader hands the chain: the payload and its probed length.
+        parent = {
+            "id": 1,
+            "media_type": "video",
+            "filename": src.name,
+            "media_bytes": b"video-bytes",
+            "duration": 6.0,
+            "origin": {"importer": "server_folder", "params": {"path": str(tmp_path), "media_type": "video"}},
+            "origin_name": src.name,
+        }
+        clips = {1: parent}
+        apply_chain_to_clips(clips, [{"kind": "clipper", "name": "video_tiling", "params": {"duration": 2.0}}])
+        assert len(clips) == 3
+        middle = next(c for c in clips.values() if c["clip_start"] == 2.0)
+        trail = parse_trail(middle["origin"]["params"]["clipper_chain"])
+        assert trail is not None
+
+        result = replay_chain_on_file(src, trail)
+        assert result is not None
+        assert result[1] is None
+
+        [(path, media_type, extra_fields)] = calls
+        assert (path, media_type) == (src, "video")
+        assert extra_fields == {"clip_start": 2.0, "clip_end": 4.0}
+        dataset_input = _build_clip_embed_input(middle, "video")
+        assert extra_fields == {k: dataset_input[k] for k in ("clip_start", "clip_end")}
+
+    def test_legacy_keys_embed_their_window(self, tmp_path, monkeypatch):
+        """With no trail to replay, the legacy keys' window still reaches the embedder."""
+        from vtscore.detectors.resolver import _apply_clip_and_embed
+
+        calls = self._record_embeds(monkeypatch)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+        origin = {
+            "importer": "server_folder",
+            "params": {"clipper": "video_tiling", "clip_start": "2.0", "clip_end": "4.0", "clip_index": "1"},
+        }
+
+        result = _apply_clip_and_embed(src, "video", origin)
+        assert result is not None
+        assert result[1] is None
+        assert calls == [(src, "video", {"clip_start": "2.0", "clip_end": "4.0"})]
+
+    def test_payload_rewritten_by_a_step_embeds_the_new_bytes(self, tmp_path, monkeypatch):
+        """A step that replaced the payload leaves *file_path* stale, so the unit
+        is embedded from a tempfile of its own bytes, as before."""
+        import vtscore.media as media_registry
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.detectors import resolver as resolver_module
+        from vtscore.media.cleaner import MediaCleaner
+
+        class _Reencode(MediaCleaner):
+            @property
+            def name(self) -> str:
+                return "video_test_reencode"
+
+            @property
+            def media_type(self) -> str:
+                return "video"
+
+            def clean(self, media):
+                return {**media, "media_bytes": b"re-encoded"}
+
+        monkeypatch.setattr("vtscore.media.video.decode.probe", lambda path: None)
+        monkeypatch.setitem(media_registry._cleaner_registry, "video_test_reencode", _Reencode())
+        seen: list[bytes] = []
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            seen.append(path.read_bytes())
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+        src = tmp_path / "movie.mp4"
+        src.write_bytes(b"video-bytes")
+
+        result = replay_chain_on_file(src, [{"kind": "cleaner", "name": "video_test_reencode", "params": {}}])
+        assert result is not None
+        assert seen == [b"re-encoded"]

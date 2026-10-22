@@ -1,8 +1,8 @@
 """Meta-path import hook that bans Flask from the library-tier test run.
 
-The ``vtscore`` library (Phase 8 of ``../vtscore/docs/architecture.md``)
-must be importable without Flask installed.  Because the library code
-still ships inside the ``vtsearch`` distribution, we can't simulate
+The ``vtscore`` library must be importable without Flask installed
+(seam 1, "Flask", in ``../vtscore/docs/architecture.md``).  Because the
+library ships inside the ``vtsearch`` distribution, we can't simulate
 "Flask uninstalled" with a Flask-less virtualenv; instead
 ``scripts/check-vtscore-clean.py`` installs the hook below, which makes
 ``import flask`` (and friends) raise :class:`ImportError`.
@@ -60,7 +60,7 @@ class _FlaskBlockerLoader(importlib.abc.Loader):
         raise ImportError(
             f"Import of {self._fullname!r} is blocked in vtscore-clean test mode. "
             "Library-candidate code (tests_lib/ targets) must not import Flask. "
-            "See ../vtscore/docs/architecture.md Phase 1/Phase 7 for the seam policy."
+            "See seams 1 and 7 in ../vtscore/docs/architecture.md for the seam policy."
         )
 
 

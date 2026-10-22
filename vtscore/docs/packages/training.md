@@ -55,7 +55,7 @@ matrices and binary labels. The `hidden_dim` argument selects the head:
 
 ### Architecture
 
-**Linear SVM head - eval harness and tests only.** Selected by the
+**Plain linear SVM head - eval harness and tests only.** Selected by the
 `hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel in `vtscore/training/mlp.py`:
 
 ```python
@@ -70,8 +70,8 @@ delegates to `train_svm(kernel="linear")` - the very call the eval harness
 scores as its `svm_linear` arm, so this head and the measured arm cannot
 drift apart - and copies the resulting hyperplane into the `Linear(input_dim, 1)`
 module, whose forward pass is then the SVM's decision function. `dropout` is
-ignored. It was the production head until #4785 and is now an eval arm
-(`head="linear_svm"`).
+ignored. It is a named eval arm (`head="linear_svm"`): the production head below
+fits the same objective from the Goods' centroid.
 
 **Linear SVM started from the Goods' centroid - the production head (#4785).** The `LINEAR_SVM_PRIOR_HEAD` (`-3`) sentinel
 builds the same `Linear(input_dim, 1)` and routes to
@@ -274,7 +274,8 @@ are summarised in
 | `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
 | `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
-| `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
+| `fit_labels_line` / `LabelsLine`          | The line under a balance (#4452): the class model the folds' held-out votes imply, cut where the expected F-beta peaks at the prevalence it estimates on the corpus |
+| `fold_anchored_gmm_threshold`             | The line with no balance, and the fallback under one - fold mixtures anchored on held-out labels |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 | `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, and off the Find Stats chart since #4360 |
 | `reporting_line`                          | The estimator's own line at an operating point: the app's line with no balance or no class model (the Inclusion 0 cut) |
@@ -457,7 +458,7 @@ fresh calibration; no explicit invalidation is needed.
 The key bytes encode the actual training vectors (not just label IDs),
 so if the embedder changes and a labelset is re-resolved to different
 embeddings, the cache invalidates automatically. The fitted fold *models*
-ride along in the tuple because the shipped fold-anchored cut needs to
+ride along in the tuple because the fold-anchored cut needs to
 re-score the haystack with them.
 
 ### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
@@ -750,6 +751,21 @@ question for the eval, priced by #4523
   census of a band no larger than a round); `record({id: match})` takes the
   labels; `unrecord(id)` takes one back; `pick_band` records which band each
   pick came from.
+- `deal_ahead()` (#5116) draws the next round before the vote that deals it:
+  once a round has one pick pending, for each way that pick can be voted, a
+  copy of the test records it and `draw()`s, from a copy of the generator at
+  its current state. It returns a `RoundAhead` (`id`, the pending pick;
+  `good` and `bad`, the round each vote would deal, `()` where it ends the
+  test), which `ahead` reads back and `as_dict()` carries as `ahead`, until a
+  label changes. `draw()` then installs the copy whose labels match the ones
+  recorded, with the draws it read the state on, instead of drawing again.
+  Why this is exact: the round used is the uniform draw from the band the
+  allocation rule names for the realized labels, from the generator state
+  `draw()` would have drawn it from, so it is the same picks; a seeded test
+  deals the same rounds and reads the same numbers whether or not anything
+  was dealt ahead, and the other way is discarded unseen. The app calls it
+  after every vote, so a client can fetch the next round's media before the
+  last vote of a round; the eval harness never does.
 - `estimates()` is every number from one set of joint Monte Carlo draws
   (`LineEstimates`): per band, a Beta posterior on the share right under the
   Jeffreys prior (`JEFFREYS`, 1/2) with the unlabelled items drawn binomially

@@ -187,7 +187,7 @@ VTSearch/
 │   ├── auth/               Flask-side login providers and the g.user resolver
 │   ├── state/, state_proxies.py  App-side state shim and the active-context proxies
 │   ├── shim/               Flask glue: context resolvers, persistence hooks, achievement
-│   │                       recorders, CoreConfig builder, app-only plugin families
+│   │                       recorders, setting getters, app-only plugin families
 │   ├── schemas/            Marshmallow schemas for API serialisation
 │   ├── settings_io/        Settings import / export / sync plugins
 │   └── routes/             Flask blueprints; all HTTP handling (_context.py holds the
@@ -198,6 +198,8 @@ VTSearch/
 ├── tests/                  App-tier test suite (Flask client, vtsearch.*)
 ├── tests_lib/              Library-tier test suite (Flask-import-clean, vtscore.*)
 ├── tests_shared/           Conftest machinery both suites import
+├── typings/               Local stubs pyright reads in place of an installed package
+│                           (transformers; see docs/TESTING.md)
 ├── scripts/                Repo tooling: run-tests.sh gates, doc generators, experiments
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
@@ -659,7 +661,10 @@ field lists — this document names the tiers and the shape, not every key.
   `autofind_exporter_field_values`, `autofind_on_import` (whether a web
   import runs the AutoFind detectors; the Add Dataset checkbox's memory), and
   `autofind_cli_delete_dataset` (whether a CLI `--autodetect` run deletes the
-  dataset it imported once its detectors have run).
+  dataset it imported once its detectors have run), `autofind_export_enabled`
+  (whether a web AutoFind run sends its results to the exporter), and
+  `import_alerts_enabled` (whether the admin's import hooks are told this user
+  wants alerts, as `DatasetImported.notify`).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
@@ -727,7 +732,7 @@ summary; the field-by-field tables are in
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
+| `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted
@@ -1180,13 +1185,49 @@ nothing. In single-user / no-auth mode it is a pass-through, matching
 `get_file_access_base_dir`. The network-side twin of that guard is
 `fetch_validated_url`, which `media_url` fetches go through for the same reason.
 
-Clippers on reference parents transiently hydrate the parent's bytes from its
-source file (tagging it with `_lazy_source`), clip as normal, then re-lazify
-the resulting clips back to references (`vtscore/datasets/stages/clipper.py`);
-converter chains re-lazify similarly via a byte-bounded LRU cache
-(`vtscore/media/lazy_clip.py`). A chain that mixes a converter and a clipper,
-and the demo-dataset / standalone-PDF conversion paths, still fall back to
-full materialization rather than lazy resolution.
+Clippers and cleaners on reference parents transiently hydrate the parent's
+payload from its source file (tagging it with `_lazy_source`; audio, image and
+text), clip and clean as normal, then re-lazify the resulting units back to
+references (`vtscore/datasets/stages/clipper.py`); an importer-level
+converter's outputs (`run_converters_on_folder`: rendered PDF pages, a PDF's
+text, extracted frames) re-lazify similarly, resolved through a byte-bounded LRU
+cache (`vtscore/media/lazy_clip.py`). A clipper chain that contains a converter
+step, and the demo-dataset / standalone-PDF conversion paths, still fall back
+to full materialization rather than lazy resolution. Text clips cut from a text
+file stay materialized too: they have no slice recipe, and text is small.
+
+A unit some cleaner rewrote (a silence trim, an edge trim, a whitespace pass)
+is no slice of its source, so its recipe is its whole chain trail
+(`origin.params['clipper_chain']`): `lazy_clip` reloads the source exactly as
+the import hydrated it, re-runs every recorded step through
+`clipper_chain.replay_chain_on_media`, and serves the result only while its
+content hash equals the one the trail recorded. Its "Original" is the same
+trail cut before the first cleaner (for a sub-clip that is the pre-clean clip,
+not the source file), checked against the `original_hash` the snapshotting gate
+recorded. The import drops a cleaned unit's payload and `original_*` snapshot
+only after a dry run of both replays reproduces them byte for byte; otherwise
+the unit keeps both, as before. These recipes are exclusive: when the source is
+edited after import, or a library upgrade changes a re-encode, the unit and its
+Original serve **nothing** (a 404, and a logged warning naming the file) rather
+than falling through to the edited or uncleaned source. A sibling memo keeps the
+replay of N cleaned tiles of one recording to one tiling of it.
+
+A converter output that a clipper cut or a cleaner rewrote (a rendered page's
+tiles, a PDF's text with its whitespace collapsed) is no output the converter
+alone rebuilds, so it gets the same chain recipe, led by the converter's own
+step (`vtscore.media.clip_recipe.converter_trail`): the replay hands the
+converter the source file the import converted, re-selects the recorded output,
+then re-runs the rest of the trail. The same dry run gates dropping its payload,
+cleaned or not. The label resolver replays the same composed trail when it
+re-embeds such a unit from its source. A converter output's recipes are
+exclusive as well, since its `media_path` names the PDF or video it came from,
+never its payload.
+
+Anything that embeds a lazy unit after import — a detector whose embedder the
+dataset lacks, a side-channel back-fill — is handed `lazy_clip.embed_view(media)`
+instead of the media: a copy whose payload resolves from the recipe on read and
+which carries no `media_path`, since every embedder falls back to that path and
+for a lazy unit it names the whole source.
 
 ### LabelSet (`vtscore/datasets/labelset.py`)
 

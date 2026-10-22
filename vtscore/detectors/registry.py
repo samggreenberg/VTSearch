@@ -7,7 +7,7 @@ the detector in the dashboard grid.
 Every entry is backed by a labelset file under ``data/detectors/``, named
 after a slug of the detector name rather than the name itself (see
 :func:`vtscore.detectors.store._slug`).
-The MLP that scores the detector is trained on demand from the labelset and
+The head that scores the detector is trained on demand from the labelset and
 lives only in RAM (see :class:`~vtsearch.state.DetectorContext`).
 
 Multiple detectors can be *loaded* into memory simultaneously.  Which detector
@@ -26,6 +26,7 @@ from typing import Any, TypeVar
 
 from vtscore.config import DATA_DIR
 from vtscore.io import atomic_write_json, file_lock
+from vtscore.security.readers import ReadersUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +259,43 @@ def update_detector(detector_id: str, **fields: Any) -> bool:
     return _read_modify_write(mutate)
 
 
+def record_detector_training(
+    detector_id: str,
+    num_training: int,
+    *,
+    dataset_id: str = "",
+    labeled_in_dataset: bool = True,
+) -> bool:
+    """Stamp a change to a detector's labels: how many, when, and from where.
+
+    ``trained_on`` lists the ids of the datasets the detector holds labels
+    from (#5142), so the Dashboard can tell the dataset a detector was trained
+    on from one it has never seen without parsing the detector file.  A writer
+    that composed its labels against one dataset passes its *dataset_id*: the
+    id is added while the detector still holds labels there
+    (*labeled_in_dataset*) and dropped once the last one is gone.  A writer
+    that names no dataset (a label import) leaves the list as it is.
+
+    Returns ``True`` if the detector was found.
+    """
+    now = time.time()
+
+    def mutate(entries: list[dict[str, Any]]) -> bool:
+        for entry in entries:
+            if entry["id"] == detector_id:
+                entry["num_training"] = num_training
+                entry["last_trained_at"] = now
+                if dataset_id:
+                    trained_on = [d for d in entry.get("trained_on") or [] if d != dataset_id]
+                    if labeled_in_dataset:
+                        trained_on.append(dataset_id)
+                    entry["trained_on"] = trained_on
+                return True
+        return False
+
+    return _read_modify_write(mutate)
+
+
 def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
     """Persist the embedder a detector's labels are currently embedded with.
 
@@ -353,22 +391,35 @@ def list_detectors_for_user(username: str) -> list[dict[str, Any]]:
         return result
 
 
-def set_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
-    """Update a detector's ``readers`` list. Only the creator may call this.
+def update_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> ReadersUpdate:
+    """Replace a detector's ``readers`` list. Only the creator may call this.
 
-    Returns ``(success, error_message)``.
+    Mirrors :func:`vtscore.datasets.registry.update_readers`: returns which
+    case happened, so a caller never reads it out of a message.
     """
 
-    def mutate(entries: list[dict[str, Any]]) -> tuple[bool, str]:
+    def mutate(entries: list[dict[str, Any]]) -> ReadersUpdate:
         for entry in entries:
             if entry["id"] == detector_id:
                 if entry.get("created_by", "default") != requesting_user:
-                    return False, "Only the detector creator can modify readers"
+                    return ReadersUpdate.NOT_CREATOR
                 entry["readers"] = readers
-                return True, ""
-        return False, "Detector not found"
+                return ReadersUpdate.UPDATED
+        return ReadersUpdate.NOT_FOUND
 
     return _read_modify_write(mutate)
+
+
+def set_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
+    """Update a detector's ``readers`` list. Only the creator may call this.
+
+    Returns ``(success, error_message)``: :func:`update_detector_readers`'s
+    outcome, with :meth:`ReadersUpdate.message` as the message.  To act on
+    why it failed, call :func:`update_detector_readers` instead of parsing
+    the message.
+    """
+    outcome = update_detector_readers(detector_id, readers, requesting_user)
+    return outcome is ReadersUpdate.UPDATED, outcome.message("detector")
 
 
 def add_loaded_detector_id(detector_id: str) -> None:

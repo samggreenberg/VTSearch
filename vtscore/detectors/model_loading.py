@@ -2,7 +2,7 @@
 
 :func:`resolve_or_train_detector` is the cold-path counterpart to the
 ``DetectorContext.model`` fast path: given a detector id and (optionally) its
-on-disk data plus a media snapshot, it returns the MLP + threshold to score
+on-disk data plus a media snapshot, it returns the head + threshold to score
 with, training from the detector's labelset when no live model exists.
 
 This logic lived inline in ``vtsearch/routes/detectors/scoring.py`` until it
@@ -82,9 +82,12 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     label whose origin cannot be resolved does not retrain it on every pass.
 
     A typed query's head (#4758) is current while its signature is and it was
-    built from *text_query*, the detector's query now; ``None`` skips that
-    check.  Any cached head is refused when the detector has a query and the
-    head is the centroid: a centroid cached before the query was there.  A
+    built from *text_query*, the detector's query now (``None`` skips that
+    check), and while its query has not missed on a patch space (#4800).  Any
+    cached head is refused when the detector has a query and the
+    head is the centroid: a centroid cached before the query was there, unless
+    the query has missed on a patch space, where the centroid is what it gives
+    (#4800, :func:`~vtscore.detectors.label_quota.query_missed`).  A
     trained head is refused, too, while that query still holds (#4736): the
     learned sort's head is cached from the quota on, but a Find there gives
     the query's set until :data:`~vtscore.detectors.label_quota.QUERY_HOLD_LABELS`.
@@ -94,20 +97,19 @@ def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet", tex
     or an older query trained is refused.
     """
     from vtscore.detectors.centroid_head import is_centroid_head
-    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds
+    from vtscore.detectors.label_quota import TIER_TRAINED, labelset_quota, query_holds, query_missed
     from vtscore.detectors.query_head import is_query_head, query_head_text, typed_query_prior_applies
     from vtscore.detectors.training import _patch_space_for
     from vtscore.training import svm_prior
 
     if det_ctx.model is None or det_ctx.model_labels_sig != labelset_signature(labelset):
         return False
-    if is_query_head(det_ctx.model):
-        return text_query is None or query_head_text(det_ctx.model) == text_query
-    if text_query and is_centroid_head(det_ctx.model):
-        return False
-    if is_centroid_head(det_ctx.model):
-        return True
     quota = labelset_quota(labelset)
+    missed = query_missed(quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder))
+    if is_query_head(det_ctx.model):
+        return (text_query is None or query_head_text(det_ctx.model) == text_query) and not missed
+    if is_centroid_head(det_ctx.model):
+        return not text_query or missed
     if text_query and query_holds(quota.n_good, quota.n_bad, patch_space=_patch_space_for(det_ctx.embedder)):
         return False
     if (
@@ -132,7 +134,7 @@ def resolve_or_train_detector(
     use_loaded_context: bool = True,
     ctx_sink: list | None = None,
 ) -> tuple[Any | None, float, dict | None]:
-    """Return (mlp, threshold, diagnostic) for *detector_id*.
+    """Return (head, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`~vtscore.state.core.DetectorContext` first, when
     its head was trained from the labelset in *det_data*
@@ -155,7 +157,7 @@ def resolve_or_train_detector(
     collapses to the historical single-vector behaviour.
 
     The balance is a pure cutoff knob: a change does **not** retrain or
-    drop the MLP, it re-derives the threshold from the cached estimators.
+    drop the head, it re-derives the threshold from the cached estimators.
     ``train_from_labelset`` passes the detector context down to
     :func:`~vtscore.detectors.training.train_and_threshold`, which caches them
     on it — without that cache a later balance change can't move the cutoff (it
@@ -192,7 +194,7 @@ def resolve_or_train_detector(
     if det_ctx is not None:
         # Defense against H5: scoring AutoFind detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
-        # have invalidated their stale MLPs.  Drop them here so the next
+        # have invalidated their stale heads.  Drop them here so the next
         # branch trains fresh against the detector's primary.  The keying
         # marker returns the detector's primary when the active dataset can
         # supply it (so a valid cached model survives), else the dataset score

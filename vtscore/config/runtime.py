@@ -155,12 +155,13 @@ MLP_DROPOUT = 0.5
 # where all quantiles degenerate to the same cut.
 MLP_LABEL_SMOOTHING = 0.05
 
-# Inverse regularisation strength of the production **linear SVM head**
-# (``LINEAR_SVM_HEAD`` in ``vtscore.training.mlp``, fitted by
-# ``vtscore.training.svm.fit_linear_svm_head``).  1.0 is sklearn's own default
-# and the value the eval harness's ``svm_linear`` arm was measured at, so the
-# shipped head and the measured arm are the same fit.  Lower it to regularise
-# harder on very few votes; raise it to trust the labels more.
+# Inverse regularisation strength of the **linear SVM heads**: the production
+# head (``LINEAR_SVM_PRIOR_HEAD`` in ``vtscore.training.mlp``, fitted by
+# ``vtscore.training.svm_prior.fit_linear_svm_prior_head``) and the plain SVM
+# eval arm (``LINEAR_SVM_HEAD``, ``vtscore.training.svm.fit_linear_svm_head``).
+# 1.0 is sklearn's own default and the value the eval harness's ``svm_linear``
+# arm was measured at.  Lower it to regularise harder on very few votes; raise
+# it to trust the labels more.
 SVM_HEAD_C = float(os.environ.get("VTSEARCH_SVM_HEAD_C", "1.0"))
 
 # --- Browse projection (UMAP Stage 1) ---------------------------------------
@@ -174,12 +175,12 @@ SVM_HEAD_C = float(os.environ.get("VTSEARCH_SVM_HEAD_C", "1.0"))
 PROJECTION_N_NEIGHBORS = 15
 PROJECTION_MIN_DIST = 0.1
 
-# Per-embedder UMAP projection defaults, from the empirical sweep in
-# ``docs/plans/vtsbrowse-empirical-tuning.md`` (§Results). Keyed off the dataset's
+# Per-embedder UMAP projection defaults, from the empirical sweep written up in
+# ``docs/experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md``. Keyed off the dataset's
 # *primary* embedder and consulted when the corresponding ``ServerSettings`` knob
 # is left at the global default above (an explicit operator override still wins).
 # Untuned embedders fall back to the globals. Image embedders peak at a smaller
-# neighbourhood than the old global 15; large ``n_neighbors`` hurt every embedder.
+# neighbourhood than the global 15; large ``n_neighbors`` hurt every embedder.
 PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
     "clap": (15, 0.10),  # audio: flat separability peak across 10-30
     "clap_general": (15, 0.10),  # same family, same flat audio peak
@@ -215,7 +216,7 @@ del _seed
 # fresh uniform picks, which is what makes its bound honest.  Set
 # ``VTSEARCH_SPOT_CHECK_SEED`` to an integer and a check over the same
 # candidate deals the same picks every time.  The user-docs screenshot harness
-# (``scripts/screenshots/refresh.sh``) sets it so the ``floor-check`` shot
+# (``scripts/screenshots/refresh.sh``) sets it so a shot of Tune's test
 # frames the same pick on every refresh.
 _seed = os.environ.get("VTSEARCH_SPOT_CHECK_SEED", "").strip()
 SPOT_CHECK_SEED: int | None = int(_seed) if _seed else None

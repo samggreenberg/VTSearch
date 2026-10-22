@@ -1,12 +1,13 @@
 """Decision-threshold computation for learned-sort scores.
 
-GMM-, cross-calibration-, and safe-threshold helpers. These are media-
-agnostic: they take score lists and label lists and return a single
-float threshold. Detector-specific glue (sourcing ``X_list`` / ``y_list``
+The labels' line, the fold-anchored, GMM, cross-calibration and safe-threshold
+estimators, and the spot check and test sample that audit a line. These are
+media-agnostic: they take score lists and label lists, and the estimators
+return a single float threshold. Detector-specific glue (sourcing ``X_list`` / ``y_list``
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across seven submodules, layered so that each one
+The implementation is split across ten submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -16,9 +17,10 @@ only reads from those above it:
   shipped Smart indicator and the eval harness both score through.
 * :mod:`~vtscore.training.thresholds.gmm` - the 1-D two-component mixture, its
   anchored variant, and the rules that read a cut off a fit.  Self-contained.
-* :mod:`~vtscore.training.thresholds.anchored` - the shipped path: per-fold
-  anchored mixtures combined in quantile space, plus the voted-media haystack
-  exclusion.
+* :mod:`~vtscore.training.thresholds.anchored` - the fold-anchored cut, the
+  line with no balance and the fallback under one where the labels support no
+  class model: per-fold anchored mixtures combined in quantile space, plus the
+  voted-media haystack exclusion.
 * :mod:`~vtscore.training.thresholds.conformal` - the rival estimator: fold
   splits and split-conformal quantiles over pooled held-out scores.
 * :mod:`~vtscore.training.thresholds.blend` - the retired safe-threshold blend,
@@ -29,6 +31,21 @@ only reads from those above it:
   decides whether a detector's line is the floor's or the Inclusion knob's.
   Reads :mod:`~vtscore.training.thresholds.gmm` for its sampling and
   sentinel filtering; otherwise numpy and scikit-learn.
+* :mod:`~vtscore.training.thresholds.labels_line` - the line under a balance
+  (#4452): the class model the calibration folds' held-out votes imply, cut
+  where the expected F-beta of the kept set peaks at the prevalence it
+  estimates on the corpus being decided, and the head's count line while that
+  model is thin.  Reads nothing above it; numpy and SciPy.
+* :mod:`~vtscore.training.thresholds.spot_check` - the balance (its presets
+  and the count rule a context with no trained head falls back to) and the spot
+  check, a walk of uniform picks in rank bands that audits the line and
+  reports a likely range without moving it.  Reads
+  :mod:`~vtscore.training.thresholds.knobs` and
+  :mod:`~vtscore.training.thresholds.gmm`.
+* :mod:`~vtscore.training.thresholds.line_test` - Test mode's sample of a
+  line (#4527): band picks on both sides of it and the precision, recall and
+  F-beta ranges they give.  Reads
+  :mod:`~vtscore.training.thresholds.spot_check`'s bands.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
@@ -252,6 +269,7 @@ from vtscore.training.thresholds.line_test import (
     PhaseReport,
     LineBudgets,
     LineEstimates,
+    RoundAhead,
     found_words,
     line_bands,
     line_phase,
@@ -365,6 +383,7 @@ __all__ = [
     "PhaseReport",
     "LineBudgets",
     "LineEstimates",
+    "RoundAhead",
     "found_words",
     "line_bands",
     "line_phase",

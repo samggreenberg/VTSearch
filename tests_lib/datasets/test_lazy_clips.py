@@ -21,7 +21,7 @@ import pytest
 from vtscore.datasets.clipper_chain import _content_hash
 from vtscore.datasets.stages import clipper as clipper_stage
 from vtscore.media.audio.wav import wav_slice
-from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, lazy_clip_bytes
+from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, embed_view, lazy_clip_bytes, recipe_is_exclusive
 
 from tests_lib.helpers import make_png_bytes, make_wav_bytes
 
@@ -521,6 +521,48 @@ class TestLazyConverterBytes:
         assert first is second  # served from the byte-bounded converter cache
 
 
+class TestConverterOutputIsExclusive:
+    """A converter output's ``media_path`` names its source, never its payload (#5041)."""
+
+    def test_a_failed_replay_serves_nothing_rather_than_the_source(self, tmp_path, monkeypatch):
+        import vtscore.media as media_registry
+
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: None)
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"RAWPDF")
+        media = _converter_media(src, out_index=0, n_out=1, content_hash=None)
+
+        assert recipe_is_exclusive(media)
+        assert media_registry.get("image")._resolve_media_bytes(media) is None
+
+    def test_a_text_output_serves_no_text_rather_than_the_source(self, tmp_path, monkeypatch):
+        import vtscore.media as media_registry
+
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: None)
+        src = tmp_path / "doc.txt"
+        src.write_text("the whole source document", encoding="utf-8")
+        media = _converter_media(src, out_index=0, n_out=1, content_hash=None, target_type="text")
+
+        assert media_registry.get("text")._resolve_media_string(media) == ""
+
+    def test_an_output_with_no_replayable_recipe_is_exclusive_too(self, tmp_path):
+        import vtscore.media as media_registry
+
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"RAWPDF")
+        media = _converter_media(src, out_index=0, n_out=1, content_hash=None)
+        del media["origin"]["params"]["converter_out_index"]
+
+        assert clip_recipe(media) is None
+        assert recipe_is_exclusive(media)
+        assert media_registry.get("image")._resolve_media_bytes(media) is None
+        # An embedder handed it gets neither a payload nor the source's path.
+        view = embed_view(media)
+        assert view is not media
+        assert view.get("media_path") is None
+        assert view.get("media_bytes") is None
+
+
 class TestRelazifyConverterOutput:
     def test_relazify_strips_converted_bytes(self, tmp_path, _fake_converter):
         """A converter output tagged with _lazy_source is stripped to a
@@ -542,6 +584,22 @@ class TestRelazifyConverterOutput:
         assert media["media_path"] == str(src)
         resolved = media_registry.get("image")._resolve_media_bytes(media)
         assert resolved == _page_bytes(b"PDFBYTES", 2)
+
+    def test_relazify_keeps_an_output_whose_trail_cannot_be_read(self, tmp_path, _fake_converter):
+        """Without its chain the converter alone would rebuild the whole page,
+        not the unit, so the stored payload is the only copy."""
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"PDFBYTES")
+        page = _page_bytes(b"PDFBYTES", 2)
+        media = _converter_media(src, out_index=2, n_out=3, content_hash=_content_hash({"media_bytes": page}))
+        media["origin"]["params"]["clipper_chain"] = "{not a trail"
+        media["media_bytes"] = page
+        media["_lazy_source"] = str(src)
+
+        _relazify({1: media})
+
+        assert "_lazy_source" not in media
+        assert media["media_bytes"] == page
 
 
 class TestByteBoundedLRU:

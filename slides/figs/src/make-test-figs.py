@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-"""Figures for the Test slides: what the Test button measures, and how (#4594).
+"""Figures for the Examination slides: what the Tune button tests, and how (#4594).
 
 Run from the repo root:
 
     python slides/figs/src/make-test-figs.py
 
-The Test button scores a corpus the detector never trained on and opens the
-Test autopilot, which asks one question of the detector's line there: *of what
-it keeps, how much is right, and of all the matches, how much does it keep?*
-The answer is `vtscore/training/thresholds/line_test.py` (#4527): uniform
+The Tune button (Test until #5098) scores a corpus the detector never trained
+on and opens the Tune autopilot, which asks one question of the detector's
+line there: *of what it keeps, how much is right, and of all the matches, how
+much does it keep?* The answer is `vtscore/training/thresholds/line_test.py` (#4527): uniform
 picks within rank bands on both sides of the line, Beta posteriors drawn
 jointly, a prior borrowed from neighbouring bands above the line, the model's
 own count corrected by the picks below it, an allocation rule, and a stop.
@@ -335,7 +335,7 @@ def _question_stage(stage: int) -> Figure:
     ax.text(
         STATEMENT_X,
         6.2,
-        f"Test scored {test.size:,} photos the detector never saw",
+        f"Tune scored {test.size:,} photos the detector never saw",
         ha="left",
         va="center",
         fontsize=19,
@@ -990,7 +990,7 @@ ROUND_R = 0.22
 
 
 def rounds_fig() -> None:
-    """The running example's test, round by round, as the Test autopilot deals them.
+    """The running example's test, round by round, as the Tune autopilot deals them.
 
     Five stages: the bands on both sides of the line; the matches phase's first
     pass, one round in each band from the line upward; the round the
@@ -1020,7 +1020,7 @@ def _rounds_stage(stage: int) -> Figure:
     n_above = len(test.above)
     line_x = _line_x(test)
     # ── stage 1: the bands, both sides of the line ───────────────────────────
-    ax.text(STATEMENT_X, 6.2, "The Test autopilot deals five picks at a time", ha="left", va="center", fontsize=19)
+    ax.text(STATEMENT_X, 6.2, "The Tune autopilot deals five picks at a time", ha="left", va="center", fontsize=19)
     _band_strip(ax, test, ROUNDS_Y0, ROUNDS_H)
     ax.text(BAND_X0, ROUNDS_Y0 - 0.12, "bands, best on the right; each twice the next", ha="left", va="top",
             fontsize=15, color=SOFT)  # fmt: skip
@@ -1083,13 +1083,13 @@ def _rounds_phases(ax: plt.Axes, test: LineTest, stage: int) -> None:
             ax.text((x0 + x1) / 2, brace_y - 0.55, f"{picks} picks: its budget", ha="center", va="top", fontsize=16)
 
 
-# ── Report Card: what the result pane says ───────────────────────────────────
+# ── Report Card: what a finished Test reports ────────────────────────────────
 
 RESULT_STAGES = 3
 
 
 def result_fig() -> None:
-    """The result pane at Done: the headline ranges, Precision by Number Returned, and Lean the Threshold.
+    """What a finished Test reports: the headline ranges, Precision by Number Returned, and Lean the Threshold.
 
     Three stages: the balance, Right and Found, with the chart of how right
     the top *N* likely are at every band edge (the count axis logarithmic, as
@@ -1097,6 +1097,12 @@ def result_fig() -> None:
     only a planted corpus can show, inside the ranges; and Lean the
     Threshold, the same draws read at the line each radio would draw on this
     corpus.
+
+    The app splits these across two panes (#5100): the headline and the chart
+    are the right-hand result pane, while Lean the Threshold sits with the
+    verdict and its two exits in the centre pane, where the picks were voted.
+    The figure keeps them on one canvas as a schematic, and the notes say
+    which is which.
     """
     _save(RESULT_STAGES, _result_stage, "test-result")
 
@@ -1149,7 +1155,7 @@ def _result_stage(stage: int) -> Figure:
         held = sum(e.precision.holds(_truth_at(e.count)[0]) for e in edges)
         assert held == len(edges), held
         ax.text(1100, true_p[1100 - 6] + 0.06, "planted", ha="center", va="bottom", fontsize=16)
-    # ── stage 3: Lean the Threshold, as the pane's table lays it out ─────────
+    # ── stage 3: Lean the Threshold, the verdict's table ─────────────────────
     if stage >= 3:
         top = 0.305
         fig.text(SIDE_X, top, "Lean the Threshold", ha="left", va="center", fontsize=17, fontweight="bold")

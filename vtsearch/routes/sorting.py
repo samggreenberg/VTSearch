@@ -1,6 +1,6 @@
 """Blueprint for sorting and voting routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
@@ -48,6 +48,7 @@ from vtsearch.schemas.sorting import (
     SortResponseSchema,
     TextsortSuggestionRequestSchema,
     TextsortSuggestionsResponseSchema,
+    VotesQuerySchema,
     VotesResponseSchema,
 )
 from vtscore.training.query_sort import (
@@ -445,9 +446,9 @@ def _validate_learned_sort_inputs(labelset, good, bad) -> None:
 def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
-    Training is GIL-bound and ran inline used to stall every other request
+    Training is GIL-bound, so run inline it would stall every other request
     served by the small ``gthread`` pool (votes polls, thumbnails, and even
-    media bytes).  The endpoint now hands the work off to a background daemon
+    media bytes).  The endpoint hands the work off to a background daemon
     thread and returns immediately with a ``job_id``; clients poll
     :func:`learned_sort_result` until ``status == "done"``.
 
@@ -465,6 +466,7 @@ def learned_sort(body: dict):
         resolve_active_labelset,
         run_learned_sort,
     )
+    from vtscore.detectors.query_head import is_quota_head
     from vtscore.detectors.training import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
@@ -473,6 +475,7 @@ def learned_sort(body: dict):
         get_active_context,
         get_active_detector_context,
     )
+    from vtsearch.routes.detectors.scoring import defer_learned_sort_baseline
 
     wait = body["wait"]
 
@@ -515,9 +518,12 @@ def learned_sort(body: dict):
     # A dataset switch drops ``line_ranking`` (media ids are per dataset) while
     # the votes, and so the signature, come back unchanged; reusing the result
     # then would draw a line the detector can no longer re-cut or spot-check,
-    # so train again instead (#4317).
+    # so train again instead (#4317).  Train again, too, when the context holds
+    # a head the label quota gives (a load or a re-embed under the quota): it
+    # keeps a ranking of its own (#5048), but the learned sort never leaves
+    # one behind, so the cached result's head is not the one on the context.
     cached = learned_sort_jobs.cached_for(signature)
-    if cached is not None and det_ctx.line_ranking is not None:
+    if cached is not None and det_ctx.line_ranking is not None and not is_quota_head(det_ctx.model):
         return _learned_sort_done_payload(cached)
 
     # _run closes over the resolved inputs and delegates the train → score →
@@ -537,12 +543,16 @@ def learned_sort(body: dict):
             calibration_fraction_value=calibration_fraction_value,
             beta_value=beta_value,
         )
+        # On the detector's training dataset, the Evidence verdict's baseline
+        # is drawn from this sort's scores once the votes stop (#5120).
+        defer_learned_sort_baseline(det_ctx, ds_ctx, snap, labelset, results, threshold)
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.  It sits four inclusion steps stricter than the line:
-        # under a balance no inclusion drew that line, so none is passed and it
-        # is derived from the line itself (#4245).
+        # carries one.  Its fallback, when neither a head's own line nor the
+        # target precision (#3546) answers, sits four inclusion steps stricter
+        # than the line: under a balance no inclusion drew that line, so none
+        # is passed and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
         # What the balance says about the line rides with it (#4247, #4413).
@@ -626,22 +636,74 @@ def cancel_learned_sort(job_id: str):
     return {"ok": True}
 
 
-@sorting_bp.route("/api/votes", methods=["GET"])
-@sorting_bp.response(200, VotesResponseSchema)
-def get_votes():
-    """Return current good/bad votes, click times, and learned scores."""
-    from vtscore.state.core import _empty_detector_context, get_active_detector_context
+def _labelset_counts(det_ctx) -> tuple[int, int]:
+    """The good/bad counts ``/api/votes`` reports: the active detector's saved
+    labelset, or the dataset's votes when no detector is loaded."""
+    from vtscore.state.core import _empty_detector_context
+
+    if det_ctx is not _empty_detector_context and det_ctx.detector_id:
+        return det_ctx.labelset_good_count, det_ctx.labelset_bad_count
+    return len(det_ctx.good_votes), len(det_ctx.bad_votes)
+
+
+def _verified_votes_payload() -> dict:
+    """``GET /api/votes?scope=verified``: the votes on the verified items only (#5115).
+
+    In Find, ``/api/find-label`` gives every item the detector's call, so the
+    full payload lists every id in ``good`` / ``bad`` with a click time (and,
+    after a learned sort, a score) for each: over a megabyte on a 50k-item
+    dataset, read every 2 s by the Review tab's poll.  The Review tab shows only
+    the verified items; it places the rest by the frozen ranking and the cutoff
+    it already holds.  So this reads just those ids, in one lock acquisition,
+    without copying the per-item dicts whole.
+    """
+    from vtscore.state.core import _state_lock, get_active_detector_context
     from vtscore.utils.scores import finite_or  # noqa: PLC0415
+
+    with _state_lock:
+        det_ctx = get_active_detector_context()
+        verified = sorted(det_ctx.verified_ids)
+        good = [mid for mid in verified if mid in det_ctx.good_votes]
+        click_times = det_ctx.vote_click_times
+        learned_scores = det_ctx.last_learned_scores
+        region_boxes = det_ctx.vote_region_boxes
+        labelset_good_count, labelset_bad_count = _labelset_counts(det_ctx)
+        return {
+            "good": good,
+            "bad": [mid for mid in verified if mid in det_ctx.bad_votes],
+            "verified": verified,
+            "click_times": {str(mid): click_times[mid] for mid in verified if mid in click_times},
+            # Non-finite guard: see ``get_votes``.
+            "learned_scores": {
+                str(mid): round(finite_or(learned_scores[mid]), 4) for mid in verified if mid in learned_scores
+            },
+            "labelset_good_count": labelset_good_count,
+            "labelset_bad_count": labelset_bad_count,
+            "good_region_boxes": {
+                str(mid): [float(c) for c in region_boxes[mid]] for mid in good if region_boxes.get(mid) is not None
+            },
+        }
+
+
+@sorting_bp.route("/api/votes", methods=["GET"])
+@sorting_bp.arguments(VotesQuerySchema, location="query")
+@sorting_bp.response(200, VotesResponseSchema)
+def get_votes(query: dict):
+    """Return current good/bad votes, click times, and learned scores.
+
+    ``scope=verified`` limits every per-item field to the ids the human has
+    verified this Find session; Find's Review tab polls that (#5115).
+    """
+    from vtscore.state.core import get_active_detector_context
+    from vtscore.utils.scores import finite_or  # noqa: PLC0415
+
+    if query["scope"] == "verified":
+        return _verified_votes_payload()
 
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
     det_ctx = get_active_detector_context()
-    if det_ctx is not _empty_detector_context and det_ctx.detector_id:
-        labelset_good_count = det_ctx.labelset_good_count
-        labelset_bad_count = det_ctx.labelset_bad_count
-    else:
-        labelset_good_count = len(good_votes)
-        labelset_bad_count = len(bad_votes)
+    labelset_good_count, labelset_bad_count = _labelset_counts(det_ctx)
     # Defensive guard against non-finite scores poisoning the response: every
     # write site is already sanitised via ``sigmoid_to_finite_scores``, but
     # ``round(NaN, 4)`` returns ``NaN`` and Flask's default JSON provider
@@ -847,7 +909,7 @@ def example_sort():
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
 def label_file_sort():
-    """Train MLP on external media files from a label file, then sort all medias.
+    """Train a head on external media files from a label file, then sort all medias.
 
     On a patch dataset each result also carries the ``best_region`` box of the
     region that drove its score, matching the cosine- and learned-sort paths.

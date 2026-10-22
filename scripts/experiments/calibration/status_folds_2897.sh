@@ -35,12 +35,12 @@ render() {
   # A cell is task_NNNN.csv; task_NNNN__cutdiag.csv / __sweep.csv are its
   # sidecars, so match the four-digit form exactly or the count triples.
   expected=$( (cd "$WT/scripts/experiments/calibration" && python run_cells.py --print-cells 2>/dev/null | tail -1) || echo "?")
-  produced=$(find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l)
-  empty=$(find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | wc -l)
+  produced=$(find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)
+  empty=$(find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | wc -l)
   echo "  produced: $produced / $expected"
   echo "  ZERO-BYTE: $empty   <- delete these before any resume; they count as done"
   if ((empty > 0)); then
-    find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | head -10 | sed 's/^/    /'
+    find "$RES/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | head -10 | sed 's/^/    /'
   fi
   echo "  bytes: $(du -sh "$RES/cells" 2>/dev/null | cut -f1)"
   echo
@@ -68,7 +68,7 @@ PY
     [[ -d "$d" ]] || continue
     found=1
     local n
-    n=$(find "$d/results/cells" -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l)
+    n=$(find "$d/results/cells" -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)
     echo "  $(basename "$d"): $n cells, report $( [[ -s "$d/results/REPORT.md" ]] && echo present || echo absent )"
   done
   ((found)) || echo "  (none yet - the chain launches these only if the screen names a K* != 2)"

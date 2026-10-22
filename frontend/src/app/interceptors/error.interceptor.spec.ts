@@ -1,10 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { Subject } from 'rxjs';
 
 import { errorInterceptor, SKIP_ERROR_TOAST } from './error.interceptor';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
+import { ContextSwitchService } from '../services/context-switch.service';
+import { SortingApiService } from '../services/sorting-api.service';
 import { ToastService } from '../services/toast.service';
 import { provideHttpTesting } from '../testing/test-providers';
 
@@ -181,5 +185,94 @@ describe('errorInterceptor', () => {
       .subscribe();
     httpMock.expectOne('/healthz').flush('ok');
     expect(connection.isOffline).toBe(false);
+  });
+});
+
+/**
+ * Issue #5155: a server restart left an open Train tab polling `/api/votes` for
+ * a pair the new process had never loaded. Every tick 409'd
+ * `detector_not_loaded` under the global toast and nothing loaded the pair
+ * again. These run the real `PairRecoveryService` behind the interceptor, with
+ * the switch and the router stubbed.
+ */
+describe('errorInterceptor: a 409 for the pair the backend lost (#5155)', () => {
+  let sortingApi: SortingApiService;
+  let httpMock: HttpTestingController;
+  let toast: { error: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn> };
+  let contextSwitch: { switching: boolean; reloadActivePair: ReturnType<typeof vi.fn> };
+  let router: { url: string; navigate: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    toast = { error: vi.fn(), info: vi.fn(() => 1), success: vi.fn() };
+    contextSwitch = { switching: false, reloadActivePair: vi.fn(() => new Subject<void>()) };
+    router = { url: '/label/ds1/det1', navigate: vi.fn(() => Promise.resolve(true)) };
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideHttpTesting(errorInterceptor),
+        { provide: ToastService, useValue: toast },
+        { provide: ContextSwitchService, useValue: contextSwitch },
+        { provide: Router, useValue: router },
+      ],
+    });
+    sortingApi = TestBed.inject(SortingApiService);
+    httpMock = TestBed.inject(HttpTestingController);
+    TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+  });
+
+  afterEach(() => httpMock.verify());
+
+  function flushNotLoaded(url: string): void {
+    httpMock.expectOne(url).flush(
+      {
+        code: 409,
+        status: 'Conflict',
+        message: 'Detector is not loaded',
+        request_id: '94783c38b351',
+        error_code: 'detector_not_loaded',
+        detector_id: 'det1',
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+  }
+
+  it('loads the pair again instead of toasting when /api/votes 409s with no switch in flight', () => {
+    let caught: HttpErrorResponse | undefined;
+    sortingApi.getVotes().subscribe({ error: (e: HttpErrorResponse) => (caught = e) });
+    flushNotLoaded('/api/votes');
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+    // The poll still sees its failed tick, which `adaptivePoll` skips.
+    expect(caught?.status).toBe(409);
+  });
+
+  it('raises no toast and starts no reload for a 409 that lands mid-switch (#3644)', () => {
+    contextSwitch.switching = true;
+
+    sortingApi.getVotes().subscribe({ error: () => undefined });
+    flushNotLoaded('/api/votes');
+    sortingApi.getLabelingStatus().subscribe({ error: () => undefined });
+    flushNotLoaded('/api/labeling-status');
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
+  });
+
+  it('starts the reload from a request that opted out of the toast, too', () => {
+    sortingApi.getLabelingStatus().subscribe({ error: () => undefined });
+    flushNotLoaded('/api/labeling-status');
+
+    expect(contextSwitch.reloadActivePair).toHaveBeenCalledTimes(1);
+  });
+
+  it('still toasts the 409 when no view is showing the pair', () => {
+    router.url = '/dashboard';
+
+    sortingApi.getVotes().subscribe({ error: () => undefined });
+    flushNotLoaded('/api/votes');
+
+    expect(contextSwitch.reloadActivePair).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(toast.error.mock.calls[0][0].message).toBe('Detector is not loaded');
   });
 });

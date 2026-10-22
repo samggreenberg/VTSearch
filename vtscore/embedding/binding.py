@@ -4,7 +4,7 @@ A dataset binds **up to one text-capable embedder**, **up to one
 patch-capable embedder**, and **up to one structural (geometric
 verification) embedder** (the "three-slot" trio in
 ``docs/ARCHITECTURE.md`` → "Embedder binding and routing").  Text sort runs against the text
-embedder; region similarity, region voting, and the detector MLP run
+embedder; region similarity, region voting, and the detector head run
 against the patch embedder; instance retrieval + geometric re-rank run
 against the structural embedder; all three can coexist on one dataset.
 
@@ -115,10 +115,10 @@ def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
 
     Anything that is not a positive ``int`` collapses to ``None``.
     ``embedding_dim`` is part of the *plugin* surface, so a third-party embedder
-    may return whatever it likes, and a test double standing in for the registry
-    returns a mock.  The value's only use is a width comparison, so a
-    non-integer has to read as "unknown" rather than as a width that nothing can
-    ever match.
+    may return whatever it likes (or, duck-typed, lack the attribute), and a
+    test double standing in for the registry returns a mock.  The value's only
+    use is a width comparison, so a non-integer has to read as "unknown" rather
+    than as a width that nothing can ever match.
     """
     name = (embedder_name or "").strip()
     if not name:
@@ -127,7 +127,7 @@ def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
     from vtscore.media import get_embedder  # noqa: PLC0415 - avoid import cycle
 
     try:
-        dim = get_embedder(name).embedding_dim
+        dim = getattr(get_embedder(name), "embedding_dim", None)
     except KeyError:
         return None
     # ``bool`` is an int subclass; True would otherwise read as a width of 1.
@@ -169,7 +169,7 @@ def embedder_of_type(embedder_names: Iterable[str | None], target_type: str) -> 
 
     This is the scoring-space resolver for a type-locked detector: given the
     embedders a dataset binds (the keys of ``media["embeddings"]``) and the
-    detector's locked type, return the single concrete embedder the MLP should
+    detector's locked type, return the single concrete embedder the head should
     train/score in, or ``None`` when the dataset supplies nothing of that type
     (the detector is then incompatible with the dataset).
 
@@ -332,7 +332,7 @@ def derive_binding(embedder_name: str | None) -> tuple[str | None, str | None, s
     fills the patch slot; a geometric-verification-capable embedder fills
     the structural slot.  A single-vector, non-text embedder (e.g.
     ``dinov2_single``) fills **no** slot (all ``None``): it still drives
-    cosine sort and the detector MLP via each media's primary vector, which
+    cosine sort and the detector head via each media's primary vector, which
     the routing layer reads directly rather than through a role slot.
 
     ``None`` / empty in → ``(None, None, None)``.
@@ -374,10 +374,10 @@ def derive_binding_from_names(
 
 
 def score_marker_embedder(media: dict[str, Any]) -> str:
-    """Concrete embedder name a detector MLP is keyed to for *media*.
+    """Concrete embedder name a detector head is keyed to for *media*.
 
     This is the v3 model-keying marker (the "embedder" component of the
-    ``(detector, dataset, embedder)`` MLP key; ``docs/ARCHITECTURE.md`` → "Per-detector embedder type").
+    ``(detector, dataset, embedder)`` head key; ``docs/ARCHITECTURE.md`` → "Per-detector embedder type").
     It resolves to the **score** embedder (structural ▸ patch ▸ text, the
     routing table) when a role slot is bound, and falls back to *media*'s
     primary embedder *name* for a slot-less single-vector dataset (e.g.

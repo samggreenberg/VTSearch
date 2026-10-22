@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 
 import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { clipBoxViewBox } from '../../../utils/clip-box';
 import { armClipWindow, ClipBounds, enforceClipWindow } from '../../../utils/clip-window';
 
 @Component({
@@ -35,6 +36,27 @@ export class VideoPlayerComponent implements OnDestroy {
   readonly videoSrc = signal('');
   readonly videoError = signal(false);
 
+  // The element's natural frame size, once (loadedmetadata) reports it for the
+  // current videoSrc; null before that. The unit's clip_box is scaled into it
+  // and clamped against it, so no crop can be computed until it is known.
+  private readonly frameSize = signal<{ width: number; height: number } | null>(null);
+
+  /**
+   * The unit's letterbox crop as an `object-view-box` value, or null when
+   * none applies. A letterbox cleaner records the crop as `clip_box` rather
+   * than re-encoding the file, and the embedder and grid thumbnail honour it;
+   * this makes the player show the same picture instead of the full padded
+   * frame. Recomputed when batch hydration delivers `clip_box` after load.
+   * `clip_box_frame` is the frame size the box was measured on, which differs
+   * from the natural size on an anamorphic video.
+   */
+  readonly viewBox = computed(() => {
+    const size = this.frameSize();
+    if (!size) return null;
+    const media = this.media();
+    return clipBoxViewBox(media.clip_box, size.width, size.height, media.clip_box_frame);
+  });
+
   // Active clip window bounds while enforcement is on, else null. Enforcement is
   // driven by the <video> element's (timeupdate) event rather than a polling
   // timer, so it only runs while the clip is actually playing and progressing.
@@ -64,6 +86,7 @@ export class VideoPlayerComponent implements OnDestroy {
         this.lastVariant = variant;
         this.videoError.set(false);
         this.metadataLoaded = false;
+        this.frameSize.set(null);
         this.stopClipEnforcement();
         this.videoSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/video`, { variant }));
       } else if (this.metadataLoaded) {
@@ -140,6 +163,7 @@ export class VideoPlayerComponent implements OnDestroy {
     const video = this.videoRef()?.nativeElement;
     if (!video) return;
     this.metadataLoaded = true;
+    this.frameSize.set({ width: video.videoWidth, height: video.videoHeight });
     video.volume = this.volume();
     this.applyClipBounds();
     this.syncPlaybackState();

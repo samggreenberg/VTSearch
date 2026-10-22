@@ -13,6 +13,8 @@ these tests pin down both halves of it:
 
 from __future__ import annotations
 
+import io
+
 import numpy as np
 import pytest
 
@@ -70,6 +72,33 @@ class TestParseProbe:
         assert info is not None
         assert info.duration == pytest.approx(2 * 3600 + 3 * 60 + 4.5)
 
+    def test_square_pixels_read_as_sar_one(self):
+        info = decode._parse_probe(_BANNER)
+        assert info is not None
+        assert info.sar == 1.0
+
+    def test_parses_a_bracketed_sar(self):
+        # How mp4 prints it: after the size, in brackets with the DAR.
+        banner = _BANNER.replace("1920x1080 [SAR 1:1 DAR 16:9]", "720x480 [SAR 32:27 DAR 16:9]")
+        info = decode._parse_probe(banner)
+        assert info is not None
+        assert (info.width, info.height) == (720, 480)
+        assert info.sar == pytest.approx(32 / 27)
+
+    def test_parses_a_bare_sar(self):
+        # How webm prints it: a field of its own.
+        banner = _BANNER.replace("1920x1080 [SAR 1:1 DAR 16:9]", "720x480, SAR 853:720 DAR 853:480")
+        info = decode._parse_probe(banner)
+        assert info is not None
+        assert (info.width, info.height) == (720, 480)
+        assert info.sar == pytest.approx(853 / 720)
+
+    @pytest.mark.parametrize("sar", ["", " [SAR 0:1 DAR 0:1]", " [SAR 1:0 DAR 0:1]"])
+    def test_a_missing_or_unset_sar_reads_as_square(self, sar):
+        info = decode._parse_probe(_BANNER.replace(" [SAR 1:1 DAR 16:9]", sar))
+        assert info is not None
+        assert info.sar == 1.0
+
 
 class TestVideoInfo:
     def test_frame_count_from_duration_and_fps(self):
@@ -117,7 +146,41 @@ def clip(tmp_path_factory) -> tuple[object, list[np.ndarray]]:
     return path, frames
 
 
+@pytest.fixture(scope="module")
+def anamorphic_clip(tmp_path_factory) -> object:
+    """A 1 s, 72x48 mp4 with sample aspect ratio 32:27, so it displays at ~85x48."""
+    import imageio_ffmpeg
+
+    frames = [np.full((48, 72, 3), 120, dtype=np.uint8) for _ in range(10)]
+    path = tmp_path_factory.mktemp("decode") / "anamorphic.mp4"
+    writer = imageio_ffmpeg.write_frames(
+        str(path),
+        size=(72, 48),
+        fps=10,
+        codec="libx264",
+        pix_fmt_in="rgb24",
+        pix_fmt_out="yuv420p",
+        macro_block_size=1,
+        output_params=["-vf", "setsar=32/27"],
+    )
+    writer.send(None)
+    try:
+        for frame in frames:
+            writer.send(frame.tobytes())
+    finally:
+        writer.close()
+    return path
+
+
 class TestProbeRealFile:
+    def test_reports_the_sample_aspect_ratio(self, clip, anamorphic_clip):
+        square = decode.probe(clip[0])
+        anamorphic = decode.probe(anamorphic_clip)
+        assert square is not None and anamorphic is not None
+        assert square.sar == 1.0
+        assert (anamorphic.width, anamorphic.height) == (72, 48)
+        assert anamorphic.sar == pytest.approx(32 / 27)
+
     def test_reports_duration_fps_and_size(self, clip):
         path, _ = clip
         info = decode.probe(path)
@@ -137,6 +200,12 @@ class TestProbeRealFile:
 
 
 class TestFrameAtRealFile:
+    def test_an_anamorphic_frame_comes_back_in_stored_pixels(self, anamorphic_clip):
+        """The PNG extract ignores the SAR; callers that need the display aspect apply it."""
+        frame = decode.frame_at(anamorphic_clip, 0.5)
+        assert frame is not None
+        assert frame.shape == (48, 72, 3)
+
     def test_returns_rgb_frame(self, clip):
         path, _ = clip
         frame = decode.frame_at(path, 0.0)
@@ -167,6 +236,19 @@ class TestFrameAtRealFile:
 
     def test_missing_file_returns_none(self, tmp_path):
         assert decode.frame_at(tmp_path / "nope.mp4", 1.0) is None
+
+
+class TestAnamorphicThumbnailRealFile:
+    def test_the_thumbnail_takes_the_display_aspect(self, anamorphic_clip):
+        """End to end: the real probe's SAR reaches the real thumbnailer (#5032)."""
+        from PIL import Image
+
+        from vtscore.media.video.media_type import generate_video_thumbnail_from_file
+
+        thumb = generate_video_thumbnail_from_file(anamorphic_clip)
+        assert thumb is not None
+        with Image.open(io.BytesIO(thumb)) as img:
+            assert img.size == (85, 48)
 
 
 class TestFramesAtRealFile:

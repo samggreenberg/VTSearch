@@ -196,6 +196,42 @@ class TestRequestScopedDataset:
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
 
+    def test_registry_load_succeeds_with_headers_naming_the_lost_pair(self, client, tmp_path):
+        """The reload after a restart sends its load with the lost pair's headers (#5155).
+
+        A tab left open across a restart goes on naming its pair, so the
+        frontend's ``reloadActivePair`` loads the dataset with ``X-Dataset-Id``
+        naming that very dataset and ``X-Detector-Id`` naming a detector the
+        new process has not loaded. Neither header may 409 the load that cures
+        them; the detector load waits for this one, because *it* would 409
+        (issue #3139).
+        """
+        import pickle
+
+        from vtscore.datasets.registry import register_dataset
+
+        pkl = tmp_path / "lost.pkl"
+        with open(pkl, "wb") as f:
+            pickle.dump(
+                {1: {"id": 1, "media_type": "audio", "embedding": np.zeros(4, dtype=np.float32)}},
+                f,
+            )
+        entry = register_dataset(
+            name="Lost",
+            media_type="audio",
+            num_items=1,
+            pkl_path=str(pkl),
+            embedder="",
+            created_by="default",
+        )
+
+        resp = client.post(
+            f"/api/datasets/registry/{entry['id']}/load",
+            headers={"X-Dataset-Id": entry["id"], "X-Detector-Id": "lost_detector"},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
     def test_no_header_uses_global_active(self, client):
         """Without the header, behaviour is identical to before (global active)."""
         _make_dataset("req_global", [400])

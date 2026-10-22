@@ -1,17 +1,27 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import { buildProjection } from '../generated/api-client/fn/projection/build-projection';
+import { getTile } from '../generated/api-client/fn/projection/get-tile';
+import { projectionLabels } from '../generated/api-client/fn/projection/projection-labels';
+import { projectionMeta } from '../generated/api-client/fn/projection/projection-meta';
+import { removeFromSubset } from '../generated/api-client/fn/projection/remove-from-subset';
+import type { ProjectionBuildRequest } from '../generated/api-client/models/projection-build-request';
 import type {
-  ProjectionMeta,
   ProjectionBuildResponse,
   ProjectionLabelsResponse,
-  TilePayload,
+  ProjectionMeta,
+  TileResponse,
 } from '../models/projection.models';
 
+/** The Browse projection endpoints, through the generated client. */
 @Injectable({ providedIn: 'root' })
 export class ProjectionApiService {
   private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
 
   getMeta(subset = false): Observable<ProjectionMeta> {
     // The browse view polls this to discover whether a projection exists
@@ -24,16 +34,13 @@ export class ProjectionApiService {
     // full-dataset projection. The bin shape (hex/square) is derived
     // server-side from the dataset's media type and reported back in
     // `bin_shape`; the client never selects it.
-    const params: Record<string, string> = {};
-    if (subset) params['subset'] = '1';
-    return this.http.get<ProjectionMeta>('/api/projection/meta', {
-      params,
-      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
-    });
+    return projectionMeta(this.http, this.config.rootUrl, subsetParams(subset), quietContext()).pipe(
+      map((r) => r.body),
+    );
   }
 
   build(): Observable<ProjectionBuildResponse> {
-    return this.http.post<ProjectionBuildResponse>('/api/projection/build', {});
+    return this.postBuild({});
   }
 
   /**
@@ -42,7 +49,7 @@ export class ProjectionApiService {
    * a job id while the fit runs in the background; poll `getMeta(true)`.
    */
   buildSubset(ids: number[]): Observable<ProjectionBuildResponse> {
-    return this.http.post<ProjectionBuildResponse>('/api/projection/build', { ids });
+    return this.postBuild({ ids });
   }
 
   /**
@@ -51,7 +58,7 @@ export class ProjectionApiService {
    * updated meta (same ``projection_id``, bumped ``content_version``).
    */
   subsetRemove(ids: number[]): Observable<ProjectionMeta> {
-    return this.http.post<ProjectionMeta>('/api/projection/subset/remove', { ids });
+    return removeFromSubset(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }
 
   /**
@@ -61,7 +68,7 @@ export class ProjectionApiService {
    * `getMeta()`.
    */
   reproject(): Observable<ProjectionBuildResponse> {
-    return this.http.post<ProjectionBuildResponse>('/api/projection/build', { force: true });
+    return this.postBuild({ force: true });
   }
 
   /**
@@ -71,7 +78,7 @@ export class ProjectionApiService {
    * `getMeta(true)`.
    */
   reprojectSubset(ids: number[]): Observable<ProjectionBuildResponse> {
-    return this.http.post<ProjectionBuildResponse>('/api/projection/build', { ids, force: true });
+    return this.postBuild({ ids, force: true });
   }
 
   /**
@@ -82,14 +89,11 @@ export class ProjectionApiService {
    * ``has_labels`` flag lets callers skip the request entirely.
    */
   getLabels(subset = false): Observable<ProjectionLabelsResponse> {
-    const params: Record<string, string> = {};
-    if (subset) params['subset'] = '1';
     // Signs are optional decoration on the map — a failure to fetch them must
     // never toast an error over a perfectly working browse view.
-    return this.http.get<ProjectionLabelsResponse>('/api/projection/labels', {
-      params,
-      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
-    });
+    return projectionLabels(this.http, this.config.rootUrl, subsetParams(subset), quietContext()).pipe(
+      map((r) => r.body),
+    );
   }
 
   getTile(
@@ -98,24 +102,35 @@ export class ProjectionApiService {
     ty: number,
     subset = false,
     cacheToken = '',
-  ): Observable<TilePayload> {
+  ): Observable<TileResponse> {
     // The backend resolves the pyramid (and its bin shape) from the active
     // dataset context, so the tile URL is keyed only by (level, tx, ty). Tiles
     // are served ``immutable``, so ``cacheToken``
     // (``<projection_id>:<content_version>``) rides along as ``?v=`` to give
     // each projection — and each in-place edit of a subset — a distinct URL,
     // busting the HTTP cache when content changes.
-    const url = `/api/projection/tiles/${level}/${tx}/${ty}`;
-    const params: Record<string, string> = {};
-    if (subset) params['subset'] = '1';
-    if (cacheToken) params['v'] = cacheToken;
+    const params = { level, tx, ty, ...subsetParams(subset), v: cacheToken || undefined };
     // Suppress the global error toast: a tile can 404 transiently when it is
     // requested before the projection has finished building. The caller
     // (TileCacheService) already recovers by rendering an empty tile and
     // refetching once the build lands, so the failure is expected and
     // self-healing — surfacing it as a banner would just alarm the user.
     // Mirrors getMeta's SKIP_ERROR_TOAST rationale.
-    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
-    return this.http.get<TilePayload>(url, { params, context });
+    return getTile(this.http, this.config.rootUrl, params, quietContext()).pipe(map((r) => r.body));
   }
+
+  /** `POST /api/projection/build`: `ids` scopes it to a subset, `force` re-fits a cached layout. */
+  private postBuild(body: ProjectionBuildRequest): Observable<ProjectionBuildResponse> {
+    return buildProjection(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
+  }
+}
+
+/** `?subset=true` for the ephemeral subset projection, nothing for the full-dataset one. */
+function subsetParams(subset: boolean): { subset?: boolean } {
+  return subset ? { subset: true } : {};
+}
+
+/** A request whose failure the caller handles inline, so the global error toast stays quiet. */
+function quietContext(): HttpContext {
+  return new HttpContext().set(SKIP_ERROR_TOAST, true);
 }

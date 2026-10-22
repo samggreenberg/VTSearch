@@ -214,6 +214,19 @@ Cancels a specific loading task, with the same response shape and the same
 
 → `200 {"ok": true, ...}`, `409 {"ok": false, ...}`, or `404 {"message": "Task not found", ...}`
 
+```
+POST /api/dataset/dismiss/{task_id}
+```
+
+Removes a finished task from the `loading-tasks` channel. A failed import is
+not pruned on a timer: it stays on the channel until this is called, so the
+dashboard can keep showing it (#4973). That failure is visible only to the user
+who started the import, so for anyone else it does not exist. Other finished
+tasks (and a cancelled import) lapse on their own, but can be dismissed early.
+
+→ `200 {"ok": true}`, `404 {"message": "Task not found", ...}` (unknown, or another
+user's failure), or `409 {"message": "Task is still running; cancel it instead", ...}`
+
 ---
 
 ## Importers
@@ -748,6 +761,12 @@ histogram is uninformative — every item unknown — and the dataset happens to
 loaded, the endpoint recounts it from the in-memory medias and writes the repair
 back to the registry.
 
+`coverage_atlas` is `null` when the dataset is not loaded (the atlas lives only
+in memory), else `{"built", "building", "auto_build_threshold"}`: whether the
+loaded dataset has a coverage atlas, whether an on-demand
+[build](#build-coverage-atlas) is running, and the item count above which
+loading leaves the atlas unbuilt. The Stats window offers the build from it.
+
 404 if the dataset does not exist.
 
 ### Dataset duplicates
@@ -807,6 +826,11 @@ already-loaded dataset. Progress streams on the `loading-tasks` channel of
 under the returned `task_id`. No body.
 
 → `{"ok": true, "message": "...", "task_id": "_atlas_abc12345"}`
+
+A request while a build is already running returns that build's `task_id` and
+starts nothing. The [stats](#dataset-statistics) response's `coverage_atlas`
+reports whether the dataset has an atlas, and the Stats window's **Build**
+button calls this route.
 
 400 if the dataset isn't loaded; 403 if access is denied; 404 if it doesn't exist.
 

@@ -16,8 +16,11 @@ fi
 # keep short-circuiting at the `-f $MARKER` check forever, even after the
 # repo was updated to require new install steps, e.g. the pip-audit
 # system-package upgrade block added in `e3eb87fd` was silently skipped
-# on containers whose marker was created before that fix landed.
-SCRIPT_HASH="$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1 | cut -c1-12)"
+# on containers whose marker was created before that fix landed. The prune
+# script this hook runs last is hashed in for the same reason.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRUNE="$SCRIPT_DIR/prune-stale-dist-info.py"
+SCRIPT_HASH="$(cat "${BASH_SOURCE[0]}" "$PRUNE" | sha256sum | cut -d' ' -f1 | cut -c1-12)"
 MARKER="${VTSEARCH_DEPS_MARKER_DIR:-/tmp}/.vtsearch-deps-installed-${SCRIPT_HASH}"
 
 # Every install below goes through `python -m pip`, never a bare `pip`. The
@@ -48,7 +51,6 @@ if ! python -m pip --version >/dev/null 2>&1; then
   python -m ensurepip --upgrade
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/../.."
 
 # Upgrade setuptools first; the system version (68.x) has a broken
@@ -62,7 +64,9 @@ python -m pip install --upgrade setuptools -q
 #   - cryptography 41.0.7 / pyjwt 2.7.0 / wheel 0.42.0 / pip 24.0 ship
 #     pre-installed; we upgrade them so they aren't flagged. Several are
 #     debian-managed (no RECORD file → pip cannot uninstall them), so
-#     we use --ignore-installed to drop fresh copies alongside.
+#     we use --ignore-installed to drop fresh copies alongside. Where the
+#     image's copies are uv-installed in /usr/local instead, that leaves
+#     two dist-info per project there; the prune at the end clears the old.
 #   - urllib3 2.6.3 is a real transitive dep (via requests); newer
 #     versions patch CVE-2026-44431/44432.
 #   - httplib2 0.20.4 ships pre-installed (via launchpadlib, debian-managed);
@@ -117,6 +121,12 @@ python -m pip install --prefer-binary \
 # model runs a correct forward pass on the modern stack), so install --no-deps
 # and let the app's own torch/torchvision/numpy/Pillow satisfy it at runtime.
 python -m pip install --no-deps facenet-pytorch -q
+
+# The installs above can leave an old dist-info beside the new one of the same
+# project (--ignore-installed never uninstalls, and a plain upgrade uninstalls
+# the copy first on sys.path, which can be the user site's rather than the one
+# in the directory it writes to). pip-audit then reads either one (#5153).
+python "$PRUNE"
 
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,

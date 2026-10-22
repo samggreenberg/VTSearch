@@ -39,6 +39,7 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_SEPARATION_D,
     WEAK_CHECK_OFF_MEDIA_TYPES,
     _line_on,
+    _norm_pdf,
     done_check_due,
     weak_check_due,
     weak_check_prompts,
@@ -377,6 +378,30 @@ def test_the_corpus_floor_is_relative_and_bounded():
     assert f == pytest.approx(RELATIVE_SIGMA_FLOOR * 0.2, rel=0.08)
     assert corpus_sigma_floor(np.full(10, 0.5)) > 0, "a corpus of one score still has a floor"
     assert corpus_sigma_floor(np.array([])) == MIN_LOGIT_SIGMA
+
+
+@pytest.mark.parametrize(("mu", "sigma"), [(0.0, 1.0), (-4.0, 1.2), (2.0, MIN_LOGIT_SIGMA), (0.3, 1e-3), (-1.5, 3.7)])
+def test_the_em_density_is_scipys_bit_for_bit(mu, sigma):
+    """#5072: the EM loops' normal density is ``scipy.stats.norm.pdf``'s, float for float, its underflowed tails too."""
+    from scipy.stats import norm
+
+    rng = np.random.default_rng(42)
+    # Around the component, then out past ~38 spreads, where the density underflows to 0.
+    x = np.r_[rng.normal(mu, 3 * sigma, 2000), mu + sigma * rng.uniform(-60.0, 60.0, 2000)]
+    want = norm.pdf(x, mu, sigma)
+    assert (want == 0).any() and (want > 0).any()
+    assert np.array_equal(_norm_pdf(x, mu, sigma), want)
+
+
+def test_the_em_density_is_scipys_off_the_happy_path():
+    """Non-finite scores and a spread that is not positive give what scipy gives: 0 at ``±inf``, NaN otherwise."""
+    from scipy.stats import norm
+
+    x = np.array([-np.inf, -1.0, 0.0, 2.5, np.inf, np.nan])
+    for sigma in (1.0, 0.0, -1.0, np.nan):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            want = norm.pdf(x, 0.0, sigma)
+        assert np.array_equal(_norm_pdf(x, 0.0, sigma), want, equal_nan=True), sigma
 
 
 def test_separation_is_read_in_the_spread_the_line_was_cut_with():

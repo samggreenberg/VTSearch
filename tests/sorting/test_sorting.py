@@ -90,7 +90,8 @@ class TestTrainAndScore:
         assert avg_good > avg_bad
 
     def test_trains_the_linear_head(self):
-        """The vote path's detector is the linear (logistic) head, not the MLP.
+        """The vote path's detector is a linear head (the SVM started from the
+        Goods' centroid, one ``Linear``), not the MLP.
 
         Pins the #2790 swap on the pipeline users actually drive: a revert to
         ``_auto_hidden_dim`` would put back a ReLU and a second Linear here.
@@ -312,7 +313,7 @@ class TestTrainModelEpochs:
 class TestCalibrationAtTinyLabelCounts:
     """Calibration runs at every label count, safe thresholds on or off.
 
-    The shipped fold-anchored estimator anchors on the fold models' held-out
+    The fold-anchored estimator anchors on the fold models' held-out
     scores, so the folds are an *input* to it - the pre-fusion skip below the
     blend schedule's floor (where the schedule multiplied the cross-cal cut by
     zero) has nothing left to save."""
@@ -769,6 +770,46 @@ class TestLearnedSortAsync:
 
         learned_sort_jobs.reset_for_tests()
 
+    def test_a_quota_head_on_the_context_retrains_rather_than_reusing_the_cache(self, client):
+        """A head the label quota gives keeps a ranking of its own (#5048), but not the cached sort's head.
+
+        A load or a re-embed under the quota puts the Goods' centroid (or a
+        typed query's head) on the context with the votes unchanged.  The
+        cached result would then answer with a trained head's sort while the
+        context holds the centroid, so the next sort trains again.
+        """
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.detectors.centroid_head import is_centroid_head
+        from vtscore.detectors.labelset_training import install_centroid_head
+        from vtscore.detectors.query_head import is_quota_head
+        from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import snapshot_medias
+
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        ctx = get_active_detector_context()
+
+        rows = scoring_rows_for_snap(snapshot_medias(), ctx.embedder or None)
+        install_centroid_head(
+            ctx,
+            [np.asarray(rows.matrix[0], dtype=np.float32)],
+            lambda h: score_rows_with_model(h, rows)[0],
+            None,
+            beta=1.0,
+            ids=rows.ids,
+        )
+        assert is_centroid_head(ctx.model) and ctx.line_ranking is not None
+        second = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert second["status"] == "done"
+        assert second["job_id"] != first["job_id"]
+        assert not is_quota_head(ctx.model), "the sort's own head is back on the context"
+
+        learned_sort_jobs.reset_for_tests()
+
     def test_polling_unknown_job_returns_404(self, client):
         # 404s are intercepted by the app-level ``NotFound`` errorhandler
         # in ``app.py``, which renders the legacy
@@ -863,7 +904,7 @@ class TestEvalTrainAndScoreAsync:
         data = resp.get_json()
         assert data["status"] == "done"
         assert data["metric"] == "smart"
-        assert "error_cost" in data
+        assert "fbeta" in data
 
     def test_async_polls_to_done(self, client):
         from tests.conftest import _wait_for_job

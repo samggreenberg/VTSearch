@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx|png] [--speaker|--watch]
+# Build one deck without make:
+#   ./render.sh hold-the-line [pdf|html|pptx|png] [--speaker|--watch] [--no-pageno] [--editable]
 # --speaker builds the speaker view -> _out/<deck>.speaker.<fmt>: each page is
 # a miniature of the real rendered slide beside its presenter notes. It renders
 # the audience deck to per-slide PNGs first, so it is a two-pass build.
@@ -24,7 +25,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-deck=${1:?usage: ./render.sh <deck-name> [pdf|html|pptx] [--speaker|--watch]}
+deck=${1:?usage: ./render.sh <deck-name> [pdf|html|pptx|png] [--speaker|--watch] [--no-pageno] [--editable]}
 shift
 fmt=pdf
 speaker=
@@ -79,11 +80,11 @@ mkdir -p _out
 # the room cannot resolve.
 PNG_SCALE=${PNG_SCALE:-2}
 PNG_MAX_MB=${PNG_MAX_MB:-25}
-# Seconds Marp may spend on one browser operation. Its own default, 30, is about
-# what printing hold-the-line's ~280 full-bleed pages to one PDF takes, so the
-# audience render failed on a cold container with "Timed out after waiting
-# 30000ms" as soon as the deck grew a page (#4598). The ceiling only matters
-# when something is slow; a render that is not finishes as fast as before.
+# Seconds Marp may spend on one browser operation. Its own default, 30, is less
+# than printing hold-the-line's few hundred full-bleed pages to one PDF can take:
+# at that default the audience render fails on a cold container with "Timed out
+# after waiting 30000ms" (#4598). The ceiling only matters when something is
+# slow; a render that is not finishes as fast as before.
 MARP_BROWSER_TIMEOUT=${MARP_BROWSER_TIMEOUT:-180}
 
 # Marp warns but exits 0 when a figure path doesn't resolve, producing a deck
@@ -96,10 +97,13 @@ run_marp() {
     # step, an agent shell) hangs forever with no output rather than failing.
     "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin \
         --browser-timeout "$MARP_BROWSER_TIMEOUT" 2>&1 | tee "$log"
-    # `set -e` does not see a failure on the left of a pipe, and this script has
-    # no `pipefail`, so without this the whole render reports success after Marp
-    # has died — which is how a run that could not find a browser at all still
-    # printed "-> _out/<deck>.pdf" and exited 0, with no PDF anywhere (#3301).
+    # `pipefail` makes the pipe fail when Marp does, but every caller runs
+    # run_marp on the left of `||`, and that switches `set -e` off for the whole
+    # function body: the failed pipe does not stop it. So without this the
+    # function carries on and returns 0 after Marp has died — which is how a run
+    # that could not find a browser at all once printed "-> _out/<deck>.pdf" and
+    # exited 0, with no PDF anywhere (#3301). PIPESTATUS, not `$?`, so the status
+    # reported is Marp's own even if `tee` fails too.
     status=${PIPESTATUS[0]}
     if [[ $status -ne 0 ]]; then
         rm -f "$log"

@@ -19,7 +19,7 @@ export interface KeyboardAction {
 
 /**
  * A claim on the vote keys, held by a step that votes on items of its own
- * while it is open: the balance's spot check (#4273, #4413). While a claim
+ * while it is open: Tune's test of the line. While a claim
  * is held, ←/→ vote and ↓/↑ navigate for its holder, even from inside a modal,
  * and nothing reaches {@link KeyboardService.action$} - the ranked list behind
  * the step never sees them.
@@ -93,7 +93,7 @@ export class KeyboardService implements OnDestroy {
   /**
    * Listen while the shortcuts are started or a claim is held, whichever
    * comes and goes first. A claim's holder can be on screen with no centre
-   * panel to start them (the Test autopilot's stage, #4555), and a centre
+   * panel to start them (the Tune autopilot's stage, #4555), and a centre
    * panel torn down beside it must not take its keys away.
    */
   private sync(): void {

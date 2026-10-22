@@ -58,10 +58,10 @@ Label endpoints (``vtsearch/routes/detectors/labels.py``):
   not described in the spec.
 
 The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
-``POST /api/detectors/registry/from-labelset/<importer>`` routes stay on the
-legacy flask pattern: their request shape depends on the chosen label
-importer's plugin fields, which don't fit a static marshmallow schema (see
-"Routes absent from the spec" in ``docs/API.md``).
+``POST /api/detectors/registry/from-labelset/<importer>`` routes declare no
+request schema: their request shape depends on the chosen label importer's
+plugin fields, which don't fit a static marshmallow schema (see "Routes with
+no typed schema" in ``docs/API.md``).
 
 The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 """
@@ -289,6 +289,10 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autofind = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
+    # Ids of the datasets the detector holds labels from (#5142): the
+    # Dashboard sends a user who selects one of them elsewhere to Tune or
+    # Find, since the detector has already seen those items.
+    trained_on = fields.List(fields.String())
     # Stamped the first time a detector trains against a dataset and
     # persisted on the registry entry, so the smart preload predictor and
     # the dashboard's cross-embedder check both see it without having to
@@ -335,7 +339,6 @@ class DetectorRegistryCreateRequestSchema(Schema):
     media_type = fields.String(required=True, validate=validate.Length(min=1))
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
-    trainable = fields.Boolean(load_default=False)
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
     # The detector's locked embedder type ("semantic" / "patch_semantic" /
     # "structural").  Empty lets the server pick (sole type a single-type
@@ -463,7 +466,7 @@ class DetectorRegistryReadersResponseSchema(Schema):
 class DetectorRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/detectors/registry/<id>/stats``.
 
-    Counts and metadata only — never embeddings or MLP weights (see the
+    Counts and metadata only — never embeddings or head weights (see the
     "No Persisted Vectors" rule). ``num_positive_resolved`` is how many of
     the detector's positive labels currently resolve into the active
     dataset (the set the Browse button would project), with
@@ -789,8 +792,8 @@ class AutoDetectResponseSchema(Schema):
     # reference from another user's deletion). Reported so a scheduled run
     # never silently drops a detector the user thinks is still active.
     missing_detectors = fields.List(fields.String(), required=True)
-    # Present only when an AutoFind results exporter is configured: the
-    # outcome of auto-exporting these results.
+    # Present only when an AutoFind results exporter is configured and the
+    # user has not paused it: the outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
 
 
@@ -1117,8 +1120,8 @@ class FindEvidenceCoverageResponseSchema(Schema):
     k = fields.Integer(required=True)
     alpha = fields.Float(required=True)
     # Share with support p-value D < alpha — an evidence vacuum for the predicted
-    # class — its expectation under the well-supported null (= alpha), and the
-    # binomial z of the excess.
+    # class, calibrated on the votes' own spread — alpha, and the binomial z of
+    # the excess.  Reported, but no longer what the verdict reads (#5089).
     frac_unsupported = fields.Float(required=True)
     expected_unsupported = fields.Float(required=True)
     z_score = fields.Float(required=True)
@@ -1127,8 +1130,20 @@ class FindEvidenceCoverageResponseSchema(Schema):
     # the median TS.
     frac_low_trust = fields.Float(required=True)
     median_trust = fields.Float(required=True)
-    # Headline: the vacuum excess is both statistically clear and practically
-    # large (z > 3 and frac_unsupported >= 2*alpha).
+    # What the verdict ranks against (#5089): "training" when the detector's
+    # training haystack gave a baseline (drawn here on the training dataset, or
+    # recorded on the detector there), "none" when it did not.  n_baseline is
+    # the training items it was drawn from, and baseline_dataset_* the dataset.
+    baseline = fields.String(required=True)
+    n_baseline = fields.Integer(required=True)
+    baseline_dataset_id = fields.String(required=True)
+    baseline_dataset_name = fields.String(required=True)
+    # Share farther from its predicted class's votes than 95% of the training
+    # haystack's items called that class, and its binomial z; null with no baseline.
+    frac_beyond = fields.Float(required=True, allow_none=True)
+    z_beyond = fields.Float(required=True, allow_none=True)
+    # Headline: that excess is both statistically clear and practically large
+    # (z_beyond > 3 and frac_beyond >= 2*alpha); always false with no baseline.
     unsupported = fields.Boolean(required=True)
 
 

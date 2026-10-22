@@ -391,11 +391,14 @@ def test_the_replay_restores_the_bads_scores_from_the_snapshots_folds():
     fl = np.r_[np.ones(20), np.zeros(n_bad)].astype(np.int8)
     fi = (np.arange(fs.size) % 2).astype(np.int16)
     built = class_score_model([(fs[fi == i], fl[fi == i]) for i in (0, 1)])
-    assert built is not None and built.neg_logits is not None
-    meta = {k: v for k, v in asdict(built).items() if k != "neg_logits"}
+    assert built is not None and built.neg_logits is not None and built.pos_logits is not None
+    meta = {k: v for k, v in asdict(built).items() if k not in ("neg_logits", "pos_logits")}
     snap = {"fold_scores": fs, "fold_labels": fl, "fold_index": fi}
     restored = _snapshot_model(snap, meta)
     assert restored.neg_logits is not None and np.array_equal(restored.neg_logits, built.neg_logits)
+    # #5039: the Goods' scores, which the head's count line reads above beta 1, come back the same way.
+    assert restored.pos_logits is not None and np.array_equal(restored.pos_logits, built.pos_logits)
     assert _snapshot_model({}, meta).neg_logits is None, "no folds, no Bads' scores"
+    assert _snapshot_model({}, meta).pos_logits is None
     other = {**meta, "mu_pos": meta["mu_pos"] + 0.5}  # an in-sample fallback's model: the folds do not rebuild it
     assert _snapshot_model(snap, other).neg_logits is None

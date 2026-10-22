@@ -168,12 +168,12 @@ status)
     # this used to have listed three of the five run_cells.py writes, so every
     # count here was inflated by the __picks and __fitq frames.  The `__` is the
     # convention (`_cells_paths.main_frame_files` filters on the same thing).
-    files=$(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l)
+    files=$(find "$d" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l)
     rows=0
-    for f in "$d"/task_*.csv; do
+    for f in "$d"/task_*.csv*; do
       case "$f" in *__*) continue;; esac
       [ -f "$f" ] || continue
-      [ "$(wc -l < "$f")" -gt 1 ] && rows=$((rows+1))
+      [ "$(zcat -f "$f" | wc -l)" -gt 1 ] && rows=$((rows+1))
     done
     # A header-only CSV passes `-size +0`, so count DATA ROWS, not bytes.
     echo "$p: $files cell files, $rows with data"

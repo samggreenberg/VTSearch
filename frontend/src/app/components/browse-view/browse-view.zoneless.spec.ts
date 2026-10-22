@@ -1,17 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { EMPTY, Subject, of } from 'rxjs';
+import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
 import { signal } from '@angular/core';
 
 import { BrowseViewComponent } from './browse-view.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
@@ -38,13 +41,20 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   let subsetHandoff: { datasetId: string; ids: number[] } | null;
   let navigate: ReturnType<typeof vi.fn>;
   let openResults: ReturnType<typeof vi.fn>;
+  /** What `GET /api/autofind/runs/<id>` answers; reassigned per test. */
+  let getAutofindRun: ReturnType<typeof vi.fn>;
+  /** Fired by hand where a test needs "the backend lost the dataset and it has
+   *  been loaded again" (#5158). */
+  let pairReloaded: Subject<void>;
 
   beforeEach(async () => {
     metaSubject = new Subject<ProjectionMeta>();
+    pairReloaded = new Subject<void>();
     query = {};
     subsetHandoff = null;
     navigate = vi.fn(() => Promise.resolve(true));
     openResults = vi.fn();
+    getAutofindRun = vi.fn((): Observable<unknown> => EMPTY);
 
     const noop = () => {};
     const projectionStub: Partial<ProjectionApiService> = {
@@ -60,6 +70,12 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       setProjectionId: noop,
       setContentVersion: noop,
       clear: noop,
+      // What the canvas reads once a test takes the view to `ready`: no tile
+      // ever arrives, so it paints an empty map.
+      tileLoaded$: new Subject(),
+      getTile: () => null,
+      getCached: () => null,
+      prefetch: noop,
     };
     const activeContextStub = makeActiveContextStub({
       pair$: EMPTY,
@@ -99,7 +115,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     const routeStub = {
       snapshot: {
         queryParamMap: { get: (key: string) => query[key] ?? null },
-        paramMap: { get: () => '' },
+        paramMap: { get: (key: string) => (key === 'datasetId' ? 'ds1' : null) },
       },
     } as unknown as ActivatedRoute;
     const routerStub = { navigate } as unknown as Router;
@@ -110,11 +126,13 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: ProjectionApiService, useValue: projectionStub },
         { provide: TileCacheService, useValue: tileCacheStub },
         { provide: ActiveContextService, useValue: activeContextStub },
+        { provide: PairRecoveryService, useValue: { reloaded$: pairReloaded.asObservable() } },
         { provide: DatasetsRegistryApiService, useValue: datasetsStub },
         { provide: DetectorsRegistryApiService, useValue: detectorsStub },
         { provide: SettingsStateService, useValue: settingsStub },
         { provide: BrowseSubsetService, useValue: subsetStub },
         { provide: AutoFindService, useValue: { openResults } },
+        { provide: DetectorsFindApiService, useValue: { getAutofindRun } },
         { provide: MediasApiService, useValue: mediasStub },
         // ngOnInit calls MediaTypeCapabilityService.ensureLoaded(), which lazily
         // resolves this service to fetch the thumbnail-type registry. The canary
@@ -534,13 +552,101 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.volume()).toBe(1);
   });
 
+  // #5158: a restart takes the dataset, and the pyramid held in memory with it.
+  // Loading the dataset again does not bring the pyramid back (tiles go on
+  // failing until something asks for a build), so the view must re-resolve
+  // its projection, whose build restores the persisted layout.
+  describe('when the lost dataset is loaded again (#5158)', () => {
+    let metas: Subject<ProjectionMeta>[];
+    let build: ReturnType<typeof vi.fn>;
+
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    beforeEach(() => {
+      // One subject per meta fetch, so each answer reaches only the request
+      // it belongs to.
+      metas = [];
+      build = vi.fn(() => of({ status: 'ready', projection_id: 'p1' }));
+      const api = TestBed.inject(ProjectionApiService);
+      api.getMeta = vi.fn(() => {
+        const meta = new Subject<ProjectionMeta>();
+        metas.push(meta);
+        return meta.asObservable();
+      });
+      api.build = build as unknown as ProjectionApiService['build'];
+    });
+
+    /** Answer the latest meta fetch. Taken first: an answer can start the next. */
+    function answer(meta: ProjectionMeta): void {
+      const latest = metas[metas.length - 1];
+      latest.next(meta);
+      latest.complete();
+    }
+
+    it('asks for the projection again, rebuilding it from what the server kept', async () => {
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      answer(ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(metas.length).toBe(1);
+
+      pairReloaded.next();
+      await settleZoneless(fixture);
+      // Started over: the canvas is down and the meta asked for afresh.
+      expect(component.status()).toBe('loading');
+      expect(metas.length).toBe(2);
+
+      // The reloaded dataset has no pyramid in memory yet, so the view asks
+      // for a build, which answers from the layout persisted beside the
+      // dataset without a fit.
+      answer({ status: 'idle' } as ProjectionMeta);
+      await settleZoneless(fixture);
+      expect(build).toHaveBeenCalledTimes(1);
+      expect(metas.length).toBe(3);
+
+      answer(ready);
+      await settleZoneless(fixture);
+      expect(component.status()).toBe('ready');
+      expect(component.revealed()).toBe(false);
+    });
+
+    it('re-fits a subset from the ids in hand, which a pair change would not', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
+      const api = TestBed.inject(ProjectionApiService);
+      const buildSubset = vi.fn(() => of({ status: 'building', job_id: 'j1' }));
+      api.buildSubset = buildSubset as unknown as ProjectionApiService['buildSubset'];
+
+      await settleZoneless(fixture);
+      answer(ready);
+      await settleZoneless(fixture);
+
+      pairReloaded.next();
+      await settleZoneless(fixture);
+      answer({ status: 'idle' } as ProjectionMeta);
+      await settleZoneless(fixture);
+
+      expect(buildSubset).toHaveBeenCalledWith([1, 2]);
+      expect(fixture.componentInstance.status()).toBe('building');
+    });
+  });
+
   describe("a Find run's results (#4615)", () => {
     beforeEach(() => {
       query = { subset: '1', from: 'results', run: '_autofind_7' };
       subsetHandoff = { datasetId: 'ds1', ids: [1, 2] };
     });
 
-    it('goes Back to the Dashboard and reopens those results, not to Test', async () => {
+    it('goes Back to the Dashboard and reopens those results, not to Tune', async () => {
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.subset).toBe(true);
@@ -560,18 +666,91 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       expect(component.canVerify).toBe(false);
     });
 
-    it('says how to rebuild an expired map from the results', async () => {
-      subsetHandoff = null;
-      await settleZoneless(fixture);
-      expect(fixture.componentInstance.errorMessage()).toContain('Open the Find results again');
+    // Opened without the in-memory handoff (a reload, a new tab, a link
+    // someone was sent), the map is rebuilt from the run the URL names (#5129).
+    describe('without the handoff', () => {
+      const run = {
+        run_id: '_autofind_7',
+        dataset_id: 'ds1',
+        results: {
+          owl: { hits: [{ id: 1 }, { id: 2 }], negative_hits: [{ id: 3 }] },
+          wren: { hits: [{ id: 2 }], negative_hits: [] },
+        },
+      };
+      let buildSubset: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        subsetHandoff = null;
+        getAutofindRun.mockImplementation(() => of(run));
+        buildSubset = vi.fn(() => of({ status: 'building', job_id: 'j1' }));
+        const api = TestBed.inject(ProjectionApiService);
+        api.buildSubset = buildSubset as unknown as ProjectionApiService['buildSubset'];
+      });
+
+      it("lays out the run's Good rows, as its Browse button does", async () => {
+        await settleZoneless(fixture);
+        const component = fixture.componentInstance;
+        expect(getAutofindRun).toHaveBeenCalledWith('_autofind_7', expect.anything());
+        expect(component.subsetIds).toEqual([1, 2]);
+        expect(component.status()).not.toBe('error');
+        expect(component.backTarget).toBe('Find Results');
+
+        metaSubject.next({ status: 'idle' } as ProjectionMeta);
+        await settleZoneless(fixture);
+        expect(buildSubset).toHaveBeenCalledWith([1, 2]);
+      });
+
+      it('lays out the rows the URL names', async () => {
+        query = { ...query, sides: 'both' };
+        await settleZoneless(fixture);
+        expect(fixture.componentInstance.subsetIds).toEqual([1, 2, 3]);
+      });
+
+      it('says the results are gone when the server no longer keeps the run', async () => {
+        getAutofindRun.mockImplementation(() => throwError(() => new HttpErrorResponse({ status: 404 })));
+        await settleZoneless(fixture);
+        const component = fixture.componentInstance;
+        expect(component.status()).toBe('error');
+        expect(component.errorMessage()).toContain('no longer available');
+        expect(fixture.nativeElement.textContent).toContain('Run Find again');
+      });
+
+      it('asks for the run again on Retry', async () => {
+        getAutofindRun.mockImplementation(() => throwError(() => new HttpErrorResponse({ status: 503 })));
+        await settleZoneless(fixture);
+        const component = fixture.componentInstance;
+        expect(component.errorMessage()).toBe('Failed to load the Find results');
+
+        getAutofindRun.mockImplementation(() => of(run));
+        component.onBuild();
+        await settleZoneless(fixture);
+        expect(getAutofindRun).toHaveBeenCalledTimes(2);
+        expect(component.subsetIds).toEqual([1, 2]);
+      });
+
+      it("lays out nothing from a run on another dataset", async () => {
+        getAutofindRun.mockImplementation(() => of({ ...run, dataset_id: 'ds2' }));
+        await settleZoneless(fixture);
+        const component = fixture.componentInstance;
+        expect(component.status()).toBe('error');
+        expect(component.subsetIds).toEqual([]);
+      });
     });
 
-    it('keeps Back to Test for a Test-view subset', async () => {
+    it('says how to rebuild an expired Tune map, which names no run', async () => {
+      query = { subset: '1' };
+      subsetHandoff = null;
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.errorMessage()).toContain('Re-run Tune');
+      expect(getAutofindRun).not.toHaveBeenCalled();
+    });
+
+    it('keeps Back to Tune for a Tune-view subset', async () => {
       query = { subset: '1' };
       await settleZoneless(fixture);
       const component = fixture.componentInstance;
       expect(component.resultsRunId).toBe('');
-      expect(component.backTarget).toBe('Test');
+      expect(component.backTarget).toBe('Tune');
       expect(component.countNoun).toBe('positives');
       expect(component.canVerify).toBe(true);
     });

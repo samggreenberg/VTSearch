@@ -376,14 +376,14 @@ def _drop_line_ranking(det_ctx) -> None:
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
-    """Drop *det_ctx*'s cached MLP when *new_embedder* differs.
+    """Drop *det_ctx*'s cached head when *new_embedder* differs.
 
     ``DetectorContext.model`` is trained against a specific embedding space -
-    ``det_ctx.embedder`` records which.  Scoring with a cross-space MLP
+    ``det_ctx.embedder`` records which.  Scoring with a cross-space head
     either crashes (different dim → ``nn.Linear`` size-mismatch) or
     silently produces garbage labels (same dim, different space).  When
     the dataset about to be scored uses a different embedder than the one
-    the cached MLP was trained on, clear the embedder-tagged scoring
+    the cached head was trained on, clear the embedder-tagged scoring
     caches (``model``, ``threshold``, ``last_learned_scores``,
     ``training_medias``, and the two threshold estimators -
     ``calibration_cache``, ``anchored_cut_cache``)
@@ -466,7 +466,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     """Active-context wrapper for :func:`invalidate_detector_model_on_embedder_mismatch`.
 
     Called from ``before_request`` so a dataset switch can't leave the
-    active detector pointing at an MLP trained against the old embedder
+    active detector pointing at a head trained against the old embedder
     (silent garbage scores at best, ``nn.Linear`` size-mismatch crash at
     worst).  Vote-rehydrate in :func:`ensure_votes_match_active_dataset`
     handles cid-keyed votes; this handles the embedder-specific caches
@@ -518,6 +518,9 @@ class VoteSnapshot(NamedTuple):
     # under the same lock so verified/unverified export filters stay atomic
     # with good_votes/bad_votes.  Empty outside Find mode.
     verified_ids: dict[int, None]
+    # Id of the dataset ``medias`` belongs to: where a labelset composed from
+    # this snapshot was trained (``record_detector_training``).
+    dataset_id: str = ""
 
 
 def validated_vote_snapshot() -> VoteSnapshot:
@@ -579,7 +582,7 @@ def validated_vote_snapshot() -> VoteSnapshot:
         # match the active dataset) is the race / stale-state scenario and
         # is the only one we refuse to compose for.
         if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
-            return VoteSnapshot(snap, {}, {}, {}, {}, safe=False, verified_ids={})
+            return VoteSnapshot(snap, {}, {}, {}, {}, safe=False, verified_ids={}, dataset_id=ds_ctx.dataset_id)
         return VoteSnapshot(
             snap,
             dict(det_ctx.good_votes),
@@ -588,4 +591,5 @@ def validated_vote_snapshot() -> VoteSnapshot:
             dict(det_ctx.vote_provenance),
             safe=True,
             verified_ids=dict(det_ctx.verified_ids),
+            dataset_id=ds_ctx.dataset_id,
         )

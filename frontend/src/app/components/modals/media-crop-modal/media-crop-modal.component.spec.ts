@@ -59,6 +59,20 @@ describe('MediaCropModalComponent', () => {
     });
   });
 
+  describe('mediaItemWord (#5175)', () => {
+    it("names one item of the example's media type for Toasty's hint", () => {
+      build('image');
+      expect(component.mediaItemWord).toBe('image');
+      build('audio');
+      expect(component.mediaItemWord).toBe('audio clip');
+    });
+
+    it('says "file" when the media type is unknown', () => {
+      build('');
+      expect(component.mediaItemWord).toBe('file');
+    });
+  });
+
   describe('view switching', () => {
     it('starts in the confirm view', () => {
       build('image');

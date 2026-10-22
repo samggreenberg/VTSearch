@@ -11,9 +11,9 @@ matching the box: the Find slide is a two-page build whose first page is the
 dashboard, and a reveal is supposed to change what is *in* the frame rather
 than move the frame (`slides/STYLE.md`).
 
-The slide it serves used to be the verification screen with the results shoved
-into a left-hand panel, which is a picture of a person checking their answers.
-Not looking at your results in the tool is a *feature* — an AutoFind detector
+The slide it serves shows the results on their own, not the verification screen
+with them shoved into a left-hand panel, which is a picture of a person checking
+their answers. Not looking at your results in the tool is a *feature* — an AutoFind detector
 mails you a list of references — so what the room should see is the pictures,
 with no chrome anywhere near them (#3779).
 

@@ -293,7 +293,7 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
 #: that is a decision** (2026-09-07).
-#: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
+#: :func:`~pilebuild.scale_core.band_for` summarises a class's boxes in an
 #: image by their **union**, which is what the harness's SIMULATED Good vote
 #: drags and is what #3156 measured -- and the build keeps every instance box
 #: behind it
@@ -1089,24 +1089,6 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-#: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
-#: lands on an image where the class already has one of its own -- see that
-#: function's ``FOLD_MODES``.
-#:
-#: ``fold`` is the reading #3637 measured and kept, and the margin is not close:
-#: over the VG-COCO overlap, on the 225 images where the three modes disagree,
-#: COCO's exhaustive boxes say the class is **not** a single-band positive on 199
-#: of them, and folding names the right answer 88% of the time against 6.7% for
-#: keeping the class's own band. The structural reason is bigger than that
-#: number: the COCO half is already banded off COCO's own exhaustive box set, so
-#: ``anchor_to_coco`` un-bands 17% of the cleanly-banded images there on evidence
-#: of exactly the same kind. A mode that protected the un-anchored half from it
-#: would make the two halves of one dataset disagree about what a positive is.
-#:
-#: The alternatives are kept so the arm can be re-measured (``band_fold.py``),
-#: not because either is a candidate default.
-SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
-
 #: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO
@@ -1121,7 +1103,7 @@ SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
 #: nor absence**: it is not a positive (we cannot say the object is there) and it
 #: bars the image from the shared negative pool (we cannot say it is not). That
 #: is the ``excluded`` third state the construction already has -- see
-#: :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the contaminated
+#: ``lift_ambiguous`` in the retired ``vg_scale`` loader (#4038). It removed the contaminated
 #: negatives; recovering the missing positives needs a human pass.
 #:
 #: **Three kinds of name land here, and they share one treatment because they
@@ -1937,7 +1919,7 @@ def scale_vg_group_why(cls: str, key: str) -> str:
 #: promotion. Listed one by one rather than derived from :data:`SCALE_CLASSES`,
 #: because deriving it would mark a *newly added* class audited without anyone
 #: having looked -- which is the exact failure this flag exists to make visible.
-#: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
+#: The retired ``vg_scale`` loader (#4038) named the unaudited classes on every
 #: build, since the rebuild is when this stops being cheap to fix (#3605).
 #:
 #: **A cleared human review is not this flag.** #3588 reviewed its thirteen at
@@ -3122,7 +3104,7 @@ SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "9900"))
 #: **1,000 since the #3588 promotion, up from 300 — and the reason is no longer
 #: the one that raised it.** It was raised to survive a correction pass over a
 #: contaminated pool: a shared negative is evaluable in *every* cell
-#: (:func:`pilebuild.loaders.vg_scale._evaluable` returns the whole cell list for
+#: (:func:`pilebuild.scale_core._evaluable` returns the whole cell list for
 #: an image with no categories), so a verdict finding a car in a pool image does
 #: not retire it from `car` alone — the image stops being clean and leaves all
 #: twenty-five. Against the negative pass's measured **14% ± 7** joint rate that
@@ -3234,7 +3216,7 @@ def aspect_transferable(vg_wh: tuple[int, int], coco_wh: tuple[int, int]) -> boo
 
     One implementation, so that anything asking "do these two copies frame the
     same thing?" asks it the same way -- the treatment
-    :func:`pilebuild.loaders.vg_scale.band_for` got for the banding question.
+    :func:`pilebuild.scale_core.band_for` got for the banding question.
 
     It is a function rather than a bare ``> MAX_ASPECT_DRIFT`` because the two
     readings of that constant are indistinguishable at a glance and were both
@@ -3477,15 +3459,17 @@ def scale_cell(category: str, band: str) -> str:
 #: is why the size a cell was built at is now in its provenance sidecar
 #: (``embed_batch_size``): changing an entry below silently redefines every cell
 #: it is rebuilt into, and the sidecar is the only place that says so.
-#: Deliberately three, not five. ``siglip`` is the shipped default and
-#: ``siglip2_l`` the premium end; the middles (``siglip_l``, ``siglip2``) were
-#: dropped because a study learns little from interpolating between them, and
-#: the compute is better spent on more runs of the endpoints.
+#:
+#: The SigLIP family is deliberately two columns, not four. ``siglip`` is the
+#: shipped default and ``siglip2_l`` the premium end; the middles (``siglip_l``,
+#: ``siglip2``) are left out because a study learns little from interpolating
+#: between them, and the compute is better spent on more runs of the endpoints.
 #:
 #: The cost of that: ``siglip`` -> ``siglip2_l`` moves generation (1 -> 2) and
 #: capacity (base -> SO400M) at the same time, so a difference between them
-#: cannot be attributed to either alone. Rebuild a middle column if a result
-#: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
+#: cannot be attributed to either alone. If a result ever needs that split, add
+#: a middle column to this table and build it (``build_pile.py --embedders
+#: siglip2``); the builder refuses an embedder the table does not list.
 #: The two CLIP columns are **evaluation only** (#3292) and exist to test whether
 #: #3287's `calibration_fraction` optimum follows single-vector geometry or just
 #: the SigLIP lineage.  Both are run, not one, because a single CLIP arm cannot
@@ -3680,7 +3664,7 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
 #: **Empty since the #3588 promotion, and that is the table working, not rotting.**
 #: The two tables cannot be merged because they are read at different times by
 #: different code: :data:`SCALE_VG_NAMES` widens the ``vg_scale`` READ and is
-#: folded by :func:`pilebuild.loaders.vg_scale.canonicalise` on every build, so an
+#: was folded by ``canonicalise`` (the retired ``vg_scale`` loader's) on every build, so an
 #: entry there for a class outside *C* changes the built dataset on the strength
 #: of a name nobody has reviewed. This one is read only by the slate makers, which
 #: band a candidate without touching the pickle. When the candidate is promoted
@@ -3702,8 +3686,8 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {}
 #:
 #: Same three-valued treatment, for the same reason: a box under one of these is
 #: evidence in neither direction, so it is dropped from the bands *and* bars its
-#: image from the shared negative pool. :func:`pilebuild.loaders.vg_scale.lift_ambiguous`
-#: does both, and exempts any image COCO annotates exhaustively or a reviewer has
+#: image from the shared negative pool. ``lift_ambiguous`` (the retired ``vg_scale``
+#: loader's, #4038) did both, and exempts any image COCO annotates exhaustively or a reviewer has
 #: ruled on -- there the question is already answered and the spelling is ignored.
 #:
 #: Empty since the #3588 promotion; `glass`, the entry that named this table, is

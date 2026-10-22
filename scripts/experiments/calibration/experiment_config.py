@@ -8,7 +8,7 @@ registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`)
 which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
-  ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
+  ``siglip`` / ``siglip2_l`` × ``whole_image`` (row-wise conformal), and
   ``dinov3_patch`` × ``max_patch`` (grouped bag calibration).  The raw-patch
   tree geometry ``max_patch_pca_hac`` and its ``topk`` / ``pnorm`` re-pools were
   #2781 arms and are off by default now that both questions are closed; see
@@ -19,9 +19,9 @@ which opens on one space's text sort and learns in another's:
   max-pool at scoring time; the single-vector embedders have neither, so
   :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
   whole-image scoring for them, and they blend under the **binary** schedule.
-  This docstring previously called the whole set "region voting", which is how
-  #2877 came to report a binary-voting environment as a region-voting one.
-* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
+  Calling the whole set "region voting" is how #2877 came to report a
+  binary-voting environment as a region-voting one.
+* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip2_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
 
 Category selection (scale-band on the boxed VG set, prevalence-spread on the
@@ -1146,6 +1146,23 @@ if SAVE_FOLD_SCALES and not (SAVE_TEST_SCORES and SAVE_TEST_SCORES_AT):
 #: ``task_NNNN__linetest.csv``.  Test votes never train, so the run is otherwise unchanged.
 LINE_TEST = os.environ.get("CALIB_LINE_TEST", "").strip().lower() in ("1", "true", "yes")
 SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
+#: #4960's second corpus (``CALIB_FIND_CORPUS=o365_better``): a dataset whose pickle holds the cell's embedder, Found on
+#: at every click beside the withheld half; its cell of the same name is the Find corpus (the whole dataset where it
+#: has none).  Each row carries the ``find_*`` columns.  ``CALIB_FIND_MIX`` draws it: unset or ``only`` is that cell
+#: alone, ``equal`` / ``0`` / a share add that many times the withheld half's size of it to the withheld half as
+#: extra haystack.  ``CALIB_FIND_FLAGS_AT`` (default ``CALIB_SAVE_TEST_SCORES_AT``'s list) are the clicks the two
+#: domain-shift flags are read at, against that corpus (``shift_*``, ``evidence_*``).  Eval only: the session is
+#: unchanged.  On a patch embedder the evidence flag floods every Bad's patches, as the app's does, which costs memory.
+FIND_CORPUS = os.environ.get("CALIB_FIND_CORPUS", "").strip() or None
+FIND_MIX = os.environ.get("CALIB_FIND_MIX", "").strip().lower() or None
+_FIND_FLAGS_AT = os.environ.get("CALIB_FIND_FLAGS_AT", "").replace(" ", "")
+FIND_FLAGS_AT = tuple(int(x) for x in _FIND_FLAGS_AT.split(",") if x) if _FIND_FLAGS_AT else SAVE_TEST_SCORES_AT
+if (FIND_MIX is not None or _FIND_FLAGS_AT) and FIND_CORPUS is None:
+    raise ValueError("CALIB_FIND_MIX and CALIB_FIND_FLAGS_AT describe a Find corpus; set CALIB_FIND_CORPUS")
+if FIND_MIX is not None:
+    from vtscore.eval.find_corpus import parse_find_mix as _parse_find_mix
+
+    _parse_find_mix(FIND_MIX)  # refused here, before the array, rather than in every cell
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None
@@ -1163,6 +1180,13 @@ ACQ_ORIGIN = os.environ.get("CALIB_ACQ_ORIGIN", "").strip().lower() or "line"
 #: #4359's bound: ``CALIB_SMART_GATE=never`` holds the Smart light yellow for
 #: Autopilot's phase decision.  Unset = the app.
 SMART_GATE = os.environ.get("CALIB_SMART_GATE", "").strip().lower() or "app"
+#: #5134: what the Smart light is read off.  Unset = the app (``fbeta_best``: each
+#: recent model's best F-beta on the current votes, going flat); ``CALIB_SMART_SIGNAL=cost``
+#: is the app before #5134 (FPR + FNR going flat), ``ap|fbeta|heldout_ap|heldout_fbeta|line``
+#: the A/B's other readings.  ``CALIB_SMART_READINGS=1`` records every reading's trend
+#: on each row without moving the light.
+SMART_SIGNAL = os.environ.get("CALIB_SMART_SIGNAL", "").strip().lower() or "fbeta_best"
+SMART_READINGS = os.environ.get("CALIB_SMART_READINGS", "").strip().lower() in ("1", "true", "yes", "on")
 #: What tells the user they can stop (#4878): unset = the app (``lights|level``,
 #: every light green or the labels line's expected F-beta at ``CALIB_STOP_LEVEL``,
 #: the app's 0.5); ``CALIB_STOP_RULE=lights`` is the app before #4878, ``level``
@@ -1298,6 +1322,11 @@ QUERY_TIER: bool = os.environ.get("CALIB_QUERY_TIER", "1").strip() not in ("0", 
 #: is the arm before (the head from the quota), any other count an arm.
 _QUERY_HOLD = os.environ.get("CALIB_QUERY_HOLD", "").strip().lower()
 QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("off", "false") else int(_QUERY_HOLD)
+#: Issue #4800: under the quota on a patch space, once the typed query has missed (a Good,
+#: and a Bad before the Goods quota), such a run's Test gives the Goods'
+#: centroid in place of the query's set, as the app's does.  On (the default) is the app;
+#: ``CALIB_QUERY_MISS=0`` is the arm before (the typed query's set until the quota).
+QUERY_MISS: bool = os.environ.get("CALIB_QUERY_MISS", "1").strip() not in ("0", "off", "false")
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check
@@ -1310,6 +1339,17 @@ BAND_SHARE: "int | str | None" = int(_BAND_SHARE) if _BAND_SHARE.isdigit() else 
 #: the absolute one it had before #4492 (``vtscore.eval.live_threshold_rules.
 #: sigma_floor``).  Unset (the default, ``relative``) is the app.
 SIGMA_FLOOR = os.environ.get("CALIB_SIGMA_FLOOR", "").strip() or "relative"
+
+#: Issue #5040's chances: ``CALIB_LINE_BAD=corpus`` fits the labels line's Bad component on the corpus being decided,
+#: the held-out Bads counted as labelled points of it (``corpus_mean``: its mean alone); ``CALIB_LINE_BOUND_MARGIN`` is the factor the 2-part estimate
+#: of the positives may exceed the counted bound by (``inf`` removes it).  Unset (the default) is the app's
+#: (``corpus_mean``, 4, since #5040); ``labels`` and 2 are the line before.  Kept as given, for preflight and the harness to refuse a value outside the set.
+LINE_BAD = os.environ.get("CALIB_LINE_BAD", "").strip().lower() or None
+_LINE_BOUND_MARGIN = os.environ.get("CALIB_LINE_BOUND_MARGIN", "").strip()
+try:
+    LINE_BOUND_MARGIN: "float | str | None" = float(_LINE_BOUND_MARGIN) if _LINE_BOUND_MARGIN else None
+except ValueError:
+    LINE_BOUND_MARGIN = _LINE_BOUND_MARGIN
 
 #: Issue #4864's split rounding: ``dither`` sizes the calibration split the way
 #: the app did before #4864, stochastically, with a coin seeded from the labelset
@@ -1327,6 +1367,25 @@ _HEAD_COUNT_BADS = os.environ.get("CALIB_HEAD_COUNT_BADS", "").strip()
 HEAD_COUNT_BADS: "int | str | None" = (
     int(_HEAD_COUNT_BADS) if _HEAD_COUNT_BADS.isdigit() else (_HEAD_COUNT_BADS or None)
 )
+#: Issue #5039's head's count line above a balance of 1: ``CALIB_HEAD_COUNT_RECALL_EXPONENT`` is how the
+#: count grows (``beta ** e`` times what stands out), ``CALIB_HEAD_COUNT_RECALL_Z`` where the line reaches down
+#: the head's excess curve when a held-out Good ranks below the count
+#: (``vtscore.eval.live_threshold_rules.head_count_recall``).  Unset is the app's; ``off`` is that piece before
+#: #5039.  A value that is neither a number nor ``off`` is kept as given, for the harness and preflight to refuse.
+
+
+def _number_or_off(name: str) -> "float | str | None":
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in ("", "off"):
+        return raw or None
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
+HEAD_COUNT_RECALL_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_RECALL_EXPONENT")
+HEAD_COUNT_RECALL_Z = _number_or_off("CALIB_HEAD_COUNT_RECALL_Z")
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
@@ -1364,12 +1423,15 @@ PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").re
 #: on.  Unset = off.
 RANK_FRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_RANK_FRAME_STEPS", "").replace(",", " ").split())
 
-#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
-#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
-#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  **On by
+#: default since #5092**; ``CALIB_CELLS_GZIP=0`` writes plain text.  A COCO
+#: Better cell's main frame is ~3.3 MB as text and ~180 KB gzipped; #4184's
+#: 5,040 cells needed ~19 GB plain on a volume with 7 GB free.  Every study
+#: launcher opted in, but the State of the App review itself did not, and its
+#: 2026-10-16 run wrote 84 GB of plain cells and filled the 1 TB volume (#4953).
 #: ``_cells_paths`` reads both spellings, so every analyzer that goes through
-#: it is unaffected.
-CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
+#: it is unaffected; ``gzip_cells.py`` converts a finished run in place.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "1") == "1"
 
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)

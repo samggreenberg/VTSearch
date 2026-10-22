@@ -289,9 +289,12 @@ if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
   #
   # `-size -2k -size +0` narrows to plausible candidates before the per-file
   # `wc -l`, so the fork runs over a handful and not the whole grid: a cell CSV
-  # holding even one run is far larger than its ~700-byte header.
-  h=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size -2k -size +0 \
-        -exec sh -c '[ "$(wc -l < "$1")" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
+  # holding even one run is far larger than its ~700-byte header.  That bound
+  # is a plain-text one: a small gzipped cell (CALIB_CELLS_GZIP) can fall under
+  # it too, which only lengthens the shortlist, since `zcat -f` (either
+  # spelling) and the line count still decide.
+  h=$(find "${ZROOTS[@]}" -name 'task_*.csv*' ! -name '*__*' -size -2k -size +0 \
+        -exec sh -c '[ "$(zcat -f "$1" | wc -l)" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
   if [[ "$h" -gt 0 ]]; then
     say_note "$h header-only cell file(s) - present, parse clean, carry no data row (see check 13)"
   else

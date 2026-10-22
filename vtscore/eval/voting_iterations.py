@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+    from vtscore.eval.find_corpus import FindCorpus
     from vtscore.training.thresholds import FoldAnchoredCut, LineBudgets
 
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
@@ -55,7 +56,16 @@ from vtscore.eval.example_opening import (
     example_sort,
     stratified_split,
 )
-from vtscore.eval.autopilot_flow import MORE_DRY_RUN, SMART_WINDOW, STOP_CAP, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import (
+    APP_SMART_SIGNAL,
+    MORE_DRY_RUN,
+    SMART_HISTORY_READINGS,
+    SMART_WINDOW,
+    STOP_CAP,
+    AutopilotFlow,
+    app_has_detector,
+    reading_columns_nan,
+)
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -75,7 +85,7 @@ from vtscore.eval.arms_query_prior import QueryPriorShadow
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
 from vtscore.eval.arms_schedule import _schedule_variant_rows
 from vtscore.detectors.centroid_head import CENTROID_LINE_RULES, CENTROID_THRESHOLD
-from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds
+from vtscore.detectors.label_quota import DRY_BAD_QUOTA, QUERY_HOLD_LABELS, TIER_CENTROID, query_holds, query_missed
 from vtscore.detectors.label_quota import label_quota as label_quota_tier
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.eval.step_model import (
@@ -89,14 +99,20 @@ from vtscore.eval.step_model import (
 )
 from vtscore.eval.step_trainers import (
     _build_eval_atlas,
+    _centroid_cut_step,
+    _centroid_goods,
     _centroid_step,
+    _head_step,
+    _heldout_readings,
     _labelset_error_costs,
+    _labelset_window_readings,
     _query_step,
     _score_pool,
     _train_and_calibrate,
 )
 from vtscore.eval import scale_bands
 from vtscore.eval.labels import evaluable_pool, media_is_positive
+from vtscore.eval.find_corpus import blank_find_columns, build_find_corpus, parse_find_mix
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
     FBETA_COLUMNS,
@@ -123,6 +139,7 @@ from vtscore.training.thresholds import (
     head_count_serves,
     STOP_LEVEL,
     stop_level_met,
+    stop_level_reading,
     weak_check_due,
     weak_check_prompts,
     ACQUISITION_INCLUSION_OFFSET,
@@ -625,16 +642,17 @@ def _safe_threshold_for_step(
     labels_scale_shadow: "str | None" = None,
     keep_fold_sim: bool = False,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
-    """The harness's **shipped** safe threshold - the same rule the app applies.
+    """The harness's line for a step - the same rule the app applies.
 
     Scores the simulation set (the harness's haystack) with the final model and
-    with each calibration fold model, then cuts via
+    with each calibration fold model, then draws the line as
+    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
-    production defaults (the ``FOLD_ANCHOR_*`` constants).  This is the
-    estimator :func:`vtscore.detectors.training._safe_threshold` ships, called
-    with the same arguments, so the harness's baseline arm cannot drift from
-    the app's behaviour - the paired ``*_variant`` rows are where deliberate
-    deviations live.
+    production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
+    arguments, so the harness's baseline arm cannot drift from the app's
+    behaviour - the paired ``*_variant`` rows are where deliberate deviations
+    live.
 
     Falls back to the schedule blend
     (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) exactly
@@ -680,16 +698,18 @@ def _safe_threshold_for_step(
     inside this function, so the default arm is production by construction.
 
     **The line is drawn where the app draws it.**  *beta* is the resolved
-    balance (``None`` for the Inclusion arm).  Under a balance the line keeps
-    a set (#4272, #4413): the top *count* unvoted items of the sim set this
-    final model scored, where *count* is the set *check* - the run's spot
-    check - ended on where the check's shape lets it move the line, or else
-    the mixture's F-beta argmax under the balance's cap;
-    :func:`~vtscore.training.thresholds.balance_line` is the app's own rule,
-    called, not copied, and its ranking rides out in
-    ``details["line_ranking"]`` for the check to draw its bands from, with the
-    balance's state in ``details["line_state"]`` for the row.  With no
-    balance the line is the fold-anchored cut at *inclusion* through the shared
+    balance (``None`` for the Inclusion arm).  Under a balance the line is the
+    labels' line (#4452, :func:`_preference_line_for_step`): the class model
+    the step's fold orderings imply, cut at the prevalence it estimates on the
+    sim set this final model scored -
+    :func:`~vtscore.training.thresholds.fit_labels_line`, the app's own rule,
+    called, not copied.  A forced *line_shape* (the ``walk_shape`` arms) draws
+    the count line instead (#4413): the set *check* - the run's spot check -
+    ended on, or the mixture's F-beta argmax under the balance's cap.  The
+    ranking rides out in ``details["line_ranking"]`` for the check to draw its
+    bands from, with the balance's state in ``details["line_state"]`` for the
+    row.  With no balance, or no class model, the line is the fold-anchored
+    cut at *inclusion* through the shared
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
@@ -756,7 +776,7 @@ def _safe_threshold_for_step(
     fold_haystacks: list[Any] = []
     # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
     # fold model is a real, K-proportional part of the calibration a live run at
-    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # K pays for - the fold-anchored rule anchors every fold's mixture on that fold's
     # own haystack - and it is paid *here*, outside `train_seconds`,
     # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
     # unmeasured it is invisible to every cost model built out of those four,
@@ -781,7 +801,7 @@ def _safe_threshold_for_step(
     _keep_fold_sim(details, keep_fold_sim, ids, all_scores, fold_sim, excluding)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
-    # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
+    # fold-anchored rule at each K, and `details["fold_models"]` is trimmed to the
     # live `calibrate_count`.  Score the extra Kmax-run folds here, where the
     # sim set and the scoring machinery are already in hand, and stash them
     # beside the orderings for :func:`_fold_count_variant_rows`.  Only the
@@ -1271,6 +1291,7 @@ def _evaluate_on_test(
     find_line: Any = None,
     beta: float | None = None,
     out: "dict[str, Any] | None" = None,
+    dump_suffix: str = "__eval",
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -1295,6 +1316,8 @@ def _evaluate_on_test(
 
     *scored_sink*, when given, receives the ``(scores, labels)`` arrays so a
     caller can derive more metrics from the same pass (issue #3959).
+    *dump_suffix* names the prediction dump (``VTS_DUMP_TEST_SCORES``) the pass
+    writes, so a second corpus scored the same click (#4960) keeps its own.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1321,7 +1344,7 @@ def _evaluate_on_test(
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
-    maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix="__eval")
+    maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix=dump_suffix)
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
@@ -1364,8 +1387,8 @@ def _standalone_calibration_row(
     :func:`_evaluate_on_test` already computed, with the step's fold orderings
     (when its trainer kept any) as the calibration set, so ``oracle_cost``,
     ``regret`` and ``threshold_provenance`` mean on a ``gp_*`` row exactly what
-    they mean on the app's.  The provenance is the shipped estimator's when the
-    safe-threshold path set one, else the trainer's own ``threshold_rule``.
+    they mean on the app's.  The provenance is the safe-threshold path's when
+    it set one, else the trainer's own ``threshold_rule``.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1590,6 +1613,7 @@ def _centroid_test(
     line_rule: str | None = None,
     line_beta: float | None = None,
     line_ids: "list[int] | None" = None,
+    dump_suffix: str = "__eval",
 ) -> tuple[StepModel, list[dict[str, Any]], "tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None"]:
     """What a Test on the withheld half gives under the label quota (#4643): the Goods' centroid.
 
@@ -1648,6 +1672,7 @@ def _centroid_test(
         region_aware=region_aware,
         style_obj=style_obj,
         beta=beta,
+        dump_suffix=dump_suffix,
     )
     return step, [metrics], None
 
@@ -1662,6 +1687,7 @@ def _query_test(
     beta: float | None,
     calibration_rows: bool,
     line_beta: float | None = None,
+    dump_suffix: str = "__eval",
 ) -> tuple[StepModel, list[dict[str, Any]]]:
     """What a Test on the withheld half gives a typed-query run until the quota (#4758): the typed query's own set.
 
@@ -1687,6 +1713,7 @@ def _query_test(
         inclusion,
         scored_sink=scored,
         beta=beta,
+        dump_suffix=dump_suffix,
     )
     if calibration_rows and scored:
         metrics = {
@@ -1694,6 +1721,162 @@ def _query_test(
             **_standalone_calibration_row(CENTROID_THRESHOLD, {"provenance": "query", "beta": beta}, scored, inclusion),
         }
     return step, [metrics]
+
+
+def _find_corpus_columns(
+    find: "FindCorpus",
+    tier: str,
+    *,
+    step: "StepModel | None",
+    threshold: float,
+    details: dict[str, Any],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    target_category: str,
+    inclusion: int,
+    region_voting: bool,
+    region_aware: bool,
+    style_obj: Any,
+    beta: float | None,
+    line_beta: float | None,
+    centroid_line: str | None,
+    flags_at: int | None,
+    atlas: Any,
+) -> dict[str, Any]:
+    """A click's Find on the second corpus (#4960): what the click's Test gives, cut where a Find there draws it.
+
+    *tier* is the row's ``detector_tier``, and the corpus is scored by the same
+    function the in-corpus columns came from: the trained head through
+    :func:`_evaluate_on_test` with the labels line's corpus side refitted on
+    the Find corpus (*details*' ``find_line`` at its ``beta``; the Train side's
+    *threshold* with no class model), the Goods' centroid through
+    :func:`_centroid_test` and the typed query's set through :func:`_query_test`,
+    each with its line drawn on the Find corpus.  *beta* weights the F-beta
+    columns and *line_beta* draws those two lines, as the in-corpus call does.
+    At a snapshot click (*flags_at*, the listed click it answers) the two
+    domain-shift flags are read against the corpus too.  Nothing here touches
+    the session: the corpus is scored and nothing else.
+    """
+    from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
+    from vtscore.eval.find_corpus import (  # noqa: PLC0415
+        blank_find_columns,
+        evidence_beyond_pool,
+        evidence_class_counts,
+        evidence_flags,
+        find_columns,
+        pool_baseline,
+        training_domain_flags,
+        vote_vectors,
+    )
+
+    import numpy as np  # noqa: PLC0415
+
+    def _find_on(
+        ids: list[int], query_scores: "dict[int, float] | None", dump_suffix: str, *, want_scores: bool
+    ) -> tuple[dict[str, Any], "np.ndarray | None", float]:
+        """A Find over *ids* as the click's Test gives it: its metric row, its scores (with *want_scores*) and its cut."""
+        scored: list[Any] = []
+        if tier == "query":
+            assert query_scores is not None  # build_find_corpus refuses a query run without them
+            f_step, (metrics,) = _query_test(
+                query_scores,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        elif tier == "centroid":
+            f_step, (metrics,), _ = _centroid_test(
+                good_votes,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_voting=region_voting,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                beta=beta,
+                calibration_rows=False,
+                line_rule=centroid_line,
+                line_beta=line_beta,
+                dump_suffix=dump_suffix,
+            )
+            cut = CENTROID_THRESHOLD
+        else:
+            assert step is not None
+            out: dict[str, Any] = {}
+            metrics = _evaluate_on_test(
+                step,
+                threshold,
+                find.clips,
+                ids,
+                target_category,
+                inclusion,
+                region_aware=region_aware,
+                style_obj=style_obj,
+                scored_sink=scored,
+                find_line=details.get("find_line"),
+                beta=details.get("beta"),
+                out=out,
+                dump_suffix=dump_suffix,
+            )
+            f_step, cut = step, float(out.get("find_threshold", threshold))
+        if not want_scores:
+            return metrics, None, cut
+        scores = (
+            scored[0]
+            if scored
+            else np.asarray(
+                _score_media_ids(f_step, find.clips, ids, region_aware=region_aware, style_obj=style_obj),
+                dtype=np.float64,
+            )
+        )
+        return metrics, np.asarray(scores, dtype=np.float64), cut
+
+    metrics, scores, cut = _find_on(find.ids, find.query_scores, "__find", want_scores=flags_at is not None)
+    cols: dict[str, Any] = {**blank_find_columns(), **find_columns(metrics)}
+    if flags_at is None:
+        return cols
+    assert scores is not None
+    matrix = find.matrix()
+    pos, neg = vote_vectors(
+        list(good_votes),
+        list(bad_votes),
+        find.clips,
+        target_category,
+        region_voting=region_voting,
+        style_obj=style_obj,
+        dim=int(matrix.shape[1]),
+    )
+    # Predicted as the metric columns flag: a score at or above the Find cut.
+    predicted = scores >= cut
+    # #5089: the haystack the votes came from, its unvoted media found as a Find
+    # there draws it: the Evidence verdict's training baseline, as the app draws
+    # it on the training dataset.
+    voted = set(good_votes) | set(bad_votes)
+    base_ids = [cid for cid in find.pool_ids if cid not in voted]
+    if base_ids:
+        _, base_scores, base_cut = _find_on(base_ids, find.pool_query_scores, "__findpool", want_scores=True)
+        assert base_scores is not None
+        base_matrix, base_predicted = find.pool_matrix(base_ids), base_scores >= base_cut
+    else:
+        base_matrix, base_predicted = matrix[:0], predicted[:0]
+    return {
+        **cols,
+        "flags_at": int(flags_at),
+        **training_domain_flags(atlas, matrix, patch_space=region_aware),
+        **evidence_flags(
+            pos, neg, matrix, predicted, pool_baseline(pos, neg, base_matrix, base_predicted) if base_ids else None
+        ),
+        **evidence_class_counts(pos, neg, matrix, predicted, prefix="evidence"),
+        **evidence_class_counts(pos, neg, base_matrix, base_predicted, prefix="evidence_pool"),
+        **evidence_beyond_pool(pos, neg, matrix, predicted, base_matrix, base_predicted),
+    }
 
 
 # ------------------------------------------------------------------
@@ -1769,8 +1952,8 @@ def _skyline_fit_and_score(
 
 
 def _model_meta(model: Any) -> dict[str, Any]:
-    """The class model's scalars at full precision, for a snapshot's JSON; its Bads' scores travel in the folds."""
-    return {k: v for k, v in asdict(model).items() if k != "neg_logits"}
+    """The class model's scalars at full precision, for a snapshot's JSON; its Goods' and Bads' scores travel in the folds."""
+    return {k: v for k, v in asdict(model).items() if k not in ("neg_logits", "pos_logits")}
 
 
 def _fold_arrays(orderings: Any) -> dict[str, Any]:
@@ -2249,6 +2432,38 @@ class _RunKnobs:
     calibration_seed: int
 
 
+@dataclass
+class _CheckState:
+    """Where one :func:`simulate_voting_iterations` run's spot checks stand between steps.
+
+    One object rather than loose locals of the voting loop, for pyright's sake
+    (#5070): its "narrowing for implied else" re-derives any *declared* name
+    tested with ``is None``, ``==`` or ``in`` at the test, and inside a
+    ~1,000-line loop each re-derivation walks the whole loop, through every
+    other such test.  The check state's tests were most of the 45s the file
+    took to check; a test on an attribute is narrowed without that walk.
+    """
+
+    #: The check running now, or the last one started.
+    check: SpotCheck | None = None
+    #: What stamps the running check's rows and picks (#4496): ``"prompt"``
+    #: for a prompted check (clicks), ``"check"`` for the end-of-run one.
+    phase: str = "check"
+    #: The last finished check: what a prompted check the budget cut short
+    #: leaves in place.
+    finished: SpotCheck | None = None
+    #: The vote count when the last check Autopilot ran ended (the app's
+    #: ``check_ended_votes``): the weak prompt's cooldown counts from it, and
+    #: so does whether the check before Done runs.
+    last_end: int | None = None
+    #: The labels separate weakly (#4496): a prompted check starts next step.
+    weak_due: bool = False
+    #: The end-of-run check has started.
+    end_checked: bool = False
+    #: #4664's early check: settled (run, or skipped) once a run.
+    early_settled: bool = True
+
+
 def _resolve_head(head: Optional[str], trainer: str) -> str:
     """Validate an explicit head name, or resolve ``None`` to the app's.
 
@@ -2615,6 +2830,11 @@ def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
     )
 
 
+#: How many media a priced centroid's probe scores at a time (#4800): a region run's
+#: every box at once is several GB over the pool, and each media scores alone.
+PROBE_CHUNK = 2048
+
+
 def _centroid_line_variant_rows(
     variants: list[tuple[str, float]],
     ident: dict[str, Any],
@@ -2628,6 +2848,7 @@ def _centroid_line_variant_rows(
     region_aware: bool,
     style_obj: Any,
     voted: "set[int] | None" = None,
+    query_scores: "dict[int, float] | None" = None,
 ) -> list[dict[str, Any]]:
     """#4732's priced lines: the same Test at each ``(rule, beta)`` of *variants*, as tagged rows.
 
@@ -2639,31 +2860,89 @@ def _centroid_line_variant_rows(
     (:data:`CENTROID_LINE_CORPORA`, #4779): ``pool`` is every media of the cell,
     the voted ones included, as the app's labelled collection holds them;
     ``unvoted`` leaves out *voted*.
+
+    In a typed-query run (*query_scores*, #4800) the rule
+    :data:`QUERY_LINE_VARIANT` is the typed query's own set with its line at
+    *beta* (:func:`_query_test`), so both of the sets a Find could give under
+    the quota are priced at every balance.  A centroid rule needs a Good and
+    the query rule a typed query: a click without one has no such row.
+
+    Every centroid variant of a click is the same head cut at another line, so
+    the click scores its media once, with the unit probe
+    :func:`~vtscore.detectors.centroid_head.fit_centroid` draws every line from
+    (:data:`PROBE_CHUNK` media at a time), and each variant draws its line off
+    those scores and reads its withheld half's off them too
+    (:func:`~vtscore.eval.step_trainers._centroid_cut_step`, #4800).  It is the
+    same set :func:`_centroid_test` gives, without its two passes a variant
+    over a region run's every box.
     """
+    from vtscore.detectors.centroid_head import centroid_head, fit_centroid, goods_centroid  # noqa: PLC0415
+
     out: list[dict[str, Any]] = []
+    goods: list[Any] = []
+    probe: dict[int, float] = {}
+
+    def probe_scores(ids: list[int]) -> list[float]:
+        """The unit probe's score of each of *ids*, scoring only the media no earlier variant has."""
+        todo = [cid for cid in dict.fromkeys(ids) if cid not in probe]
+        step = _head_step(centroid_head(goods_centroid(goods), 0.0, scale=1.0))
+        for i in range(0, len(todo), PROBE_CHUNK):
+            chunk = todo[i : i + PROBE_CHUNK]
+            got = _score_media_ids(step, clips_dict, chunk, region_aware=region_aware, style_obj=style_obj)
+            probe.update(zip(chunk, (float(s) for s in got)))
+        return [probe[cid] for cid in ids]
+
     for spec, beta in variants:
+        if spec == QUERY_LINE_VARIANT:
+            if query_scores is None:
+                continue
+            _qstep, q_rows = _query_test(
+                query_scores,
+                clips_dict,
+                test_ids,
+                target_category,
+                inclusion,
+                beta=beta,
+                calibration_rows=False,
+                line_beta=beta,
+            )
+            out.extend(
+                {**ident, **mr, "beta": beta, "detector_tier": "query", "gmm_variant": centroid_line_tag(spec, beta)}
+                for mr in q_rows
+            )
+            continue
+        if not good_votes:
+            continue
+        if not goods:
+            goods = _centroid_goods(
+                good_votes, clips_dict, target_category, region_voting=region_voting, style_obj=style_obj
+            )
         rule, _, corpus = spec.partition("~")
-        line_ids = None
+        line_ids = list(test_ids)
         if corpus == "pool":
             line_ids = list(clips_dict)
         elif corpus == "unvoted":
             line_ids = [i for i in clips_dict if i not in (voted or set())]
-        _step, metric_rows, _cal = _centroid_test(
-            good_votes,
+        _head, _thr, line = fit_centroid(goods, lambda _probe, ids=line_ids: probe_scores(ids), rule=rule, beta=beta)
+        test_scores = dict(zip(test_ids, probe_scores(list(test_ids)), strict=True))
+        metrics = _evaluate_on_test(
+            _centroid_cut_step(test_scores, line.cut),
+            CENTROID_THRESHOLD,
             clips_dict,
             test_ids,
             target_category,
             inclusion,
-            region_voting=region_voting,
-            region_aware=region_aware,
-            style_obj=style_obj,
             beta=beta,
-            calibration_rows=False,
-            line_rule=rule,
-            line_beta=beta,
-            line_ids=line_ids,
         )
-        out.extend({**ident, **mr, "beta": beta, "gmm_variant": centroid_line_tag(spec, beta)} for mr in metric_rows)
+        out.append(
+            {
+                **ident,
+                **metrics,
+                "beta": beta,
+                "detector_tier": "centroid",
+                "gmm_variant": centroid_line_tag(spec, beta),
+            }
+        )
     return out
 
 
@@ -2722,6 +3001,10 @@ def _quota_centroid(n_good: int, n_bad: int, dry_bad_quota: Optional[int]) -> bo
 #: labelled collection today) and the cell's media less the voted ones (``unvoted``).
 CENTROID_LINE_CORPORA = ("withheld", "pool", "unvoted")
 
+#: The variant ``query@<beta>`` (#4800): in a typed-query run, the typed query's own set with
+#: its line at that balance, priced on the same clicks as the centroid's lines.
+QUERY_LINE_VARIANT = "query"
+
 #: The ``gmm_variant`` tag of the head's rows at a click where the typed query holds (#4736):
 #: Test gives the query's set there, so the head's line is what it would have given.
 QUERY_HOLD_HEAD_TAG = "hold:head"
@@ -2730,10 +3013,14 @@ QUERY_HOLD_HEAD_TAG = "hold:head"
 def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tuple[str, float]]:
     """``[(rule, beta), ...]`` from #4732's ``"<rule>@<beta>"`` variants (a list, or one comma-separated string).
 
+    ``query@<beta>`` (:data:`QUERY_LINE_VARIANT`, #4800) is the typed query's
+    own set, which takes no corpus.
+
     Raises:
         ValueError: On a rule outside
-            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, a
-            balance that is not a positive number, or a repeated variant.
+            :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES` and
+            :data:`QUERY_LINE_VARIANT`, a balance that is not a positive
+            number, or a repeated variant.
     """
     if spec is None:
         return []
@@ -2748,13 +3035,13 @@ def parse_centroid_line_variants(spec: "Sequence[str] | str | None") -> list[tup
             beta = float("nan")
         if (
             not sep
-            or rule not in CENTROID_LINE_RULES
+            or not (rule in CENTROID_LINE_RULES or (rule == QUERY_LINE_VARIANT and not tilde))
             or (tilde and corpus not in CENTROID_LINE_CORPORA)
             or not (math.isfinite(beta) and beta > 0)
         ):
             raise ValueError(
                 f"a centroid line variant is '<rule>[~<corpus>]@<beta>' with rule in {CENTROID_LINE_RULES} "
-                f"and corpus in {CENTROID_LINE_CORPORA}; got {item!r}"
+                f"and corpus in {CENTROID_LINE_CORPORA}, or '{QUERY_LINE_VARIANT}@<beta>'; got {item!r}"
             )
         rule = spec
         if (rule, beta) in out:
@@ -2872,6 +3159,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_origin: str = "line",
     acq_target_p: "float | str | None" = None,
     smart_gate: str = "app",
+    smart_signal: str = APP_SMART_SIGNAL,
+    smart_readings: bool = False,
     stop_rule: str = "lights|level",
     stop_level: float = STOP_LEVEL,
     stop_cap: Optional[int] = STOP_CAP,
@@ -2929,6 +3218,11 @@ def simulate_voting_iterations(  # noqa: C901
     query_vector: Optional[np.ndarray] = None,
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
+    query_miss: bool = True,
+    find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
+    find_corpus_scores: Optional[Mapping[int, float]] = None,
+    find_mix: "float | str | None" = None,
+    find_flag_steps: Optional[Sequence[int]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2994,8 +3288,10 @@ def simulate_voting_iterations(  # noqa: C901
             ``target_prevalence`` the test set is untouched, so it combines with
             ``test_bands`` and each cell pairs with its natural twin (#4184).
         sim_fraction: Fraction of medias used for simulated voting.
-        safe_thresholds: The shipped threshold path - fuse the haystack score
-            distribution into the trained cut (the fold-anchored estimator, see
+        safe_thresholds: The shipped threshold path - the line drawn where
+            the app draws it (:func:`_safe_threshold_for_step`): the labels'
+            line under a balance (#4452), else the haystack score distribution
+            fused into the trained cut (the fold-anchored estimator, see
             :func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`).
             **On by default, matching the app**, which has no switch for it.
             Set ``False`` only to run the no-fusion control arm: pure
@@ -3091,7 +3387,11 @@ def simulate_voting_iterations(  # noqa: C901
             "centroid_line:<rule>@<beta>"`` so a production read skips it.
             The centroid never picks, so these rows change nothing else, and
             Autopilot's opening reads no balance, so a variant's balance prices
-            the line a user at that balance would see on these clicks.
+            the line a user at that balance would see on these clicks.  In a
+            typed-query run, where Test gives the typed query's set under the
+            quota, the same rows price the centroid there all the same, from
+            the first Good, and ``"query@<beta>"`` adds the typed query's set
+            at that balance from the first vote (#4800).
         handover_shadow: Price a hand-over rule on the same session (#4776):
             at every click Test gives the trained head, also a row of what the
             Goods' centroid would give there, scored as the centroid's rows
@@ -3148,6 +3448,46 @@ def simulate_voting_iterations(  # noqa: C901
             untagged are kept tagged :data:`QUERY_HOLD_HEAD_TAG`, so the hold is
             priced on the same session.  Picks never change: the head is
             trained and asks either way.  Inert where *query_tier* is.
+        query_miss: Whether such a run's Test gives the Goods' centroid in
+            place of the typed query's set once the query has missed on a
+            patch space, as the app's does (#4800,
+            :func:`~vtscore.detectors.label_quota.query_missed`): under the
+            quota, a Good in hand and a Bad before the Goods quota, on a run
+            whose media carry a patch grid (*region_aware*).
+            ``True`` - the default - is the app; ``False`` is the arm before
+            (the typed query's set until the quota).  The click's untagged row
+            is then the centroid's (``detector_tier = "centroid"``).  Picks
+            never change.  Inert where *query_tier* is.
+        find_corpus: A second corpus to Find on at every click (#4960,
+            :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
+            run's embedder, whose cell of the same name as *target_category*
+            (the whole dataset when it has none) is the Find corpus, as
+            *find_mix* draws it.  Each row then also carries
+            :data:`~vtscore.eval.voting_columns.FIND_CORPUS_COLUMNS`: the
+            detector the click's Test gives, scored there and cut where a Find
+            there draws its line (:func:`_find_corpus_columns`).  The corpus is
+            only scored, so the in-corpus columns are byte-identical with and
+            without it, and it never enters the pool, the votes, the atlas or
+            the folds.  ``None`` (the default) leaves those columns NaN.
+        find_corpus_scores: The typed query's cosine over *find_corpus*'s
+            medias, as *seed_scores* holds it over this cell's: what a
+            typed-query run's Test returns there (#4758).  Needed on such a
+            run whenever the Find corpus holds foreign medias.
+        find_mix: How the Find corpus is drawn
+            (:func:`~vtscore.eval.find_corpus.parse_find_mix`): ``"only"``
+            (the default) is the foreign cell alone; a share adds that many
+            times the withheld half's size of foreign medias to the withheld
+            half as extra haystack (``"equal"`` is 1, ``0`` the withheld half
+            alone), a draw seeded off *seed*.
+        find_flag_steps: The snapshot clicks: at the first click at or past
+            each, the row also reads the app's two domain-shift flags against
+            the Find corpus (:data:`~vtscore.eval.voting_columns.FIND_FLAG_COLUMNS`):
+            the Training-domain overlap against the sim pool's coverage atlas
+            (NaN on a patch embedder, which the app refuses, and on a
+            non-Autopilot strategy, which builds no atlas) and the Evidence
+            coverage from the votes' vectors and the Find cut.  Off every
+            other click, because routing a whole corpus through the atlas is
+            the costly step.  Needs *find_corpus*.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
             :data:`CUT_INCLUSION_COLUMNS`).  Orthogonal to
@@ -3283,6 +3623,16 @@ def simulate_voting_iterations(  # noqa: C901
         smart_gate: #4359's bound on the Smart light: ``"app"`` (the default)
             reads it; ``"never"`` holds it yellow for the phase decision, so
             Autopilot stays in ``hard`` to the end of the run.
+        smart_signal: What the Smart light is read off (#5134;
+            :data:`~vtscore.eval.autopilot_flow.SMART_SIGNALS`).  ``"fbeta_best"``
+            (the default) is the app: each recent model's best F-beta on the
+            current votes at the run's balance (F1 with none), green once it stops
+            rising.  ``"cost"`` is the app before #5134, FPR + FNR going flat; the
+            rest are the A/B's other readings.  Needs the Autopilot flow; ``line``
+            needs a balance too.
+        smart_readings: Record every reading's trend on each row
+            (``smart_<reading>_<part>``, #5134) without moving the light, so one
+            run of the app prices them all.
         stop_rule: What tells the user they can stop (#4878;
             :data:`~vtscore.eval.autopilot_flow.STOP_RULES`).  ``"lights|level"``
             (the default) is the app: Done once every quality light is green, or
@@ -3378,8 +3728,9 @@ def simulate_voting_iterations(  # noqa: C901
             are the paired, reporting-only view of the same rules.
         live_threshold: A **retired** live threshold rule (issue #4184), one of
             :data:`~vtscore.eval.live_threshold_rules.LIVE_THRESHOLD_RULES`, or
-            ``None`` (default) for the shipped fold-anchored cut.  The named rule
-            replaces the step's live cut after the fused path has fitted it -
+            ``None`` (default) for the step's own line (the labels' line under
+            a balance, else the fold-anchored cut).  The named rule replaces
+            that line once the safe-threshold path has drawn it -
             reporting, acquisition and every later vote read it - so, like
             *live_cut_rule*, it is a run-level arm.  The acquisition offset does
             not apply under it: the retired rules predate the offset and have no
@@ -3398,7 +3749,7 @@ def simulate_voting_iterations(  # noqa: C901
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
             ``"anchored"`` (issue #3959) is the GP-native rule: the GP fits its
-            own calibration folds on the app's splits and the **shipped**
+            own calibration folds on the app's splits and the app's **own**
             fold-anchored estimator runs on them - each fold's mixture on that
             fold GP's haystack scores, anchored by its held-out votes, carried
             to the final GP by quantile.  Needs *safe_thresholds* (that is where
@@ -3606,6 +3957,10 @@ def simulate_voting_iterations(  # noqa: C901
     if target_prevalence is not None and haystack_prevalence is not None:
         raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
+    # #4960's Find corpus: its knobs are read here, the corpus is built once the split exists.
+    find_share = parse_find_mix(find_mix)
+    if find_corpus is None and (find_corpus_scores is not None or find_flag_steps or find_mix is not None):
+        raise ValueError("find_corpus_scores, find_mix and find_flag_steps describe a Find corpus; pass find_corpus")
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
     # they have to be taken off the unfiltered pool (#4044).
@@ -3772,6 +4127,15 @@ def simulate_voting_iterations(  # noqa: C901
     if seed_examples is not None:
         pending_examples = choose_examples(sim_ids, clips_dict, target_category, seed_examples, seed)
         seed_scores = example_sort(clips_dict, pending_examples)
+    # The sort the session walks (#5004).  The app sorts the dataset it has
+    # loaded, which the run models with the voting half, so the selector's cut
+    # and rank distances, a schedule's cuts and the pick log's ranks are read
+    # over that half alone.  ``query_scores`` above keeps every media: the typed
+    # query's Test reads the withheld half's cosines from it.
+    sim_id_set = set(sim_ids)
+    sim_seed_scores: Optional[dict[int, float]] = (
+        None if seed_scores is None else {cid: v for cid, v in seed_scores.items() if cid in sim_id_set}
+    )
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -3800,6 +4164,25 @@ def simulate_voting_iterations(  # noqa: C901
             RuntimeWarning,
             stacklevel=2,
         )
+
+    # The second corpus a Find reads beside the withheld half (#4960), drawn
+    # off its own generator: no draw here can move the trajectory's.
+    find: "FindCorpus | None" = None
+    if find_corpus is not None:
+        find = build_find_corpus(
+            clips_dict,
+            test_ids,
+            find_corpus,
+            target_category,
+            mix=find_share,
+            seed=seed,
+            region_aware=region_aware,
+            query_scores=query_scores,
+            foreign_query_scores=find_corpus_scores,
+            pool_ids=sorted(sim_ids),
+        )
+    find_flag_pending = sorted({int(s) for s in find_flag_steps}) if find is not None and find_flag_steps else []
+    blank_find = blank_find_columns()
 
     # **The default arm must be the app's default.**  On a patch dataset the
     # live detector floods a Bad vote over the image's whole score-row stack
@@ -4018,6 +4401,8 @@ def simulate_voting_iterations(  # noqa: C901
             good_dry_run=flow_good_dry_run,
             stop_rule=stop_rule,
             stop_cap=stop_cap,
+            smart_signal=smart_signal,
+            record_readings=smart_readings,
         )
     elif more_walk != "seed":
         raise ValueError(
@@ -4029,6 +4414,14 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError("new_walk='hard' needs Autopilot's phase machine (an autopilot strategy, autopilot_fidelity)")
     if band_share is not None and (flow is None or beta is None):
         raise ValueError("band_share needs Autopilot's phase machine and a balance (beta)")
+    if smart_signal != APP_SMART_SIGNAL and flow is None:
+        raise ValueError(f"smart_signal {smart_signal!r} needs Autopilot's phase machine")
+    if smart_signal == "line" and beta is None:
+        # The labels line reads no level without a balance, so the light would never have a window.
+        raise ValueError("smart_signal 'line' needs a balance (beta)")
+    # What the flow is handed beyond Smart's own window (#5134): the cost arm's window, and the per-retrain readings.
+    read_cost = smart_readings or smart_signal == "cost"
+    read_history = smart_readings or smart_signal in SMART_HISTORY_READINGS
     if stop_rule in ("level", "lights+level") and (flow is None or beta is None):
         # An arm that waits on the level, with no line to read or no phase to move, would never stop.
         raise ValueError(f"stop_rule {stop_rule!r} needs Autopilot's phase machine and a balance (beta)")
@@ -4059,15 +4452,17 @@ def simulate_voting_iterations(  # noqa: C901
     # cosine sort's GMM over the whole sort and never refits it as votes come
     # in, so these are constants of the run rather than per-step state.
     startup_cuts: list[float] = []
-    if startup_state is not None and seed_scores is not None:
-        sort_values = list(seed_scores.values())
+    if startup_state is not None and sim_seed_scores is not None:
+        sort_values = list(sim_seed_scores.values())
         startup_cuts = [round_cut(sort_values, rnd) for rnd in startup_state.rounds]
     # The seed sort as a ranking, for the pick log: where in the sort each click
     # landed is the mining record the study reads.
     seed_rank: dict[int, int] = {}
-    if pick_sink is not None and seed_scores is not None:
-        seed_rank = {cid: i for i, cid in enumerate(sorted(seed_scores, key=lambda c: seed_scores[c], reverse=True))}
-    seed_sorted_scores: list[float] = sorted(seed_scores.values(), reverse=True) if seed_scores else []
+    if pick_sink is not None and sim_seed_scores is not None:
+        seed_rank = {
+            cid: i for i, cid in enumerate(sorted(sim_seed_scores, key=lambda c: sim_seed_scores[c], reverse=True))
+        }
+    seed_sorted_scores: list[float] = sorted(sim_seed_scores.values(), reverse=True) if sim_seed_scores else []
     # Recent per-step models (each with the threshold it was calibrated at),
     # re-scored every step against the *current* labelset so the Smart
     # indicator's slope regresses over one shared eval set - exactly what the
@@ -4131,7 +4526,9 @@ def simulate_voting_iterations(  # noqa: C901
                 "picked_seed_percentile": (
                     round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
                 ),
-                "picked_seed_score": round6(seed_scores[cid]) if seed_scores and cid in seed_scores else float("nan"),
+                "picked_seed_score": (
+                    round6(sim_seed_scores[cid]) if sim_seed_scores and cid in sim_seed_scores else float("nan")
+                ),
                 "picked_detector_score": round6(pool_scores[cid]) if cid in pool_scores else float("nan"),
                 "acq_threshold": round6(acq_threshold),
                 "n_good": len(good_votes),
@@ -4149,10 +4546,10 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
     # The balance's spot check (#4272, #4413), run once the voting steps are
     # spent: the simulated user checks the line as the app's check step does,
-    # its picks answered from ground truth and cast as votes.  ``line_ranking``
-    # is the ranking the last step's line was drawn over, which the walk's
-    # bands are cut from and a finished result is fingerprinted against.
-    check: SpotCheck | None = None
+    # its picks answered from ground truth and cast as votes; ``checks`` holds
+    # where it stands.  ``line_ranking`` is the ranking the last step's line
+    # was drawn over, which the walk's bands are cut from and a finished
+    # result is fingerprinted against.
     line_ranking: LineRanking | None = None
     # How many unvoted items the line keeps on it: the set a check started next
     # ranges over (#4483).
@@ -4170,18 +4567,8 @@ def simulate_voting_iterations(  # noqa: C901
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
     # #4496: under ``spot_check="weak"`` the app prompts a check when the labels
-    # separate weakly.  ``check_phase`` stamps the running check's rows and
-    # picks: ``"prompt"`` for a prompted check (clicks), ``"check"`` for the
-    # end-of-run one.
-    check_phase = "check"
-    end_checked = False
-    weak_due = False
-    # The vote count when the last check Autopilot ran ended (the app's
-    # ``check_ended_votes``): the weak prompt's cooldown counts from it, and so
-    # does whether the check before Done runs.
-    last_check_end: int | None = None
-    # #4664's early check: settled (run, or skipped) once a run.
-    early_settled = early_check is None
+    # separate weakly.
+    checks = _CheckState(early_settled=early_check is None)
     if flow is not None and (spot_check == "off" or not done_check or beta is None):
         # No check before Done: the arm before the app ran it, a run that never
         # checks, or the Inclusion arm, which has no balance to check.
@@ -4221,9 +4608,6 @@ def simulate_voting_iterations(  # noqa: C901
             kept=line_kept if walk_shape_resolved != CHECK_TRIM else None,
         )
 
-    # The last finished check: what a prompted check the budget cut short leaves in place.
-    finished_check: SpotCheck | None = None
-
     def _settle_done_check() -> None:
         """Whether the check before Done runs, decided the step the flow reaches it, as the app decides it.
 
@@ -4238,7 +4622,7 @@ def simulate_voting_iterations(  # noqa: C901
             return
         n = len(good_votes) + len(bad_votes)
         if (
-            not done_check_due(n, last_check_end)
+            not done_check_due(n, checks.last_end)
             or line_ranking is None
             or not pool
             or n + _check_start_cost() > n_steps
@@ -4251,6 +4635,94 @@ def simulate_voting_iterations(  # noqa: C901
             return 0
         schedule = balance_schedule(beta)
         return schedule.rounds * (walk_picks or schedule.picks)
+
+    def _check_round(t: int) -> list[int] | None:  # noqa: C901 - the loop's check scheduling, moved out whole (#5070)
+        """The picks of the check round this step is, or ``None`` when it is an ordinary step.
+
+        The running check's next round, else a check started now: prompted
+        (the weak prompt, the check before Done, the early check) or, once
+        the voting steps are spent, the end-of-run one.  An empty list ends
+        the run: the steps are spent and there is nothing left to check.
+        """
+        picks: list[int] | None = None
+        if checks.check is not None and checks.check.running:
+            if checks.phase == "prompt" and t + len(checks.check.pending) > n_steps:
+                # The budget is spent mid-check: the user stops there, as closing
+                # the step does, and the end-of-run check takes over (#4496).
+                checks.check.cancel()
+                checks.check = checks.finished
+                checks.last_end = t
+                if flow is not None:
+                    flow.end_spot_check()
+            else:
+                picks = list(checks.check.pending)
+        if picks is None and not (checks.check is not None and checks.check.running):
+            if checks.weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                # The labels separate weakly (#4496): the user checks now, and
+                # the check's picks are clicks, so its opening bands must fit
+                # the budget left.
+                checks.weak_due = False
+                checks.last_end = t
+                started = _start_check()
+                if started is not None and started.pending:
+                    checks.check, checks.phase = started, "prompt"
+                    picks = list(started.pending)
+                    # The step is Autopilot's Spot Check.  Not in the opening,
+                    # which only the ``weak_phase="any"`` arm prompts in and the
+                    # app never does: there the flow keeps the walk's phase, as
+                    # that arm was priced.
+                    if flow is not None and flow.phase not in _OPENING_PHASES:
+                        flow.begin_spot_check("weak")
+            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
+                # Every light went green last step and the check before Done is
+                # due (``_settle_done_check`` let it stand): the user runs it now.
+                started = _start_check() if line_ranking is not None and pool else None
+                if started is not None and started.pending:
+                    checks.check, checks.phase = started, "prompt"
+                    picks = list(started.pending)
+                    flow.begin_spot_check("done")
+                else:
+                    flow.skip_done_check()
+            if picks is None and (t >= n_steps or not pool):
+                # The voting steps are spent.  Check the line once, if the run
+                # checks at all and there is a ranking with something unvoted in it.
+                if spot_check == "off" or checks.end_checked or beta is None or line_ranking is None:
+                    return []
+                checks.end_checked = True
+                started = _start_check()
+                if started is None:
+                    return []
+                checks.check, checks.phase = started, "check"
+                picks = list(started.pending)
+                if not picks:
+                    return []
+
+        if (
+            not checks.early_settled
+            and early_check is not None
+            and flow is not None
+            and t >= early_check
+            and flow.phase not in _OPENING_PHASES
+        ):
+            # #4664: every session is checked at early_check votes, once.  A
+            # prompted check running now or started this step, or one whose
+            # rounds reached that vote (a round casts its picks at once, so it
+            # can step over it), is that check; otherwise the user checks now,
+            # if a check can start.
+            if (checks.check is not None and checks.check.running and checks.phase == "prompt") or (
+                checks.last_end is not None and checks.last_end >= early_check
+            ):
+                checks.early_settled = True
+            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
+                checks.early_settled = True
+                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
+                    started = _start_check()
+                    if started is not None and started.pending:
+                        checks.last_end = t
+                        checks.check, checks.phase = started, "prompt"
+                        picks = list(started.pending)
+                        flow.begin_spot_check("early")
+        return picks
 
     t = 0
 
@@ -4311,6 +4783,8 @@ def simulate_voting_iterations(  # noqa: C901
             # margin cannot disagree with the light above it; NaN where no phase
             # machine ran, or where the rule itself declined to fit one.
             **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
+            # #5134's Smart candidates: NaN unless the run reads them.
+            **(flow.smart_reading_columns if flow is not None else reading_columns_nan()),
             "app_trained": 1
             if (flow is None or app_has_detector(flow.phase, more_shown=more_walk == "detector"))
             else 0,
@@ -4339,112 +4813,81 @@ def simulate_voting_iterations(  # noqa: C901
 
         return score
 
+    def _find_flags_due(t: int, is_click: bool) -> int | None:
+        """The listed snapshot click this click answers, if it is the first click at or past it (#4960)."""
+        if not find_flag_pending or not is_click or t < find_flag_pending[0]:
+            return None
+        hit = find_flag_pending[0]
+        while find_flag_pending and find_flag_pending[0] <= t:
+            find_flag_pending.pop(0)
+        return hit
+
+    def _find_row(
+        tier: str,
+        st: StepModel | None,
+        cut: float,
+        step_details: dict[str, Any],
+        row_beta: float | None,
+        flags_at: int | None,
+    ) -> dict[str, Any]:
+        """This click's Find on the second corpus (#4960); NaN with none."""
+        if find is None:
+            return blank_find
+        return _find_corpus_columns(
+            find,
+            tier,
+            step=st,
+            threshold=cut,
+            details=step_details,
+            good_votes=good_votes,
+            bad_votes=bad_votes,
+            target_category=target_category,
+            inclusion=inclusion,
+            region_voting=region_voting,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            beta=row_beta,
+            line_beta=beta,
+            centroid_line=centroid_line,
+            flags_at=flags_at,
+            atlas=atlas,
+        )
+
     while True:
-        picks: list[int] | None = None
         # The vote count before this step's votes: a frame is due at every
         # requested click this step reaches, which a check round can jump past.
         t_before = t
-        if check is not None and check.running:
-            if check_phase == "prompt" and t + len(check.pending) > n_steps:
-                # The budget is spent mid-check: the user stops there, as closing
-                # the step does, and the end-of-run check takes over (#4496).
-                check.cancel()
-                check = finished_check
-                last_check_end = t
-                if flow is not None:
-                    flow.end_spot_check()
-            else:
-                picks = list(check.pending)
-        if picks is None and not (check is not None and check.running):
-            if weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
-                # The labels separate weakly (#4496): the user checks now, and
-                # the check's picks are clicks, so its opening bands must fit
-                # the budget left.
-                weak_due = False
-                last_check_end = t
-                started = _start_check()
-                if started is not None and started.pending:
-                    check, check_phase = started, "prompt"
-                    picks = list(check.pending)
-                    # The step is Autopilot's Spot Check.  Not in the opening,
-                    # which only the ``weak_phase="any"`` arm prompts in and the
-                    # app never does: there the flow keeps the walk's phase, as
-                    # that arm was priced.
-                    if flow is not None and flow.phase not in _OPENING_PHASES:
-                        flow.begin_spot_check("weak")
-            if picks is None and flow is not None and flow.phase == "spot" and flow.spot_check is None:
-                # Every light went green last step and the check before Done is
-                # due (``_settle_done_check`` let it stand): the user runs it now.
-                started = _start_check() if line_ranking is not None and pool else None
-                if started is not None and started.pending:
-                    check, check_phase = started, "prompt"
-                    picks = list(check.pending)
-                    flow.begin_spot_check("done")
-                else:
-                    flow.skip_done_check()
-            if picks is None and (t >= n_steps or not pool):
-                # The voting steps are spent.  Check the line once, if the run
-                # checks at all and there is a ranking with something unvoted in it.
-                if spot_check == "off" or end_checked or beta is None or line_ranking is None:
-                    break
-                end_checked = True
-                started = _start_check()
-                if started is None:
-                    break
-                check, check_phase = started, "check"
-                picks = list(check.pending)
-                if not picks:
-                    break
-
-        if (
-            not early_settled
-            and early_check is not None
-            and flow is not None
-            and t >= early_check
-            and flow.phase not in _OPENING_PHASES
-        ):
-            # #4664: every session is checked at early_check votes, once.  A
-            # prompted check running now or started this step, or one whose
-            # rounds reached that vote (a round casts its picks at once, so it
-            # can step over it), is that check; otherwise the user checks now,
-            # if a check can start.
-            if (check is not None and check.running and check_phase == "prompt") or (
-                last_check_end is not None and last_check_end >= early_check
-            ):
-                early_settled = True
-            elif picks is None and flow.phase != "spot" and flow.spot_check is None:
-                early_settled = True
-                if t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
-                    started = _start_check()
-                    if started is not None and started.pending:
-                        last_check_end = t
-                        check, check_phase = started, "prompt"
-                        picks = list(check.pending)
-                        flow.begin_spot_check("early")
+        # Undeclared on purpose: a typed ``picks`` makes every ``picks is None``
+        # below cost pyright a walk of the whole loop (see ``_CheckState``).
+        picks = _check_round(t)
+        if picks == []:
+            break
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
             # move what the next round samples.
-            phase = check_phase
+            phase = checks.phase
             startup_round, startup_cut = -1, None
             round_votes = {cid: _cast(cid, phase) for cid in picks}
             t = len(good_votes) + len(bad_votes)
             for cid in picks:
                 _log_pick(cid, round_votes[cid], phase, startup_round, startup_cut)
             is_positive = round_votes[picks[-1]]
-            assert check is not None and line_ranking is not None
-            check.record(round_votes)
-            if check.finished and check_phase == "prompt":
-                last_check_end = t
+            assert checks.check is not None and line_ranking is not None
+            checks.check.record(round_votes)
+            if checks.check.finished and checks.phase == "prompt":
+                checks.last_end = t
                 if flow is not None:
                     # The step ends with the check; this step's update reads the phase after it.
                     flow.end_spot_check()
-            if check.finished:
-                finished_check = check
+            if checks.check.finished:
+                checks.finished = checks.check
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
-                check.fingerprint = line_ranking.fingerprint(check.range_count, set(good_votes) | set(bad_votes))
+                checks.check.fingerprint = line_ranking.fingerprint(
+                    checks.check.range_count, set(good_votes) | set(bad_votes)
+                )
         else:
             phase = flow.phase if flow is not None else None
             startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
@@ -4485,7 +4928,7 @@ def simulate_voting_iterations(  # noqa: C901
                     atlas=atlas,
                     rng=rng,
                     pool_labels=pool_labels,
-                    seed_scores=seed_scores,
+                    seed_scores=sim_seed_scores,
                     phase=phase,
                     startup_cut=startup_cut,
                     uncertainty=pool_uncertainty,
@@ -4581,11 +5024,18 @@ def simulate_voting_iterations(  # noqa: C901
                     "device": c_step.device,
                     "elapsed_seconds": round(time.monotonic() - start_time, 3),
                 }
+                c_find = _find_row(
+                    "query" if query_on else "centroid",
+                    None,
+                    float("nan"),
+                    {"beta": row_beta},
+                    row_beta,
+                    _find_flags_due(t, True),
+                )
                 for mr in c_rows:
-                    rows.append({**c_ident, **mr, **c_bands, **c_timing})
-                if query_on:
-                    # The centroid is not what Test gives here, so its lines are not priced.
-                    continue
+                    rows.append({**c_ident, **mr, **c_bands, **c_find, **c_timing})
+                # In a typed-query run the centroid is not what Test gives, but it is
+                # priced all the same when asked: the set a fallback would give (#4800).
                 rows.extend(
                     _centroid_line_variant_rows(
                         line_variants,
@@ -4599,6 +5049,7 @@ def simulate_voting_iterations(  # noqa: C901
                         region_aware=region_aware,
                         style_obj=style_obj,
                         voted=set(good_votes) | set(bad_votes),
+                        query_scores=query_scores,
                     )
                 )
             continue
@@ -4663,7 +5114,7 @@ def simulate_voting_iterations(  # noqa: C901
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
-                    check=check,
+                    check=checks.check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
                     line_shape=line_shape,
@@ -4685,12 +5136,12 @@ def simulate_voting_iterations(  # noqa: C901
                 if weak_line is not None and weak_check_due(
                     weak_line.separation,
                     t,
-                    last_check_end,
+                    checks.last_end,
                     threshold=weak_separation,
                     min_votes=weak_min_t,
                     cooldown=weak_repeat if weak_repeat > 0 else None,
                 ):
-                    weak_due = True
+                    checks.weak_due = True
             if live_threshold is not None:
                 # A retired rung replaces the shipped cut, and the fit it
                 # replaced is dropped with it so acquisition cannot re-cut an
@@ -4789,8 +5240,10 @@ def simulate_voting_iterations(  # noqa: C901
         # head (#4643): the withheld half is scored as that.
         centroid = quota_on and _quota_centroid(len(good_votes), len(bad_votes), dry_bad_quota)
         # ... and a typed-query run's Test gives the typed query's own set (#4758), past
-        # the quota too while the query holds on a single-vector space (#4736).
-        query = centroid and query_on
+        # the quota too while the query holds on a single-vector space (#4736), but the
+        # centroid once the query has missed on a patch space (#4800).
+        missed = query_miss and query_missed(len(good_votes), len(bad_votes), patch_space=region_aware)
+        query = centroid and query_on and not missed
         held = (
             query_on
             and not centroid
@@ -4805,7 +5258,7 @@ def simulate_voting_iterations(  # noqa: C901
         # The trained head's scores of the withheld half, their truth and ids, for #4786's line counts.
         scored_test: tuple[Any, Any, list[int]] | None = None
         t_test = time.monotonic()
-        if centroid and query_scores is not None:
+        if query and query_scores is not None:
             centroid_step, c_rows = _query_test(
                 query_scores,
                 clips_dict,
@@ -4852,7 +5305,7 @@ def simulate_voting_iterations(  # noqa: C901
                 # its scores and labels, Train's threshold and the labels' class
                 # model, so any Find corpus drawn from it is priced post hoc.
                 find_line = details.get("find_line")
-                snap_phase = check_phase if picks is not None else (flow.phase if flow is not None else "")
+                snap_phase = checks.phase if picks is not None else (flow.phase if flow is not None else "")
                 # #4936: the fold models' own scores ride on the snapshot run_cells keeps for a listed click.
                 fold_scale: dict[str, Any] = {}
                 if fold_scale_pending and snap_phase != "check" and int(t) >= fold_scale_pending[0]:
@@ -4929,6 +5382,19 @@ def simulate_voting_iterations(  # noqa: C901
             neg_ids=band_neg_ids,
             target_category=target_category,
         )
+        # The second corpus a Find reads (#4960), scored by the detector this
+        # click's Test gives; the flags at a snapshot click.  On a held click
+        # the typed query's row is the untagged one, so the flags ride there.
+        find_flags_at = _find_flags_due(t, picks is None or checks.phase == "prompt")
+        find_hold = held and query_scores is not None
+        find_cols = _find_row(
+            "query" if query else "centroid" if centroid else "trained",
+            step,
+            threshold,
+            details,
+            details.get("beta"),
+            None if find_hold else find_flags_at,
+        )
 
         # Score the remaining pool with the fresh model so the next step's
         # autopilot Hard pick can rank it - in the geometry the cut it will be
@@ -4967,6 +5433,8 @@ def simulate_voting_iterations(  # noqa: C901
             # step trains one, so the last SMART_WINDOW steps are the same set.
             del recent_steps[:-SMART_WINDOW]
             flow.record_step(
+                # The ``cost`` arm's window, the app before #5134: priced at
+                # SMART_INCLUSION at each model's own cut (#4243).
                 _labelset_error_costs(
                     recent_steps,
                     good_votes,
@@ -4975,12 +5443,32 @@ def simulate_voting_iterations(  # noqa: C901
                     SMART_INCLUSION,
                     region_aware=region_aware,
                     style_obj=style_obj,
-                ),
+                )
+                if read_cost
+                else None,
                 pool_scores,
                 threshold,
                 # Rates are over the haystack the votes came out of, labeled
                 # items included, as the app divides by its whole scored pool.
                 num_pool=len(sim_ids),
+                # Smart's window (#5134): each model's best F-beta on the current
+                # votes at the run's balance, and the A/B's other units of it.
+                windows=_labelset_window_readings(
+                    recent_steps,
+                    good_votes,
+                    bad_votes,
+                    clips_dict,
+                    beta,
+                    region_aware=region_aware,
+                    style_obj=style_obj,
+                ),
+                # The A/B's per-retrain readings: held-out and labels-line.
+                history={
+                    **_heldout_readings(details.get("fold_orderings"), beta),
+                    "line": stop_level_reading(details.get("find_line"), beta)["expected_fbeta"],
+                }
+                if read_history
+                else None,
             )
             flow.update(
                 len(good_votes),
@@ -4995,7 +5483,7 @@ def simulate_voting_iterations(  # noqa: C901
         # Identifying columns shared by every row this step emits.
         base_row = _ident_row(
             t,
-            check_phase if picks is not None else (flow.phase if flow is not None else ""),
+            checks.phase if picks is not None else (flow.phase if flow is not None else ""),
             acq_threshold,
             threshold,
             pool_scores,
@@ -5062,7 +5550,7 @@ def simulate_voting_iterations(  # noqa: C901
             # the centroid's line keeps the same set at every balance.
             metric_rows, base_scores, base_labels, base_ids = calibration
             if (rank_frame_sink is not None or line_test_sink is not None) and (
-                picks is None or check_phase == "prompt"
+                picks is None or checks.phase == "prompt"
             ):
                 last_ordinary = {
                     "t": t,
@@ -5077,11 +5565,11 @@ def simulate_voting_iterations(  # noqa: C901
                     "fallback_threshold": CENTROID_THRESHOLD,
                 }
             for mr in metric_rows:
-                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+                rows.append({**base_row, **mr, **band_metrics, **find_cols, **timing_cols})
         elif calibration is not None:
             metric_rows, base_scores, base_labels, base_ids = calibration
             # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
-            is_click = picks is None or check_phase == "prompt"
+            is_click = picks is None or checks.phase == "prompt"
             if (rank_frame_sink is not None or line_test_sink is not None) and is_click:
                 # Kept by reference and turned into the ``last`` frame after the
                 # loop: nothing here is mutated later, and the voted set is a
@@ -5259,7 +5747,7 @@ def simulate_voting_iterations(  # noqa: C901
                     )
                 )
             for mr in metric_rows:
-                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
+                rows.append({**base_row, **mr, **band_metrics, **find_cols, **timing_cols})
             # The near-free inclusion-budget sweep, into the side sink.
             if inclusion_sweep_ks and sweep_sink is not None:
                 for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
@@ -5286,7 +5774,7 @@ def simulate_voting_iterations(  # noqa: C901
                 ):
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
-            rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
+            rows.append({**base_row, **metrics, **band_metrics, **find_cols, **timing_cols})
         if held and query_scores is not None:
             # #4736: the typed query's set is what Test gives at this click, so it is the
             # untagged row; the head's, which the step drew all the same, stay as tagged rows.
@@ -5313,8 +5801,20 @@ def simulate_voting_iterations(  # noqa: C901
                 neg_ids=band_neg_ids,
                 target_category=target_category,
             )
-            rows.append({**base_row, "detector_tier": "query", "app_trained": 0, **q_rows[0], **q_bands, **timing_cols})
-        if centroid and line_variants and not query:
+            q_find = _find_row("query", None, float("nan"), details, details.get("beta"), find_flags_at)
+            rows.append(
+                {
+                    **base_row,
+                    "detector_tier": "query",
+                    "app_trained": 0,
+                    **q_rows[0],
+                    **q_bands,
+                    **q_find,
+                    **timing_cols,
+                }
+            )
+        if centroid and line_variants:
+            # A typed-query run prices the centroid here too, beside its query's own set (#4800).
             rows.extend(
                 _centroid_line_variant_rows(
                     line_variants,
@@ -5324,6 +5824,7 @@ def simulate_voting_iterations(  # noqa: C901
                     test_ids,
                     target_category,
                     inclusion,
+                    query_scores=query_scores,
                     region_voting=region_voting,
                     region_aware=region_aware,
                     style_obj=style_obj,
@@ -5492,6 +5993,7 @@ def simulate_voting_iterations(  # noqa: C901
             "span_depth": -1,
             "span_target": -1,
             **{col: float("nan") for col in STOPPING_MARGIN_COLUMNS},
+            **reading_columns_nan(),
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,
@@ -5502,6 +6004,8 @@ def simulate_voting_iterations(  # noqa: C901
             **_line_columns({}),
             # The skyline is fitted to every label; no Test gives it (#4643).
             "detector_tier": "",
+            # No click, so no Find on the second corpus (#4960).
+            **blank_find,
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
@@ -5554,7 +6058,7 @@ def run_voting_iterations_eval(
             would only re-weight ``cost``.  The app has no such setting
             (#4269); 0 is the cut it draws with no balance.
         sim_fraction: Fraction of medias reserved for simulated voting.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
             (see :func:`simulate_voting_iterations`).
         calibrate_count: Number of random Train/Calibrate splits for threshold
@@ -5709,7 +6213,7 @@ def run_voting_iterations_eval_from_pickles(
         inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
             needs ``beta="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
-        safe_thresholds: The shipped fused threshold path; on by default,
+        safe_thresholds: The shipped threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).

@@ -30,7 +30,6 @@ the arm cannot be re-run from this tree; its published numbers live in
 from __future__ import annotations
 
 import os
-import zlib
 
 # --- Datasets (image demo ids) ---
 # visual_genome_m and openlogo_a carry ground-truth region boxes (region votes
@@ -59,12 +58,6 @@ MAX_STEPS = int(os.environ.get("MAXPATCH_MAX_STEPS", "150"))
 #: one a real user sees rather than whatever the library happens to default to
 #: (#3341).  The sibling knob is ``calibration/experiment_config.SEED_ENRICH``.
 SEED_ENRICH = os.environ.get("MAXPATCH_SEED_ENRICH", "0") == "1"
-
-# --- Startup-sort exemplars ---
-# Per category, this many candidate exemplars are cropped + embedded at prepare
-# time; seed *s* uses candidate ``s % len(candidates)``, so every arm at a given
-# (category, seed) starts from the *same* exemplar image.
-EXEMPLAR_CANDIDATES = int(os.environ.get("MAXPATCH_EXEMPLAR_CANDIDATES", "8"))
 
 # --- Production-faithful fixed choices (pre-registered) ---
 INCLUSION = 0
@@ -120,20 +113,6 @@ def styles_for_embedder(embedder: str) -> list[str]:
 def pickle_name(dataset: str, embedder: str) -> str:
     """Basename of the per-(dataset, embedder) pickle prepare writes."""
     return f"{dataset}__{embedder}.pkl"
-
-
-def crops_basename(dataset: str, embedder: str) -> str:
-    """Basename (no extension) of the exemplar-crop artifacts prepare writes."""
-    return f"{dataset}__{embedder}__crops"
-
-
-def category_rng_seed(category: str) -> int:
-    """Deterministic RNG seed for a category's exemplar-candidate draw.
-
-    CRC32 rather than ``hash()`` so the draw is stable across processes
-    (PYTHONHASHSEED) and repo checkouts.
-    """
-    return zlib.crc32(category.encode("utf-8")) & 0x7FFFFFFF
 
 
 def select_categories_by_prevalence(category_counts: dict[str, int], n: int = N_CATEGORIES) -> list[str]:
@@ -261,8 +240,8 @@ def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[
     *categories_by_dataset* is keyed ``{dataset: {embedder: [category, ...]}}``
     (category counts can differ per embedder only if a load partially failed; in
     the normal case they agree).  Each cell runs **all styles** for its embedder
-    inside one task (they share the loaded pickle), so MaxHAC and MaxPatch
-    trajectories are paired on identical data, splits, and exemplars.
+    inside one task (they share the loaded pickle), so the styles'
+    trajectories are paired on identical data, splits, and opening.
     Deterministic order so a task index maps to a stable cell across submissions.
     """
     cells: list[dict] = []
@@ -273,3 +252,16 @@ def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[
                 for seed in SEEDS:
                     cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
     return cells
+
+
+def max_array_cells() -> int:
+    """The most cells :func:`array_cells` can enumerate under this config.
+
+    Prepare picks the categories, so the exact count exists only once it has run
+    (``run_cells.py --print-cells``).  This bound sizes an array submitted before
+    then: every dataset at its larger selection (every scale band full, or the
+    prevalence spread), every embedder, every seed.  Indices past the real count
+    exit as no-ops.
+    """
+    per_dataset = max(len(SCALE_BANDS) * N_PER_BAND, N_CATEGORIES)
+    return len(DATASETS) * len(EMBEDDERS) * per_dataset * len(SEEDS)

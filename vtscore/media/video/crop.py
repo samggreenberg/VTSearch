@@ -8,8 +8,8 @@ honoured, not baked in, for exactly the same reason: re-encoding a cropped copy
 of the file per unit would duplicate the payload and desync the time window
 that still indexes the parent's timeline.
 
-Three readers therefore have to agree about the box, so the parsing and the
-crop live here once:
+Three server-side readers therefore have to agree about the box, so the
+parsing and the crop live here once:
 
 * :func:`~vtscore.media.video._frame_sampling.sample_video_frames` - what the
   embedder actually sees.
@@ -19,6 +19,19 @@ crop live here once:
   that writes the box in the first place, and
   :class:`~vtscore.media.video.cleaner.VideoBlankTrimCleaner`, which measures
   blankness inside it.
+
+A fourth reader cannot import this module: the SPA's video player crops its
+picture to the box in the browser, and ``frontend/src/app/utils/clip-box.ts``
+mirrors :func:`clamp_clip_box` for it.  Change the clamp rule in both places.
+
+The box is in the pixels of the frames :func:`~vtscore.media.video.decode.frame_at`
+returns: *stored* pixels, autorotated.  The browser measures a video in
+*display* pixels, which differ on an anamorphic video (non-square pixels: a
+720x480 DVD rip with sample aspect ratio 32:27 displays at 853x480).  So the
+letterbox cleaner records the frame size it measured the box on beside it, as
+``clip_box_frame: [width, height]``, and the player scales the box from that
+frame to the one it plays before clamping.  The server-side readers all decode
+stored pixels and ignore it.  A box without one is used as is.
 """
 
 from __future__ import annotations

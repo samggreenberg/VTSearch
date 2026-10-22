@@ -34,7 +34,7 @@ export type { CleanerInfo } from '../generated/api-client/models/cleaner-info';
 export type { DatasetRegistryEntry } from '../generated/api-client/models/dataset-registry-entry';
 export type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
 export type { FieldOptions } from '../generated/api-client/models/field-options';
-export type { ErrorCostPoint } from '../generated/api-client/models/error-cost-point';
+export type { SmartPoint } from '../generated/api-client/models/smart-point';
 export type { StabilityPoint } from '../generated/api-client/models/stability-point';
 export type { DiversityPoint } from '../generated/api-client/models/diversity-point';
 
@@ -165,6 +165,14 @@ export interface LoadingTask extends ProgressEvent {
   embedder?: string;
   /** Present on a background AutoFind's row (task ids starting `_autofind_`). */
   autofind?: AutoFindTaskInfo;
+  /** User the task runs for. A kept failure is only streamed to them (#4973). */
+  created_by?: string;
+  /** Set on imports: a failure stays on the channel until dismissed (#4973). */
+  keep_failure?: boolean;
+  /** What the task reads, as a person would name it (an import's origin). */
+  source?: string;
+  /** Epoch seconds the task finished at; absent while it runs. */
+  finished_at?: number;
 }
 
 /** One row of a multi-media import specification.  See
@@ -302,4 +310,3 @@ export interface AutoFindTaskInfo {
    *  lacks): the reason. Such a row is idle from its first frame. */
   skipped?: string;
 }
-

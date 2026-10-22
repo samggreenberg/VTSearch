@@ -74,26 +74,13 @@
          Autopilot case used to render its own pane *instead of* the centre
          panel, which also took the keyboard handler with it — and undo is the
          way out of an exhausted queue, so it has to keep working here. -->
-    <!-- Autopilot's Spot Check step takes the pane while it runs. The centre
-         panel stays mounted under it, hidden, so its keyboard and viewer
-         state survive the step; the stage holds the vote keys meanwhile. -->
-    @if (spotCheck()) {
-      <vt-spot-check-stage
-        [intro]="spotCheckIntro()"
-        [hintable]="spotCheckHintable()"
-        (closed)="onSpotCheckClosed()"
-        (voted)="onSpotCheckVoted($event)"
-      />
-    }
     <vt-center-panel
-      [style.display]="spotCheck() ? 'none' : null"
       [media]="mediaState.selectedMedia"
       [exhausted]="centreExhausted()"
       [exhaustedHeading]="exhaustedHeading()"
       [exhaustedDetail]="exhaustedDetail()"
       [advancePending]="advancePending()"
       [voteHint]="voteHint()"
-      [voteHintCounts]="voteHintCounts()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
     />
@@ -125,8 +112,7 @@
        panel clips, so the hint is placed in the layout instead (#4824). -->
   @if (labelsHint()) {
     <vt-toasty-hint hintId="fix-votes" [anchor]="labelsPanel" side="beside" reach="left">
-      Your vote went to <strong>Labels</strong> on the right. Misclicked? Open Labels, click the item, and
-      vote again.
+      Your vote went to <strong>Labels</strong> on the right, where you can change it. Keep clicking.
     </vt-toasty-hint>
   }
 </div>
@@ -163,7 +149,6 @@
     [currentExampleDisplay]="resortCurrentDisplay"
     [clicksSoFar]="resortSortClicks"
     [positivesSoFar]="resortSortPositives"
-    [positivesNeeded]="resortPositivesNeeded"
     (keepExample)="onResortKeep()"
     (newExample)="onResortNewExample($event)"
     (closed)="onResortClosed()"

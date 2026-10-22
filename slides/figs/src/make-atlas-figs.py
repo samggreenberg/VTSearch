@@ -85,13 +85,11 @@ INK, SOFT, RULE = INTRO.INK, INTRO.SOFT, "#d8dee6"
 CELL_LINE = "#aeb8c6"
 BLUE, RED, GREEN = INTRO.BLUE, INTRO.RED, INTRO.GREEN
 CANVAS, UNIT_PT, R = INTRO.CANVAS, INTRO.UNIT_PT, INTRO.R
-#: The two figures drawn on the deck's plane share that plane's slide slot and
-#: its headline shape, so they take its measured one-line notch rather than the
-#: deck's two-line reserve — see `slides/STYLE.md`. Both headlines are one line;
-#: gaining a second would mean re-measuring, and `build.py --check` would not
-#: catch it, because a figure under a two-line headline is legal and merely
-#: wrong. The other two figures here are drawings of my own with room to spare,
-#: so they keep clear of the full reserve and take the standard.
+#: All four figures sit under one-line headlines, so all four take the deck
+#: plane's measured one-line notch rather than the deck's two-line reserve —
+#: see `slides/STYLE.md`. A headline gaining a second line would mean
+#: re-measuring, and `build.py --check` would not catch it, because a figure
+#: under a two-line headline is legal and merely wrong.
 NOTCH = INTRO.VOTE_NOTCH_PX
 
 #: Type sizes, in points at `UNIT_PT` per drawing unit. The floor is 20 slide
@@ -1464,7 +1462,7 @@ def depth_fig() -> None:
 # 3b. Far Out — the atlas finding the room's second collection (#4517)
 # ──────────────────────────────────────────────────────────────────────────────
 
-FAR_STAGES = 4
+FAR_STAGES = 5
 #: How many floor points the atlas is built on. Denser than the drawing's
 #: `N_ITEMS`, because the shipped atlas splits only nodes of twenty and more
 #: and calibrates only those: built on the drawn seventy-six it would have a
@@ -1555,9 +1553,10 @@ def _far_centre(u: float, v: float) -> np.ndarray:
 def far_fig() -> None:
     """The atlas finding Out of Its Depth's second collection, drawn in the same room (#4517).
 
-    Four pages (owner, #4872: "show the centers in a), the distance lines in
-    b), the second domain in c), and the (longer) distance lines in d)"): the
-    floor with the centres of the atlas's cells; each floor item's spoke to its
+    Five pages (owner, #4872: "show the centers in a), the distance lines in
+    b), the second domain in c), and the (longer) distance lines in d)", with
+    the floor alone first, #5132): the floor's items; then with the centres of
+    the atlas's cells; each floor item's spoke to its
     cell's centre, short; the second collection on the ceiling, as Out of Its
     Depth showed it; and its spokes, each down to the nearest centre, long.
     How far an item is from its cell's centre, against how far the cell's own
@@ -1744,10 +1743,12 @@ def _near_edges(ax: plt.Axes) -> None:
 
 
 def _far_stage(stage: int) -> plt.Figure:
+    # Step 0 is the floor's items alone (owner, #5132); the atlas's centres arrive at step 1.
+    step = stage - 1
     fig, ax = _canvas()
     planes = _wireframe(ax)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
-    centres = [c for _centre, kids in _far_tree() for c in kids]
+    centres = [c for _centre, kids in _far_tree() for c in kids] if step >= 1 else []
     # The floor's spheres and cubes, far to near: whichever is further south is nearer and covers the other.
     things = [("item", tuple(p)) for p in floor] + [("cube", tuple(c)) for c in centres]
     for k, (kind, (u, v)) in enumerate(sorted(things, key=lambda thing: -thing[1][1])):
@@ -1756,15 +1757,15 @@ def _far_stage(stage: int) -> plt.Figure:
             _item(ax, proj(u, v, 0.0), zorder, planes[0])
         else:
             _cube(ax, u, v, zorder)
-    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED) if stage >= 3 else None
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED) if step >= 3 else None
     if ceiling is not None:
         for index, depth_z in _painted_back_to_front(ceiling, 0.0):
             _item(ax, proj(*ceiling[index], NEW_H), Z_FAR_CEILING + 100 * depth_z, planes[1])
     scene = _Scene(floor, centres, ceiling)
-    if stage >= 2:
+    if step >= 2:
         for u, v in floor:
             _spoke(ax, scene, np.array([u, v, 0.0]), np.array([*_far_centre(u, v), 0.0]))
-    if stage >= 4:
+    if step >= 4:
         for u, v in ceiling:
             _spoke(ax, scene, np.array([u, v, NEW_H]), np.array([*_far_centre(u, v), 0.0]))
     _near_edges(ax)

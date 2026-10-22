@@ -96,14 +96,14 @@ export class PhotoGridComponent {
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
-  /** Faces to leave out (Test's verified faces, as its list leaves them out). */
+  /** Faces to leave out (Tune's verified faces, as its list leaves them out). */
   readonly hiddenIds = input<Set<number>>(new Set());
   /** The list's thumbnail goal width; a photo column is twice it. */
   readonly gridGoalWidth = input(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   /** Said when every face of the ranking is hidden. */
   readonly emptyNote = input('No faces to show.');
-  /** What the header says stays per face (Test adds its work-queue actions). */
+  /** What the header says stays per face (Tune adds its work-queue actions). */
   readonly scopeNote = input('counts and votes are per face');
 
   readonly mediaSelect = output<number>();

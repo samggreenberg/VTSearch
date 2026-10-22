@@ -6,6 +6,13 @@
   font-size: var(--font-md);
 }
 
+// Browse, centred on its own row over the list it maps (#5102).
+.browse-lead {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
 .results-table-wrapper {
   // Claim the modal body's remaining height and scroll internally, rather
   // than capping at a fixed height that would nest a second scrollbar inside
@@ -62,12 +69,6 @@
 
 .export-row {
   max-width: 300px;
-}
-
-.export-actions {
-  display: flex;
-  gap: var(--space-md);
-  justify-content: flex-end;
 }
 
 .centroid-note,

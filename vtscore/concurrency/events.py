@@ -4,8 +4,8 @@ Maintains a registry of named channels (each backed by a
 :class:`ProgressTracker` or :class:`LoadingTasksTracker`) and produces SSE
 event strings that ``/api/events`` streams to connected clients.
 
-Replaces the per-tracker REST polling endpoints (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel.
+Clients read every progress channel from this one push stream rather than
+polling a REST endpoint per tracker.
 
 The stream carries two kinds of channel. The tracker channels below are
 *state*: each has a current snapshot, sent on connect and re-sent on every
@@ -170,18 +170,24 @@ def _format_sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def initial_snapshot() -> list[str]:
+def _tasks_frame(name: str, tasks: list[dict[str, Any]], viewer: str | None) -> str:
+    """Format one task-channel snapshot, cut down to what *viewer* may see."""
+    return _format_sse(name, LoadingTasksTracker.visible_to(tasks, viewer))
+
+
+def initial_snapshot(viewer: str | None = None) -> list[str]:
     """Return the SSE frames a freshly-connected client should receive first.
 
     The first frame is always the ``server`` channel carrying the
     process's :data:`BOOT_ID`; subsequent frames are the per-channel
-    progress snapshots.
+    progress snapshots.  *viewer* filters the task channels the way
+    :meth:`LoadingTasksTracker.visible_to` describes; ``None`` sends them whole.
     """
     frames: list[str] = [_format_sse("server", {"boot_id": BOOT_ID})]
     for name, tracker in _TRACKER_CHANNELS.items():
         frames.append(_format_sse(name, tracker.get()))
     for name, tasks_tracker in _TASK_CHANNELS.items():
-        frames.append(_format_sse(name, tasks_tracker.list_tasks()))
+        frames.append(_tasks_frame(name, tasks_tracker.list_tasks(), viewer))
     return frames
 
 
@@ -190,6 +196,7 @@ def stream_progress_events(  # noqa: C901
     heartbeat_seconds: float = HEARTBEAT_SECONDS,
     keepalive_seconds: float = KEEPALIVE_SECONDS,
     max_queue: int = 1024,
+    viewer: str | None = None,
 ) -> Generator[str, None, None]:
     """Yield SSE-formatted strings for every progress channel until disconnect.
 
@@ -197,6 +204,11 @@ def stream_progress_events(  # noqa: C901
     and the notification broker push into the queue, and the generator drains
     it. On client disconnect (the generator is closed by Flask/Werkzeug) the
     ``finally`` block unsubscribes so we don't leak callbacks.
+
+    *viewer* is the user the stream is for: task-channel frames are filtered
+    to what they may see (another user's kept failure is not theirs to read
+    or dismiss; see :meth:`LoadingTasksTracker.visible_to`).  ``None`` streams
+    every task.
     """
     q: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=max_queue)
 
@@ -214,7 +226,7 @@ def stream_progress_events(  # noqa: C901
     def _make_tasks_handler(channel: str) -> Callable[[list[dict[str, Any]]], None]:
         def handler(snapshot: list[dict[str, Any]]) -> None:
             try:
-                q.put_nowait((channel, snapshot))
+                q.put_nowait((channel, LoadingTasksTracker.visible_to(snapshot, viewer)))
             except queue.Full:
                 pass
 
@@ -247,7 +259,7 @@ def stream_progress_events(  # noqa: C901
         # first byte arrives.
         yield ": connected\n\n"
 
-        for frame in initial_snapshot():
+        for frame in initial_snapshot(viewer):
             yield frame
 
         last_heartbeat = time.monotonic()
@@ -281,7 +293,7 @@ def stream_progress_events(  # noqa: C901
                     for name, tracker in _TRACKER_CHANNELS.items():
                         yield _format_sse(name, tracker.get())
                     for name, tasks_tracker in _TASK_CHANNELS.items():
-                        yield _format_sse(name, tasks_tracker.list_tasks())
+                        yield _tasks_frame(name, tasks_tracker.list_tasks(), viewer)
                     last_heartbeat = time.monotonic()
                 else:
                     # Socket probe only (see KEEPALIVE_SECONDS): a comment is

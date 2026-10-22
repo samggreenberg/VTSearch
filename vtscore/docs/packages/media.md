@@ -42,7 +42,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, speech extractor, synthetic audio generator |
 | `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
@@ -126,7 +126,9 @@ in `origin.params` (see `vtscore/media/lazy_clip.py`) → an archive member →
 `media_path` on disk → `media_url` (fetched through the SSRF guard);
 `_resolve_media_string` skips the lazy-clip and archive-member steps. So
 implementations transparently handle in-memory, thin, derived and
-URL-backed items.
+URL-backed items. A cleaned unit's recipe (a replay of its chain trail) is
+exclusive: if the replay no longer reproduces the hash recorded at import, the
+resolvers return nothing rather than the source file.
 
 ### `MediaEmbedder` - media/text → vector
 

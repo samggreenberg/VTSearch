@@ -6,7 +6,7 @@
 #   make unnumbered           every deck -> _out/*.unnumbered.pdf (no page numbers)
 #   make editable             every deck -> _out/*.editable.pptx (real shapes; needs LibreOffice)
 #   make pngs                 every deck -> _out/*-pngs*.zip (one image per page)
-#   make html FMT=html        every deck -> _out/*.html
+#   make FMT=html             every deck -> _out/*.html
 #   make watch DECK=hold-the-line   live preview in a browser
 #   make check                preflight every manifest, build nothing
 #   make list                 decks, slide counts, unused fragments
@@ -20,8 +20,8 @@ DEPS  := $(wildcard fragments/*.md) $(wildcard figs/*) themes/vtsearch.css build
 # Marp call does not have -- `--no-stdin` (without it Marp waits for EOF on
 # stdin, so a render started from a script or an agent shell hangs forever)
 # and a PIPESTATUS check (without it a Marp that died still reports success,
-# #3301). This Makefile used to call Marp itself and had neither, so building
-# through `make` reproduced exactly the hang render.sh was written to prevent
+# #3301). A Makefile that called Marp itself would have neither, so building
+# through `make` would reproduce exactly the hang render.sh exists to prevent
 # (#3434). Every target below therefore delegates.
 
 .PHONY: all speaker unnumbered editable pngs check list clean watch $(DECKS)

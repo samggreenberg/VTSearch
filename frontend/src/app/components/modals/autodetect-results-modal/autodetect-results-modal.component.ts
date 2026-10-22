@@ -27,11 +27,13 @@ import { SKIP_ERROR_TOAST } from '../../../interceptors/error.interceptor';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { adaptivePoll } from '../../../services/adaptive-poll';
 import { BrowseSubsetPrepService } from '../../../services/browse-subset-prep.service';
+import { runBrowseIds } from '../../../services/browse-subset.service';
 import { ContextSwitchService } from '../../../services/context-switch.service';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   AutoDetectDetectorResult,
   AutoDetectHit,
@@ -44,6 +46,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { labelsOwed } from '../../../utils/label-quota';
+import { isSoloMediaType } from '../../../utils/solo-media-type';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 
@@ -69,6 +72,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private contextSwitch = inject(ContextSwitchService);
   private findApi = inject(DetectorsFindApiService);
   private router = inject(Router);
+  private settingsState = inject(SettingsStateService);
   /** Builds the Browse map while the dialog shows its progress. */
   readonly browsePrep = inject(BrowseSubsetPrepService);
   /** Browse was clicked and the run's dataset is being made active (and
@@ -204,6 +208,12 @@ export class AutoDetectResultsModalComponent implements OnInit {
       lines.push(owed ? `${result.detector_name || name} (${owed})` : result.detector_name || name);
     }
     return lines;
+  }
+
+  /** Whether the summary names the run's media type: not on a server locked
+   *  to that one type, where it could be nothing else (#5106). */
+  get showMediaType(): boolean {
+    return !isSoloMediaType(this.settingsState.settingsSignal()?.solo_media_type, this.data().media_type);
   }
 
   get allHits(): AutoDetectHit[] {
@@ -382,11 +392,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   /** The listed rows' media ids, once each: what Browse lays out. A media
    *  two detectors both called Good is one item on the map. */
   get browseIds(): number[] {
-    const ids = new Set<number>();
-    for (const hit of this.displayHits) {
-      if (typeof hit.id === 'number') ids.add(hit.id);
-    }
-    return [...ids];
+    return runBrowseIds(this.data(), this.exportSides);
   }
 
   /** Why Browse is unavailable, or `''` when it isn't. */
@@ -397,7 +403,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   }
 
   /**
-   * Open the listed items in Browse, as a map of their own. As in the Test
+   * Open the listed items in Browse, as a map of their own. As in the Tune
    * view, the map is built here, behind a progress bar with a Cancel, and the
    * dialog hands off to Browse only once it is ready; the run's dataset is
    * made active first, since the build scores against the active dataset.
@@ -407,6 +413,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
     const datasetId = this.data().dataset_id;
     const runId = this.data().run_id;
     const ids = this.browseIds;
+    const sides = this.exportSides;
     if (this.browseBlocker || !datasetId || !runId || this.browseStarting() || this.browsePrep.preparing()) return;
     // Browse's own build takes over from here: it attaches to a fit the
     // warm-up already started, or finds the map built.
@@ -421,7 +428,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() =>
-        this.browsePrep.start(datasetId, ids, { kind: 'results', runId }, () => this.closed.emit()),
+        this.browsePrep.start(datasetId, ids, { kind: 'results', runId, sides }, () => this.closed.emit()),
       );
   }
 

@@ -27,7 +27,7 @@ import numpy as np
 import pytest
 
 from vtscore.concurrency.progress import LoadingTasksTracker
-from vtscore.datasets.stages.embedding import _embed_missing_stage, embed_missing
+from vtscore.datasets.stages.embedding import _check_named_vector_widths, _embed_missing_stage, embed_missing
 from vtscore.datasets.stages.finalize import _drop_none_embeddings_stage
 from vtscore.embedding.matrix import _stack_embeddings, _uniform_primary_embedder, get_embedding_matrix
 from vtscore.embedding.media_vectors import UNKNOWN_EMBEDDER_KEY, init_embeddings, media_embedding
@@ -233,6 +233,72 @@ class TestPartialImportNoPick:
         assert "1.wav" in msg
         assert str(DIM + 3) in msg and str(DIM) in msg
         assert EMBEDDER in msg
+
+
+class TestNamedVectorsAreWidthChecked:
+    """A vector an importer files under an embedder's name must be that embedder's width.
+
+    The shape a ``fetch_record`` hook or a ``run()`` override hands in:
+    ``media["embeddings"] = {name: vec}``, which no reader checked at the door.
+    """
+
+    def _named(self, vec: np.ndarray, name: str = EMBEDDER) -> dict[int, dict]:
+        media = _media(1, None)
+        media["embeddings"] = {name: vec}
+        media["embedder"] = name
+        return {1: media}
+
+    def test_the_load_stage_rejects_a_named_vector_of_the_wrong_width(self):
+        emb = _fake_embedder()
+        emb.embedding_dim = DIM
+        ctx = DatasetContext("named-width")
+        ctx.medias.update(self._named(np.ones(DIM + 2, dtype=np.float32)))
+
+        with _registered(emb), pytest.raises(MismatchedVectorError) as exc:
+            _embed_missing_stage(ctx, _tracker(), [EMBEDDER])
+
+        msg = str(exc.value)
+        assert "1.wav" in msg and str(DIM + 2) in msg and EMBEDDER in msg
+        assert emb.embed_media_bulk.call_count == 0
+
+    def test_a_name_the_load_does_not_bind_is_checked_too(self):
+        """The importer's whole hand-in is checked, not only the embedders this load runs."""
+        other = _fake_embedder(name="other_embedder")
+        other.embedding_dim = DIM
+
+        with _registered(other), pytest.raises(MismatchedVectorError):
+            _check_named_vector_widths(self._named(np.ones(DIM + 1, dtype=np.float32), name="other_embedder"))
+
+    def test_a_named_vector_of_the_declared_width_passes(self):
+        emb = _fake_embedder()
+        emb.embedding_dim = DIM
+        vec = np.arange(DIM, dtype=np.float32)
+        medias = self._named(vec)
+
+        with _registered(emb):
+            _check_named_vector_widths(medias)
+
+        np.testing.assert_array_equal(media_embedding(medias[1], EMBEDDER), vec)
+
+    def test_nameless_unregistered_and_undeclared_vectors_are_not_checked(self):
+        undeclared = _fake_embedder()  # embedding_dim None
+        nameless = self._named(np.ones(DIM + 2, dtype=np.float32), name=UNKNOWN_EMBEDDER_KEY)
+        unregistered = self._named(np.ones(DIM + 2, dtype=np.float32), name="nobody_registered_this")
+
+        with _registered(undeclared):
+            for medias in (nameless, unregistered, self._named(np.ones(DIM + 2, dtype=np.float32))):
+                _check_named_vector_widths(medias)
+
+    def test_re_embedding_the_apps_own_vectors_does_not_re_check_them(self):
+        """``embed_missing`` also runs over vectors the app made (routing, the CLI); it leaves them alone."""
+        emb = _fake_embedder()
+        emb.embedding_dim = DIM
+        medias = self._named(np.ones(DIM + 2, dtype=np.float32))
+
+        with mock.patch("vtscore.media.get_embedder", return_value=emb):
+            embed_missing(medias, EMBEDDER)
+
+        assert media_embedding(medias[1], EMBEDDER).shape == (DIM + 2,)
 
 
 class TestPartialImportExplicitPick:

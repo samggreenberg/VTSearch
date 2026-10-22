@@ -17,22 +17,27 @@ Schematic inputs, real code, as in `make-test-figs.py`:
   (`vtscore.eval.autopilot_flow.next_phase`, pinned to the app by
   `scripts/check-eval-app-sync.py`) through the steps, and every target it
   prints is that module's constant.
-* `autopilot-smart` runs the shipped `smart_status_from_costs` on a planted
-  session's error costs, and asserts the lights the slide draws.
+* `autopilot-smart` is Smart's idea, a student's Spanish classes, and
+  `autopilot-smart-trend` runs the shipped `rising_status_from_scores` on a
+  planted session's F-beta points (#5134), and asserts the lights the slide draws.
 * `autopilot-stable` runs the shipped `count_flips` on two planted retrains,
   and asserts the flips the slide counts.
 * `autopilot-span` counts the walk's run over the first 40 cells of an atlas,
   as `CoverageAtlas.coverage_level` does, and reads the light from the
   harness's port of the Span rule.
-* `autopilot-done` is the hand-off, Toasty's hint in the app's own words
-  (`app.component.html`).
+* `autopilot-done` is the three ways a run ends: every light green, a
+  document walk run dry (the harness's `MORE_DRY_RUN`), every item voted.
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
-fired in today's app, at each radio's beta, and what clicking on bought. It is
-re-plotted from the 2026-10-16 Binary Photo review's committed tables
-(`docs/experiments/2026-10-16-state-of-the-app-binary-photo/`:
-`stopping_by_preset.csv` and `objective_by_click.csv`). `EXPECT` pins the numbers the
-notes quote.
+fired in today's app, at each radio's beta, and what it gave up against
+clicking on to 150. It is re-plotted from committed tables in the State of the
+App review's shape (`stopping_by_preset.csv` and `objective_by_click.csv`,
+written by `stops_by_preset.py` and `by_click.py`). Since #5141 they are
+#5134's shipped arm, Smart on F-beta, read at the review's 150-click budget
+(`docs/experiments/2026-10-20-smart-fbeta-5134/stop/`); the chart runs on to
+the app's 200-click cap from that study's own tables (#5171). The 2026-10-16
+Binary Photo review measured the app before Smart's switch. `EXPECT` pins the
+numbers the slide and notes quote.
 
 Every canvas is the whole 1280x720 slide at 100 px to the inch, saved at its
 declared bounds, so every stage of a build shares one framing by construction
@@ -42,6 +47,7 @@ and `save()` checks the title notch against exactly what the slide shows.
 from __future__ import annotations
 
 import csv
+import gzip
 import math
 import sys
 from pathlib import Path
@@ -58,16 +64,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
-from matplotlib.patches import Circle, FancyBboxPatch, Polygon, Rectangle  # noqa: E402
+from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
 
 from vtscore.detectors.cost_trend import (  # noqa: E402
-    SMART_FLAT_THRESHOLD,
+    SMART_RISE_THRESHOLD,
     SMART_SLOPE_T,
     SMART_WINDOW,
-    smart_status_from_costs,
+    rising_status_from_scores,
 )
 from vtscore.detectors.stability import (  # noqa: E402
     STABLE_BAND_STD_FRACTION,
@@ -79,12 +85,14 @@ from vtscore.eval.autopilot_flow import (  # noqa: E402
     GOOD_TARGET,
     MORE_DRY_RUN,
     SPAN_GREEN_DEFAULT,
+    STOP_CAP,
     next_phase,
 )
 
 OUT = Path(__file__).resolve().parent.parent
-#: The State of the App review the measured slide reads: Binary Photo on COCO Better, one session set per radio.
-REPORT_SOTA = _REPO_ROOT / "docs" / "experiments" / "2026-10-16-state-of-the-app-binary-photo"
+#: The tables the measured slide reads: Binary Photo on COCO Better, one session set per radio, in the review's shape.
+#: #5134's shipped arm (Smart on F-beta) read at click 150 (#5141), until the next State of the App review.
+REPORT_STOP = _REPO_ROOT / "docs" / "experiments" / "2026-10-20-smart-fbeta-5134" / "stop"
 
 # The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): blue is the
 # line, red the losing arm and a Bad, green a Good. The lights borrow red and
@@ -199,40 +207,47 @@ def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
     ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
 
 
-# ── Flight Plan: the steps ───────────────────────────────────────────────────
+# ── All Sorts of Sorts (once Flight Plan): the steps ─────────────────────────
 
 STEPS_STAGES = 4
 
 #: The rows, top to bottom: the step's mark, its name as the panel's short
-#: label shows it, the drawing in the middle column, and what ends it. The
+#: label shows it, the sort it asks from, the drawing in the Question column,
+#: and what ends it. The
 #: targets are the harness's constants, which mirror the app's. Spot Check is
 #: lettered, not numbered: it runs once every light is green, but Autopilot
 #: also runs it earlier when the labels separate weakly (#4496), so it is not
 #: a fifth step in a fixed order (owner, #4872). Its "until" is what the check
 #: is for: it walks bands down from the top while its estimate of the kept
 #: set's F-beta rises, and stops at that estimate's peak (`spot_check`), so the
-#: slide says "Fβ estimated". Each light's "until" names what green
+#: slide says "Fβ: estimated", in the lights' "name: state" form (owner,
+#: #5171). Each light's "until" names what green
 #: means for it, not the colour (owner, #4884), so the slide reads without the
 #: three light slides before it; a two-part rule takes two lines.
 STEPS = (
     # The Good walk can also run dry once a Good is in (#4731).
-    ("good", "1", "Good", "query-top", f"{GOOD_TARGET} Goods OR\n{MORE_DRY_RUN} in a row without one"),
-    ("bad", "2", "Bad", "query-line", f"{BAD_TARGET} Bads"),
-    ("hard", "3", "Boundary", "detector-odds", "Smart: flat AND\nStable: low"),
-    ("new", "4", "Diversity", "atlas", "Span: full"),
-    ("spot", "A", "Spot Check", "bands", "Fβ estimated"),
+    ("good", "1", "Good", "Query", "query-top", f"{GOOD_TARGET} Goods OR\n{MORE_DRY_RUN} in a row without one"),
+    ("bad", "2", "Bad", "Query", "query-line", f"{BAD_TARGET} Bads"),
+    ("hard", "3", "Boundary", "Detector", "detector-odds", "Smart: flat AND\nStable: low"),
+    ("new", "4", "Diversity", "Atlas", "atlas", "Span: full"),
+    ("spot", "A", "Spot Check", "Detector", "bands", "Fβ: estimated"),
 )
 #: No More walk on photos since #4740 (``MORE_TARGET`` 0): the opening is Good and
 #: Bad on the query, then the detector takes over. Five rows down the slide,
-#: with no statement over them (owner, #4872: the room has met Autopilot by now).
-STEP_ROWS_Y = (5.0, 3.95, 2.9, 1.85, 0.8)
-STEP_HEAD_Y = 5.85
+#: with no statement over them (owner, #4872: the room has met Autopilot by now),
+#: under a header row and its rule, as a table (owner, #5171: the old soft
+#: "where it asks" and "until" just floated). The header sits under the title
+#: notch, since its first column starts inside the notch's span.
+STEP_ROWS_Y = (4.4, 3.45, 2.5, 1.55, 0.6)
+STEP_HEAD_Y, STEP_RULE_Y = 5.2, 4.95
+STEP_RULE_X0, STEP_RULE_X1 = 0.6, 12.4
+STEP_HEADS = ("Sort", "Question", "Stopping")
 #: Which row each build stage reveals up to: the opening on the query, then
 #: one step a stage.
 STEP_STAGE_ROWS = {1: 2, 2: 3, 3: 4, 4: 5}
-#: The "where it asks" column is the point of the slide, so it takes every inch
-#: the shortened "until" column gives back (owner, #4884).
-NAME_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.05, 9.2, 9.6
+#: The Question column is the point of the slide, so it takes every inch the
+#: Sort and Stopping columns leave it (owner, #4884).
+NAME_X, SORT_X, PICTURE_X0, PICTURE_X1, ENDS_X = 1.25, 3.2, 4.4, 9.35, 9.7
 STRIP_H = 0.34
 #: Where each ranking's line falls along its strip (best on the right).
 QUERY_LINE, DETECTOR_LINE = 0.62, 0.68
@@ -287,12 +302,14 @@ def steps_fig() -> None:
     _save(STEPS_STAGES, _steps_stage, "autopilot-steps")
 
 
-def _strip(ax: plt.Axes, y: float, words: str, line_at: float) -> float:
-    """A ranking as a strip, best on the right, its line drawn; returns the line's x."""
+def _strip(ax: plt.Axes, y: float, line_at: float) -> float:
+    """A ranking as a strip, best on the right, its line drawn; returns the line's x.
+
+    Which ranking it is goes in the Sort column, not on the strip.
+    """
     width = PICTURE_X1 - PICTURE_X0
     ax.add_patch(Rectangle((PICTURE_X0, y - STRIP_H / 2), width, STRIP_H, facecolor=UNLABELED_FILL,
                            edgecolor="none", zorder=2))  # fmt: skip
-    ax.text(PICTURE_X0 + 0.1, y, words, ha="left", va="center", fontsize=15, color=SOFT, zorder=3)
     x = PICTURE_X0 + line_at * width
     _line(ax, x, y - STRIP_H / 2 - 0.08, y + STRIP_H / 2 + 0.08)
     return x
@@ -306,7 +323,7 @@ def _ask(ax: plt.Axes, x: float, y: float) -> None:
 
 def _spot_bands(ax: plt.Axes, y: float) -> None:
     """The detector's strip with Spot Check's bands bracketed from the top, and a few random picks in each."""
-    _strip(ax, y, "Detector", DETECTOR_LINE)
+    _strip(ax, y, DETECTOR_LINE)
     width = PICTURE_X1 - PICTURE_X0
     # Each band's bracket sits over the strip, its picks on the strip under it.
     top = y + STRIP_H / 2 + 0.1
@@ -347,39 +364,45 @@ def _mini_tree(ax: plt.Axes, y: float) -> None:
 
 def _steps_stage(stage: int) -> Figure:
     fig, ax = _canvas()
-    centre = (PICTURE_X0 + PICTURE_X1) / 2
-    ax.text(centre, STEP_HEAD_Y, "where it asks", ha="center", va="center", fontsize=15, color=SOFT)
-    ax.text(ENDS_X, STEP_HEAD_Y, "until", ha="left", va="center", fontsize=15, color=SOFT)
+    for x, head in zip((SORT_X, PICTURE_X0, ENDS_X), STEP_HEADS, strict=True):
+        ax.text(x, STEP_HEAD_Y, head, ha="left", va="center", fontsize=18, fontweight="bold")
+    ax.plot([STEP_RULE_X0, STEP_RULE_X1], [STEP_RULE_Y, STEP_RULE_Y], color=INK, linewidth=1.4, zorder=2)
     for row in range(STEP_STAGE_ROWS[stage]):
-        _phase, mark, name, picture, ends = STEPS[row]
+        _phase, mark, name, sort, picture, ends = STEPS[row]
         y = STEP_ROWS_Y[row]
         _disc(ax, 0.85, y, mark)
         ax.text(NAME_X, y, name, ha="left", va="center", fontsize=18, fontweight="bold")
+        ax.text(SORT_X, y, sort, ha="left", va="center", fontsize=17)
         if picture == "query-top":
-            _strip(ax, y, "Query", QUERY_LINE)
+            _strip(ax, y, QUERY_LINE)
             _ask(ax, PICTURE_X1 - ASK_R - 0.03, y)
         elif picture == "query-line":
-            _ask(ax, _strip(ax, y, "Query", QUERY_LINE), y)
+            _ask(ax, _strip(ax, y, QUERY_LINE), y)
         elif picture == "detector-odds":
-            _strip(ax, y, "Detector", DETECTOR_LINE)
+            _strip(ax, y, DETECTOR_LINE)
             _ask(ax, PICTURE_X0 + DETECTOR_ODDS * (PICTURE_X1 - PICTURE_X0), y)
         elif picture == "atlas":
             _mini_tree(ax, y)
         else:
             _spot_bands(ax, y)
-        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=16, linespacing=1.35)
+        ax.text(ENDS_X, y, ends, ha="left", va="center", fontsize=17, linespacing=1.35)
     return fig
 
 
-# ── Diminishing Returns: Smart ───────────────────────────────────────────────
+# ── Rate Expectations, then Diminishing Returns: Smart ───────────────────────
 
 #: The idea first, then the implementation (owner, #4884): eight pages of a
-#: student taking Spanish 101 to 104, then the two pages of the retrain chart.
+#: student taking Spanish 101 to 104, and then, on a slide of its own (owner,
+#: #5132), the two pages of the retrain chart.
 SPANISH_PAGES = 8
-SMART_STAGES = SPANISH_PAGES + 2
+SMART_TREND_STAGES = 2
 #: The classes along the time axis, and the ability axis's words, bottom up.
 SPANISH_CLASSES = ("Spanish101", "Spanish102", "Spanish103", "Spanish104")
 SPANISH_LEVELS = ("Bad", "Ok", "Good", "Great")
+#: The ability axis on the last page, after Spanish 104: in Spanish (owner, #5132).
+SPANISH_AXIS = "Spanish ability"
+SPANISH_AXIS_ES = "Habilidad en Español"
+SPANISH_LEVELS_ES = ("Malo", "Ok", "Bueno", "Genial")
 #: Each test the student takes, in order: (class, before or after it, ability).
 #: Ability is in a fixed unit nobody sees — how much Spanish they know — and the
 #: axis shows it against everything they have met so far.
@@ -404,11 +427,22 @@ SPANISH_INSET = 0.12
 SPANISH_YLIM = (-1.85, 3.35)
 #: The ability each page shows, as the notes describe it: the class's words, once a test is the newest on the page.
 SPANISH_SHOWN = ("Bad", "Great", "Bad", "Good", "Bad", "Ok", "Ok", "Ok")
-#: A planted session's error cost, one point a retrain: falling fast, then
-#: flat with the step-to-step scatter a real labelset gives it.
+#: A planted session (#5134): retrain *k*'s detector, scored on the votes as
+#: they stood at a later retrain *t*. Smart re-scores its window on *today's*
+#: votes, and Autopilot spends the clicks between retrains on the photos it is
+#: least sure of, so the votes keep getting harder: an old detector that never
+#: trained on the newer ones loses ground on them. The chart at retrain 14 and
+#: the chart at retrain 30 are two different tests, not one curve extended
+#: (owner, #5171). A detector's skill rises and levels off
+#: (``SMART_SKILL``: top, rise, time constant), the votes harden
+#: (``SMART_HARDER``: by how much, how fast), and every re-scoring draws its own
+#: step-to-step scatter.
 SMART_RETRAINS = 30
 SMART_SEED = 7
-#: The two windows the slide fits, as the last retrain each one ends on.
+SMART_SKILL = (0.85, 0.55, 5.0)
+SMART_HARDER = (0.35, 12.0)
+SMART_SCATTER = 0.008
+#: The two days the slide shows, each the last retrain its window ends on.
 SMART_EARLY_END, SMART_LATE_END = 14, 30
 
 
@@ -428,25 +462,32 @@ def _spanish_points(page: int) -> list[tuple[float, float]]:
     return out
 
 
-def _smart_costs() -> np.ndarray:
-    rng = np.random.default_rng(SMART_SEED)
-    t = np.arange(1, SMART_RETRAINS + 1)
-    return 0.16 + 0.55 * np.exp(-t / 5.5) + rng.normal(0.0, 0.008, size=t.size)
+def _smart_fbetas(today: int) -> np.ndarray:
+    """F-beta of retrains 1 to *today*, every one scored on the votes as they stand at retrain *today*."""
+    scatter = np.random.default_rng(SMART_SEED).normal(0.0, SMART_SCATTER, size=(SMART_RETRAINS, SMART_RETRAINS))
+    top, rise, pace = SMART_SKILL
+    harder, harden = SMART_HARDER
+    k = np.arange(1, today + 1)
+    skill = top - rise * np.exp(-k / pace)
+    # What the votes asked since retrain k, which its detector never trained on.
+    unseen = harder * (np.exp(-k / harden) - np.exp(-today / harden))
+    return skill - unseen + scatter[today - 1, :today]
 
 
-def _smart_window(costs: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
+def _smart_window(fbetas: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
     """The last ``SMART_WINDOW`` retrains up to *end* (1-based), and the shipped Smart status over them."""
-    window = costs[end - SMART_WINDOW : end]
-    return window, smart_status_from_costs(list(window), good=10, bad=10)
+    window = fbetas[end - SMART_WINDOW : end]
+    return window, rising_status_from_scores(list(window), good=10, bad=10)
 
 
 def smart_fig() -> None:
-    """Smart: the idea, in Spanish classes, and then the error cost of the last ten detectors.
+    """Smart: the idea, in Spanish classes, and then the F-beta of the last ten detectors.
 
-    Ten stages (owner, #4884): eight pages of the idea, a student whose ability
+    Two slides. Eight pages of the idea (owner, #4884): a student whose ability
     axis rescales each time a class shows them how much more Spanish there is,
-    until a class brings nothing new and the curve goes flat; then the shipped
-    measure, early in a session (still falling) and later (flat).
+    until a class brings nothing new and the curve goes flat, its axis by then
+    in Spanish (#5132). Then, on its own slide (#5132), the shipped measure,
+    early in a session (still rising) and later (flat).
     """
     # Every test on its own page reads as the notes say it does.
     for page, words in enumerate(SPANISH_SHOWN, start=1):
@@ -456,27 +497,35 @@ def smart_fig() -> None:
     for page in (3, 5):
         assert all(y < 0 for _x, y in _spanish_points(page)[: page - 2]), page
     # The notes say "two standard errors" and "the 1.5% line".
-    assert (SMART_SLOPE_T, SMART_FLAT_THRESHOLD) == (2.0, -0.015), (SMART_SLOPE_T, SMART_FLAT_THRESHOLD)
-    costs = _smart_costs()
-    early, late = _smart_window(costs, SMART_EARLY_END), _smart_window(costs, SMART_LATE_END)
+    assert (SMART_SLOPE_T, SMART_RISE_THRESHOLD) == (2.0, 0.015), (SMART_SLOPE_T, SMART_RISE_THRESHOLD)
+    early_day, late_day = _smart_fbetas(SMART_EARLY_END), _smart_fbetas(SMART_LATE_END)
+    early, late = _smart_window(early_day, SMART_EARLY_END), _smart_window(late_day, SMART_LATE_END)
     assert early[1]["status"] == "yellow", early[1]
     assert late[1]["status"] == "green" and not late[1]["drift_within_noise"], late[1]
-    _save(SMART_STAGES, lambda stage: _smart_stage(stage, costs), "autopilot-smart")
+    # The notes' claim: on the later, harder votes every old detector scores lower than it did.
+    assert (late_day[:SMART_EARLY_END] < early_day).all(), late_day[:SMART_EARLY_END] - early_day
+    assert 0.0 < late_day.min() and early_day.max() < SMART_Y_TOP, (late_day.min(), early_day.max())
+    _save(SPANISH_PAGES, _spanish_stage, "autopilot-smart")
+    _save(SMART_TREND_STAGES, _smart_trend_stage, "autopilot-smart-trend")
 
 
 def _spanish_stage(page: int) -> Figure:
-    """The student's tests up to *page*, on that page's axis; a rescale shows where the old dots were."""
+    """The student's tests up to *page*, on that page's axis; a rescale shows where the old dots were.
+
+    The last page, after Spanish 104, reads its ability axis in Spanish.
+    """
+    spanish = page == SPANISH_PAGES
     fig = plt.figure(figsize=(W, H))
     ax = fig.add_axes((0.15, 0.15, 0.79, 0.58))
     ax.set_xlim(0, len(SPANISH_CLASSES))
     ax.set_ylim(*SPANISH_YLIM)
     ax.set_yticks(range(len(SPANISH_LEVELS)))
-    ax.set_yticklabels(SPANISH_LEVELS, fontsize=17)
+    ax.set_yticklabels(SPANISH_LEVELS_ES if spanish else SPANISH_LEVELS, fontsize=17)
     ax.tick_params(axis="y", colors=INK)
     ax.set_xticks([k + 0.5 for k in range(len(SPANISH_CLASSES))])
     ax.set_xticklabels(SPANISH_CLASSES, fontsize=17, color=INK)
     ax.tick_params(axis="x", length=0, pad=10)
-    ax.set_ylabel("Spanish ability")
+    ax.set_ylabel(SPANISH_AXIS_ES if spanish else SPANISH_AXIS)
     for k in range(1, len(SPANISH_CLASSES)):
         ax.axvline(k, color=RULE, linewidth=1.2, zorder=1)
     for level in range(len(SPANISH_LEVELS)):
@@ -484,7 +533,11 @@ def _spanish_stage(page: int) -> Figure:
     points = _spanish_points(page)
     if page > 1 and _spanish_axis(page) != _spanish_axis(page - 1):
         # The rescale: every earlier test where the last page had it, hollow, and an arrow down to where it is now.
-        for (x, was), (_x, now) in zip(_spanish_points(page - 1), points, strict=False):
+        # The hollow dots keep the thin line that joined them, so what came down is visibly the curve the last
+        # page drew (owner, #5171).
+        ghosts = _spanish_points(page - 1)
+        ax.plot(*zip(*ghosts, strict=True), color=SOFT, linewidth=1.2, zorder=2)
+        for (x, was), (_x, now) in zip(ghosts, points, strict=False):
             ax.plot(x, was, marker="o", markersize=12, markerfacecolor="white", markeredgecolor=SOFT,
                     markeredgewidth=1.6, linestyle="none", zorder=3)  # fmt: skip
             ax.annotate("", xy=(x, now + 0.16), xytext=(x, was - 0.16),
@@ -502,51 +555,63 @@ def _fit_line(window: np.ndarray, x0: int) -> tuple[np.ndarray, np.ndarray]:
     return xs, slope * xs + intercept
 
 
-def _smart_stage(stage: int, costs: np.ndarray) -> Figure:
-    if stage <= SPANISH_PAGES:
-        return _spanish_stage(stage)
+def _smart_trend_stage(stage: int) -> Figure:
+    """The retrain chart on one day's votes: retrain 14's, still rising (stage 1); retrain 30's, flat (stage 2).
+
+    Stage 2 re-scores every old detector on the harder votes, and keeps stage 1's points where they stood,
+    hollow and joined as stage 1 drew them, so the room sees the same detectors drop rather than an old
+    curve levelling off (owner, #5171).
+    """
     fig = plt.figure(figsize=(W, H))
     ax = fig.add_axes((0.40, 0.14, 0.56, 0.62))
     ax.set_xlim(0.3, SMART_RETRAINS + 0.7)
     ax.set_ylim(0.0, SMART_Y_TOP)
     ax.set_xticks([1, 10, 20, 30])
-    ax.set_yticks([0.0, 0.2, 0.4, 0.6])
+    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
     ax.set_xlabel("retrain")
-    ax.set_ylabel("mistakes, FPR + FNR")
+    ax.set_ylabel("F-beta on today's votes")
     fig.text(0.40, 0.86, "Is the detector still getting better?", ha="left", va="center", fontsize=19)
     overlay = _overlay(fig)
+    today = SMART_EARLY_END if stage == 1 else SMART_LATE_END
     _side_block(
         fig,
         [
             ("Each point", "head", 0.0),
             ("one retrain's detector,", "body", 0.055),
             ("scored on today's votes", "body", 0.05),
+            ("Today", "head", 0.085),
+            (f"retrain {today}", "body", 0.055),
             ("The fit", "head", 0.085),
             (f"through the last {SMART_WINDOW}", "body", 0.055),
         ],
     )
-    shown = SMART_EARLY_END if stage == SPANISH_PAGES + 1 else SMART_RETRAINS
-    xs = np.arange(1, shown + 1)
-    ax.plot(xs, costs[:shown], linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
-    windows = [(SMART_EARLY_END, 0.56, "still falling")]
-    if stage == SMART_STAGES:
-        windows.append((SMART_LATE_END, 0.36, "flat"))
-    for end, label_y, words in windows:
-        window, status = _smart_window(costs, end)
-        x0 = end - SMART_WINDOW + 1
-        ax.add_patch(Rectangle((x0 - 0.45, 0.0), SMART_WINDOW - 0.1, SMART_Y_TOP, facecolor="#eef1f5",
-                               edgecolor="none", zorder=1))  # fmt: skip
-        fx, fy = _fit_line(window, x0)
-        ax.plot(fx, fy, color=INK, linewidth=2.6, zorder=5)
-        cx, cy = _to_canvas(fig, ax, x0 + (SMART_WINDOW - 1) / 2, label_y)
-        overlay.text(cx, cy, words, ha="center", va="center", fontsize=17, fontweight="bold")
-        overlay.text(cx, cy - 0.36, _signed(100 * status["slope"]) + "% a retrain", ha="center", va="center",
-                     fontsize=16)  # fmt: skip
+    fbetas = _smart_fbetas(today)
+    if stage == SMART_TREND_STAGES:
+        before = _smart_fbetas(SMART_EARLY_END)
+        xs = np.arange(1, SMART_EARLY_END + 1)
+        ax.plot(xs, before, color=SOFT, linewidth=1.2, zorder=3)
+        ax.plot(xs, before, linestyle="none", marker="o", markersize=8, markerfacecolor="white",
+                markeredgecolor=SOFT, markeredgewidth=1.6, zorder=3)  # fmt: skip
+        # Over the hollow curve's end rather than past it: past it are the re-scored points.
+        ax.text(SMART_EARLY_END, before[-1] + 0.05, f"on retrain {SMART_EARLY_END}'s votes", ha="center",
+                va="bottom", fontsize=15, color=SOFT, zorder=6)  # fmt: skip
+    ax.plot(np.arange(1, today + 1), fbetas, linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
+    label_y, words = (0.42, "still rising") if stage == 1 else (0.6, "flat")
+    window, status = _smart_window(fbetas, today)
+    x0 = today - SMART_WINDOW + 1
+    ax.add_patch(Rectangle((x0 - 0.45, 0.0), SMART_WINDOW - 0.1, SMART_Y_TOP, facecolor="#eef1f5",
+                           edgecolor="none", zorder=1))  # fmt: skip
+    fx, fy = _fit_line(window, x0)
+    ax.plot(fx, fy, color=INK, linewidth=2.6, zorder=5)
+    cx, cy = _to_canvas(fig, ax, x0 + (SMART_WINDOW - 1) / 2, label_y)
+    overlay.text(cx, cy, words, ha="center", va="center", fontsize=17, fontweight="bold")
+    overlay.text(cx, cy - 0.36, _signed(100 * status["slope"]) + "% a retrain", ha="center", va="center",
+                 fontsize=16)  # fmt: skip
     return fig
 
 
-#: The top of the Smart chart's cost axis: clear of the session's first point.
-SMART_Y_TOP = 0.7
+#: The top of the Smart chart's F-beta axis: F-beta's own.
+SMART_Y_TOP = 1.0
 
 
 def _signed(value: float) -> str:
@@ -571,7 +636,7 @@ def _to_canvas(fig: Figure, ax: plt.Axes, x: float, y: float) -> tuple[float, fl
 
 # ── Change of Heart: Stable ──────────────────────────────────────────────────
 
-STABLE_STAGES = 4
+STABLE_STAGES = 5
 STABLE_CUT = 0.5
 #: The planted pool both retrains score, one photo a letter, best on the right.
 #: Lettered left to right on the last retrain, so the room can follow each one
@@ -623,8 +688,8 @@ def _stable_chart() -> tuple[np.ndarray, np.ndarray]:
 def stable_fig() -> None:
     """Stable: two retrains' calls on the same pool, the photos that changed side, and which of those count.
 
-    Four stages: the two retrains, every photo joined to itself by its letter;
-    the photos that changed side; the band around the line, and the flips clear
+    Five stages: the last retrain alone (owner, #5132); then this one under
+    it, every photo joined to itself by its letter; the photos that changed side; the band around the line, and the flips clear
     of it both times, the super flips, the only ones that count; and those over
     a session, falling to none.
     """
@@ -659,15 +724,17 @@ def _runs(ax: plt.Axes, x: float, y: float, runs: tuple[tuple[str, str], ...], s
 def _stable_stage(stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> Figure:
     if stage == STABLE_STAGES:
         return _stable_chart_stage()
+    # Step 0 is the last retrain alone; from step 1 this one is under it.
+    step = stage - 1
     fig, ax = _canvas()
-    _stable_retrain_axes(ax, stage, last, this)
-    flipped, confident = _stable_items(ax, last, this)
-    if stage >= 2:
+    _stable_retrain_axes(ax, step, last, this)
+    flipped, confident = _stable_items(ax, last, this, both=step >= 1)
+    if step >= 2:
         for x0, x1 in flipped:
             ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=SOFT, linewidth=2.6, zorder=5)
         ax.text(STABLE_TEXT_X, 4.0, f"{len(flipped)} changed side", ha="left", va="center", fontsize=17,
                 fontweight="bold")  # fmt: skip
-    if stage >= 3:
+    if step >= 3:
         for x0, x1 in confident:
             ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=INK, linewidth=4.2, zorder=6)
         _runs(ax, STABLE_TEXT_X, 3.4, ((f"{len(confident)} ", "normal"), ("super", "italic"),
@@ -675,15 +742,15 @@ def _stable_stage(stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> Fig
     return fig
 
 
-def _stable_retrain_axes(ax: plt.Axes, stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> None:
-    """The two retrains' score axes, each with its line, and from stage 3 its band."""
+def _stable_retrain_axes(ax: plt.Axes, step: int, last: ScoredSnapshot, this: ScoredSnapshot) -> None:
+    """The retrains' score axes, each with its line: the last alone at step 0, both after; bands from step 3."""
     for y, snap, words, words_y in (
         (STABLE_Y_LAST, last, "last retrain", STABLE_Y_LAST + 0.5),
         (STABLE_Y_THIS, this, "this retrain", STABLE_Y_THIS - 0.5),
-    ):
+    )[: 1 if step == 0 else 2]:
         ax.plot([STABLE_X0 - 0.2, STABLE_X1 + 0.2], [y, y], color=SOFT, linewidth=1.4, zorder=2)
         ax.text(STABLE_X0 - 0.2, words_y, words, ha="left", va="center", fontsize=16, color=SOFT)
-        if stage >= 3:
+        if step >= 3:
             x0, x1 = _score_x(snap.threshold - snap.band), _score_x(snap.threshold + snap.band)
             ax.add_patch(Rectangle((x0, y - 0.3), x1 - x0, 0.6, facecolor=BAND_FILL, edgecolor="none", zorder=1))
         _line(ax, _score_x(snap.threshold), y - 0.36, y + 0.36)
@@ -691,14 +758,18 @@ def _stable_retrain_axes(ax: plt.Axes, stage: int, last: ScoredSnapshot, this: S
 
 
 def _stable_items(
-    ax: plt.Axes, last: ScoredSnapshot, this: ScoredSnapshot
+    ax: plt.Axes, last: ScoredSnapshot, this: ScoredSnapshot, *, both: bool = True
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Every photo joined to itself, its letter on both lines; returns the ends of the flips, and of the confident ones among them."""
+    """Every photo joined to itself, its letter on both lines; returns the ends of the flips, and of the confident ones among them.
+
+    With *both* false only the last retrain's letters are drawn, and nothing joins them.
+    """
     flipped, confident = [], []
     for cid in sorted(this.scores):
         x0, x1 = _score_x(last.scores[cid]), _score_x(this.scores[cid])
-        ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=RULE, linewidth=1.4, zorder=3)
-        for x, y in ((x0, STABLE_Y_LAST), (x1, STABLE_Y_THIS)):
+        if both:
+            ax.plot([x0, x1], [STABLE_Y_LAST, STABLE_Y_THIS], color=RULE, linewidth=1.4, zorder=3)
+        for x, y in ((x0, STABLE_Y_LAST), (x1, STABLE_Y_THIS))[: 2 if both else 1]:
             ax.add_patch(Circle((x, y), STABLE_ITEM_R, facecolor="white", edgecolor=SOFT, linewidth=1.6, zorder=7))
             ax.text(x, y, STABLE_LETTERS[cid], ha="center", va="center_baseline", fontsize=15, fontweight="bold",
                     color=INK, zorder=8)  # fmt: skip
@@ -725,9 +796,9 @@ def _stable_chart_stage() -> Figure:
     return fig
 
 
-# ── Lay of the Land: Span ────────────────────────────────────────────────────
+# ── Tree's Company: Span ─────────────────────────────────────────────────────
 
-SPAN_STAGES = 5
+SPAN_STAGES = 4
 #: The atlas the slide draws: three children a cell, the first four levels,
 #: which are exactly the 40 cells Span's default full asks for.
 SPAN_K, SPAN_LEVELS = 3, 4
@@ -736,24 +807,26 @@ SPAN_LEAF_X0, SPAN_LEAF_X1 = 1.9, 12.3
 #: Cells as (level, index within the level), the walk's breadth-first order
 #: being level by level, left to right (biggest sibling first). The cells the
 #: Boundary step's votes landed in, before Diversity begins: deep in the first
-#: branch, and one deep in the second.
-SPAN_BOUNDARY_VOTES = ((3, 0), (3, 1), (3, 4), (3, 5), (3, 13))
+#: branch, and one deep in the second, off its middle (owner, #5132: a path
+#: straight down the middle of the tree looked chosen, not landed in).
+SPAN_BOUNDARY_VOTES = ((3, 0), (3, 1), (3, 4), (3, 5), (3, 16))
 #: The picks Diversity then makes, each the first cell the walk finds empty, and
 #: the drawn leaf the picked item sits in. A vote is on one item, which sits in
 #: one leaf of the atlas, and it marks that leaf and every cell above it
 #: (`CoverageAtlas.label`), so a pick in a big empty cell fills a path down
 #: through it, not the cell alone. Which child the item sits in is the item's
-#: business, so the paths wander (owner, #4884: not always the leftmost child):
-#: the first pick, cell 02, lands in 021 and then 0212.
-SPAN_PICK_LEAVES = {(1, 2): (3, 23), (2, 2): (3, 8), (2, 3): (3, 10), (2, 5): (3, 16)}
-#: The five pages (owner, #4884): the empty atlas; the cells the Boundary votes
-#: reached; where the walk asks next; four picks later; and where it asks after
-#: those. No lights and no bar: the slide shows the measure, not the rule.
-#: Per page: how many picks are in, and whether the (?) is drawn.
-SPAN_PAGES = {1: (None, False), 2: (0, False), 3: (0, True), 4: (4, False), 5: (4, True)}
+#: business, so the path wanders (owner, #4884: not always the leftmost child):
+#: the pick at cell 02 lands in 021 and then 0212.
+SPAN_PICK_LEAVES = {(1, 2): (3, 23)}
+#: The four pages: the empty atlas; the cells the Boundary votes reached; where
+#: the walk asks next; and that one pick, with where it asks after it (owner,
+#: #5132: one pick, not a jump of four). No lights and no bar: the slide shows
+#: the measure, not the rule. Per page: how many picks are in, and whether the
+#: (?) is drawn.
+SPAN_PAGES = {1: (None, False), 2: (0, False), 3: (0, True), 4: (1, True)}
 #: The runs the notes quote: from the top to the first empty cell, after the
-#: Boundary votes and after the four picks.
-SPAN_RUNS = {0: 3, 4: 10}
+#: Boundary votes and after the pick.
+SPAN_RUNS = {0: 3, 1: 6}
 
 
 def _span_cells() -> list[tuple[int, int]]:
@@ -800,9 +873,9 @@ def _span_covered(picks_in: int | None) -> tuple[set[tuple[int, int]], int, list
 def span_fig() -> None:
     """Span: the first 40 cells of an atlas, the cells the votes reach, and where the walk asks.
 
-    Five stages (owner, #4884): the empty cells; after asking at the line, a few
-    darkened; the first empty cell, where the walk asks; four atlas picks later,
-    the first of them a path down 02, 021, 0212; and the next ask.
+    Four stages: the empty cells; after asking at the line, a few darkened; the
+    first empty cell, where the walk asks; and its pick there, a path down 02,
+    021, 0212, with the next ask (owner, #4884, #5132).
     """
     for picks_in, run in SPAN_RUNS.items():
         _covered, got, picks = _span_covered(picks_in)
@@ -825,13 +898,12 @@ def _span_xy() -> dict[tuple[int, int], tuple[float, float]]:
 
 
 #: A cell's radius, and the (?) drawn in place of the cell the walk asks next:
-#: the deck's mark for where a step asks, as Flight Plan draws it.
+#: the deck's mark for where a step asks, as All Sorts of Sorts draws it.
 SPAN_CELL_R = 0.13
 
 
 def _span_stage(stage: int) -> Figure:
     fig, ax = _canvas()
-    _statement(ax, "Have your votes been everywhere?")
     xy = _span_xy()
     for (level, i), (x, y) in xy.items():
         if level:
@@ -844,8 +916,6 @@ def _span_stage(stage: int) -> Figure:
     for i in range(SPAN_K ** (SPAN_LEVELS - 1)):
         x, y = xy[(SPAN_LEVELS - 1, i)]
         ax.plot([x - 0.08, x, x + 0.08], [y - 0.42, y, y - 0.42], color=EDGE, linewidth=1.3, zorder=1)
-    ax.text((SPAN_LEAF_X0 + SPAN_LEAF_X1) / 2, 0.85, "and thousands of smaller cells below", ha="center",
-            va="center", fontsize=15, color=SOFT)  # fmt: skip
     picks_in, asking = SPAN_PAGES[stage]
     covered, run, _picks = _span_covered(picks_in)
     ask = _span_cells()[run] if asking else None
@@ -861,125 +931,62 @@ def _span_stage(stage: int) -> Figure:
 # ── Cleared to Land: Done ────────────────────────────────────────────────────
 
 DONE_STAGES = 3
-#: Toasty's picture: the happy face every hand-off hint wears
-#: (`frontend/src/app/utils/toasty-faces.ts`).
-TOASTY_PNG = _REPO_ROOT / "frontend" / "public" / "logo.png"
-#: The three hints, top to bottom, as `app.component.html` words them. A
-#: ``*word*`` is set bold, as the app sets Dashboard; the dry run's count is the
-#: harness's constant, which mirrors the app's.
-DONE_HINTS = (
-    "Your detector is trained! Every quality light is green. Keep voting to sharpen it, or click *Dashboard* to "
-    "test it or put it to work.",
-    f"Your detector is trained! {MORE_DRY_RUN} of its best matches in a row were not good, so it has likely found "
-    "what it can. Keep voting to sharpen it, or click *Dashboard* to test it or put it to work.",
-    "You've labeled every item in this dataset! Click *Dashboard* to test or run your detector on another dataset.",
-)
-#: Toasty stands at the left and his bubble reaches right, as `toastyHintPlacement`
-#: lays a hint under the top bar's Dashboard button; the bubble drops a little
-#: below his head, as the component's margin does.
-TOASTY_SIZE = 0.7
-TOASTY_X = 5.0
-BUBBLE_X0, BUBBLE_X1 = TOASTY_X + TOASTY_SIZE + 0.1, 12.35
-BUBBLE_DROP, BUBBLE_PAD, TAIL_DROP, TAIL = 0.08, 0.17, 0.22, 0.09
-HINT_SIZE, HINT_LEADING, HINT_ASCENT, HINT_DESCENT = 15, 0.29, 0.16, 0.05
-#: The first hint's top, low enough that the ending beside it clears the title
-#: notch; and the gap between hints.
-HINT_TOP, HINT_GAP = 5.35, 0.3
-#: Where each ending's words stop and its arrow to Toasty starts.
-ENDING_X0, ENDING_X1 = 0.7, 4.25
+#: The three endings, side by side: each column's left edge, and the heights of
+#: its heading, its picture and its two lines of words. The picture sits low
+#: enough that the first column clears the title notch.
+DONE_COL_X = (0.75, 4.85, 8.95)
+DONE_HEAD_Y, DONE_PICTURE_Y, DONE_WORDS_Y = 4.75, 3.95, (3.15, 2.72)
+#: A vote in the Documents and Anything pictures: a disc in its class's hue,
+#: red a Bad and green a Good, as everywhere in the deck.
+DONE_VOTE_R, DONE_VOTE_PITCH = 0.085, 0.215
+#: Anything's collection, every item voted: a grid of Goods and Bads.
+DONE_GRID_ROWS, DONE_GRID_COLS, DONE_GRID_GOOD = 3, 14, 0.3
 
 
 def done_fig() -> None:
-    """The ways a run ends, and what the app says at each, in the app's own words.
+    """The ways a run ends: every light green on photos, a document walk run dry, every item voted.
 
-    Since #4680 the hand-off is Toasty's hint under the top bar's Dashboard
-    button, one version per ending. Three stages: every light green on a photo
-    collection; a document collection's dry run; every item labeled.
+    Toasty's hand-off says the same thing whichever ending it was (#5143), so
+    the slide draws the endings alone. Three stages, one ending each.
     """
     _save(DONE_STAGES, _done_stage, "autopilot-done")
 
 
-def _arrow(ax: plt.Axes, x0: float, y0: float, x1: float, y1: float) -> None:
-    ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
-                arrowprops=dict(arrowstyle="-|>", color=INK, linewidth=1.8, mutation_scale=22,
-                                shrinkA=0, shrinkB=0))  # fmt: skip
+def _done_column(ax: plt.Axes, x: float, head: str, words: tuple[str, str]) -> None:
+    ax.text(x, DONE_HEAD_Y, head, ha="left", va="center", fontsize=20, fontweight="bold")
+    for y, line in zip(DONE_WORDS_Y, words, strict=True):
+        ax.text(x, y, line, ha="left", va="center", fontsize=17)
 
 
-def _text_width(ax: plt.Axes, words: str, bold: bool) -> float:
-    label = ax.text(0, 0, words, fontsize=HINT_SIZE, fontweight="bold" if bold else "normal")
-    width = label.get_window_extent(ax.figure.canvas.get_renderer()).width / ax.figure.dpi
-    label.remove()
-    return width
-
-
-def _wrap(ax: plt.Axes, words: str) -> list[list[tuple[str, bool, float]]]:
-    """*words* in lines that fit the bubble, each word with its weight and its offset from the line's start."""
-    room = BUBBLE_X1 - BUBBLE_X0 - 2 * BUBBLE_PAD
-    space = _text_width(ax, "a a", False) - _text_width(ax, "aa", False)
-    lines: list[list[tuple[str, bool, float]]] = [[]]
-    end = 0.0
-    for word in words.split():
-        bold = word.startswith("*")
-        word = word.strip("*")
-        width = _text_width(ax, word, bold)
-        if lines[-1] and end + space + width > room:
-            lines.append([])
-        start = end + space if lines[-1] else 0.0
-        lines[-1].append((word, bold, start))
-        end = start + width
-    return lines
-
-
-def _hint(ax: plt.Axes, top: float, lines: list[list[tuple[str, bool, float]]], face: np.ndarray | None) -> float:
-    """Toasty and his bubble, top edge at *top*; returns the hint's bottom. Drawn only when *face* is given."""
-    bubble_top = top - BUBBLE_DROP
-    height = HINT_ASCENT + (len(lines) - 1) * HINT_LEADING + HINT_DESCENT + 2 * BUBBLE_PAD
-    if face is not None:
-        ax.imshow(face, extent=(TOASTY_X, TOASTY_X + TOASTY_SIZE, top - TOASTY_SIZE, top), aspect="auto", zorder=5)
-        ax.add_patch(FancyBboxPatch((BUBBLE_X0, bubble_top - height), BUBBLE_X1 - BUBBLE_X0, height,
-                                    boxstyle="round,pad=0,rounding_size=0.1", facecolor="white", edgecolor=SOFT,
-                                    linewidth=1.6, zorder=4))  # fmt: skip
-        # The tail, pointing back at Toasty: white over the bubble's edge, outlined on its two outer sides.
-        y = bubble_top - TAIL_DROP
-        ax.add_patch(Polygon([(BUBBLE_X0 + 0.03, y + TAIL), (BUBBLE_X0 - TAIL, y), (BUBBLE_X0 + 0.03, y - TAIL)],
-                             facecolor="white", edgecolor="none", zorder=5))  # fmt: skip
-        ax.plot([BUBBLE_X0, BUBBLE_X0 - TAIL, BUBBLE_X0], [y + TAIL, y, y - TAIL], color=SOFT, linewidth=1.6,
-                zorder=6)  # fmt: skip
-        for k, line in enumerate(lines):
-            baseline = bubble_top - BUBBLE_PAD - HINT_ASCENT - k * HINT_LEADING
-            for word, bold, start in line:
-                ax.text(BUBBLE_X0 + BUBBLE_PAD + start, baseline, word, ha="left", va="baseline",
-                        fontsize=HINT_SIZE, fontweight="bold" if bold else "normal", zorder=6)  # fmt: skip
-    return min(top - TOASTY_SIZE, bubble_top - height)
+def _vote(ax: plt.Axes, x: float, y: float, good: bool) -> None:
+    ax.add_patch(Circle((x, y), DONE_VOTE_R, facecolor=GREEN if good else RED, edgecolor="none", zorder=6))
 
 
 def _done_stage(stage: int) -> Figure:
     fig, ax = _canvas()
-    _statement(ax, "Three ways a run ends, each said once")
-    face = plt.imread(TOASTY_PNG)
-    # Lay all three out on every stage, so the build only adds.
-    middles, top = [], HINT_TOP
-    for k, words in enumerate(DONE_HINTS):
-        middles.append(top - TOASTY_SIZE / 2)
-        top = _hint(ax, top, _wrap(ax, words), face if stage > k else None) - HINT_GAP
-    for k in range(stage):
-        _arrow(ax, ENDING_X1, middles[k], TOASTY_X - 0.12, middles[k])
+    _statement(ax, "Three ways a run ends")
     # Photos: every light green.
-    y = middles[0]
-    ax.text(ENDING_X0, y + 0.28, "Photos", ha="left", va="center", fontsize=18, fontweight="bold")
+    x = DONE_COL_X[0]
+    _done_column(ax, x, "Photos", ("all three lights", "are green"))
     for k, word in enumerate(("Smart", "Stable", "Span")):
-        x = ENDING_X0 + 0.15 + k * 1.15
-        _light(ax, x, y - 0.24, "green")
-        ax.text(x + 0.2, y - 0.24, word, ha="left", va="center", fontsize=16)
+        lx = x + 0.15 + k * 1.15
+        _light(ax, lx, DONE_PICTURE_Y, "green")
+        ax.text(lx + 0.2, DONE_PICTURE_Y, word, ha="left", va="center", fontsize=16)
     if stage >= 2:
-        y = middles[1]
-        ax.text(ENDING_X0, y + 0.38, "Documents", ha="left", va="center", fontsize=18, fontweight="bold")
-        ax.text(ENDING_X0, y - 0.05, f"{MORE_DRY_RUN} best matches in a row,", ha="left", va="center", fontsize=16)
-        ax.text(ENDING_X0, y - 0.4, "not one of them Good", ha="left", va="center", fontsize=16)
+        # Documents: the walk's best matches, a run of Bads as long as the dry-run stop.
+        x = DONE_COL_X[1]
+        _done_column(ax, x, "Documents", (f"{MORE_DRY_RUN} best matches in a row,", "not one of them Good"))
+        for k in range(MORE_DRY_RUN):
+            _vote(ax, x + DONE_VOTE_R + k * DONE_VOTE_PITCH, DONE_PICTURE_Y, good=False)
     if stage >= 3:
-        y = middles[2]
-        ax.text(ENDING_X0, y + 0.22, "Anything", ha="left", va="center", fontsize=18, fontweight="bold")
-        ax.text(ENDING_X0, y - 0.23, "every item has a vote", ha="left", va="center", fontsize=16)
+        # Anything: nothing left to show.
+        x = DONE_COL_X[2]
+        _done_column(ax, x, "Anything", ("every item", "has a vote"))
+        good = np.random.default_rng(42).random((DONE_GRID_ROWS, DONE_GRID_COLS)) < DONE_GRID_GOOD
+        for row in range(DONE_GRID_ROWS):
+            for col in range(DONE_GRID_COLS):
+                y = DONE_PICTURE_Y + (1 - row) * DONE_VOTE_PITCH
+                _vote(ax, x + DONE_VOTE_R + col * DONE_VOTE_PITCH, y, good=bool(good[row, col]))
     return fig
 
 
@@ -989,23 +996,24 @@ STOP_STAGES = 2
 #: The three radios, as the review's `beta` column names them, and what the slide calls each
 #: (`make-sota-figs.RADIOS`).
 STOP_RADIOS = ((0.25, "β = ¼"), (1.0, "β = 1"), (4.0, "β = 4"))
-#: The review's click budget: where its sessions end, not where a user must.
+#: The review's click budget, where its stopping table reads a session's end: the "vs 150" the slide quotes.
 STOP_BUDGET = 150
+#: Every session stops by the app's cap (#4903), whatever its lights say, so the chart runs that far (owner,
+#: #5171). #5134's sessions ran to it; the per-click table the review commits stops at its 150-click budget,
+#: and past that the curve is the study's own every-5-click table for today's app plus the A/B's paired
+#: difference for the shipped arm (`_stop_curves`).
+STOP_AXIS = STOP_CAP
+REPORT_STUDY = REPORT_STOP.parent / "tables"
 
-#: The numbers the notes quote, pinned per radio as (fire rate, KM median stop, mean Fβ gain after the stop,
-#: its SE, share ending 0.02 or more worse, share ending 0.02 or more better): `main` fails if the review's
-#: committed table says anything else, so a new State of the App review is a re-run of this script and then
-#: a look at the notes.
-EXPECT = {
-    0.25: (0.90, 55, 0.070, 0.006, 0.18, 0.54),
-    1.0: (0.90, 58, 0.072, 0.006, 0.11, 0.63),
-    4.0: (0.90, 64, 0.068, 0.005, 0.08, 0.62),
-}
+#: The numbers the slide prints and the notes quote, pinned per radio as (median stop, median Fβ at the
+#: budget minus at the stop): `main` fails if the review's committed table says anything else, so a new
+#: State of the App review is a re-run of this script and then a look at the notes.
+EXPECT = {0.25: (54, 0.019), 1.0: (59, 0.026), 4.0: (64, 0.030)}
 
 
 def _stop_rows() -> dict[float, dict[str, str]]:
     """The review's stopping table over every session, per radio (`stops_by_preset.py`)."""
-    path = REPORT_SOTA / "stopping_by_preset.csv"
+    path = REPORT_STOP / "stopping_by_preset.csv"
     if not path.exists():
         raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's stopping table")
     with path.open() as handle:
@@ -1013,51 +1021,66 @@ def _stop_rows() -> dict[float, dict[str, str]]:
 
 
 def _stop_curves() -> dict[float, tuple[np.ndarray, np.ndarray]]:
-    """The objective a user has in hand at every click, mean over every session, per radio (`by_click.py`)."""
-    path = REPORT_SOTA / "objective_by_click.csv"
+    """The objective a user has in hand at every click to the cap, mean over every session, per radio.
+
+    To click 150 it is the review's per-click table (`by_click.py`). Past it, the same sessions read from
+    #5134's every-5-click table of the reading pass, which is today's app before the switch, plus the A/B's
+    paired difference of the shipped arm against it, click by click. The two agree where they overlap, and
+    the splice asserts it.
+    """
+    path = REPORT_STOP / "objective_by_click.csv"
     if not path.exists():
         raise SystemExit(f"{path.relative_to(_REPO_ROOT)} is missing: it is the review's per-click objective")
     curves: dict[float, list[tuple[float, float]]] = {}
     with path.open() as handle:
         for row in csv.DictReader(handle):
             curves.setdefault(float(row["beta"]), []).append((float(row["t"]), float(row["fbeta"])))
-    return {beta: (np.array([t for t, _ in pts]), np.array([f for _, f in pts])) for beta, pts in curves.items()}
+    with (REPORT_STUDY / "over_clicks.csv").open() as handle:
+        control = {(float(r["beta"]), int(r["click"])): float(r["f"]) for r in csv.DictReader(handle)}
+    with gzip.open(REPORT_STUDY / "ab_curves.csv.gz", "rt") as handle:
+        shift = {
+            (float(r["beta"]), int(r["click"])): float(r["d_f"])
+            for r in csv.DictReader(handle)
+            if r["arm"] == "fbeta_best"
+        }
+    out = {}
+    for beta, pts in curves.items():
+        t, f = np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
+        assert t[-1] == STOP_BUDGET, (beta, t[-1])
+        joined = control[(beta, STOP_BUDGET)] + shift[(beta, STOP_BUDGET)]
+        assert abs(joined - f[-1]) < 0.001, (beta, joined, f[-1])
+        later = np.arange(STOP_BUDGET + 5, STOP_AXIS + 1, 5)
+        out[beta] = (
+            np.concatenate([t, later]),
+            np.concatenate([f, [control[(beta, c)] + shift[(beta, c)] for c in later]]),
+        )
+    return out
 
 
 def stop_fig() -> None:
-    """Where today's app told its sessions they could stop, and what clicking on did.
+    """Where today's app told its sessions they could stop, and what that cost against clicking on.
 
-    Two stages: the objective along a session at each radio, with each radio's median stop; then what
-    the sessions that were told to stop gained by clicking on to the review's budget.
+    Two stages: the objective along a session at each radio to the cap, with each radio's median stop; then
+    the median session's F-beta at the stop against at the review's budget.
     """
     rows, curves = _stop_rows(), _stop_curves()
-    got = {
-        beta: (
-            round(float(r["fire_rate"]), 2),
-            round(float(r["km_t_stop"])),
-            round(float(r["mean_delta"]), 3),
-            round(float(r["se_delta"]), 3),
-            round(float(r["share_worse"]), 2),
-            round(float(r["share_better"]), 2),
-        )
-        for beta, r in rows.items()
-    }
+    got = {beta: (round(float(r["km_t_stop"])), round(float(r["median_fbeta_delta"]), 3)) for beta, r in rows.items()}
     assert got == EXPECT, got
     _save(STOP_STAGES, lambda stage: _stop_stage(stage, rows, curves), "autopilot-stop")
 
 
-def _span(values: list[float], fmt: str) -> str:
-    """A range over the radios, or one number when they agree at the precision shown."""
-    lo, hi = fmt.format(min(values)), fmt.format(max(values))
-    return lo if lo == hi else f"{lo} to {hi}"
+#: The table of medians under the title notch, in figure fractions: each column's left edge, the header's
+#: height, the rule under it, and the rows below.
+STOP_TABLE_X = (0.04, 0.14, 0.255)
+STOP_TABLE_HEAD_Y, STOP_TABLE_RULE_Y, STOP_TABLE_ROW_Y, STOP_TABLE_ROW_GAP = 0.66, 0.63, 0.575, 0.065
 
 
 def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
     fig = plt.figure(figsize=(W, H))
-    ax = fig.add_axes((0.40, 0.14, 0.43, 0.68))
-    ax.set_xlim(0, STOP_BUDGET)
+    ax = fig.add_axes((0.43, 0.14, 0.42, 0.68))
+    ax.set_xlim(0, STOP_AXIS)
     ax.set_ylim(0.3, 0.7)
-    ax.set_xticks([0, 50, 100, 150])
+    ax.set_xticks([0, 50, 100, STOP_BUDGET, STOP_AXIS])
     ax.set_yticks([0.3, 0.4, 0.5, 0.6, 0.7])
     ax.set_xlabel("click")
     ax.set_ylabel("Fβ at that β")
@@ -1072,39 +1095,29 @@ def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
         ends.append((float(f[-1]), words))
     heights = spread_labels([f for f, _ in ends], gap=0.03)
     for (_, words), y in zip(ends, heights, strict=True):
-        ax.text(STOP_BUDGET + 3, y, words, ha="left", va="center", fontsize=16, clip_on=False)
+        ax.text(STOP_AXIS + 4, y, words, ha="left", va="center", fontsize=16, clip_on=False)
     ax.text(min(stops.values()), 0.705, "○ the stop, median click", ha="left", va="bottom", fontsize=15,
             color=SOFT, clip_on=False)  # fmt: skip
-    fired = [100 * float(rows[beta]["fire_rate"]) for beta, _ in STOP_RADIOS]
-    _side_block(
-        fig,
-        [
-            ("The stop fired", "head", 0.0),
-            (f"in {_span(fired, '{:.0f}')}% of sessions,", "body", 0.055),
-            (f"at median click {_span(list(stops.values()), '{:.0f}')}", "body", 0.05),
-        ],
-    )
+    heads = ["Median", "Stop"] + (["Fβ vs 150"] if stage >= 2 else [])
     if stage >= 2:
-        first = min(stops.values())
-        ax.add_patch(Rectangle((first, 0.3), STOP_BUDGET - first, 0.4, facecolor="#eef1f5", edgecolor="none",
-                               zorder=1))  # fmt: skip
-        gain = [float(rows[beta]["mean_delta"]) for beta, _ in STOP_RADIOS]
-        se = max(float(rows[beta]["se_delta"]) for beta, _ in STOP_RADIOS)
-        better = [100 * float(rows[beta]["share_better"]) for beta, _ in STOP_RADIOS]
-        worse = [100 * float(rows[beta]["share_worse"]) for beta, _ in STOP_RADIOS]
-        _side_block(
-            fig,
-            [
-                (f"Clicking on to {STOP_BUDGET}", "head", 0.0),
-                (f"Fβ {_span(gain, '{:+.2f}')} on average", "body", 0.055),
-                (f"(± {se:.3f} at most);", "body", 0.05),
-                (f"{_span(better, '{:.0f}')}% of sessions end", "body", 0.05),
-                ("0.02 or more better,", "body", 0.05),
-                (f"{_span(worse, '{:.0f}')}% that much worse", "body", 0.05),
-            ],
-            top=SIDE_TOP - 0.25,
-        )
+        ax.axvline(STOP_BUDGET, color=SOFT, linewidth=1.4, linestyle=(0, (5, 4)), zorder=2)
+    for x, head in zip(STOP_TABLE_X, heads, strict=False):
+        fig.text(x, STOP_TABLE_HEAD_Y, head, ha="left", va="center", fontsize=17, fontweight="bold")
+    fig.add_artist(plt.Line2D([STOP_TABLE_X[0], 0.36], [STOP_TABLE_RULE_Y] * 2, color=INK, linewidth=1.2))
+    for k, (beta, words) in enumerate(STOP_RADIOS):
+        y = STOP_TABLE_ROW_Y - k * STOP_TABLE_ROW_GAP
+        fig.text(STOP_TABLE_X[0], y, words, ha="left", va="center", fontsize=16)
+        fig.text(STOP_TABLE_X[1], y, f"{stops[beta]:.0f} clicks", ha="left", va="center", fontsize=16)
+        if stage >= 2:
+            # The stop against the budget, from the stop's side: what stopping there gave up.
+            cost = -float(rows[beta]["median_fbeta_delta"])
+            fig.text(STOP_TABLE_X[2], y, _signed2(cost), ha="left", va="center", fontsize=16)
     return fig
+
+
+def _signed2(value: float) -> str:
+    """A signed number with a real minus sign, two decimals."""
+    return f"{value:+.2f}".replace("-", "\u2212")
 
 
 if __name__ == "__main__":

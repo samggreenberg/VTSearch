@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, ReplaySubject, Subject } from 'rxjs';
-import { catchError, filter, take, takeUntil } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, ReplaySubject, Subject, of } from 'rxjs';
+import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
@@ -8,21 +8,7 @@ import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import { LoadingTask } from '../models/api.models';
-
-/** A task row's identity across reuse. Loads of one dataset or detector share
- *  a task id (`_regload_<id>`, `_detload_<id>`), and a finished row lingers
- *  on the channel for seconds afterwards (5s, or 30s with an error), so the
- *  id alone cannot tell this load's row from the last one's; `created_at`
- *  can. */
-function rowKey(task: LoadingTask): string {
-  return `${task.task_id}@${task.created_at}`;
-}
-
-/** Keys of the rows on *tasks* that have already settled: leftovers of
- *  earlier loads, which a waiter must not read as its own load finishing. */
-function settledRowKeys(tasks: LoadingTask[]): ReadonlySet<string> {
-  return new Set(tasks.filter((t) => t.status === 'idle').map(rowKey));
-}
+import { rowKey, settledRowKeys } from '../utils/pair-load-bar';
 
 interface ActiveSwitch {
   requestId: number;
@@ -65,7 +51,7 @@ interface ActiveSwitch {
  * Two entry points:
  *
  *  - `switchTo(ds, det)`: called by the top-bar pulldowns. When the
- *    user is on `/label/:ds/:det` or `/test/:ds/:det`, it navigates to
+ *    user is on `/label/:ds/:det` or `/tune/:ds/:det`, it navigates to
  *    the new URL (the route guard then calls `applyActivePair`). On
  *    other routes (e.g. `/dashboard`) it flips the pair imperatively.
  *  - `applyActivePair(ds, det)`: called by the active-context route
@@ -92,7 +78,7 @@ export class ContextSwitchService {
   }
 
   /**
-   * Pulldown-initiated switch. On `/label` or `/test`, navigates to the
+   * Pulldown-initiated switch. On `/label` or `/tune`, navigates to the
    * matching `/<view>/:ds/:det` URL; the route guard then drives the
    * active-pair flip via `applyActivePair`. On other routes, flips the
    * pair imperatively (no navigation).
@@ -103,14 +89,14 @@ export class ContextSwitchService {
   switchTo(datasetId: string, detectorId: string): void {
     const currentUrl = this.router.url.split('?')[0];
     const onLabel = currentUrl.startsWith('/label');
-    const onTest = currentUrl.startsWith('/test');
+    const onTune = currentUrl.startsWith('/tune');
     const onBrowse = currentUrl.startsWith('/browse');
     if (onBrowse && datasetId) {
       this.router.navigate(['/', 'browse', datasetId]);
       return;
     }
-    if ((onLabel || onTest) && datasetId && detectorId) {
-      const seg = onTest ? 'test' : 'label';
+    if ((onLabel || onTune) && datasetId && detectorId) {
+      const seg = onTune ? 'tune' : 'label';
       this.router.navigate(['/', seg, datasetId, detectorId]);
       return;
     }
@@ -130,7 +116,26 @@ export class ContextSwitchService {
     return this.flipAndLoad(datasetId, detectorId);
   }
 
-  private flipAndLoad(datasetId: string, detectorId: string): Observable<void> {
+  /**
+   * Load the active pair again because the backend has lost it. A restart
+   * empties it of loaded pairs while an open tab goes on naming its pair on
+   * every request (#5155); `PairRecoveryService` calls this when those
+   * requests start answering 409. Emits and completes like
+   * {@link applyActivePair}, or completes without emitting if a load fails or
+   * a switch supersedes it.
+   *
+   * Two differences from a switch. Both halves are asked for whatever the
+   * registry says, because its snapshot predates the loss and still reads
+   * `loaded`; the backend answers a half it does hold with a no-op. And the
+   * dataset loads first: the detector load resolves its dataset from the
+   * request's `X-Dataset-Id`, which here names the dataset being reloaded,
+   * and that answers 409 until the dataset is back in (#3139).
+   */
+  reloadActivePair(): Observable<void> {
+    return this.flipAndLoad(this.activeContext.datasetId, this.activeContext.modelId, true);
+  }
+
+  private flipAndLoad(datasetId: string, detectorId: string, reload = false): Observable<void> {
     const previous = this.active;
     if (
       previous &&
@@ -175,7 +180,7 @@ export class ContextSwitchService {
     const dataset = datasetId ? this.datasetState.datasetById().get(datasetId) ?? null : null;
     const detector = detectorId ? this.datasetState.detectorById().get(detectorId) ?? null : null;
 
-    const needsDatasetLoad = !!dataset && !dataset.loaded;
+    const needsDatasetLoad = !!dataset && (reload || !dataset.loaded);
     // Re-embed labels when the active dataset's embedder differs from the
     // one the detector's cached label vectors were built with. Both sides
     // are reported by the registry endpoints; missing values (unloaded
@@ -188,7 +193,8 @@ export class ContextSwitchService {
       !!dataset.embedder &&
       !!detector.embedder &&
       dataset.embedder !== detector.embedder;
-    const needsDetectorLoad = !!detector && (!detector.detector_loaded || needsLabelReembed);
+    const needsDetectorLoad =
+      !!detector && (reload || !detector.detector_loaded || needsLabelReembed);
 
     if (!needsDatasetLoad && !needsDetectorLoad) {
       this.finishIfCurrent(current);
@@ -203,6 +209,15 @@ export class ContextSwitchService {
       pending -= 1;
       if (pending <= 0) this.finishIfCurrent(current);
     };
+
+    if (reload && needsDatasetLoad && needsDetectorLoad && dataset && detector) {
+      // In sequence, not in parallel; see `reloadActivePair`.
+      pending += 1;
+      this.runDatasetLoad(current, dataset.id)
+        .pipe(switchMap(() => (current.failed ? of(undefined) : this.runDetectorLoad(current, detector.id))))
+        .subscribe({ next: tick });
+      return current.completion.asObservable();
+    }
 
     if (needsDatasetLoad && dataset) {
       pending += 1;

@@ -222,15 +222,17 @@ export class ExportModalComponent implements OnInit {
    * exports (CSV/JSON files, webhooks), where they make the payload
    * re-importable: the exporter receives the whole `LabeledElement`s, so
    * `origin` reaches the file as a real dict and is JSON-serialized on the way
-   * out (and JSON-parsed back on re-import).
+   * out (and JSON-parsed back on re-import). `region_box` is a Good label's
+   * drawn box on a patch dataset; it decides which patch the label pools to,
+   * so a detector re-imported without it is a different detector (#5130).
    *
    * They are deliberately **not** appended to the clipboard, which flattens
    * rows to strings client-side: `origin` would stringify to `[object Object]`,
-   * which no importer can parse back. Two unselectable junk columns that buy
-   * zero matching power is a strictly worse paste, so the clipboard honours the
+   * which no importer can parse back. Unselectable junk columns that buy zero
+   * matching power make a strictly worse paste, so the clipboard honours the
    * user's column selection exactly (issue #2770).
    */
-  private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
+  private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name', 'region_box'];
 
   /** Detector/model name from any available source: the parent-supplied name
    *  (a Dashboard row action exports *that* row's detector, which need not be

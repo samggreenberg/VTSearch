@@ -46,11 +46,12 @@ export type Target =
 export interface Annotation {
   target: Target;
   /**
-   * `box` outlines the target; `highlight` also dims everything else; `step`
-   * outlines it and puts a numbered red disc on its corner — the click-by-click
-   * markers (#4202), read in order 1, 2, 3.
+   * `box` outlines the target; `highlight` also dims everything else; `ring`
+   * circles it with fully rounded ends; `step` outlines it and puts a numbered
+   * red disc on its corner — the click-by-click markers (#4202), read in order
+   * 1, 2, 3.
    */
-  kind: 'box' | 'highlight' | 'step';
+  kind: 'box' | 'highlight' | 'ring' | 'step';
   /** The number on a `step` disc. */
   step?: number;
   /**
@@ -173,8 +174,8 @@ const STEPS = `${GUIDE}#step-by-step-your-first-search`;
 /** A dashboard row, matched by its exact name (see `Target`). */
 const datasetRow = (name: string): Target => ({ selector: 'tr[vt-dataset-card]', name });
 const detectorRow = (name: string): Target => ({ selector: 'tr[vt-detector-card]', name });
-/** The Train / Test / Find buttons under the dashboard tables. */
-const dashButton = (hasText: 'Train' | 'Test' | 'Find'): Target => ({
+/** The Train / Tune / Find buttons under the dashboard tables. */
+const dashButton = (hasText: 'Train' | 'Tune' | 'Find'): Target => ({
   selector: '.dashboard-actions .btn--primary',
   hasText,
 });
@@ -427,29 +428,6 @@ async function dropExample(page: Page, h: Helpers): Promise<void> {
 const ROSY = 'Rosy Smileys';
 const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
 
-/**
- * A detector whose labels overlap, for the Spot Check shot: Goods and Bads
- * of the same kind of drawing, so the labels separate weakly and Autopilot
- * runs its weak-separation check (#4496) as soon as its first learned sort
- * lands. Only Autopilot starts a check, and this is the one it starts on
- * entry; ten labels meet `WEAK_CHECK_MIN_VOTES`.
- *
- * One kind, not two: piles that were each half yellow smileys, half yellow
- * faces came out at a separation of 2.3, over the 1.5 that makes a check due,
- * so the shot waited for a check that never came (#4862). Five yellow faces a
- * side measure 0.50 in the app refresh.sh starts and 0.26 after a restart.
- * Ten yellow smileys are no good: 0.13 after a restart, but 2.69 in the
- * process that imported the fixtures, which is the one refresh.sh shoots in
- * (#4892).
- */
-const OVERLAP = 'Overlapping Smileys';
-
-/** The Overlapping Smileys detector's labels: ten yellow faces, none smiling, five in each pile. */
-function overlapVotes(): { good: string[]; bad: string[] } {
-  const faces = framesOf(corpus(TRAIN_DATASET).pictures, 'yellow-face', 10);
-  return { good: faces.slice(0, 5), bad: faces.slice(5) };
-}
-
 type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
 
 /** True if *picture* is a yellow smiley with rosy cheeks (the ROSY detector's target). */
@@ -589,8 +567,8 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
 }
 
 /**
- * Score the test dataset with the detector and land on the Test view's
- * Autopilot tab (#4524), the tab Test opens on, with the test's first round
+ * Score the test dataset with the detector and land on the Tune view's
+ * Autopilot tab (#4524), the tab Tune opens on, with the test's first round
  * dealt. refresh.sh seeds the draw (VTSEARCH_SPOT_CHECK_SEED), so a refresh
  * frames the same picks.
  *
@@ -599,14 +577,14 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
  * *Drawing picks…* is a heading too, and the view sat on it when the test
  * never started (#4555), so a wait that took it photographed the hang.
  */
-async function openTest(page: Page, h: Helpers): Promise<void> {
+async function openTune(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
   await h.dashboard();
   await h.selectDatasetRow(TEST_DATASET);
   await h.selectDetectorRow(DETECTOR);
-  // Test scores every item, then opens the three-pane view on Autopilot.
+  // Tune scores every item, then opens the three-pane view on Autopilot.
   // (Not Find: since #4525 that button runs AutoFind and opens no view.)
-  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  await page.getByRole('button', { name: 'Tune', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
   // photographing a progress bar. The test starts once the pass lands.
@@ -619,6 +597,32 @@ async function openTest(page: Page, h: Helpers): Promise<void> {
 }
 
 /**
+ * Record the detector's training baseline for the Evidence verdict (#5089),
+ * as the how-to's reader has it: a Tune on the dataset it was trained on.
+ * Tune's result pane reads the Evidence report at Done, and that report, run
+ * on the training dataset, draws the baseline and records it on the detector.
+ * Both calls go through the API, as the Tune view makes them; testing the
+ * training pile to Done first would change none of what gets recorded.
+ * Without this the chip reads the evidence-vacuum share and no verdict.
+ */
+async function recordEvidenceBaseline(h: Helpers): Promise<void> {
+  const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  if (!train || !det) throw new Error(`no ${TRAIN_DATASET} / ${DETECTOR} to record a baseline with`);
+  await h.app.loadDataset(train);
+  const pair = { dataset: train.id, detector: det.id };
+  await resetFind(h);
+  await h.app.api('/api/find-label', { method: 'POST', body: { detector_id: det.id }, ...pair });
+  const evidence = await h.app.api('/api/find/evidence-coverage', pair);
+  // End the session, as the Train view does on entry, so the presumed votes
+  // the scoring left on the training pile go with it.
+  await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  if (evidence.baseline !== 'training') {
+    throw new Error(`a Tune on ${TRAIN_DATASET} recorded no Evidence baseline (baseline: ${evidence.baseline})`);
+  }
+}
+
+/**
  * Score the test dataset, test the line to Done on Autopilot, then open the
  * Review tab: the ranked result in full, the test's picks in the piles. That
  * is the guide's order (Step 4: click until Done, then open Review), and the
@@ -627,16 +631,16 @@ async function openTest(page: Page, h: Helpers): Promise<void> {
  * the Threshold until Done.
  */
 async function openFind(page: Page, h: Helpers): Promise<void> {
-  await openTest(page, h);
+  await openTune(page, h);
   await testUntilDone(page, h);
-  await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+  await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
   await page.locator('.left-tab[title^="Review"]').first().click();
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await h.wait(1500);
 }
 
 /**
- * Vote the Test autopilot's rounds to Done, with the corpus's truth: each
+ * Vote the Tune autopilot's rounds to Done, with the corpus's truth: each
  * round's pending picks (in draw order, which is the stage's dot order) are
  * read off `/api/line-test`, named through `/api/medias/batch`, and answered
  * with the keys, as a reader would. Up to twenty rounds; a test's budgets
@@ -679,57 +683,6 @@ async function testUntilDone(page: Page, h: Helpers): Promise<void> {
     await h.wait(400);
   }
   throw new Error('testUntilDone: the test is not Done after twenty rounds');
-}
-
-/**
- * The chromium check of the spot check's keys (#4273), run by the `floor-check`
- * shot on every capture: jsdom is not a browser, and key routing is browser
- * semantics (CLAUDE.md). In Autopilot's Spot Check step, → votes the pick on
- * screen Good and moves on, ↓ goes back, ← votes it Bad; none of it may reach
- * the centre panel hidden under the step (a `POST /api/medias/<id>/vote`).
- * Votes are held in the step until a round is whole, so this sends nothing:
- * the recipe's `after` cancels the check.
- */
-async function checkStepKeys(page: Page): Promise<void> {
-  const listVotes: string[] = [];
-  const onRequest = (req: { url(): string; method(): string }) => {
-    if (req.method() === 'POST' && /\/api\/medias\/\d+\/vote$/.test(new URL(req.url()).pathname)) listVotes.push(req.url());
-  };
-  page.on('request', onRequest);
-  try {
-    const dots = page.locator('.pick-dot');
-    if ((await dots.count()) < 2) throw new Error('floor-check: the round has fewer than two picks');
-    /** Wait for the dots to show *votes* with pick *current* on screen; the view repaints a frame after the key. */
-    const expect = async (what: string, votes: (string | null)[], current: number) => {
-      const want = JSON.stringify({ votes, current });
-      const read = () =>
-        page.evaluate(() => {
-          const ds = Array.from(document.querySelectorAll('.pick-dot'));
-          return JSON.stringify({
-            votes: ds.map((d) => d.getAttribute('data-vote')),
-            current: ds.findIndex((d) => d.classList.contains('current')),
-          });
-        });
-      const deadline = Date.now() + 5000;
-      let got = await read();
-      while (got !== want && Date.now() < deadline) {
-        await page.waitForTimeout(50);
-        got = await read();
-      }
-      if (got !== want) throw new Error(`floor-check: ${what}: expected ${want}, got ${got}`);
-    };
-    const rest = Array((await dots.count()) - 1).fill(null) as null[];
-    await page.keyboard.press('ArrowRight');
-    await expect('→ votes the pick Good and moves on', ['good', ...rest], 1);
-    await page.keyboard.press('ArrowDown');
-    await expect('↓ goes back a pick', ['good', ...rest], 0);
-    await page.keyboard.press('ArrowLeft');
-    await expect('← changes it to Bad and moves on', ['bad', ...rest], 1);
-    await page.waitForTimeout(300);
-    if (listVotes.length) throw new Error(`floor-check: the centre panel took a vote: ${listVotes.join(', ')}`);
-  } finally {
-    page.off('request', onRequest);
-  }
 }
 
 /**
@@ -871,12 +824,12 @@ export const SHOTS: Shot[] = [
   {
     id: 'step-find',
     embeddedIn: STEPS,
-    caption: 'Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Test',
+    caption: 'Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Tune',
     themes: BOTH,
     annotations: [
       { target: datasetRow(TEST_DATASET), kind: 'step', step: 1 },
       { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
-      { target: dashButton('Test'), kind: 'step', step: 3 },
+      { target: dashButton('Tune'), kind: 'step', step: 3 },
     ],
     async recipe(page, h) {
       await h.dashboard();
@@ -890,7 +843,7 @@ export const SHOTS: Shot[] = [
     id: 'step-find-results',
     embeddedIn: STEPS,
     caption:
-      'Step 4, the Review tab: Test ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
+      'Step 4, the Review tab: Tune ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
     themes: BOTH,
     annotations: [
       { target: '.panel-left', kind: 'step', step: 1, at: 'corner' },
@@ -932,9 +885,9 @@ export const SHOTS: Shot[] = [
   }),
   icon({
     id: 'icon-find',
-    anchor: 'step-4-test-the-detector-on-the-new-dataset',
-    caption: 'The Test button',
-    target: dashButton('Test'),
+    anchor: 'step-4-tune-the-detector-on-the-new-dataset',
+    caption: 'The Tune button',
+    target: dashButton('Tune'),
     recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TEST_DATASET);
@@ -986,8 +939,8 @@ export const SHOTS: Shot[] = [
   }),
   icon({
     id: 'icon-export',
-    anchor: 'testing-a-detector',
-    caption: 'The Export button in the Test view',
+    anchor: 'tuning-a-detector',
+    caption: 'The Export button in the Tune view',
     target: '.goods-actions button[aria-label="Export"]',
     recipe: async (page, h) => { await openFind(page, h); },
   }),
@@ -997,7 +950,7 @@ export const SHOTS: Shot[] = [
     id: 'dashboard-loaded',
     embeddedIn: `${GUIDE}#what-vtsearch-does`,
     caption:
-      'The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Test / Find beneath them',
+      'The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Tune / Find beneath them',
     themes: BOTH,
     async recipe(page, h) {
       await cleanDashboard(page, h);
@@ -1191,8 +1144,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'settings-appearance',
-    embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
+    embeddedIn: `${GUIDE}#settings-tabs`,
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls',
     themes: BOTH,
     async recipe(_page, h) {
       await openAppearance(h);
@@ -1202,12 +1155,12 @@ export const SHOTS: Shot[] = [
   {
     id: 'dashboard-manage',
     embeddedIn: `${GUIDE}#dashboard-managing-datasets-and-detectors`,
-    caption: 'A dataset row and a detector row selected, with the Train / Test / Find action bar below the tables',
+    caption: 'A dataset row and a detector row selected, with the Train / Tune / Find action bar below the tables',
     themes: BOTH,
     annotations: [
       // Box (not highlight): this shot has two focal points — the open ⋯ menu
-      // and the Train/Test/Find bar — so don't dim the rest of the dashboard.
-      { target: '.dashboard-actions', kind: 'box', label: 'Train opens labeling; Test tests a detector; Find runs them' },
+      // and the Train/Tune/Find bar — so don't dim the rest of the dashboard.
+      { target: '.dashboard-actions', kind: 'box', label: 'Train opens labeling; Tune tests and corrects a detector; Find runs them' },
     ],
     async recipe(_page, h) {
       await h.dashboard();
@@ -1289,64 +1242,48 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'find-view',
-    embeddedIn: `${GUIDE}#testing-a-detector`,
+    embeddedIn: `${GUIDE}#tuning-a-detector`,
     caption:
-      "The Test view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)",
+      "The Tune view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)",
     themes: BOTH,
     async recipe(page, h) {
-      await openTest(page, h);
+      await openTune(page, h);
     },
     after: async (_page, h) => resetFind(h),
   },
   {
     id: 'find-stats',
-    embeddedIn: `${GUIDE}#testing-a-detector`,
+    embeddedIn: `${GUIDE}#tuning-a-detector`,
     caption:
-      "The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart",
+      "The Tune view's result pane at Done: the balance headline, the Right and Found ranges, the Precision by Number Returned chart, and the picks by band",
     themes: BOTH,
     clip: { target: '.line-test-result' },
     async recipe(page, h) {
-      await openTest(page, h);
+      await openTune(page, h);
       await testUntilDone(page, h);
-      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+      // The verdict lands in the centre pane (#5100); the result pane beside it.
+      await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
+      await page.waitForSelector('.line-test-result .chart-wrap', { timeout: 60000 });
       await page.locator('.line-test-result').first().evaluate((el) => el.scrollTo(0, 0));
       await h.wait(1200);
     },
     after: async (_page, h) => resetFind(h),
   },
   {
-    id: 'floor-check',
-    embeddedIn: `${GUIDE}#how-close-the-line-got`,
+    id: 'test-verdict',
+    embeddedIn: `${GUIDE}#the-result`,
     caption:
-      "Autopilot's Spot Check step: a random pick from a band of the list, with a dot for each pick in the round and the Good / Bad buttons under it",
+      'The verdict at Done, in the middle of the Tune view: the sentence reading the ranges, Move to AutoFind, Add Corrections and retrain, and the Lean the Threshold table',
     themes: BOTH,
-    clip: { target: 'vt-spot-check-stage' },
-    // Only Autopilot starts a check (there is no Check button), so the shot
-    // enters Autopilot on a detector whose labels overlap (`OVERLAP`), which
-    // runs the weak-separation check at once, and answers the first pick with
-    // the keys, which is the step's chromium check (`checkStepKeys`). The
-    // server draws the picks at random, by design; refresh.sh seeds that draw
-    // (VTSEARCH_SPOT_CHECK_SEED, #4330), so the same pick is framed on every
-    // capture.
+    clip: { target: '.verdict-card', pad: 8 },
     async recipe(page, h) {
-      await h.app.dropDetectors(OVERLAP);
-      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
-      const det = await h.app.ensureDetector(OVERLAP, train, DETECTOR_TEXT);
-      await h.app.setVotes(train, det, overlapVotes());
-      await h.enterLabelView(TRAIN_DATASET, OVERLAP);
-      await h.leftTab('Autopilot');
-      await page.locator('vt-spot-check-stage .pick-dot').first().waitFor({ timeout: 120000 });
-      await page.locator('vt-spot-check-stage img.image-element').first().waitFor({ timeout: 20000 });
-      await checkStepKeys(page);
+      await openTune(page, h);
+      await testUntilDone(page, h);
+      await page.waitForSelector('.line-test-stage .verdict-card .exits', { timeout: 60000 });
       await page.mouse.move(5, 5);
       await h.wait(1200);
     },
-    after: async (_page, h) => {
-      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
-      const det = h.app.named(await h.app.detectors(), OVERLAP);
-      if (det) await h.app.api('/api/precision-check/cancel', { method: 'POST', dataset: train.id, detector: det.id });
-      await h.app.dropDetectors(OVERLAP);
-    },
+    after: async (_page, h) => resetFind(h),
   },
   {
     id: 'achievements',
@@ -1454,7 +1391,7 @@ export const SHOTS: Shot[] = [
     themes: BOTH,
     clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {
-      await openTest(page, h);
+      await openTune(page, h);
       await testUntilDone(page, h);
       await page.waitForSelector('.line-test-result .chart-wrap', { timeout: 60000 });
       await page.locator('.line-test-result .chart-wrap').first().scrollIntoViewIfNeeded();
@@ -1468,7 +1405,7 @@ export const SHOTS: Shot[] = [
     id: 'trust-stats',
     embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
     caption:
-      'Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+      'Step 2: in the result pane, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share sitting farther from the detector\'s examples than its training data does',
     themes: BOTH,
     clip: { target: '.line-test-result' },
     annotations: [
@@ -1476,12 +1413,15 @@ export const SHOTS: Shot[] = [
       // On the right: the clip is the result pane, and a badge on a chip's
       // left edge would land outside it.
       { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2, at: 'right' },
-      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3, at: 'right' },
+      { target: '.evidence-chip', kind: 'step', step: 3, at: 'right' },
     ],
+    // The baseline stays recorded on the detector afterwards, as it would on a
+    // reader's; no other shot shows the Evidence chip.
     async recipe(page, h) {
-      await openTest(page, h);
+      await recordEvidenceBaseline(h);
+      await openTune(page, h);
       await testUntilDone(page, h);
-      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+      await page.waitForSelector('.line-test-stage .exits', { timeout: 60000 });
       // The overlap check picks the first candidate itself; make sure it is
       // the training pile, and wait for both verdicts to come back.
       const select = page.locator('.domain-ref-select').first();
@@ -1489,8 +1429,11 @@ export const SHOTS: Shot[] = [
       const trainId = h.app.named(await h.app.datasets(), TRAIN_DATASET)?.id;
       if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
       await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
-      await page.locator('.domain-chip', { hasText: 'evidence vacuum' }).first().waitFor({ timeout: 120000 });
-      await page.locator('.domain-ref-select').first().scrollIntoViewIfNeeded();
+      await page.locator('.evidence-chip').first().waitFor({ timeout: 120000 });
+      // The verdict left the result pane (#5100), so the chips sit higher and
+      // the longer Evidence sentence (#5089) runs below the fold: bring the
+      // select to the pane's top so all three callouts fit.
+      await page.locator('.domain-ref-select').first().evaluate((el) => el.scrollIntoView({ block: 'start' }));
       await h.wait(800);
     },
     after: async (_page, h) => resetFind(h),
@@ -1501,7 +1444,7 @@ export const SHOTS: Shot[] = [
     id: 'icon-to-dataset',
     anchor: 'what-gets-sent',
     page: 'export-matches.md',
-    caption: 'The To Dataset button in the Test view',
+    caption: 'The To Dataset button in the Tune view',
     target: '.goods-actions button[aria-label="To Dataset"]',
     recipe: async (page, h) => { await openFind(page, h); },
   }),
@@ -2105,8 +2048,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'browse-find',
-    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-test`,
-    caption: "Browsing a tested detector's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Test",
+    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-tune`,
+    caption: "Browsing a tested detector's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Tune",
     themes: BOTH,
     annotations: [
       { target: '.bsp', kind: 'step', step: 1 },

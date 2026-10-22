@@ -2,7 +2,7 @@
 
 import pytest
 
-from vtscore.config import CoreConfig
+from vtscore.config import get_setting
 from vtsearch.state import (
     add_label_to_history,
     bad_votes,
@@ -512,7 +512,7 @@ class TestDiversityLevelOverTime:
         capped at the atlas's node count.
         """
         atlas = _build_atlas()
-        expected = min(CoreConfig.from_settings().autopilot_goal_diversity, atlas.total_nodes)
+        expected = min(get_setting("autopilot_goal_diversity"), atlas.total_nodes)
 
         data = client.get("/api/labeling-status").get_json()
         assert data["span"]["target"] == expected

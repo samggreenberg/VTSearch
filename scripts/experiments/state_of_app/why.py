@@ -99,7 +99,7 @@ def main() -> int:
 
     bad: dict[str, collections.Counter] = {c: collections.Counter() for c in classes}
     good: dict[str, int] = collections.Counter()
-    for p in sorted((args.exp / "results" / "cells").glob("task_*__picks.csv")):
+    for p in sorted((args.exp / "results" / "cells").glob("task_*__picks.csv*")):
         df = pd.read_csv(p, usecols=["category", "picked_id", "picked_label", "embedder"])
         df = df[df["embedder"] == "siglip"]
         if df.empty:

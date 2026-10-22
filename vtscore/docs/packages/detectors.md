@@ -39,6 +39,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/cost_trend.py`            | The Smart indicator's arithmetic (shared with the eval harness)     |
 | `vtscore/detectors/stability.py`             | The Stable indicator's arithmetic (shared with the eval harness)    |
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+| `vtscore/detectors/evidence_baseline.py`     | The Evidence verdict's training baseline, stamped onto the detector |
 | `vtscore/detectors/training_domain.py`       | Which loaded dataset a detector's labels were cast on               |
 | `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 | `vtscore/detectors/balance.py`               | The detector's balance (beta), kept on the detector JSON            |
@@ -123,7 +124,12 @@ see [`concepts.md`](../concepts.md) - which is also why
 `vtscore.config.DATA_DIR / "detector_registry.json"` (`REGISTRY_PATH`).
 Each entry is a flat dict with `id` (uuid hex), `name`, `media_type`,
 `num_training`, `text_query`, `media_example`, `examples`, `created_by`,
-`created_at`, `embedder`, `embedder_type`, `readers`.
+`created_at`, `embedder`, `embedder_type`, `readers`; once its labels
+change it also carries `last_trained_at` and `trained_on`, the ids of the
+datasets it holds labels from. `record_detector_training(detector_id,
+num_training, *, dataset_id="", labeled_in_dataset=True)` stamps all
+three: a writer that composed its labels against one dataset passes its
+id, which stays listed while the detector holds labels there.
 `register_detector(*, name, media_type, ...)` is keyword-only and
 returns the new entry. Mutation is
 guarded by a module-level `RLock`; reads return deep copies so callers
@@ -140,10 +146,14 @@ registry.unregister_detector(entry["id"])
 
 CRUD: `list_detectors`, `get_detector`, `register_detector`,
 `unregister_detector`, `rename_detector`, `update_detector`,
-`find_by_name`. Loaded-set tracking:
+`record_detector_training`, `find_by_name`. Loaded-set tracking:
 `add_loaded_detector_id` / `remove_loaded_detector_id` /
 `is_detector_loaded` / `get_loaded_detector_ids`. Mode flag:
-`is_find_mode` / `set_find_mode`. Test reset: `reset_for_tests`.
+`is_find_mode` / `set_find_mode`. Access control:
+`can_user_access_detector`, `is_detector_owner`,
+`list_detectors_for_user`, and `update_detector_readers` (returns a
+`ReadersUpdate`; see [security.md](security.md#readers-updates)) with its
+`(ok, err)` form `set_detector_readers`. Test reset: `reset_for_tests`.
 
 ### Find mode
 
@@ -283,9 +293,10 @@ bags and a scoring population that differs from *snap*):
 Returns `(model, threshold)`. The function reads the balance of `det_ctx`
 (`detector_beta(det_ctx)`, the detector's own, #4665; `line_knobs`, the
 active detector's, with no `det_ctx`), `get_calibrate_count`, and
-`get_calibration_fraction` from `vtscore.state`; those getters resolve
-through `CoreConfig`, so library consumers running outside an app must
-register a `register_core_config_builder` provider.
+`get_calibration_fraction` from `vtscore.state`; those getters read
+`vtscore.config.get_setting`, and `calibrate_count` is a required setting,
+so library consumers running outside an app must register a
+`register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
@@ -465,7 +476,7 @@ with resolve_file_context(origin, origin_name, filename) as path:
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
 | `resolve_file_context(origin, origin_name="", filename="")`          | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
 | `resolve_file_from_origin(origin, origin_name="", filename="")`      | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
-| `embed_file(file_path, media_type, embedder_name="")`                | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. Returns the vector or `None`. |
+| `embed_file(file_path, media_type, embedder_name="", *, extra_fields=None)` | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`, with `extra_fields` merged into that media dict (a video unit's `clip_start` / `clip_end` / `clip_box`). Returns the vector or `None`. |
 | `resolve_label_embeddings(labels, media_type, progress_callback=None, *, embedder_name="")` | Batch entry point. Returns `ResolvedLabels`.            |
 
 `ResolvedLabels` is a dataclass with `embeddings`, `labels`,
@@ -478,10 +489,12 @@ from `parent_importer` / `parent_path` / `parent_url` params and
 recurses), and `example_media` (the detector-exemplar sentinel, resolved
 to its `example_media_dir()` byte-cache file under the same traversal
 confinement the seeding path applies). Clipped origins - audio `clip_start`/`clip_end`, image
-`clip_box`, text `clip_index`, and origin-stored clipper chains - are
-handled transparently: the chain is replayed on the resolved source
-file via `vtscore.datasets.clipper_chain.replay_chain_on_file` before
-embedding.
+`clip_box`, text `clip_index`, video `clip_start`/`clip_end`/`clip_box`, and
+origin-stored clipper chains - are handled transparently: the chain is
+replayed on the resolved source file via
+`vtscore.datasets.clipper_chain.replay_chain_on_file` before embedding. A
+video unit is never cut: it is embedded from the source file with its window
+and box passed to the embedder, as the dataset embedded it.
 
 ---
 
@@ -578,6 +591,13 @@ A patch space, or an embedder the registry does not know, has no hold.
 `_query_tier` and `cached_head_is_current` read it, and the learned-sort
 payload reports it as `query_hold`, so the Train view keeps the text sort on
 screen while Autopilot asks from the head.
+`query_missed(n_good, n_bad, *, patch_space)` is the typed query's miss
+(#4800): on a known patch space (`patch_space` `True`), under the quota with a
+Good but fewer than `GOOD_QUOTA` and at least `QUERY_MISS_BADS` (1) Bads (a Bad
+before the Goods quota), a typed-query detector gives the Goods' centroid in place of its
+query. `_query_tier` reads it (the centroid only where a Good resolved), and
+`cached_head_is_current` takes a cached centroid there and refuses a cached
+query head. `served_quota` reports such a detector's tier as `centroid`.
 
 The centroid is `fit_centroid_head(goods, score, *, rule=None, beta=None,
 line_mask=None)`: the unit mean of the L2-normalised Good vectors, as a
@@ -756,12 +776,12 @@ Every entry point resolves its cache through the active
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
-| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`); `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines |
+| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines; `smart_threshold` is deprecated and ignored (#5134) |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
-| `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
+| `calculate_fbeta_over_time(..., beta=None)`     | Per-step best F-beta on current votes at the session's balance (Smart's points) |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
-| `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
+| `compute_labeling_status(..., span_info=None, beta=None)` | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
 | `cached_indicator_history(metric, ...)`         | Read one metric's history **without** advancing the cache; returns `(history, complete)` |
 
@@ -769,15 +789,18 @@ Every entry point resolves its cache through the active
 
 `compute_labeling_status` returns three indicators:
 
-- **Smart** - fits a linear regression slope over the most recent 10
-  error-cost values; green when the relative slope is above `-0.015` (cost has
-  leveled off) **or** when the slope is within two standard errors of zero, i.e.
-  the window's step-to-step scatter explains it (a plateaued cost is flat on
+- **Smart** - re-scores the 10 most recent detectors on the current votes and
+  reads each one's best F-beta over every cut, at the session's balance (F1 with
+  none; `best_fbeta`, `smart_beta`). It fits a linear regression slope over those
+  10 points; green when the relative slope is below `+0.015` (F-beta has stopped
+  rising) **or** when the slope is within two standard errors of zero, i.e. the
+  window's step-to-step scatter explains it (a plateaued F-beta is flat on
   average but noisy between retrains). The arithmetic lives in
-  `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
-  is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
-  that inclusion (`smart_cut`), whatever line the balance draws, so one
-  window never mixes models cut under different rules (issue #4243).
+  `vtscore.detectors.cost_trend` (`rising_status_from_scores`), which the eval
+  harness calls too. Cut-free, so one window never mixes models cut under
+  different rules. Until #5134 each point was the detector's FPR + FNR at its
+  own Inclusion 0 cut (`smart_cut`, #4243), green once it stopped falling; that
+  rule is the eval's `cost` arm now.
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only
   **confident** flips count against it - items that sat clear of the cut

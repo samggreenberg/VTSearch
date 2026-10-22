@@ -128,7 +128,7 @@
 
   &:last-child { border-bottom: none; }
   &:hover:not(:disabled) { background: var(--bg-subtle); }
-  &:disabled { opacity: 0.55; cursor: wait; }
+  &:disabled { opacity: var(--opacity-disabled); cursor: wait; }
 }
 
 .vfb-row--selected {

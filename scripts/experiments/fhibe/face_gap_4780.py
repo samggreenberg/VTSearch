@@ -112,7 +112,7 @@ def _ranks(s) -> np.ndarray:
 def frames(cells_dir: Path, dataset: str) -> pd.DataFrame:
     """Each person's final and ceiling ranking: the positives' test ranks, from ``task_*__rankframes.csv``."""
     rows = []
-    for f in sorted(cells_dir.glob("task_*__rankframes.csv")):
+    for f in sorted(cells_dir.glob("task_*__rankframes.csv*")):
         df = pd.read_csv(f, usecols=["dataset", "category", "kind", "n_test_pos", "test_pos_ranks"])
         df = df[(df["dataset"] == dataset) & df["kind"].isin(["last", "skyline_train_full"])]
         for r in df.itertuples():

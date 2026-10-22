@@ -74,19 +74,16 @@ def read_cell(path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
             m = m[m[col].isna() | m[col].astype(str).str.strip().isin(("", "nan", "None"))]
     if "pool_variant" in m.columns:
         m = m[m["pool_variant"].fillna("").astype(str).str.strip().isin(("", "max"))]
-    stem = path[: -len(".csv")]
-    pk = (
-        pd.read_csv(f"{stem}__picks.csv", usecols=lambda c: c in PICK_COLS)
-        if os.path.getsize(f"{stem}__picks.csv")
-        else None
-    )
+    stem, ext = path.rsplit(".csv", 1)  # ext "" or ".gz" (CALIB_CELLS_GZIP): the picks frame shares it
+    picks = f"{stem}__picks.csv{ext}"
+    pk = pd.read_csv(picks, usecols=lambda c: c in PICK_COLS) if os.path.getsize(picks) else None
     if pk is not None:
         pk = pk[pk["embedder"] == "siglip"]
     return m, pk if pk is not None else pd.DataFrame(columns=PICK_COLS)
 
 
 def load_arm(root: Path, date: str, arm: str, seeds: int, procs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    cells = sorted(f for f in glob.glob(f"{root}/{date}-band4482-{arm}-b1/results/cells/task_*.csv") if "__" not in f)
+    cells = sorted(f for f in glob.glob(f"{root}/{date}-band4482-{arm}-b1/results/cells/task_*.csv*") if "__" not in f)
     with Pool(procs) as pool:
         parts = pool.map(read_cell, cells, chunksize=16)
     steps = pd.concat([p[0] for p in parts if len(p[0])], ignore_index=True)

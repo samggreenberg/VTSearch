@@ -1,5 +1,6 @@
 import {
   afterRenderEffect,
+  booleanAttribute,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -97,16 +98,19 @@ export function toastyHintPlacement(
  * is what Toasty says.
  *
  * Each bubble carries "Hide this hint" and "Hide all hints" boxes, kept in the
- * user's settings through {@link HintsService}; a hint the user has hidden
- * renders nothing. When to show a hint at all is the caller's call: wrap it in
- * an `@if` that goes false the moment the user takes the step.
+ * user's settings through {@link HintsService}, unless it is not `hideable`;
+ * a hint the user has hidden renders nothing. When to show a hint at all is
+ * the caller's call: wrap it in an `@if` that goes false the moment the user
+ * takes the step.
  *
  * At most one hint is on screen at a time (#4807): a hint inside a dialog
  * (any `vt-modal` it is projected into, however deep) shows only while that
  * dialog is the topmost one open, and a hint on a view shows only while no
- * dialog is open. Inside a dialog the `anchor` may be left out: the hint is
- * then about the dialog box itself, standing below it (or beside it when the
- * box fills the window) with the bubble reaching right.
+ * dialog is open. A hint `aboveDialogs` (the offline banner's, #5149) shows
+ * whatever is open, and {@link HintsService} keeps every other hint off while
+ * it is up. Inside a dialog the `anchor` may be left out: the hint is then
+ * about the dialog box itself, standing below it (or beside it when the box
+ * fills the window) with the bubble reaching right.
  *
  * The host positions itself absolutely in its nearest positioned ancestor, so
  * drop it anywhere under a positioned container; the anchor may sit outside
@@ -144,6 +148,12 @@ export class ToastyHintComponent {
    *  fixing, sad when something went wrong. */
   readonly face = input<ToastyFace>('happy');
   readonly faceSrc = computed(() => TOASTY_FACES[this.face()]);
+  /** Whether the bubble offers "Hide this hint" and "Hide all hints". Off for
+   *  a hint shown while the server is unreachable, where a hide can't be saved. */
+  readonly hideable = input(true, { transform: booleanAttribute });
+  /** Shows over any dialog, rather than only while none is open: for a hint
+   *  on a surface that floats over them all (the offline banner). */
+  readonly aboveDialogs = input(false, { transform: booleanAttribute });
 
   private readonly hints = inject(HintsService);
   /** The dialog this hint is projected into, or `null` on a view. */
@@ -154,7 +164,9 @@ export class ToastyHintComponent {
     () => this.anchor() ?? this.modal?.box()?.nativeElement ?? null,
   );
   readonly reachWay = computed<ToastyHintReach>(() => this.reach() ?? (this.modal ? 'right' : 'left'));
-  readonly shown = computed(() => this.hints.isShown(this.hintId()) && topOpenModal() === this.modal);
+  readonly shown = computed(
+    () => this.hints.isShown(this.hintId()) && (this.aboveDialogs() || topOpenModal() === this.modal),
+  );
 
   /** Written from the after-render hook and the ResizeObserver callback
    *  (neither is a template event), so a signal so the host moves. */

@@ -356,7 +356,7 @@ write out with the hits. See [the line state](api/labeling.md#the-line-state).
 
 **A detector with too few labels runs as its typed query, or as the Goods'
 centroid, and the run says so.** Under the label quota (3 Goods and 4 Bads,
-or a Good and 16 Bads) there is no trained head, here as in the app's Test and
+or a Good and 16 Bads) there is no trained head, here as in the app's Tune and
 AutoFind (see [find-label](api/find.md#find-label-score--label-the-active-dataset)).
 A detector made from a typed query (its `text_query`, else its first `text`
 example) scores as that query's own set: each item's cosine to the query in
@@ -776,6 +776,7 @@ is there; each one is intended.
 | GC freeze after the preload (`VTSEARCH_GC_FREEZE`) | Yes | No | It keeps garbage-collection pauses out of interactive requests, and a run serves no requests. |
 | Stall diagnostics (GC-pause log, heartbeat watchdog, `VTSEARCH_STALL_*`, the diagnostics-bars log line) | Started | Not started | The bars measure request and phase latency on an interactive server (#3853); a run has neither. |
 | Web-UI admin overrides: `--solo-media-type`, `--solo-embedder`, `--hide-plugin`, `--support-email`, `--semantic-only`, `--autopilot-only` (flag, env var or settings key) | Shape the UI, the listing routes and, for `--semantic-only`, the create and import routes | Validated, so a bad value still exits 2, then inert: nothing headless reads them. `--hide-plugin` hides nothing from `--list-plugins`, and a hidden plugin can still be named with `--importer` / `--exporter`; `--semantic-only` does not refuse a patch or structural embedder; `--solo-embedder` does not choose the run's embedder | They control what a web user is offered. The person running the CLI names plugins and embedders explicitly, and hidden plugins stay callable by name on the server too. |
+| `autofind_export_enabled` (a user's **Export results when AutoFind finishes**) | Off pauses the AutoFind exporter for that user's web runs | Not read: without `--exporter`, a run still falls back to `autofind_exporter` | On the command line the exporter is where the run's results go, not an alert sent alongside them. |
 | `--on-dataset-imported` / `VTSEARCH_ON_DATASET_IMPORTED` | Called after every import a user starts from the web app | The flag's module is imported (a typo exits 2), but the hook never fires. The variable is not read | The hooks are for imports a user waits on in the web app ([EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)). |
 | Login: `--login` on the server; `--user` + `--api-key` headless | `--login` activates the provider; `--user` and `--api-key` are ignored | `--user` + `--api-key` authenticate against the same `data/api_keys.json`; `--login` is ignored | The server authenticates each request; a run authenticates once, as the user it runs as. |
 | `--port`, `VTSEARCH_PORT`, the single-instance lock, the port preflight, the dev server's SSE cap | Applied | None | A run binds no port and takes no lock, so it can run beside a server on the same data directory. |
@@ -892,7 +893,9 @@ python app.py --login api_key    # Bearer-key auth against data/api_keys.json
 ```
 
 - **`trivial`** shows a username prompt (no password) and tracks the user via a
-  cookie; useful for low-stakes multi-user setups.
+  cookie; useful for low-stakes multi-user setups. Without `VTSEARCH_SECRET_KEY`
+  the cookie is signed with a random per-process key, so users sign in again
+  after a restart (see [DEPLOYMENT.md § Security](DEPLOYMENT.md#security)).
 - **`api_key`** authenticates each request via an `Authorization: Bearer <key>`
   header, checking the key against `data/api_keys.json`. This is the same key
   store the CLI's `--user` + `--api-key` flags use (see [Which user's AutoFind
@@ -906,7 +909,9 @@ who only ever look at one media type (e.g. images, optionally pulled
 in via converters from videos/documents). When set, the dataset
 importer and new-detector flows hide their mediaType pickers and lock
 to this type, the converter list filters to converters whose output is
-this type, and the type's default embedder is warmed at startup:
+this type, the read-only fields that could only name this type (Find
+Results, the metadata panes, the Dashboard's Type columns, …) drop out,
+and the type's default embedder is warmed at startup:
 
 ```bash
 python app.py --solo-media-type image
@@ -1050,7 +1055,7 @@ available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
 
-**Autopilot only** (`--autopilot-only`): keep Train and Test on their
+**Autopilot only** (`--autopilot-only`): keep Train and Tune on their
 Autopilot tabs, for a deployment whose users should only see the guided
 flow:
 
@@ -1058,7 +1063,7 @@ flow:
 python app.py --autopilot-only
 ```
 
-Train loses its Manual tab and Test its Review tab, and neither view
+Train loses its Manual tab and Tune its Review tab, and neither view
 renders a tab bar. Like `--semantic-only`, this is a **server-wide
 override** that can only turn the lock on: there is no
 `--no-autopilot-only`, the persisted `autopilot_only` setting can turn it
@@ -1066,7 +1071,7 @@ on too, and neither is editable via the Settings dialog or the settings
 API (the Settings ▸ Server tab reports it). The env-var equivalent is
 `VTSEARCH_AUTOPILOT_ONLY`; an explicit flag wins over it. See
 [`autopilot_only`](DEPLOYMENT.md#server-tier--datasettingsjson) for what
-it means for Test's Review actions, and for a detector Autopilot can't
+it means for Tune's Review actions, and for a detector Autopilot can't
 start.
 
 **Run a function when an import finishes** (`--on-dataset-imported

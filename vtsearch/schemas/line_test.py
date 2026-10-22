@@ -1,4 +1,4 @@
-"""Schemas for Test mode's test of the line (#4524).
+"""Schemas for Tune's test of the line (#4524).
 
 Every ``/api/line-test`` verb (``vtsearch/routes/line_test.py``) answers with
 :class:`LineTestResponseSchema`: the balance's state and the line it draws,
@@ -106,6 +106,21 @@ class LineTestBudgetsSchema(Schema):
     alpha = fields.Float(required=True)
 
 
+class LineTestAheadSchema(Schema):
+    """The next round, dealt ahead for both ways the round's one pending pick can be voted (#5116).
+
+    The vote on ``id`` installs ``good`` if it is a match and ``bad`` if not;
+    an empty list is a vote that ends the test.  The two name the same picks
+    when both outcomes send the next round to the same band.  For fetching
+    their media ahead of the vote, not for showing: only the one the vote
+    names becomes the round, and the other is discarded unseen.
+    """
+
+    id = fields.Integer(required=True)
+    good = fields.List(fields.Integer(), required=True)
+    bad = fields.List(fields.Integer(), required=True)
+
+
 class LineTestStateSchema(Schema):
     """A test of the line, as :meth:`vtscore.training.thresholds.LineTest.as_dict` reports it."""
 
@@ -123,6 +138,9 @@ class LineTestStateSchema(Schema):
     # The picks awaiting a vote, in draw order (random).  They are a sample,
     # not the ranking: a client must not show them with a rank.
     picks = fields.List(fields.Integer(), required=True)
+    # Once one pick is left, the round its vote deals either way; ``null``
+    # otherwise (#5116).
+    ahead = fields.Nested(LineTestAheadSchema, required=True, allow_none=True)
     labelled = fields.Integer(required=True)
     bands = fields.List(fields.Nested(LineTestBandSchema), required=True)
     # ``null`` when there is nothing to test.

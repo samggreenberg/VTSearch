@@ -8,7 +8,9 @@
     @if (data().dataset_name) {
       <span><strong>Dataset:</strong> {{ data().dataset_name }}</span>
     }
-    <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+    @if (showMediaType) {
+      <span><strong>Media Type:</strong> {{ data().media_type }}</span>
+    }
     <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
     @if (exportSides === 'good') {
       <span><strong>Good Results:</strong> {{ goodCount }}</span>
@@ -69,8 +71,22 @@
     </div>
   }
 
+  <!-- Browse, the way in to the results (#5102): large and centred over the
+       list it maps, rather than one small button between Close and Export. -->
+  <div class="browse-lead">
+    <button
+      class="btn btn--primary btn--lg"
+      (click)="browse()"
+      [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
+      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
+    >
+      <vt-icon type="eye" [size]="18"></vt-icon>
+      Browse
+    </button>
+  </div>
+
   <!-- Results table, or Browse building its map: built here, behind a bar
-       with a Cancel, as the Test view's Browse does, and opened only once the
+       with a Cancel, as the Tune view's Browse does, and opened only once the
        map is ready. -->
   <div class="results-table-wrapper">
     @if (browsePrep.preparing()) {
@@ -180,16 +196,8 @@
     ></vt-clipboard-copy>
   </div>
 
-  <div class="export-actions" modal-footer>
+  <div class="form-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Close</button>
-    <button
-      class="btn btn--secondary"
-      (click)="browse()"
-      [disabled]="!!browseBlocker || browseStarting() || browsePrep.preparing()"
-      [title]="browseBlocker || 'Open the listed items in Browse, laid out as a map of their own'"
-    >
-      Browse
-    </button>
     @if (activeExporter; as exp) {
       <button
         class="btn btn--primary"

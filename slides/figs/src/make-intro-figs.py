@@ -1570,8 +1570,11 @@ EMBED_WORD = "embed"
 #: say it is a string and not a label the corpus carries.
 QUERY_TEXT = '"book"'
 
-#: The four pages of the build. See `embed_flow_fig`.
+#: The four beats of the drawing, and the first one the deck shows: the pile of
+#: photographs alone was a page of its own until the owner cut it (#5171), so
+#: the slide opens on the pile already going into the cube. See `embed_flow_fig`.
 EMBED_FLOW_STAGES = 4
+EMBED_FLOW_FIRST = 2
 
 #: The block arrows' shaft width and head, in units.
 FLOW_ARROW_W, FLOW_HEAD_W, FLOW_HEAD_L = 0.52, 0.82, 0.38
@@ -1830,8 +1833,10 @@ def embed_flow_fig() -> None:
     comes out as a point in the same space. That is the whole reason the seed
     works, and the deck had been assuming it.
 
-    Four pages, one per beat, because the last beat is the one that carries the
-    argument and it needs the room looking at the cube when it arrives. Every
+    Three pages, one per beat after the first, because the last beat is the
+    one that carries the argument and it needs the room looking at the cube
+    when it arrives. The first beat, the photographs alone, is drawn on every
+    page but never shown by itself (`EMBED_FLOW_FIRST`, #5171). Every
     page is the final drawing with the later beats removed, and nothing moves
     between them (`slides/STYLE.md`) — the shared untrimmed canvas gets that
     for free. The last page does *cover* a little of the cloud, which is the
@@ -1839,11 +1844,11 @@ def embed_flow_fig() -> None:
     the space is crowded, and a gap left open for it three pages early is a
     hole the room would spend those pages wondering about.
     """
-    for stage in range(1, EMBED_FLOW_STAGES):
+    for page, stage in enumerate(range(EMBED_FLOW_FIRST, EMBED_FLOW_STAGES), 1):
         save(
             _embed_flow_stage(stage),
             OUT,
-            f"embed-flow.build{stage}.webp",
+            f"embed-flow.build{page}.webp",
             column=FULL_BLEED,
             tight=False,
         )
@@ -1942,8 +1947,129 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Squaring the Cube — UMAP flattens the cube into the map Browse draws (#5132)
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: Embed-time Stories' first page, with a second arrow out of the cube,
+#: "flatten", by UMAP, into a flat square holding the same dots in the same
+#: pattern (owner, #5132). Three objects and two arrows do not fit across the
+#: slide at Embed-time Stories' scale, so the drawing is that one at
+#: `UMAP_SCALE` of its size, type and all: the canvas spans more units, and every
+#: point size is scaled to match (22px for the word in an arrow, over the type
+#: floor).
+UMAP_SCALE = 0.714
+UMAP_CANVAS = (CANVAS[0] / UMAP_SCALE, CANVAS[1] / UMAP_SCALE)
+#: The row's vertical centre, the left margin, and the flat square's side: the
+#: whole cube's, front face and depth together, so the square is the whole cube
+#: flattened and stands level with it, every dot where it was (owner, #5132:
+#: not the front face, with the dots squeezed into it).
+UMAP_ROW_Y = 5.6
+UMAP_LEFT = 1.0
+UMAP_SQUARE = CUBE_SIDE + CUBE_DEPTH
+#: The second arrow says what it does and is labelled with what does it, as the
+#: first says "embed" over "SigLIP" (owner, #5132).
+FLATTEN_WORD = "flatten"
+FLATTEN_BY = "UMAP"
+UMAP_STAGES = 2
+
+
+def _umap_arrow_len(label: str) -> float:
+    """The shortest block arrow whose word fits clear of its head, in this canvas's units."""
+    size = FLOW_ARROW_PT * UMAP_SCALE
+    width = TextPath((0, 0), label, size=size, prop=FontProperties(family="DejaVu Sans")).get_extents().width
+    return width / (UNIT_PT * UMAP_SCALE) + 2 * FLOW_HEAD_L
+
+
+def _umap_flat() -> np.ndarray:
+    """The cube's dots, flattened: each exactly where the cube drawing puts it, in the square of its extent.
+
+    The square is the whole cube squashed along the line of sight, so every dot
+    keeps the coordinates it has in the cube (owner, #5132: the room looks at the
+    two side by side, and a dot that moved reads as a different dot). The two
+    corners the box does not reach, top left and bottom right, stay as empty
+    as they are in the cube. A real UMAP keeps neighbours rather than a view,
+    and can move things; this paints the picture rather than the method.
+    """
+    flat = np.array([_cube_project(p) for p in _flow_field_3d()])
+    radius = FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * 0.5)
+    gaps = [np.hypot(*(flat[i] - flat[j])) for i in range(len(flat)) for j in range(i + 1, len(flat))]
+    assert min(gaps) > 2 * radius + 0.02, "two flattened dots touch"
+    assert flat.min() > radius and flat.max() < UMAP_SQUARE - radius, "a flattened dot crosses the square's edge"
+    return flat
+
+
+def umap_flow_fig() -> None:
+    """Photographs into the cube, as Embed-time Stories drew them, and then UMAP out of it, into a square.
+
+    Two pages: the cube as Embed-time Stories' first page left it; then the
+    second arrow and the square, the whole cube flattened, the same sixty dots
+    at the same coordinates (`_umap_flat`).
+    """
+    for stage in range(1, UMAP_STAGES):
+        save(_umap_flow_stage(stage), OUT, f"umap-flow.build{stage}.webp", column=FULL_BLEED, tight=False)
+    save(_umap_flow_stage(UMAP_STAGES), OUT, "umap-flow.webp", column=FULL_BLEED, tight=False)
+
+
+def _umap_flow_stage(stage: int) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, UMAP_CANVAS[0])
+    ax.set_ylim(0, UMAP_CANVAS[1])
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+    stack_w = CARD_W + (CARDS - 1) * CARD_STEP
+    stack_h = CARD_H + (CARDS - 1) * CARD_STEP
+    cube_w = CUBE_SIDE + CUBE_DEPTH
+    # Both arrows one length, the longer word's, so the two steps read as alike.
+    arrow_len = max(_umap_arrow_len(word) for word in (EMBED_WORD, FLATTEN_WORD)) + 0.2
+    stack_x = UMAP_LEFT
+    embed_x0 = stack_x + stack_w + FLOW_GAP
+    cube_x = embed_x0 + arrow_len + FLOW_GAP
+    flatten_x0 = cube_x + cube_w + FLOW_GAP
+    square_x = flatten_x0 + arrow_len + FLOW_GAP
+    assert square_x + UMAP_SQUARE <= UMAP_CANVAS[0] - 0.5, "the square runs off the slide"
+    y = UMAP_ROW_Y
+    cube_y = y - CUBE_SIDE / 2
+
+    name_pt = FLOW_NAME_PT * UMAP_SCALE
+
+    def name(x: float, bottom: float, text: str) -> None:
+        ax.text(x, bottom - NAME_DROP, text, ha="center", va="baseline", fontsize=name_pt, color=INK, zorder=4)
+
+    def arrow(x0: float, word: str, by: str) -> None:
+        """A block arrow with *word* in it and what does that, *by*, under it."""
+        _block_arrow(ax, (x0, y), (x0 + arrow_len, y), word)
+        # `_block_arrow` sets its word at Embed-time Stories' size; this canvas draws everything smaller.
+        ax.texts[-1].set_fontsize(FLOW_ARROW_PT * UMAP_SCALE)
+        ax.text(x0 + arrow_len / 2, y - 0.95, by, ha="center", va="center", fontsize=name_pt, color=INK, zorder=4)
+
+    _photo_stack(ax, stack_x, y - stack_h / 2)
+    name(stack_x + stack_w / 2, y - stack_h / 2, "Photos")
+    arrow(embed_x0, EMBED_WORD, "SigLIP")
+    _wire_cube(ax, cube_x, cube_y)
+    for point in _flow_field_3d():
+        dx, dy = _cube_project(point)
+        _flow_dot(ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1 - point[2]))
+    name(cube_x + cube_w / 2, cube_y, "768-d")
+
+    if stage >= 2:
+        arrow(flatten_x0, FLATTEN_WORD, FLATTEN_BY)
+        square_y = cube_y
+        ax.add_patch(plt.Rectangle((square_x, square_y), UMAP_SQUARE, UMAP_SQUARE, facecolor="none", edgecolor=WIRE,
+                                   linewidth=1.4, zorder=2))  # fmt: skip
+        # Every dot at the size of one at the cube's mid-depth: the square has no depth left to shrink them by.
+        radius = FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * 0.5)
+        for u, v in _umap_flat():
+            _flow_dot(ax, square_x + u, square_y + v, radius, 5)
+        name(square_x + UMAP_SQUARE / 2, square_y, "2-d")
+    return fig
+
+
 if __name__ == "__main__":
     vote_boundary_fig()
     second_cut_fig()
     embed_flow_fig()
+    umap_flow_fig()
     print("wrote figures to", OUT)

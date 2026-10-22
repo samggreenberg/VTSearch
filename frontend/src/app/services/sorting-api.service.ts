@@ -154,8 +154,13 @@ export class SortingApiService {
     );
   }
 
-  getVotes(): Observable<VotesResponse> {
-    return getVotes(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  /**
+   * The vote piles. `'verified'` is Find's scope (#5115): the items the human
+   * has verified, and nothing on the rest, which in Find carry the detector's
+   * presumed label (megabytes on a large dataset). Omitted, every vote.
+   */
+  getVotes(scope?: 'all' | 'verified'): Observable<VotesResponse> {
+    return getVotes(this.http, this.config.rootUrl, scope ? { scope } : undefined).pipe(map((r) => r.body));
   }
 
   clearVotes(): Observable<OkResponse> {
@@ -328,14 +333,6 @@ export class SortingApiService {
     return addTextsortSuggestionRoute(this.http, this.config.rootUrl, { body: { text } }).pipe(
       map((r) => r.body),
     );
-  }
-
-  /** ``/api/labeling-progress`` reads global state (votes, label history) and
-   *  takes no request body; the spec's ``ApiLabelingProgressPost$Params``
-   *  reflects that.  Production callers were removed; the method is kept for
-   *  parity with the legacy surface. */
-  getLabelingProgress(): Observable<unknown> {
-    return this.http.post('/api/labeling-progress', {});
   }
 
   /** The left panel polls this every 2 s for the whole labeling session, and

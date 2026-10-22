@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DatasetCardComponent } from './dataset-card.component';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
@@ -35,6 +36,14 @@ describe('DatasetCardComponent', () => {
       ],
     }).compileComponents();
 
+    // The Type cell's icon comes from the served media-type registry, which
+    // the dashboard loads; seed it as the backend serves it.
+    TestBed.inject(MediaTypeCapabilityService).infos.set([
+      { type_id: 'audio', name: 'Audio', icon: 'audio' },
+      { type_id: 'face', name: 'Face', icon: 'face' },
+      { type_id: 'point_cloud', name: 'Point Cloud', icon: 'cubes' },
+    ]);
+
     fixture = TestBed.createComponent(DatasetCardComponent);
     component = fixture.componentInstance;
     fixture.componentRef.setInput('dataset', { ...mockDataset });
@@ -58,6 +67,25 @@ describe('DatasetCardComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('Audio');
     expect(el.querySelector('.type-icon')).toBeTruthy();
+  });
+
+  // #5178: the cell once hardcoded five types' SVGs, so Face rows had none.
+  it('shows the served icon for every media type, face and a third-party one included', async () => {
+    for (const mediaType of ['face', 'point_cloud']) {
+      fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: mediaType });
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.type-icon'), mediaType).toBeTruthy();
+      expect(component.typeIcon).toBe(mediaType === 'face' ? 'face' : 'cubes');
+    }
+  });
+
+  it('shows no icon for a type the registry does not list', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: 'mystery' });
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('Mystery');
+    expect(el.querySelector('.type-icon')).toBeNull();
   });
 
   it('should display item count', () => {

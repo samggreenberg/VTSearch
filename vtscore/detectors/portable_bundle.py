@@ -63,7 +63,7 @@ _PROJECT_URL = "https://github.com/samggreenberg/vtsearch"
 
 #: Embedder types whose scoring can't be represented as a scoring-only ONNX
 #: graph at all, keyed to the reason.  Structural (SIFT/VLAD) detectors gate a
-#: stage-1 VLAD-space MLP behind a stage-2 RANSAC geometric-verification pass
+#: stage-1 VLAD-space head behind a stage-2 RANSAC geometric-verification pass
 #: matched against raw SIFT-keypoint templates extracted from Good-vote
 #: training media (see ``vtscore/training/structural_similarity.py``).  That
 #: verification pass isn't an ONNX-representable forward pass, and the
@@ -82,10 +82,10 @@ _NOT_EXPORTABLE_REASONS = {
 
 #: Embedder types that export in a legitimate but degraded mode, keyed to the
 #: manifest/README caveat describing the degradation.  Patch (DINOv2/v3, EUPE)
-#: detectors train their MLP on per-region vectors and score by max-pooling
+#: detectors train their head on per-region vectors and score by max-pooling
 #: over a media's region tree; the bundle has no way to ship that tree
 #: extraction, so it scores the whole item as a single vector instead - a
-#: legitimate subset of what the MLP saw during training (the untouched
+#: legitimate subset of what the head saw during training (the untouched
 #: whole-image vector is one of the training rows), just without the
 #: best-sub-region search VTSearch itself does.
 _DEGRADED_EXPORT_CAVEATS = {

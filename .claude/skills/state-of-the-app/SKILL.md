@@ -136,8 +136,17 @@ same edit.
     the GRID. `/expscratch/sgreenberg/sota-1016/drive.sh` does it in two lanes: cpu arrays (pack jobs past seed 34)
     and up to 4 V100 packs. It claims seeds in order while each would end by the deadline, and claimed seeds run
     out. 2026-10-16 reached 45 seeds.
-  - **Check `df /expscratch/$USER` first.** A Binary seed writes ~0.6 GB into each preset's dir, uncompressed. The
-    2026-10-16 run filled the 1 TB volume at 04:40 and lost seeds 45–49 (#4953).
+  - **Check `df /expscratch/$USER` first.** Cells are gzipped by default since #5092 (`task_NNNN.csv.gz`; set
+    `CALIB_CELLS_GZIP=0` only to debug). Before that a Binary seed wrote ~0.6 GB of plain cells into each preset's
+    dir, and the 2026-10-16 run filled the 1 TB volume at 04:40 and lost seeds 45–49 (#4953). A driver that counts
+    finished cells must count `task_NNNN.csv*`, not `.csv`. An older run's plain cells convert in place with
+    `calibration/gzip_cells.py` (dry run unless `--apply`).
+- **Prevalence is a scenario the review runs on purpose (owner, 2026-10-16, #4959).** Every coco_better cell sits
+  at the bench's 0.44% (about 100 positives a class and size), so a review that wants other prevalences runs them
+  as session sets of their own, each named by its number: `SOTA_POOL_PREVALENCE=0.01` (the user's pool thinned to
+  1%; the withheld half stays at 0.44%, so a cell pairs with the review's same seed) and `SOTA_CELL_PREVALENCE=0.001`
+  (the whole cell thinned before the split; `text_baseline.py` thins the same way). `viewer_prevalence.sh <date> <out> <beta>` puts a review beside its scenarios, one page per
+  preset, opening on each dataset; they are committed as `viewer_prevalence_b025|b1|b4.html` beside `viewer.html`.
 - **Shipped defaults** for everything else: the text opening (refused
   otherwise), the fused threshold, and no variant arms.
 - **Scale up in one step (owner, 2026-09-23):** settle the presentation on a
@@ -593,6 +602,8 @@ things keep a report on its link:
   the viewer has no opening rule, and the report says so in one line.
   Without a committed viewer, the `viewer.html` link serves a page saying the
   newest report has none (it never falls back to an older report's viewer).
+- **Companion pages:** any `viewer_<name>.html` beside the newest report is published beside its `viewer.html`
+  and linked from the index under its name (#4959's prevalence pages).
 - **A new kind** (a future modality) needs nothing here: its first report
   creates `sota/<kind>/`.
 

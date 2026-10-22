@@ -87,7 +87,8 @@ describe('SettingsModalComponent', () => {
   // Settle runs ngOnInit, whose forkJoin issues the four parallel GETs (plain
   // HTTP subscribes don't hold the app unstable, so whenStable resolves before
   // the flush). Settle again afterwards so the resolved signals repaint.
-  async function flushInit(): Promise<void> {
+  // `extraSettings` layers server-tier keys (e.g. `solo_media_type`) on top.
+  async function flushInit(extraSettings: Record<string, unknown> = {}): Promise<void> {
     await settleZoneless(fixture);
     // ngOnInit also refreshes HuggingFace sign-in status for the HuggingFace tab.
     httpMock
@@ -101,7 +102,7 @@ describe('SettingsModalComponent', () => {
     const versionReq = httpMock.expectOne('/api/version');
     // Deep-clone so per-test component mutations (onGridIconSizeChange, etc.)
     // never leak back into the shared mockSettings constant.
-    settingsReq.flush(structuredClone(mockSettings));
+    settingsReq.flush({ ...structuredClone(mockSettings), ...extraSettings });
     mediaTypesReq.flush(mockMediaTypes);
     embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
@@ -123,6 +124,32 @@ describe('SettingsModalComponent', () => {
     await flushInit();
     expect(component.mediaTypes().length).toBe(2);
     expect(component.activeViewTab()).toBe('audio');
+  });
+
+  describe('the per-type tab bars (#5106)', () => {
+    const tabNames = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).map((el) =>
+        el.textContent?.trim(),
+      );
+
+    it('offers a tab per registered type on a server open to every type', async () => {
+      await flushInit();
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
+      expect(tabNames()).toEqual(['Sound', 'Image']);
+    });
+
+    it('drops the bar on a server locked to one type, and settles on that type', async () => {
+      await flushInit({ solo_media_type: 'image' });
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['image']);
+      expect(component.activeViewTab()).toBe('image');
+      expect(component.activeBrowseTab()).toBe('image');
+      expect(tabNames()).toEqual([]);
+    });
+
+    it('keeps every tab when the lock names a type the registry lacks', async () => {
+      await flushInit({ solo_media_type: 'video' });
+      expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
+    });
   });
 
   it('should update theme and save', async () => {
@@ -224,6 +251,56 @@ describe('SettingsModalComponent', () => {
     const req = httpMock.expectOne('/api/settings');
     expect(req.request.body.autofind_cli_delete_dataset).toBe(true);
     req.flush(mockSettings);
+  });
+
+  describe('alert switches (#5170)', () => {
+    function checkbox(label: string): HTMLInputElement | undefined {
+      return [...(fixture.nativeElement as HTMLElement).querySelectorAll('.checkbox-row')]
+        .find((row) => row.textContent?.includes(label))
+        ?.querySelector('input[type="checkbox"]') as HTMLInputElement | undefined;
+    }
+
+    async function openTab(tab: 'imports' | 'autofind', extraSettings: Record<string, unknown>): Promise<void> {
+      await flushInit(extraSettings);
+      component.activeSettingsTab.set(tab);
+      await settleZoneless(fixture);
+      // Each tab loads its picker lists on init; what they hold does not matter here.
+      httpMock.match(() => true).forEach((req) => req.flush('', { status: 500, statusText: 'unused' }));
+      await settleZoneless(fixture);
+    }
+
+    it('offers import alerts only on a server with import hooks', async () => {
+      await openTab('imports', { import_hooks_configured: false, import_alerts_enabled: true });
+      expect(checkbox('Alert me when an import finishes')).toBeUndefined();
+    });
+
+    it('saves the import-alerts checkbox', async () => {
+      await openTab('imports', { import_hooks_configured: true, import_alerts_enabled: true });
+      const box = checkbox('Alert me when an import finishes') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      box.click();
+      await settleZoneless(fixture);
+      const req = httpMock.expectOne('/api/settings');
+      expect(req.request.body.import_alerts_enabled).toBe(false);
+      req.flush(mockSettings);
+    });
+
+    it('offers to pause the AutoFind export only with an exporter picked', async () => {
+      await openTab('autofind', { autofind_exporter: '', autofind_export_enabled: true });
+      expect(checkbox('Export results when AutoFind finishes')).toBeUndefined();
+    });
+
+    it('pauses the AutoFind export and keeps the exporter', async () => {
+      await openTab('autofind', { autofind_exporter: 'email_smtp', autofind_export_enabled: true });
+      const box = checkbox('Export results when AutoFind finishes') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      box.click();
+      await settleZoneless(fixture);
+      const req = httpMock.expectOne('/api/settings');
+      expect(req.request.body.autofind_export_enabled).toBe(false);
+      expect(req.request.body.autofind_exporter).toBe('email_smtp');
+      req.flush(mockSettings);
+    });
   });
 
   it('should default the Graphics pulldown to auto when the setting is unset', async () => {

@@ -26,8 +26,8 @@ describe('ProgressModalComponent', () => {
     votingIterations$ = new Subject<VotingIterationsResponse>();
     rendered = [];
     const chartsStub = {
-      renderErrorCostChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
-        rendered.push({ chart: 'error-cost', canvas, points }),
+      renderSmartChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
+        rendered.push({ chart: 'smart', canvas, points }),
       renderStabilityChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
         rendered.push({ chart: 'stability', canvas, points }),
       renderDiversityChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
@@ -99,7 +99,7 @@ describe('ProgressModalComponent', () => {
         job_id: 'abc',
         status: 'done',
         metric: 'smart',
-        error_cost: [{ num_labels: 5, error_cost: 0.5 }],
+        fbeta: [{ num_labels: 5, fbeta: 0.5 }],
       });
 
       await vi.advanceTimersByTimeAsync(50);
@@ -150,7 +150,7 @@ describe('ProgressModalComponent', () => {
         job_id: 'j1',
         status: 'done',
         metric: 'smart',
-        error_cost: [{ num_labels: 5, error_cost: 0.5 }],
+        fbeta: [{ num_labels: 5, fbeta: 0.5 }],
       });
 
       await vi.advanceTimersByTimeAsync(50);
@@ -225,7 +225,7 @@ describe('ProgressModalComponent', () => {
 
       httpMock.expectOne(isHistory).flush({
         metric: 'smart',
-        history: [{ num_labels: 5, error_cost: 0.5 }],
+        history: [{ num_labels: 5, fbeta: 0.5 }],
         complete: true,
       });
 
@@ -309,7 +309,7 @@ describe('ProgressModalComponent', () => {
 
     httpMock.expectOne(isHistory).flush({
       metric: 'smart',
-      history: [{ num_labels: 5, error_cost: 0.5 }],
+      history: [{ num_labels: 5, fbeta: 0.5 }],
       complete: true,
     });
     await settleZoneless(fixture);
@@ -320,7 +320,7 @@ describe('ProgressModalComponent', () => {
     const canvas = fixture.nativeElement.querySelector('canvas') as HTMLCanvasElement;
     expect(canvas).toBeTruthy();
     expect(rendered).toEqual([
-      { chart: 'error-cost', canvas, points: [{ num_labels: 5, error_cost: 0.5 }] },
+      { chart: 'smart', canvas, points: [{ num_labels: 5, fbeta: 0.5 }] },
     ]);
   });
 
@@ -358,7 +358,7 @@ describe('ProgressModalComponent', () => {
         job_id: 'j5',
         status: 'done',
         metric: 'smart',
-        error_cost: [],
+        fbeta: [],
       });
 
       await vi.advanceTimersByTimeAsync(50);

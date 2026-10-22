@@ -54,14 +54,92 @@
     @if (session.error()) {
       <p class="error-text" role="alert">{{ session.error() }}</p>
     }
-  } @else {
-    <div #stageEmpty class="stage-empty empty-state" role="status">
-      @switch (session.phase()) {
-        @case ('done') {
-          <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
-          <!-- What to do next is Toasty's to say (test-done, below; #4807). -->
+  } @else if (session.phase() === 'done') {
+    <!-- The verdict and its three exits, where the user just voted (#5100);
+         the numbers behind it stay in the right pane. -->
+    <div #stageDone class="stage-done">
+      <div class="done-column">
+        <div class="done-head" role="status">
+          <span class="done-icon" aria-hidden="true"><vt-icon type="check" [size]="24"></vt-icon></span>
           <p class="stage-heading">Test done</p>
+        </div>
+        <section class="verdict-card" aria-label="Verdict">
+          <h3 class="section-title">Verdict</h3>
+          @if (stale()) {
+            <p class="stale-note" role="note">
+              ⚠ Out of date: corrections were added to the detector after this test, so it has now seen the test set.
+              Score the collection again to test the retrained detector.
+            </p>
+          } @else if (moved()) {
+            <p class="stale-note" role="note">
+              ⚠ The line has moved since this test: it measured the top {{ session.test()?.line_count | number }}, and the
+              line keeps the top {{ lineCount() | number }} now.
+              <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
+            </p>
+          }
+          <p class="verdict">{{ verdict() }}</p>
+          <div class="exits">
+            <button
+              type="button"
+              class="btn btn--primary exit-btn"
+              (click)="moveToAutoFind.emit()"
+              title="Put this detector on the AutoFind list, so every dataset you import or run it over ships its matches unchecked, at this balance. The verdict above the button says what that is likely to ship."
+            >Move to AutoFind</button>
+            <button
+              type="button"
+              class="btn btn--secondary exit-btn"
+              (click)="addCorrections.emit()"
+              title="The line is not good enough yet: hand the picks you disagreed with to the detector and retrain it. This result is then out of date, since the detector has seen the test set."
+            >Add Corrections and retrain</button>
+          </div>
+
+          @if (presetRows().length) {
+            <h3 class="section-title" title="The same picks, read at the line each balance would draw on this collection. Pick one to move the Threshold there; nothing is re-scored.">Lean the Threshold</h3>
+            <table class="data-table stats-table presets">
+              <thead>
+                <tr>
+                  <th>Balance</th>
+                  <th class="num">Keeps</th>
+                  <th class="num">Right</th>
+                  <th>Found</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of presetRows(); track row.beta) {
+                  <tr [class.current]="row.current">
+                    <td>
+                      <button
+                        type="button"
+                        class="btn btn--toolbar preset-btn"
+                        [class.active]="row.current"
+                        [disabled]="row.current"
+                        [title]="presetTitle(row)"
+                        (click)="lean.emit(row.beta)"
+                      >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
+                    </td>
+                    <td class="num">{{ row.estimate!.count | number }}</td>
+                    <td class="num">{{ row.estimate!.precision.lo * 100 | number: '1.0-0' }}–{{ row.estimate!.precision.hi * 100 | number: '1.0-0' }}%</td>
+                    <td>{{ row.estimate!.found }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+        @if (session.error()) {
+          <p class="error-text" role="alert">{{ session.error() }}</p>
         }
+      </div>
+      <!-- Toasty stands by the verdict (#4807); the hint positions against
+           the centre panel, which is the positioned ancestor. -->
+      <vt-toasty-hint hintId="test-done" [anchor]="stageDone" reach="right">
+        The test is done. Click <strong>Move to AutoFind</strong> if the verdict is good enough, or open the
+        <strong>Review</strong> tab to check the list yourself.
+      </vt-toasty-hint>
+    </div>
+  } @else {
+    <div class="stage-empty empty-state" role="status">
+      @switch (session.phase()) {
         @case ('nothing') {
           <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
           <p class="stage-heading">Nothing to test</p>
@@ -78,14 +156,6 @@
       }
       @if (session.error()) {
         <p class="error-text" role="alert">{{ session.error() }}</p>
-      }
-      <!-- Toasty stands under the Test done note (#4807); the hint positions
-           against the centre panel, which is the positioned ancestor. -->
-      @if (session.phase() === 'done') {
-        <vt-toasty-hint hintId="test-done" [anchor]="stageEmpty" reach="right">
-          The test is done. Read the verdict on the right, or open the <strong>Review</strong> tab to check
-          the list yourself.
-        </vt-toasty-hint>
       }
     </div>
   }

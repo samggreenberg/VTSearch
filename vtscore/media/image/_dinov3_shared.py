@@ -7,7 +7,7 @@ in what they expose:
   storage, no region search.
 - ``dinov3_patch``  - same CLS vector plus a per-patch grid + HAC region
   tree; ~30× slower per image and ~100× more storage, but enables region
-  similarity and region-aware MLP scoring.
+  similarity and region-aware detector scoring.
 
 DINOv3 weights are **gated** on Hugging Face - running either variant
 requires the ``HF_TOKEN`` env var to be set to a user token that has

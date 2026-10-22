@@ -62,7 +62,7 @@ def _trio_medias() -> dict[int, dict]:
 
 
 def _fires_on_dim1_mlp() -> nn.Module:
-    """MLP whose logit is high on e1 and low on e0 (score >0.5 only for e1)."""
+    """Head whose logit is high on e1 and low on e0 (score >0.5 only for e1)."""
     linear = nn.Linear(DIM, 1)
     with torch.no_grad():
         linear.weight.copy_(torch.tensor([[0.0, 10.0, 0.0, 0.0]]))
@@ -88,10 +88,10 @@ class TestFindScoreEmbedderResolution:
 
 class TestSelectScorerUsesScoreEmbedder:
     def test_live_selected_when_live_embedder_matches_score_not_primary(self):
-        # The live MLP trained in dinov3_patch (the patch slot / score embedder),
+        # The live head trained in dinov3_patch (the patch slot / score embedder),
         # which differs from the dataset primary (siglip).  The old code compared
         # against the primary and would have fallen through to cold; the fix
-        # compares against the score embedder and keeps the live MLP.
+        # compares against the score embedder and keeps the live head.
         dc = {
             "name": "d",
             "live_mlp": _fires_on_dim1_mlp(),
@@ -116,7 +116,7 @@ class TestSelectScorerUsesScoreEmbedder:
 
 class TestScoreDatasetRoutesLiveMatrix:
     def test_live_mlp_scored_against_patch_slot_not_primary(self, client, monkeypatch):
-        """`_score_dataset` builds the live matrix in the MLP's embedder space.
+        """`_score_dataset` builds the live matrix in the head's embedder space.
 
         Scored in dinov3_patch, media 1 (e1) is Good and media 2 (e0) is Bad. A
         matrix built from the primary (siglip) vectors would flip both verdicts,

@@ -33,6 +33,7 @@ import pandas as pd
 from _cells_paths import (
     SIDE_FRAME_SUFFIXES,  # noqa: F401 - re-exported; callers import it from here
     main_frame_files,
+    open_frame,  # noqa: F401 - re-exported; callers import it from here
     side_frame_files,  # noqa: F401 - re-exported; callers import it from here
 )
 
@@ -67,7 +68,7 @@ CHECK_PHASE = "check"
 
 
 def check_rows(df: pd.DataFrame) -> pd.Series:
-    """True on the rows of the spot check a floor-era run ends on.
+    """True on the rows of the spot check a run ends on.
 
     Since #4272 the default arm checks its line once the voting steps are spent.
     The check's rounds are cast as votes and each emits a row with ``phase ==
@@ -261,12 +262,11 @@ def load_arm(arm_dir: Path, *, keep_check: bool = False) -> tuple[pd.DataFrame, 
     unreadable ones, and the zero-byte ones, because an analysis that silently
     drops cells is how a disk incident becomes a wrong verdict.
 
-    Written for the #2847 spike study and lived in ``analyze_spikes.py`` until
-    #3409 moved it here.  It had become the de-facto arm loader for six callers
-    across five studies -- including ``curves.py``, which every study's figure
-    pair goes through, so the *shared* layer was importing a *study*.  Nothing
-    about it was ever spike-specific; ``analyze_spikes`` re-exports the name so
-    its own callers are unaffected.
+    Written for the #2847 spike study, it is the arm loader most studies here
+    use -- including ``curves.py``, which every study's figure pair goes
+    through -- so it lives in the shared layer rather than in a study (#3409).
+    Nothing about it is spike-specific; ``analyze_spikes`` re-exports the name
+    for its own callers.
 
     The reading and the three drop counts are :func:`load_cells`'; what is left
     here is the base-row filter, which is this loader's own contract.  A cell
@@ -276,8 +276,8 @@ def load_arm(arm_dir: Path, *, keep_check: bool = False) -> tuple[pd.DataFrame, 
     #2847's grid size and is where a long-horizon run with hundreds of cells
     dies, AFTER the cells have been paid for.
 
-    **The spot check is set apart too** (#4364).  A floor-era run ends on its
-    spot check, whose rows (:func:`check_rows`) carry no variant tag and so pass
+    **The spot check is set apart too** (#4364).  A run that checks its line
+    ends on its spot check, whose rows (:func:`check_rows`) carry no variant tag and so pass
     the base-row filter.  Every caller reads the frame as clicks: "final" is the
     last row, and ``curves.py`` and ``viewer.py`` draw one point per row.  So
     the check rows are dropped by default, counted in ``check_rows``, and

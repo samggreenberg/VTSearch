@@ -24,8 +24,11 @@ data/
 *.swp
 *.swo
 
-# Tests (not needed at runtime)
+# Tests (not needed at runtime). Every top-level tests*/ tree belongs here;
+# tests_lib/meta/test_check_dockerfiles.py fails when one is missing.
 tests/
+tests_lib/
+tests_shared/
 run-tests.sh
 
 # Frontend node_modules and build cache; the Dockerfile's frontend

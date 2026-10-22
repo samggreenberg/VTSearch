@@ -8,6 +8,7 @@ import { inject } from '@angular/core';
 import { catchError, tap, throwError } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
 import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
+import { PairRecoveryService } from '../services/pair-recovery.service';
 import { ErrorContext, ToastService } from '../services/toast.service';
 
 /**
@@ -49,11 +50,17 @@ export const SKIP_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
  * `net::ERR_CONNECTION_REFUSED` (the browser logs those itself for every
  * real failed fetch; JS cannot mute them). Raw network errors (status 0) no
  * longer raise a toast — the offline banner is their single surface.
+ *
+ * Every failed response is offered to {@link PairRecoveryService} first, even
+ * one that opted out of the toast, since any request can be the first to find
+ * that the backend has lost the active pair. A 409 that service answers by
+ * loading the pair again (#5155) raises no toast.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const ctx = inject(ActiveContextService);
   const connection = inject(ConnectionStateService);
+  const pairRecovery = inject(PairRecoveryService);
 
   // Circuit breaker: while offline, suppress every request except the
   // recovery probe. Returns a synthetic status-0 error so callers'
@@ -71,6 +78,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
     );
   }
 
+  // Read as the request goes out: see `PairRecoveryService.epoch`.
+  const sentEpoch = pairRecovery.epoch;
   return next(req).pipe(
     tap((event) => {
       // Any full response proves the backend is reachable.
@@ -89,7 +98,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // A non-zero HTTP status means the server answered, so it is reachable
       // even though this request failed — clear any pending offline tally.
       connection.recordSuccess();
-      if (req.context.get(SKIP_ERROR_TOAST)) {
+      const recovering = pairRecovery.absorb(err, sentEpoch);
+      if (recovering || req.context.get(SKIP_ERROR_TOAST)) {
         return throwError(() => err);
       }
       const parsed = parseErrorBody(err);

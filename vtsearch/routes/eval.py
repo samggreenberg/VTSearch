@@ -1,6 +1,6 @@
 """Blueprint for evaluation and labeling progress routes.
 
-Migrated to ``flask_smorest`` so the routes are described in
+Built on ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``. Schema-level
 failures (missing ``metric`` / ``job_id``, invalid metric value) surface
 as 422 with the standard ``errors`` envelope; handler-level rejects
@@ -14,7 +14,7 @@ from vtscore.detectors.labeling_progress import (
     analyze_labeling_progress,
     cached_indicator_history,
     calculate_diversity_level_over_time,
-    calculate_error_cost_over_time,
+    calculate_fbeta_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
     document_labeling_status,
@@ -88,7 +88,9 @@ def labeling_progress():
         abort(400, message="no label history available")
 
     try:
-        return analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes)
+        return analyze_labeling_progress(
+            snapshot_medias(), label_history, good_votes, bad_votes, beta=line_knobs()["beta"]
+        )
     except _CONTEXT_ERRORS:
         raise
     except Exception:
@@ -141,6 +143,8 @@ def _schedule_status_refresh(span_info) -> None:
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
+    # The balance Smart reads its F-beta at (#5134), read here: the worker has no request context.
+    beta = line_knobs()["beta"]
 
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
@@ -152,7 +156,7 @@ def _schedule_status_refresh(span_info) -> None:
         # ``_progress_lock`` and refreshes ``_status_snapshot``; the return
         # value is unused - the next poll reads the snapshot.  The lock is
         # taken only inside the worker, never across the HTTP response.
-        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info)
+        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info, beta=beta)
 
     labeling_status_jobs.start(
         signature,
@@ -182,7 +186,8 @@ def labeling_status_indicator():
     inline (cheap: cached-model forward passes over the small labeled set).
     When the cache is *behind* - the common case on the first poll after a new
     vote, or after a polarity flip truncated the cache - advancing it would
-    retrain one-or-more MLPs and score every unlabeled media, so we return the
+    score every media with each new step's head (the one that step's sort
+    trained; the cache trains none of its own), so we return the
     last-computed snapshot immediately with ``stale = true`` and defer the
     advancement to a background worker (issue #2397).
 
@@ -203,7 +208,9 @@ def labeling_status_indicator():
         span = tree.span_info() if tree is not None else None
 
         if is_status_cache_fresh(label_history):
-            status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, span_info=span)
+            status = compute_labeling_status(
+                snapshot_medias(), label_history, good_votes, bad_votes, span_info=span, beta=line_knobs()["beta"]
+            )
             status["stale"] = False
             status["stop_rule"] = "lights"
             status["level"] = _stop_level()
@@ -211,7 +218,7 @@ def labeling_status_indicator():
 
         # Cache is behind: serve the last snapshot now, advance the cache in
         # the background.  ``stale_labeling_status`` keeps the cheap fields
-        # (counts + Span) live and lags only the MLP-derived Smart / Stable
+        # (counts + Span) live and lags only the head-derived Smart / Stable
         # indicators, falling back to a "computing" placeholder when no
         # snapshot exists yet (rapid votes at session start, or the first poll
         # after a detector switch cleared the cache).
@@ -252,22 +259,24 @@ def indicator_score_history(query: dict):
     fall back to ``POST /api/eval/train-and-score``, which computes the same
     series on a background thread with live progress and cancellation.
 
-    This route used to call the ``calculate_*_over_time`` helpers directly.
-    Those advance the cache via ``_ensure_cache`` - retraining one MLP per
-    uncached label step plus a forward pass over the unlabeled pool, and on a
-    cold cache a full hierarchical-k-means coverage-atlas build - all inline on
-    the request thread under ``_progress_lock``.  Since ``/api/labeling-status``
-    deliberately defers exactly that work to a background worker (issue #2397),
-    the cache is behind for most of a labeling session, and this endpoint
-    absorbed the entire deferred build: tens of seconds on a mid-size dataset,
-    growing with both media count and vote count.
+    It does not call the ``calculate_*_over_time`` helpers, because those
+    advance the cache via ``_ensure_cache`` - retraining a model per uncached
+    label step plus a forward pass over the unlabeled pool, and on a cold cache
+    a full hierarchical-k-means coverage-atlas build - all inline on the request
+    thread under ``_progress_lock``.  ``/api/labeling-status`` defers exactly
+    that work to a background worker (#2397), so the cache is behind for most
+    of a labeling session, and advancing it here would put the whole deferred
+    build on this request: tens of seconds on a mid-size dataset, growing with
+    both media count and vote count.
     """
     metric = query["metric"]
 
     clips = snapshot_medias()
 
     try:
-        data, complete = cached_indicator_history(metric, clips, label_history, good_votes, bad_votes)
+        data, complete = cached_indicator_history(
+            metric, clips, label_history, good_votes, bad_votes, beta=line_knobs()["beta"]
+        )
         return {"metric": metric, "history": data, "complete": complete}
     except _CONTEXT_ERRORS:
         raise
@@ -278,7 +287,7 @@ def indicator_score_history(query: dict):
         abort(500, message="Score history computation failed")
 
 
-_METRIC_KEY = {"smart": "error_cost", "stable": "stability", "diverse": "diversity"}
+_METRIC_KEY = {"smart": "fbeta", "stable": "stability", "diverse": "diversity"}
 
 
 def _eval_done_payload(job) -> dict:
@@ -301,9 +310,9 @@ def _eval_done_payload(job) -> dict:
 def eval_train_and_score(body: dict):
     """Start (or short-circuit) an eval train-and-score computation.
 
-    The work walks the full ``label_history`` retraining a small MLP at
-    every step, which used to block every other request on the gthread
-    pool.  We now run it on a background daemon thread and return a
+    The work walks the full ``label_history``, scoring every media with
+    each step's head, which would block every other request on the gthread
+    pool, so it runs on a background daemon thread and returns a
     ``job_id``; clients poll ``/api/eval/train-and-score/result`` for the
     metric data; the ``eval`` SSE channel on ``/api/events`` carries
     live progress.
@@ -328,6 +337,8 @@ def eval_train_and_score(body: dict):
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
+    # Smart's series is an F-beta at the session's balance (#5134): read here, and part of what a cached job answers.
+    beta = line_knobs()["beta"]
 
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
@@ -340,6 +351,7 @@ def eval_train_and_score(body: dict):
         tuple(history),
         tuple(sorted(good_snap)),
         tuple(sorted(bad_snap)),
+        beta,
     )
 
     cached = eval_jobs.cached_for(signature)
@@ -359,7 +371,7 @@ def eval_train_and_score(body: dict):
             update_eval_progress("running", f"Computing {metric}...", 0, n_total)
             try:
                 if metric == "smart":
-                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap)
+                    data = calculate_fbeta_over_time(clips, history, good_snap, bad_snap, beta)
                 elif metric == "stable":
                     data = calculate_prediction_stability_over_time(clips, history)
                 else:

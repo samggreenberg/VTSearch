@@ -13,9 +13,10 @@ Reads the per-click log `run_cells.py` writes (`task_*__picks.csv`).
 
     python analyze_phases.py --exp /expscratch/$USER/scale-3156-fixed
 
-Caveat carried from `pick_sheets.py`: `picked_seed_percentile` is a position in
-the text sort over ALL medias, while a run walks only the simulation split
-(~half at the default `sim_fraction`), so it overstates depth-into-the-pool.
+Caveat carried from `pick_sheets.py`: since #5004 `picked_seed_percentile` is a
+position in the text sort of the simulation split the run walks. A pick log
+written before it placed the pick in the sort over ALL medias: the withheld half
+too and, on a scale-banded cell, the wrong-band images that sit near its top.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from _cells_paths import side_frame_files
+from _cells_paths import open_frame, side_frame_files
 
 from study_paths import require_study_dir
 
@@ -37,7 +38,7 @@ rows_by = defaultdict(lambda: {"n": 0, "good": 0, "pct": [], "runs": set()})
 files = side_frame_files(Path(EXP) / "results" / "cells", "__picks")
 for path in files:
     try:
-        with open(path, newline="") as fh:
+        with open_frame(path) as fh:
             for r in csv.DictReader(fh):
                 mode = f"{r.get('embedder', '')}/{r.get('style', '')}".strip("/")
                 ph = r.get("phase") or "?"
@@ -49,7 +50,7 @@ for path in files:
                     d["pct"].append(float(r["picked_seed_percentile"]))
                 except (KeyError, ValueError, TypeError):
                     pass
-    except (OSError, csv.Error):
+    except (OSError, EOFError, csv.Error):  # EOFError: a truncated .gz (a cell mid-write)
         continue
 
 

@@ -152,6 +152,38 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('/api/votes scope (#5115)', () => {
+    it('reads every vote outside Find', () => {
+      service.loadVotes();
+      const req = httpMock.expectOne((r) => r.url === '/api/votes');
+      expect(req.request.params.has('scope')).toBe(false);
+      req.flush(mockVotes);
+    });
+
+    it('reads only the verified votes in Find, from the poll too', async () => {
+      vi.useFakeTimers();
+      try {
+        service.setFindMode(true);
+        service.loadVotes();
+        httpMock.expectOne('/api/votes?scope=verified').flush(mockVotes);
+
+        service.startPolling(1000);
+        await vi.advanceTimersByTimeAsync(0);
+        httpMock.expectOne('/api/votes?scope=verified').flush(mockVotes);
+        service.stopPolling();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('goes back to every vote when Find is left', () => {
+      service.setFindMode(true);
+      service.setFindMode(false);
+      service.loadVotes();
+      httpMock.expectOne('/api/votes').flush(mockVotes);
+    });
+  });
+
   describe('Find-mode verification gating', () => {
     /** Push a /api/votes payload (with a verified array) through applyVotes. */
     const flushVotes = (good: number[], bad: number[], verified: number[]) => {
@@ -388,11 +420,11 @@ describe('VoteStateService', () => {
 
     it('drops a stale /api/votes response that resolves after a fresher one (out-of-order race)', () => {
       service.setFindMode(true);
-      // Flood-fill: 1, 2, 3 presumed good, none verified yet.
+      // Find reads the verified scope (#5115): item 1 is verified good.
       service.loadVotes();
       httpMock
-        .expectOne('/api/votes')
-        .flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [] });
+        .expectOne('/api/votes?scope=verified')
+        .flush({ good: [1], bad: [], click_times: {}, learned_scores: {}, verified: [1] });
 
       // A read issued early (e.g. a poll that read the server before the vote
       // commits) is still in flight; it will report the OLD verified set.
@@ -403,15 +435,15 @@ describe('VoteStateService', () => {
       service.setOptimisticVerified(2, true);
       service.loadVotes(); // GET_fresh
 
-      const [staleReq, freshReq] = httpMock.match('/api/votes');
+      const [staleReq, freshReq] = httpMock.match('/api/votes?scope=verified');
       // The fresher read lands first: the server now reports 2 as verified.
-      freshReq.flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [1, 2] });
+      freshReq.flush({ good: [1, 2], bad: [], click_times: {}, learned_scores: {}, verified: [1, 2] });
       expect(service.verifiedIds.has(2)).toBe(true);
 
       // The stale read lands later with the pre-vote verified set. It must be
       // dropped, not applied — otherwise it wipes the just-verified id back out
       // of the right pile (the find-verification staleness report).
-      staleReq.flush({ good: [1, 2, 3], bad: [], click_times: {}, learned_scores: {}, verified: [1] });
+      staleReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {}, verified: [1] });
       expect(service.verifiedIds.has(2)).toBe(true);
     });
   });

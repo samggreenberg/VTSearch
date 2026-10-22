@@ -103,6 +103,27 @@ def test_viewer_is_copied_byte_for_byte(tmp_path: Path) -> None:
     assert 'href="binary-photo/viewer.html"' in (out / "sota/index.html").read_text()
 
 
+def test_companion_viewers_are_copied_and_linked(tmp_path: Path) -> None:
+    """A report's viewer_<name>.html pages ride beside its viewer (#4959); an older report's never do."""
+    exp = tmp_path / "experiments"
+    _report(exp, "2026-10-08-state-of-the-app-binary-photo", "State of the App: Binary Photo", viewer="OLD")
+    (exp / "2026-10-08-state-of-the-app-binary-photo" / "viewer_old_page.html").write_text("OLD PAGE")
+    _report(exp, "2026-10-16-state-of-the-app-binary-photo", "State of the App: Binary Photo", viewer="NEW")
+    for name in ("viewer_prevalence_b1.html", "viewer_prevalence_b4.html"):
+        (exp / "2026-10-16-state-of-the-app-binary-photo" / name).write_text(name)
+
+    out, _, _ = _build(tmp_path, exp)
+
+    site = out / "sota/binary-photo"
+    assert (site / "viewer.html").read_text() == "NEW"
+    assert (site / "viewer_prevalence_b1.html").read_text() == "viewer_prevalence_b1.html"
+    assert (site / "viewer_prevalence_b4.html").read_text() == "viewer_prevalence_b4.html"
+    assert not (site / "viewer_old_page.html").exists()
+    index = (out / "sota/index.html").read_text()
+    assert 'href="binary-photo/viewer_prevalence_b1.html">prevalence b1</a>' in index
+    assert "old page" not in index
+
+
 def test_missing_viewer_is_said_not_borrowed(tmp_path: Path) -> None:
     """An older report's viewer must never answer for the newest one."""
     exp = tmp_path / "experiments"

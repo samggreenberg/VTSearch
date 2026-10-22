@@ -3814,8 +3814,11 @@ FBETA_STAGES = 5
 
 #: How many stages the region-maximum figure reveals in: two photographs cut
 #: into regions; each region's score and the max over them; the corpus of
-#: maxima; the two tail families fitted to it.
-REGION_MAX_STAGES = 4
+#: maxima; the two tail families fitted to it; and the two curves written out.
+#: The formulas are a page of their own so the deck can drop them by dropping
+#: that page (owner, #5171).
+REGION_MAX_STAGES = 5
+REGION_FITS_STAGE = 4
 
 #: The balances the F-beta figure draws, top row first, as (beta, label): the
 #: app's three presets (#4448), F-beta's beta of 1/4, 1 and 4. Symmetric about
@@ -3990,11 +3993,10 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
             fontsize=30,
             color=GREEN if keep else RED,
         )
-    # The Cutting Room's axis label, word for word, in the same place on the
-    # slide and at the same rendered size: flicking between the two, the
-    # photographs go and the label does not move. So it is centred on the
-    # *slide* (`FBETA_AXIS_LABEL_X`), not on this line, which starts right of
-    # the balances' column. `make-book-figs.py` draws the same string.
+    # The score axis named in words: the Cutting Room printed each photo's
+    # score (owner, #5132), and with the pictures off this names the axis
+    # instead. Centred on the *slide* (`FBETA_AXIS_LABEL_X`), not on this
+    # line, which starts right of the balances' column.
     ax.text(
         FBETA_AXIS_LABEL_X,
         rank_y + FBETA_AXIS_LABEL_LIFT,
@@ -4007,10 +4009,14 @@ def _fbeta_ranking(ax: plt.Axes, top_reserve: float = FBETA_TOP_RESERVE) -> tupl
     return x0, w, rank_y
 
 
-#: How many stages F-ing Metrics reveals in: the cut, with F1's definition
+#: How many stages F-ing Metrics draws in: the cut, with F1's definition
 #: already up top; the two rates' names; their definitions; their arithmetic;
 #: F1's value; Fβ right of F1 (owner, 2026-10-13, #4833).
 FMETRICS_STAGES = 6
+#: The stages the slide shows. The names alone, a page of two words and two
+#: empty equals signs, is skipped (owner, #5132): the definitions bring the
+#: names with them.
+FMETRICS_SHOWN = (1, 3, 4, 5, 6)
 #: The cut F-ing Metrics reads, as items kept: one left of the Cutting Room's
 #: middle one, so it is plainly not the best cut, and its two rates differ —
 #: 4/6 and 4/5 — where the middle cut's were both 4/5, which left a room unable
@@ -4044,11 +4050,11 @@ def fmetrics_fig() -> None:
     """
     final = _fmetrics_stage(FMETRICS_STAGES)
     box = tight_box(final)
-    for stage in range(1, FMETRICS_STAGES):
+    for page, stage in enumerate(FMETRICS_SHOWN[:-1], start=1):
         save(
             _fmetrics_stage(stage),
             OUT,
-            f"calib-fmetrics.build{stage}.webp",
+            f"calib-fmetrics.build{page}.webp",
             column=FULL_BLEED,
             box=box,
             notch=FMETRICS_NOTCH_PX,
@@ -4413,10 +4419,10 @@ FBETA_CONTROL_DROP = 2.0
 #: The radios' radius, in canvas units.
 BALANCE_RADIO_R = 0.15
 
-#: The axis label, placed so it lands where `book-rank`'s does on its slide:
-#: centred on the slide rather than on this figure's (indented) axis, and at
-#: the same rendered size. Measured, not derived — if either figure's framing
-#: changes, re-measure both labels in slide pixels and move this one.
+#: The axis label, centred on the slide rather than on this figure's (indented)
+#: axis. It was measured to land where `book-rank`'s did on the slide before;
+#: that slide now prints each photo's score instead (owner, #5132), so the
+#: placement stands on its own.
 FBETA_AXIS_LABEL_X = 10.30
 FBETA_AXIS_LABEL_LIFT = 0.30
 FBETA_AXIS_LABEL_PT = 12.8
@@ -4836,6 +4842,9 @@ def region_max_fig() -> None:
     vote is, why an item's score becomes a maximum, and why a maximum is not
     Gaussian-shaped (#3246).
     """
+    # The key's widest line has to clear the "#" at the histogram's left edge.
+    widest = max(_text_width(text, REGION_KEY_PT) for text in [m for _, m, *_ in REGION_FITS] + [REGION_FITS_Z])
+    assert REGION_KEY_X + widest < REGION_PANEL_X0 - 1.0, widest
     final = _region_max_stage(REGION_MAX_STAGES)
     box = tight_box(final)
     for stage in range(1, REGION_MAX_STAGES):
@@ -4871,6 +4880,54 @@ REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.
 REGION_SCORE_PT = 13
 #: The histogram panel: left edge, floor, and height.
 REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
+#: The two fits, in the key's order: name, the curve's formula, which curve,
+#: colour and line weight. The Gaussian is thin and red, the family a maximum
+#: is not; the Gumbel thicker and green, the one it is (owner, #5171). Both
+#: formulas are in the same z, so the page shows the one thing that differs:
+#: the Gaussian falls off as z² on both sides, the Gumbel fast on the left and
+#: only as e⁻ᶻ on the right. Written as exp(…) so no exponent carries an
+#: exponent of its own, which would set below the type floor.
+REGION_FITS = (
+    ("Gumbel", "a·exp(−z − e⁻ᶻ)", "gumbel", GREEN, 3.6),
+    ("Gaussian", "a·exp(−z²/2)", "normal", RED, 1.6),
+)
+REGION_FITS_Z = "z = (x − b) / c"
+#: The key, in the column left of the histogram, under the title notch: where
+#: its lines start, its type, the stretch of line drawn before each name, and
+#: the step between its lines.
+REGION_KEY_X, REGION_KEY_PT, REGION_KEY_SEG, REGION_KEY_STEP = 0.9, 16, 1.0, 0.6
+
+
+def _text_width(text: str, fontsize: float) -> float:
+    """How wide *text* sets at *fontsize*, in drawing units."""
+    return (
+        TextPath((0, 0), text, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width
+        / FLOW_UNIT_PT
+    )
+
+
+def _region_fits(ax: plt.Axes, stage: int, x: np.ndarray, curves: dict[str, np.ndarray], top: float) -> None:
+    """The two fitted families over the histogram, and their key, from *top* down.
+
+    Red for the family the slide argues against and green for the one it fits,
+    told apart by weight as well as hue, and the key draws a stretch of each
+    line so neither is told by colour alone (owner, #5171). The key's lines
+    keep their places on the last stage, which writes each curve under its name.
+    """
+    y = top
+    for name, maths, key, colour, weight in REGION_FITS:
+        ax.plot(x, curves[key], color=colour, linewidth=weight, zorder=5 if key == "gumbel" else 4)
+        ax.plot([REGION_KEY_X, REGION_KEY_X + REGION_KEY_SEG], [y, y], color=colour, linewidth=weight,
+                solid_capstyle="butt", zorder=4)  # fmt: skip
+        ax.text(REGION_KEY_X + REGION_KEY_SEG + LABEL_GAP, y, name, ha="left", va="center", fontsize=REGION_KEY_PT,
+                color=INK)  # fmt: skip
+        if stage >= REGION_MAX_STAGES:
+            ax.text(REGION_KEY_X, y - REGION_KEY_STEP, maths, ha="left", va="center", fontsize=REGION_KEY_PT,
+                    color=INK)  # fmt: skip
+        y -= 2.2 * REGION_KEY_STEP
+    if stage >= REGION_MAX_STAGES:
+        ax.text(REGION_KEY_X, y + 0.2 * REGION_KEY_STEP, REGION_FITS_Z, ha="left", va="center",
+                fontsize=REGION_KEY_PT, color=INK)  # fmt: skip
 
 
 def _region_max_stage(stage: int) -> plt.Figure:
@@ -4992,28 +5049,10 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
-    if stage >= REGION_MAX_STAGES:
-        for curve, colour, dash, name in (
-            (normal, SOFT, (0, (5, 3)), "Fitted Gaussian"),
-            (gumbel, BLUE, (0, ()), "Fitted Gumbel"),
-        ):
-            ax.plot(
-                panel_x0 + (xs - lo) / (hi - lo) * panel_w,
-                y_base + curve * sy,
-                color=colour,
-                linewidth=2.6,
-                linestyle=dash,
-                zorder=4,
-            )
-            ax.text(
-                panel_x0 + panel_w,
-                y_base + panel_h - (0.0 if colour == BLUE else CAP_16 + LABEL_GAP) - CAP_16,
-                name,
-                ha="right",
-                va="bottom",
-                fontsize=15,
-                color=colour,
-            )
+    if stage >= REGION_FITS_STAGE:
+        x = panel_x0 + (xs - lo) / (hi - lo) * panel_w
+        curves = {"gumbel": y_base + gumbel * sy, "normal": y_base + normal * sy}
+        _region_fits(ax, stage, x, curves, y_base + panel_h - CAP_16 / 2)
     return fig
 
 
@@ -5311,7 +5350,7 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 LL_STAGES = 6
 #: The stage each radio's expected F-beta arrives on, in `FBETA_ARMS` order.
 LL_REVEAL = (5, 4, 6)
-#: The first stage Just How You Like It shows. The three before it are Curvey and
+#: The first stage Twin Peaks shows. The three before it are Curvey and
 #: InDiscrete's (`calib-labels-fit`), the slide right before it (owner,
 #: 2026-10-13: the fit without a balance, then the line with one), so the slide
 #: opens on that fit recapped and builds only what the balance adds.
@@ -5525,13 +5564,12 @@ def _ll_corpus_row(
     model: "ClassScoreModel",
     *,
     fit: bool = True,
-    show_count: bool = True,
 ) -> None:
-    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds.
+    """Stage 3: the corpus and the 2-part fit over it.
 
     With ``fit=False`` the bars alone: the corpus as Oops! All Haystack left it,
-    before Curvey & InDiscrete fits it. With ``show_count=False`` the fit without the
-    count of matches, on a slide whose point is elsewhere (A Cut Above).
+    before Curvey & InDiscrete fits it. The count of matches the fit implies is
+    said, not printed (owner, #5132: the label was text the slide did not need).
     """
     lo, hi = LL_LOGIT
     counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
@@ -5561,21 +5599,6 @@ def _ll_corpus_row(
         dens = count * bin_w * np.exp(-0.5 * ((grid - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
         seen = dens * sy > TAIL_FLOOR
         ax.plot(_ll_at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
-    if not show_count:
-        return
-    # Over the matches' hump, clear of the tallest bar under it, and starting
-    # at its peak so it stays right of the line and inside the canvas (a label
-    # past the edge widens the crop and rescales the slide).
-    under = edges[1:] > model.mu_pos - model.sigma
-    ax.text(
-        float(_ll_at(model.mu_pos)),
-        LL_CORPUS_Y + float(counts[under].max()) * sy + LABEL_GAP,
-        f"≈ {int(round(matches, -1)):,} matches",
-        ha="left",
-        va="bottom",
-        fontsize=16,
-        color=INK,
-    )
 
 
 def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) -> None:
@@ -5626,17 +5649,17 @@ LF_STAGES = 4
 
 
 def labels_fit_fig() -> None:
-    """Curvey & InDiscrete: where section II's three ideas meet, before any line is drawn (#4452).
+    """Curvey & InDiscrete: where section III's three ideas meet, before any line is drawn (#4452).
 
-    Just How You Like It's canvas and rows, built up from nothing (owner, #4835):
+    Twin Peaks' canvas and rows, built up from nothing (owner, #4835):
     Grade My Own Homework's held-out votes beside Oops! All Haystack's corpus,
     bare, so the room sees the votes are no sample of it; the two normals the
     votes imply; the fit Great Expectations' EM makes of the corpus when the
     Good normal's shape is held from the votes and only its share and the rest
-    are fitted, and the count of matches that fit gives; then the other thing
+    are fitted; then the other thing
     the same fit says, every item's chance of being a match, in the row where
-    Just How You Like It will draw expected F-beta. Dots in, curves out, hence the
-    title. No line: choosing one takes the user's balance. It ends section II,
+    Twin Peaks will draw expected F-beta. Dots in, curves out, hence the
+    title. No line: choosing one takes the user's balance. It ends section III,
     after Cross Examination and Above Average, the naive ways of putting the
     folds and the corpus together (owner, 2026-10-13).
     """
@@ -5650,7 +5673,7 @@ def labels_fit_fig() -> None:
 def _ll_chance_row(ax: plt.Axes, line: "LabelsLine") -> None:
     """Each unvoted item's chance of being a match, from the 3-part fit, with even odds marked.
 
-    Drawn where Just How You Like It draws expected F-beta, so Curvey & InDiscrete and
+    Drawn where Twin Peaks draws expected F-beta, so Curvey & InDiscrete and
     A Cut Above read as the same fit asked one question.
     """
     lo, hi = LL_LOGIT
@@ -5687,7 +5710,7 @@ def _lf_stage(stage: int) -> plt.Figure:
 
 # ── A Cut Above: where Autopilot asks (#3546, #4632) ──────────────────────────
 
-#: How many build stages A Cut Above's figure has: Just How You Like It's votes,
+#: How many build stages A Cut Above's figure has: Twin Peaks' votes,
 #: corpus and line, with each unvoted item's chance of being a match where that
 #: slide drew expected F-beta; the even-odds cut and the item it asks about; the
 #: other two radios' lines, which move while that cut does not; the answer
@@ -5697,7 +5720,7 @@ ACQ_FLOW_STAGES = 4
 #: InDiscrete's last page already, so the slide goes straight to where it asks
 #: (owner, #4872).
 ACQ_FIRST_SHOWN = 2
-#: The chance row stands where Just How You Like It drew expected F-beta, at that
+#: The chance row stands where Twin Peaks drew expected F-beta, at that
 #: row's height, so the two figures read as one fit asked two questions.
 ACQ_CHANCE_Y, ACQ_CHANCE_H = LL_F_Y, LL_F_H
 #: How far under the chance row's baseline the radios' names hang.
@@ -5710,7 +5733,7 @@ ACQ_PICK_GAP = 0.12
 def acq_flow_fig() -> None:
     """A Cut Above: where Autopilot asks, read off the line's own fit (#3546, #4632).
 
-    Just How You Like It's votes, corpus and line, with that slide's expected-F-beta
+    Twin Peaks' votes, corpus and line, with that slide's expected-F-beta
     row swapped for the other thing the same 3-part fit says about every
     unvoted item: its chance of being a match (``LabelsLine.unvoted_posteriors``).
     Autopilot's Hard and New picks sample where that chance first falls below
@@ -5720,7 +5743,7 @@ def acq_flow_fig() -> None:
     score is what the figure drops to the corpus. The other two radios' lines
     arrive after it, because the slide's point is that they move and the asking
     cut does not: it is a fact about the fit, not about the user's preference.
-    Schematic inputs, real code, as on Just How You Like It.
+    Schematic inputs, real code, as on Twin Peaks.
 
     It replaced a figure of the line − 4 Inclusion re-cut of the fused mixture,
     which #3546 found had saturated into a rank pin under the balance.
@@ -5786,7 +5809,7 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
 
     # ── stage 1: Curvey & InDiscrete's fit, with the line at the middle radio ───────
     _ll_votes_row(ax, model, 2)
-    _ll_corpus_row(ax, corpus, line, model, show_count=False)
+    _ll_corpus_row(ax, corpus, line, model)
     _ll_chance_row(ax, line)
     # The radios' lines by weight, as everywhere the three are drawn (owner,
     # #4872); the picked one in the line's own blue.
@@ -5843,7 +5866,7 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
 #: Expect left it; the labels, carried across; the corpus Find is pointed at;
 #: the line the same labels draw there.
 TX_STAGES = 4
-#: The two columns, each a copy of Just How You Like It's votes and corpus rows on
+#: The two columns, each a copy of Twin Peaks' votes and corpus rows on
 #: its own copy of the score axis: (left edge, width). The gap between them is
 #: what the one arrow crosses.
 TX_TRAIN = (4.0, 6.3)
@@ -5861,7 +5884,7 @@ TX_BINS = 30
 
 @functools.lru_cache(maxsize=None)
 def _tx_find() -> tuple[np.ndarray, "LabelsLine"]:
-    """The Find corpus and the line `fit_labels_line` draws on it from Just How You Like It's votes."""
+    """The Find corpus and the line `fit_labels_line` draws on it from Twin Peaks' votes."""
     n, share, (pos_mu, pos_sd), (neg_mu, neg_sd), seed = TX_FIND_CORPUS
     rng = np.random.default_rng(seed)
     n_pos = int(round(n * share))
@@ -5878,7 +5901,7 @@ def transfer_fig() -> None:
 
     Find runs on a corpus nobody voted on. The model's scores there are new,
     the Train corpus and its line stay behind, and the one thing carried
-    across is the labels. Just How You Like It's own votes and `fit_labels_line`,
+    across is the labels. Twin Peaks' own votes and `fit_labels_line`,
     run on a second corpus: the same labels draw a different line there, and
     keep a different count, because the corpus is half the input.
     """
@@ -5896,7 +5919,7 @@ def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray
 
 
 def _tx_votes(ax: plt.Axes, column: tuple[float, float]) -> None:
-    """The votes on half Just How You Like It's width, piled as that slide piles them.
+    """The votes on half Twin Peaks' width, piled as that slide piles them.
 
     At half the width the pile round the line stacks deeper, but it is the same
     dot plot, so the room reads the same votes on both slides.
@@ -5970,7 +5993,7 @@ def _tx_stage(stage: int) -> plt.Figure:
     peak = max(np.histogram(c, bins=TX_BINS, range=LL_LOGIT)[0].max() for c in (train, find))
     sy = (TX_CORPUS_H - 0.9) / float(peak)
 
-    # ── stage 1: Train, as Just How You Like It left it ─────────────────────────────
+    # ── stage 1: Train, as Twin Peaks left it ─────────────────────────────
     for name, y in (("The votes", TX_VOTES_Y + 0.15), ("The corpus", TX_CORPUS_Y + 1.6)):
         ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
     ax.text(
@@ -6480,7 +6503,17 @@ def _land_stage(stage: int) -> plt.Figure:
         _land_labels(ax)
     if stage >= 4:
         _land_query(ax)
+    if stage >= LAND_STAGES:
+        # The lightened cells have no row of their own (`LAND_TABLE`), so the key says under it what the
+        # paleness means: the cell has gone part way to the text query's white (owner, #5171).
+        for y, words in zip(LAND_PALE_NOTE_Y, LAND_PALE_NOTE, strict=True):
+            ax.text(MAP_TABLE_X["swatch"], y, words, ha="left", va="center", fontsize=16, color=INK)
     return fig
+
+
+#: The note under Head Count's key on its last page, and its two lines' heights: under the last row.
+LAND_PALE_NOTE = ("Paler shades lean to white:", "the text query's results show")
+LAND_PALE_NOTE_Y = (3.25, 2.7)
 
 
 def _land_cells(ax: plt.Axes, stage: int) -> None:
@@ -6524,9 +6557,9 @@ LAND_TABLE = (
     (2, "count", "Trained head", "Outlier cut"),
     # No row for the band the folds' split decides: a mix of orange and
     # purple returns one or the other, which their own rows already say
-    # (owner, 2026-10-13). None for the text query's hold either: the map's
-    # own name says where the lightened cells are, and the white row says
-    # what they return.
+    # (owner, 2026-10-13). None for the text query's hold either: a note
+    # under the key says the paler cells lean to the white row, whose
+    # results they return (`LAND_PALE_NOTE`).
     (3, "labels", "Trained head", "Fβ peak"),
 )
 

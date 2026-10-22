@@ -25,7 +25,7 @@ alone, since a plan legitimately names files its work has not created yet). An
 experiment report can now only cite analysis code that exists in the tree;
 `tests_lib/meta/test_docs_gate.py` pins both halves — the citation fires, the
 scratch paths stay quiet. The three real violations this surfaced were
-`scripts/sod/`, which lives in the `evaluation-framework` repo and is now an
+`scripts/sod/`, which lives only on the `evaluation-framework` branch and is now an
 allowlist entry with that reason.
 
 **Related, still advice:** a dump file is rewritten at every step, so reading one

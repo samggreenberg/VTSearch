@@ -17,6 +17,8 @@ import type { DatasetStatusResponse } from '../generated/api-client/models/datas
 import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
 import { cancelDatasetLoadTask } from '../generated/api-client/fn/datasets-status/cancel-dataset-load-task';
 import { datasetStatus } from '../generated/api-client/fn/datasets-status/dataset-status';
+import { dismissDatasetTask } from '../generated/api-client/fn/datasets-status/dismiss-dataset-task';
+import { buildDatasetCoverageAtlas } from '../generated/api-client/fn/datasets-registry/build-dataset-coverage-atlas';
 import { datasetDomainShift } from '../generated/api-client/fn/datasets-registry/dataset-domain-shift';
 import { deleteRegisteredDataset } from '../generated/api-client/fn/datasets-registry/delete-registered-dataset';
 import { getDatasetDuplicates } from '../generated/api-client/fn/datasets-registry/get-dataset-duplicates';
@@ -50,6 +52,13 @@ export class DatasetsRegistryApiService {
     );
   }
 
+  /** Remove a finished task's row; a failed import's row stays until this. */
+  dismissTask(taskId: string, context?: HttpContext): Observable<DatasetRegistryOkResponse> {
+    return dismissDatasetTask(this.http, this.config.rootUrl, { task_id: taskId }, context).pipe(
+      map((r) => r.body),
+    );
+  }
+
   getRegistry(): Observable<DatasetsRegistryListResponse> {
     return listRegisteredDatasets(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
@@ -70,6 +79,16 @@ export class DatasetsRegistryApiService {
     return runDatasetAutofind(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
       body: detectorIds ? { detector_ids: detectorIds } : undefined,
+    }).pipe(map((r) => r.body));
+  }
+
+  /** Build the coverage atlas of a loaded dataset that has none (one past the
+   *  auto-build threshold loads without it). Resolves with the ``task_id``;
+   *  progress arrives on the ``loading-tasks`` channel on a row keyed to the
+   *  dataset. A call while a build runs returns that build's ``task_id``. */
+  buildCoverageAtlas(datasetId: string): Observable<DatasetRegistryLoadResponse> {
+    return buildDatasetCoverageAtlas(this.http, this.config.rootUrl, {
+      dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
 

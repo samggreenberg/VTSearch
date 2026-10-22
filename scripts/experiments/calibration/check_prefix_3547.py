@@ -5,8 +5,9 @@ within a cell.  #3319 ran two.  Compared on the arms both waves share.
 """
 
 import csv
-import glob
 import os
+
+from _cells_paths import main_frame_files, open_frame
 
 SHALLOW = "/expscratch/sgreenberg/acq-3319/bin"
 DEEP = "/expscratch/sgreenberg/acq-3319-deep/bin"
@@ -17,10 +18,8 @@ CMP = ("n_good", "n_bad", "cost", "threshold", "acq_threshold", "acq_pool_percen
 def rows_at(base, arm, t):
     d = os.path.join(base, arm, "results", "cells")
     out = {}
-    for f in sorted(glob.glob(d + "/task_*.csv")):
-        if "__" in os.path.basename(f):
-            continue
-        with open(f) as fh:
+    for f in main_frame_files(d):
+        with open_frame(f) as fh:
             for r in csv.DictReader(fh):
                 if int(r["t"]) == t:
                     out[tuple(r.get(k, "") for k in KEYCOLS)] = r

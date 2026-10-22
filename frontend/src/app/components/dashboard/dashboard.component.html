@@ -96,15 +96,11 @@
                 </td>
                 <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {
-                    <div class="loading-task-failed">
-                      <span class="error-msg" [title]="task.error">Failed: {{ task.error }}</span>
-                      <div class="loading-task-failed__actions">
-                        @if (isHuggingFaceGatedError(task)) {
-                          <button class="btn btn--primary btn--sm" (click)="signInToHuggingFace()" title="Sign in with HuggingFace, then retry the download">Sign in with HuggingFace</button>
-                        }
-                        <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
-                      </div>
-                    </div>
+                    <vt-failed-task [task]="task" (dismiss)="loadingTasksSvc.dismissLoadingTask(task.task_id)">
+                      @if (isHuggingFaceGatedError(task)) {
+                        <button class="btn btn--primary btn--sm" (click)="signInToHuggingFace()" title="Sign in with HuggingFace, then retry the download">Sign in with HuggingFace</button>
+                      }
+                    </vt-failed-task>
                   } @else {
                     @let info = taskProgressInfo(task);
                     <vt-job-progress
@@ -312,7 +308,7 @@
   </div>
 
   <!-- Action Buttons: STABLE POSITIONING (read before changing!)
-       Train/Test/Find buttons must stay in the EXACT same position whether their hint is
+       Train/Tune/Find buttons must stay in the EXACT same position whether their hint is
        visible or not, and regardless of hint text length. Three rules enforce this:
 
        1. Each .action-btn-group has a FIXED WIDTH in SCSS; do NOT remove it.
@@ -320,7 +316,8 @@
        2. Hints use [style.visibility] (NOT *ngIf or display:none); do NOT change.
           visibility:hidden still reserves vertical space; display:none does not.
        3. .btn-disabled-reason has a fixed height in SCSS; do NOT remove it.
-          Without it, showing/hiding text causes vertical reflow.
+          Without it, showing/hiding text causes vertical reflow. Tune's click
+          bar (#5098) takes the same slot at the same height, for the same reason.
 
        If you change any of these three things, the buttons WILL jump around.
 
@@ -342,26 +339,40 @@
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!labelEnabled && labelHint && !hintOnShow) ? 'visible' : 'hidden'">{{ labelHint || '&nbsp;' }}</span>
     </div>
-    <!-- Test opens the view whose code is still called find (`onFind`, the
-         find-view component; #4525), as Train opens the one called label. -->
+    <!-- Tune opens the view whose code is still called find (`onFind`, the
+         find-view component; #4525, #5098), as Train opens the one called label. -->
     <div class="action-btn-group">
       <button
-        #testBtn
+        #tuneBtn
         class="btn btn--primary"
         [class.loading-active]="findLoading()"
         [disabled]="!findEnabled || isNavBusy"
         [title]="findHint"
         (click)="onFind()"
       >
-        <!-- A flask: Test measures the detector (#4525). -->
-        <svg aria-hidden="true" [class.icon-waggle]="findLoading()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 10a1.5 1.5 0 0 0 1.3 2h13.4a1.5 1.5 0 0 0 1.3-2l-5-10V3"/><line x1="7.5" y1="3" x2="16.5" y2="3"/><line x1="6.5" y1="14" x2="17.5" y2="14"/></svg>
-        Test
+        <!-- Sliders: Tune sets the detector's line and corrects it (#5098). -->
+        <svg aria-hidden="true" [class.icon-waggle]="findLoading()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        Tune
       </button>
-      <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint && !hintOnShow) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
+      <!-- From the click until the view opens, the loads the route waits on
+           (#5098): the reason's slot, as nothing is disabled for a reason then. -->
+      @if (tuneBar(); as bar) {
+        <span class="btn-load-bar" title="Opening Tune: loading the dataset and detector">
+          <vt-progress-bar
+            [indeterminate]="bar.indeterminate"
+            [pulsing]="!!bar.pulsing"
+            [smooth]="true"
+            [value]="bar.value"
+            [max]="bar.max"
+          />
+        </span>
+      } @else {
+        <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint && !hintOnShow) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
+      }
     </div>
     <!-- Find. Not a view: one background AutoFind per ticked dataset with the
          ticked detectors, shown inline on the dataset rows (#4529; labelled
-         AutoRun until #4525 renamed the old Find to Test). Gated on the
+         AutoRun until #4525 renamed the old Find to Test, now Tune). Gated on the
          context switch like the other independent actions, not on browse-prep
          (`isNavBusy`), since it navigates nowhere. -->
     <div class="action-btn-group">
@@ -395,44 +406,42 @@
   @switch (dashboardHint) {
     @case ('add-dataset') {
       <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
-        Start here! Click <strong>+</strong> to add a dataset: the {{ addDatasetMedia }} you want to
-        train or search on.
+        Start here! Click <strong>+</strong> to add a dataset of the {{ addDatasetMedia }} you want
+        to search.
       </vt-toasty-hint>
     }
     @case ('select-dataset') {
       <vt-toasty-hint hintId="select-dataset" [anchor]="datasetAddBtn">
-        You have data, but none is selected. Select the dataset you want to search over, or click
-        <strong>+</strong> to add a new one.
+        You have datasets, but none is selected. Select one, or click <strong>+</strong> to add
+        another.
       </vt-toasty-hint>
     }
     @case ('mixed-datasets') {
       <vt-toasty-hint hintId="mixed-datasets" [anchor]="datasetAddBtn" face="surprised">
-        The datasets you selected hold different kinds of media, so they can't be searched
-        together. Select datasets of one kind.
+        The selected datasets hold different kinds of media. Select datasets of one kind.
       </vt-toasty-hint>
     }
     @case ('add-detector') {
       <vt-toasty-hint hintId="add-detector" [anchor]="detectorAddBtn">
-        You need a detector to do the searching. Click <strong>+</strong> to add one and say what
-        you're looking for.
+        You need a detector to do the searching. Click <strong>+</strong> to add one.
       </vt-toasty-hint>
     }
     @case ('empty-detector-tab') {
       <vt-toasty-hint hintId="empty-detector-tab" [anchor]="detectorTabBar">
-        The {{ detectorTabLabel }} tab is empty. Click <strong>{{ otherDetectorTabLabel }}</strong> to select one of your
-        detectors, or click <strong>+</strong> to make a new one.
+        The <strong>{{ detectorTabLabel }}</strong> tab is empty. Click
+        <strong>{{ otherDetectorTabLabel }}</strong> for your detectors, or <strong>+</strong> to make a new one.
       </vt-toasty-hint>
     }
     @case ('select-detector') {
       <vt-toasty-hint hintId="select-detector" [anchor]="detectorAddBtn">
-        You have detectors, but none is selected. Click one to select it, or click
-        <strong>+</strong> to make a new one.
+        You have detectors, but none is selected. Select one, or click <strong>+</strong> to make
+        a new one.
       </vt-toasty-hint>
     }
     @case ('mismatch') {
       <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn" face="surprised">
-        The detector you selected is for a different kind of media than your dataset, so they
-        can't work together. Select ones that match, or click <strong>+</strong> to make one that does.
+        The selected dataset and detector are different kinds of media. Select ones that match, or
+        click <strong>+</strong> to add a new one.
       </vt-toasty-hint>
     }
     @case ('wait-for-import') {
@@ -442,8 +451,7 @@
     }
     @case ('train') {
       <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
-        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it with Good
-        and Bad examples.
+        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it.
       </vt-toasty-hint>
     }
     @case ('train-one-dataset') {
@@ -454,13 +462,19 @@
     }
     @case ('untrained-detector') {
       <vt-toasty-hint hintId="untrained-detector" [anchor]="trainBtn" side="above" reach="right" face="surprised">
-        <strong>{{ untrainedDetectorName }}</strong> has no training labels yet, so it can't
-        search. Deselect it, or select it alone with one dataset and click <strong>Train</strong>.
+        {{ untrainedDetectorName }} has no training labels yet. Select it and one dataset to
+        <strong>Train</strong>.
+      </vt-toasty-hint>
+    }
+    @case ('trained-here') {
+      <vt-toasty-hint hintId="trained-here" [anchor]="datasetAddBtn">
+        You trained this detector on this dataset. Select a different dataset or detector to
+        <strong>Tune</strong> or <strong>Find</strong>.
       </vt-toasty-hint>
     }
     @case ('test-or-find') {
-      <vt-toasty-hint hintId="test-or-find" [anchor]="testBtn" side="above" reach="right">
-        Your detector is trained. Click <strong>Test</strong> to measure it on this dataset, or
+      <vt-toasty-hint hintId="test-or-find" [anchor]="tuneBtn" side="above" reach="right">
+        Your detector is trained. Click <strong>Tune</strong> to check it on this dataset, or
         <strong>Find</strong> to collect its matches.
       </vt-toasty-hint>
     }
@@ -476,6 +490,7 @@
 @if (modals.combineDatasets.open) {
   <vt-combine-datasets-modal
     [datasets]="modals.combineDatasets.datasets"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeCombineDatasets()"
     (combineStarted)="onCombineStarted($event)"
   />
@@ -485,6 +500,7 @@
   <vt-combine-detectors-modal
     [sources]="combineSelectedDetectorSources"
     [existingNames]="allDetectorNames"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeCombineDetectors()"
     (created)="onDetectorsCombined($event)"
   />
@@ -513,6 +529,7 @@
     [datasetName]="modals.stats.datasetName"
     [isDefaultLogin]="isDefaultLogin()"
     [serverSetsAgeOff]="serverSetsAgeOff()"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeStats()"
   />
 }
@@ -521,6 +538,7 @@
   <vt-detector-stats-modal
     [detectorId]="modals.detectorStats.detectorId"
     [detectorName]="modals.detectorStats.detectorName"
+    [soloMediaType]="soloMediaType"
     (closed)="modals.closeDetectorStats()"
   />
 }

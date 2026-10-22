@@ -18,7 +18,9 @@ nothing in the log to name the test.  Two faults, both in the plugins:
   xdist's restart budget (four per worker) runs out.  ``--dist load`` already
   drops a crashed test.  And it takes back a unit whose send finds the worker
   already gone, which upstream lets escape as an ``INTERNALERROR`` that ends
-  the run.
+  the run, and it offers work only to workers whose collection has arrived,
+  where upstream also offers it to a replacement still collecting, another
+  ``INTERNALERROR`` once two workers have died.
 * **pytest-timeout's report goes to /dev/null.**  The ``thread`` method writes
   the stacks through the terminal writer, then calls ``os._exit(1)``.  In an
   xdist worker that writer is the worker's stdout, which execnet points at
@@ -77,11 +79,18 @@ class CrashSafeLoadGroupScheduling(LoadGroupScheduling):
         # A worker runs a test only once it holds the next one (or a shutdown),
         # and the replacement for a dead worker joins holding nothing, so after
         # the first distribution every node is offered work twice, as upstream
-        # does (pytest-dev/pytest-xdist#1327).
-        if self.collection is not None:
+        # does (pytest-dev/pytest-xdist#1327).  Only nodes whose collection has
+        # arrived: two replacements can be in flight at once, and the one still
+        # collecting has no collection to index the work by.  Its own
+        # collection's arrival calls this again.  (Upstream offers to every
+        # node, and raises ``KeyError`` there.)
+        if self.collection is None:
+            super().schedule()
+            return
+        for _ in range(2):
             for node in self.nodes:
-                self._reschedule(node)
-        super().schedule()
+                if node in self.registered_collections:
+                    self._reschedule(node)
 
 
 def make_crash_safe_scheduler(config, log):

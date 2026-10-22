@@ -10,10 +10,10 @@ so the core package can stay import-clean.
 
 from __future__ import annotations
 
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
-from vtscore.config import DATA_DIR, CoreConfig
+from vtscore.config import DATA_DIR
 
 
 def _flask_dataset_context_resolver() -> Any:
@@ -127,7 +127,7 @@ def register_app_persistence_hooks() -> None:
     """Wire library-side persistence hooks to the app's ``vtsearch.settings``.
 
     The library exposes a few "let the app persist this" hook points so it
-    doesn't import settings directly (see Phase 2 of
+    doesn't import settings directly (the Settings seam in
     ``../../vtscore/docs/architecture.md``).  This function installs the Flask
     app's settings as the backing store for each hook.
     """
@@ -184,61 +184,48 @@ def register_app_achievement_recorders() -> None:
     register_achievement_recorder("find", _record_find)
 
 
-def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
-    """Snapshot ``vtsearch.settings`` into a :class:`CoreConfig`.
+def register_app_setting_getters() -> None:
+    """Answer every :func:`vtscore.config.get_setting` knob from ``vtsearch.settings``.
 
-    The app-side implementation of :meth:`CoreConfig.from_settings`.  Lives
-    here so the library file ``vtsearch/config.py`` never imports
-    ``vtsearch.settings`` - see Phase 8 of
-    ``../../vtscore/docs/architecture.md``.
+    Called once at Flask app startup.  Each getter reads its one setting live,
+    for the current user, so library code pays for the knob it asks about and
+    no other.  Also installs ``settings.set_settings_path`` as the library's
+    settings-path redirect, which the CLI's ``--settings`` goes through.
 
-    When *settings_path* is given, the server-tier settings file path is
-    redirected to that location before reading.  The CLI uses this to
-    point at a run-specific settings JSON.
+    Every getter looks the settings function up when it is called, not here,
+    so a test that patches one on ``vtsearch.settings`` is seen.
     """
-    from vtsearch import settings as _settings
+    from vtsearch import settings
+    from vtscore.config import register_setting_getter, register_settings_path_redirect
 
-    if settings_path is not None:
-        _settings.set_settings_path(settings_path)
-
-    return CoreConfig(
-        saved_datasets_dir=_settings.get_saved_datasets_dir(),
-        detectors_dir=_settings.get_detectors_dir(),
-        max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
-        max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
-        autofind_detectors=tuple(_settings.get_autofind_detectors()),
-        dataset_max_age_days=_settings.get_effective_dataset_max_age_days(),
-        calibrate_count=_settings.get_calibrate_count(),
-        calibration_fraction=_settings.get_calibration_fraction(),
-        enrich_descriptions=_settings.get_enrich_descriptions(),
-        autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
-        beta=_settings.get_beta(),
-        data_dir=DATA_DIR,
-        autofind_exporter=_settings.get_autofind_exporter(),
-        autofind_exporter_field_values={
-            name: dict(vals) for name, vals in _settings.get_autofind_exporter_field_values().items()
+    getters: dict[str, Callable[[], Any]] = {
+        "saved_datasets_dir": lambda: settings.get_saved_datasets_dir(),
+        "detectors_dir": lambda: settings.get_detectors_dir(),
+        "max_concurrent_dataset_downloads": lambda: settings.get_max_concurrent_dataset_downloads(),
+        "max_concurrent_dataset_embeddings": lambda: settings.get_max_concurrent_dataset_embeddings(),
+        "autofind_detectors": lambda: tuple(settings.get_autofind_detectors()),
+        "dataset_max_age_days": lambda: settings.get_effective_dataset_max_age_days(),
+        "calibrate_count": lambda: settings.get_calibrate_count(),
+        "calibration_fraction": lambda: settings.get_calibration_fraction(),
+        "enrich_descriptions": lambda: settings.get_enrich_descriptions(),
+        "autopilot_goal_diversity": lambda: settings.get_autopilot_goal_diversity(),
+        "beta": lambda: settings.get_beta(),
+        "data_dir": lambda: DATA_DIR,
+        "autofind_exporter": lambda: settings.get_autofind_exporter(),
+        "autofind_exporter_field_values": lambda: {
+            name: dict(vals) for name, vals in settings.get_autofind_exporter_field_values().items()
         },
-        autofind_cli_delete_dataset=_settings.get_autofind_cli_delete_dataset(),
-        projection_n_neighbors=_settings.get_projection_n_neighbors(),
-        projection_min_dist=_settings.get_projection_min_dist(),
-        signpost_captioner=dict(_settings.get_browse_signpost_captioner()),
-        signpost_vocab={mt: list(terms) for mt, terms in _settings.get_browse_signpost_vocab().items()},
-        default_labelset_source=_settings.get_default_labelset_source(),
-        labelset_source_push_interval=_settings.get_labelset_source_push_interval_seconds(),
-    )
-
-
-def register_app_config_builder() -> None:
-    """Install :func:`build_core_config` as the backing for
-    :meth:`CoreConfig.from_settings`.
-
-    Called once at Flask app startup so library-candidate callers can keep
-    using ``CoreConfig.from_settings()`` while the bridge to
-    ``vtsearch.settings`` lives entirely in this shim package.
-    """
-    from vtscore.config import register_core_config_builder
-
-    register_core_config_builder(build_core_config)
+        "autofind_cli_delete_dataset": lambda: settings.get_autofind_cli_delete_dataset(),
+        "projection_n_neighbors": lambda: settings.get_projection_n_neighbors(),
+        "projection_min_dist": lambda: settings.get_projection_min_dist(),
+        "signpost_captioner": lambda: dict(settings.get_browse_signpost_captioner()),
+        "signpost_vocab": lambda: {mt: list(terms) for mt, terms in settings.get_browse_signpost_vocab().items()},
+        "default_labelset_source": lambda: settings.get_default_labelset_source(),
+        "labelset_source_push_interval": lambda: settings.get_labelset_source_push_interval_seconds(),
+    }
+    for name, getter in getters.items():
+        register_setting_getter(name, getter)
+    register_settings_path_redirect(lambda path: settings.set_settings_path(path))
 
 
 def register_app_plugin_families() -> None:
@@ -248,7 +235,8 @@ def register_app_plugin_families() -> None:
     :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
     ``vtsearch.settings`` to disk).  Registering them here keeps
     ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
-    import - see ``../../vtscore/docs/architecture.md`` Phase 5.
+    import - see the Plugin discovery seam in
+    ``../../vtscore/docs/architecture.md``.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.
@@ -276,10 +264,9 @@ def register_app_plugin_families() -> None:
 
 
 __all__ = [
-    "build_core_config",
     "register_app_achievement_recorders",
-    "register_app_config_builder",
     "register_app_persistence_hooks",
     "register_app_plugin_families",
+    "register_app_setting_getters",
     "register_flask_context_resolvers",
 ]

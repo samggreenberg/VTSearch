@@ -2,27 +2,20 @@
 
 An *admin override* is a server-wide restriction an operator sets at startup:
 it applies to every user, is fixed for the lifetime of the process, and is not
-editable through ``PUT /api/settings``. Seven exist today -- the solo
+editable through ``PUT /api/settings``. There are seven -- the solo
 mediaType lock, the per-mediaType solo-embedder locks, the plugin hide list,
 the dataset retention window, the support-email address, the Semantic-only
-embedder lock, and the Autopilot-only lock on Train and Test.
+embedder lock, and the Autopilot-only lock on Train and Tune.
 
-Each one used to be spelled out four times: a ``set_cli_X`` / ``get_cli_X`` /
-``get_effective_X`` triad in :mod:`vtsearch.settings`, an ``_apply_X`` argparse
-hook in :mod:`vtsearch.cli_main`, an ``_apply_env_X`` startup hook in
-``app.py``, and a line in the ``/api/settings`` effective-value overlay. Nothing
-tied the four together, so the set drifted: only three of the six were reachable
-from the environment, which meant the gunicorn-launched Docker images (which
-never parse ``argv``) could set *some* admin restrictions and not others, for no
-reason a reader could recover. The env path also re-implemented validation --
-``--dataset-max-age-days 0`` was an argparse error while
-``VTSEARCH_DATASET_MAX_AGE_DAYS=0`` warned and carried on.
+Every override is reachable two ways: a CLI flag, and an environment variable
+for the gunicorn-launched Docker images, which never parse ``argv``.
 
-This module is the single source of truth instead. One :class:`AdminOverride`
+This module is the single source of truth for them. One :class:`AdminOverride`
 descriptor per knob carries the flag spelling and help text, the env-var name,
-the parser/validator both entry paths share, the rule for combining the
-override with the persisted setting, and the key it surfaces under at
-``/api/settings``. Everything else derives from the registry:
+the parser/validator both entry paths share (so a value the flag rejects, the
+env var rejects too), the rule for combining the override with the persisted
+setting, and the key it surfaces under at ``/api/settings``. Everything else
+derives from the registry:
 
 * :func:`register_override_flags` builds the argparse arguments.
 * :func:`apply_flag_values` validates and stores what argparse parsed.
@@ -35,7 +28,7 @@ override with the persisted setting, and the key it surfaces under at
 
 Adding another knob is therefore one :class:`AdminOverride` entry, and
 ``tests/core/test_admin_overrides.py`` fails if it does not carry a flag, an env
-var, and an overlay key -- the coverage can no longer go arbitrary by accident.
+var, and an overlay key.
 
 This module deliberately imports nothing from :mod:`vtsearch.settings` (the
 dependency runs the other way) and touches the plugin/media registries only
@@ -362,7 +355,7 @@ _REGISTRY: tuple[AdminOverride, ...] = (
             "Overrides the persisted ``solo_media_type`` key in the server "
             "settings file for the lifetime of the process. Valid values are "
             "the registered media-type ids (e.g. audio, image, video, text, "
-            "document)."
+            "document, face)."
         ),
     ),
     AdminOverride(
@@ -406,9 +399,10 @@ _REGISTRY: tuple[AdminOverride, ...] = (
         help=(
             "Hide a plugin from picker / listing API responses for this "
             "process (declutter the UI without editing the codebase). "
-            "Repeatable. FAMILY is a plugin-family id (importers, exporters, "
-            "label_importers, labelset_sources, converters, media_sources, "
-            "media_types, embedders, clippers, settings_importers, "
+            "Repeatable. FAMILY is a plugin-family id (importers, "
+            "datasource_importers, exporters, label_importers, seed_importers, "
+            "labelset_sources, converters, media_sources, media_types, "
+            "embedders, clippers, cleaners, settings_importers, "
             "settings_exporters, settings_sources); NAME is the plugin's "
             "registered name. Hidden plugins remain importable and callable "
             "by name via execution endpoints (e.g. autodetect, label "
@@ -484,8 +478,8 @@ _REGISTRY: tuple[AdminOverride, ...] = (
         effective_key="autopilot_only",
         resolve=_resolve_switch,
         help=(
-            "Lock Train and Test to their Autopilot tabs: Train's Manual tab "
-            "and Test's Review tab are removed, and neither view renders a tab "
+            "Lock Train and Tune to their Autopilot tabs: Train's Manual tab "
+            "and Tune's Review tab are removed, and neither view renders a tab "
             "bar. The New Detector dialog already requires an example item for "
             "a dataset whose embedder can't search by text, so Autopilot always "
             "has a first sort to start from. Applies to all users for the "

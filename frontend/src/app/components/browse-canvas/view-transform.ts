@@ -5,14 +5,14 @@
 // own. Mirrors the sibling `bin-geometry.ts`: plain exported functions over a
 // small context type, not a stateful class.
 
-import type { ProjectionMeta, ViewTransform } from '../../models/projection.models';
+import type { ProjectionLayout, ViewTransform } from '../../models/projection.models';
 
 /** The inputs every geometry function needs beyond the live transform: the
  *  active projection's pyramid metadata, the viewport size (CSS px), and the
  *  on-screen bin radius level selection targets. Bundled so call sites build it
  *  once per call rather than threading four separate parameters through. */
 export interface ViewGeomContext {
-  meta: ProjectionMeta | null;
+  meta: ProjectionLayout | null;
   width: number;
   height: number;
   targetRadius: number;

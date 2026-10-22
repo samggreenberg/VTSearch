@@ -91,8 +91,9 @@ DEFAULT_MIN_INLIERS = 8
 """Cold-start inlier-count threshold for ``MatchStats.is_match``.
 
 Used as the default geometric-consistency gate before the verification
-classifier has votes to train on (mirrors the safe-threshold fallback the
-detector MLP uses below 6 labels).
+classifier has votes to train on (as a semantic detector gives the Goods'
+centroid until its labels meet the label quota,
+:mod:`vtscore.detectors.label_quota`).
 """
 
 _CODEBOOK_ASSET = Path(__file__).resolve().parent / "assets" / "vlad_codebook_v1.npy"

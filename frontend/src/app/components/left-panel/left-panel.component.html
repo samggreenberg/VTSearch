@@ -3,17 +3,17 @@
     <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
   @if (panelMode() === 'find' && folded()) {
-    <!-- Test's Autopilot tab, hidden (#4673): the strip, as Train's folds to
+    <!-- Tune's Autopilot tab, hidden (#4673): the strip, as Train's folds to
          its phase rail. The tabs come back with the panel. -->
     <vt-side-panel-toggle side="left" label="Autopilot" [collapsed]="true" (toggle)="toggleCollapse.emit()" />
   } @else if (panelMode() === 'find') {
-    <!-- Test mode (#4524; `find` in code, #4525): the Test autopilot on one
+    <!-- Tune mode (#4524; `find` in code, #4525): the Tune autopilot on one
          tab, Review (the ranked list in full) on the other, the Train view's
-         Autopilot / Manual split applied to Test. The host owns the tab,
+         Autopilot / Manual split applied to Tune. The host owns the tab,
          since the centre and right panes switch with it. The Autopilot-only
-         lock drops the bar and leaves Test on its Autopilot (#4666). -->
+         lock drops the bar and leaves Tune on its Autopilot (#4666). -->
     @if (!autopilotOnly()) {
-    <div class="left-tabs" role="tablist" aria-label="Test mode">
+    <div class="left-tabs" role="tablist" aria-label="Tune mode">
       <button
         class="left-tab"
         role="tab"
@@ -36,8 +36,8 @@
          says when (the tab is open and nothing is checked yet). -->
     @if (reviewHint()) {
       <vt-toasty-hint hintId="review" [anchor]="reviewTab" reach="right">
-        Every item is here, best match first. Click one to check it with Good or Bad, or
-        <strong>Export</strong> to send the matches on.
+        Every item is here, best match first. Click one to check it with <strong>Good</strong> or
+        <strong>Bad</strong>, or <strong>Export</strong> to send the matches on.
       </vt-toasty-hint>
     }
     }
@@ -48,7 +48,7 @@
     }
 
     @if (findTab() === 'autopilot') {
-      <div class="tab-panel-autopilot" role="tabpanel" aria-label="Test autopilot">
+      <div class="tab-panel-autopilot" role="tabpanel" aria-label="Tune autopilot">
         <vt-side-panel-toggle side="left" label="Autopilot" [collapsed]="false" (toggle)="toggleCollapse.emit()" />
         <!-- The balance, live between phases and frozen within one: the host
              says which. Its state line is this corpus's test result, or

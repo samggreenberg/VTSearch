@@ -248,9 +248,9 @@ class DatasetImporter(ImporterBase):
 
         Each yielded ``raw_media`` dict must match the shape expected of
         media of ``spec.source_type`` (so a video spec yields
-        ``type="video"`` dicts with ``media_bytes`` / ``media_path``; the
-        framework hands them to the spec's converter, which produces
-        e.g. ``type="image"`` dicts).  ``id`` and ``origin`` may be
+        ``media_type="video"`` dicts with ``media_bytes`` / ``media_path``;
+        the framework hands them to the spec's converter, which produces
+        e.g. ``media_type="image"`` dicts).  ``id`` and ``origin`` may be
         omitted; :meth:`run` assigns IDs and falls back to
         :meth:`build_origin` for unset origins.
 
@@ -285,14 +285,15 @@ class DatasetImporter(ImporterBase):
         e.g. images + videos in one import), override this method.  The
         framework calls it once per :class:`SourceSpec` returned by
         :meth:`effective_source_specs`; if the spec declares a converter,
-        the framework runs ``converter.convert(raw, spec.params)`` on every
-        yielded media before storing it.  Subclasses never invoke
+        the framework runs ``converter.convert_normalized(raw, spec.params)``
+        on every yielded media before storing it.  Subclasses never invoke
         converters themselves.
 
         Each yielded dict should already match the shape expected of media
-        of ``spec.source_type`` (so a video spec yields ``type="video"``
-        dicts with ``media_bytes`` / ``media_path``; the framework hands
-        them to the converter which produces e.g. ``type="image"`` dicts).
+        of ``spec.source_type`` (so a video spec yields
+        ``media_type="video"`` dicts with ``media_bytes`` / ``media_path``;
+        the framework hands them to the converter which produces e.g.
+        ``media_type="image"`` dicts).
         Yield nothing if the spec resolves to zero records.
 
         Default implementation: delegates to
@@ -361,7 +362,7 @@ class DatasetImporter(ImporterBase):
         """Convert a single *record* into a media dict.
 
         The returned dict should contain the standard media fields
-        (``type``, ``filename``, ``embeddings`` (``{}`` to let the framework
+        (``media_type``, ``filename``, ``embeddings`` (``{}`` to let the framework
         embed, or ``{"<embedder>": vec}`` with ``embedder="<embedder>"`` for a
         vector you already have), ``md5``, ``media_bytes`` / ``media_path``,
         etc.).  ``id`` is assigned by the framework and may be omitted.  ``origin`` and ``origin_name`` may also be omitted;

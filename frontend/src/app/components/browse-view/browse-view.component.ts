@@ -1,3 +1,4 @@
+import { HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -21,13 +22,21 @@ import { ProjectionApiService } from '../../services/projection-api.service';
 import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-until';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PairRecoveryService } from '../../services/pair-recovery.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { AutoFindService } from '../../services/autofind.service';
-import { BrowseSubsetService } from '../../services/browse-subset.service';
+import {
+  BrowseSubsetService,
+  runBrowseIds,
+  runBrowseSidesParam,
+  type RunBrowseSides,
+} from '../../services/browse-subset.service';
+import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { MediasApiService } from '../../services/medias-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
@@ -38,7 +47,7 @@ import {
   MAX_THUMBNAIL_BORDER,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
-import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
+import { readyLayout, type ProjectionMeta, type RegionLabel } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
@@ -76,6 +85,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private projectionApi = inject(ProjectionApiService);
   private tileCache = inject(TileCacheService);
   private activeContext = inject(ActiveContextService);
+  private pairRecovery = inject(PairRecoveryService);
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private settingsState = inject(SettingsStateService);
@@ -83,6 +93,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private browseSubset = inject(BrowseSubsetService);
   private autofind = inject(AutoFindService);
+  private findApi = inject(DetectorsFindApiService);
   private selection = inject(BrowseSelectionService);
   private mediasApi = inject(MediasApiService);
   private dialog = inject(VtDialogService);
@@ -100,6 +111,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private readonly content = viewChild<ElementRef<HTMLElement>>('content');
 
   readonly meta = signal<ProjectionMeta | null>(null);
+  /** The meta's built layout, which the canvas and minimap draw; null until one is ready. */
+  readonly layout = computed(() => readyLayout(this.meta()));
   // Written from raw/async callbacks (dataset-status subscribe, projection
   // build poller, settings effect), so a signal so those writes repaint the
   // canvas/minimap inputs and the info row under zoneless.
@@ -311,39 +324,39 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Subset mode: browse an ephemeral UMAP fit over just a handful of media
-   * (the positives of a Test session, or a Find run's listed results) instead
+   * (the positives of a Tune session, or a Find run's listed results) instead
    * of the full dataset. Set from the `?subset=1` query param plus a handoff
-   * from {@link BrowseSubsetService}. `subsetIds` is kept on the component so
-   * re-resolving the projection (e.g. a bin-shape switch) re-sends the same
-   * ids without a fresh handoff.
+   * from {@link BrowseSubsetService}, or, for a Find run's results opened
+   * without one, from the run itself (see {@link recoverRunSubset}).
+   * `subsetIds` is kept on the component so re-resolving the projection (e.g.
+   * a bin-shape switch) re-sends the same ids without a fresh handoff.
    */
   subset = false;
   subsetIds: number[] = [];
   /**
    * The Find run whose results this subset came from (`?from=results&run=…`,
-   * #4615), or `''` for a Test-view subset. Back reopens those results instead
-   * of returning to Test, and the verify actions are off: they mark votes on
-   * the Test session's detector, and a run's results may span several.
+   * #4615), or `''` for a Tune-view subset. Back reopens those results instead
+   * of returning to Tune, and the verify actions are off: they mark votes on
+   * the Tune session's detector, and a run's results may span several.
    */
   resultsRunId = '';
+  /** Which of that run's rows the map lays out (`&sides=…`). */
+  private resultsSides: RunBrowseSides = 'good';
 
   /** Whether the selection panel offers Verified Good / Verified Bad: only on
-   *  a Test-view subset, whose detector the verdicts are votes for. */
+   *  a Tune-view subset, whose detector the verdicts are votes for. */
   get canVerify(): boolean {
     return this.subset && !this.resultsRunId;
   }
 
   /** Where the subset Back button goes, for its label and tooltip. */
   get backTarget(): string {
-    return this.resultsRunId ? 'Find Results' : 'Test';
+    return this.resultsRunId ? 'Find Results' : 'Tune';
   }
 
-  /** What to tell a user whose subset handoff is gone (e.g. after a reload). */
-  private get expiredMessage(): string {
-    return this.resultsRunId
-      ? 'This map has expired. Open the Find results again and click Browse to rebuild it.'
-      : 'This map has expired. Re-run Test and click Browse to rebuild it.';
-  }
+  /** What to tell a user whose Tune subset handoff is gone (e.g. after a
+   *  reload). A Find run's map is rebuilt from the run instead. */
+  private readonly expiredMessage = 'This map has expired. Re-run Tune and click Browse to rebuild it.';
 
   /**
    * Width (CSS px) of the docked side panel (selection list + legend +
@@ -435,7 +448,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * to the canvas. Empty for datasets with no computed labels — the signpost
    * toggle button disables itself then.
    */
-  readonly labels = signal<RegionLabelPayload[]>([]);
+  readonly labels = signal<RegionLabel[]>([]);
 
   /**
    * Whether the canvas draws the region signposts — mirrored from the
@@ -578,10 +591,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const query = this.route.snapshot.queryParamMap;
     this.subset = query.get('subset') === '1';
     this.resultsRunId = (this.subset && query.get('from') === 'results' && query.get('run')) || '';
+    this.resultsSides = runBrowseSidesParam(query.get('sides'));
     if (this.subset) {
       const handoff = this.browseSubset.take();
       if (handoff && handoff.ids.length > 0) {
         this.subsetIds = handoff.ids;
+      } else if (this.resultsRunId) {
+        // No handoff, but the URL names the Find run: a reload, a new tab, or
+        // a link someone was sent (#5129). Its ids come from the run.
+        this.recoverRunSubset();
+        return;
       } else {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
         this.status.set('error');
@@ -589,6 +608,51 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    this.startLoad();
+  }
+
+  /**
+   * Rebuild a Find run's map without the in-memory handoff: fetch the run
+   * the URL names and lay out its listed rows, the set its results dialog's
+   * Browse button lays out. The server keeps only its most recent runs, none
+   * from before a restart, and shows each only to the user who ran it, so
+   * past those the view says the results are gone.
+   */
+  private recoverRunSubset(): void {
+    const datasetId = this.route.snapshot.paramMap.get('datasetId') || '';
+    // A 404 is not a failed request but a gone run, said below instead.
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    this.findApi
+      .getAutofindRun(this.resultsRunId, context)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (run) => {
+          // The dialog browses a run on its own dataset, so another dataset
+          // in the URL can only be a hand-edited link: lay out nothing.
+          const ids = run.dataset_id === datasetId ? runBrowseIds(run, this.resultsSides) : [];
+          if (ids.length === 0) {
+            this.status.set('error');
+            this.errorMessage.set('These Find results list no items on this dataset to browse.');
+            return;
+          }
+          this.subsetIds = ids;
+          this.startLoad();
+        },
+        error: (err) => {
+          this.status.set('error');
+          this.errorMessage.set(
+            err instanceof HttpErrorResponse && err.status === 404
+              ? 'These Find results are no longer available: the server keeps only its most ' +
+                  'recent runs, none from before a restart, and shows each only to the user who ' +
+                  'ran it. Run Find again and click Browse to rebuild the map.'
+              : apiErrorMessage(err, 'Failed to load the Find results'),
+          );
+        },
+      });
+  }
+
+  /** Begin the view's first load, once the subset ids (if any) are in hand. */
+  private startLoad(): void {
     this.tileCache.setSubset(this.subset);
 
     this.datasetsRegistryApi
@@ -617,13 +681,26 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!this.subset) {
       this.activeContext.pair$
         .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe(() => {
-          if (this.initialLoadStarted) {
-            this.loadProjection();
-          } else {
-            this.maybeStartInitialLoad();
-          }
-        });
+        .subscribe(() => this.reloadProjection());
+    }
+    // The backend lost the dataset and it has been loaded again (#5158). A
+    // load does not bring the pyramid back into memory, so tiles go on 404ing
+    // until something asks for a build: re-resolve the projection as on a pair
+    // change, whose build restores the persisted layout (or re-fits a subset
+    // from the ids in hand). Unlike a pair change this holds in subset mode,
+    // since the ids are the same ones that produced the lost layout.
+    this.pairRecovery.reloaded$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadProjection());
+  }
+
+  /** Re-resolve the projection from scratch, or start the gated first load if
+   *  it has not run yet (see {@link initialLoadStarted}). */
+  private reloadProjection(): void {
+    if (this.initialLoadStarted) {
+      this.loadProjection();
+    } else {
+      this.maybeStartInitialLoad();
     }
   }
 
@@ -708,7 +785,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.densityMax = max;
   }
 
-  /** Noun for the item-count chip — "positives" for a Test-subset browse. A
+  /** Noun for the item-count chip — "positives" for a Tune-subset browse. A
    *  Find run's subset may be its Good or its Bad rows, so it stays "items". */
   get countNoun(): string {
     return this.subset && !this.resultsRunId ? 'positives' : 'items';
@@ -1274,6 +1351,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   onBuild(): void {
     if (this.subset && this.subsetIds.length === 0) {
+      if (this.resultsRunId) {
+        // Retry after the run could not be read: ask for it again.
+        this.status.set('loading');
+        this.recoverRunSubset();
+        return;
+      }
       // Nothing to rebuild (e.g. Retry after the handoff expired).
       this.status.set('error');
       this.errorMessage.set(this.expiredMessage);
@@ -1447,8 +1530,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Return to wherever this browse was launched from: the Test view for a
-   * Test-positives subset, the Dashboard with the Find results reopened for a
+   * Return to wherever this browse was launched from: the Tune view for a
+   * Tune-positives subset, the Dashboard with the Find results reopened for a
    * Find run's subset, or the Dashboard for a full-dataset browse.
    */
   back(): void {
@@ -1475,7 +1558,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const detectorId = this.activeContext.modelId;
     this.browseSubset.markReturningToFind();
     if (datasetId && detectorId) {
-      this.router.navigate(['/test', datasetId, detectorId]);
+      this.router.navigate(['/tune', datasetId, detectorId]);
     } else {
       this.router.navigate(['/dashboard']);
     }
@@ -1556,10 +1639,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.mediaType.set(meta.media_type);
       this.applyBrowsePrefsForMediaType();
     }
-    this.tileCache.setProjectionId(meta.projection_id);
+    this.tileCache.setProjectionId(meta.projection_id ?? '');
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
-    if (meta.point_count > 0) {
+    if ((meta.point_count ?? 0) > 0) {
       this.syncLabels(meta);
       this.enterReady();
       return;
@@ -1604,8 +1687,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.mediaType.set(meta.media_type);
       this.applyBrowsePrefsForMediaType();
     }
-    this.tileCache.setProjectionId(meta.projection_id);
-    if (meta.point_count > 0) {
+    this.tileCache.setProjectionId(meta.projection_id ?? '');
+    if ((meta.point_count ?? 0) > 0) {
       this.syncLabels(meta);
       this.enterReady();
       return 'stop';

@@ -1,6 +1,6 @@
 """Blueprint for media-related routes.
 
-Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+Built on ``flask_smorest`` so the JSON-shaped routes appear in the
 ``/api/openapi.json`` spec.
 
 The binary-streaming routes (``audio``, ``video``, ``image``, ``media``)
@@ -26,7 +26,9 @@ from flask_smorest import Blueprint, abort
 from vtscore.datasets import source_item
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+from vtscore.media.audio.sniff import sniff_audio_format
 from vtscore.media.base import MediaResponse
+from vtscore.media.provenance import CLIP_WINDOW_FIELDS
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
 from vtscore.datasets.vote_provenance import normalize_provenance
@@ -224,15 +226,22 @@ def _variant_media(media: dict) -> dict:
 
     ``?variant=original`` instead returns a throwaway view with the snapshot
     promoted into the canonical keys, so the ordinary resolution chain streams
-    the original bytes without any route having to know cleaners exist.  Every
+    the original bytes without any route having to know cleaners exist.  A
+    cleaned unit of a reference import keeps no snapshot; its Original is
+    replayed from the source instead
+    (:func:`~vtscore.media.lazy_clip.lazy_original_bytes`), and is served as
+    nothing when that replay no longer matches the import.  Every
     non-inline backing (``media_path`` / ``media_url``) is stripped from the
     view: those point at the *source* file, which the resolver would otherwise
     fall through to and serve as if it were the snapshot.  ``md5`` is dropped
     too, so ETag-emitting routes hash the bytes they actually serve rather than
     labelling the original with the cleaned item's hash.
 
-    An unknown variant, or ``original`` on a media with no snapshot, falls back
-    to the canonical payload: a stale bookmark should show the item, not 404.
+    ``original`` on a media with no snapshot falls back to the canonical
+    payload: a stale bookmark should show the item, not 404.  An unknown
+    variant never gets here - every route that calls this validates its query
+    with :class:`~vtsearch.schemas.media.MediaVariantQuerySchema`, which
+    rejects it with a 422.
     """
     if request.args.get("variant") != "original":
         return media
@@ -245,6 +254,14 @@ def _variant_media(media: dict) -> dict:
     view = dict(media)
     view["media_bytes"] = media.get("original_media_bytes")
     view["media_string"] = media.get("original_media_string")
+    if view["media_bytes"] is None and view["media_string"] is None:
+        from vtscore.media.lazy_clip import lazy_original_bytes  # noqa: PLC0415
+
+        replayed = lazy_original_bytes(media)
+        if media.get("media_type") == "text":
+            view["media_string"] = replayed.decode("utf-8", errors="replace") if replayed is not None else None
+        else:
+            view["media_bytes"] = replayed
     if media.get("original_duration") is not None:
         view["duration"] = media["original_duration"]
     # Derived metadata (counts, dimensions, hash, thumbnail) all describe the
@@ -493,10 +510,22 @@ def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Respons
 
 
 def _resolve_string(media: dict) -> str | None:
-    """Return media string, lazy-loading from media_path if needed."""
+    """Return media string, lazy-loading from its recipe or media_path if needed.
+
+    A lazy recipe (see :mod:`vtscore.media.lazy_clip`) comes before the
+    whole-file read, since ``media_path`` names its *source*; a cleaned unit
+    whose replay no longer matches the import yields ``None``.
+    """
     media_string = media.get("media_string")
     if media_string is not None:
         return media_string
+    from vtscore.media.lazy_clip import lazy_clip_bytes, recipe_is_exclusive  # noqa: PLC0415
+
+    derived = lazy_clip_bytes(media)
+    if derived is not None:
+        return derived.decode("utf-8", errors="replace")
+    if recipe_is_exclusive(media):
+        return None
     media_path = media.get("media_path")
     if media_path:
         p = resolve_media_file_path(media_path)
@@ -637,7 +666,7 @@ def batch_medias(body: dict):
         # the offsets still reach the UI as provenance via ``custom_metadata``
         # ("Clip Start" / "Clip End") from ``display_metadata`` above.
         audio_serves_slice = media_type_id == "audio" and archive_member_ref(c) is None
-        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
+        for clip_key in CLIP_WINDOW_FIELDS:
             if clip_key not in c:
                 continue
             if audio_serves_slice and clip_key in ("clip_start", "clip_end"):
@@ -741,10 +770,11 @@ def media_source_batch(body: dict):
 @medias_bp.arguments(MediaVariantQuerySchema, location="query")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 def media_audio(query: dict, media_id: int):
-    """Stream the WAV audio bytes for a single media item.
+    """Stream the audio bytes for a single media item.
 
-    Returns an ``audio/wav`` file response on success (HTTP 200), or a 404
-    JSON envelope if the media does not exist or its bytes are unavailable.
+    Returns the bytes on success (HTTP 200), typed by their container (an MP3
+    import is ``audio/mpeg``, a clip slice ``audio/wav``), or a 404 JSON
+    envelope if the media does not exist or its bytes are unavailable.
 
     Accepts ``?variant=original`` to stream the pre-clean payload of an item a
     cleaner rewrote at load time (see :func:`_variant_media`).
@@ -773,11 +803,12 @@ def media_audio(query: dict, media_id: int):
         resp.set_etag(etag)
         resp.headers["Cache-Control"] = "private, max-age=86400"
         return resp
+    mimetype, sniffed_ext = sniff_audio_format(media_bytes)
     resp = make_response(
         send_file(
             io.BytesIO(media_bytes),
-            mimetype="audio/wav",
-            download_name=f"media_{media_id}.wav",
+            mimetype=mimetype,
+            download_name=f"media_{media_id}{sniffed_ext}",
         )
     )
     resp.set_etag(etag)
@@ -1059,11 +1090,10 @@ def vote_media(body: dict, media_id: int):
 
     Behaviour is **idempotent**: sending the current state is a no-op
     that does not append to ``label_history``, does not credit
-    achievements, and returns the existing click-time.  This is the
-    fix for logical-bug-audit H1; two stale-view tabs that race the
-    same media no longer alternate ADD/REMOVE on the server, so the
-    achievement counter no longer inflates beyond the number of real
-    labeling decisions.
+    achievements, and returns the existing click-time, so two stale-view
+    tabs that race the same media cannot alternate ADD/REMOVE on the
+    server or inflate the achievement counter beyond the number of real
+    labeling decisions (logical-bug-audit H1).
 
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
@@ -1100,12 +1130,11 @@ def vote_media(body: dict, media_id: int):
     _old, new_state, click_time = set_vote(media_id, target, region_box=region_box, provenance=provenance)
 
     # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
-    # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
-    # uncaught 500 with no rollback, leaving the in-memory vote committed
-    # while the on-disk labelset stayed at its prior value (audit finding
-    # H30).  Now we explicitly surface the failure as a 500 with a clear
-    # message; the in-memory mutation is rare enough to be acceptable
-    # since the next vote re-merges and retries.  The write also schedules
+    # EBUSY/ENOSPC under ``_write_detector``) leaves the in-memory vote
+    # committed while the on-disk labelset stays at its prior value (audit
+    # finding H30), so it is surfaced as a 500 with a clear message; the
+    # in-memory mutation is rare enough to be acceptable since the next vote
+    # re-merges and retries.  The write also schedules
     # the push to the detector's labelset source, if it has one.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 

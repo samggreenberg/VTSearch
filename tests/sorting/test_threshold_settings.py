@@ -1,9 +1,10 @@
 """Tests for the threshold blend fallback and the Calibration Fraction setting.
 
-The schedule blend (``calculate_safe_threshold``) is no longer the shipped
-threshold - the fold-anchored population estimator is, unconditionally, with no
-user setting to turn it off - but the blend is still what runs for label sets
-too small to form calibration folds, so its ramp is still load-bearing.
+The schedule blend (``calculate_safe_threshold``) does not draw the line: under
+a balance the labels' line does (#4452), and with no balance, or where the
+labels give no line, the fold-anchored population estimator does, with no user
+setting to turn it off.  But the blend is still what runs for label sets too
+small to form calibration folds, so its ramp is still load-bearing.
 
 Covers:
 - calculate_safe_threshold logic (blending, label-count ramp)
@@ -133,9 +134,10 @@ class TestTrainAndScoreFusesUnconditionally:
         assert len(results) == len(medias)
 
     def test_threshold_is_realizable_on_the_haystack_distribution(self):
-        """The shipped cut is realized as a quantile of the scores it will be
-        compared against, so it always lands inside their range - which the raw
-        conformal quantile, measured on fold-model scores, need not."""
+        """The fold-anchored cut (the line with no balance) is realized as a
+        quantile of the scores it will be compared against, so it always lands
+        inside their range - which the raw conformal quantile, measured on
+        fold-model scores, need not."""
         good_votes.update({k: None for k in [1, 2, 3]})
         bad_votes.update({k: None for k in [18, 19, 20]})
         results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
@@ -145,7 +147,7 @@ class TestTrainAndScoreFusesUnconditionally:
 
 class TestTrainingSettingsInvalidateLoadedDetector:
     """Regression for M7: changing a training-relevant setting must drop the
-    cached MLP / threshold on every loaded detector so the next
+    cached head / threshold on every loaded detector so the next
     ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` retrains
     under the new setting instead of scoring with a stale threshold.
     """
@@ -153,7 +155,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
     def _loaded_ctx(self):
         from vtsearch.state import DetectorContext, register_detector_context
 
-        # Sentinel object stands in for a trained MLP; invalidation just
+        # Sentinel object stands in for a trained head; invalidation just
         # needs to drop the reference, it doesn't introspect the model.
         ctx = DetectorContext("det-m7", name="m7")
         ctx.model = object()

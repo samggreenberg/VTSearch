@@ -88,12 +88,22 @@ fewer items than one round is ``nothing``: nothing to test.  The targets and
 budgets are parameters whose defaults are the values #4523 priced
 (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``).
 
+**Dealing ahead** (:meth:`LineTest.deal_ahead`, #5116) is how the app keeps
+a round boundary from stalling: once a round has one pick left, both rounds
+its vote could deal are drawn now, one per outcome, each on a copy of the
+test at the generator's current state.  :meth:`LineTest.draw` then installs
+the one for the label actually cast, which is the round it would have drawn
+itself, pick for pick, so the band design and a seeded run's picks are as
+they were; the other is discarded unseen.
+
 Test votes never train the detector: they are recorded with
 :data:`TEST_PROVENANCE` so a later merge can tell them from a check's.
 """
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
@@ -468,6 +478,26 @@ class PhaseReport:
         }
 
 
+@dataclass(frozen=True)
+class RoundAhead:
+    """The round the vote on a round's last pending pick would deal, each way it can go (#5116).
+
+    *id* is that pick; *good* the next round's picks if it is voted a match,
+    *bad* if it is not, in the order :meth:`LineTest.draw` deals them, and
+    ``()`` where that vote ends the test.  Both ways name the same picks when
+    both outcomes send the next round to the same band.  A client may fetch
+    their media ahead of the vote, but not show them: only the round the vote
+    names is dealt, and the other is discarded unseen.
+    """
+
+    id: int
+    good: tuple[int, ...]
+    bad: tuple[int, ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "good": list(self.good), "bad": list(self.bad)}
+
+
 # ------------------------------------------------------------------ the sample
 
 
@@ -486,7 +516,9 @@ class LineTest:
     between votes - which is what makes the band design valid.
     :meth:`draw` deals the next round from the band :meth:`next_band` picks;
     :meth:`record` takes the labels on it.  :meth:`estimates` and
-    :meth:`phase` read the state.
+    :meth:`phase` read the state.  :meth:`deal_ahead` draws the next round
+    early, for both outcomes of a round's last pick, for :meth:`draw` to
+    install.
     """
 
     ranking_ids: tuple[int, ...]
@@ -519,6 +551,9 @@ class LineTest:
     _cache: list[Any] = field(default_factory=list, repr=False, compare=False)
     #: The joint draws every estimate rests on, keyed on :attr:`_version`.
     _counts: list[Any] = field(default_factory=list, repr=False, compare=False)
+    #: What :meth:`deal_ahead` dealt: ``[RoundAhead, version, generator state,
+    #: {label: the copy that drew it}]``, or empty.
+    _ahead: list[Any] = field(default_factory=list, repr=False, compare=False)
 
     @classmethod
     def start(
@@ -985,9 +1020,15 @@ class LineTest:
 
         Fewer than a round when the band holds fewer unlabelled items (a
         census of it).  ``()`` once the test is done, or while a round is
-        still pending.
+        still pending.  When :meth:`deal_ahead` already drew this round for
+        the labels as they stand, it is installed rather than drawn again:
+        the same picks from the same generator state, so the same round.
         """
         if self.pending:
+            return self.pending
+        ahead = self._take_ahead()
+        if ahead is not None:
+            self._install(ahead)
             return self.pending
         b = self.next_band()
         if b is None:
@@ -1029,13 +1070,99 @@ class LineTest:
             raise ValueError(f"not a label of this round: {media_id}")
         del self.labels[cid]
         self._invalidate()
+        self._ahead.clear()
         self.pending = tuple(i for i in self.band_ids(self.band) if i in self.pick_band and i not in self.labels)
+
+    # ---- dealing ahead
+
+    def deal_ahead(self) -> RoundAhead | None:
+        """Draw the next round now, for both ways the round's one pending pick can be voted (#5116).
+
+        Without it the next round is drawn only once the last vote lands,
+        because :meth:`next_band` reads the estimates and they depend on
+        that label, so a client meets every round boundary with nothing to
+        fetch ahead.  Each outcome is dealt on a copy of the test with that
+        label recorded and the generator copied at its current state, by
+        :meth:`record` and :meth:`draw` themselves; :meth:`draw` installs
+        the copy whose labels match the ones actually recorded, so the round
+        used is the uniform draw from the band the rule names for the
+        realized labels, the very picks the generator would have dealt, and
+        the other is thrown away.
+
+        ``None``, holding nothing, unless exactly one pick is pending and the
+        test is running.  Computed once per state; :attr:`ahead` reads it
+        back, and an :meth:`unrecord` drops it.
+        """
+        if len(self.pending) != 1 or self.phase().done:
+            self._ahead.clear()
+            return None
+        held = self.ahead
+        if held is not None:
+            return held
+        (cid,) = self.pending
+        state = self._generator.bit_generator.state
+        forks: dict[bool, LineTest] = {}
+        for right in (True, False):
+            fork = self._fork()
+            fork.record({cid: right})
+            fork.draw()
+            forks[right] = fork
+        ahead = RoundAhead(cid, forks[True].pending, forks[False].pending)
+        self._ahead[:] = [ahead, self._version, state, forks]
+        return ahead
+
+    @property
+    def ahead(self) -> RoundAhead | None:
+        """What :meth:`deal_ahead` dealt, while its pick is still the one pending and no label has changed; else ``None``."""
+        if not self._ahead:
+            return None
+        ahead, version, _, _ = self._ahead
+        if version != self._version or self.pending != (ahead.id,):
+            return None
+        return ahead
+
+    def _fork(self) -> "LineTest":
+        """A copy to deal ahead on: its own labels, picks and caches, and the generator copied at its state."""
+        return dataclasses.replace(
+            self,
+            labels=dict(self.labels),
+            pick_band=dict(self.pick_band),
+            _generator=copy.deepcopy(self._generator),
+            _cache=[],
+            _counts=[],
+            _ahead=[],
+        )
+
+    def _take_ahead(self) -> "LineTest | None":
+        """The copy :meth:`deal_ahead` dealt for the labels as recorded, if the generator has not moved since; spent either way."""
+        if not self._ahead:
+            return None
+        ahead, _, state, forks = self._ahead
+        self._ahead.clear()
+        if ahead.id not in self.labels or self._generator.bit_generator.state != state:
+            return None
+        fork = forks[self.labels[ahead.id]]
+        return fork if fork.labels == self.labels else None
+
+    def _install(self, fork: "LineTest") -> None:
+        """Take *fork*'s round as this one's, with the generator it drew from and the draws it read the state on."""
+        self.pending, self.band = fork.pending, fork.band
+        if fork.band is not None:
+            for cid in fork.pending:
+                self.pick_band[cid] = fork.band
+        self._generator = fork._generator
+        # Its labels are these, so its draws (keyed on its own version) are this state's.
+        if fork._counts and fork._counts[0] == fork._version:
+            self._counts[:] = [self._version, fork._counts[1]]
+        if fork._cache and fork._cache[0][0] == fork._version:
+            self._cache[:] = [(self._version, fork._cache[0][1]), fork._cache[1]]
 
     # ---- the wire shape
 
     def as_dict(self) -> dict[str, Any]:
-        """The test as a client sees it: the phase, the round, the bands and their picks, and the estimates."""
+        """The test as a client sees it: the phase, the round, the bands and their picks, the estimates, and the round dealt ahead."""
         report = self.phase()
+        ahead = self.ahead
         bands = []
         for band in self._bands:
             size, labelled, right = self.band_counts(band.index)
@@ -1057,6 +1184,7 @@ class LineTest:
             "picks_per_round": self.budgets.picks_per_round,
             "band": None if self.band is None else self._bands[self.band].as_dict(),
             "picks": list(self.pending),
+            "ahead": None if ahead is None else ahead.as_dict(),
             "labelled": len(self.labels),
             "bands": bands,
             "estimates": None if self.nothing_to_test else self.estimates().as_dict(),

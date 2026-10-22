@@ -1,8 +1,12 @@
 """Dataset importer registry with auto-discovery.
 
 Any package placed directly under this directory is automatically registered
-if it exposes a module-level ``IMPORTER`` attribute that is a
-:class:`~vtscore.datasets.importers.base.DatasetImporter` instance.
+if it exposes a module-level ``IMPORTER`` attribute: an instance of
+:class:`~vtscore.datasets.importers.base.ImporterBase`.  Importers that drive
+their own ingestion subclass ``ImporterBase`` directly; spec-driven and
+service-style ones subclass its
+:class:`~vtscore.datasets.importers.base.DatasetImporter`.  Third-party
+packages register under the ``vtscore.importers`` entry-point group.
 
 Usage::
 

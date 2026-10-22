@@ -92,6 +92,17 @@ export class ProgressEventsService implements OnDestroy {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBootId: string | null = null;
 
+  /**
+   * Ids of dataset tasks that had already failed when the stream (re)connected:
+   * the ones the connect's opening `loading-tasks` snapshot carried as failed.
+   * A failed import stays on that channel until it is dismissed (#4973), so
+   * every page load replays the undismissed ones; their dashboard row reports
+   * them, and `ToastService` reads this to keep from re-announcing them.
+   */
+  private readonly failedAtConnect = new Set<string>();
+  /** Set by each connect's `server` frame, which precedes its opening snapshots. */
+  private awaitingConnectSnapshot = false;
+
   constructor() {
     // Track the circuit breaker: stay connected while online, and tear the
     // EventSource down when the breaker trips so its native auto-reconnect
@@ -154,6 +165,11 @@ export class ProgressEventsService implements OnDestroy {
     );
   }
 
+  /** True if dataset task `taskId` had already failed when the stream connected. */
+  failedBeforeConnect(taskId: string): boolean {
+    return this.failedAtConnect.has(taskId);
+  }
+
   // -------------------------------------------------------------------------
   // EventSource lifecycle.
   // -------------------------------------------------------------------------
@@ -167,9 +183,16 @@ export class ProgressEventsService implements OnDestroy {
     this.source = es;
 
     this.listen(es, 'server', (e) => this.handleServerFrame(e));
-    this.listen(es, 'loading-tasks', (e) =>
-      this._loadingTasks.set(this.parse<LoadingTask[]>(e, [])),
-    );
+    this.listen(es, 'loading-tasks', (e) => {
+      const tasks = this.parse<LoadingTask[]>(e, []);
+      if (this.awaitingConnectSnapshot) {
+        this.awaitingConnectSnapshot = false;
+        for (const t of tasks) {
+          if (t.status === 'idle' && t.error) this.failedAtConnect.add(t.task_id);
+        }
+      }
+      this._loadingTasks.set(tasks);
+    });
     this.listen(es, 'detector-loading-tasks', (e) =>
       this._detectorLoadingTasks.set(this.parse<LoadingTask[]>(e, [])),
     );
@@ -259,8 +282,12 @@ export class ProgressEventsService implements OnDestroy {
     const { boot_id } = this.parse<{ boot_id?: string }>(e, {});
     if (!boot_id) return;
     if (this.lastBootId !== null && this.lastBootId !== boot_id) {
+      this.failedAtConnect.clear();
       this.serverResetSubject.next();
     }
     this.lastBootId = boot_id;
+    // The server frame opens every (re)connect, the browser's own silent
+    // reconnects included, so the next `loading-tasks` frame is its snapshot.
+    this.awaitingConnectSnapshot = true;
   }
 }

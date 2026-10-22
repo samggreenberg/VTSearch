@@ -494,6 +494,11 @@ section.speaker .speaker-visual {
    the size of the hero they replaced, which is the opposite of the point. The
    notes give up width beside it and take it all back underneath. */
 section.speaker .speaker-visual--equal { width: 52%; }
+/* An equal *pair* stacks instead (build.py `VISUAL_FRACTION_STACK`): side by
+   side at 52% each frame was a quarter of the page across, smaller than a
+   build's hero (#5171). Stacked, the pair is bound by the page's height, and
+   47% is the widest column whose two frames and their gap still fit it. */
+section.speaker .speaker-visual--stack { width: 47%; }
 section.speaker .speaker-visual img {
   width: 100%;
   display: block;

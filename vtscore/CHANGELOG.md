@@ -12,6 +12,212 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Demo downloads fall back to mirrors.** `download_file_with_progress` (and so `download_file_atomic` and every
+  demo downloader built on them) now tries the canonical URL first, then each mirror its `downloader.core._MIRRORS`
+  entry lists, restarting the file for each. A source is abandoned after `_FAILOVER_AFTER_ATTEMPTS` (3) attempts that
+  never received a byte, at once on a non-retryable status or 401/403, or when it serves something other than the
+  archive its filename names (a host that is mid-transfer keeps the full retry budget). When every source fails, one
+  `RemoteUnreachableError` gives each one's reason in order. A URL with no mirrors behaves exactly as before.
+  `_validate_archive` now raises `InvalidArchiveError`, a `RuntimeError` subclass, so existing handlers still catch
+  it.
+- **A converted demo load no longer embeds its source media** (issue #5176). `load_demo_dataset` now passes
+  `MediaType.load_demo_source(skip_embedding=True)` whenever a converter is set, as it already did for a clipper: the
+  converter replaces every loaded media, and the framework embed stage embeds its outputs. An override that honours
+  `skip_embedding` skips that wasted pass; its `embedder` may then belong to the converter's target type. The load's
+  `AdaptiveLoadPacer` paces a conversion (status `"converting"`) as its own `convert` phase within step 2, after
+  `load`, so the bar keeps moving through it. Additive.
+- **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
+  cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
+  balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
+  sign turned over, `SMART_RISE_THRESHOLD`), `best_fbeta`, `smart_beta`, `SMART_NO_BALANCE_BETA`. Each point was the
+  detector's FPR + FNR at its own Inclusion 0 cut, green once it stopped falling; the A/B found the two a tie
+  (`docs/experiments/2026-10-20-smart-fbeta-5134`). **Breaking:** `labeling_progress.calculate_error_cost_over_time`
+  is replaced by `calculate_fbeta_over_time(..., beta=None)`, whose points are `{time_index, num_labels, fbeta}`;
+  `analyze_labeling_progress` returns `fbeta_over_time` in place of `error_cost_over_time`; `compute_labeling_status`,
+  `cached_indicator_history` and `analyze_labeling_progress` take `beta=`. `inject_live_model(smart_threshold=)` is
+  deprecated and ignored, and the cache keeps no Smart cut. `smart_status_from_costs`, `smart_cut` and
+  `SMART_INCLUSION` stay for the eval's `cost` arm.
+- **The eval harness has Smart's readings as arms** (issue #5134). `AutopilotFlow(smart_signal=, record_readings=)`
+  (`SMART_SIGNALS`, `APP_SMART_SIGNAL` = `fbeta_best`, the app; `cost`, the app before; `ap`, `fbeta`, `heldout_ap`,
+  `heldout_fbeta`, `line`) and `record_step(windows=, history=)`; `simulate_voting_iterations(smart_signal=,
+  smart_readings=)`; `step_trainers._labelset_window_readings` scores Smart's window. Every row gains
+  `smart_<reading>_{slope,mean,t,last}` (`SMART_READING_COLUMNS`), NaN unless `smart_readings`. The default arm's
+  Smart is the app's F-beta light.
+- **A learned sort leaves the Evidence verdict's training baseline to be drawn once the votes stop** (issue #5120).
+  The baseline was drawn only by the evidence route on the training dataset, after a Find there.
+  `vtscore.detectors.evidence_baseline` now holds the draw both share (`scored_queries`, `labelset_evidence`,
+  `draw_baseline`), and a deferred one: `PendingDraw` carries a sort's labels, scores and line and draws them when the
+  detector has not moved on since, `defer_baseline_draw` draws it on a timer once a detector's sorts have been quiet for
+  `DRAW_QUIET_SECONDS` (a newer one replaces it), `flush_baseline_draw` lands it at once, `discard_baseline_draw` drops
+  it, and a normal exit lands any still waiting. `record_baseline` takes `det_ctx=`, re-pointing that context's cached
+  labelset after the write so it does not read as an outside edit. Additive.
+- **The Evidence coverage verdict ranks against the training haystack, not the votes' own spread** (issue #5089).
+  `evidence_coverage_report` drew `unsupported` from the share with support p-value `D < alpha`, `D` ranked against the
+  labelset's leave-one-out distances; active learning picks the votes, so on #4739's bench it fired on 81-83% of
+  in-domain runs by vote 150, and below 20 votes of a class it could not fire at all. It now takes `baseline`, the
+  training haystack's `reference_cutoffs` (per predicted class, the distance past 95% of the haystack's media called
+  that class), and draws `unsupported` from the share beyond them (`frac_beyond`, `z_beyond`; `beyond_reference`):
+  in-domain it fires on 1 of 4,320 runs at vote 150, and on the 22% screens mix and on screens alone on 99.6-100% of
+  runs from vote 10 (`docs/experiments/2026-10-19-evidence-chip-5089`). Without a baseline `unsupported` is `False`;
+  `frac_unsupported`, `z_score` and `median_support` keep their meaning. New module `vtscore.detectors.evidence_baseline`
+  stamps the cuts (embedder, width, labelset signature, k, alpha) for the detector JSON (`evidence_baseline`) and refuses
+  a stale stamp; `training_domain.labelled_media_ids` names a labelset's media in a dataset. The eval harness's Find
+  corpus ranks against the sim pool's unvoted media (`find_corpus.pool_baseline`, `FindCorpus.pool_ids`), and its flag
+  rows gain `evidence_frac_beyond` and the counts behind the shares (`evidence_n*`, `evidence_pool_n*`,
+  `evidence_n_{pos,neg}_beyond_pool`; `unsupported_counts`, `reference_vacuum_counts`).
+- **On a patch space a typed-query detector gives the Goods' centroid once its query has missed** (issue #4800).
+  Under the label quota, a detector made from a typed query gives that query's own set (#4758). On a patch space,
+  once a Bad comes before the Goods quota with a Good in hand (`label_quota.query_missed`: 1-2 Goods and 1-15 Bads,
+  `QUERY_MISS_BADS`), it now gives the Goods' centroid instead, until the quota. `_query_tier` gives the centroid there only
+  where a Good resolved; `cached_head_is_current` takes a cached centroid there and refuses a cached query head. A
+  single-vector space, and an embedder the registry does not know, keep the query. On the Region path (COCO
+  Better, DINOv3 learning on SigLIP's typed query, 864 sessions) Find's mean F-beta gains
+  +0.011 / +0.009 / +0.012 over votes 1-10 and +0.0053 / +0.0038 / +0.0047 over 1-50 at beta 1/4, 1 and 4
+  (every seed; `docs/experiments/2026-10-19-region-missed-query-4800`). The eval harness follows (`query_miss`,
+  `CALIB_QUERY_MISS=0` is the arm before). Its priced centroid lines (`centroid_line_variants`) score a click's
+  media once and draw every line off that pass (`step_trainers._centroid_cut_step`), the same sets as before, and
+  `query@<beta>` prices the typed query's own set beside them in a typed-query run.
+
+- **Above beta 1 the head's count line keeps 1.3x what stands out at beta 4, and reaches deeper where a held-out Good
+  sits below it** (issue #5039). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods the labels
+  line is the head's count (#4786, #4798). Its count now grows as `beta ** HEAD_COUNT_RECALL_EXPONENT` (0.18925) above
+  beta 1 instead of `beta ** 0.708`, and where the class model's deepest held-out Good ranks below the count at beta 1,
+  `head_count_cut` keeps at least as deep as the head's excess curve's expected F-beta peaks, from
+  `HEAD_COUNT_RECALL_Z` (2.75) bulk spreads up (`_excess_depth`). `head_count_cut` takes the held-out Goods' logits
+  (`held_out_goods=`, which `LabelsLine.threshold` passes); `ClassScoreModel.pos_logits` carries them (`None` on the
+  in-sample stand-in and on a model built by hand). Beta 1 and below are unchanged, and the line stays monotone in
+  beta. `vtscore.eval.live_threshold_rules.head_count_recall(exponent, z)` sets either piece for a run (`"off"` is the
+  line before #5039). Closed loop at beta 4: +0.0035 Find mean F-beta over a Binary Photo session, +0.015 to +0.017
+  over a FHIBE face session (`docs/experiments/2026-10-18-head-count-5039`).
+
+- **`SortResultsCache` holds a ranking as columns, and holds four times the rows** (issue #5012). A
+  stored ranking was a list of row dicts, about 250 bytes a row (336 with `best_region`). It is now an
+  int64 id column, a float64 score column and, on a region sort, an index into a table of the distinct
+  boxes: 16 bytes a row, or 20. `SORT_CACHE_MAX_ROWS` rises from 2,000,000 to 8,000,000, so all eight
+  of the most recent sorts of a 1M-item dataset stay pageable (two did) in about 160 MB at most (#4978's
+  cap allowed about 0.6 GB). `page()` builds fresh dicts for the window it returns, and `derived()`
+  hands `build` the whole ranking as a fresh `list[dict]`. Both are equal to the rows stored, keys in the
+  order `id`, score key, `best_region`, but they are no longer the stored objects. A row with another key
+  or value type is kept whole and comes back as stored. `store()` copies the rows, so a caller may now
+  change its list after handing it off. Scores stay float64, so `redraw()` counts rows at the line
+  exactly as `count_above_threshold` does. Signatures unchanged.
+
+- **A folder load width-checks every named pre-computed vector** (issue #4966). `load_dataset_from_folder` /
+  `load_dataset_from_folder_chunked` check a `content_vectors` entry filed under `content_embedder_name`, and
+  each column of a per-embedder `{embedder: vector}` entry, against the width that embedder declares
+  (`vtscore.embedding.binding.expected_dim_for_embedder`, no model load), as the `.npz` readers already did,
+  and raise `MismatchedVectorError` naming both widths. A vector with no embedder name, or one naming an
+  unregistered embedder or one that declares no width, is not width-checked there.
+
+- **An import width-checks every named vector the importer hands in** (issue #4966). Before anything is
+  embedded, the load pipeline's embed stage, its staging import and the CLI's import embed pass check each
+  vector filed under a registered embedder's name against that embedder's declared width, so a plugin
+  importer's `media["embeddings"] = {name: vec}` from a `fetch_record` / `fetch_source_media` hook or a `run()`
+  override is held to the same rule as the folder and `.npz` paths. A mismatch raises `MismatchedVectorError`
+  naming the media and both widths. Shape only; a nameless vector, an unregistered name and an embedder that
+  declares no width are not checked, and `embed_missing` itself does not re-check vectors the app made.
+
+- **`VideoXClipEmbedder.embedding_dim` is 512** (issue #4966). X-CLIP returns its 512-wide `projection_dim`
+  for both videos and text; the declared 768 was the vision tower's hidden width, so a width check rejected
+  genuine X-CLIP vectors.
+
+- **`detector_balance_state` counts what a trained head's fallback line keeps** (issue #4966). A trained head
+  whose labels give no class model (no `labels_line`: too few votes, one class) is cut at the retrain's
+  fallback, and the state's `count` is now how many unvoted items of `line_ranking` that threshold keeps, as
+  it already was under the labels line and a quota head's line. It was the count rule's (the mixture's F-beta
+  argmax under the balance's cap), a set that line never keeps. Only a context with no head reads the count
+  rule. A headless CLI run's `detector_unchecked` event and `balance` entry carry the same count.
+
+- **Library code reads one setting at a time: `vtscore.config.get_setting`** (issue #4997). `CoreConfig`
+  was meant to be built once per request and passed down; instead 28 call sites built one with
+  `CoreConfig.from_settings()` to read a field or two, each a snapshot of every setting. They now call the
+  new `get_setting(name)`, where `name` is a `CoreConfig` field, which answers from a host getter registered
+  with the new `register_setting_getter(name, fn)`, else that field of the `CoreConfig` a registered builder
+  returns, else the field's default; a required field with none of these raises `RuntimeError`, as
+  `from_settings()` did, and a name that is not a setting raises `ValueError`. The new
+  `register_settings_path_redirect(fn)` / `redirect_settings_path(path)` carry the CLI's `--settings`
+  redirect, which `from_settings(settings_path)` used to (with no redirect hook, a registered builder is still
+  handed the path). **`CoreConfig` keeps its name and its uses**: a library-only consumer still constructs
+  one and registers a builder returning it, unchanged, and `CoreConfig.from_settings()` still returns the
+  whole bundle - the builder's config when that is all there is, else one assembled from `get_setting`. An
+  out-of-tree plugin that read `CoreConfig.from_settings().<field>` keeps working; `get_setting("<field>")`
+  is the narrow read. The VTSearch app now registers a getter per setting instead of a builder.
+  `vtscore.host_seams.HostSeams` gains `setting_getters` and `settings_path_redirect`. **Behaviour change**:
+  a setting with a `CoreConfig` default now reads that default in a process that configured nothing, so
+  there `vtscore.state.core.user_beta` returns `DEFAULT_BETA` (it returned `None`), and
+  `vtscore.state.detector_beta` / `seed_detector_beta` seed `DEFAULT_BETA` (they raised `RuntimeError`).
+
+- **A head the label quota gives keeps the ranking its line is counted on** (issue #5048). The Goods'
+  centroid (#4643) and a typed query's head (#4758) used to install with `line_ranking = None`, so
+  `detector_balance_state` reported the balance's cap (32 at beta 1 or below, 128 above) as their
+  `count` wherever no Find pass had ranked them: the Train view's balance, and a headless CLI run's
+  `detector_unchecked` event, while the run exported what the head's line kept. Installing one now
+  scores it over the corpus its line was drawn on and parks that `LineRanking`, the labelled media
+  marked voted as a trained head's retrain marks them, so the count is what the line keeps.
+  `install_centroid_head` takes `ids=` (one per score its `score` returns; without them it keeps no
+  ranking, as before) and `install_query_head` takes `voted=` (the labelled media, in the scored
+  snapshot's ids). Both are additive. The Train view's learned-sort cache still misses while a quota
+  head is on the context, as it did when that head had no ranking.
+
+- **A converter output a clipper or cleaner changed replays converter first** (issue #5041). The new
+  `vtscore.media.clip_recipe.converter_trail(params)` composes a flat `run_converters_on_folder` origin with
+  the `clipper_chain` that ran on its output: the converter's step, then that chain (`None` when either cannot
+  be read). `lazy_clip.clip_recipe` returns it as a `("chain", …)` recipe for an audio / image / text
+  converter output some clipper cut or cleaner rewrote; it used to return the converter recipe, which rebuilds
+  the whole output, so every tile of a page served the whole page. The replay hands the converter the
+  source's name and path, as a reference import does. `recipe_is_exclusive` is now true for converter
+  recipes too, and for a converter output with no replayable recipe, so `_resolve_media_bytes` /
+  `_resolve_media_string` and `embed_view` never fall through to the file it was converted from.
+  `_relazify_reference_clips_stage` drops any chain-replayed unit's payload (and Original) only after a dry
+  run reproduces it, and keeps a converter output it cannot replay. In the label resolver,
+  `_apply_clip_and_embed` replays a converter origin converter first (`_converter_origin_to_chain` returns the
+  whole composed trail) and `_embed_resolved_label` sends converter origins through it; the chain on such an
+  origin used to be replayed on the source file itself. No plugin contract changes.
+
+- **A failed import's task stays listed until it is dismissed** (issue #4973). A failed import
+  produces no dataset, so its task row was the only trace of the failure, and it lapsed 30 seconds
+  after it. `LoadingTasksTracker.create_task(keep_failure=True)` keeps a failed task (its `error`
+  set and not the new `CANCELLED_ERROR`) until the new `dismiss_task(task_id)` removes it; the
+  tracker holds at most `max_kept_failures` (new constructor argument, default 20), dropping the
+  oldest first, and `dismiss_task` refuses a task that is still running. Every import's task sets
+  `keep_failure`, so code that waited for a failed import's task to age out must dismiss it; other
+  tasks lapse as before. `create_task` also takes `created_by=` (defaulting to the current user)
+  and `source=` (what the task reads; imports set it from their origin), and a snapshot carries
+  `created_by`, `source`, `keep_failure` and, once the task has finished, `finished_at`.
+  `LoadingTasksTracker.visible_to(tasks, viewer)` drops other users' kept failures from a snapshot,
+  and `initial_snapshot(viewer)` / `stream_progress_events(viewer=)` apply it per SSE connection.
+  The rest is additive.
+
+- **The structural embedders detect SIFT once per image at load** (issue #4996). `sift_vlad` and
+  `sift_vlad_doc`'s `embed_media_bulk` keeps the features each VLAD vector was aggregated from and stores
+  them, compact, as `media["local_features"]` on the dict it was handed, so `embed_missing`'s local-feature
+  back-fill skips those media instead of decoding and detecting them again. A lazy unit is embedded
+  through a copy (`embed_view`), so the embed pass copies any side channel the embedder stored on that
+  copy back onto the media. The back-fill still derives features for media that arrive embedded without
+  them (a pickle reload). Vectors, features and `sift_vlad_doc`'s tile vectors are bit-identical to the
+  two-pass output; the embed stage is ~2.5x faster on CPU.
+
+  **For library consumers:** calling `embed_media_bulk` on a structural embedder now also writes
+  `local_features` onto each media dict it embeds.
+
+- **A reference import's cleaned units are lazy: they replay their chain trail** (issue #4992).
+  `vtscore.media.lazy_clip.clip_recipe` gains a `("chain", media_type, trail_json)` recipe for an audio /
+  image / text unit some cleaner changed: the source is reloaded with the new `load_reference_source` (the
+  same loader the import hydrates thin parents with, now for text too), every recorded step is re-run
+  through the new `clipper_chain.replay_chain_on_media` (the loop factored out of `replay_chain_on_file`,
+  which keeps its behaviour), and the result is served only if it still hashes to the trail's last
+  `content_hash`. `lazy_original_bytes` replays the trail before its first cleaner and checks it against
+  the new `original_hash` trail key, which the gate that takes the `original_*` snapshot now records
+  (`original_hash(trail)` / `pre_clean_steps(trail)` read it). These recipes are exclusive
+  (`recipe_is_exclusive`): `MediaType._resolve_media_bytes` / `_resolve_media_string` return nothing when
+  the replay no longer matches, never the source file; `_resolve_media_string` now consults lazy recipes
+  at all. `has_original_payload` is also true for such a unit (`has_lazy_original`).
+  `_relazify_reference_clips_stage` drops a cleaned unit's payload and snapshot only after a dry run
+  rebuilds both byte for byte. The embed and side-channel back-fill passes hand embedders
+  `embed_view(media)`, which resolves a lazy unit's payload from its recipe instead of exposing its
+  `media_path`. `_ByteBoundedLRU.put` takes an optional `nbytes`. Additive for plugins: a cleaner that is
+  not deterministic only keeps its units materialized.
+
 - **`Audio2TextMediaConverter` and `Image2TextMediaConverter` cache their model on the instance** (issue
   #4979). Each keeps one model in a private `ModelSlot`, keyed by the loader (`whisper.load_model`, the
   `PaddleOCR` class) plus the model size or language and the resolved device: a new key frees the old model
@@ -32,6 +238,25 @@ instead, since every commit on `dev` is effectively a new app release.)
   **For library consumers:** a job started under ids that name no registered context now errors rather
   than running unbound. Register the contexts first, omit the ids, or build the manager with
   `binds_context=False`.
+
+- **`eval_learned_sort` no longer fits its threshold on the items it scores** (issue #5003). It handed
+  `train_and_score` the whole pool, so the threshold was fitted over the held-out test items it was
+  then measured on (they were the unvoted haystack). Each category is now split into a simulation half
+  and a held-out test half first (new `sim_fraction`, default `0.5`, the same default as
+  `simulate_voting_iterations`); `train_fraction` is now the fraction of the **simulation half** that is
+  voted, its unvoted rest is the haystack, and only that half reaches `train_and_score`. The test half is
+  scored with the returned model (`score_media_with_model`). `num_train` counts the votes, so
+  `num_train + num_test` no longer covers the pool. Reported `python -m vtscore.eval --mode learned`
+  metrics will move: the leak is gone and, at the default fractions, a quarter of the pool is voted
+  rather than half. A structural dataset is now refused with a `ValueError`, since its threshold is
+  the Stage-2 gate's and the held-out half is scored by the head.
+
+- **`AudioMediaType.media_response` types the payload by its container** (issue #4981). It returned
+  `audio/wav` and a `media_<id>.wav` download name whatever the bytes, though an MP3 / FLAC / OGG / M4A
+  import keeps its file verbatim. New `vtscore.media.audio.sniff.sniff_audio_format(data)` returns
+  `(mimetype, extension)` from the leading bytes (`RIFF`, `fLaC`, `OggS`, `ftyp` at offset 4, `ID3` or an
+  MPEG frame sync, an ADTS frame sync), defaulting to `("audio/wav", ".wav")`; `media_response` uses it,
+  keeping the `media_<id>` stem. Additive for callers; a WAV payload is served exactly as before.
 
 - **A spot check's ranges are exact per band, unsplit, over the set the line kept when it started** (issue
   #4483). `likely_range` bounds a band of known size with the exact hypergeometric bound (new
@@ -256,6 +481,63 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
+  `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
+  `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
+  is `False`, and one that only records imports can ignore it. Additive; a hook that never reads it is unchanged.
+
+- **The detector registry records the datasets a detector holds labels from** (issue #5142). New
+  `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
+  labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's
+  `trained_on` list of dataset ids: a writer that composed its labels against one dataset adds it while the detector
+  still holds labels there and drops it once the last one is gone; a writer that names no dataset leaves the list
+  alone. The per-vote label sync calls it, and `VoteSnapshot` gains `dataset_id`, the dataset its `medias` belong to.
+  Additive.
+- **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
+  one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
+  generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends
+  the test), which `LineTest.ahead` reads back and `as_dict()` carries as `ahead` until a label changes. `draw()`
+  installs the copy whose labels match the ones recorded instead of drawing again: the same picks from the same
+  generator state, so a seeded test deals the same rounds, and reads the same numbers, whether or not anything was
+  dealt ahead. `RoundAhead` is exported from `vtscore.training.thresholds`. Additive: a caller that never deals ahead
+  sees no change but `as_dict()["ahead"]`, always `None`.
+
+- **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
+  (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
+  `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the
+  media whose rows have all been scored. A detector's train scores its haystack with its final head and each
+  calibration fold model before the detector's own pass, so this is how the app's Find bar counts all of them. The
+  hook is per thread, `None` reports nothing, and the outer callback comes back when the block exits.
+  `_forward_sigmoid_chunked` takes an optional `on_rows` (rows scored so far, per chunk). Additive.
+
+- **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
+  (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:
+  another dataset's medias in the run's embedder, whose cell of the same name is scored at every click by the
+  detector the click's Test gives, its line's corpus side refitted there, into the new
+  `voting_columns.FIND_CORPUS_COLUMNS` (`find_fbeta` and its presets, `find_precision`, `find_recall`,
+  `find_n_flagged`, `find_average_precision`, `find_n_pos`, `find_n_neg`). `find_mix` (`"only"`, the default;
+  `"equal"`, `0` or a share) mixes it into the withheld half as extra haystack. At `find_flag_steps` the row also
+  carries `FIND_FLAG_COLUMNS`: `domain_shift_report` against the sim pool's coverage atlas (NaN on a patch
+  embedder) and `evidence_coverage_report` from the votes' vectors and the Find cut. New module
+  `vtscore.eval.find_corpus` (`build_find_corpus`, `parse_find_mix`, `find_cell`, the two flag readers). Both
+  frames gain the columns, NaN without the knob; every other column is unchanged.
+
+- **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
+  `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
+  pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.
+  `frame_at` still returns stored pixels. `VideoLetterboxCropCleaner` now writes `clip_box_frame: [width,
+  height]`, the decoded frame size it measured `clip_box` on, beside the box, and
+  `vtscore.media.provenance.CLIP_WINDOW_FIELDS` carries it, so a saved dataset keeps it. The video thumbnailers
+  stretch the frame by the SAR, so an anamorphic video previews at its display aspect. Additive.
+
+- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
+  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
+  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
+  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
+  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
+  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
+  message. Additive.
 
 - **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
   looks for each face MTCNN finds again in the photo turned a quarter each way
@@ -1962,6 +2244,49 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A Good's `region_box` survives the CSV labelset round trip** (issue #5130). The `server_csv_file`
+  label importer ignored a `region_box` column, so a boxed Good came back image-level. The exporter now writes
+  `region_box` as a JSON list, includes it in its default label columns, and leaves the column out when no label
+  has a box (every label off a patch dataset). The importer reads it back on Good rows. New
+  `vtscore.datasets.labelset.imported_region_box(label, raw)` is the shared check for an imported entry's box: a
+  float 4-tuple for a `"good"` label whose value is four numbers, else `None`. Additive.
+
+- **Label training and label ingest replay a converter output no clipper touched** (issue #5058).
+  `labelset_training._embed_one` replayed a label's unit only when its origin carried a `clipper` key, and
+  label ingest only for `clipper` / `clipper_chain`. So a `run_converters_on_folder` output with neither (an
+  import that converted and did not clip) embedded its source file whole: the PDF read as text, or decoded as
+  an image. A chain whose only step is a converter stamps no `clipper` key either, so training missed that too.
+  All three callers, `_embed_resolved_label` included, now ask one predicate (`resolver._needs_clip_replay`),
+  which accepts a clipper, chain or converter origin. A `region_box` on such a unit is on the converter's
+  output, not on the source, so training takes the replayed output's image-level vector with a warning, as it
+  does for a clipped unit. Label ingest also never reached a converter origin: `_media_type_from_origin`
+  found no media type on it, every ingest path declined, and the label was silently left out. It now takes
+  the converter's `target_type`, stores the replayed output's bytes and MD5, and skips an output it cannot
+  rebuild rather than storing the source file as the item. No plugin contract changes.
+
+- **A video label re-embeds its own window and crop** (issue #4994). `replay_chain_on_file` copied a
+  video unit to a tempfile and embedded the path alone, so the frame sampler never saw the unit's
+  `clip_start` / `clip_end` / `clip_box` and sampled the whole video, uncropped. A video unit whose
+  steps were all metadata-only is now embedded from the source file with those fields, the values the
+  dataset's embed used. `embed_file` gains a keyword-only `extra_fields` merged into the embedder's
+  media dict (additive). The replay also probes a video source's `duration`, which the tiling
+  clipper reads: without it no tiled trail replayed, and the resolver fell back to the whole file.
+  That fallback (`_apply_clip_and_embed`) now passes a video origin's legacy `clip_start` /
+  `clip_end` / `clip_box` too.
+
+- **The simulated session sorts its voting half, not the whole dataset** (issue #5004).
+  `simulate_voting_iterations` handed the selector the caller's full `seed_scores` map (or the example
+  opening's sort of every media), so the Bad phase's text-sort cut was fitted over the withheld half's
+  cosines too, and over media the cell drops before the split (a scale-banded cell's wrong-band images,
+  a prevalence arm's thinned positives, a haystack arm's thinned negatives), and the rank-space pick
+  measured distances through items it could never pick; a startup
+  schedule's cuts and the pick log's `picked_seed_rank`, `picked_seed_percentile` and
+  `startup_cut_percentile` were read over the same list. They now read a copy restricted to the sim
+  half, which is what the app has loaded, and which `ALContext.embeddings` (so the centroid fallback)
+  already was. The typed query's Test keeps the full map: it reads the withheld half's cosines. No label
+  leaked (the cosines are the query's), but which Bads a default-arm session voted could depend on the
+  size and make-up of its withheld half, so vote orders from earlier runs can differ.
 
 - **`build_coverage_atlas` no longer holds `_state_lock` across the k-means fit** (issue #4977). It
   snapshotted, fitted and installed the atlas inside one `with _state_lock:`, so a call blocked every

@@ -29,7 +29,7 @@ for half in bin reg; do
     [[ -d "$d" ]] || continue
     # Main frames only: a cell also writes __sweep / __cutdiag / __cutincl /
     # __picks, and counting those reports 5x progress.
-    n=$(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' | wc -l)
+    n=$(find "$d" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' | wc -l)
     # A zero-byte file counts as "done" to resume and must be deleted before
     # one; a header-only file parses cleanly and passes `-size 0`, so it is
     # counted separately rather than trusted.
@@ -41,10 +41,12 @@ for half in bin reg; do
     # deleting it destroys work rather than recovering it.  Same number,
     # opposite meaning -- seen once on this study at 08:10, gone by 08:12, with
     # no failed or cancelled task behind it.
-    z=$(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size 0 | wc -l)
+    z=$(find "$d" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' -size 0 | wc -l)
     h=0
-    for f in $(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size -2k); do
-      [[ "$(wc -l < "$f")" -le 1 ]] && h=$((h + 1))
+    # `-size -2k` only shortlists; the line count decides.  `zcat -f` reads a
+    # plain or gzipped cell, and a gzipped header-only one is far below 2k.
+    for f in $(find "$d" -maxdepth 1 -name 'task_*.csv*' ! -name '*__*' -size -2k); do
+      [[ "$(zcat -f "$f" | wc -l)" -le 1 ]] && h=$((h + 1))
     done
     total=$((total + n))
     printf '%-4s %-9s %7d %7d %7d %7d  %5.1f%%\n' "$half" "$arm" "$n" "$WANT" "$z" "$h" \

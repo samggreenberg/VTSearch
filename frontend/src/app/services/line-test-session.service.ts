@@ -6,13 +6,12 @@ import type { LineTestState } from '../generated/api-client/models/line-test-sta
 import { LineTestApiService } from './line-test-api.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
 import { PairScopeService } from './pair-scope.service';
-import { VoteStateService } from './vote-state.service';
 import type { VoteDirection } from './keyboard.service';
 import { apiErrorMessage } from '../utils/api-error';
 import { lineTestPhase, type LineTestPhase } from '../utils/line-test';
 
 /**
- * One Find session's test of the line (#4524): the Test autopilot's state as
+ * One Find session's test of the line (#4524): the Tune autopilot's state as
  * the view and its three panes read it. Component-provided on the Find view,
  * beside `PairScopeService`, so it lives exactly as long as the pair does.
  *
@@ -26,12 +25,16 @@ import { lineTestPhase, type LineTestPhase } from '../utils/line-test';
  * ↓ key sends an unvote. Responses carry the whole state and can land out of
  * order, so each is stamped with the request's sequence and an older one
  * never overwrites a newer (`apply`).
+ *
+ * A vote here never re-reads the vote piles (`/api/votes`): only the Review
+ * tab shows them, so the view reads them when Review opens (#5099). That read
+ * was every item's presumed label then, megabytes on a large dataset; Find
+ * reads the verified scope now (#5115).
  */
 @Injectable()
 export class LineTestSessionService {
   private readonly api = inject(LineTestApiService);
   private readonly metadataCache = inject(MediaMetadataCacheService);
-  private readonly voteState = inject(VoteStateService);
   private readonly pairScope = inject(PairScopeService);
 
   /** The server's last word. */
@@ -54,7 +57,7 @@ export class LineTestSessionService {
     const phase = this.phase();
     return (phase === 'matches' || phase === 'misses') && this.roundPicks().length > 0;
   });
-  /** The balance is frozen within a phase (#4524): changing it would move the line and the bands under the picks. */
+  /** The balance is frozen while the test runs, through both phases (#4524): changing it would move the line and the bands under the picks. */
   readonly locked = computed(() => {
     const phase = this.phase();
     return phase === 'matches' || phase === 'misses';
@@ -88,13 +91,11 @@ export class LineTestSessionService {
 
   /**
    * Start a test over the Find pass's frozen scores. One that resumed from the
-   * picks the detector keeps (#4526) made them session votes again, so the
-   * Review tab's piles are re-read.
+   * picks the detector keeps (#4526) made them session votes again; the
+   * Review tab's piles pick them up when it opens.
    */
   start(): void {
-    this.send(this.api.start(), 'Could not start the test.', () => {
-      if (this.test()?.kept_at) this.voteState.loadVotes();
-    });
+    this.send(this.api.start(), 'Could not start the test.');
   }
 
   /** Vote the pick on screen and move to the next unvoted one. */
@@ -109,8 +110,6 @@ export class LineTestSessionService {
     this.send(
       this.api.vote([{ id, label: direction }]),
       'Could not send the vote.',
-      // The vote is a session vote: the Review tab's piles hold it now.
-      () => this.voteState.loadVotes(),
       // Refused: the pick is unvoted again, and back on screen to vote once more.
       () => {
         const back = new Map(this.roundVotes());
@@ -141,13 +140,44 @@ export class LineTestSessionService {
     this.send(
       this.api.unvote(id),
       'Could not take the vote back.',
-      () => this.voteState.loadVotes(),
       () => {
         const back = new Map(this.roundVotes());
         back.set(id, was);
         this.roundVotes.set(back);
       },
     );
+  }
+
+  /**
+   * The next *depth* picks a vote will bring on screen, in that order: the
+   * unvoted picks after the one shown, wrapping round, as {@link vote} walks
+   * them, then the next round's first picks. What the view warms while the
+   * user looks at this one (#5099).
+   *
+   * The next round is known before the vote that deals it (#5116): once one
+   * pick is left the server deals that round both ways the pick can go
+   * (`test.ahead`). While the pick is unvoted both are upcoming, taken in
+   * turns, since either may come (they are the same picks when both ways go
+   * to the same band); once it has its vote here, the way it went, so the
+   * other's fetch stops as the vote goes out.
+   */
+  upcoming(depth: number): number[] {
+    const picks = this.roundPicks();
+    const votes = this.roundVotes();
+    const from = this.index();
+    const ids: number[] = [];
+    for (let step = 1; step < picks.length && ids.length < depth; step++) {
+      const id = picks[(from + step) % picks.length];
+      if (!votes.has(id)) ids.push(id);
+    }
+    const next = this.nextRounds();
+    for (let i = 0; ids.length < depth && next.some((round) => i < round.length); i++) {
+      for (const round of next) {
+        const id = round[i];
+        if (id !== undefined && ids.length < depth && !ids.includes(id)) ids.push(id);
+      }
+    }
+    return ids;
   }
 
   /** Show pick *i* of the round. */
@@ -165,7 +195,6 @@ export class LineTestSessionService {
   private send(
     request: Observable<LineTestResponse>,
     failure: string,
-    then?: () => void,
     refused?: () => void,
   ): void {
     const seq = ++this.seq;
@@ -185,7 +214,6 @@ export class LineTestSessionService {
         if (seq < this.applied) return;
         this.applied = seq;
         this.apply(resp);
-        then?.();
       },
       error: (err) => {
         settle();
@@ -207,6 +235,8 @@ export class LineTestSessionService {
     const previous = this.test();
     this.response.set(resp);
     const test = resp.test ?? null;
+    // The next round, dealt ahead (#5116): its metadata is in hand as it is dealt, like its images.
+    if (test?.ahead) this.metadataCache.ensureLoaded([...test.ahead.good, ...test.ahead.bad]);
     const pending = test?.picks ?? [];
     if (!test || !pending.length && !this.roundPicks().length) {
       if (!test || test.phase === 'done' || test.phase === 'nothing') {
@@ -230,6 +260,23 @@ export class LineTestSessionService {
       this.roundVotes.set(new Map());
       this.index.set(0);
     }
+  }
+
+  /**
+   * The rounds the vote on this round's last pick can deal, from the
+   * server's `ahead`: both while that pick is the one unvoted, the one its
+   * vote names once every pick has one, and none while two or more are
+   * unvoted (a ↓ lifted a vote, and the unvote's reply drops `ahead`).
+   */
+  private nextRounds(): number[][] {
+    const ahead = this.test()?.ahead;
+    const picks = this.roundPicks();
+    if (!ahead || !picks.includes(ahead.id)) return [];
+    const votes = this.roundVotes();
+    const unvoted = picks.filter((id) => !votes.has(id));
+    const vote = votes.get(ahead.id);
+    if (vote) return unvoted.length ? [] : [vote === 'good' ? ahead.good : ahead.bad];
+    return unvoted.length === 1 ? [ahead.good, ahead.bad] : [];
   }
 
   /** The first unvoted pick after *from*, wrapping round; null when every pick has a vote. */

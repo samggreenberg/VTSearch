@@ -688,7 +688,7 @@ def supports_text(self) -> bool:
 |---|---|---|
 | `supports_text: bool` | **True** | Return `False` for vision-only or patch-based encoders with no text tower (DINOv2/v3, EUPE, SIFT/VLAD, FaceNet, BEATs, AST, Whisper-encoder, VideoMAE). The default is `True` because most shipped embedders are cross-modal (CLIP, SigLIP, CLAP, E5, BGE); leaving it unset on a vision-only encoder wrongly advertises `POST /api/sort` text queries. |
 | `supports_patch_regions: bool` | False | Return `True` for image embedders that implement `_patch_forward_impl(media) -> PatchEmbedOutput` (the hook behind the public `patch_forward`, which takes the `_embed_lock` for you). Loaders that see this flag run the patch pass after the standard CLS pass and store a hierarchical region set plus the raw patch grid. |
-| `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]`, enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
+| `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]` (it skips media your `embed_media_bulk` already stored them on, which is how the shipped SIFT/VLAD embedders detect once per image), enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
 All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
@@ -1055,8 +1055,13 @@ payload the first time a cleaner actually changes an item, under
   `?variant=original`, and the detail viewer shows a Clean/Original toggle when
   the flag is set.
 - Because a cleaner rewrites the payload rather than slicing it, a cleaned item
-  from a *reference* (thin) import keeps its bytes materialized — `lazy_clip`
-  has no recipe that reproduces a cleaner's output from the source file.
+  from a *reference* (thin) import is reproduced by replaying its whole chain
+  trail from the source file, and the snapshotting gate's trail entry records
+  `original_hash` so the replayed Original can be checked too. The import keeps
+  only that recipe once a dry run rebuilds both payloads byte for byte, so a
+  cleaner that is not deterministic (same input and params, same output) costs
+  a thin import its byte savings on the items it changed, but nothing worse.
+  See "Reference (no-copy) imports and lazy clips" in `docs/ARCHITECTURE.md`.
 
 A cleaned item is flagged for MD5 + embedding + thumbnail recomputation, and its
 trail entry records `changed`, so provenance's "Derived Via" line lists only the
@@ -1082,14 +1087,23 @@ good: a metadata-cleaned unit costs no extra storage, and a reference (thin)
 import keeps its byte savings on it.
 
 The spatial half of that contract, `clip_box`, is *honoured* rather than baked
-in, by three readers that have to agree (the parsing and the crop live once in
-`vtscore/media/video/crop.py`):
+in, by four readers that have to agree (the parsing and the crop live once in
+`vtscore/media/video/crop.py`, plus the player's mirror of the clamp):
 
 | Reader | Why it needs the box |
 |--------|---------------------|
 | `sample_video_frames` (`vtscore/media/video/_frame_sampling.py`) | what the embedder actually sees |
 | the video thumbnailers (`vtscore/media/video/media_type.py`) | so the grid preview frames the same picture |
 | `_fixup_clip_md5_and_embeddings` (`vtscore/datasets/stages/clipper.py`) | folds the box into the boundary-tag MD5 so two crops of one parent don't collide |
+| `VideoPlayerComponent`, via `frontend/src/app/utils/clip-box.ts` | so the detail player shows the picture that was embedded; a TypeScript mirror of `clamp_clip_box`, applied with CSS `object-view-box` after scaling the box by `clip_box_frame` |
+
+The box is in the pixels of the frames the decoder returns, which are *stored*
+pixels. The browser sizes a video in *display* pixels, and on an anamorphic
+video (non-square pixels) the two differ, so the letterbox cleaner writes the
+frame size it measured on beside the box, as `clip_box_frame: [width, height]`.
+The player scales the box from that frame to the one it plays; the server-side
+readers decode stored pixels and need no scaling. A box with no frame recorded
+is read as is.
 
 If you add a media type whose units are likewise metadata-only, follow the same
 shape: narrow the keys, let the readers honour them, and snapshot nothing.

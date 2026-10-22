@@ -4,7 +4,7 @@
   (closed)="onCancel()">
   @if (view === 'confirm') {
   <vt-toasty-hint hintId="use-example">
-    <strong>OK</strong> uses the whole file as the example. <strong>OK but Crop</strong> lets you mark just
+    <strong>OK</strong> uses the whole {{ mediaItemWord }}. <strong>OK but Crop</strong> lets you mark just
     the part you mean.
   </vt-toasty-hint>
     <div class="preview">
@@ -47,7 +47,7 @@
   }
 
   @if (view === 'confirm') {
-    <div modal-footer>
+    <div class="form-actions" modal-footer>
       <button type="button" class="btn btn--secondary" (click)="onCancel()">Cancel</button>
       <button
         type="button"

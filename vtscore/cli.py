@@ -258,17 +258,19 @@ def _load_and_train_detectors(
     snap: dict[int, dict[str, Any]],
     routed: "_RoutedSnapshots | None" = None,
 ) -> dict[str, dict[str, Any]]:
-    """Resolve, re-embed, and train an MLP for each named detector.
+    """Resolve, re-embed, and train a head for each named detector.
 
     For every name in *detector_names* the on-disk JSON is read, the
     labelset's origins are resolved via their importer's ``resolve_file()``,
-    the files are embedded with the dataset's embedder, and an MLP is trained
-    from the resulting vectors.  Detectors whose ``media_type`` doesn't match
-    the dataset are skipped with a warning.  Detectors that declare an
-    ``input_spec`` (a clipper the detector was trained on) are also skipped
-    when the loaded dataset wasn't clipped to match - the resulting
-    embeddings would be from a different granularity and the scores would
-    be meaningless.
+    the files are embedded with the dataset's embedder, and the head the
+    labels give is built from the resulting vectors: a trained head, or, under
+    the label quota (or a typed query's hold, #4736), the Goods' centroid or
+    the typed query's head.  Detectors whose ``media_type`` has no direct or
+    one-hop converter route from the dataset's types are skipped with a
+    ``detector_skipped`` event.  Detectors that declare an ``input_spec`` (a
+    clipper the detector was trained on) the loaded dataset wasn't clipped to
+    match have the dataset re-clipped to that granularity at scoring time,
+    announced with a ``detector_reclip`` event.
 
     When *routed* is given, each detector's threshold is calibrated on the
     snapshot **scoring will read** - the converted, re-clipped, re-embedded one
@@ -488,12 +490,13 @@ def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
     """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
     Read at the balance the training read: the detector's own
-    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot spot-check its line (#4272), so it exports
-    the balance's unchecked set - the cap or the mixture's F-beta argmax,
-    whichever is smaller (#4389) - and the ``detector_unchecked`` event is
-    the run's record that the set it exports was never checked.  ``None``
-    with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
-    the Inclusion 0 cut, and there is no set to report.
+    (:func:`vtscore.state.detector_beta`, #4413, #4665).  A headless run cannot
+    spot-check its line (#4272), so it exports what the line keeps unchecked -
+    every unvoted item at or above the threshold the labels drew (#4452), the
+    state's ``count`` - and the ``detector_unchecked`` event is the run's
+    record that the set it exports was never checked.  ``None`` with no
+    balance (a library caller's ``CoreConfig(beta=None)``): the line is the
+    Inclusion 0 cut, and there is no set to report.
     """
     from vtscore.state import detector_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
@@ -520,7 +523,7 @@ def _score_medias_with_detectors(
     detector_mlps: dict[str, dict[str, Any]],
     routed: "_RoutedSnapshots | None" = None,
 ) -> dict[str, dict[str, Any]]:
-    """Score *medias* against pre-trained detector MLPs, routing across types.
+    """Score *medias* against pre-trained detector heads, routing across types.
 
     *medias* may arrive unembedded and may mix source types.  For each group of
     detectors sharing a target ``media_type`` + embedder + re-clip granularity,
@@ -633,7 +636,7 @@ def _emit_skipped_medias(skipped: list[int], embedder_name: str = "") -> None:
     one bad file doesn't abort a long run (issue #3179).  Silent skipping would
     be worse than the crash it replaces, though: the exported hit count would
     just be quietly short.  So every skip is announced on the CLI's own event
-    stream, where ``--format json`` consumers can see it too.
+    stream, where ``--progress-format json`` consumers can see it too.
     """
     if not skipped:
         return
@@ -1219,9 +1222,12 @@ def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[st
     """
     from collections import defaultdict  # noqa: PLC0415
 
-    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+    from vtscore.datasets.stages.embedding import _check_named_vector_widths, embed_missing  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
+    # What the importer filed under an embedder's name must have that
+    # embedder's width, as in the GUI's load pipeline.
+    _check_named_vector_widths(medias)
     by_type: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)
     for mid, media in medias.items():
         by_type[media.get("media_type") or ""][mid] = media
@@ -1289,12 +1295,14 @@ def _load_importer_chunked(
 def _check_multi_output(importer: Any) -> None:
     """Refuse an ``outputs`` list for an importer that makes one dataset per run.
 
-    The same two conditions the Add Dataset form's *Multi-Dataset* box checks
+    The rule the Add Dataset form's *Multi-Dataset* box reads
     (``supports_multi_output`` in the importer's listing): the importer has not
     opted out, and it declares a ``media_type`` field for the outputs to
     multiply.
     """
-    if not getattr(importer, "multi_output", True) or not any(f.key == "media_type" for f in importer.fields):
+    from vtscore.datasets.importers.base.core import _supports_multi_output  # noqa: PLC0415
+
+    if not _supports_multi_output(importer):
         raise ValueError(
             f"Importer {importer.name!r} produces one dataset per run; it does not accept an outputs list."
         )
@@ -1952,20 +1960,20 @@ def _run_pipeline(
     source and the exporter has run, ``False`` for a dry run and for a saving
     run that skipped detection.
     """
-    from vtscore.config import CoreConfig
+    from vtscore.config import get_setting, redirect_settings_path
 
-    # Build the runtime config once (routing the optional settings_path
-    # redirect through the same call) so this function - and the helpers
-    # below - never import ``vtsearch.settings`` directly.
-    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
-    autofind_detectors = list(config.autofind_detectors)
+    # Settings are read through ``get_setting`` so this function - and the
+    # helpers below - never import ``vtsearch.settings`` directly.
+    if settings_path:
+        redirect_settings_path(settings_path)
+    autofind_detectors = list(get_setting("autofind_detectors"))
     detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
-    exporter_name, exporter_field_values = _resolve_exporter(config, exporter_name, exporter_field_values)
+    exporter_name, exporter_field_values = _resolve_exporter(exporter_name, exporter_field_values)
     if dataset is not None and not dry_run:
         exporter_field_values = _exporter_fields_for_dataset(exporter_name or "gui", exporter_field_values, dataset)
 
     if dry_run:
-        if source_description and source_description.get("save_dataset") and config.autofind_cli_delete_dataset:
+        if source_description and source_description.get("save_dataset") and get_setting("autofind_cli_delete_dataset"):
             source_description = {**source_description, "delete_after_detection": True}
         _run_dry_run(
             source_description,
@@ -2017,17 +2025,22 @@ def _run_pipeline(
 
 
 def _resolve_exporter(
-    config: Any, exporter_name: str | None, exporter_field_values: dict[str, Any] | None
+    exporter_name: str | None, exporter_field_values: dict[str, Any] | None
 ) -> tuple[str | None, dict[str, Any] | None]:
     """Fall back to the settings' AutoFind results exporter when no ``--exporter`` was given.
 
     Its per-exporter field values come along too.  An explicit ``--exporter``
     always wins; if neither is set the downstream default (``gui``) applies.
     """
-    if exporter_name is None and config.autofind_exporter:
-        exporter_name = config.autofind_exporter
+    from vtscore.config import get_setting  # noqa: PLC0415
+
+    if exporter_name is not None:
+        return exporter_name, exporter_field_values
+    configured = get_setting("autofind_exporter")
+    if configured:
+        exporter_name = configured
         if exporter_field_values is None:
-            exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
+            exporter_field_values = dict(get_setting("autofind_exporter_field_values").get(configured, {}))
     return exporter_name, exporter_field_values
 
 
@@ -2364,11 +2377,12 @@ def _delete_after_detection(entry: dict[str, Any], settings_path: str | None) ->
     the import was the point) or failed (so it can be searched again from the
     dashboard).
     """
-    from vtscore.config import CoreConfig  # noqa: PLC0415
+    from vtscore.config import get_setting, redirect_settings_path  # noqa: PLC0415
     from vtscore.datasets.registry import unregister_dataset  # noqa: PLC0415
 
-    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
-    if not config.autofind_cli_delete_dataset or not unregister_dataset(entry["id"]):
+    if settings_path:
+        redirect_settings_path(settings_path)
+    if not get_setting("autofind_cli_delete_dataset") or not unregister_dataset(entry["id"]):
         return
     cli_progress.emit(
         "dataset_deleted",
@@ -2628,9 +2642,9 @@ def _run_source(
     imports transformers (#3715).  A dry run loads nothing and skips it.
     """
     if settings_path:
-        from vtscore.config import CoreConfig  # noqa: PLC0415
+        from vtscore.config import redirect_settings_path  # noqa: PLC0415
 
-        CoreConfig.from_settings(settings_path=settings_path)
+        redirect_settings_path(settings_path)
     if not dry_run:
         from vtscore.embedding import initialize_models  # noqa: PLC0415
 

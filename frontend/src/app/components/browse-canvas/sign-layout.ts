@@ -46,7 +46,7 @@
 // lie flat on the map instead of floating toward the viewer). See
 // {@link approximateLevelKeys} for which bands qualify.
 
-import type { RegionLabelPayload, ViewTransform } from '../../models/projection.models';
+import type { RegionLabel, ViewTransform } from '../../models/projection.models';
 import { projToScreen } from './view-transform';
 
 /** Scale + opacity a sign renders at, before de-cluttering. */
@@ -60,7 +60,7 @@ export interface SignAppearance {
 
 /** A sign that survived visibility + de-cluttering, ready to paint. */
 export interface PlacedSign {
-  label: RegionLabelPayload;
+  label: RegionLabel;
   /** The lettering to paint — `label.text`, prefixed with
    *  {@link SIGN_APPROXIMATE_PREFIX} when {@link approximate}. Always use this
    *  rather than `label.text`, so the painted glyphs match the measured pill. */
@@ -294,7 +294,7 @@ function levelKey(level: number): number {
  * the result: they are not clustered, so the finding does not apply to them.
  */
 export function approximateLevelKeys(
-  labels: readonly RegionLabelPayload[],
+  labels: readonly RegionLabel[],
 ): ReadonlySet<number> {
   const bands = new Set<number>();
   for (const label of labels) {
@@ -323,7 +323,7 @@ export function approximateLevelKeys(
  * a later zoom re-runs the layout and the sign gets another chance.
  */
 export function layoutSigns(
-  labels: readonly RegionLabelPayload[],
+  labels: readonly RegionLabel[],
   view: SignViewContext,
   measure: (text: string, fontPx: number, approximate: boolean) => number,
   baseFontPx: number = SIGN_BASE_FONT_PX,

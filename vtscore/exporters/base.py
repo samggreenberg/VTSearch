@@ -515,7 +515,7 @@ class ResultsExporter(PluginBase):
 
         Almost every exporter serialises the scored *results* (the hit lists).
         The portable-detector exporter is the exception: it serialises the
-        trained MLP itself (an ONNX scoring bundle), so it needs the in-memory
+        trained head itself (an ONNX scoring bundle), so it needs the in-memory
         detectors the CLI pipeline just trained rather than their output.  When
         this returns ``True`` the pipeline routes to :meth:`export_cli_detectors`
         instead of :meth:`export_cli`; results-consuming exporters leave it

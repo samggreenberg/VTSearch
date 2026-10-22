@@ -25,6 +25,7 @@ import { DashboardLoadingTasksService } from '../../services/dashboard-loading-t
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -37,12 +38,15 @@ import {
 } from '../../utils/format-progress';
 import { sortRowsByColumn } from '../../utils/sort-rows';
 import { clusterImportSiblings, importSiblingNames } from '../../utils/import-siblings';
+import { PairLoadWatch, pairLoadBar, watchPairLoad } from '../../utils/pair-load-bar';
 import {
   DashboardColumnsService,
   DatasetColumn,
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
 import { JobProgressComponent } from '../job-progress/job-progress.component';
+import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { FailedTaskComponent } from './failed-task/failed-task.component';
 import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
@@ -61,6 +65,7 @@ import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
 import { topOpenModal } from '../modal/modal.component';
 import { HintId, HintsService } from '../../services/hints.service';
 import { datasetMediaWords } from '../../utils/media-words';
+import { allSoloMediaType } from '../../utils/solo-media-type';
 import { typedQuery } from '../../utils/label-quota';
 import { apiErrorMessage } from '../../utils/api-error';
 import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
@@ -79,6 +84,7 @@ type DashboardHintId = Extract<
   | 'train'
   | 'train-one-dataset'
   | 'untrained-detector'
+  | 'trained-here'
   | 'test-or-find'
   | 'find'
 >;
@@ -89,6 +95,8 @@ type DashboardHintId = Extract<
   standalone: true,
   imports: [
     JobProgressComponent,
+    ProgressBarComponent,
+    FailedTaskComponent,
     DatasetCardComponent,
     DetectorCardComponent,
     CombineDatasetsModalComponent,
@@ -133,6 +141,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
   private hints = inject(HintsService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   /** The highlighted rows, owned by `DashboardSelectionService` (a root
    *  singleton, so the top bar reads them without this component and they
@@ -174,15 +183,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly deletingDatasetId = signal('');
   readonly deletingDetectorId = signal('');
   trainAfterModelCreation = false;
-  /** Mirrors the user's click intent so the Train/Test button icons
+  /** Mirrors the user's click intent so the Train/Tune button icons
    *  can waggle while the `activeContextGuard` waits between click and
    *  route activation. Reset when `contextSwitch.switching$` settles
    *  back to false (either route activated or canActivate denied). */
   // Written from the router-events subscribe (an unpatched callback) as well as
-  // the bound Train/Test click handlers, so signals so the button-icon waggle
+  // the bound Train/Tune click handlers, so signals so the button-icon waggle
   // repaints under zoneless.
   readonly trainLoading = signal(false);
   readonly findLoading = signal(false);
+  /** The pair a Tune click is loading, while it waits (#5098); `null` otherwise. */
+  private readonly tuneLoadWatch = signal<PairLoadWatch | null>(null);
+  /** The bar under Tune from the click until the view opens: the loads the
+   *  route guard is holding it for, as one bar (see `pairLoadBar`). */
+  readonly tuneBar = computed(() => {
+    const watch = this.tuneLoadWatch();
+    if (!watch) return null;
+    return pairLoadBar(watch, this.progressEvents.loadingTasks(), this.progressEvents.detectorLoadingTasks());
+  });
 
   /** Lifted out of this component into `DashboardColumnsService` so the
    *  top-bar context pulldowns can mirror the user's sort. Assigned in
@@ -198,6 +216,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // `visibleDatasetColumns` getter, so a signal so the column set repaints.
   readonly serverSetsAgeOff = signal(false);
 
+  /** The server's one media type when it is locked to one (`solo_media_type`),
+   *  else `null`. Wherever it is the only type on show, the Type columns and
+   *  the stats and combine dialogs' type fields drop out (#5106). */
+  get soloMediaType(): string | null {
+    return this.settingsState.settingsSignal()?.solo_media_type || null;
+  }
+
   get visibleDatasetColumns(): DatasetColumn[] {
     let cols = this.datasetCols.columnOrder;
     if (this.isDefaultLogin()) {
@@ -206,6 +231,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.serverSetsAgeOff()) {
       cols = cols.filter((c) => c !== 'expires_at');
     }
+    // On a server locked to one media type the Type column would say that
+    // type on every row; one row of another type brings it back.
+    if (allSoloMediaType(this.soloMediaType, this.datasets.map((d) => d.media_type))) {
+      cols = cols.filter((c) => c !== 'media_type');
+    }
     return cols;
   }
 
@@ -213,6 +243,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     let cols = this.detectorCols.columnOrder;
     if (this.isDefaultLogin()) {
       cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    // Both tabs judged together, so the column doesn't come and go on a switch.
+    if (allSoloMediaType(this.soloMediaType, this.detectors.map((d) => d.media_type))) {
+      cols = cols.filter((c) => c !== 'media_type');
     }
     return cols;
   }
@@ -309,6 +343,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((models) => {
         this.reconcileSelection('detector', models.map((m) => m.id));
       });
+    // The dataset and detector rows draw their Type icon from the media-type
+    // registry (`MediaTypeCapabilityService.iconFor`, #5178).
+    this.mediaTypeCaps.ensureLoaded();
     this.refresh();
     this.startDiskUsagePolling();
     this.startRamUsagePolling();
@@ -332,6 +369,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         ) {
           this.trainLoading.set(false);
           this.findLoading.set(false);
+          this.tuneLoadWatch.set(null);
         }
       });
   }
@@ -947,7 +985,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           // Promote to active once the load has settled (never before, per
           // the H25 intent/active ordering), keeping any active detector
           // half. This drives the interceptor's X-Dataset-Id and the
-          // top-bar label on the label/test views; on the Dashboard itself
+          // top-bar label on the label/tune views; on the Dashboard itself
           // the top bar mirrors the table selection instead.
           this.activeContext.setActivePair(dataset.id, this.activeContext.modelId),
         ),
@@ -1328,7 +1366,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Button state ---
 
   /** True only while the **active (dataset, detector) pair** is mid-switch:
-   *  a top-bar pulldown change, or a Train/Test click, that the
+   *  a top-bar pulldown change, or a Train/Tune click, that the
    *  `activeContextGuard` is still promoting. That promotion is the
    *  H25-critical window — the moment the HTTP interceptor's request
    *  tagging is in transition — so the dashboard freezes its controls
@@ -1349,10 +1387,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.trainLoading() || this.findLoading() || this.contextSwitch.switching;
   }
 
-  /** Train/Test gate on this rather than `isContextSwitching` because they
+  /** Train/Tune gate on this rather than `isContextSwitching` because they
    *  must also wait out an in-flight browse-prep: when its projection build
    *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
-   *  Test navigation underneath it would race that redirect. Independent
+   *  Tune navigation underneath it would race that redirect. Independent
    *  actions don't care — to them browse-prep is just more background work. */
   get isNavBusy(): boolean {
     return this.isContextSwitching || this.browsePrep.preparing;
@@ -1362,7 +1400,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
    * Which of Toasty's hints the Dashboard shows (#4680, #4807), or `null`. At
    * most one at a time: the first step, in the order a new user takes them,
    * that the current state is waiting on, so every state on the way from an
-   * empty Dashboard to Train, Test or Find has one. Each goes away the moment
+   * empty Dashboard to Train, Tune or Find has one. Each goes away the moment
    * that step is taken (and while Add Dataset or New Detector is open, since
    * opening one is taking it).
    */
@@ -1371,7 +1409,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.importerFlow().open || this.newDetectorFlow().open) return null;
     const pickedDatasets = this.resolvedSelectedDatasets;
     const pickedDetectors = this.resolvedSelectedModels;
-    const importing = this.loadingTasksSvc.orphanLoadingTasks.length > 0;
+    // A failed import's row stays until dismissed (#4973), but nothing is coming from it.
+    const importing = this.loadingTasksSvc.orphanLoadingTasks.some((t) => !t.error);
     if (this.datasets.length === 0 && !importing) return this.loading ? null : 'add-dataset';
     if (this.datasets.length > 0 && pickedDatasets.length === 0) return 'select-dataset';
     if (new Set(pickedDatasets.map((d) => d.media_type)).size > 1) return 'mixed-datasets';
@@ -1382,8 +1421,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (pickedDatasets.length === 0) return 'wait-for-import';
     if (!this.findMediaTypesMatch()) return 'mismatch';
     if (this.showTrainHint) return 'train';
-    // Test takes one dataset and one detector; Find takes any number.
-    if (this.findEnabled) return 'test-or-find';
+    // Tune takes one dataset and one detector; Find takes any number. On the
+    // dataset the detector was trained on, both would show it items it has seen.
+    if (this.findEnabled) return this.selectionTrainedHere ? 'trained-here' : 'test-or-find';
     if (this.autofindEnabled) return 'find';
     // Nothing runs: a ticked detector has nothing to score with (#4758). One
     // detector under several datasets needs the datasets narrowed to train it;
@@ -1395,7 +1435,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /**
    * Whether one of Toasty's hints is on screen (#4807): the one the state calls
    * for, not hidden by the user, with no dialog over it. The reasons under the
-   * Train / Test / Find buttons step aside while it is: Toasty is saying the
+   * Train / Tune / Find buttons step aside while it is: Toasty is saying the
    * same thing, at more length.
    */
   get hintOnShow(): boolean {
@@ -1426,6 +1466,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get selectedDatasetCount(): number {
     return this.resolvedSelectedDatasets.length;
+  }
+
+  /** Whether the one ticked detector holds labels from the one ticked dataset
+   *  (#5142), which the server lists as the detector's `trained_on`. */
+  private get selectionTrainedHere(): boolean {
+    const datasets = this.resolvedSelectedDatasets;
+    const models = this.resolvedSelectedModels;
+    if (datasets.length !== 1 || models.length !== 1) return false;
+    return (models[0].trained_on ?? []).includes(datasets[0].id);
   }
 
   /** The first ticked detector with nothing to score with (#4758), for Toasty. */
@@ -1494,8 +1543,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Why the selection cannot be scored, or `''` when it can: at least one
    *  dataset and one detector, one media type across every ticked row, and
-   *  every ticked detector with labels or a typed query (#4758). Test and Find
-   *  share this rule, except that Test (*onePair*) opens one view on one pair
+   *  every ticked detector with labels or a typed query (#4758). Tune and Find
+   *  share this rule, except that Tune (*onePair*) opens one view on one pair
    *  and so takes exactly one of each, as Train does; Find runs AutoFind on
    *  every ticked dataset with every ticked detector.
    *
@@ -1522,16 +1571,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.scoreSelectionBlocker(true) === '';
   }
 
-  /** The Test button's hint (the view is `find` in code, as Train's is `label`). */
+  /** The Tune button's hint (the view is `find` in code, as Train's is `label`). */
   get findHint(): string {
     return (
       this.scoreSelectionBlocker(true) ||
-      "Open the Test view to score the selected dataset and test the selected detector's line on it"
+      "Open the Tune view to score the selected dataset, test the selected detector's line on it, and correct what it gets wrong"
     );
   }
 
   /** The big Find button (#4529; labelled AutoRun until #4525): enabled on
-   *  Test's rule, for any number of ticked rows. */
+   *  Tune's rule, for any number of ticked rows. */
   get autofindEnabled(): boolean {
     return this.scoreSelectionBlocker(false) === '';
   }
@@ -1599,9 +1648,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     if (!model) return;
 
-    // See `onLabel`; the route guard owns context + loading.
+    // See `onLabel`; the route guard owns context + loading. The watch is
+    // taken before the guard asks for any load, so none of its rows is a leftover.
     this.findLoading.set(true);
-    this.router.navigate(['/test', dataset.id, model.id]);
+    this.tuneLoadWatch.set(
+      watchPairLoad(dataset.id, model.id, this.progressEvents.loadingTasks(), this.progressEvents.detectorLoadingTasks()),
+    );
+    this.router.navigate(['/tune', dataset.id, model.id]);
   }
 
   /** The big Find button: one background AutoFind run per ticked dataset,

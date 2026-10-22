@@ -69,9 +69,9 @@ ALLOWED_PATHS: dict[str, str] = {
     # the author's box and fail on a fresh clone.
     "slides/_build/": "assembled deck markdown (slides/build.py); gitignored",
     "slides/_out/": "rendered decks (slides/render.sh); gitignored",
-    # Another repository's tree. Backticked because it reads as a path, but it
-    # is the evaluation-framework repo's, and nothing here will ever create it.
-    "scripts/sod/": "lives in the evaluation-framework repo, not this one (#2847)",
+    # Another branch's tree. Backticked because it reads as a path, but it
+    # exists only on the evaluation-framework branch, never on dev or main.
+    "scripts/sod/": "lives only on the evaluation-framework branch, not dev (#2847)",
     # Deliberately fictional paths in "here is how you would write your own"
     # examples. These must stay non-existent — that is the point of the example.
     "vtsearch/auth/my_provider.py": "fictional path in the auth extension guide",

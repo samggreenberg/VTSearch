@@ -51,6 +51,7 @@ describe('BrowsePrepService', () => {
 
   function meta(overrides: Partial<ProjectionMeta>): ProjectionMeta {
     return {
+      status: 'idle',
       projection_id: 'p',
       bounds: [0, 0, 1, 1],
       base_radius: 1,
@@ -228,6 +229,7 @@ describe('BrowsePrepService: zoneless repaint of the projection row', () => {
 
   function meta(overrides: Partial<ProjectionMeta>): ProjectionMeta {
     return {
+      status: 'idle',
       projection_id: 'p',
       bounds: [0, 0, 1, 1],
       base_radius: 1,

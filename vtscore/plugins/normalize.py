@@ -2,7 +2,7 @@
 
 After marshmallow / argparse validates the *shape* of incoming field
 values, this module's :func:`normalize_field_values` applies the
-behaviours that used to be plugin-author responsibility:
+behaviours every plugin needs, so no plugin author implements them:
 
 1. **Default fallback** for a field the caller left blank.  A
    :attr:`~vtscore.plugins.PluginField.default` is a *value*, not a
@@ -11,8 +11,8 @@ behaviours that used to be plugin-author responsibility:
    what the plugin body sees.  ``argparse`` already did this for the CLI
    (an omitted flag takes the field's ``default``); web callers send an
    untouched input as ``""``, which marshmallow's ``load_default`` does
-   *not* cover, so the two ingress points disagreed until this pass
-   (issue #3874).
+   *not* cover, so without this pass the two ingress points would
+   disagree (issue #3874).
 2. **Whitespace strip** on every text-like value, so plugin bodies can
    trust ``field_values[key]`` is the trimmed form.
 3. **Template variable substitution** for fields that declare
@@ -28,11 +28,13 @@ behaviours that used to be plugin-author responsibility:
    :func:`~vtscore.security.url_validation.validate_url` (or, for a field
    declaring :attr:`~vtscore.plugins.PluginField.opened_in_browser`,
    through :func:`~vtscore.security.url_validation.validate_browser_url`);
-   ``field_type="server_path"`` values are passed through
+   ``field_type="server_path"`` and ``field_type="folder"`` values are
+   passed through
    :func:`~vtscore.security.path_validation.confine_server_filepath`
-   anchored at the per-user data dir, and the *approved* path is written
-   back into ``field_values`` so the plugin body consumes exactly what
-   was validated.
+   anchored at the per-user data dir (no confinement in single-user mode;
+   see :func:`~vtscore.security.path_validation.get_file_access_base_dir`),
+   and the *approved* path is written back into ``field_values`` so the
+   plugin body consumes exactly what was validated.
 
 Plugin bodies are expected to trust the resulting dict - no more
 ``if not foo: raise ValueError`` boilerplate, no more manual

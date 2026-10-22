@@ -61,7 +61,7 @@ import statistics
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _cells_paths import main_frame_files  # noqa: E402
+from _cells_paths import main_frame_files, open_frame  # noqa: E402
 
 #: What makes two rows different *cells* rather than two steps of one.  A cell
 #: file can hold more than one style, and a grid can run one category under
@@ -121,7 +121,7 @@ def read_cells(cells_dir: pathlib.Path, horizon: int) -> list[Cell]:
     for path in main_frame_files(cells_dir):
         if path.stat().st_size == 0:
             continue
-        with open(path, newline="") as fh:
+        with open_frame(path) as fh:
             for row in csv.DictReader(fh):
                 try:
                     t = int(row["t"])

@@ -99,7 +99,8 @@ dependencies = [
     "soxr",
     "sentencepiece",
     "protobuf",
-    "Pillow",
+    # The floor is a CVE pin (CVE-2026-112395..112899 at 12.3.0).
+    "Pillow>=13.0.0",
     # SigLIP-L image embedder: loads open_clip's ``ViT-SO400M-14-SigLIP-384``
     # checkpoint so its 1152-d vectors match galleries embedded by open_clip
     # itself. ``timm`` (vision backbones) and ``ftfy`` (text cleanup) are
@@ -181,7 +182,7 @@ include = ["vtsearch*", "vtscore*"]
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
 # by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
-"vtscore.media" = ["assets/*.npy"]
+"vtscore.media" = ["assets/*.npy", "assets/*.json"]
 # Zero-shot tag vocabularies for the signpost text providers (AudioSet-527 /
 # OpenImages-600 class names; see vtscore.projection.signpost_texts).
 "vtscore.projection" = ["assets/*.txt"]
@@ -463,11 +464,12 @@ exclude_lines = [
 # already skipped for.  A study's viewer.html (scripts/experiments/
 # calibration/viewer.py) is the same class again: a self-contained page
 # carrying the run's per-cell numbers as an encoded payload, which
-# codespell reads as thousands of misspelled two-letter words.
+# codespell reads as thousands of misspelled two-letter words. Its companion
+# pages, viewer_<name>.html beside it (#4959), are the same.
 # slides/_build and slides/_out are gitignored deck-build artifacts; the
 # rendered PDFs there decode as mojibake that codespell "corrects", which
 # used to fail any test run that happened after `slides/render.sh`.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*docs/experiments/*/viewer_*.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # names of the removed integration scaffolds, kept because vtscore/CHANGELOG.md
 # records their removal), legitimate code identifiers (numer/denom in
@@ -486,5 +488,6 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # a lookup against the data. `moniter` is Objects365's own spelling of its
 # `Moniter/TV` category, quoted verbatim in O365_NAMES (#4815) for the same
 # reason. `whis` is matplotlib's own `boxplot` keyword (the
-# whisker range), so it is an API name rather than a word.
-ignore-words-list = "whis,moniter,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
+# whisker range), so it is an API name rather than a word. `hart` is Kevin
+# Hart, a person in the Celebrities in Context demo (CELEBRITY_TOGETHER_CATEGORIES).
+ignore-words-list = "hart,whis,moniter,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"

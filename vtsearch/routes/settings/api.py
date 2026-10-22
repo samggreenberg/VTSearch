@@ -20,12 +20,12 @@ automatically by flask-smorest.
 
 from __future__ import annotations
 
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable
 
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import admin_overrides, settings
+from vtsearch import admin_overrides, import_hooks, settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
@@ -44,104 +44,6 @@ settings_bp = Blueprint(
 # ``SettingsUpdateSchema`` further down, once ``_CUSTOM_SETTERS`` /
 # ``_READ_ONLY_KEYS`` / ``_NON_PUT_KEYS`` are defined. See
 # ``_build_scalar_setters``.
-
-
-class _CustomSetter(NamedTuple):
-    """A key whose update needs bespoke validation, split from its write.
-
-    *validate* returns the cleaned value (or aborts 400); *apply* persists
-    an already-cleaned value and must not re-validate. Keeping the two
-    halves separate is what lets :func:`update_settings` check an entire
-    body before committing any of it.
-    """
-
-    validate: Callable[[Any], Any]
-    apply: Callable[[Any], None]
-
-
-def _validate_enable_achievements(value) -> bool:
-    """Coerce the toggle to a bool (the schema already rejects non-booleans)."""
-    return bool(value)
-
-
-def _apply_enable_achievements(value: bool) -> None:
-    """Persist the toggle and wipe stored counters when flipping it off.
-
-    The user-visible promise is that turning the feature off zeroes the
-    achievement counters and keeps them there. Wiping on the True→False
-    transition (rather than every set) makes the on→off→on cycle
-    deterministic: counters reset on opt-out and start fresh if the user
-    ever opts back in.
-    """
-    prev = bool(settings.get_enable_achievements())
-    settings.set_enable_achievements(value)
-    if prev and not value:
-        from vtsearch import achievements
-
-        achievements.wipe_state()
-
-
-def _validate_solo_embedder_per_media_type(value) -> dict[str, str] | None:
-    """Validate the ``{media_type: embedder}`` map and return it cleaned.
-
-    ``None`` (which clears every per-type lock) passes through. Otherwise
-    *value* must be a dict mapping registered media-type ids to embedder
-    names that exist for that type (per
-    :func:`vtscore.media.embedders_for_type`). An empty string value is
-    preserved as a **per-type opt-out sentinel**; it overrides the
-    ``--solo-embedder`` CLI fallback for that type. Any other invalid
-    pairing raises 400.
-    """
-    if value is None:
-        return None
-    if not isinstance(value, dict):
-        abort(400, message="solo_embedder_per_media_type must be a dict or null")
-
-    from vtscore.media import all_type_ids, embedders_for_type
-
-    valid_types = set(all_type_ids())
-    cleaned: dict[str, str] = {}
-    for raw_type, raw_emb in value.items():
-        if not isinstance(raw_type, str) or not raw_type.strip():
-            abort(400, message="solo_embedder_per_media_type keys must be non-empty media-type ids")
-        mt = raw_type.strip()
-        if mt not in valid_types:
-            abort(400, message=f"Unknown media type: {mt!r}. Valid: {sorted(valid_types)}")
-        if raw_emb is None or (isinstance(raw_emb, str) and not raw_emb.strip()):
-            # Per-type opt-out sentinel: preserve so it overrides the
-            # CLI fallback. ``None`` is normalised to "" here.
-            cleaned[mt] = ""
-            continue
-        if not isinstance(raw_emb, str):
-            abort(400, message=f"solo_embedder_per_media_type[{mt!r}] must be a string")
-        emb_name = raw_emb.strip()
-        valid_embedders = {e.name for e in embedders_for_type(mt)}
-        if emb_name not in valid_embedders:
-            abort(
-                400,
-                message=(f"Unknown embedder {emb_name!r} for media type {mt!r}. Valid: {sorted(valid_embedders)}"),
-            )
-        cleaned[mt] = emb_name
-    return cleaned
-
-
-def _validate_dir(key: str, value: str) -> str:
-    """Validate a directory-path setting and return the path to persist.
-
-    Returns the *approved* path rather than the raw input: under multi-user
-    confinement a relative dir is checked against the user's data dir but
-    would later be opened relative to the process CWD.  Unconfined
-    (single-user) values come back verbatim.
-    """
-    import vtscore.security.path_validation as _paths
-
-    if not value or not value.strip():
-        abort(400, message=f"{key} must be a non-empty string")
-
-    try:
-        return _paths.confine_server_filepath(value.strip(), _paths.get_file_access_base_dir())
-    except ValueError as exc:
-        abort(400, message=str(exc))
 
 
 #: Schema fields declared as dicts (``browse_*``, the per-media-type
@@ -191,6 +93,9 @@ def _with_effective(data: dict) -> dict:
     _coerce_dict_fields(data)
     for override in admin_overrides.OVERRIDES.values():
         data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
+    # Not an admin override (see :mod:`vtsearch.import_hooks`), so set here:
+    # only whether hooks exist, never what they are.
+    data["import_hooks_configured"] = import_hooks.configured()
     return data
 
 
@@ -217,67 +122,15 @@ _READ_ONLY_KEYS = frozenset(
 )
 
 
-def _validate_autofind_exporter(value) -> str:
-    """Validate the AutoFind results exporter name and return it.
-
-    ``""``/``None`` (which clears auto-export) normalises to ``""``. Any
-    other value must name a registered (pickable) exporter; an unknown
-    name aborts 400. Field values are validated lazily at export time
-    against the chosen plugin's schema, not here.
-    """
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return ""
-    if not isinstance(value, str):
-        abort(400, message="autofind_exporter must be a string")
-    from vtscore.exporters import list_exporters
-
-    name = value.strip()
-    valid = {exp.name for exp in list_exporters() if not getattr(exp, "hidden_from_picker", False)}
-    if name not in valid:
-        abort(400, message=f"Unknown exporter {name!r}. Available: {sorted(valid)}")
-    return name
-
-
-def _validate_autofind_exporter_field_values(value) -> dict[str, dict[str, str]]:
-    """Validate the per-exporter ``{name: {key: value}}`` map and clean it.
-
-    ``None`` (which clears every exporter's stored config) normalises to
-    ``{}``. Otherwise the value must be a dict whose entries are
-    themselves ``{str: str}`` dicts; non-string values are coerced to
-    strings so the persisted shape stays flat (exporter fields are always
-    rendered/sent as strings).
-    """
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        abort(400, message="autofind_exporter_field_values must be a dict")
-    cleaned: dict[str, dict[str, str]] = {}
-    for exp_name, fvals in value.items():
-        if not isinstance(exp_name, str) or not isinstance(fvals, dict):
-            abort(400, message="autofind_exporter_field_values must map exporter names to field dicts")
-        cleaned[exp_name] = {str(k): "" if v is None else str(v) for k, v in fvals.items()}
-    return cleaned
-
-
-#: Keys with bespoke side-effects (validation against a registry, path
-#: traversal checks, counter wipes, etc.). Each entry pairs a validator
-#: -- which raises 400 on invalid input and returns the cleaned value --
-#: with the writer that persists it, so a whole PUT body can be validated
-#: before any of it is committed (see :func:`update_settings`).
-_CUSTOM_SETTERS: dict[str, _CustomSetter] = {
-    "saved_datasets_dir": _CustomSetter(
-        lambda v: _validate_dir("saved_datasets_dir", v), settings.set_saved_datasets_dir
-    ),
-    "detectors_dir": _CustomSetter(lambda v: _validate_dir("detectors_dir", v), settings.set_detectors_dir),
-    "enable_achievements": _CustomSetter(_validate_enable_achievements, _apply_enable_achievements),
-    "solo_embedder_per_media_type": _CustomSetter(
-        _validate_solo_embedder_per_media_type, settings.apply_user_solo_embedder_per_media_type
-    ),
-    "autofind_exporter": _CustomSetter(_validate_autofind_exporter, settings.set_autofind_exporter),
-    "autofind_exporter_field_values": _CustomSetter(
-        _validate_autofind_exporter_field_values, settings.set_autofind_exporter_field_values
-    ),
-}
+#: Keys whose update needs more than the field validator: a check against a
+#: live registry, a cleaning pass, or a side effect beside the write (the
+#: achievement wipe). Each entry pairs a validator -- which raises
+#: ``ValueError`` (a 400 here) and returns the cleaned value -- with the writer
+#: that persists it, so a whole PUT body can be validated before any of it is
+#: committed (see :func:`update_settings`). The table is the settings module's
+#: own, shared with a settings import and a settings-source sync, so neither
+#: can store a value this route would refuse (#4965).
+_CUSTOM_SETTERS = settings.CUSTOM_USER_WRITES
 
 
 # The training-relevant settings route through ``vtsearch.state`` rather
@@ -289,9 +142,9 @@ _CUSTOM_SETTERS: dict[str, _CustomSetter] = {
 # otherwise pick up.
 #
 # ``calibrate_count`` / ``calibration_fraction`` change what a *retrain*
-# produces, so their setters invalidate the cached MLP
+# produces, so their setters invalidate the cached head
 # (``invalidate_loaded_detector_models``). ``beta`` (the balance, #4413) is a
-# pure cutoff knob, so its setter keeps the MLP and only re-derives the
+# pure cutoff knob, so its setter keeps the head and only re-derives the
 # threshold from the cached ranking (``recompute_detector_thresholds``). All
 # three persist back to :mod:`vtsearch.settings` through the shim's
 # setting-persister hook (:func:`vtsearch.shim.register_app_persistence_hooks`),
@@ -304,6 +157,12 @@ _CUSTOM_SETTERS: dict[str, _CustomSetter] = {
 # autogenerated ``settings.validate_beta`` and therefore to the ``[0.25, 4]``
 # bound declared once on ``UserSettings.beta``. A bespoke validator here would
 # be a second copy of that range (issue #3416).
+#
+# Only this route dispatches here. A settings import or a settings-source sync
+# writes these keys through the plain setters and then hands the change to
+# loaded detectors itself (``settings._refresh_loaded_detectors``): ``set_beta``
+# also makes the value the *active* detector's own balance, which is a balance
+# pick, and a bulk import of the user's settings is not one.
 _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
@@ -366,18 +225,18 @@ def _plan_one_key(key: str, value) -> tuple[Callable[[Any], Any], Any] | None:
     whole body before committing any of it.
 
     Keeps :func:`update_settings` simple by hosting the per-key branching
-    here. Side effects (path validation, achievement wipe, state-tier
+    here. Side effects (registry checks, achievement wipe, state-tier
     setter) are isolated to their helper functions.
     """
     if key in _READ_ONLY_KEYS:
         return None
-    custom = _CUSTOM_SETTERS.get(key)
-    if custom is not None:
-        return custom.apply, custom.validate(value)
-    setter = _SCALAR_SETTERS.get(key)
-    if setter is None:
-        return None
     try:
+        custom = _CUSTOM_SETTERS.get(key)
+        if custom is not None:
+            return custom.apply, custom.validate(value)
+        setter = _SCALAR_SETTERS.get(key)
+        if setter is None:
+            return None
         return setter, settings.validate_setting(key, value)
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
@@ -386,15 +245,20 @@ def _plan_one_key(key: str, value) -> tuple[Callable[[Any], Any], Any] | None:
 @settings_bp.route("/api/settings", methods=["PUT"])
 @settings_bp.arguments(SettingsUpdateSchema)
 @settings_bp.response(200, AppSettingsSchema)
-@settings_bp.alt_response(400, description="Setter-level validation failure (range, one-of, path traversal).")
+@settings_bp.alt_response(
+    400, description="Setter-level validation failure (range, one-of, unknown media type / embedder / exporter)."
+)
 def update_settings(body: dict):
     """Update one or more settings fields, all-or-nothing.
 
     Only keys present in *body* are applied. Unknown keys are silently
     dropped (per the schema's ``unknown = "exclude"`` policy); type
     errors raise 422 with the standard error envelope; setter-level
-    validation failures (range / one-of / path traversal) raise 400 and
-    leave every key in the body unchanged.
+    validation failures (range / one-of / an unknown media type, embedder
+    or exporter) raise 400 and leave every key in the body unchanged.
+    Server-tier keys are not in the schema, so they are dropped like any
+    unknown key: no user can set one through this route (or through an
+    import or a sync; see :func:`vtsearch.settings.plan_user_write`).
     """
     # Validate the whole body before writing any of it. Each setter
     # persists immediately, so applying as we went meant a body whose
