@@ -1144,10 +1144,13 @@ then read the log around the `stall:` line.
 every stall in a log.
 
 **Every run records the bars it is using**, as a `diagnostics config:` line at
-startup, at WARNING so a stock deployment has it too. Without it a log cannot
-be read honestly after the fact: "no slow requests" means *nothing was slow*
-and *the bar was a second* equally well. The analyzer prints that line first,
-and says so when a log lacks it.
+startup. Without it a log cannot be read honestly after the fact: "no slow
+requests" means *nothing was slow* and *the bar was a second* equally well. The
+line goes out at WARNING, so a stock log level keeps it, whenever a bar is off
+its shipped default: `VTSEARCH_DIAGNOSE=1`, or any threshold variable set by
+hand. With every bar stock it drops to INFO, so a normal start stays quiet; a
+WARNING-level log without the line was written at the shipped defaults of its
+build. The analyzer prints that line first, and says so when a log lacks it.
 
 For what the app cannot see — NFS latency on the mount every vote writes to,
 and major faults on the app process — run
