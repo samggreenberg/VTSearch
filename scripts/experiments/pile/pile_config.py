@@ -3908,7 +3908,9 @@ O365_NAMES: dict[str, tuple[str, ...]] = {
     # rule, but the category cannot be split and most of it is tableware.
     # `Pot`: owner ruling from samples, 2026-10-20 (#4817), 16 of 17 Good.
     "bowl": ("Bowl/Basin", "Plate", "Pot"),
-    "bottle": ("Bottle", "Jug"),
+    # `Toiletry`, `Cleaning Products`: owner ruling from samples, 2026-10-22
+    # (#4817), each 19 of 20 Good.
+    "bottle": ("Bottle", "Jug", "Toiletry", "Cleaning Products"),
     "vase or potted plant": ("Vase", "Potted Plant"),
     "bench": ("Bench",),
     "chair": ("Chair", "Stool"),
@@ -3953,15 +3955,17 @@ O365_NAMES: dict[str, tuple[str, ...]] = {
 #: (``o365_supply.py``), and an owner ruling moves a name to
 #: :data:`O365_NAMES`, or deletes it, which makes it a plain negative.
 #:
-#: The owner ruled from SAMPLES on 2026-10-20 (#4817): 20 crops a name, one box
-#: per image, in one VTSearch queue per class beside 8 crops of the class's own
-#: names as an attention control (93% Good, 67 of 72). Good rate per name:
+#: The owner ruled from SAMPLES on 2026-10-20 and 2026-10-22 (#4817): 20 crops a
+#: name, one box per image, in one VTSearch queue per class beside 8 crops of the
+#: class's own names as an attention control (91% Good, 73 of 80). Good rate per
+#: name:
 #:
-#: * moved to :data:`O365_NAMES`: `Formula 1 ` 20/20, `Scooter` 19/20, `Pot` 16/17;
-#: * deleted, so a box under one is a plain negative: `Wheelchair` 0/20, `Side
-#:   Table` 0/14, `Rickshaw` as `enclosed road vehicle` 0/12, `Coffee Table` 1/18,
-#:   `Rickshaw` as `bicycle` 2/17, `Wallet/Purse` 3/20, `Desk` 3/15, `Machinery
-#:   Vehicle` 3/12. The last four keep a real member in every four to eight
+#: * moved to :data:`O365_NAMES`: `Formula 1 ` 20/20, `Scooter` 19/20, `Toiletry`
+#:   19/20, `Cleaning Products` 19/20, `Pot` 16/17;
+#: * deleted, so a box under one is a plain negative: `Wheelchair` 0/20, `Tea pot`
+#:   0/20, `Side Table` 0/14, `Rickshaw` as `enclosed road vehicle` 0/12, `Coffee
+#:   Table` 1/18, `Rickshaw` as `bicycle` 2/17, `Wallet/Purse` 3/20, `Desk` 3/15,
+#:   `Machinery Vehicle` 3/12. The last four keep a real member in every four to eight
 #:   boxes (purses, pedal rickshaws, dining desks, garbage trucks); the owner
 #:   chose to score those as absences rather than withhold the name;
 #: * kept here, below: the names between 50% and 80% Good.
@@ -3974,10 +3978,8 @@ O365_AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "bicycle": ("Tricycle",),
     # A basket that holds food is Good; a laundry basket is not. 7 of 14 Good.
     "bowl": ("Bakset",),
-    # Shampoo and spray bottles are Good, and so are squeezable tubes; a bar of
-    # soap or a box of detergent is not. A vacuum flask is Good; lab glassware
-    # is not. Teapots pour for more than one, which the rule calls a bottle.
-    "bottle": ("Toiletry", "Cleaning Products", "Flask", "Tea pot"),
+    # A vacuum flask is Good; lab glassware is not. 11 of 20 Good.
+    "bottle": ("Flask",),
     # A cut-flower arrangement is Good; a bed of plants growing in the ground is
     # Bad. 16 of 20 Good.
     "vase or potted plant": ("Flower",),
