@@ -486,6 +486,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
+  and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~78 / ~234 MB), taken from the
+  Celebrity Together dataset's red-carpet, event and press photos. Unlike the VGGFace2 Faces demo, whose photos are
+  framed on one face, each photo shows the scene around the person, usually with other people in it, so the face
+  path has to find the faces first: load it with the **Images → Faces** converter. A photo is labelled with the
+  person it was picked for; anyone else in it is unlabelled. Each variant downloads only its own photos, and (M)
+  reuses the ones (S) already fetched.
+
 - **Turn off the server's alerts for yourself** (issue #5170). A server can be set up to email you (or alert you
   some other way) when an import you started finishes; Settings › **Import Defaults** now has **Alert me when an
   import finishes**, shown only on a server that sends such alerts. Untick it and the server's alert code is told

@@ -116,6 +116,8 @@ The tables below are generated from the demo-dataset registry (each media type's
 | **visual_genome_a** | Dense multi-label scenes with object boxes | ~14551 MB |
 | **vggface2_faces_s** | In-the-wild celebrity photos, one label per person | ~1935 MB |
 | **vggface2_faces_m** | In-the-wild celebrity photos, one label per person | ~1935 MB |
+| **celebrity_together_s** | Celebrity event photos, several people each, labelled by who they were picked for | ~78 MB |
+| **celebrity_together_m** | Celebrity event photos, several people each, labelled by who they were picked for | ~234 MB |
 
 <!-- END GENERATED: demos:image -->
 
@@ -128,13 +130,29 @@ The tables below are generated from the demo-dataset registry (each media type's
 > icon instance. Boxes are stored on the media as `regions` and are read by the
 > evaluation harness; they are not rendered in the app.
 >
-> **Rico Icons is the one source whose Download column differs between
-> variants.** Its screenshots run to ~7.7 GB across 67 shard folders, so the
-> loader fetches the 535 MB annotation manifest first, slices it, then pulls
-> only the shard folders that slice lands in — (S) is budgeted at three
-> folders (its share of the 67, plus one for a slice that straddles a
-> boundary), not sixty-seven. Every other source's **Download** column is the
-> full-source figure for all its variants.
+> **Rico Icons and Celebrities in Context are the two image sources whose
+> Download column differs between variants.** Rico's screenshots run to
+> ~7.7 GB across 67 shard folders, so the loader fetches the 535 MB annotation
+> manifest first, slices it, then pulls only the shard folders that slice lands
+> in — (S) is budgeted at three folders (its share of the 67, plus one for a
+> slice that straddles a boundary), not sixty-seven. Celebrities in Context
+> fetches only its variant's own photos (below). Every other image source's
+> **Download** column is the full-source figure for all its variants.
+>
+> **Face demos.** Both face demos are image datasets meant to be loaded with
+> the **Images → Faces** converter (`image2face`), which crops each face it
+> finds for the FaceNet embedder; each photo's category is a person.
+> `vggface2_faces_*` photos are framed on one face. `celebrity_together_*`
+> photos are whole scenes from [Celebrity Together](https://www.robots.ox.ac.uk/~vgg/data/celebrity_together/)
+> (red carpets, events, press photos): 60 people, 20 (S) or 60 (M) photos
+> each, picked so the person's face is at most 22% of the photo's height and
+> no photo appears twice. Most photos hold other people too, labelled or not,
+> so a face found in a photo filed under one person may be someone else's; the
+> category says who the photo was picked for. The dataset's mirror holds its
+> 11 GB of photos as one archive, plus about 100k of them as loose files, so
+> the photos are pinned in `vtscore/media/assets/celebrity_together.json`
+> (rebuilt by `scripts/build_celebrity_together_manifest.py`) and each variant
+> downloads only its own; (M) reuses what (S) already fetched.
 
 
 ## Document

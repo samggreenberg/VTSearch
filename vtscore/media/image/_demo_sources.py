@@ -120,6 +120,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     def celebs_mb(per_person: int) -> int:
         """Advertised download for one Celebrities in Context variant (only its own photos)."""
         return round(len(CELEBRITY_TOGETHER_CATEGORIES) * per_person * CELEBRITY_TOGETHER_PHOTO_KB / 1000)
+
     return [
         DemoDataset(
             id="synthetic_world_image",

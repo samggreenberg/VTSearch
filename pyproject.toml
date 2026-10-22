@@ -488,5 +488,6 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # a lookup against the data. `moniter` is Objects365's own spelling of its
 # `Moniter/TV` category, quoted verbatim in O365_NAMES (#4815) for the same
 # reason. `whis` is matplotlib's own `boxplot` keyword (the
-# whisker range), so it is an API name rather than a word.
-ignore-words-list = "whis,moniter,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
+# whisker range), so it is an API name rather than a word. `hart` is Kevin
+# Hart, a person in the Celebrities in Context demo (CELEBRITY_TOGETHER_CATEGORIES).
+ignore-words-list = "hart,whis,moniter,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
