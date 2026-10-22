@@ -17,6 +17,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Demos load from a mirror when their home server is down.** On 2026-10-22 Stanford's cs.stanford.edu and
+  ai.stanford.edu stopped answering, and the Visual Genome and IMDB demos failed with "Couldn't reach
+  cs.stanford.edu". A demo whose file has a known mirror still tries its original host first, then, after three
+  failed connections (or at once, if the host says the file is gone or serves a web page instead), downloads the
+  same file from the mirror. The progress line says when it switches. Visual Genome, IMDB, Caltech-101,
+  Caltech-256, Food-101, Oxford Flowers and Reuters-21578 have a copy on Hugging Face (no sign-in needed);
+  Places365, Oxford Buildings' labels, Enrico, BBC News and KTH Actions, and some of the first group as a last
+  resort, have the Internet Archive's Wayback Machine. Each copy was checked to be the same file, byte for byte.
+  Oxford Buildings' image archive has no copy anywhere, so that demo still needs its home server.
+
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
 - **Toasty's hints are shorter, and bold every button they name** (issue #5175). Hints no longer repeat what
   their step already says or explain what the next sentence makes plain. **Add Dataset**'s now says "Pick where your
   images or other media come from, then click **Import**.", since picking the source *is* filling in the form, and
@@ -25,13 +42,6 @@ not list every commit. Use `git log` for the full history.
   example's kind ("**OK** uses the whole image."). A button or tab a hint names is in bold, under the label it
   carries: the Tune view's verdict hint says **Move to AutoFind**, and **Tune** and the Review tab's **Good** /
   **Bad** are bold now too. A detector's name no longer is.
-
-- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
-  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
-  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
-  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
-  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
-  folder imports with a converter too.
 
 - **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
   stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING

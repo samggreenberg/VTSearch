@@ -318,6 +318,84 @@ UCF101_FULL_URL = "https://huggingface.co/datasets/quchenyuan/UCF101-ZIP/resolve
 KTH_BASE_URL = "https://www.csc.kth.se/cvap/actions/"
 KTH_ACTIONS = ("walking", "jogging", "running", "boxing", "handwaving", "handclapping")
 
+
+def _wayback(timestamp: str, captured_url: str) -> str:
+    """The Wayback Machine's raw copy (``id_``: the bytes as captured, no
+    rewritten HTML) of *captured_url* at *timestamp*."""
+    return f"https://web.archive.org/web/{timestamp}id_/{captured_url}"
+
+
+def _hf(repo_path: str) -> str:
+    return f"https://huggingface.co/datasets/{repo_path}"
+
+
+# Fallback sources for a canonical download URL, tried in order once it fails
+# (unreachable, a dead status, or an HTML page where the archive should be).
+# The canonical host always goes first: a mirror is only ever someone else's
+# copy, and the canonical one needs nothing a user may lack.  Each entry must
+# serve the *byte-identical* file — a switch restarts the file from zero rather
+# than resuming, but the extracted tree still has to match what the loader
+# expects — so each notes its evidence.  Hugging Face copies come before the
+# Wayback Machine, which is slow (5-15 MB/s) and itself often unavailable.
+# Every entry was checked on 2026-10-22: an HF copy by its LFS sha256 against
+# TFDS's recorded checksum or the canonical file's own; a Wayback copy by the
+# sha1 its capture index records against the canonical file's.
+_MIRRORS: dict[str, tuple[str, ...]] = {
+    # cs.stanford.edu refused every connection on 2026-10-22.  Five independent
+    # HF re-uploads share these LFS sha256s (51c682d2… / 99da1a0d…), and the
+    # zips hold the full VG_100K/ (64,346) + VG_100K_2/ (43,903) JPEG trees.
+    VISUAL_GENOME_IMAGES_URL: (_hf("jn12/VisualGenome/resolve/main/images.zip"),),
+    VISUAL_GENOME_IMAGES2_URL: (_hf("jn12/VisualGenome/resolve/main/images2.zip"),),
+    VISUAL_GENOME_OBJECTS_URL: (
+        _hf("jn12/VisualGenome/resolve/main/objects.json.zip"),  # sha256 efa45606…, the canonical's
+        _wayback("20240428141401", VISUAL_GENOME_OBJECTS_URL),
+    ),
+    # ai.stanford.edu went down with it.  sha256 c40f74a1… is TFDS's.
+    IMDB_URL: (_hf("NolanChai/aclImdb_v1/resolve/main/aclImdb_v1.tar.gz"),),
+    CALTECH101_URL: (_hf("HuggingFaceM4/Caltech-101/resolve/main/caltech-101.zip"),),  # sha256 33123475…, TFDS's
+    CALTECH256_URL: (_hf("xingslong/caltech256/resolve/main/256_ObjectCategories.tar"),),  # sha256 08ff01b0…
+    FOOD101_URL: (
+        _hf("xingslong/food-101/resolve/main/food-101.tar.gz"),  # sha256 d97d15e4…, TFDS's
+        _wayback("20260101011658", "https://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"),
+    ),
+    # www.robots.ox.ac.uk redirects to thor.robots.ox.ac.uk, the host the
+    # captures were taken from (and Oxford Buildings' too, which has no copy).
+    OXFORD_FLOWERS_URL: (
+        _hf("namhai2803/Flower102/resolve/main/102flowers.tgz"),  # sha256 2d01ecc8…, TFDS's
+        _wayback("20250416134905", "https://thor.robots.ox.ac.uk/flowers/102/102flowers.tgz"),
+    ),
+    OXFORD_FLOWERS_LABELS_URL: (
+        _wayback("20260220095026", "https://thor.robots.ox.ac.uk/flowers/102/imagelabels.mat"),
+    ),
+    PLACES365_URL: (_wayback("20250814074200", "https://data.csail.mit.edu/places/places365/val_256.tar"),),
+    PLACES365_LABELS_FILELIST_URL: (
+        _wayback("20240805220520", "https://data.csail.mit.edu/places/places365/filelist_places365-standard.tar"),
+    ),
+    ROXFORD_GND_URL: (_wayback("20210624021917", ROXFORD_GND_URL),),
+    ENRICO_SCREENSHOTS_URL: (_wayback("20240708033546", ENRICO_SCREENSHOTS_URL),),
+    BBC_NEWS_URL: (_wayback("20260929074115", BBC_NEWS_URL),),
+    REUTERS21578_URL: (
+        _hf("ucirvine/reuters21578/resolve/main/data/reuters21578.tar.gz"),  # sha256 3bae43c9…
+        _wayback("20240423115758", "https://kdd.ics.uci.edu/databases/reuters21578/reuters21578.tar.gz"),
+    ),
+    **{
+        f"{KTH_BASE_URL}{action}.zip": (_wayback(timestamp, f"{KTH_BASE_URL}{action}.zip"),)
+        for action, timestamp in (
+            ("walking", "20251208114458"),
+            ("jogging", "20251118053436"),
+            ("running", "20251208114623"),
+            ("boxing", "20251118054547"),
+            ("handwaving", "20251118132933"),
+            ("handclapping", "20251118063514"),
+        )
+    },
+}
+# Attempts a source gets before falling over to the next one, while it has not
+# sent a single byte.  A host that is refusing or black-holing connections is
+# not worth the full retry ladder when a mirror is waiting; one that is
+# mid-transfer keeps the full budget, since switching restarts the file.
+_FAILOVER_AFTER_ATTEMPTS = 3
+
 # Demo dataset download size estimates (MB)
 ESC50_DOWNLOAD_SIZE_MB = 600
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB = 150
@@ -438,7 +516,12 @@ def _total_size_from_headers(response: requests.Response, downloaded: int, expec
 
 
 def _backoff_and_notify(
-    on_progress: ProgressCallback, label: str, attempt: int, downloaded: int, total_size: int
+    on_progress: ProgressCallback,
+    label: str,
+    attempt: int,
+    downloaded: int,
+    total_size: int,
+    max_attempts: int = _MAX_DOWNLOAD_ATTEMPTS,
 ) -> None:
     """Report a recoverable interruption and sleep for an exponential backoff.
 
@@ -446,14 +529,15 @@ def _backoff_and_notify(
     a metadata fetch).  The wording follows the byte count: with nothing on disk
     yet there is nothing to resume, and saying "resuming" at 0 bytes is exactly
     the message that made a failed-to-even-connect load read as a stalled
-    transfer (see issue #3216).
+    transfer (see issue #3216).  *max_attempts* is this source's budget, which
+    is shorter while a mirror is waiting.
     """
     backoff = min(_RETRY_BACKOFF_BASE_S * (2 ** (attempt - 1)), _RETRY_BACKOFF_MAX_S)
     where = f" at {downloaded:,} bytes" if downloaded else ""
     verb = "resuming" if downloaded else "retrying"
     on_progress(
         "downloading",
-        f"Connection interrupted{where} - {verb} {label} (attempt {attempt + 1}/{_MAX_DOWNLOAD_ATTEMPTS})...",
+        f"Connection interrupted{where} - {verb} {label} (attempt {attempt + 1}/{max_attempts})...",
         downloaded,
         total_size,
     )
@@ -558,7 +642,68 @@ def _gated_error(url: str, status: int) -> GatedResourceError:
     return GatedResourceError(msg, url=url, status=status)
 
 
-def download_file_with_progress(  # noqa: C901
+class InvalidArchiveError(RuntimeError):
+    """A download finished but holds something other than the expected archive
+    (typically an HTML error page served with a 200)."""
+
+
+# What makes a source not worth another try *from that source*, so a mirror
+# should be: it is unreachable, refuses us, has dropped the file, or serves
+# something else in its place.
+_SOURCE_FAILURES = (RemoteUnreachableError, GatedResourceError, requests.HTTPError, InvalidArchiveError)
+
+
+def _host(url: str) -> str:
+    return urlparse(url).hostname or url
+
+
+def _failure_reason(url: str, exc: BaseException) -> str:
+    """One sentence on why *url* failed, for the every-source-failed message.
+
+    An ``HTTPError``'s own text ends in the redirect target's CDN URL, so it is
+    reduced to the host and status like the retry errors already are.
+    """
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return f"{_host(url)} answered HTTP {exc.response.status_code}."
+    return str(exc)
+
+
+def _first_working_source(
+    urls: tuple[str, ...],
+    fetch: Callable[[str, Optional[int]], None],
+    on_progress: ProgressCallback,
+) -> None:
+    """Call ``fetch(url, failover_after)`` on each of *urls* until one succeeds.
+
+    *failover_after* is :data:`_FAILOVER_AFTER_ATTEMPTS` while another source is
+    still waiting and ``None`` (the full retry budget) for the last.  When every
+    source fails, one :class:`RemoteUnreachableError` says why for each, in try
+    order, and carries the last failure as its ``__cause__``.
+    """
+    failures: list[tuple[str, BaseException]] = []
+    for i, url in enumerate(urls):
+        has_next = i + 1 < len(urls)
+        try:
+            fetch(url, _FAILOVER_AFTER_ATTEMPTS if has_next else None)
+            return
+        except _SOURCE_FAILURES as exc:
+            failures.append((url, exc))
+            if has_next:
+                on_progress(
+                    "downloading", f"{_host(url)} is unavailable - switching to mirror {_host(urls[i + 1])}...", 0, 0
+                )
+    filename = urlparse(urls[0]).path.rsplit("/", 1)[-1] or urls[0]
+    mirrors = ", ".join(_host(url) for url, _ in failures[1:])
+    reasons = " ".join(_failure_reason(url, exc) for url, exc in failures)
+    raise RemoteUnreachableError(
+        f"Couldn't download {filename} from {_host(urls[0])} or its mirror{'s' if len(failures) > 2 else ''} "
+        f"({mirrors}). {reasons}",
+        url=urls[0],
+        attempts=len(failures),
+    ) from failures[-1][1]
+
+
+def download_file_with_progress(
     url: str,
     dest_path: Path,
     expected_size: int = 0,
@@ -577,6 +722,11 @@ def download_file_with_progress(  # noqa: C901
     than restarting from zero. Servers that ignore ``Range`` (resending the full
     body) or transport-compress the response are handled by restarting the file.
 
+    If *url* has registered mirrors (:data:`_MIRRORS`) and it fails outright,
+    each mirror is tried in turn, restarting the file from zero.  A mirrored
+    download whose *dest_path* names an archive is also checked to be one, so
+    a host serving an HTML page in the archive's place counts as failed too.
+
     Args:
         url: The HTTP/HTTPS URL to download from.
         dest_path: Local filesystem path where the downloaded file will be written.
@@ -591,11 +741,35 @@ def download_file_with_progress(  # noqa: C901
         RemoteUnreachableError: If the connection keeps failing, or the server
             keeps returning a retryable status, after the final retry attempt.
             A connection failure leaves the underlying requests exception as
-            its ``__cause__``.
+            its ``__cause__``.  Also raised when *url* and every mirror failed.
     """
     if on_progress is None:
         on_progress = resolve_progress_callback()
+    mirrors = _MIRRORS.get(url, ())
+    if not mirrors:
+        _download_from(url, dest_path, expected_size, on_progress)
+        return
+    progress = on_progress
 
+    def _fetch(source: str, failover_after: Optional[int]) -> None:
+        _download_from(source, dest_path, expected_size, progress, failover_after)
+        _validate_archive(dest_path, dest_path.name, dest_path.name)
+
+    _first_working_source((url, *mirrors), _fetch, progress)
+
+
+def _download_from(  # noqa: C901
+    url: str,
+    dest_path: Path,
+    expected_size: int,
+    on_progress: ProgressCallback,
+    failover_after: Optional[int] = None,
+) -> None:
+    """Download *url* to *dest_path* with retries; see :func:`download_file_with_progress`.
+
+    *failover_after*, when set, ends the attempts early as long as nothing has
+    been written yet: there is a mirror to move on to.
+    """
     session = guarded_session()
     downloaded = 0  # bytes already on disk at dest_path
     total_size = 0  # full size of the file once known
@@ -605,8 +779,11 @@ def download_file_with_progress(  # noqa: C901
     # back to restarting the file rather than risk a corrupt resume.
     resume_ok = True
 
+    def _budget() -> int:
+        return failover_after if failover_after is not None and downloaded == 0 else _MAX_DOWNLOAD_ATTEMPTS
+
     for attempt in range(1, _MAX_DOWNLOAD_ATTEMPTS + 1):
-        last_attempt = attempt == _MAX_DOWNLOAD_ATTEMPTS
+        last_attempt = attempt >= _budget()
         use_range = downloaded > 0 and resume_ok
         if not use_range:
             downloaded = 0  # first attempt, or a resume we can't safely do -> start over
@@ -621,9 +798,9 @@ def download_file_with_progress(  # noqa: C901
             # than letting raise_for_status dump the CDN node URL.
             if response.status_code in _RETRYABLE_STATUS:
                 if not last_attempt:
-                    _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
+                    _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size, _budget())
                     continue
-                raise _status_error(url, response.status_code, _MAX_DOWNLOAD_ATTEMPTS)
+                raise _status_error(url, response.status_code, attempt)
             # Auth-required: this is gated content we can't fetch with the
             # credentials we have.  Surface a short, actionable message instead
             # of a raw HTTPError, and don't retry (it can't succeed unchanged).
@@ -659,8 +836,8 @@ def download_file_with_progress(  # noqa: C901
             return  # stream consumed cleanly
         except _RETRYABLE_EXCEPTIONS as exc:
             if last_attempt:
-                raise _unreachable_error(url, exc, _MAX_DOWNLOAD_ATTEMPTS) from exc
-            _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
+                raise _unreachable_error(url, exc, attempt) from exc
+            _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size, _budget())
         finally:
             if response is not None:
                 response.close()
@@ -798,8 +975,10 @@ _HTML_SIGNATURES = (b"<", b"<!", b"{")
 def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) -> None:
     """Check that a downloaded file looks like a genuine archive.
 
-    Deletes the file and raises ``RuntimeError`` with a user-friendly
-    message when the content does not match the expected format.
+    Deletes the file and raises :class:`InvalidArchiveError` (a
+    ``RuntimeError``) with a user-friendly message when the content does not
+    match the expected format.  A name that is no archive format (a mirrored
+    ``.mat`` or ``.pkl``) is only checked not to be an HTML page.
     """
     suffix = archive_name.lower()
     try:
@@ -822,10 +1001,12 @@ def _validate_archive(archive_path: Path, archive_name: str, dataset_name: str) 
     elif suffix.endswith(".tar"):
         # For plain tar we just check it doesn't look like HTML/text
         ok = not any(header.startswith(sig) for sig in _HTML_SIGNATURES)
+    else:
+        ok = not header.startswith(b"<")
 
     if not ok:
         archive_path.unlink(missing_ok=True)
-        raise RuntimeError(
+        raise InvalidArchiveError(
             f"Failed to download {dataset_name}: the server returned an invalid file "
             f"instead of the expected archive. This usually means the download URL is "
             f"temporarily unavailable or has changed. Please try again later."
