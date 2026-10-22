@@ -131,10 +131,15 @@ td {
   align-items: center;
   gap: var(--space-md);
 
+  // Wraps, so a long error cannot stretch the table and clip Dismiss (#5177;
+  // see `vt-failed-task`).
   .error-msg {
     flex: 1;
+    min-width: 0;
     font-size: var(--font-md);
     color: var(--error-text);
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 

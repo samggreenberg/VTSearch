@@ -2,6 +2,12 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-md);
+  // The dashboard grid's cells are `white-space: nowrap`. Unwrapped, an error
+  // is as wide as its text, and the auto-layout table grows to fit it: past
+  // the grid's clipped edge, taking Dismiss and every row's Actions column
+  // out of view (#5177). Wrapping (with `overflow-wrap: anywhere` below)
+  // leaves the text no minimum width to impose.
+  white-space: normal;
 }
 
 .failed-task__text {
