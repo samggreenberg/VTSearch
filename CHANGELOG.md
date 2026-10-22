@@ -1147,7 +1147,8 @@ not list every commit. Use `git log` for the full history.
 - **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
   Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
   none. Both now draw the icon the server's media-type registry names, the same one the importer and
-  Settings show, so audio rows also switch from a music note to the app's usual speaker.
+  Settings show, so audio rows also switch from a music note to the app's usual speaker. Face's own icon,
+  everywhere it appears, is now a head-and-shoulders portrait in a photo frame instead of a smiley.
 
 - **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
   Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the
