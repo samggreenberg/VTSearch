@@ -30,6 +30,12 @@ export class ProgressIndicatorsComponent {
   readonly sortStepEnd = input<number | null>(null);
   /** Overall remaining-seconds estimate; ``null`` hides the ETA chip. */
   readonly sortEtaSeconds = input<number | null>(null);
+  /** Whether a detector's sort ranks what is on screen (the learned sort). Until
+   *  one does, a green Smart shows yellow (#5137): it greens about as soon as
+   *  three detectors exist, while the user still labels the search's matches,
+   *  with most of the session's F-beta still to come. Display only: Autopilot
+   *  reads the backend's status, and reads no light before its learned sort. */
+  readonly detectorShown = input(true);
 
   readonly indicatorClick = output<string>();
   readonly cancel = output<void>();
@@ -82,7 +88,13 @@ export class ProgressIndicatorsComponent {
       + 'A good vote starts the count again.';
   }
 
+  /** Set when Smart's window has stopped rising but no detector ranks the screen yet (#5137). */
+  get smartHeld(): boolean {
+    return this.labelingStatus()?.smart.status === 'green' && !this.detectorShown();
+  }
+
   get smartStatus(): string {
+    if (this.smartHeld) return 'yellow';
     return this.labelingStatus()?.smart.status || '';
   }
 
@@ -128,7 +140,10 @@ export class ProgressIndicatorsComponent {
     const drift = this.smartDriftWithinNoise
       ? ' F-beta still drifts up, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
       : '';
-    return `${meaning}${drift}`;
+    const held = this.smartHeld
+      ? ' It stays yellow until a detector ranks what you see: so far the list is ranked by your search or example.'
+      : '';
+    return `${meaning}${drift}${held}`;
   }
 
   get stableTooltip(): string {

@@ -240,6 +240,7 @@
 
         <vt-progress-indicators
           [labelingStatus]="labelingStatus()"
+          [detectorShown]="sortMode() === 'learned'"
           [sortBusy]="sortBusy()"
           [sortStatus]="sortStatus()"
           [sortProgress]="sortProgress()"
