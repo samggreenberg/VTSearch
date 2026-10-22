@@ -50,9 +50,9 @@ describe('DashboardComponent', () => {
 
   /** Flush the fire-and-forget requests the dashboard issues on init and
    *  as a side effect of selection: the disk/RAM usage pollers
-   *  (`timer(0, 10000)`) and the per-dataset embedder preload. None of
-   *  these are asserted on by the selection/hint/button tests, so we just
-   *  swallow whatever has accumulated. */
+   *  (`timer(0, 10000)`), the per-dataset embedder preload and the media-type
+   *  registry load. None of these are asserted on by the selection/hint/button
+   *  tests, so we just swallow whatever has accumulated. */
   function drainBackgroundRequests(): void {
     for (const req of httpMock.match('/api/dashboard/disk-usage')) {
       if (!req.cancelled) req.flush({ total: 0, used: 0, free: 0 });
@@ -62,6 +62,10 @@ describe('DashboardComponent', () => {
     }
     for (const req of httpMock.match((r) => /\/preload-embedder$/.test(r.url))) {
       if (!req.cancelled) req.flush({ ok: true, embedder: '' });
+    }
+    // The media-type registry the rows' Type icons read (#5178).
+    for (const req of httpMock.match('/api/media-types')) {
+      if (!req.cancelled) req.flush({ media_types: [] });
     }
   }
 

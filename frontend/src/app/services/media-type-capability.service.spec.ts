@@ -18,10 +18,10 @@ describe('MediaTypeCapabilityService', () => {
     { type_id: 'video', name: 'Video', has_thumbnail: true },
     { type_id: 'audio', name: 'Audio', has_thumbnail: true },
     { type_id: 'document', name: 'Document', has_thumbnail: true },
-    { type_id: 'text', name: 'Text', has_thumbnail: false },
+    { type_id: 'text', name: 'Text', has_thumbnail: false, icon: 'file-text' },
     { type_id: 'point_cloud', name: 'Point Cloud', has_thumbnail: true }, // a new thumbnail type
     { type_id: 'legacy', name: 'Legacy' }, // has_thumbnail undefined ⇒ no thumbnail
-    { type_id: 'face', name: 'Face', has_thumbnail: true, importable: false }, // convert-in
+    { type_id: 'face', name: 'Face', has_thumbnail: true, importable: false, icon: 'face' }, // convert-in
   ];
 
   beforeEach(() => {
@@ -72,6 +72,16 @@ describe('MediaTypeCapabilityService', () => {
     expect(service.isConvertIn('face')).toBe(true);
     expect(service.isConvertIn('image')).toBe(false); // importable unset
     expect(service.isConvertIn('mystery')).toBe(false);
+  });
+
+  it('iconFor reads the served icon, and is empty until loaded or for an unlisted type', () => {
+    expect(service.iconFor('face')).toBe('');
+    service.ensureLoaded();
+    // Every served type gets its own icon, the convert-in one included (#5178).
+    expect(service.iconFor('face')).toBe('face');
+    expect(service.iconFor('text')).toBe('file-text');
+    expect(service.iconFor('legacy')).toBe(''); // served without an icon
+    expect(service.iconFor('mystery')).toBe('');
   });
 
   it('ensureLoaded is idempotent (fetches at most once)', () => {
