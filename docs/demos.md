@@ -116,8 +116,8 @@ The tables below are generated from the demo-dataset registry (each media type's
 | **visual_genome_a** | Dense multi-label scenes with object boxes | ~14551 MB |
 | **vggface2_faces_s** | In-the-wild celebrity photos, one label per person | ~1935 MB |
 | **vggface2_faces_m** | In-the-wild celebrity photos, one label per person | ~1935 MB |
-| **celebrity_together_s** | Celebrity event photos, several people each, labelled by who they were picked for | ~78 MB |
-| **celebrity_together_m** | Celebrity event photos, several people each, labelled by who they were picked for | ~234 MB |
+| **celebrity_together_s** | Celebrity event photos, several people each, labelled by who they were picked for | ~89 MB |
+| **celebrity_together_m** | Celebrity event photos, several people each, labelled by who they were picked for | ~266 MB |
 
 <!-- END GENERATED: demos:image -->
 
