@@ -226,6 +226,24 @@ OPENLOGO_REPO_ID = "Voxel51/OpenLogo"
 # 8 to fetch many concurrently. Kept modest to stay under HF's public rate limits.
 OPENLOGO_DOWNLOAD_WORKERS = 16
 
+# Celebrity Together (Zhong, Arandjelovic & Zisserman, ACCV 2018): ~194k
+# red-carpet / event / press photos with every celebrity face boxed and named,
+# behind the Celebrities in Context demo.  The HuggingFace mirror holds the full
+# set only as an 11 GB tar, but ~100k of the photos also as loose files
+# (``images/n<id>/<md5>.jpg``), so the demo fetches just the ones its variant
+# needs, one file at a time.  Which ones is pinned in
+# ``vtscore/media/assets/celebrity_together.json``
+# (``scripts/build_celebrity_together_manifest.py``).
+CELEBRITY_TOGETHER_REPO_ID = "Juoguessr/celebritytogether"
+CELEBRITY_TOGETHER_FILE_URL = f"https://huggingface.co/datasets/{CELEBRITY_TOGETHER_REPO_ID}/resolve/main/images/{{}}"
+#: Parallel fetches.  Each photo is ~65 KB, so the download is latency-bound on
+#: per-file round trips; 8 keeps an (M) load well inside HF's anonymous limit on
+#: file requests per five minutes.
+CELEBRITY_TOGETHER_DOWNLOAD_WORKERS = 8
+#: Mean size of a manifest photo, measured from the mirror's file tree
+#: (2026-10-22: 233 MB over 3,600 photos).  The demo sizes each variant from it.
+CELEBRITY_TOGETHER_PHOTO_KB = 65
+
 # Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
 # photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
 # object annotations (per-object name + pixel bounding box) ship as a separate

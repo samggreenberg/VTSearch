@@ -22,6 +22,7 @@ from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
 from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
 from vtscore.media.base import DemoDataset, demo_slice, demo_slice_by_category
 from vtscore.media.image._demo_categories import (
+    CELEBRITY_TOGETHER_CATEGORIES,
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
     ENRICO_CATEGORIES,
@@ -50,6 +51,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     from vtscore.datasets.downloader import (  # noqa: PLC0415
         CALTECH101_DOWNLOAD_SIZE_MB,
         CALTECH256_DOWNLOAD_SIZE_MB,
+        CELEBRITY_TOGETHER_PHOTO_KB,
         ENRICO_DOWNLOAD_SIZE_MB,
         EUROSAT_DOWNLOAD_SIZE_MB,
         FOOD101_DOWNLOAD_SIZE_MB,
@@ -112,6 +114,12 @@ def build_demo_datasets() -> list[DemoDataset]:
 
     faces_desc = "In-the-wild celebrity photos, one label per person"
     faces_folder = DATA_DIR / "vggface2" / "test"
+    celebs_desc = "Celebrity event photos, several people each, labelled by who they were picked for"
+    celebs_folder = DATA_DIR / "celebrity_together" / "images"
+
+    def celebs_mb(per_person: int) -> int:
+        """Advertised download for one Celebrities in Context variant (only its own photos)."""
+        return round(len(CELEBRITY_TOGETHER_CATEGORIES) * per_person * CELEBRITY_TOGETHER_PHOTO_KB / 1000)
     return [
         DemoDataset(
             id="synthetic_world_image",
@@ -726,6 +734,34 @@ def build_demo_datasets() -> list[DemoDataset]:
             items_per_category=40,
             download_size_mb=VGGFACE2_TEST_DOWNLOAD_SIZE_MB,
         ),
+        # Whole event photos rather than face-framed ones, for practising the
+        # image -> face path (load with the image2face converter).  Like Rico
+        # Icons, each variant downloads only its own photos, so (S) and (M)
+        # advertise different sizes.  Every person has exactly 60 pinned photos.
+        DemoDataset(
+            id="celebrity_together_s",
+            label="Celebrities in Context (S)",
+            description=celebs_desc,
+            categories=CELEBRITY_TOGETHER_CATEGORIES,
+            source="celebrity_together",
+            required_folder=celebs_folder,
+            slice_start=0,
+            slice_end=20,
+            items_per_category=20,
+            download_size_mb=celebs_mb(20),
+        ),
+        DemoDataset(
+            id="celebrity_together_m",
+            label="Celebrities in Context (M)",
+            description=celebs_desc,
+            categories=CELEBRITY_TOGETHER_CATEGORIES,
+            source="celebrity_together",
+            required_folder=celebs_folder,
+            slice_start=0,
+            slice_end=60,
+            items_per_category=60,
+            download_size_mb=celebs_mb(60),
+        ),
     ]
 
 
@@ -779,6 +815,36 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
         for img_path in sorted(person_dir.glob("*.jpg")):
             by_cat.setdefault(name, []).append((img_path, name))
     return demo_slice_by_category(by_cat, categories, *slice_args)
+
+
+#: The photos each Celebrities in Context person is shown in, pinned so the demo
+#: fetches a few thousand loose files instead of the dataset's 11 GB archive.
+#: Built by ``scripts/build_celebrity_together_manifest.py``.
+_CELEBRITY_TOGETHER_MANIFEST = Path(__file__).resolve().parent.parent / "assets" / "celebrity_together.json"
+
+
+def celebrity_together_photos() -> dict[str, list[str]]:
+    """``{person: [mirror path, ...]}`` for the Celebrities in Context demo, in slicing order."""
+    import json  # noqa: PLC0415
+
+    with open(_CELEBRITY_TOGETHER_MANIFEST, encoding="utf-8") as f:
+        return json.load(f)["photos"]
+
+
+def _collect_celebrity_together_files(categories, slice_args, on_progress) -> list:
+    """Collect Celebrity Together event photos grouped by person (the Celebrities in Context demo).
+
+    Slices each requested person's pinned photo list first, then downloads only
+    what the slice holds, so (S) never pays for (M)'s photos.  A photo's
+    category is the person it was pinned for; it usually shows others too.
+    """
+    from vtscore.datasets.downloader import download_celebrity_together  # noqa: PLC0415
+
+    photos = celebrity_together_photos()
+    by_cat = {person: [(photo, person) for photo in photos.get(person, [])] for person in categories}
+    selected = demo_slice_by_category(by_cat, categories, *slice_args)
+    images_dir = download_celebrity_together([photo for photo, _ in selected], on_progress=on_progress)
+    return [(images_dir / photo, person) for photo, person in selected]
 
 
 def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
@@ -1569,6 +1635,7 @@ def _render_cifar_array(entry, clip_id) -> _RenderedImage:
 #: source id as an extra argument.
 _DEMO_SOURCE_LOADERS: dict[str, tuple[Callable, Callable]] = {
     "vggface2": (_collect_vggface2_files, _render_single_label_image),
+    "celebrity_together": (_collect_celebrity_together_files, _render_single_label_image),
     "oxford_flowers_102": (_collect_oxford_flowers_files, _render_single_label_image),
     "roxford5k": (_collect_roxford_files, _render_single_label_image),
     "enrico": (_collect_enrico_files, _render_single_label_image),

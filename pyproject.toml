@@ -182,7 +182,7 @@ include = ["vtsearch*", "vtscore*"]
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
 # by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
-"vtscore.media" = ["assets/*.npy"]
+"vtscore.media" = ["assets/*.npy", "assets/*.json"]
 # Zero-shot tag vocabularies for the signpost text providers (AudioSet-527 /
 # OpenImages-600 class names; see vtscore.projection.signpost_texts).
 "vtscore.projection" = ["assets/*.txt"]

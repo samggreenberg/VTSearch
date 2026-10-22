@@ -42,6 +42,7 @@ from vtscore.datasets.downloader.core import (
     CALTECH101_URL,
     CALTECH256_DOWNLOAD_SIZE_MB,
     CALTECH256_URL,
+    CELEBRITY_TOGETHER_PHOTO_KB,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CIFAR10_URL,
     APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
@@ -158,6 +159,7 @@ from vtscore.datasets.downloader.audio import (
 from vtscore.datasets.downloader.images import (
     download_caltech101,
     download_caltech256,
+    download_celebrity_together,
     download_cifar10,
     download_enrico,
     download_eurosat,
@@ -224,6 +226,7 @@ __all__ = [
     "CALTECH101_URL",
     "CALTECH256_DOWNLOAD_SIZE_MB",
     "CALTECH256_URL",
+    "CELEBRITY_TOGETHER_PHOTO_KB",
     "CIFAR10_DOWNLOAD_SIZE_MB",
     "CIFAR10_URL",
     "APOLLO11_AUDIO_DOWNLOAD_SIZE_MB",
@@ -333,6 +336,7 @@ __all__ = [
     # Images
     "download_caltech101",
     "download_caltech256",
+    "download_celebrity_together",
     "download_cifar10",
     "download_enrico",
     "download_eurosat",
