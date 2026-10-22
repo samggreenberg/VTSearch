@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Toasty's hints are shorter** (issue #5175). Hints no longer repeat what their step already says or explain
+  what the next sentence makes plain. **Add Dataset**'s now says "Pick where your images or other media come from,
+  then click **Import**.", since picking the source *is* filling in the form. Seventeen others lost a clause like
+  this, and "images, sounds or other media" is now "images or other media".
+
 - **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
   Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
   sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same

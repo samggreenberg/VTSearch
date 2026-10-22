@@ -100,7 +100,7 @@ describe('ResortPromptModalComponent', () => {
     expect(hint).not.toBeNull();
     // The counts are the dialog's fields; Toasty says only what to do.
     expect(squash(hint!.querySelector('.toasty-hint__text')?.textContent)).toBe(
-      "This example isn't finding many Goods. Try a different one on the right, or click Continue to keep going.",
+      "This example isn't finding many Goods. Try a different one on the right, or click Continue.",
     );
   });
 

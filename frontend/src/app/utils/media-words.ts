@@ -13,6 +13,6 @@ export const MEDIA_PLURALS: Readonly<Record<string, string>> = {
  * locked to one (`solo_media_type`), else a mix.
  */
 export function datasetMediaWords(solo: string | null | undefined): string {
-  if (!solo) return 'images, sounds or other media';
+  if (!solo) return 'images or other media';
   return MEDIA_PLURALS[solo] ?? `${solo} files`;
 }

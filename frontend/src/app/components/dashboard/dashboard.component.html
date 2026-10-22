@@ -407,43 +407,41 @@
     @case ('add-dataset') {
       <vt-toasty-hint hintId="add-dataset" [anchor]="datasetAddBtn">
         Start here! Click <strong>+</strong> to add a dataset: the {{ addDatasetMedia }} you want to
-        train or search on.
+        search.
       </vt-toasty-hint>
     }
     @case ('select-dataset') {
       <vt-toasty-hint hintId="select-dataset" [anchor]="datasetAddBtn">
-        You have data, but none is selected. Select the dataset you want to search over, or click
-        <strong>+</strong> to add a new one.
+        You have datasets, but none is selected. Select one, or click <strong>+</strong> to add
+        another.
       </vt-toasty-hint>
     }
     @case ('mixed-datasets') {
       <vt-toasty-hint hintId="mixed-datasets" [anchor]="datasetAddBtn" face="surprised">
-        The datasets you selected hold different kinds of media, so they can't be searched
-        together. Select datasets of one kind.
+        The datasets you selected hold different kinds of media. Select datasets of one kind.
       </vt-toasty-hint>
     }
     @case ('add-detector') {
       <vt-toasty-hint hintId="add-detector" [anchor]="detectorAddBtn">
-        You need a detector to do the searching. Click <strong>+</strong> to add one and say what
-        you're looking for.
+        You need a detector to do the searching. Click <strong>+</strong> to add one.
       </vt-toasty-hint>
     }
     @case ('empty-detector-tab') {
       <vt-toasty-hint hintId="empty-detector-tab" [anchor]="detectorTabBar">
-        The {{ detectorTabLabel }} tab is empty. Click <strong>{{ otherDetectorTabLabel }}</strong> to select one of your
-        detectors, or click <strong>+</strong> to make a new one.
+        The {{ detectorTabLabel }} tab is empty. Click <strong>{{ otherDetectorTabLabel }}</strong> for your
+        detectors, or <strong>+</strong> to make a new one.
       </vt-toasty-hint>
     }
     @case ('select-detector') {
       <vt-toasty-hint hintId="select-detector" [anchor]="detectorAddBtn">
-        You have detectors, but none is selected. Click one to select it, or click
-        <strong>+</strong> to make a new one.
+        You have detectors, but none is selected. Select one, or click <strong>+</strong> to make
+        a new one.
       </vt-toasty-hint>
     }
     @case ('mismatch') {
       <vt-toasty-hint hintId="mismatch" [anchor]="detectorAddBtn" face="surprised">
-        The detector you selected is for a different kind of media than your dataset, so they
-        can't work together. Select ones that match, or click <strong>+</strong> to make one that does.
+        The detector you selected is for a different kind of media than your dataset. Select ones
+        that match, or click <strong>+</strong> to make one that does.
       </vt-toasty-hint>
     }
     @case ('wait-for-import') {
@@ -453,8 +451,7 @@
     }
     @case ('train') {
       <vt-toasty-hint hintId="train" [anchor]="trainBtn" side="above" reach="right">
-        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it with Good
-        and Bad examples.
+        Your new detector has no training labels yet. Click <strong>Train</strong> to teach it.
       </vt-toasty-hint>
     }
     @case ('train-one-dataset') {
@@ -465,20 +462,20 @@
     }
     @case ('untrained-detector') {
       <vt-toasty-hint hintId="untrained-detector" [anchor]="trainBtn" side="above" reach="right" face="surprised">
-        <strong>{{ untrainedDetectorName }}</strong> has no training labels yet, so it can't
-        search. Deselect it, or select it alone with one dataset and click <strong>Train</strong>.
+        <strong>{{ untrainedDetectorName }}</strong> has no training labels yet. Deselect it, or
+        select it alone with one dataset and click <strong>Train</strong>.
       </vt-toasty-hint>
     }
     @case ('trained-here') {
       <vt-toasty-hint hintId="trained-here" [anchor]="datasetAddBtn">
-        You trained this detector on this dataset. Select a different dataset to
-        <strong>Tune</strong> or <strong>Find</strong> on, or a different detector.
+        You trained this detector on this dataset. Select a different dataset or detector to
+        <strong>Tune</strong> or <strong>Find</strong>.
       </vt-toasty-hint>
     }
     @case ('test-or-find') {
       <vt-toasty-hint hintId="test-or-find" [anchor]="tuneBtn" side="above" reach="right">
-        Your detector is trained. Click <strong>Tune</strong> to check it on this dataset and
-        correct what it gets wrong, or <strong>Find</strong> to collect its matches.
+        Your detector is trained. Click <strong>Tune</strong> to check it on this dataset, or
+        <strong>Find</strong> to collect its matches.
       </vt-toasty-hint>
     }
     @case ('find') {

@@ -1284,7 +1284,7 @@ describe('DashboardComponent', () => {
       await loadSettings({});
       expect(component.dashboardHint).toBe('add-dataset');
       expect(hintTexts(el)).toEqual([
-        'Start here! Click + to add a dataset: the images, sounds or other media you want to train or search on.',
+        'Start here! Click + to add a dataset: the images or other media you want to search.',
       ]);
       expect(el.querySelector('vt-toasty-hint')?.classList).not.toContain('toasty-hint--off');
     });
@@ -1293,7 +1293,7 @@ describe('DashboardComponent', () => {
       const el = renderWith();
       await loadSettings({ solo_media_type: 'image' });
       expect(hintTexts(el)).toEqual([
-        'Start here! Click + to add a dataset: the images you want to train or search on.',
+        'Start here! Click + to add a dataset: the images you want to search.',
       ]);
     });
 
@@ -1342,7 +1342,7 @@ describe('DashboardComponent', () => {
       ]);
       expect(component.dashboardHint).toBe('select-dataset');
       expect(hintTexts(el)).toEqual([
-        'You have data, but none is selected. Select the dataset you want to search over, or click + to add a new one.',
+        'You have datasets, but none is selected. Select one, or click + to add another.',
       ]);
     });
 
@@ -1382,7 +1382,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.dashboardHint).toBe('test-or-find');
       expect(hintTexts(el)).toEqual([
-        'Your detector is trained. Click Tune to check it on this dataset and correct what it gets wrong, or Find to collect its matches.',
+        'Your detector is trained. Click Tune to check it on this dataset, or Find to collect its matches.',
       ]);
     });
 
@@ -1394,7 +1394,7 @@ describe('DashboardComponent', () => {
       expect(component.findEnabled).toBe(true);
       expect(component.dashboardHint).toBe('trained-here');
       expect(hintTexts(el)).toEqual([
-        'You trained this detector on this dataset. Select a different dataset to Tune or Find on, or a different detector.',
+        'You trained this detector on this dataset. Select a different dataset or detector to Tune or Find.',
       ]);
     });
 
@@ -1428,7 +1428,7 @@ describe('DashboardComponent', () => {
       const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
       await loadSettings({});
       expect(hintTexts(el)).toEqual([
-        "You need a detector to do the searching. Click + to add one and say what you're looking for.",
+        'You need a detector to do the searching. Click + to add one.',
       ]);
 
       TestBed.inject(NewThingFlowsService).openNewDetector();
@@ -1473,7 +1473,7 @@ describe('DashboardComponent', () => {
       );
       expect(component.showTrainHint).toBe(true);
       expect(hintTexts(el)).toEqual([
-        'Your new detector has no training labels yet. Click Train to teach it with Good and Bad examples.',
+        'Your new detector has no training labels yet. Click Train to teach it.',
       ]);
     });
 
@@ -1501,7 +1501,7 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect(component.dashboardHint).toBe('empty-detector-tab');
       expect(hintTexts(el)).toEqual([
-        'The AutoFind tab is empty. Click Drafts to select one of your detectors, or click + to make a new one.',
+        'The AutoFind tab is empty. Click Drafts for your detectors, or + to make a new one.',
       ]);
     });
 
@@ -1545,7 +1545,7 @@ describe('DashboardComponent', () => {
       expect(component.autofindEnabled).toBe(false);
       expect(component.dashboardHint).toBe('untrained-detector');
       expect(hintTexts(el)).toEqual([
-        "Blank has no training labels yet, so it can't search. Deselect it, or select it alone with one dataset and click Train.",
+        'Blank has no training labels yet. Deselect it, or select it alone with one dataset and click Train.',
       ]);
     });
 
