@@ -36,7 +36,7 @@
     "jsdom": "^25.0.1",
     "ng-openapi-gen": "^1.0.5",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "pacote": {

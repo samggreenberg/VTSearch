@@ -549,7 +549,10 @@ class MediaType(ABC):
                 embedding it here.  The demo loader sets this when a clipper
                 will split + re-embed every clip, so embedding the full parent
                 would be wasted (and, for audio, can fail on parents longer
-                than the embedder window before the clipper trims them).
+                than the embedder window before the clipper trims them), and
+                when a converter will replace every media with its outputs.
+                *embedder* may then belong to the converter's target type, so
+                an override must not load its models or embed with it.
 
         Returns:
             An optional external media directory path (absolute string) to

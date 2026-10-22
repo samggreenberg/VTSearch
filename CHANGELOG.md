@@ -27,6 +27,18 @@ not list every commit. Use `git log` for the full history.
   resort, have the Internet Archive's Wayback Machine. Each copy was checked to be the same file, byte for byte.
   Oxford Buildings' image archive has no copy anywhere, so that demo still needs its home server.
 
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
+- **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
+  stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
+  only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
+  `-v` or `VTSEARCH_LOG_LEVEL=INFO` still shows it.
+
 - **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
   Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
   sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same
@@ -1148,6 +1160,12 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
+  Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
+  none. Both now draw the icon the server's media-type registry names, the same one the importer and
+  Settings show, so audio rows also switch from a music note to the app's usual speaker. Face's own icon,
+  everywhere it appears, is now a head-and-shoulders portrait in a photo frame instead of a smiley.
 
 - **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
   Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the

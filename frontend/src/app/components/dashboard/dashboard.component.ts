@@ -25,6 +25,7 @@ import { DashboardLoadingTasksService } from '../../services/dashboard-loading-t
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
+import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -140,6 +141,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
   private hints = inject(HintsService);
+  private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   /** The highlighted rows, owned by `DashboardSelectionService` (a root
    *  singleton, so the top bar reads them without this component and they
@@ -341,6 +343,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((models) => {
         this.reconcileSelection('detector', models.map((m) => m.id));
       });
+    // The dataset and detector rows draw their Type icon from the media-type
+    // registry (`MediaTypeCapabilityService.iconFor`, #5178).
+    this.mediaTypeCaps.ensureLoaded();
     this.refresh();
     this.startDiskUsagePolling();
     this.startRamUsagePolling();
