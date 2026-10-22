@@ -22,6 +22,13 @@ not list every commit. Use `git log` for the full history.
   then click **Import**.", since picking the source *is* filling in the form. Seventeen others lost a clause like
   this, and "images, sounds or other media" is now "images or other media".
 
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
 - **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
   stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
   only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
@@ -1152,7 +1159,8 @@ not list every commit. Use `git log` for the full history.
 - **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
   Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
   none. Both now draw the icon the server's media-type registry names, the same one the importer and
-  Settings show, so audio rows also switch from a music note to the app's usual speaker.
+  Settings show, so audio rows also switch from a music note to the app's usual speaker. Face's own icon,
+  everywhere it appears, is now a head-and-shoulders portrait in a photo frame instead of a smiley.
 
 - **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
   Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the

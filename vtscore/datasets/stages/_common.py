@@ -17,7 +17,8 @@ from typing import Optional
 # into its own ordered sub-range of the slice — see AdaptiveLoadPacer.
 # "loading"/"converting" cover model loading, pickle loading, and source→media
 # conversion (document→image, video→frames): all pre-embed work that produces
-# the medias to embed, so they share the loading slice.
+# the medias to embed, so they share the loading slice. As with step 1, the
+# pacer gives each its own ordered sub-range of it (``load``, then ``convert``).
 # "embedding" covers per-file embedding (and clip+embed for clipped datasets;
 # see clipper.py — clipping IS the embed phase there, so it reports this step).
 #
@@ -340,9 +341,14 @@ def _finalize_slots(media_type: str = "") -> tuple[tuple[str, float], ...]:
 
 
 #: Canonical phase order for a dataset load. ``download`` and ``extract`` are
-#: the two sub-phases of step 1 (acquire); the rest map 1:1 onto steps 2–4.
-_PHASE_ORDER: tuple[str, ...] = ("download", "extract", "load", "embed", "finalize")
-_PHASE_STEP: dict[str, int] = {"download": 1, "extract": 1, "load": 2, "embed": 3, "finalize": 4}
+#: the two sub-phases of step 1 (acquire); ``load`` and ``convert`` (a
+#: converter turning the loaded media into the dataset's type, e.g. image→face)
+#: share step 2; ``embed`` and ``finalize`` are steps 3 and 4.
+_PHASE_ORDER: tuple[str, ...] = ("download", "extract", "load", "convert", "embed", "finalize")
+_PHASE_STEP: dict[str, int] = {"download": 1, "extract": 1, "load": 2, "convert": 2, "embed": 3, "finalize": 4}
+#: Steps hosting more than one phase. The pacer hands the tracker a composite
+#: within-step fraction for these, so each phase fills only its own sub-range.
+_SHARED_STEPS: frozenset[int] = frozenset(s for s in _PHASE_STEP.values() if list(_PHASE_STEP.values()).count(s) > 1)
 
 
 class AdaptiveLoadPacer:
@@ -442,14 +448,16 @@ class AdaptiveLoadPacer:
         self._raw = max(self._raw, self._consumed + self._span * self._frac)
 
         s = _PHASE_STEP[phase]
-        if s == 1:
-            # Composite within-step fraction against step 1's actual slice
-            # (consumed so far + every step-1 share still pending), so the
-            # tracker's weight mapping lands exactly on the targeted fraction.
-            # Passed via the ``within`` override so the displayed
-            # ``current``/``total`` keep the caller's real byte/member counts.
-            w1 = self._weights[0]
-            kwargs["within"] = self._raw / w1 if w1 > 0 else 1.0
+        if s in _SHARED_STEPS:
+            # Composite within-step fraction against step s's actual slice
+            # (every share still pending in that step; for step 1 also the
+            # consumed share folded into w[0]), so the tracker's weight mapping
+            # lands exactly on the targeted fraction rather than running one
+            # phase across the whole step. Passed via the ``within`` override so
+            # the displayed ``current``/``total`` keep the caller's real counts.
+            before = sum(self._weights[: s - 1])
+            ws = self._weights[s - 1]
+            kwargs["within"] = (self._raw - before) / ws if ws > 0 else 1.0
         self._tracker.update(status, message, current, total, step=s, total_steps=_TOTAL_LOAD_STEPS, **kwargs)
 
     # -- pacing internals ---------------------------------------------------
@@ -459,6 +467,8 @@ class AdaptiveLoadPacer:
             return "finalize"  # FinalizeProgress stamps step 4 explicitly
         if status == "extracting":
             return "extract"
+        if status == "converting":
+            return "convert"
         if step == 1:
             return "download"
         if step == 2:
@@ -481,9 +491,25 @@ class AdaptiveLoadPacer:
         self._phase = phase
         self._phase_t0 = now
         self._frac = 0.0
+        if phase == "convert" and self._terms["convert"] <= 0.0:
+            self._seed_convert_term()
         self._span = (1.0 - self._consumed) * self._phase_share(phase)
         self._weights = self._weights_vector()
         self._tracker.set_step_weights(self._weights)
+
+    def _seed_convert_term(self) -> None:
+        """Budget a conversion the cost model does not price.
+
+        The cost terms carry no ``convert`` term (most loads convert nothing),
+        so a conversion would enter with no span and park the bar for its whole
+        run (#5176). Price it like the embed phase that follows: a converter
+        runs a model or a renderer over every loaded item, as the embedder then
+        does over every output. The observed pace corrects it from there.
+        Seeded only when the phase starts, so a load that never converts keeps
+        its pacing.
+        """
+        self._terms["convert"] = self._terms["embed"]
+        self._prior_terms["convert"] = self._prior_terms["embed"]
 
     def _phase_share(self, phase: str) -> float:
         idx = _PHASE_ORDER.index(phase)
