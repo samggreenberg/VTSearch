@@ -22,6 +22,11 @@ not list every commit. Use `git log` for the full history.
   then click **Import**.", since picking the source *is* filling in the form. Seventeen others lost a clause like
   this, and "images, sounds or other media" is now "images or other media".
 
+- **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
+  stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
+  only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
+  `-v` or `VTSEARCH_LOG_LEVEL=INFO` still shows it.
+
 - **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
   Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
   sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same
@@ -1143,6 +1148,11 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
+  Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
+  none. Both now draw the icon the server's media-type registry names, the same one the importer and
+  Settings show, so audio rows also switch from a music note to the app's usual speaker.
 
 - **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
   Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the
