@@ -103,14 +103,23 @@ from matplotlib.textpath import TextPath
 from sklearn.svm import SVC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, OBJECT_GAP_PT, notch_box, save  # noqa: E402
+from slide_figure import (  # noqa: E402
+    BOUNDARY_DOTS,
+    BOUNDARY_LW,
+    CUT_DOTS,
+    CUT_LW,
+    CUT_WASH,
+    FULL_BLEED,
+    OBJECT_GAP_PT,
+    notch_box,
+    save,
+)
 
 OUT = Path(__file__).resolve().parent.parent
 
 INK = "#14181f"
 SOFT = "#5b6472"
-BLUE = "#0b5fa5"  # the detector's boundary — the shipped decision
-BAND = "#dce7f2"  # the strip between the loose and the tight cut
+BAND = CUT_WASH  # the strip between the loose and the tight cut: a neutral wash (#5206)
 RED = "#b91c1c"  # the Bad side
 GREEN = "#0d8a5f"  # the Good side
 GHOST = "#aab3c0"  # the boundary as it was before the retrain
@@ -1083,7 +1092,7 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     assert _side(first, pts[asked]) == -1, "the item the app asks about is already inside the boundary"
     assert _side(second, pts[asked]) == 1, "the Good vote did not bring its own item inside the new boundary"
     # The votes have to read right against the curve they trained: a check mark
-    # drawn outside the blue line, or a cross drawn inside it, is a picture of
+    # drawn outside the line, or a cross drawn inside it, is a picture of
     # a detector that ignored its own training data.
     for model in (first, second):
         assert all(_side(model, pts[i]) == 1 for i in seed_good), "a Good is drawn outside the boundary"
@@ -1244,18 +1253,21 @@ def _grid(model: SVC) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def _boundary(ax: plt.Axes, model: SVC, *, ghost: bool = False) -> None:
-    """The detector, drawn as the closed curve around what it calls a match."""
+    """The detector, drawn as the closed curve around what it calls a match.
+
+    In the deck's threshold style (`slides/STYLE.md`, *A threshold is a dotted
+    black line*): round black dots, at the weight a plane's boundary takes
+    (`slide_figure.BOUNDARY_LW`), so the curve reads among the items' ink
+    outlines. The ghost, the boundary before the retrain, stays a grey dash.
+    """
     xx, yy, zz = _grid(model)
-    ax.contour(
-        xx,
-        yy,
-        zz,
-        levels=[0.0],
-        colors=[GHOST if ghost else BLUE],
-        linewidths=2.0 if ghost else 3.0,
-        linestyles="--" if ghost else "-",
-        zorder=1 if ghost else 2,
+    if ghost:
+        ax.contour(xx, yy, zz, levels=[0.0], colors=[GHOST], linewidths=2.0, linestyles="--", zorder=1)
+        return
+    curve = ax.contour(
+        xx, yy, zz, levels=[0.0], colors=[INK], linewidths=BOUNDARY_LW, linestyles=[BOUNDARY_DOTS], zorder=2
     )
+    curve.set_capstyle("round")
 
 
 def _signed_distance(model: SVC) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -1316,7 +1328,7 @@ def _band(ax: plt.Axes, model: SVC, width: float) -> None:
     """
     xx, yy, field = _signed_distance(model)
     ax.contourf(xx, yy, field, levels=[-width, width], colors=[BAND], zorder=0)
-    ax.contour(xx, yy, field, levels=[-width, width], colors=[BLUE], linewidths=1.6, linestyles=[(0, (5, 4))], zorder=1)
+    ax.contour(xx, yy, field, levels=[-width, width], colors=[INK], linewidths=CUT_LW, linestyles=[CUT_DOTS], zorder=1)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1457,7 +1469,7 @@ def _vote_boundary_stage(stage: int, ask_inside: bool = False) -> plt.Figure:
             _circle(ax, p, glyph="?" if i in asking else None)
 
     # ── stage 3: the detector the votes imply ────────────────────────────────
-    # It stays the *solid* curve through stage 6, the page on which the user has
+    # It stays the detector's own curve through stage 6, the page on which the user has
     # only answered: the retrain has not happened yet, so nothing about the line
     # has changed. It goes ghosted on stage 7, where the new one arrives.
     if 3 <= step <= 7:

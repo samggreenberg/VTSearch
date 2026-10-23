@@ -19,5 +19,5 @@
 <!-- **c** — Find's corpus has its own shape: half again as big, matches a third
      as common. -->
 
-<!-- **d** — Same labels, same fit, new line: 116 kept, 120 really there. Labels
+<!-- **d** — Same labels, same fit, new line: 95 kept, 120 really there. Labels
      are all that travel, and all you need. -->

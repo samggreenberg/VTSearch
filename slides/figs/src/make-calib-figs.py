@@ -41,6 +41,9 @@ from matplotlib.textpath import TextPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import (  # noqa: E402
+    CUT_DOTS,
+    CUT_LW,
+    CUT_WASH,
     FULL_BLEED,
     LABEL_GAP_PT,
     OBJECT_GAP_PT,
@@ -3539,9 +3542,12 @@ def blend_schedule_fig() -> None:
     schedule = get_schedule(binary)
     lo_edge = schedule.combine(-10.0, gmm, ctx, fit)
     hi_edge = schedule.combine(10.0, gmm, ctx, fit)
-    ax.axvspan(lo_edge, hi_edge, color=BLUE, alpha=0.16, linewidth=0)
-    ax.plot([gmm, gmm], [0, 1.18], color=BLUE, linewidth=2.2)
-    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=BLUE)
+    # The corridor is the band round the line, so a neutral wash, and the line
+    # is dotted black, as every slide draws a threshold (#5206). The schedule's
+    # curve above stays blue: it is the shipped schedule, not a cut.
+    ax.axvspan(lo_edge, hi_edge, color=CUT_WASH, linewidth=0, zorder=0)
+    ax.plot([gmm, gmm], [0, 1.18], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS)
+    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=INK)
     ax.text(mu_lo, -0.10, _sub(r"\mu_{lo}"), ha="center", va="top", fontsize=15, color=RED)
     ax.text(mu_hi, -0.10, _sub(r"\mu_{hi}"), ha="center", va="top", fontsize=15, color=GREEN)
     ax.annotate(
@@ -3751,7 +3757,9 @@ def anchored_fig() -> None:
     ax.plot(x, anchored.w_lo * gaussian(x, anchored.mu_lo, anchored.var_lo), color=RED, linewidth=2.4, zorder=3)
     ax.plot(x, anchored.w_hi * gaussian(x, anchored.mu_hi, anchored.var_hi), color=GREEN, linewidth=2.4, zorder=3)
     ax.axvline(plain_mid, color=SOFT, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
-    ax.axvline(anch_mid, color=BLUE, linewidth=2.4, zorder=4)
+    # Dotted black at its own curves' weight, as Twin Peaks draws a cut beside its curve (#5206).
+    cut = ax.axvline(anch_mid, color=INK, linewidth=2.4, linestyle=LL_CUT_DOTS, zorder=4)
+    cut.set_dash_capstyle("round")
 
     ymax = ax.get_ylim()[1]
     for s in bad_anchors:
@@ -3773,7 +3781,7 @@ def anchored_fig() -> None:
         xytext=(10, 0),
         textcoords="offset points",
         ha="left",
-        color=BLUE,
+        color=INK,
         fontsize=15,
     )
     ax.annotate(
@@ -5903,6 +5911,11 @@ TX_CORPUS_Y, TX_CORPUS_H = 1.2, 4.6
 #: else and keep a different count, from the same votes.
 TX_FIND_CORPUS = (3000, 0.04, (1.1, 0.65), (-1.0, 0.9), 7)
 TX_BINS = 30
+#: What the notes say: Train keeps 216, and the same labels keep 95 on Find,
+#: where 120 are really matches. They are the shipped line's numbers, so a
+#: change to `fit_labels_line` moves them, and the notes have to move too
+#: (Find kept 116 until #5040's corpus-fitted Bad component).
+TX_NOTES_COUNTS = (216, 95, 120)
 
 
 @functools.lru_cache(maxsize=None)
@@ -5928,6 +5941,14 @@ def transfer_fig() -> None:
     run on a second corpus: the same labels draw a different line there, and
     keep a different count, because the corpus is half the input.
     """
+    train, train_line = _ll_data()
+    find, find_line = _tx_find()
+    counts = (
+        int(np.sum(train >= float(_ll_logit(train_line.threshold(LL_PICKED))))),
+        int(np.sum(find >= float(_ll_logit(find_line.threshold(LL_PICKED))))),
+        int(round(TX_FIND_CORPUS[0] * TX_FIND_CORPUS[1])),
+    )
+    assert counts == TX_NOTES_COUNTS, f"Transfer Student's notes quote {TX_NOTES_COUNTS}; the line now gives {counts}"
     final = _tx_stage(TX_STAGES)
     box = tight_box(final)
     for stage in range(1, TX_STAGES):
@@ -5985,12 +6006,12 @@ def _tx_corpus(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, sy
 
 
 def _tx_line(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, line: "LabelsLine") -> None:
-    """The line at the middle radio, blue, through the corpus, and what it keeps."""
+    """The line at the middle radio, dotted black (#5206), through the corpus, and what it keeps."""
     x0, w = column
     cut = float(_ll_logit(line.threshold(LL_PICKED)))
     cut_x = float(_tx_at(column, cut))
     top = TX_CORPUS_Y + TX_CORPUS_H + 0.2
-    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=BLUE, linewidth=2.6, zorder=5)
+    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=5)
     kept = int(np.sum(corpus >= cut))
     bracket_y = TX_CORPUS_Y + TX_CORPUS_H - 0.3
     right = x0 + w
@@ -7464,10 +7485,10 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
         fontsize=15,
         color=INK,
     )
-    # The line, at the kept set's foot, in the palette's blue: it is the shipped
-    # decision, and the one thing on the drawing the fragment names in colour.
+    # The line, at the kept set's foot: dotted black, as every slide draws a
+    # threshold (#5206).
     line_bottom = strip_y0 - 1.15
-    ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
+    ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=6)
     ax.text(line_x - 0.14, line_bottom + 0.05, "the line", ha="right", va="bottom", fontsize=16, color=INK)
     return {
         "cell_w": cell_w,
@@ -7692,18 +7713,11 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         for index, _good in deeper_picks:
             _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
         _floor_vote_marks(ax, rows, deeper_picks)
-        # Both steps leave from the line: its own blue, carried down dashed to
-        # the walk row, so the two arrows read as two moves of one line rather
-        # than as one arrow with two heads.
+        # Both steps leave from the line: carried down to the walk row in its
+        # own dots, so the two arrows read as two moves of one line rather than
+        # as one arrow with two heads.
         line_x = rows["line_x"]
-        ax.plot(
-            [line_x] * 2,
-            [walk_y, rows["line_bottom"]],
-            color=BLUE,
-            linewidth=2.0,
-            linestyle=(0, (2, 2)),
-            zorder=6,
-        )
+        ax.plot([line_x] * 2, [walk_y, rows["line_bottom"]], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=6)
         shallower_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][0])
         _floor_walk_arrow(ax, line_x - 0.2, FLOOR_STRIP_X0, walk_y, "a band deeper: worse")
         _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
