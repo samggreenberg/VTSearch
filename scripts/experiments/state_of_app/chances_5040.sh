@@ -24,7 +24,9 @@
 #                                            full; a cell is charged one CPU, not an array task's whole core
 #
 # Launch from a FROZEN worktree (VTS_REPO is the worktree this script sits in, and every task imports it).
-# Env: CHANCES5040_DATE (default 2026-10-17), CHANCES5040_SEEDS (5), CHANCES5040_TAG (e.g. smoke), SOTA_ROOT, and
+# Env: CHANCES5040_DATE (default 2026-10-17), CHANCES5040_SEEDS (5), CHANCES5040_TAG (e.g. smoke), SOTA_ROOT,
+# CHANCES5040_DATASET (coco_better; o365_better re-reads the contrast on the confirmation bench, #4817) with
+# CHANCES5040_GRID (that dataset's prepared grid: its results dir, holding prepare_info.json and crops/), and
 # anything launch.sh reads (CALIB_MEM, CALIB_CONC, CALIB_TIME, CALIB_PACK_JOBS, CALIB_PACK_PAR, CALIB_PACK_TIME).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -36,14 +38,27 @@ declare -A KNOBS=([ctl]="CALIB_LINE_BAD=labels CALIB_LINE_BOUND_MARGIN=2" [bssl]
   [bssl4]="CALIB_LINE_BAD=corpus" [bmean4]="")
 declare -A DIVERGES=([ctl]="line_bad,line_bound_margin" [bssl]="line_bad,line_bound_margin" [bssl4]="line_bad" [bmean4]="")
 GRID_SRC="${CHANCES5040_GRID:-$S/2026-10-08-b1/results}"  # prepare_data.py unchanged since (one docstring edit)
+DATASET="${CHANCES5040_DATASET:-coco_better}"
 
 btag() { case "$1" in 0.25) echo 025 ;; 1) echo 1 ;; 4) echo 4 ;; *) echo "beta must be 0.25, 1 or 4" >&2; exit 2 ;; esac; }
 run_of() { echo "chances5040${CHANCES5040_TAG:-}-$1-b$(btag "$2")"; }
 
+# The grid's own block sizes: seed-major, then embedder (siglip, the Binary path, first), then cell.
+# coco_better: 288 a seed, the first 144 Binary.
+grid_sizes() {
+  python3 - "$GRID_SRC/prepare_info.json" "$DATASET" <<'PY'
+import json, sys
+info = json.load(open(sys.argv[1]))["datasets"][sys.argv[2]]
+sizes = [len(info[e]["selected_categories"]) for e in ("siglip", "siglip+dinov3_patch")]
+print(sum(sizes), sizes[0])
+PY
+}
 all_idx() {
-  python3 - "$SEEDS" <<'PY'
+  read -r per_seed n_binary < <(grid_sizes)
+  python3 - "$SEEDS" "$per_seed" "$n_binary" <<'PY'
 import sys
-print(",".join(str(s * 288 + i) for s in range(int(sys.argv[1])) for i in range(144)))
+seeds, per_seed, n_binary = (int(a) for a in sys.argv[1:])
+print(",".join(str(s * per_seed + i) for s in range(seeds) for i in range(n_binary)))
 PY
 }
 
@@ -57,8 +72,9 @@ dirs)
       mkdir -p "$r/cells"
       ln -sfn "$GRID_SRC/prepare_info.json" "$r/prepare_info.json"
       ln -sfn "$GRID_SRC/crops" "$r/crops"
+      read -r per_seed _ < <(grid_sizes)
       cat >"$r/grid_shape.json" <<JSON
-{"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
+{"n_cells": $per_seed, "datasets": ["$DATASET"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": $SEEDS,
  "max_steps": 200, "cell_order": "seed", "test_bands": "all", "job_name": "$(run_of "$arm" "$b")",
  "note": "#5040 arm $arm ($knobs), beta $b, 200 clicks, binary path only, trajectory pass; grid symlinked from $GRID_SRC"}
 JSON
@@ -74,6 +90,7 @@ launch|cpack)
   mem_in="${CALIB_MEM:-}"
   export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}" CALIB_MEM="${CALIB_MEM:-3G}" CALIB_TIME="${CALIB_TIME:-2:00:00}"
   export SOTA_BETA="$b" SOTA_DATE="$D-$run" SOTA_PASS=trajectory SOTA_SEEDS="$SEEDS" SOTA_MAX_STEPS=200
+  export SOTA_DATASET="$DATASET"
   export SOTA_RANK_FRAME_STEPS="${SOTA_RANK_FRAME_STEPS:-10,25,50,100,150,200}"
   export CALIB_JOB_NAME="$run"
   unset CALIB_LINE_BAD CALIB_LINE_BOUND_MARGIN CALIB_SAVE_TEST_SCORES CALIB_SAVE_FOLD_SCALES CALIB_SAVE_TEST_SCORES_AT
