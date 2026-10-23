@@ -17,8 +17,8 @@
 <!-- **b** — Scoring is one dot product a photo: two milliseconds for ten
      thousand photos, about a third of a second for a million. -->
 
-<!-- **c** — Every click refits three of these, the two halves it checks itself
+<!-- **c** — Every vote refits three of these, the two halves it checks itself
      with and the real one, and scores the pile three times. On ten thousand
      photos that's about fifteen milliseconds, a fraction of a blink, so we
-     redraw the line on every click. Which is why where it goes matters so
+     redraw the line on every vote. Which is why where it goes matters so
      much. -->

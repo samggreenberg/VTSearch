@@ -19,7 +19,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
   prints is that module's constant.
 * `autopilot-smart` is Smart's idea, a student's Spanish classes, and
   `autopilot-smart-trend` runs the shipped `rising_status_from_scores` on a
-  planted session's F-beta points (#5134), and asserts the lights the slide draws.
+  planted session's Fβ points, counted in votes (#5134), and asserts the lights the slide draws.
 * `autopilot-stable` runs the shipped `count_flips` on two planted retrains,
   and asserts the flips the slide counts.
 * `autopilot-span` counts the walk's run over the first 40 cells of an atlas,
@@ -30,7 +30,7 @@ Schematic inputs, real code, as in `make-test-figs.py`:
 
 The last figure, `autopilot-stop`, is the only measurement: where the stop
 fired in today's app, at each radio's beta, and what it gave up against
-clicking on to 150. It is re-plotted from committed tables in the State of the
+voting on to 150. It is re-plotted from committed tables in the State of the
 App review's shape (`stopping_by_preset.csv` and `objective_by_click.csv`,
 written by `stops_by_preset.py` and `by_click.py`). Since #5141 they are
 #5134's shipped arm, Smart on F-beta, read at the review's 150-click budget
@@ -94,11 +94,11 @@ OUT = Path(__file__).resolve().parent.parent
 #: #5134's shipped arm (Smart on F-beta) read at click 150 (#5141), until the next State of the App review.
 REPORT_STOP = _REPO_ROOT / "docs" / "experiments" / "2026-10-20-smart-fbeta-5134" / "stop"
 
-# The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): blue is the
-# line, red the losing arm and a Bad, green a Good. The lights borrow red and
-# green from it and add an amber, and every light on a slide is named in words
-# beside it, so no state is told by hue alone.
-BLUE = "#0b5fa5"
+# The deck's palette (`make-calib-figs.py`, `themes/vtsearch.css`): red the
+# losing arm and a Bad, green a Good. The line is a thin dotted black one, as
+# the deck's other charts draw a threshold (Beta Max's cuts). The lights borrow
+# red and green from the palette and add an amber, and every light on a slide
+# is named in words beside it, so no state is told by hue alone.
 RED = "#b91c1c"
 GREEN = "#0d8a5f"
 AMBER = "#c98a06"
@@ -108,9 +108,9 @@ RULE = "#d8dee6"
 #: rule grey was too faint).
 EDGE = "#9aa3ae"
 UNLABELED_FILL = "#dae0e8"
-#: The ambiguity band around the line: a tint of the line's own blue, since it
-#: is the line's band.
-BAND_FILL = "#d6e4f2"
+#: The ambiguity band around the line: a neutral grey wash, since the line it
+#: belongs to is black (#5203).
+BAND_FILL = "#e3e6ea"
 LIGHT = {"red": RED, "yellow": AMBER, "green": GREEN}
 
 plt.rcParams.update(
@@ -140,9 +140,9 @@ W, H = 12.8, 7.2
 #: Where a statement over the drawing starts: right of the title notch
 #: (`slide_figure.TITLE_NOTCH_PX`, 60-360 px across), with a margin.
 STATEMENT_X, STATEMENT_Y = 4.0, 6.35
-#: A chart slide's numbers stack under the notch in this column (figure
-#: fractions), as the Test slides' do.
-SIDE_X, SIDE_TOP = 0.04, 0.70
+#: A chart slide's axes, in figure fractions: under the statement, the y axis's
+#: labels clear of the notch above them.
+CHART_AXES = (0.10, 0.14, 0.84, 0.58)
 
 
 # ── shared drawing ───────────────────────────────────────────────────────────
@@ -168,21 +168,6 @@ def _statement(ax: plt.Axes, words: str) -> None:
     ax.text(STATEMENT_X, STATEMENT_Y, words, ha="left", va="center", fontsize=19)
 
 
-def _side_block(fig: Figure, lines: list[tuple[str, str, float]], top: float = SIDE_TOP) -> float:
-    """A column of ``(words, style, gap before)`` lines under the notch; returns the last line's height.
-
-    ``head`` is a bold heading in ink and ``body`` plain ink indented under it.
-    """
-    y = top
-    for words, style, gap in lines:
-        y -= gap
-        if style == "body":
-            fig.text(SIDE_X + 0.015, y, words, ha="left", va="center", fontsize=16)
-        else:
-            fig.text(SIDE_X, y, words, ha="left", va="center", fontsize=17, fontweight="bold")
-    return y
-
-
 def _light(ax: plt.Axes, x: float, y: float, colour: str, r: float = 0.13) -> None:
     """One indicator light: a disc in the light's colour, and a white tick on green, as the app draws it."""
     ax.add_patch(Circle((x, y), r, facecolor=LIGHT[colour], edgecolor="none", zorder=6))
@@ -202,9 +187,14 @@ def _disc(ax: plt.Axes, x: float, y: float, mark: int | str, r: float = 0.22) ->
     ax.text(x, y, f"{mark}", ha="center", va="center", fontsize=16, color="white", fontweight="bold", zorder=7)
 
 
+#: The line's weight and dots: Beta Max's cuts (`make-calib-figs.py`), so a
+#: threshold looks the same on every slide (#5203).
+LINE_WIDTH, LINE_DOTS = 1.4, (0, (2, 3))
+
+
 def _line(ax: plt.Axes, x: float, y0: float, y1: float) -> None:
-    """The line, in the palette's blue: the one shipped decision on every drawing."""
-    ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
+    """The line, thin, dotted and black: the one shipped decision on every drawing."""
+    ax.plot([x, x], [y0, y1], color=INK, linewidth=LINE_WIDTH, linestyle=LINE_DOTS, zorder=6)
 
 
 # ── All Sorts of Sorts (once Flight Plan): the steps ─────────────────────────
@@ -429,11 +419,14 @@ SPANISH_YLIM = (-1.85, 3.35)
 SPANISH_SHOWN = ("Bad", "Great", "Bad", "Good", "Bad", "Ok", "Ok", "Ok")
 #: A planted session (#5134): retrain *k*'s detector, scored on the votes as
 #: they stood at a later retrain *t*. Smart re-scores its window on *today's*
-#: votes, and Autopilot spends the clicks between retrains on the photos it is
+#: votes, and Autopilot spends the votes between retrains on the photos it is
 #: least sure of, so the votes keep getting harder: an old detector that never
 #: trained on the newer ones loses ground on them. The chart at retrain 14 and
 #: the chart at retrain 30 are two different tests, not one curve extended
-#: (owner, #5171). A detector's skill rises and levels off
+#: (owner, #5171). The chart counts them in votes (owner, #5203): every vote
+#: retrains, and the first retrain is the detector the opening's votes hand
+#: over to (`SMART_FIRST_VOTES`), as Change of Heart's session counts its
+#: retrains from that hand-over. A detector's skill rises and levels off
 #: (``SMART_SKILL``: top, rise, time constant), the votes harden
 #: (``SMART_HARDER``: by how much, how fast), and every re-scoring draws its own
 #: step-to-step scatter.
@@ -444,6 +437,14 @@ SMART_HARDER = (0.35, 12.0)
 SMART_SCATTER = 0.008
 #: The two days the slide shows, each the last retrain its window ends on.
 SMART_EARLY_END, SMART_LATE_END = 14, 30
+#: How many votes retrain 1 is trained on: the opening's Goods and Bads, on the
+#: query, before the detector takes over. Retrain *k* holds ``k - 1`` votes more.
+SMART_FIRST_VOTES = GOOD_TARGET + BAD_TARGET
+
+
+def _smart_votes(retrain: int | np.ndarray) -> int | np.ndarray:
+    """How many votes there are at *retrain* (1-based): one retrain a vote, from the hand-over."""
+    return retrain + SMART_FIRST_VOTES - 1
 
 
 def _spanish_axis(page: int) -> tuple[float, float]:
@@ -463,7 +464,7 @@ def _spanish_points(page: int) -> list[tuple[float, float]]:
 
 
 def _smart_fbetas(today: int) -> np.ndarray:
-    """F-beta of retrains 1 to *today*, every one scored on the votes as they stand at retrain *today*."""
+    """Fβ of retrains 1 to *today*, every one scored on the votes as they stand at retrain *today*."""
     scatter = np.random.default_rng(SMART_SEED).normal(0.0, SMART_SCATTER, size=(SMART_RETRAINS, SMART_RETRAINS))
     top, rise, pace = SMART_SKILL
     harder, harden = SMART_HARDER
@@ -481,7 +482,7 @@ def _smart_window(fbetas: np.ndarray, end: int) -> tuple[np.ndarray, dict]:
 
 
 def smart_fig() -> None:
-    """Smart: the idea, in Spanish classes, and then the F-beta of the last ten detectors.
+    """Smart: the idea, in Spanish classes, and then the Fβ of the last ten detectors.
 
     Two slides. Eight pages of the idea (owner, #4884): a student whose ability
     axis rescales each time a class shows them how much more Spanish there is,
@@ -505,6 +506,11 @@ def smart_fig() -> None:
     # The notes' claim: on the later, harder votes every old detector scores lower than it did.
     assert (late_day[:SMART_EARLY_END] < early_day).all(), late_day[:SMART_EARLY_END] - early_day
     assert 0.0 < late_day.min() and early_day.max() < SMART_Y_TOP, (late_day.min(), early_day.max())
+    # Change of Heart counts its session's retrains from the same hand-over: its first flip is the first
+    # retrain after the opening's votes against the one before it.
+    assert STABLE_CHART_VOTES[0] == _smart_votes(2), (STABLE_CHART_VOTES, _smart_votes(2))
+    # The notes say "20 votes" and "36".
+    assert (_smart_votes(SMART_EARLY_END), _smart_votes(SMART_LATE_END)) == (20, 36)
     _save(SPANISH_PAGES, _spanish_stage, "autopilot-smart")
     _save(SMART_TREND_STAGES, _smart_trend_stage, "autopilot-smart-trend")
 
@@ -556,61 +562,53 @@ def _fit_line(window: np.ndarray, x0: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _smart_trend_stage(stage: int) -> Figure:
-    """The retrain chart on one day's votes: retrain 14's, still rising (stage 1); retrain 30's, flat (stage 2).
+    """The chart on one day's votes: 20 of them, still rising (stage 1); 36, flat (stage 2).
 
     Stage 2 re-scores every old detector on the harder votes, and keeps stage 1's points where they stood,
     hollow and joined as stage 1 drew them, so the room sees the same detectors drop rather than an old
-    curve levelling off (owner, #5171).
+    curve levelling off (owner, #5171). Each point sits at the votes its detector had, and the chart has the
+    slide to itself (owner, #5203).
     """
     fig = plt.figure(figsize=(W, H))
-    ax = fig.add_axes((0.40, 0.14, 0.56, 0.62))
-    ax.set_xlim(0.3, SMART_RETRAINS + 0.7)
+    ax = fig.add_axes(CHART_AXES)
+    ax.set_xlim(_smart_votes(0.3), _smart_votes(SMART_RETRAINS + 0.7))
     ax.set_ylim(0.0, SMART_Y_TOP)
-    ax.set_xticks([1, 10, 20, 30])
+    ax.set_xticks([10, 20, 30])
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_xlabel("retrain")
-    ax.set_ylabel("F-beta on today's votes")
-    fig.text(0.40, 0.86, "Is the detector still getting better?", ha="left", va="center", fontsize=19)
+    ax.set_xlabel("# today's votes")
+    ax.set_ylabel("Fβ on today's votes")
+    fig.text(STATEMENT_X / W, STATEMENT_Y / H, "Is the detector still getting better?", ha="left", va="center",
+             fontsize=19)  # fmt: skip
     overlay = _overlay(fig)
     today = SMART_EARLY_END if stage == 1 else SMART_LATE_END
-    _side_block(
-        fig,
-        [
-            ("Each point", "head", 0.0),
-            ("one retrain's detector,", "body", 0.055),
-            ("scored on today's votes", "body", 0.05),
-            ("Today", "head", 0.085),
-            (f"retrain {today}", "body", 0.055),
-            ("The fit", "head", 0.085),
-            (f"through the last {SMART_WINDOW}", "body", 0.055),
-        ],
-    )
     fbetas = _smart_fbetas(today)
     if stage == SMART_TREND_STAGES:
         before = _smart_fbetas(SMART_EARLY_END)
-        xs = np.arange(1, SMART_EARLY_END + 1)
+        xs = _smart_votes(np.arange(1, SMART_EARLY_END + 1))
         ax.plot(xs, before, color=SOFT, linewidth=1.2, zorder=3)
         ax.plot(xs, before, linestyle="none", marker="o", markersize=8, markerfacecolor="white",
                 markeredgecolor=SOFT, markeredgewidth=1.6, zorder=3)  # fmt: skip
         # Over the hollow curve's end rather than past it: past it are the re-scored points.
-        ax.text(SMART_EARLY_END, before[-1] + 0.05, f"on retrain {SMART_EARLY_END}'s votes", ha="center",
-                va="bottom", fontsize=15, color=SOFT, zorder=6)  # fmt: skip
-    ax.plot(np.arange(1, today + 1), fbetas, linestyle="none", marker="o", markersize=8, color=INK, zorder=4)
+        ax.text(xs[-1], before[-1] + 0.05, f"on the first {xs[-1]} votes", ha="center", va="bottom",
+                fontsize=15, color=SOFT, zorder=6)  # fmt: skip
+    ax.plot(_smart_votes(np.arange(1, today + 1)), fbetas, linestyle="none", marker="o", markersize=8, color=INK,
+            zorder=4)  # fmt: skip
     label_y, words = (0.42, "still rising") if stage == 1 else (0.6, "flat")
     window, status = _smart_window(fbetas, today)
-    x0 = today - SMART_WINDOW + 1
+    # One retrain a vote, so the window's ten retrains are its last ten votes, and its slope is per vote.
+    x0 = _smart_votes(today - SMART_WINDOW + 1)
     ax.add_patch(Rectangle((x0 - 0.45, 0.0), SMART_WINDOW - 0.1, SMART_Y_TOP, facecolor="#eef1f5",
                            edgecolor="none", zorder=1))  # fmt: skip
     fx, fy = _fit_line(window, x0)
     ax.plot(fx, fy, color=INK, linewidth=2.6, zorder=5)
     cx, cy = _to_canvas(fig, ax, x0 + (SMART_WINDOW - 1) / 2, label_y)
     overlay.text(cx, cy, words, ha="center", va="center", fontsize=17, fontweight="bold")
-    overlay.text(cx, cy - 0.36, _signed(100 * status["slope"]) + "% a retrain", ha="center", va="center",
+    overlay.text(cx, cy - 0.36, _signed(100 * status["slope"]) + "% a vote", ha="center", va="center",
                  fontsize=16)  # fmt: skip
     return fig
 
 
-#: The top of the Smart chart's F-beta axis: F-beta's own.
+#: The top of the Smart chart's Fβ axis: Fβ's own.
 SMART_Y_TOP = 1.0
 
 
@@ -663,9 +661,10 @@ STABLE_LINE_CLEAR = STABLE_ITEM_R + 0.08
 STABLE_TEXT_X = 0.7
 #: The last page's chart: a planted session's count of flips that count, one a
 #: retrain, jiggling down to none (owner, #4884: fabricated, it is a picture of
-#: the idea). Retrains from the hand-over to the detector to the 150th click.
+#: the idea). One retrain a vote, from the hand-over to the detector to the
+#: 150th vote.
 STABLE_CHART_SEED = 31
-STABLE_CHART_CLICKS = (8, 150)
+STABLE_CHART_VOTES = (8, 150)
 
 
 def _stable_retrains() -> tuple[ScoredSnapshot, ScoredSnapshot]:
@@ -679,7 +678,7 @@ def _stable_retrains() -> tuple[ScoredSnapshot, ScoredSnapshot]:
 def _stable_chart() -> tuple[np.ndarray, np.ndarray]:
     """The super flips at every retrain of a planted session: a few early, jiggling, flattening to none."""
     rng = np.random.default_rng(STABLE_CHART_SEED)
-    t = np.arange(STABLE_CHART_CLICKS[0], STABLE_CHART_CLICKS[1] + 1)
+    t = np.arange(STABLE_CHART_VOTES[0], STABLE_CHART_VOTES[1] + 1)
     mean = 7.0 * np.exp(-(t - t[0]) / 26.0)
     count = np.maximum(0, np.round(mean + rng.normal(0.0, 1.0, size=t.size) * 0.8 * np.sqrt(mean))) + 0.0
     return t, count
@@ -743,7 +742,7 @@ def _stable_stage(stage: int, last: ScoredSnapshot, this: ScoredSnapshot) -> Fig
 
 
 def _stable_retrain_axes(ax: plt.Axes, step: int, last: ScoredSnapshot, this: ScoredSnapshot) -> None:
-    """The retrains' score axes, each with its line: the last alone at step 0, both after; bands from step 3."""
+    """The retrains' score axes, each with its dotted line: the last alone at step 0, both after; bands from step 3."""
     for y, snap, words, words_y in (
         (STABLE_Y_LAST, last, "last retrain", STABLE_Y_LAST + 0.5),
         (STABLE_Y_THIS, this, "this retrain", STABLE_Y_THIS - 0.5),
@@ -784,21 +783,21 @@ def _stable_chart_stage() -> Figure:
     """The super flips over a session, one point a retrain, falling to none."""
     t, count = _stable_chart()
     fig = plt.figure(figsize=(W, H))
-    ax = fig.add_axes((0.10, 0.14, 0.84, 0.58))
-    ax.set_xlim(0, STABLE_CHART_CLICKS[1] + 2)
+    ax = fig.add_axes(CHART_AXES)
+    ax.set_xlim(0, STABLE_CHART_VOTES[1] + 2)
     ax.set_ylim(0, max(count) + 1)
     ax.set_xticks([0, 25, 50, 75, 100, 125, 150])
     ax.set_yticks(range(0, int(max(count)) + 2, 2))
-    ax.set_xlabel("clicks")
+    ax.set_xlabel("votes")
     ax.set_ylabel("# super changed side")
     ax.plot(t, count, color=INK, linewidth=2.4, solid_joinstyle="round", zorder=4)
-    fig.text(STATEMENT_X / W, STATEMENT_Y / H, "# Super Changed Side vs Clicks", ha="left", va="center", fontsize=19)
+    fig.text(STATEMENT_X / W, STATEMENT_Y / H, "# Super Changed Side vs Votes", ha="left", va="center", fontsize=19)
     return fig
 
 
 # ── Tree's Company: Span ─────────────────────────────────────────────────────
 
-SPAN_STAGES = 4
+SPAN_STAGES = 5
 #: The atlas the slide draws: three children a cell, the first four levels,
 #: which are exactly the 40 cells Span's default full asks for.
 SPAN_K, SPAN_LEVELS = 3, 4
@@ -818,12 +817,20 @@ SPAN_BOUNDARY_VOTES = ((3, 0), (3, 1), (3, 4), (3, 5), (3, 16))
 #: business, so the path wanders (owner, #4884: not always the leftmost child):
 #: the pick at cell 02 lands in 021 and then 0212.
 SPAN_PICK_LEAVES = {(1, 2): (3, 23)}
-#: The four pages: the empty atlas; the cells the Boundary votes reached; where
-#: the walk asks next; and that one pick, with where it asks after it (owner,
-#: #5132: one pick, not a jump of four). No lights and no bar: the slide shows
-#: the measure, not the rule. Per page: how many picks are in, and whether the
-#: (?) is drawn.
-SPAN_PAGES = {1: (None, False), 2: (0, False), 3: (0, True), 4: (1, True)}
+#: The five pages: the empty atlas; the leaves the Boundary votes landed in,
+#: alone; those leaves and every cell above them (owner, #5203: empty, leaves,
+#: leaves and ancestors); where the walk asks next; and that one pick, with
+#: where it asks after it (owner, #5132: one pick, not a jump of four). No
+#: lights and no bar: the slide shows the measure, not the rule. Per page: how
+#: many picks are in, whether the cells above a vote are darkened too, and
+#: whether the (?) is drawn.
+SPAN_PAGES = {
+    1: (None, False, False),
+    2: (0, False, False),
+    3: (0, True, False),
+    4: (0, True, True),
+    5: (1, True, True),
+}
 #: The runs the notes quote: from the top to the first empty cell, after the
 #: Boundary votes and after the pick.
 SPAN_RUNS = {0: 3, 1: 6}
@@ -842,15 +849,20 @@ def _span_ancestors(cell: tuple[int, int]) -> list[tuple[int, int]]:
     return out
 
 
-def _span_covered(picks_in: int | None) -> tuple[set[tuple[int, int]], int, list[tuple[int, int]]]:
+def _span_covered(picks_in: int | None, paths: bool = True) -> tuple[set[tuple[int, int]], int, list[tuple[int, int]]]:
     """The cells holding a vote (each with its path), the walk's run, and the picks Diversity made.
 
     *picks_in* is how many picks Diversity has made; None is the empty atlas,
-    before any vote.
+    before any vote. With *paths* false only the leaves the Boundary votes
+    landed in are covered, not the cells above them: the page before the one
+    that says a vote in a cell is a vote in every cell over it.
     """
     covered: set[tuple[int, int]] = set()
     picks: list[tuple[int, int]] = []
-    if picks_in is not None:
+    if picks_in is not None and not paths:
+        assert picks_in == 0, picks_in
+        covered.update(SPAN_BOUNDARY_VOTES)
+    elif picks_in is not None:
         for cell in SPAN_BOUNDARY_VOTES:
             covered.update(_span_ancestors(cell))
         order = _span_cells()
@@ -873,10 +885,16 @@ def _span_covered(picks_in: int | None) -> tuple[set[tuple[int, int]], int, list
 def span_fig() -> None:
     """Span: the first 40 cells of an atlas, the cells the votes reach, and where the walk asks.
 
-    Four stages: the empty cells; after asking at the line, a few darkened; the
-    first empty cell, where the walk asks; and its pick there, a path down 02,
-    021, 0212, with the next ask (owner, #4884, #5132).
+    Five stages: the empty cells; after asking at the line, the leaves the
+    votes landed in; those leaves' ancestors too; the first empty cell, where
+    the walk asks; and its pick there, a path down 02, 021, 0212, with the next
+    ask (owner, #4884, #5132, #5203).
     """
+    # The leaves page darkens only leaves, so nothing above the bottom row is covered yet.
+    leaves, _run, _picks = _span_covered(0, paths=False)
+    assert all(level == SPAN_LEVELS - 1 for level, _i in leaves), leaves
+    # The notes count the leaves the votes landed in.
+    assert len(leaves) == 5, leaves
     for picks_in, run in SPAN_RUNS.items():
         _covered, got, picks = _span_covered(picks_in)
         assert got == run and len(picks) == picks_in, (picks_in, got)
@@ -916,8 +934,8 @@ def _span_stage(stage: int) -> Figure:
     for i in range(SPAN_K ** (SPAN_LEVELS - 1)):
         x, y = xy[(SPAN_LEVELS - 1, i)]
         ax.plot([x - 0.08, x, x + 0.08], [y - 0.42, y, y - 0.42], color=EDGE, linewidth=1.3, zorder=1)
-    picks_in, asking = SPAN_PAGES[stage]
-    covered, run, _picks = _span_covered(picks_in)
+    picks_in, paths, asking = SPAN_PAGES[stage]
+    covered, run, _picks = _span_covered(picks_in, paths)
     ask = _span_cells()[run] if asking else None
     for cell, (x, y) in xy.items():
         if cell == ask:
@@ -1058,7 +1076,7 @@ def _stop_curves() -> dict[float, tuple[np.ndarray, np.ndarray]]:
 
 
 def stop_fig() -> None:
-    """Where today's app told its sessions they could stop, and what that cost against clicking on.
+    """Where today's app told its sessions they could stop, and what that cost against voting on.
 
     Two stages: the objective along a session at each radio to the cap, with each radio's median stop; then
     the median session's F-beta at the stop against at the review's budget.
@@ -1082,7 +1100,7 @@ def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
     ax.set_ylim(0.3, 0.7)
     ax.set_xticks([0, 50, 100, STOP_BUDGET, STOP_AXIS])
     ax.set_yticks([0.3, 0.4, 0.5, 0.6, 0.7])
-    ax.set_xlabel("click")
+    ax.set_xlabel("votes")
     ax.set_ylabel("Fβ at that β")
     stops = {beta: float(rows[beta]["km_t_stop"]) for beta, _ in STOP_RADIOS}
     ends = []
@@ -1096,7 +1114,7 @@ def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
     heights = spread_labels([f for f, _ in ends], gap=0.03)
     for (_, words), y in zip(ends, heights, strict=True):
         ax.text(STOP_AXIS + 4, y, words, ha="left", va="center", fontsize=16, clip_on=False)
-    ax.text(min(stops.values()), 0.705, "○ the stop, median click", ha="left", va="bottom", fontsize=15,
+    ax.text(min(stops.values()), 0.705, "○ the median stop", ha="left", va="bottom", fontsize=15,
             color=SOFT, clip_on=False)  # fmt: skip
     heads = ["Median", "Stop"] + (["Fβ vs 150"] if stage >= 2 else [])
     if stage >= 2:
@@ -1107,7 +1125,7 @@ def _stop_stage(stage: int, rows: dict, curves: dict) -> Figure:
     for k, (beta, words) in enumerate(STOP_RADIOS):
         y = STOP_TABLE_ROW_Y - k * STOP_TABLE_ROW_GAP
         fig.text(STOP_TABLE_X[0], y, words, ha="left", va="center", fontsize=16)
-        fig.text(STOP_TABLE_X[1], y, f"{stops[beta]:.0f} clicks", ha="left", va="center", fontsize=16)
+        fig.text(STOP_TABLE_X[1], y, f"{stops[beta]:.0f} votes", ha="left", va="center", fontsize=16)
         if stage >= 2:
             # The stop against the budget, from the stop's side: what stopping there gave up.
             cost = -float(rows[beta]["median_fbeta_delta"])

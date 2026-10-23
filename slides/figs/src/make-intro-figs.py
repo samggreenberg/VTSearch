@@ -1570,11 +1570,27 @@ EMBED_WORD = "embed"
 #: say it is a string and not a label the corpus carries.
 QUERY_TEXT = '"book"'
 
-#: The four beats of the drawing, and the first one the deck shows: the pile of
+#: The five beats of the drawing, and the first one the deck shows: the pile of
 #: photographs alone was a page of its own until the owner cut it (#5171), so
 #: the slide opens on the pile already going into the cube. See `embed_flow_fig`.
-EMBED_FLOW_STAGES = 4
+EMBED_FLOW_STAGES = 5
 EMBED_FLOW_FIRST = 2
+
+#: The last beat's lines, from the phrase's square to every photo (owner,
+#: #5203): how close each photo is to "book", which is what the next slides
+#: work with. In `GREEN`, because they are the phrase's, and thin, because
+#: sixty of them have to read as a fan out of the square rather than as a green
+#: blot over the cloud. Each stops at its photo's outline, where the circle's
+#: own ink takes over (`_query_lines`).
+QUERY_LINE_PT = 0.8
+#: A dot's outline width, which is where a line stops short of the dot's centre.
+FLOW_DOT_EDGE_PT = 1.3
+#: The square's own outline, in its fill colour, and the white keyline the
+#: lines stop at around it. Sixty lines converging on a mark a few pixels wide
+#: merge into a green star there, and on the slide the square read as the hub
+#: of the fan rather than as a thing in the space; the keyline keeps its edges.
+QUERY_EDGE_PT = 1.4
+QUERY_KEYLINE_PT = 1.8
 
 #: The block arrows' shaft width and head, in units.
 FLOW_ARROW_W, FLOW_HEAD_W, FLOW_HEAD_L = 0.52, 0.82, 0.38
@@ -1776,9 +1792,19 @@ def _block_arrow(ax: plt.Axes, start: tuple[float, float], end: tuple[float, flo
 
 
 #: Where the cube's edges sit in the stack: the three hidden ones under every
-#: dot, the nine the viewer can see over every dot. The dots are drawn at
-#: 5 to 7 (`_embed_flow_stage`), so these bracket them.
+#: dot, the nine the viewer can see over every dot. The dots, and the lines
+#: between them, are drawn at 5 to 7 by depth (`_flow_z`), so these bracket
+#: them.
 CUBE_BACK_Z, CUBE_FRONT_Z = 2, 7.5
+
+
+def _flow_z(depth: float) -> float:
+    """The stacking order of something `depth` into the cube (0 front, 1 back): 7 at the front, 5 at the back.
+
+    One scale for the dots and the lines between them, so whichever is nearer
+    the viewer where they cross is the one drawn on top.
+    """
+    return 5 + 2 * (1 - depth)
 
 
 def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
@@ -1819,7 +1845,94 @@ def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
 
 
 def _flow_dot(ax: plt.Axes, x: float, y: float, radius: float, z: float) -> None:
-    ax.add_patch(plt.Circle((x, y), radius, facecolor="white", edgecolor=INK, linewidth=1.3, zorder=z))
+    ax.add_patch(plt.Circle((x, y), radius, facecolor="white", edgecolor=INK, linewidth=FLOW_DOT_EDGE_PT, zorder=z))
+
+
+def _flow_radius(depth: float) -> float:
+    """A dot's radius `depth` into the cube: `FLOW_DEPTH_SHRINK` smaller at the back than at the front."""
+    return FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * depth)
+
+
+def _query_lines(ax: plt.Axes, cube_x: float, cube_y: float) -> None:
+    """A green line from the phrase's square to every dot, each at its own depth in the cube.
+
+    The square sits at the cube's centre and the dots all through it, so a line
+    runs in depth as well as across the page: towards the viewer to a dot near
+    the front, away to one at the back. The page is flat, though, and one line
+    has one place in the stack, so a line drawn whole would pass over every dot
+    it crosses or under every one, and the cloud would flatten into a picture
+    of a star pasted over a picture of a box.
+
+    What the stack has to get right is only where a line *crosses* a dot, so
+    each line is cut there: wherever it passes over another dot's disc, that
+    stretch is stacked at the depth the line has reached at that point, on the
+    dots' own scale (`_flow_z`). A dot nearer the viewer than the line is drawn
+    over it, so the line passes behind; one farther back is drawn under it.
+    Everything else holds without help: every line is inside the cube, so the
+    front edges cover all of them and the hidden back edges none; and the
+    square, drawn over the cloud as it always was, covers where they start,
+    inside a white keyline (`QUERY_KEYLINE_PT`) that keeps it a square.
+
+    Each line stops at its own dot's outline rather than its centre, for the
+    same reason: a line that reaches a dot at the back arrives from in front of
+    it and would otherwise run on across its face.
+    """
+    origin = np.array([cube_x, cube_y])
+    centre = np.full(3, 0.5)
+    start = origin + _cube_project(centre)
+    points = _flow_field_3d()
+    flat = np.array([origin + _cube_project(p) for p in points])
+    unit_per_pt = 1 / UNIT_PT
+    half_line = QUERY_LINE_PT / 2 * unit_per_pt
+
+    # The keyline: white, under the square and over every line, and clear of every dot.
+    key_half = QUERY_SIDE / 2 + (QUERY_EDGE_PT / 2 + QUERY_KEYLINE_PT) * unit_per_pt
+    for k, point in enumerate(points):
+        clearance = float(np.abs(flat[k] - start).max()) - _flow_radius(point[2]) - FLOW_DOT_EDGE_PT / 2 * unit_per_pt
+        assert clearance > key_half, f"dot {k} sits inside the square's keyline, which would cut into it"
+    ax.add_patch(
+        plt.Rectangle(
+            (start[0] - key_half, start[1] - key_half),
+            2 * key_half,
+            2 * key_half,
+            facecolor="white",
+            edgecolor="none",
+            zorder=7.9,
+        )
+    )
+    for k, point in enumerate(points):
+        run = flat[k] - start
+        length = float(np.hypot(*run))
+        # Stop where the line's rounded end just meets the outline's outer edge.
+        stop = 1.0 - (_flow_radius(point[2]) + FLOW_DOT_EDGE_PT / 2 * unit_per_pt + half_line) / length
+        assert stop > 0, f"dot {k} sits under the square — its line has nowhere to go"
+        cuts = {0.0, stop}
+        for j, other in enumerate(points):
+            if j == k:
+                continue
+            # Where the line comes within one dot radius (plus its own half width) of `other`'s centre.
+            reach = _flow_radius(other[2]) + FLOW_DOT_EDGE_PT / 2 * unit_per_pt + half_line
+            rel = start - flat[j]
+            a, b, c = run @ run, 2 * run @ rel, rel @ rel - reach**2
+            disc = b * b - 4 * a * c
+            if disc <= 0:
+                continue
+            for t in ((-b - np.sqrt(disc)) / (2 * a), (-b + np.sqrt(disc)) / (2 * a)):
+                if 0.0 < t < stop:
+                    cuts.add(float(t))
+        cuts = sorted(cuts)
+        for t0, t1 in zip(cuts[:-1], cuts[1:]):
+            depth = 0.5 + (t0 + t1) / 2 * (point[2] - 0.5)
+            p0, p1 = start + t0 * run, start + t1 * run
+            ax.plot(
+                [p0[0], p1[0]],
+                [p0[1], p1[1]],
+                color=GREEN,
+                linewidth=QUERY_LINE_PT,
+                solid_capstyle="round",
+                # A hair under the dots' scale, so a stretch exactly level with a dot sits behind it.
+                zorder=_flow_z(depth) - 1e-3,
+            )
 
 
 def embed_flow_fig() -> None:
@@ -1833,16 +1946,19 @@ def embed_flow_fig() -> None:
     comes out as a point in the same space. That is the whole reason the seed
     works, and the deck had been assuming it.
 
-    Three pages, one per beat after the first, because the last beat is the
-    one that carries the argument and it needs the room looking at the cube
-    when it arrives. The first beat, the photographs alone, is drawn on every
+    Four pages, one per beat after the first, because the square's landing is
+    the beat that carries the argument and it needs the room looking at the
+    cube when it arrives; then the lines from it to every photo, which turn
+    "the same space" into "this close to each one", the thing the next slides
+    rank by (#5203). The first beat, the photographs alone, is drawn on every
     page but never shown by itself (`EMBED_FLOW_FIRST`, #5171). Every
     page is the final drawing with the later beats removed, and nothing moves
     between them (`slides/STYLE.md`) — the shared untrimmed canvas gets that
-    for free. The last page does *cover* a little of the cloud, which is the
-    one thing it is allowed to do: the square lands in a crowded space because
-    the space is crowded, and a gap left open for it three pages early is a
-    hole the room would spend those pages wondering about.
+    for free, and pins every stage to the final page's crop without a
+    `tight_box`. The square's page does *cover* a little of the cloud, which is
+    the one thing it is allowed to do: the square lands in a crowded space
+    because the space is crowded, and a gap left open for it three pages early
+    is a hole the room would spend those pages wondering about.
     """
     for page, stage in enumerate(range(EMBED_FLOW_FIRST, EMBED_FLOW_STAGES), 1):
         save(
@@ -1898,9 +2014,7 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
         _wire_cube(ax, cube_x, cube_y)
         for point in _flow_field_3d():
             dx, dy = _cube_project(point)
-            _flow_dot(
-                ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1 - point[2])
-            )
+            _flow_dot(ax, cube_x + dx, cube_y + dy, _flow_radius(point[2]), _flow_z(point[2]))
         name(cube_x + cube_w / 2, cube_y, "768-d")
         ax.text(*SIGLIP_XY, "SigLIP", ha="center", va="center", fontsize=FLOW_NAME_PT, color=INK, zorder=4)
 
@@ -1940,10 +2054,14 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
                 QUERY_SIDE,
                 facecolor=GREEN,
                 edgecolor=GREEN,
-                linewidth=1.4,
+                linewidth=QUERY_EDGE_PT,
                 zorder=8,
             )
         )
+
+    # ── beat 5: and how close it is to every one of them ─────────────────────
+    if stage >= 5:
+        _query_lines(ax, cube_x, cube_y)
     return fig
 
 
@@ -2051,7 +2169,7 @@ def _umap_flow_stage(stage: int) -> plt.Figure:
     _wire_cube(ax, cube_x, cube_y)
     for point in _flow_field_3d():
         dx, dy = _cube_project(point)
-        _flow_dot(ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1 - point[2]))
+        _flow_dot(ax, cube_x + dx, cube_y + dy, _flow_radius(point[2]), _flow_z(point[2]))
     name(cube_x + cube_w / 2, cube_y, "768-d")
 
     if stage >= 2:

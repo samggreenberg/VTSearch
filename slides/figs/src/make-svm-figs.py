@@ -349,10 +349,10 @@ def _margin_call(stage: int, model: SVC) -> Figure:
 
 # ──────────────────────────────────────────────────────────────────────────────── Off With Their Heads
 
-#: The five heads, in reading order: the one that ships first, then the others tried. Each is its name on
+#: The five heads, in reading order: the one the current app uses first, then the others tried. Each is its name on
 #: the slide and a factory for the fit, seeded where the fit is random.
 HEADS = (
-    ("Linear SVM (ships)", lambda: SVC(kernel="linear", C=1e4)),
+    ("Linear SVM (Current app)", lambda: SVC(kernel="linear", C=1e4)),
     ("Logistic regression", lambda: LogisticRegression(C=1.0)),
     ("MLP", lambda: MLPClassifier(hidden_layer_sizes=(32, 32), solver="lbfgs", max_iter=5000, random_state=0)),
     ("Random forest", lambda: RandomForestClassifier(n_estimators=25, max_features=1, random_state=0)),
@@ -389,6 +389,7 @@ def _off_with_their_heads() -> Figure:
     X = np.vstack([BADS, GOODS])
     y = np.r_[np.zeros(len(BADS)), np.ones(len(GOODS))]
     xs, ys = np.meshgrid(np.linspace(0, PLANE_W, 400), np.linspace(0, PLANE_H, 225))
+    titles = []
     for (name, make), (left, bottom) in zip(HEADS, HEADS_SLOTS, strict=True):
         model = make().fit(X, y)
         assert (model.predict(X) == y).all(), name
@@ -411,10 +412,16 @@ def _off_with_their_heads() -> Figure:
             _cross(ax, p)
         for p in GOODS:
             _tick(ax, p)
-        ax.set_title(name, loc="left", fontsize=HEADS_NAME_PT, fontweight="bold" if ships else "normal", pad=8)
+        title = ax.set_title(name, loc="left", fontsize=HEADS_NAME_PT, fontweight="bold" if ships else "normal", pad=8)
+        titles.append((ax, title))
     x, (y0, y1) = HEADS_STATEMENT_XY
     for yy, words in zip((y0, y1), HEADS_STATEMENT, strict=True):
         fig.text(x / FIG_W, yy / FIG_H, words, ha="left", va="center", fontsize=20)
+    # Each head's name stays over its own panel, so it cannot run into the next one's.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for ax, title in titles:
+        assert title.get_window_extent(renderer).x1 <= ax.get_window_extent(renderer).x1, title.get_text()
     return fig
 
 

@@ -34,6 +34,13 @@ that moves is worse than no title at all — a figure that cannot spare its
 top-left corner carries no title, it does not put one somewhere else. Its
 *height* is the one part a figure may trim, and only against a measurement of
 its own slide's headline; see the constant.
+
+A fifth is that a figure draws the same on every machine (#5203). Importing
+this module puts matplotlib back on its own defaults, whatever matplotlibrc the
+machine has, and `save()` refuses a label set in a font that came from the
+machine rather than from matplotlib or the repo (`enforce_portable_fonts`).
+And it refuses an em dash in a label (`enforce_no_em_dash`; STYLE.md, *Write
+it like a person*).
 """
 
 from __future__ import annotations
@@ -45,7 +52,29 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import font_manager
 from PIL import Image
+
+# Every generator imports this module before it sets its own rcParams, so this
+# is where a machine's matplotlibrc stops reaching the figures. A Claude Code
+# container's /etc/matplotlib/matplotlibrc sets Inter and turns hinting off;
+# the GRID has neither, so a generator that named no face of its own drew a
+# different typeface depending on where it ran, and every figure came out a
+# pixel off the one it replaced (#5203). The backend is left alone, as
+# `rcdefaults` always leaves it.
+matplotlib.rcdefaults()
+
+#: The deck's own typeface, committed beside the theme that loads it
+#: (`slides/themes/fonts/`, Liberation Sans): what a figure uses when it sets
+#: text in the slide's face rather than the figures' DejaVu Sans, as the "Data,
+#: Set" cards' dataset names do. Name a file, never the family: a machine with
+#: its own copy of Liberation Sans would otherwise answer for it.
+DECK_FONTS = Path(__file__).resolve().parents[2] / "themes" / "fonts"
+DECK_SANS = DECK_FONTS / "LiberationSans-Regular.ttf"
+DECK_SANS_BOLD = DECK_FONTS / "LiberationSans-Bold.ttf"
+#: Where a figure's fonts may come from: matplotlib's own (DejaVu Sans, which
+#: every generator names, and the mathtext faces) and the repo's.
+PORTABLE_FONT_DIRS = (Path(matplotlib.get_data_path()) / "fonts", DECK_FONTS)
 
 #: Marp renders these decks at 1280x720.
 SLIDE_PX = 1280
@@ -299,6 +328,38 @@ def enforce_type_floor(fig: plt.Figure, column: float = SIDEBAR) -> None:
         )
 
 
+def _labels(fig: plt.Figure) -> list[matplotlib.text.Text]:
+    return [t for t in fig.findobj(matplotlib.text.Text) if t.get_text().strip()]
+
+
+def enforce_portable_fonts(fig: plt.Figure) -> None:
+    """Raise if any label is set in a font file the machine supplied.
+
+    A family name is a request, not a font: "Arial" is Liberation Sans on one
+    box, DejaVu Sans on another, and Arial on a third, and the figure changes
+    with it. So what is checked is the file each label resolves to, which has
+    to be one of matplotlib's or one of the repo's (`PORTABLE_FONT_DIRS`).
+    """
+    for text in _labels(fig):
+        found = Path(font_manager.findfont(text.get_fontproperties())).resolve()
+        if not any(found.is_relative_to(root.resolve()) for root in PORTABLE_FONT_DIRS):
+            raise SystemExit(
+                f"fonts: {text.get_text()!r} is set in {found}, which this machine supplied, so the "
+                f"figure would draw differently elsewhere. Name DejaVu Sans, or pass "
+                f"`fontproperties=FontProperties(fname=slide_figure.DECK_SANS)` for the deck's own face."
+            )
+
+
+def enforce_no_em_dash(fig: plt.Figure) -> None:
+    """Raise if any label carries an em dash (STYLE.md, *Write it like a person*)."""
+    for text in _labels(fig):
+        if "—" in text.get_text():
+            raise SystemExit(
+                f"em dash: {text.get_text()!r}. A slide does not use them; reword it "
+                f"(a colon, a comma, two sentences), do not swap in another dash."
+            )
+
+
 def slot_px_per_pt(path: Path, column: float = FULL_BLEED) -> float:
     """Slide pixels per printed point for a figure **as written to disk**.
 
@@ -393,6 +454,8 @@ def save(
     if not name.endswith(".webp"):
         raise SystemExit(f"{name}: slide figures are written as WebP (see `write_webp`); name it `.webp`")
     enforce_type_floor(fig, column)
+    enforce_portable_fonts(fig)
+    enforce_no_em_dash(fig)
     buffer = io.BytesIO()
     if box is not None:
         fig.savefig(buffer, format="png", bbox_inches=box)

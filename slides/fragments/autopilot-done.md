@@ -14,7 +14,7 @@
      choose. -->
 
 <!-- **b** — Documents stop differently: sixteen best matches in a row, none
-     Good. Clicking on past that found at most 0.8% more. Toasty's news is the
+     Good. Voting on past that found at most 0.8% more. Toasty's news is the
      same, trained; the user never needs the reason. -->
 
 <!-- **c** — And on a small collection we might vote on everything first; then

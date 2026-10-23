@@ -27,7 +27,7 @@
      empty screen to a pile of books it found. -->
 
 <!-- **c** — Section two: under the hood. How a picture becomes numbers, how a
-     detector splits them, and why it can afford to redo that on every click.
+     detector splits them, and why it can afford to redo that on every vote.
      It ends on the line this whole talk is about. -->
 
 <!-- **d** — Section three: calibration. How do we threshold a model without
