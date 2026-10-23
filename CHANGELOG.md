@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A green Smart light no longer says you can stop** (issue #5137). Smart goes green about as soon as it can read
+  anything (a median click 13 on Binary Photo), with over a quarter of the session's F-beta still to come. Its
+  reason in `/api/labeling-status` now says only what it measures ("F-beta has stopped rising."); Done is still what
+  tells you the session has ended. And until a detector ranks what you see (the learned sort), a green Smart shows
+  yellow, its tooltip saying why: it used to green while you were still labeling your search's matches. On Binary
+  Photo that moves its first green from about click 13 to about click 32, where what is still to come drops from
+  0.26 to 0.11 of F-beta at β 1. Autopilot behaves exactly as before: it reads no light until its learned sort.
+
 - **Demos load from a mirror when their home server is down.** On 2026-10-22 Stanford's cs.stanford.edu and
   ai.stanford.edu stopped answering, and the Visual Genome and IMDB demos failed with "Couldn't reach
   cs.stanford.edu". A demo whose file has a known mirror still tries its original host first, then, after three
