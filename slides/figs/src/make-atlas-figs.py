@@ -31,13 +31,14 @@ and hard to parse — a fair verdict, and the diagnosis worth keeping is that
 points on a sphere give the eye nothing to judge position against. A floor,
 four posts and a lid do.
 
-`atlas-far` is drawn in that same room, and is not the atlas at all: it is the
-domain-shift check, which ranked against the atlas's cells until #3348 and now
-ranks against the reference's own photos. The floor is the reference, split in
-half as the shipped rule splits it, and a spoke runs from each photo to its
-nearest photo of the half it is measured against. A plot of how calibrated the
-old atlas score was (`atlas-pvalues`) was cut from the deck as too technical
-for a feature rarely used (#4872).
+`atlas-far` is drawn in that same room: the domain-shift check, with a
+reference built on its floor and a spoke from each item to a cube standing for
+where the reference is. The cubes and spokes were drawn when the check ranked
+against the atlas's cells, and are kept as the illustration (owner, #5197); the
+counts are the shipped rule's, a split-conformal kNN against the reference's
+own photos (#3348). A plot of how calibrated the old atlas score was
+(`atlas-pvalues`) was cut from the deck as too technical for a feature rarely
+used (#4872).
 """
 
 import functools
@@ -958,8 +959,7 @@ def _item(
     through the plane, *including* the rim of one hanging over the plane's edge,
     which is clear of the plane and so stays black.
 
-    *fill* is the sphere's face, and the crescent is that face seen through
-    the plane (`_sunk`): white goes to the plane's own fill.
+    *fill* is the sphere's face.
     """
     ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor=fill, edgecolor="none", zorder=zorder))
     if plane is None:
@@ -969,7 +969,7 @@ def _item(
         return None
 
     submerged = _submerged_outline() + point
-    crescent = plt.Polygon(submerged, closed=True, facecolor=_sunk(fill), edgecolor="none", zorder=zorder + 0.05)
+    crescent = plt.Polygon(submerged, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder + 0.05)
     ax.add_patch(crescent)
     crescent.set_clip_path(plane)
     # The fill alone is a few percent off white and vanishes at slide size; the
@@ -1463,132 +1463,124 @@ def depth_fig() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3b. Far Out — the domain-shift rule finding the room's second collection (#4517)
+# 3b. Far Out — the domain-shift check finding the room's second collection (#4517)
 # ──────────────────────────────────────────────────────────────────────────────
 
 FAR_STAGES = 5
+#: How many floor points the reference holds. Denser than the drawing's
+#: `N_ITEMS`, so the rule's two halves (a thousand photos each) cover the floor
+#: finely. The drawn floor items are then *held out* — the reference never
+#: holds them — which is the honest test.
+FAR_BUILD = 2000
+FAR_SEED = 23
+#: The threshold an item is flagged at: the domain-shift report's own alpha.
+FAR_ALPHA = 0.05
+#: What the notes say the rule makes of each collection, flagged of drawn.
+FAR_FLAGGED = (7, 76)
 #: How far above the room a position is lifted before the rule sees it, in
 #: world units. The rule compares directions, the cosines of unit vectors, and
 #: a room position taken as a vector is a direction from the room's corner: two
 #: photos on one ray from it would be the same photo. Centred on the floor and
 #: lifted to `(u, v, h, FAR_LIFT)`, every position is seen from this far off,
 #: where cosine falls with room distance `d` as `1 - d^2 / 2 FAR_LIFT^2` to
-#: within a percent. So the rule's nearest photos are the drawing's, which
-#: `_far_rule` checks.
+#: within a percent. So the rule's "near" is the room's.
 FAR_LIFT = 50.0
-#: How many of the ceiling's photos the rule flags, as the notes say: all of
-#: them, each one farther from its nearest floor photos than any floor photo
-#: of the yardstick half is from its own (`_far_rule` checks the "any").
-FAR_FLAGGED = N_ITEMS
-#: The reference half every photo is measured against: filled, so the eye can
-#: find where each spoke lands. A mid grey: one of the deck's neutrals, since
-#: a fit photo is the same kind of thing as every other photo, in another role,
-#: and dark enough to stand off the floor's wash from the back of a room.
-FIT_FILL = "#aeb8c6"
-#: The spoke from each photo to its nearest fit photo. One, though the rule
-#: averages over its nearest five (`DOMAIN_SHIFT_K`): five a photo turned the
-#: floor into a web and the room into a curtain of 380 lines, and the nearest
-#: is the one of the five the eye can check. `_far_rule` checks that the one
-#: drawn tells the same story as the five: every floor spoke shorter than
-#: every ceiling spoke.
+#: Where the cubes go: two levels of the atlas's three-way split, nine cells,
+#: on the reference, one cube at each cell's centre. They were the cells'
+#: centres when the check ranked against the atlas (owner, #4872). Now they
+#: stand for where the reference is, which is what the rule measures an item
+#: against; where exactly each one sits is the drawing's choice (owner, #5197).
+FAR_LEVELS = 2
+#: The reference's mark: a white cube, a shape no item has, half sunk in the floor as
+#: every item is (owner, #4884: not a black diamond laid over everything). Its
+#: half-side in world units, sized so the cube stands as big on the page as a
+#: sphere does.
+FAR_CUBE = 0.11
+#: The cube's faces, lit from above: the top white, the near side a shade
+#: down, the right side another. Under the floor each face is seen through the
+#: floor's own wash, as a sphere's crescent is.
+CUBE_FACES = {"top": "white", "front": "#f3f5f8", "right": "#e2e7ee"}
+CUBE_FACES_SUNK = {"front": PLANE_FILL, "right": "#d6dde6"}
+#: The spokes from each item to its cube.
 FAR_SPOKE = {"color": SOFT, "linewidth": 1.2}
 #: How finely a spoke is cut to be tested against what stands in front of it,
 #: in page units, before each change between seen and hidden is refined.
 SPOKE_STEP = 0.01
-#: Every sphere is painted far to near, the ceiling's after the floor's; the
-#: parts of the spokes the eye can see go over all of them, and the box's
-#: three near edges over those.
+#: Every object is painted far to near, two z-steps apiece (a sphere spends 0.3
+#: of its own), the ceiling's after the floor's; the parts of the spokes the eye
+#: can see go over all of them, and the box's three near edges over those.
 Z_FAR_FLOOR, Z_FAR_CEILING, Z_FAR_SPOKES, Z_FAR_NEAR_EDGES = 1.0, 200.0, 400.0, 410.0
 
 
-def _floor_points() -> np.ndarray:
-    return _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
-
-
-def _ceiling_points() -> np.ndarray:
-    return _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
-
-
-def _lifted(points: np.ndarray, h: float) -> np.ndarray:
-    """Room positions as the rule's vectors, unit length: see `FAR_LIFT`."""
-    n = len(points)
-    raw = np.column_stack(
-        [points[:, 0] - BOX_U / 2, points[:, 1] - BOX_V / 2, np.full(n, h), np.full(n, FAR_LIFT)]
-    ).astype(np.float32)
-    return raw / np.linalg.norm(raw, axis=1, keepdims=True)
+@functools.lru_cache(maxsize=1)
+def _far_build() -> np.ndarray:
+    rng = np.random.default_rng(FAR_SEED)
+    (u0, u1), (v0, v1) = ITEM_LIMITS
+    return np.column_stack([rng.uniform(u0, u1, FAR_BUILD), rng.uniform(v0, v1, FAR_BUILD)])
 
 
 @functools.lru_cache(maxsize=1)
-def _far_split() -> tuple[np.ndarray, np.ndarray]:
-    """The floor's two halves as the rule splits its reference: ``(fit, calibration)`` item indices.
-
-    The rule's own seeded permutation, restated because the module keeps it
-    private. `_far_rule` rebuilds the module's p-values from these halves, so
-    a change to the split there fails here rather than drawing the wrong ones.
-    """
-    perm = np.random.default_rng(0).permutation(N_ITEMS)
-    return np.sort(perm[: N_ITEMS // 2]), np.sort(perm[N_ITEMS // 2 :])
-
-
-@functools.lru_cache(maxsize=1)
-def _far_rule() -> tuple[dict[int, int], dict[int, int]]:
-    """The shipped rule on the room: each photo's nearest fit photo, ``(calibration's, ceiling's)``.
+def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
+    """The shipped rule, with the floor's build as the reference, scoring the drawn floor items and the ceiling.
 
     Real code on drawing coordinates: `typicality_pvalues`, the function the
-    domain-shift check calls, with the floor's photos as the reference and the
-    ceiling's as the items scored. The module returns p-values, not the
-    neighbours behind them, so the neighbours are worked out here, and checked
-    to be the module's by rebuilding its p-values from them: for the ceiling,
-    and for the floor scored against itself, which only matches if the halves
-    do. Each photo's nearest is what the slide draws (`FAR_SPOKE`).
+    domain-shift check calls. Each item is its room position `(u, v, h)`,
+    lifted as `FAR_LIFT` says.
     """
-    from vtscore.coverage.domain_shift import DOMAIN_SHIFT_ALPHA, DOMAIN_SHIFT_K, typicality_pvalues  # noqa: PLC0415
+    from vtscore.coverage.domain_shift import typicality_pvalues  # noqa: PLC0415
 
-    floor, ceiling = _lifted(_floor_points(), 0.0), _lifted(_ceiling_points(), NEW_H)
-    fit, cal = _far_split()
+    def lifted(points: np.ndarray, h: float) -> np.ndarray:
+        n = len(points)
+        return np.column_stack(
+            [points[:, 0] - BOX_U / 2, points[:, 1] - BOX_V / 2, np.full(n, h), np.full(n, FAR_LIFT)]
+        ).astype(np.float32)
 
-    def nearest(queries: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Each row's nearest fit photo, the cosine to it, and the rule's score: the mean over the nearest k."""
-        sims = queries @ floor[fit].T
-        order = np.argsort(-sims, axis=1, kind="stable")[:, :DOMAIN_SHIFT_K]
-        top = np.take_along_axis(sims, order, axis=1)
-        return fit[order[:, 0]], top[:, 0], top.mean(axis=1)
+    reference = lifted(_far_build(), 0.0)
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+    return typicality_pvalues(reference, lifted(floor, 0.0)), typicality_pvalues(reference, lifted(ceiling, NEW_H))
 
-    cal_near, cal_cos, cal_scores = nearest(floor[cal])
-    ceiling_near, ceiling_cos, ceiling_scores = nearest(ceiling)
-    yardstick = np.sort(cal_scores)
 
-    def pvalues(scores: np.ndarray) -> np.ndarray:
-        return (1.0 + np.searchsorted(yardstick, scores, side="right")) / (len(yardstick) + 1.0)
+@functools.lru_cache(maxsize=1)
+def _far_tree() -> list[tuple[np.ndarray, list[np.ndarray]]]:
+    """The floor's first split and each part's own split: ``[(centre, [child centres])]``."""
+    build = _far_build()
+    top = KMeans(n_clusters=SPLIT_K, n_init=10, random_state=0).fit(build)
+    out = []
+    for k in range(SPLIT_K):
+        part = build[top.labels_ == k]
+        sub = KMeans(n_clusters=SPLIT_K, n_init=10, random_state=0).fit(part)
+        out.append((top.cluster_centers_[k], list(sub.cluster_centers_)))
+    return out
 
-    shipped = typicality_pvalues(floor, ceiling)
-    assert np.allclose(pvalues(ceiling_scores), shipped), "the ceiling's neighbours are not the rule's"
-    assert np.allclose(pvalues(nearest(floor)[2]), typicality_pvalues(floor, floor)), "the halves are not the rule's"
-    flagged = int((shipped < DOMAIN_SHIFT_ALPHA).sum())
-    assert flagged == FAR_FLAGGED, f"the notes say {FAR_FLAGGED} flagged, the rule says {flagged}"
-    assert ceiling_scores.max() < yardstick.min(), "the notes say every ceiling photo is farther than any floor photo"
-    assert ceiling_cos.max() < cal_cos.min(), "a drawn floor spoke is longer than a drawn ceiling spoke"
-    room = np.column_stack([_floor_points()[fit], np.zeros(len(fit))])
-    for points, h, near in ((_floor_points()[cal], 0.0, cal_near), (_ceiling_points(), NEW_H, ceiling_near)):
-        here = np.column_stack([points, np.full(len(points), h)])
-        by_room = fit[np.linalg.norm(here[:, None, :] - room[None, :, :], axis=2).argmin(axis=1)]
-        assert (by_room == near).all(), "a spoke runs to a photo the eye would not call the nearest: raise FAR_LIFT"
-    return dict(zip(cal.tolist(), cal_near.tolist(), strict=True)), dict(enumerate(ceiling_near.tolist()))
+
+def _far_centre(u: float, v: float) -> np.ndarray:
+    """The cube an item's spoke runs to: the nearest part, then that part's nearest child, as the atlas walked.
+
+    The route from when the cubes were the atlas's cells, kept with them, so
+    a spoke does not always end on the nearest cube.
+    """
+    q = np.array([u, v])
+    centre, kids = min(_far_tree(), key=lambda node: float(np.hypot(*(node[0] - q))))
+    return min(kids, key=lambda c: float(np.hypot(*(c - q))))
 
 
 def far_fig() -> None:
-    """The domain-shift rule finding Out of Its Depth's second collection, drawn in the same room (#4517).
+    """The domain-shift check finding Out of Its Depth's second collection, drawn in the same room (#4517).
 
-    Five pages: the floor's photos alone; the rule's split of them, the half
-    every photo is measured against filled; a spoke from each photo of the
-    other half to its nearest filled one, short, which is the yardstick; the
+    Five pages (owner, #4872: "show the centers in a), the distance lines in
+    b), the second domain in c), and the (longer) distance lines in d)", with
+    the floor alone first, #5132): the floor's items; then the cubes that
+    stand for the reference; each floor item's spoke to its cube, short; the
     second collection on the ceiling, as Out of Its Depth showed it; and its
-    spokes, each down to its nearest filled photo, long. A photo is strange
-    when it sits farther from the filled half than almost all of the
-    yardstick does, and the count the notes give is the shipped rule's
-    (`_far_rule`).
+    spokes, each down to a cube, long. The rule asks how far an item is from
+    the reference's nearest photos, against how far the reference's own photos
+    sit from theirs, and the counts the notes give are the rule's
+    (`_far_pvalues`).
     """
-    _far_rule()
+    floor_p, ceiling_p = _far_pvalues()
+    flagged = (int((floor_p < FAR_ALPHA).sum()), int((ceiling_p < FAR_ALPHA).sum()))
+    assert flagged == FAR_FLAGGED, f"the notes say {FAR_FLAGGED} flagged, the rule says {flagged}"
     for stage in range(1, FAR_STAGES):
         save(_far_stage(stage), OUT, f"atlas-far.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
     save(_far_stage(FAR_STAGES), OUT, "atlas-far.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
@@ -1608,10 +1600,54 @@ def _sunk(colour: str) -> str:
     `PLANE_FILL` under the floor and their black rim to `OUTLINE_SUNK` — taken
     per channel and applied to anything else seen through the same glass.
     """
-    hexes = (matplotlib.colors.to_hex(colour), PLANE_FILL, OUTLINE_SUNK)
+    hexes = (colour, PLANE_FILL, OUTLINE_SUNK)
     c, white, black = (np.array([int(h[i : i + 2], 16) for i in (1, 3, 5)]) / 255.0 for h in hexes)
     out = black + c * (white - black)
     return "#" + "".join(f"{round(255 * v):02x}" for v in out)
+
+
+def _cube(ax: plt.Axes, u: float, v: float, zorder: float) -> None:
+    """A stand-in for the reference: a cube half sunk in the floor, drawn as a sphere is.
+
+    The camera sees the top, the south face and the east face. The floor cuts
+    the two side faces at half height: above it they are white-ish with ink
+    edges, below it they are seen through the floor in its wash, edged in the
+    sunk grey, and the cut itself is the waterline, in the waterline's grey.
+    """
+    a = FAR_CUBE
+
+    def at(du: float, dv: float, dh: float) -> np.ndarray:
+        return proj(u + du * a, v + dv * a, dh * a)
+
+    sunk_edge = {"color": OUTLINE_SUNK, "linewidth": 1.4, "solid_capstyle": "round"}
+    ink_edge = {"color": INK, "linewidth": 1.7, "solid_capstyle": "round", "solid_joinstyle": "round"}
+    faces = {
+        "front": lambda h0, h1: [at(-1, -1, h0), at(1, -1, h0), at(1, -1, h1), at(-1, -1, h1)],
+        "right": lambda h0, h1: [at(1, -1, h0), at(1, 1, h0), at(1, 1, h1), at(1, -1, h1)],
+    }
+    for name, face in faces.items():
+        ax.add_patch(plt.Polygon(face(-1, 0), closed=True, facecolor=CUBE_FACES_SUNK[name], edgecolor="none",
+                                 zorder=zorder))  # fmt: skip
+        ax.add_patch(plt.Polygon(face(0, 1), closed=True, facecolor=CUBE_FACES[name], edgecolor="none",
+                                 zorder=zorder + 0.1))  # fmt: skip
+    top = [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1), at(-1, 1, 1)]
+    ax.add_patch(plt.Polygon(top, closed=True, facecolor=CUBE_FACES["top"], edgecolor="none", zorder=zorder + 0.1))
+    # Under the floor: the bottom edges and the lower halves of the three near verticals.
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, -1), at(1, -1, -1), at(1, 1, -1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, -1)],
+    ):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.05, **sunk_edge)
+    # The waterline, where the floor cuts the two faces.
+    ax.plot(*np.array([at(-1, -1, 0), at(1, -1, 0), at(1, 1, 0)]).T, color=CELL_LINE, linewidth=1.1,
+            zorder=zorder + 0.15)  # fmt: skip
+    # Above it: the upper halves of the verticals and the top's four edges.
+    for path in (
+        [at(-1, -1, 0), at(-1, -1, 1), at(-1, 1, 1), at(1, 1, 1), at(1, 1, 0)],
+        [at(1, -1, 0), at(1, -1, 1)],
+        [at(-1, -1, 1), at(1, -1, 1), at(1, 1, 1)],
+    ):
+        ax.plot(*np.array(path).T, zorder=zorder + 0.2, **ink_edge)
 
 
 def _in_polygon(q: np.ndarray, polygon: np.ndarray) -> bool:
@@ -1621,20 +1657,20 @@ def _in_polygon(q: np.ndarray, polygon: np.ndarray) -> bool:
 class _Scene:
     """What stands between a point on a spoke and the eye.
 
-    The figure is painted far to near, which settles every sphere against every
-    other; a spoke cannot be, because it runs from one depth to another. So
-    each spoke is cut fine and every piece asks the scene whether anything
-    covers it, and only the pieces nothing covers are drawn, over everything.
-    That one rule is all of the owner's (#4884): a spoke passes behind
-    whichever end is nearer the eye and over the other, a spoke from the
+    The figure is painted far to near, which settles every sphere and cube
+    against every other; a spoke cannot be, because it runs from one depth to
+    another. So each spoke is cut fine and every piece asks the scene whether
+    anything covers it, and only the pieces nothing covers are drawn, over
+    everything. That one rule is all of the owner's (#4884): a spoke passes
+    behind whichever end is nearer the eye and over the other, a spoke from the
     ceiling passes in front of the floor's items it crosses, and the piece of
     one below the ceiling is seen through the ceiling.
     """
 
-    def __init__(self, floor: np.ndarray, ceiling: np.ndarray | None) -> None:
-        self.spheres = [np.array([u, v, 0.0]) for u, v in floor]
-        if ceiling is not None:
-            self.spheres += [np.array([u, v, NEW_H]) for u, v in ceiling]
+    def __init__(self, floor: np.ndarray, centres: list[np.ndarray], ceiling: np.ndarray | None) -> None:
+        self.floor = [np.array([u, v, 0.0]) for u, v in floor]
+        self.cubes = [np.array([u, v, 0.0]) for u, v in centres]
+        self.ceiling = [] if ceiling is None else [np.array([u, v, NEW_H]) for u, v in ceiling]
         corners = [(0, 0), (BOX_U, 0), (BOX_U, BOX_V), (0, BOX_V)]
         self.lid = np.array([proj(u, v, BOX_H) for u, v in corners])
         self.crescent = _submerged_outline(CLIP_PAD)
@@ -1649,10 +1685,29 @@ class _Scene:
         behind = float((centre - point) @ TOWARD) > 0.0
         return behind or float(np.linalg.norm(point - centre)) < ITEM_R_WORLD
 
+    @staticmethod
+    def _behind_cube(point: np.ndarray, centre: np.ndarray) -> bool:
+        """Whether the ray from *point* toward the eye meets the cube: the slab test, from t = 0."""
+        half = FAR_CUBE + CLIP_PAD / PROJ_SCALE
+        lo, hi = 0.0, math.inf
+        for k in range(3):
+            near, far = centre[k] - half, centre[k] + half
+            if abs(TOWARD[k]) < 1e-12:
+                if not near <= point[k] <= far:
+                    return False
+                continue
+            t0, t1 = sorted(((near - point[k]) / TOWARD[k], (far - point[k]) / TOWARD[k]))
+            lo, hi = max(lo, t0), min(hi, t1)
+            if lo > hi:
+                return False
+        return True
+
     def look(self, point: np.ndarray) -> str | None:
         """``None`` if something covers *point*, else how it is seen: ``"clear"``, or ``"sunk"`` under the lid."""
         q = proj(*point)
-        if any(self._behind_sphere(point, q, c) for c in self.spheres):
+        if any(self._behind_cube(point, c) for c in self.cubes):
+            return None
+        if any(self._behind_sphere(point, q, c) for c in self.floor + self.ceiling):
             return None
         if point[2] < NEW_H - 1e-9 and _in_polygon(q, self.lid):
             return "sunk"
@@ -1703,27 +1758,31 @@ def _near_edges(ax: plt.Axes) -> None:
 
 
 def _far_stage(stage: int) -> plt.Figure:
-    # Step 0 is the floor's photos alone (owner, #5132); the rule's split arrives at step 1.
+    # Step 0 is the floor's items alone (owner, #5132); the cubes arrive at step 1.
     step = stage - 1
     fig, ax = _canvas()
     planes = _wireframe(ax)
-    floor = _floor_points()
-    fit = set(_far_split()[0].tolist()) if step >= 1 else set()
-    for k, index in enumerate(sorted(range(len(floor)), key=lambda i: -floor[i][1])):
-        _item(ax, proj(*floor[index], 0.0), Z_FAR_FLOOR + 0.5 * k, planes[0],
-              fill=FIT_FILL if index in fit else "white")  # fmt: skip
-    ceiling = _ceiling_points() if step >= 3 else None
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    centres = [c for _centre, kids in _far_tree() for c in kids] if step >= 1 else []
+    # The floor's spheres and cubes, far to near: whichever is further south is nearer and covers the other.
+    things = [("item", tuple(p)) for p in floor] + [("cube", tuple(c)) for c in centres]
+    for k, (kind, (u, v)) in enumerate(sorted(things, key=lambda thing: -thing[1][1])):
+        zorder = Z_FAR_FLOOR + 0.5 * k
+        if kind == "item":
+            _item(ax, proj(u, v, 0.0), zorder, planes[0])
+        else:
+            _cube(ax, u, v, zorder)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED) if step >= 3 else None
     if ceiling is not None:
         for index, depth_z in _painted_back_to_front(ceiling, 0.0):
             _item(ax, proj(*ceiling[index], NEW_H), Z_FAR_CEILING + 100 * depth_z, planes[1])
-    scene = _Scene(floor, ceiling)
-    cal_near, ceiling_near = _far_rule()
+    scene = _Scene(floor, centres, ceiling)
     if step >= 2:
-        for index, target in cal_near.items():
-            _spoke(ax, scene, np.array([*floor[index], 0.0]), np.array([*floor[target], 0.0]))
+        for u, v in floor:
+            _spoke(ax, scene, np.array([u, v, 0.0]), np.array([*_far_centre(u, v), 0.0]))
     if step >= 4:
-        for index, target in ceiling_near.items():
-            _spoke(ax, scene, np.array([*ceiling[index], NEW_H]), np.array([*floor[target], 0.0]))
+        for u, v in ceiling:
+            _spoke(ax, scene, np.array([u, v, NEW_H]), np.array([*_far_centre(u, v), 0.0]))
     _near_edges(ax)
     return fig
 
