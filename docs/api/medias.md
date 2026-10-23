@@ -250,7 +250,9 @@ surfacing context is *not re-derivable later*: the ranking is client-side
 state and the model behind the score is overwritten by the next retrain, so a
 vote not annotated at click time is annotated never. It is stored in the
 element's labelset `metadata` under `"vt:provenance"` and round-trips through
-label export/import.
+label export/import, except `rank_at_vote` and `score_at_vote`: they were
+measured by this server's embedder and head, so the detector keeps them and a
+labelset export (an exporter or a labelset-source push) leaves them behind.
 
 Six optional fields, four of them independent categorical axes rather than one
 fused enum (the bias this recording exists to measure tracks *how the item was

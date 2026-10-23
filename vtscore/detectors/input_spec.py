@@ -7,8 +7,10 @@ loaded dataset matches the detector's expected granularity.
 
 The module also assembles the ``detector_meta`` block that travels with
 a labelset when synced through a :class:`LabelsetSource`, so a downstream
-consumer can reproduce the detector's input format and decision boundary
-without reading the detector JSON directly.
+consumer can reproduce the detector's input format without reading the
+detector JSON directly.  The block describes the input, never a
+measurement: a threshold belongs to the head that drew it, and the
+receiver trains its own (#5131).
 
 ``input_spec`` and ``detector_meta`` are both **optional**: detectors
 that never set ``input_spec`` behave exactly as before, and labelsets
@@ -17,6 +19,7 @@ exported without a ``detector_meta`` block are still valid.
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 
@@ -74,12 +77,24 @@ def build_detector_meta(
     """Assemble a ``detector_meta`` block for labelset export.
 
     Pulls ``media_type`` and ``input_spec`` straight from the detector
-    JSON dict and folds in the supplied *threshold* (typically the active
-    in-memory head's calibrated threshold).  Keys with empty/None values
-    are omitted so the block stays minimal - a detector with neither an
-    ``input_spec`` nor a current threshold produces a block containing
+    JSON dict.  Keys with empty/None values are omitted so the block stays
+    minimal - a detector with no ``input_spec`` produces a block containing
     only ``media_type``.
+
+    *threshold* is deprecated and ignored (#5131).  The block used to carry
+    the live head's threshold, which is a number from one embedder's space
+    and one trained head and means nothing to a receiver that trains its
+    own.  Passing one still works, with a ``DeprecationWarning``, so an
+    out-of-tree caller keeps running.
     """
+    if threshold is not None:
+        warnings.warn(
+            "build_detector_meta(threshold=...) is deprecated and ignored: an exported labelset no longer "
+            "carries a threshold, which belongs to the head that drew it (#5131). It will be removed in a "
+            "future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     meta: dict[str, Any] = {}
     media_type = detector_data.get("media_type") or ""
     if media_type:
@@ -87,8 +102,6 @@ def build_detector_meta(
     spec = detector_data.get("input_spec")
     if isinstance(spec, dict) and spec:
         meta["input_spec"] = dict(spec)
-    if threshold is not None:
-        meta["threshold"] = float(threshold)
     return meta
 
 
@@ -100,9 +113,10 @@ def apply_detector_meta(
 
     Writes ``input_spec`` (and ``media_type`` when the receiver doesn't
     already have one) so the receiving detector picks up the originating
-    detector's expected input format.  Does **not** persist ``threshold``
-    - the receiver retrains its own head from the imported labels, so the
-    threshold is rederived on the next load.
+    detector's expected input format.  Does **not** persist a ``threshold``
+    (which this server no longer sends, but an older one or another producer
+    may) - the receiver retrains its own head from the imported labels, so
+    the threshold is rederived on the next load.
 
     Returns ``True`` when *detector_data* was modified.
     """

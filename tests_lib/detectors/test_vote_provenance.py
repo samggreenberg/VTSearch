@@ -18,14 +18,16 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.datasets.labelset import LabeledElement, LabelSet, labelset_for_export
 from vtscore.datasets.vote_provenance import (
     FLOWS,
     METADATA_KEY,
+    NON_PORTABLE_FIELDS,
     SCHEMA_VERSION,
     attach_provenance,
     coerce_provenance,
     normalize_provenance,
+    portable_metadata,
     read_provenance,
 )
 from vtscore.state import get_active_detector_context
@@ -281,6 +283,70 @@ class TestLabelsetRoundTrip:
         meta = _meta(ls.elements[0])
         assert meta["contentID"] == "abc"
         assert meta[METADATA_KEY]["flow"] == "bulk"
+
+
+class TestExportLeavesMeasurementsBehind:
+    """#5131: an export keeps how an item was drawn, not what one embedder's head measured."""
+
+    def test_rank_and_score_are_dropped_and_the_draw_is_kept(self):
+        metadata = {"contentID": "abc", METADATA_KEY: {"v": 1, **FULL}}
+        out = portable_metadata(metadata)
+        assert out == {
+            "contentID": "abc",
+            METADATA_KEY: {"v": 1, "flow": "list_review", "select_mode": "hard", "sort_kind": "learned"},
+        }
+        assert set(NON_PORTABLE_FIELDS) == {"rank_at_vote", "score_at_vote"}
+
+    def test_the_detectors_own_record_is_not_touched(self):
+        metadata = {METADATA_KEY: {"v": 1, **FULL}}
+        portable_metadata(metadata)
+        assert metadata[METADATA_KEY] == {"v": 1, **FULL}
+
+    def test_nothing_to_drop_returns_the_same_dict(self):
+        metadata = {METADATA_KEY: {"v": 1, "flow": "autopilot", "phase": "hard"}}
+        assert portable_metadata(metadata) is metadata
+        assert portable_metadata(None) is None
+        plain = {"reviewer": "alice"}
+        assert portable_metadata(plain) is plain
+
+    def test_a_record_left_with_only_its_version_is_dropped(self):
+        assert portable_metadata({METADATA_KEY: {"v": 1, "rank_at_vote": 4}}) is None
+        assert portable_metadata({"contentID": "abc", METADATA_KEY: {"v": 1, "score_at_vote": 0.3}}) == {
+            "contentID": "abc"
+        }
+
+    def test_labelset_for_export_strips_every_entry_and_the_threshold(self):
+        ls = LabelSet.from_clips_and_votes(
+            {1: _media(1), 2: _media(2)},
+            {1: None},
+            {2: None},
+            vote_provenance={1: {"v": 1, **FULL}, 2: {"v": 1, "flow": "list_review", "rank_at_vote": 2}},
+        )
+        payload = ls.to_dict()
+        payload["detector_meta"] = {"media_type": "audio", "threshold": 0.31}
+        payload["selected_columns"] = ["md5", "label"]
+        payload["labels"][0]["custom_metadata"] = {"contentID": "abc"}
+
+        out = labelset_for_export(payload)
+
+        assert out["detector_meta"] == {"media_type": "audio"}
+        assert out["selected_columns"] == ["md5", "label"]
+        assert out["labels"][0]["custom_metadata"] == {"contentID": "abc"}
+        for entry in out["labels"]:
+            provenance = entry["metadata"][METADATA_KEY]
+            assert not set(provenance) & set(NON_PORTABLE_FIELDS)
+            assert provenance["flow"] == "list_review"
+        # The detector's own record keeps every field.
+        assert payload["labels"][0]["metadata"][METADATA_KEY] == {"v": 1, **FULL}
+        assert payload["detector_meta"]["threshold"] == 0.31
+
+    def test_labelset_for_export_drops_a_detector_meta_left_empty(self):
+        out = labelset_for_export({"labels": [], "detector_meta": {"threshold": 0.5}})
+        assert out == {"labels": []}
+
+    def test_labelset_for_export_leaves_a_plain_labelset_alone(self):
+        payload = {"labels": [{"md5": "a", "label": "good"}, {"md5": "b", "label": "bad", "metadata": None}]}
+        assert labelset_for_export(payload) == payload
 
 
 class TestElementVoteFlip:

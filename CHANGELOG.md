@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Exported labels no longer carry this server's scores or threshold** (issue #5131). An exported labelset says
+  which items are Good and Bad and where each came from, so the labels can rebuild the detector under another
+  embedder. A labelset-source push and Export labels (Webhook included) used to send the trained head's threshold
+  and, per label, the rank and score it had when you voted: numbers from this server's embedder that mean nothing
+  at the other end. Both now leave them behind. The detector keeps them, and how each label was drawn (flow, phase,
+  select mode, sort) still travels.
+
 - **A green Smart light no longer says you can stop** (issue #5137). Smart goes green about as soon as it can read
   anything (a median click 13 on Binary Photo), with over a quarter of the session's F-beta still to come. Its
   reason in `/api/labeling-status` now says only what it measures ("F-beta has stopped rising."); Done is still what

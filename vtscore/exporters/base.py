@@ -349,6 +349,13 @@ class ResultsExporter(PluginBase):
                      ``metadata`` / ``region_box`` where present.  The
                      ``origin`` is what makes the export re-importable, so
                      preserve it rather than flattening it to a string.
+                     A ``metadata`` entry's vote provenance arrives without
+                     its ``rank_at_vote`` / ``score_at_vote``: VTSearch
+                     passes every labelset through
+                     :func:`~vtscore.datasets.labelset.labelset_for_export`
+                     before an exporter sees it, so no number measured by
+                     this server's embedder or head leaves in an export
+                     (#5131).
 
                      ``selected_columns`` is the user's column choice from the
                      Export modal.  Honour it for tabular output; a delivery

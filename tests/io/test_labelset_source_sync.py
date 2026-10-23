@@ -237,7 +237,8 @@ class TestPush:
         flush_pending_label_syncs()
         assert counting_save == []
 
-    def test_live_threshold_travels_only_from_a_trained_head(self, tmp_path):
+    def test_no_threshold_travels_even_from_a_trained_head(self, tmp_path):
+        """#5131: a head's threshold means nothing to a receiver, which trains its own."""
         from vtscore.state.core import DetectorContext, register_detector_context, unregister_detector_context
 
         remote = tmp_path / "meta.json"
@@ -245,19 +246,50 @@ class TestPush:
         ctx = DetectorContext(entry["id"], name="thresholded", media_type="audio")
         register_detector_context(ctx)
         try:
-            ctx.model = None
-            ctx.threshold = 0.99
-            _rewrite_labels("thresholded", [GOOD_A, BAD_B])
-            flush_pending_label_syncs()
-            assert "threshold" not in json.loads(remote.read_text())["detector_meta"]
-
             ctx.model = object()  # stands in for a trained head
             ctx.threshold = 0.31
-            _rewrite_labels("thresholded", [GOOD_A, BAD_B, GOOD_C])
+            _rewrite_labels("thresholded", [GOOD_A, BAD_B])
             flush_pending_label_syncs()
-            assert json.loads(remote.read_text())["detector_meta"]["threshold"] == pytest.approx(0.31)
+            assert json.loads(remote.read_text())["detector_meta"] == {"media_type": "audio"}
         finally:
             unregister_detector_context(entry["id"])
+
+    def test_the_push_leaves_rank_and_score_behind_and_the_file_keeps_them(self, tmp_path):
+        """#5131: the export carries how each label was drawn, not what this embedder's head measured."""
+        from vtscore.datasets.vote_provenance import METADATA_KEY
+
+        drawn = {"v": 1, "flow": "autopilot", "phase": "hard", "select_mode": "hard", "sort_kind": "learned"}
+        measured = {**drawn, "rank_at_vote": 7, "score_at_vote": 0.48}
+        good = {**GOOD_A, "metadata": {"contentID": "abc", METADATA_KEY: measured}}
+        bad = {**BAD_B, "metadata": {METADATA_KEY: {"v": 1, "rank_at_vote": 3}}}
+        remote = tmp_path / "provenance.json"
+        _make_detector("drawn", [GOOD_A], binding=_binding(remote))
+        _rewrite_labels("drawn", [good, bad])
+        flush_pending_label_syncs()
+
+        pushed = {el["md5"]: el for el in _remote_labels(remote)}
+        assert pushed[GOOD_A["md5"]]["metadata"] == {"contentID": "abc", METADATA_KEY: drawn}
+        assert "metadata" not in pushed[BAD_B["md5"]]
+        assert "threshold" not in json.loads(remote.read_text())["detector_meta"]
+
+        kept = {el["md5"]: el for el in _local_labels("drawn")}
+        assert kept[GOOD_A["md5"]]["metadata"][METADATA_KEY] == measured
+        assert kept[BAD_B["md5"]]["metadata"][METADATA_KEY] == {"v": 1, "rank_at_vote": 3}
+
+    def test_a_pull_keeps_the_files_rank_and_score(self, tmp_path):
+        """The source holds the stripped labels; merging them back must not strip the file."""
+        from vtscore.datasets.vote_provenance import METADATA_KEY
+
+        measured = {"v": 1, "flow": "list_review", "rank_at_vote": 7, "score_at_vote": 0.48}
+        good = {**GOOD_A, "metadata": {METADATA_KEY: measured}}
+        remote = tmp_path / "round.json"
+        entry = _make_detector("round", [good], binding=_binding(remote))
+        _rewrite_labels("round", [good, BAD_B])
+        flush_pending_label_syncs()
+
+        sync_from_labelset_source(entry["id"])
+        flush_pending_label_syncs()
+        assert {el["md5"]: el for el in _local_labels("round")}[GOOD_A["md5"]]["metadata"][METADATA_KEY] == measured
 
     def test_the_first_push_merges_what_the_source_holds(self, tmp_path):
         """A write before any load (the create itself) must not overwrite a backup."""
