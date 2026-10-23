@@ -23,5 +23,5 @@
 
 <!-- **d** — Put those in and F1 is 0.73. It's only high when both are. -->
 
-<!-- **e** — F-beta is the same thing with a dial. At β = 1 it's F1; above 1
+<!-- **e** — Fβ is the same thing with a dial. At β = 1 it's F1; above 1
      it leans toward recall, below 1 toward precision. -->

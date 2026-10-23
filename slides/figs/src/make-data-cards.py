@@ -671,22 +671,24 @@ def frame_coco_better_zoom() -> Any:
 #: The knobs a COCO Better set is cut to (owner, #4884: much of its power is in
 #: changing them). A set reads as one sentence, `[prevalence] [object]@[size]
 #: among [images]`, each slot a knob; under it, every knob with what it can be
-#: set to, the sentence's four in its order and then the two it does not show.
+#: set to, the sentence's four in its order and then the one it does not show.
+#: (A sixth, what counts as a negative, was cut from the card: owner, #5203.)
 #: All of them are query-time filters over the embedded corpus,
 #: `coco_better_export.py`'s flags, so nothing re-embeds.
 KNOB_SENTENCE = (("1%", True), ("Dog", True), ("@", False), ("Medium", True), ("among", False), ("10,000", True))
 KNOBS = (
     ("Prevalence", "0.1% to 50%"),
-    ("Object", "any of 49: Dog, Bus, Book …"),
-    ("Size", "Small, Medium, Large, or a mix"),
-    ("Images", "up to 100,000"),
-    ("Negatives", "anything without a dog, or nothing from any class"),
+    ("Object", "Dog, Bus, Book …"),
+    ("Size", "Small, Medium, Large, All"),
+    ("Images", "up to 100K"),
     ("Tested at", "the same size, or all three"),
 )
 #: The sentence's type and the rows', in points; the sentence's baseline, the
 #: first row's, the rows' pitch and the indent of a row's range, in figure
-#: fractions.
-KNOB_SLOT_PT, KNOB_ROW_PT = 28, dc.FLOOR_PT + 2
+#: fractions. 26pt is the largest the sentence fits the media area at in
+#: DejaVu Sans; it was 28 while this card was drawn in a container's Inter
+#: (#5203).
+KNOB_SLOT_PT, KNOB_ROW_PT = 26, dc.FLOOR_PT + 2
 KNOB_SENTENCE_Y, KNOB_ROWS_Y, KNOB_PITCH, KNOB_INDENT = 0.74, 0.585, 0.074, 0.15
 
 

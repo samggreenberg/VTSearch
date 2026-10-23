@@ -20,5 +20,5 @@
 
 <!-- **c** — And that's the power: every set is a sentence of knobs. One
      percent Dog at Medium among ten thousand; change any word and it's a new
-     set, with nothing re-embedded. Prevalence, object, size, how many, what
-     counts as a negative, what size we test at. -->
+     set, with nothing re-embedded. Prevalence, object, size, how many, and
+     what size we test at. -->

@@ -3,7 +3,7 @@
 
 Run from the repo root:
 
-    MATPLOTLIBRC=/tmp/empty-matplotlibrc python slides/figs/src/make-achievement-figs.py
+    python slides/figs/src/make-achievement-figs.py
 
 Three figures, one per slide:
 

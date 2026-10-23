@@ -14,7 +14,7 @@
 
 <!-- **a** — Back to the ranking, cut off. Which should the app pick? -->
 
-<!-- **b** — Where F-beta peaks. At beta 1, a miss and a false alarm cost the
+<!-- **b** — Where Fβ peaks. At beta 1, a miss and a false alarm cost the
      same, so: the middle cut, five. -->
 
 <!-- **c** — At a quarter, a miss is a sixteenth of a false alarm, and the peak

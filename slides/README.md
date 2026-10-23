@@ -474,18 +474,20 @@ plot can be regenerated when the underlying numbers move —
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
 
-**Regenerate with matplotlib's stock defaults.** The figures were drawn with
-none of a machine's own matplotlib settings, and a Claude Code on the web
-container has some: its `/etc/matplotlib/matplotlibrc` sets the Inter face and
-turns hinting off, so a generator that does not name its own face draws in a
-different typeface from the committed figures, and every figure comes out a
-pixel off the one it replaces. Point `MATPLOTLIBRC` at an empty file and the
-regenerated figures match the committed ones wherever nothing was changed:
+**A figure draws the same wherever it is generated.** A machine's own
+matplotlib settings never reach it: importing `slide_figure` resets matplotlib
+to its stock defaults, which a Claude Code on the web container needs, since
+its `/etc/matplotlib/matplotlibrc` sets the Inter face and turns hinting off.
+And `save()` refuses a label set in a font the machine supplied rather than
+matplotlib or `themes/fonts/` (see *The typeface ships with the deck* in
+[`STYLE.md`](STYLE.md)). So there is no `MATPLOTLIBRC` to set any more.
 
-```bash
-touch /tmp/empty-matplotlibrc
-MATPLOTLIBRC=/tmp/empty-matplotlibrc python slides/figs/src/make-data-cards.py --only coco
-```
+What can still differ is matplotlib itself: 3.11 rasterises text a pixel
+differently from the release most committed figures were drawn with. A
+generator that rewrites figures you did not change can therefore leave them
+"modified" with nothing moved; restore those with `git checkout` rather than
+committing the churn, and keep a re-rendered build stage only when the rest of
+its build is being redrawn with it, so its pages match.
 
 **Screenshots of the app are generated too.** `figs/ui-make-detector*.webp`,
 `figs/ui-train-loop*.webp`, `figs/ui-find*.webp`, `figs/ui-steps-*.webp` and

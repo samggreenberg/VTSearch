@@ -246,10 +246,10 @@ def cost_traces_fig() -> None:
 
 
 BOX_SERIES = [
-    ("siglip (no box possible)", "siglip", "siglip — binary", "solid"),
-    ("siglip2_l (no box possible)", "siglip2_l", "siglip2_l — binary", "solid"),
-    ("dinov3_patch — box NOT drawn", "binary", "dinov3_patch — binary", "solid"),
-    ("dinov3_patch — box drawn", "dinov3_patch", "dinov3_patch — region voting", "dashed"),
+    ("siglip (no box possible)", "siglip", "siglip, binary", "solid"),
+    ("siglip2_l (no box possible)", "siglip2_l", "siglip2_l, binary", "solid"),
+    ("dinov3_patch — box NOT drawn", "binary", "dinov3_patch, binary", "solid"),
+    ("dinov3_patch — box drawn", "dinov3_patch", "dinov3_patch, region voting", "dashed"),
 ]
 
 
