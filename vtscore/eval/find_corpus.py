@@ -25,11 +25,12 @@ simulator a second corpus to Find on, beside the in-corpus read:
 * **At the snapshot clicks** (``find_flag_steps``) it also reads the app's two
   domain-shift flags against that corpus, as delegated calls into the library
   functions the app's own routes call: the Training-domain overlap
-  (:func:`training_domain_flags`, ``domain_shift_report`` against the atlas the
-  harness builds over the sim pool for the New phase) and the Evidence
-  coverage (:func:`evidence_flags`, ``evidence_coverage_report`` from the votes'
-  vectors, :func:`vote_vectors`, and the Find cut).  Routing a whole corpus
-  through the atlas is the costly step, so it runs at those clicks only.
+  (:func:`training_domain_flags`, ``domain_shift_report`` against the sim
+  pool's vectors, as the app's route reads the reference dataset's) and the
+  Evidence coverage (:func:`evidence_flags`, ``evidence_coverage_report`` from
+  the votes' vectors, :func:`vote_vectors`, and the Find cut).  Ranking a
+  whole corpus against the pool is the costly step, so it runs at those clicks
+  only.
 
 What is ported rather than called is how the app's routes call the two reports
 - which vectors, which threshold, which refusals - and the eval/app sync gate
@@ -284,23 +285,27 @@ def find_columns(metrics: Mapping[str, Any]) -> dict[str, float]:
     return out
 
 
-def training_domain_flags(atlas: Any, matrix: "np.ndarray", *, patch_space: bool) -> dict[str, float]:
+def training_domain_flags(reference: "np.ndarray | None", matrix: "np.ndarray") -> dict[str, float]:
     """The Training-domain overlap chip's reading of *matrix* (#4961's warning), NaN where the app refuses it.
 
     The app's route (``vtsearch.training_domain.domain_shift_against``) runs
-    :func:`~vtscore.coverage.atlas.domain_shift_report` at its default alpha
-    against the reference dataset's coverage atlas, over the whole-image
-    vectors of every media of the dataset searched.  The harness's reference
-    is the sim pool and its atlas the one it builds there for the New phase.
-    Refused, as the app refuses, with no atlas, no vectors, or on a patch
-    embedder, where the guard does not separate in-domain from out (#3329).
+    :func:`~vtscore.coverage.domain_shift.domain_shift_report` at its default
+    alpha with the reference dataset's whole-image vectors as *reference* and
+    the whole-image vectors of every media of the dataset searched as
+    *matrix*.  The harness's reference is the sim pool.  Refused, as the app
+    refuses, with no reference, no vectors, or a reference too small to
+    calibrate.  Patch embedders are not refused any more (#3348).
     """
     nan = math.nan
-    if atlas is None or patch_space or matrix.shape[0] == 0:
-        return {"shift_frac_atypical": nan, "shift_z": nan, "shift_shifted": nan}
-    from vtscore.coverage.atlas import domain_shift_report  # noqa: PLC0415
+    blank = {"shift_frac_atypical": nan, "shift_z": nan, "shift_shifted": nan}
+    if reference is None or reference.shape[0] == 0 or matrix.shape[0] == 0:
+        return blank
+    from vtscore.coverage.domain_shift import ReferenceTooSmall, domain_shift_report  # noqa: PLC0415
 
-    report = domain_shift_report(atlas, matrix)
+    try:
+        report = domain_shift_report(reference, matrix)
+    except ReferenceTooSmall:
+        return blank
     return {
         "shift_frac_atypical": float(report["frac_atypical"]),
         "shift_z": float(report["z_score"]),

@@ -10,7 +10,11 @@ pair in which only one of the two was state.  The algorithm has moved to
 This module re-exports the new location so existing imports keep working, and
 warns on import.  Import from :mod:`vtscore.coverage` instead::
 
-    from vtscore.coverage import CoverageAtlas, auto_max_depth, domain_shift_report
+    from vtscore.coverage import CoverageAtlas, auto_max_depth
+
+``domain_shift_report`` is not re-exported: the atlas-based report it named
+was removed in #3348, and :func:`vtscore.coverage.domain_shift_report` takes a
+reference dataset's vectors, not an atlas.
 """
 
 from __future__ import annotations
@@ -25,7 +29,6 @@ from vtscore.coverage.atlas import (  # noqa: F401
     COVERAGE_ATLAS_MIN_NODE_SIZE,
     CoverageAtlas,
     auto_max_depth,
-    domain_shift_report,
 )
 
 warnings.warn(
@@ -41,7 +44,6 @@ __all__ = [
     "COVERAGE_ATLAS_MIN_NODE_SIZE",
     "CoverageAtlas",
     "auto_max_depth",
-    "domain_shift_report",
 ]
 
 

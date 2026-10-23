@@ -1,6 +1,6 @@
 """Tests for ``GET /api/find/evidence-coverage``.
 
-The cross-user complement to the atlas domain-shift report: how much of the
+The cross-user complement to the domain-shift report: how much of the
 scored dataset the active detector is calling *without labeled evidence behind
 the call*, measured from the detector's own labelset (re-embedded in memory at
 load) — so it fires with no reference dataset loaded.  See

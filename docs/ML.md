@@ -2,7 +2,7 @@
 
 VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced), **started from the Goods' centroid** (#4785, [below](#the-svm-started-from-the-goods-centroid-4785)). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset. Below a minimum label count the detector is the Goods' centroid instead ([label quota](#below-the-label-quota-the-goods-centroid-not-a-head)), and a trained head's Good/Bad line is drawn from the labels at the detector's F-beta balance ([Threshold Calibration](#threshold-calibration)).
 
-Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides typicality ranks for domain-shift detection.
+Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling. [Domain shift](#domain-shift) — is this dataset unlike the one a detector was trained on? — is a separate kNN report against the training dataset's own vectors.
 
 ## Architecture
 
@@ -488,10 +488,9 @@ The remaining unflooded path is label-file sort, which scores each image by one 
 
 ## Coverage Atlas
 
-The Coverage Atlas (`vtscore/coverage/atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
+The Coverage Atlas (`vtscore/coverage/atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. Its job is **diversity sampling**: the Training autopilot's "Explore Diversity" phase asks it for the next item to label, so a handful of clicks covers the whole collection and stress-tests the model where it is most likely to be wrong.
 
-1. **Diversity sampling** — the Training autopilot's "Explore Diversity" phase asks it for the next item to label, so a handful of clicks covers the whole collection and stress-tests the model where it is most likely to be wrong.
-2. **Domain-shift detection** — it answers "how typical is this item of the data this atlas was built on?" with a calibrated p-value, so a detector trained on dataset A can be sanity-checked against dataset B before anyone trusts its scores there.
+It used to have a second job, domain-shift detection, through calibrated per-node typicality p-values. #3348 measured that calibration as wrong on every embedder and replaced it with a split-conformal kNN report that does not use the atlas at all. See [Domain shift](#domain-shift).
 
 One atlas exists per dataset (`DatasetContext.coverage_atlas`). It replaced the earlier Diversity Tree, which kept only a boolean "seen" flag per region; the atlas keeps the geometry and statistics the tree threw away. The full design study (including the not-yet-built portable artifact, blob scan, and active auditor) lives in [`docs/plans/coverage-atlas.md`](plans/coverage-atlas.md).
 
@@ -499,11 +498,11 @@ One atlas exists per dataset (`DatasetContext.coverage_atlas`). It replaced the 
 
 All stored embeddings are unit vectors (L2-normalized at ingest), and contrastive embedders concentrate them in a narrow cone — raw cosines between any two items are uniformly high, which makes raw directions nearly useless for partitioning or typicality. The atlas therefore works in a **centered spherical frame**: it subtracts the dataset's mean vector and re-normalizes to the unit sphere. The centering vector is part of the structure and every query is mapped into the same frame.
 
-One consequence worth remembering: the **root node is directionally degenerate by construction**. Centering makes the sum of all vectors (the "resultant") vanish, so the root has no preferred direction. Everything below the root — the k-means cells — is cohesive and directional. Several behaviors key off this via the resultant length `rbar` (see the calibration gate below).
+One consequence worth remembering: the **root node is directionally degenerate by construction**. Centering makes the sum of all vectors (the "resultant") vanish, so the root has no preferred direction. Everything below the root — the k-means cells — is cohesive and directional. `next_sample` keys off this via the resultant length `rbar` (see typicality tempering below).
 
 ### Build
 
-Built automatically at dataset load for datasets up to 50 000 items (`COVERAGE_ATLAS_AUTO_THRESHOLD`), on demand via `POST /api/datasets/registry/<id>/coverage-atlas` for larger ones, and cached inside the dataset pickle (key `"coverage_atlas"`, format `"coverage-atlas/1"`) so reloads skip the k-means. The build is recursive k-means (k = 3) over the centered vectors, splitting until a node has fewer than 20 items (`min_node_size`) or the depth cap is hit (`auto_max_depth` bounds the leaf count at ~4 000 for very large datasets). K-means runs on cuML when a usable GPU is present, sklearn otherwise, with restart counts scaled down for large nodes.
+Built automatically at dataset load for datasets up to 50 000 items (`COVERAGE_ATLAS_AUTO_THRESHOLD`), on demand via `POST /api/datasets/registry/<id>/coverage-atlas` for larger ones, and cached inside the dataset pickle (key `"coverage_atlas"`, format `"coverage-atlas/1"`) so reloads skip the k-means. A cache written before #3348 also carries per-node `t_quantiles`, which are ignored. The build is recursive k-means (k = 3) over the centered vectors, splitting until a node has fewer than 20 items (`min_node_size`) or the depth cap is hit (`auto_max_depth` bounds the leaf count at ~4 000 for very large datasets). K-means runs on cuML when a usable GPU is present, sklearn otherwise, with restart counts scaled down for large nodes.
 
 Each node stores:
 
@@ -513,7 +512,6 @@ Each node stores:
 | `children` | Child node names, stored **largest-first** so breadth-first traversal reaches big unexplored regions before small ones |
 | `n` | Item count |
 | `mu`, `rbar` | Mean direction and resultant length — the sufficient statistics of a von Mises–Fisher component, so reading the tree at any depth gives a multiresolution mixture model of the dataset |
-| `t_quantiles` | A 21-point quantile grid of the node's own points' **leave-one-out** typicality scores, used to calibrate query p-values |
 
 Node records are **immutable** once built. Labeled evidence lives in a separate per-atlas **overlay** — `n_pos` / `n_neg` counts keyed by node name (session state, not serialized), plus the labeled-ID set — so two atlases can share one node table by reference while keeping independent labels. `structural_clone()` exploits this: an atlas over the same id set (e.g. the labeling-progress per-step atlas mirroring the dataset context's) is cloned with the node table shared and a fresh overlay, skipping the hierarchical-k-means re-fit.
 
@@ -539,36 +537,6 @@ Without scores, the pick is the node's most typical element (`ids[0]`), a repres
 
 The response's `coverage_level` — the number of consecutive covered nodes in breadth-first order — is the autopilot's **Span** indicator: it turns green at `autopilot_goal_diversity` (default 40) covered nodes, ending the diversity phase. `exhausted: true` means every node carries evidence.
 
-### Typicality and domain shift
-
-`CoverageAtlas.typicality_pvalues(matrix)` answers, per query vector: *what fraction of the data this atlas was built on looks less typical than this?* Small p-value = the atlas has essentially never seen anything like it.
-
-How a query is scored:
-
-1. Map the query into the atlas frame (subtract `center`, renormalize).
-2. Route it down the tree, at each node descending into the cosine-nearest child.
-3. At every **calibrated** node along the path — at least 20 points *and* `rbar ≥ 0.1` — compute the alignment `t = mu . x` and read a p-value off the node's stored quantile grid.
-4. Average the p-values along the path.
-
-Three details are meant to make the p-values honest rather than merely monotone. Each does real work, and together they still fall short of calibration — see [How good are these p-values?](#how-good-are-these-p-values) below:
-
-- **Leave-one-out calibration.** Each node's quantile grid is built from scores of its own points against the mean direction of the *other* points (closed form on the sphere: `(R.x - 1) / ||R - x||`). Scoring a point against a mean it helped shape is optimistic, and without the correction fresh in-domain queries systematically read as atypical.
-- **The `rbar` gate.** A node with no concentrated direction has a meaningless `mu` and pathological leave-one-out scores; the gate excludes it — notably the always-degenerate root. Sparse branches terminate shallow, which is the adaptive bandwidth: dense regions are judged at fine scale, sparse ones at coarse scale.
-- **Path averaging.** A hard partition has boundary artifacts (a fresh in-domain query near a k-means cell edge looks atypical at leaf scale); averaging across scales smooths them the way a tree ensemble would, at zero extra build cost.
-
-`domain_shift_report(atlas, matrix, alpha=0.05)` aggregates the p-values into a dataset-level verdict: the observed fraction below `alpha` (`frac_atypical` — roughly the shifted proportion), a binomial z-score for the excess against the *nominal* rate, the median p-value, and a headline `shifted` boolean (excess both statistically clear, z > 3, and practically large, ≥ 2×`alpha`).
-
-#### How good are these p-values?
-
-Not calibrated, and the gap was unmeasured for as long as the atlas existed. Measured on held-out in-domain data across five embedders ([the #3329 fit-quality study](experiments/2026-08-30-fit-quality-3329/REPORT.md), B1–B6):
-
-- The values are **under-dispersed** — sd 0.250 against the 0.289 a uniform would give — and sit **KS 0.103** from uniform. An in-domain query does not have an `alpha` chance of scoring below `alpha`, so `expected_atypical` is nominal, not measured.
-- **No combiner is calibrated.** Median 0.071, mean (shipped) 0.103, deepest-only 0.132, Fisher 0.186, min 0.329. Dropping the path averaging — the obvious suspect — makes it *worse*, not better.
-- **The shipped combiner looks right at exactly the number a spot check reads** (4.3 % flagged against a nominal 5 %) while sitting 0.103 from uniform — not the worst of the five, and not the best either: `median` is a third closer overall (0.071) and over-flags at α instead. No candidate is good at both, which is why this went unnoticed.
-- **Patch embedders are where it breaks.** Their spaces are the least concentrated (node `rbar` 0.61 against 0.66–0.70), and `dinov3_patch` puts 13.7 % of its own in-domain items below 0.05 — the verdict fires on 80 % of the atlas's own held-out data against 93 % cross-corpus, a separation of 0.13. The domain-shift route therefore **refuses patch embedders outright** rather than answering with noise. Refitting `alpha` per embedder was priced and does not rescue it; the fix, if it is ever wanted there, is the per-node vMF model.
-
-The **ranking** is unaffected, which is what the autopilot's diversity sampling actually uses (`next_sample` reads each node's score-sorted `ids` and gates on `rbar`, never a p-value). The defect is confined to the calibrated *value* and its one consumer, the domain-shift endpoint.
-
 ### Tutorial: how a diversity session works
 
 What actually happens when the autopilot enters its "Explore Diversity" phase, click by click:
@@ -582,14 +550,43 @@ What actually happens when the autopilot enters its "Explore Diversity" phase, c
 
 Either outcome of step 5 helped: a flip hands the head a training example from a region it was confidently wrong about (the next retrain bends the boundary there); a non-flip certifies the region at its weakest point for one click.
 
+### Costs
+
+Build is the same order as the embedding-matrix work a dataset load already does — seconds on CPU for 50k items, with progress reported to the load bar. A `next_sample` call is a breadth-first walk over node records. Nothing needs a GPU.
+
+## Domain shift
+
+You trained a detector on dataset A and want to run it on dataset B. Should you trust it there? `vtscore.coverage.domain_shift.domain_shift_report(reference, matrix)` answers with a **split-conformal kNN** over A's own vectors (the reference):
+
+1. A's vectors are split in half by a fixed seed: a **fit** half and a **calibration** half.
+2. An item's score is the mean cosine to its 5 nearest fit vectors. Each calibration vector is scored the same way.
+3. An item's p-value is its rank among the calibration scores, `(1 + #{cal ≤ s}) / (n_cal + 1)`.
+
+For an item drawn from A, the calibration vectors and the item are exchangeable, so the p-value is **uniform by construction**: about `alpha` of A's own items fall below `alpha`, on every embedder. The report counts how many of B's items fall below `alpha = 0.05` (`frac_atypical`, roughly the shifted share). It gives a binomial z-score for the excess, the median p-value, and a `shifted` verdict that needs the excess to be both statistically clear (z > 3) and practically large (≥ 2×`alpha`). To keep the check cheap enough to run automatically, at most 4 000 of B's items are scored (sampled), and the fit and calibration halves are capped at 20 000 and 10 000 items. A reference under 40 items is refused (`ReferenceTooSmall`): the smallest attainable p-value would not reach below `alpha`.
+
+#### Why not the atlas
+
+Until #3348 this was the atlas's job. Each node calibrated a 21-point quantile grid of leave-one-out `mu . x`, and a query's p-value was the mean over its root-to-leaf path. That ranked a query against the very points the k-means cells had been drawn around. Those points sit more centrally in their cells than any fresh item does, so a dataset's own held-out items read atypical:
+
+- **KS 0.11 from uniform on every embedder** ([#3329](experiments/2026-08-30-fit-quality-3329/REPORT.md) measured 0.103).
+- **On `dinov3_patch`, false alarms on 60 % of its own held-out splits** and separation 0.36, so the route refused patch embedders.
+
+[The #3348 study](experiments/2026-10-23-atlas-node-model-3348/REPORT.md) priced four per-node statistics (the vMF direction, a vMF mixture, PPCA, node kNN) under both calibrations. Calibrating on a held-back half that the partition never saw fixed every statistic on every embedder (0.041–0.052 below 0.05), and the statistic barely mattered once that was done. The tree-free kNN rule beat every atlas variant:
+
+| | KS from uniform | false alarm on own data | separation, `dinov3_patch` | separation, worst embedder |
+|---|---|---|---|---|
+| atlas guard (until #3348) | 0.11–0.13 | 0.60 on `dinov3_patch` | 0.36 | 0.36 |
+| kNN report (now) | 0.021–0.033 | 0 everywhere | **1.00** | 0.67 |
+
+*Separation is the share of different-corpus pairs flagged minus the share of own-holdout pairs flagged, over 5 datasets × 3 seeds.*
+
+The atlas's typicality *ordering* is untouched by any of this, and it is the only part `next_sample` ever read.
+
 ### Tutorial: checking for domain shift before reusing a detector
 
-You trained a detector on dataset A and want to run it on dataset B. Should you trust it? Ask the atlas:
-
 ```
-# Both datasets loaded; A's coverage atlas built (automatic ≤ 50k items).
-# The X-Dataset-Id header names the ACTIVE dataset (B); the URL names the
-# REFERENCE dataset (A, the training domain).
+# Both datasets loaded. The X-Dataset-Id header names the ACTIVE dataset (B);
+# the URL names the REFERENCE dataset (A, the training domain).
 GET /api/datasets/registry/<dataset_A_id>/domain-shift
 X-Dataset-Id: <dataset_B_id>
 ```
@@ -597,46 +594,37 @@ X-Dataset-Id: <dataset_B_id>
 ```json
 {
   "reference_dataset_id": "…",
-  "n_items": 40000,
+  "n_items": 4000,
   "alpha": 0.05,
   "frac_atypical": 0.31,
   "expected_atypical": 0.05,
-  "z_score": 24.1,
+  "z_score": 75.4,
   "median_pvalue": 0.18,
   "shifted": true
 }
 ```
 
-Reading this: 31% of dataset B sits in regions of embedding space where dataset A had essentially no mass (against the 5% that chance would produce), so the verdict is `shifted` — the detector will be *extrapolating* on a third of B, and its scores there are unfalsified guesswork. Verify by hand before trusting it. A same-domain report instead shows `frac_atypical` near `alpha`, a median p-value near 0.5, and `shifted: false`.
+Reading this: 31 % of the sampled items of B sit farther from A's vectors than almost anything of A's own does (against the 5 % that chance produces), so the verdict is `shifted`. The detector will be *extrapolating* on about a third of B, and its scores there are unfalsified guesswork; verify by hand before trusting it. A same-domain report shows `frac_atypical` near `alpha`, a median p-value near 0.5, and `shifted: false`.
 
 The app asks this for you. [`GET /api/find/training-domain`](api/find.md#training-domain-overlap) takes A to be the loaded dataset holding most of the detector's labelled examples and returns the same report, and the SPA calls it the moment a detector meets a dataset, warning on a `shifted` verdict before anything is run.
 
-The endpoint refuses (HTTP 400) when the two datasets use different embedders — typicality across embedding spaces would be confident nonsense — or when the reference has no atlas yet (build it via the endpoint above).
+The endpoint refuses (HTTP 400) when the two datasets use different embedders (typicality across embedding spaces would be confident nonsense), when A is not loaded, or when A has fewer than 40 embeddings. It needs no coverage atlas, and it answers on patch embedders.
 
-The same machinery is available in the library tier:
+In the library tier:
 
 ```python
 import numpy as np
-from vtscore.coverage.atlas import CoverageAtlas, domain_shift_report
+from vtscore.coverage import domain_shift_report
 
-atlas = CoverageAtlas({mid: vec for mid, vec in train_vectors.items()}, k=3)
-
-atlas.label(42, good=True)          # count labeled evidence
-print(atlas.next_sample(scores, threshold))  # next diversity probe
-
-pvals = atlas.typicality_pvalues(np.stack(list(other_vectors.values())))
-print(domain_shift_report(atlas, np.stack(list(other_vectors.values()))))
+report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(list(other_vectors.values())))
 ```
-
-### Costs
-
-Build is the same order as the embedding-matrix work a dataset load already does — seconds on CPU for 50k items, with progress reported to the load bar. Queries are microseconds per item (`O(depth × k × dim)`); a full domain-shift sweep over a 40k-item dataset is well under a second. Nothing needs a GPU.
 
 ## Key Files
 
 - `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`, the head sentinels
 - `vtscore/training/svm_prior.py`: `fit_linear_svm_prior_head` (the shipped head's fit); `vtscore/training/svm.py`: `fit_linear_svm_head` (the plain SVM arm); `vtscore/training/logreg.py`: `fit_linear_logreg_head`
-- `vtscore/coverage/atlas.py`: `CoverageAtlas`, `domain_shift_report`
+- `vtscore/coverage/atlas.py`: `CoverageAtlas`
+- `vtscore/coverage/domain_shift.py`: `domain_shift_report`, `typicality_pvalues` (split-conformal kNN)
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training

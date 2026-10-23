@@ -5,7 +5,8 @@ coverage atlas for a loaded dataset that skipped the automatic build at load
 time (see the S2/S8 auto-defer item in ``docs/plans/scalability.md``).
 
 ``GET /api/datasets/registry/<id>/domain-shift`` reports how typical the
-active dataset's embeddings look under ``<id>``'s coverage atlas, so a user
+active dataset's embeddings look against ``<id>``'s own embeddings (a
+split-conformal kNN since #3348; it needs no atlas), so a user
 can tell whether a detector trained on ``<id>`` should be trusted on the
 active dataset without hands-on verification.
 """
@@ -219,17 +220,14 @@ class TestStatsCoverageAtlasStatus:
 
 
 class TestDomainShiftEndpoint:
-    def _reference_with_atlas(self, client, n: int = 120):
-        """Register + load a reference dataset and build its atlas synchronously."""
-        from vtscore.coverage.atlas import CoverageAtlas
-
+    def _reference(self, client, n: int = 120):
+        """Register + load a reference dataset (no atlas: the report reads its vectors)."""
         entry, ctx = _loaded_dataset(n, name="Reference", seed_offset=0)
-        vectors = {cid: m["embeddings"]["clap"] for cid, m in ctx.medias.items()}
-        ctx.coverage_atlas = CoverageAtlas(vectors, k=3)
+        ctx.coverage_atlas = None
         return entry, ctx
 
     def test_same_domain_not_shifted(self, client):
-        ref_entry, _ = self._reference_with_atlas(client)
+        ref_entry, _ = self._reference(client)
         target_entry, _ = _loaded_dataset(40, name="TargetSame", seed_offset=1000)
 
         resp = client.get(
@@ -246,7 +244,7 @@ class TestDomainShiftEndpoint:
         assert data["frac_atypical"] < 0.2
 
     def test_shifted_domain_flagged(self, client):
-        ref_entry, _ = self._reference_with_atlas(client)
+        ref_entry, _ = self._reference(client)
         target_entry, _ = _loaded_dataset(40, name="TargetShifted", seed_offset=2000, shifted=True)
 
         resp = client.get(
@@ -259,16 +257,17 @@ class TestDomainShiftEndpoint:
         assert data["frac_atypical"] > 0.5
         assert data["median_pvalue"] < 0.5
 
-    def test_reference_without_atlas_returns_400(self, client):
-        ref_entry, ref_ctx = _loaded_dataset(20, name="NoAtlasRef", seed_offset=3000)
-        ref_ctx.coverage_atlas = None
-        target_entry, _ = _loaded_dataset(10, name="TargetNoAtlas", seed_offset=4000)
+    def test_reference_too_small_returns_400(self, client):
+        """Under 40 reference vectors no p-value can reach below alpha, so there is no verdict."""
+        ref_entry, _ = _loaded_dataset(20, name="TinyRef", seed_offset=3000)
+        target_entry, _ = _loaded_dataset(10, name="TargetTinyRef", seed_offset=4000)
 
         resp = client.get(
             f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
             headers={"X-Dataset-Id": target_entry["id"]},
         )
         assert resp.status_code == 400
+        assert "too small" in resp.get_json()["message"].lower()
 
     def test_reference_not_loaded_returns_400(self, client):
         from vtscore.datasets.registry import register_dataset
@@ -288,7 +287,7 @@ class TestDomainShiftEndpoint:
         assert resp.status_code == 404
 
     def test_same_dataset_returns_400(self, client):
-        ref_entry, _ = self._reference_with_atlas(client)
+        ref_entry, _ = self._reference(client)
         resp = client.get(
             f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
             headers={"X-Dataset-Id": ref_entry["id"]},
@@ -296,7 +295,7 @@ class TestDomainShiftEndpoint:
         assert resp.status_code == 400
 
     def test_embedder_mismatch_returns_400(self, client):
-        ref_entry, _ = self._reference_with_atlas(client)
+        ref_entry, _ = self._reference(client)
         target_entry, _ = _loaded_dataset(10, name="TargetOtherEmb", seed_offset=6000, embedder="siglip")
 
         resp = client.get(
@@ -306,26 +305,25 @@ class TestDomainShiftEndpoint:
         assert resp.status_code == 400
         assert "mismatch" in resp.get_json()["message"].lower()
 
-    def test_patch_embedder_returns_400(self, client):
-        """A patch-embedder reference is refused rather than answered with noise.
+    def test_patch_embedder_reports(self, client):
+        """A patch-embedder reference is answered since #3348.
 
-        The typicality guard does not separate in-domain from out-of-domain
-        data in a patch space - on ``dinov3_patch`` it fires on 80% of the
-        reference's own held-out data against 93% cross-corpus, a separation
-        of 0.13.  See ``docs/experiments/2026-08-30-fit-quality-3329/`` (B4-B6).
+        The atlas guard it replaced fired on 80 % of a ``dinov3_patch``
+        reference's own held-out data and was refused there; the kNN report
+        is uniform on its own data on every embedder measured, ``dinov3_patch``
+        included (``docs/experiments/2026-10-23-atlas-node-model-3348/``).
         """
-        from vtscore.coverage.atlas import CoverageAtlas
-
-        ref_entry, ref_ctx = _loaded_dataset(120, name="RefPatch", seed_offset=7000, embedder="dinov3_patch")
-        ref_ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ref_ctx.medias.items()}, k=3)
-        target_entry, _ = _loaded_dataset(10, name="TargetPatch", seed_offset=8000, embedder="dinov3_patch")
+        ref_entry, _ = _loaded_dataset(120, name="RefPatch", seed_offset=7000, embedder="dinov3_patch")
+        target_entry, _ = _loaded_dataset(
+            40, name="TargetPatch", seed_offset=8000, shifted=True, embedder="dinov3_patch"
+        )
 
         resp = client.get(
             f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
             headers={"X-Dataset-Id": target_entry["id"]},
         )
-        assert resp.status_code == 400
-        assert "patch embedder" in resp.get_json()["message"].lower()
+        assert resp.status_code == 200
+        assert resp.get_json()["shifted"] is True
 
     def test_single_vector_embedder_still_reports(self, client):
         """The patch gate reads the capability, so single-vector siblings pass.

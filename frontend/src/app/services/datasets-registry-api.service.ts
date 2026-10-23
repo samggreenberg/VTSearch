@@ -156,11 +156,11 @@ export class DatasetsRegistryApiService {
   }
 
   /** Typicality of the *active* dataset (the ``X-Dataset-Id`` header, set by
-   *  the active-context interceptor) under *referenceDatasetId*'s coverage
-   *  atlas. ``frac_atypical`` is roughly the share of the active dataset that
-   *  lies outside the reference (training) domain. The backend refuses (400)
-   *  when the reference isn't loaded, has no atlas, or uses a different
-   *  embedder. */
+   *  the active-context interceptor) against *referenceDatasetId*'s own
+   *  embeddings. ``frac_atypical`` is roughly the share of the active dataset
+   *  that lies outside the reference (training) domain. The backend refuses
+   *  (400) when the reference isn't loaded, is too small to calibrate, or uses
+   *  a different embedder. */
   domainShift(referenceDatasetId: string): Observable<DatasetDomainShiftResponse> {
     return datasetDomainShift(this.http, this.config.rootUrl, {
       dataset_id: referenceDatasetId,

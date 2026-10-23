@@ -11165,7 +11165,7 @@
     },
     "/api/datasets/registry/{dataset_id}/domain-shift": {
       "get": {
-        "description": "*dataset_id* names the **reference** dataset \u2014 the one a detector was\ntrained on.  Its coverage atlas is queried with every embedding of the\n**active** dataset (the ``X-Dataset-Id`` header), yielding calibrated\ntypicality p-values.  The response summarises them: ``frac_atypical``\nis roughly the proportion of the active dataset that lies outside the\nreference domain, and ``shifted`` is the headline verdict.  Use it\nbefore trusting a detector trained on *dataset_id* against the active\ndataset without hands-on verification.\n\n**Refused for patch embedders** (400).  The guard's separation between\n\"my own data\" and \"a different corpus\" collapses to 0.13 on\n``dinov3_patch`` \u2014 close to a constant \u2014 because patch spaces are far\nless concentrated than single-vector ones, and every threshold repair\nwas priced and failed.  See\n``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).",
+        "description": "*dataset_id* names the **reference** dataset \u2014 the one a detector was\ntrained on.  Every embedding of the **active** dataset (the\n``X-Dataset-Id`` header; at most 4 000, sampled) is ranked against the\nreference dataset's own embeddings by a split-conformal kNN, yielding\ntypicality p-values that are uniform for an item drawn from the\nreference.  The response summarises them: ``frac_atypical`` is roughly\nthe proportion of the active dataset that lies outside the reference\ndomain, and ``shifted`` is the headline verdict.  Use it before trusting\na detector trained on *dataset_id* against the active dataset without\nhands-on verification.\n\nWorks on every embedder, patch embedders included, and needs no coverage\natlas (#3348; ``docs/experiments/2026-10-23-atlas-node-model-3348/REPORT.md``).",
         "operationId": "dataset_domain_shift",
         "responses": {
           "200": {
@@ -11179,7 +11179,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Reference dataset has no coverage atlas, embedders differ, the reference uses a patch embedder (unsupported), or the active dataset has no embeddings."
+            "description": "Reference dataset is not loaded or is the active one, embedders differ, the reference has too few embeddings to calibrate, or either dataset has no embeddings."
           },
           "403": {
             "description": "Access denied for the current user."
@@ -11191,7 +11191,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Report domain shift of the active dataset against *dataset_id*'s atlas.",
+        "summary": "Report domain shift of the active dataset against *dataset_id*.",
         "tags": [
           "datasets_registry"
         ]
@@ -13710,7 +13710,7 @@
     },
     "/api/find/evidence-coverage": {
       "get": {
-        "description": "The cross-user complement to the atlas domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded with a built atlas, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector; run\nanywhere else, it first lands one a learned sort there left waiting\n(:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md\n\u00a76.1 (phase v0).",
+        "description": "The cross-user complement to the domain-shift report\n(``GET /api/datasets/registry/<id>/domain-shift``): that one needs the\n*training* dataset loaded, which is absent in a true\ndetector handoff (userB has userA's detector JSON, not userA's haystack).\nThis asks only what the detector itself carries \u2014 its labelset, re-embedded\nin memory against the active dataset's embedder at load, and the training\nbaseline recorded on it \u2014 so it reads even when the training haystack was\nnever handed over.\n\nFor every scored item it measures how far the detector's *predicted* class\nsits from the labeled evidence of that class (a conformal support p-value\n``D``, calibrated against the labelset's own leave-one-out distances) and\nthe trust-score ratio ``TS``, then summarises the share of the dataset the\ndetector is calling without supervision behind it.  The verdict ranks the\nsame distances against the training haystack's own (#5089,\n:func:`_evidence_baseline_home`): the votes are picked by active learning, so\ntheir own spread fired on most in-domain datasets.  With no baseline the\nshare is reported and no verdict is drawn.  Returns ``available: False``\n(rather than 4xx) when there is no scored Find run or no resolvable\nlabelset, so the Stats modal can simply hide the section.  Its one write:\nrun on the training dataset, it records the baseline on the detector; run\nanywhere else, it first lands one a learned sort there left waiting\n(:func:`defer_learned_sort_baseline`).  See docs/plans/coverage-atlas.md\n\u00a76.1 (phase v0).",
         "operationId": "find_evidence_coverage",
         "responses": {
           "200": {

@@ -412,9 +412,10 @@ class TestRealRegisteredEmbedder:
 class TestEmbedderSupportsPatchRegions:
     """The public single-capability read used to gate patch-embedder callers.
 
-    Added for the #3329 fit-quality finding: the coverage atlas's typicality
-    guard is uninformative in a patch space, so the domain-shift route refuses
-    those references.  The gate reads the declared capability rather than a
+    Added for the #3329 fit-quality finding, when the coverage atlas's
+    typicality guard was uninformative in a patch space and the domain-shift
+    route refused those references (#3348 replaced the guard and lifted the
+    refusal).  The gate reads the declared capability rather than a
     hard-coded name list, so a newly registered patch embedder is covered the
     day it lands.
     """

@@ -1,9 +1,10 @@
 """Coverage Atlas: the pure-algorithm half of the coverage machinery.
 
 This package holds the *structure* — a hierarchical k-means partition with
-per-class evidence channels, von Mises-Fisher moments and calibrated
-typicality ranks (see :mod:`vtscore.coverage.atlas` and
-``docs/plans/coverage-atlas.md``).  It touches no
+per-class evidence channels and von Mises-Fisher moments (see
+:mod:`vtscore.coverage.atlas` and ``docs/plans/coverage-atlas.md``) — and the
+domain-shift report, a split-conformal kNN against a reference dataset's
+vectors (:mod:`vtscore.coverage.domain_shift`, #3348).  It touches no
 :class:`~vtscore.state.core.DatasetContext` and takes no lock: everything
 here is a function of the embeddings handed to it.
 
@@ -23,8 +24,8 @@ from vtscore.coverage.atlas import (
     COVERAGE_ATLAS_MIN_NODE_SIZE,
     CoverageAtlas,
     auto_max_depth,
-    domain_shift_report,
 )
+from vtscore.coverage.domain_shift import domain_shift_report
 
 __all__ = [
     "COVERAGE_ATLAS_DEFAULT_K",

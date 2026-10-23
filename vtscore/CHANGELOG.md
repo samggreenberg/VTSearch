@@ -12,6 +12,25 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Domain shift is a split-conformal kNN against the reference dataset's vectors, not the Coverage Atlas's
+  typicality** (issue #3348). The new `vtscore.coverage.domain_shift.domain_shift_report(reference, matrix,
+  alpha=0.05)` (also exported as `vtscore.coverage.domain_shift_report`) splits the reference in half by a fixed
+  seed, scores each item by its mean cosine to the 5 nearest fit-half vectors, and ranks that among the
+  calibration half's scores. A reference item's p-value is therefore uniform on every embedder, patch embedders
+  included. The return keys and the `shifted` rule (z > 3 and >= 2 alpha) are unchanged. At most
+  `DOMAIN_SHIFT_MAX_QUERY` (4 000) rows of *matrix* are scored, so `n_items` can be smaller than the matrix. A
+  reference under 40 vectors raises `ReferenceTooSmall`. Measured
+  (`docs/experiments/2026-10-23-atlas-node-model-3348/`): KS 0.021-0.033 from uniform on five embedders against
+  the atlas's 0.11-0.13, and on `dinov3_patch` 0 false alarms on own held-out data (was 0.60) and separation
+  1.00 (was 0.36). **Breaking:** the atlas-based `domain_shift_report(atlas, matrix)` is removed from
+  `vtscore.coverage.atlas`, along with `CoverageAtlas.typicality_pvalues` / `typicality_pvalue` and the per-node
+  `t_quantiles` calibration grid. They had no consumer besides the report, and `next_sample` never read them.
+  New atlas snapshots carry no `t_quantiles`, and `from_serializable` ignores them on an older snapshot (same
+  `coverage-atlas/1` format). `vtscore.state.coverage_atlas` no longer re-exports `domain_shift_report`. The eval
+  harness's `find_corpus.training_domain_flags(reference, matrix)` now takes the sim pool's vectors instead of an
+  atlas, and so reads the `shift_*` columns on patch embedders and non-Autopilot strategies too, where they were
+  NaN before.
+
 - **An exported labelset no longer carries numbers measured by one embedder or head** (issue #5131). A labelset
   export is references to the Good and Bad labels, so it can rebuild the detector under another embedder; a number
   from this server's embedder space or trained head means nothing at the other end. The new

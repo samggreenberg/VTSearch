@@ -30,7 +30,7 @@ interface Pair {
  * failure, says nothing.
  *
  * One toast per pair per session. A pair whose check could not run (the
- * training dataset's atlas still building, say) is asked again the next time
+ * training dataset not loaded yet, say) is asked again the next time
  * it becomes active.
  */
 @Injectable({ providedIn: 'root' })

@@ -374,10 +374,10 @@ FIND_CORPUS_COLUMNS: tuple[str, ...] = (
 #: The app's two domain-shift flags against the Find corpus (#4960), at the
 #: snapshot clicks only (``find_flag_steps``): ``flags_at`` names the listed
 #: click a row answers (the first click at or past it).  ``shift_*`` is the
-#: Training-domain overlap chip, :func:`~vtscore.coverage.atlas.domain_shift_report`
-#: against the coverage atlas built over the sim pool - NaN on a patch
-#: embedder, which the app refuses (#3329), and with no atlas (a non-Autopilot
-#: strategy).  ``evidence_*`` is the Evidence coverage chip,
+#: Training-domain overlap chip, :func:`~vtscore.coverage.domain_shift.domain_shift_report`
+#: against the sim pool's vectors, on every embedder and strategy (#3348; until
+#: then it read the pool's coverage atlas, NaN on a patch embedder and with no
+#: atlas).  ``evidence_*`` is the Evidence coverage chip,
 #: :func:`~vtscore.detectors.evidence_coverage.evidence_coverage_report` from the
 #: votes' vectors and the Find cut, its verdict ranked against the sim pool's
 #: unvoted media (#5089).  ``shift_shifted`` / ``evidence_unsupported`` are the
