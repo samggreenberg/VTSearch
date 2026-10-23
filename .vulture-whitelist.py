@@ -328,6 +328,11 @@ second_hook  # noqa: F821
 raising_hook  # noqa: F821
 NOT_A_FUNCTION  # noqa: F821
 
+# ``tests/core/test_settings_api_routes.py``'s ``_a_hook`` is likewise named
+# only in a ``"module:function"`` spec string passed to
+# ``import_hooks.configure``.
+_a_hook  # noqa: F821
+
 # ---------------------------------------------------------------------------
 # ``tests_lib/meta/test_preflight_knobs.py`` assigns ``__signature__`` on a
 # stand-in function; ``inspect.signature`` reads it reflectively when the
