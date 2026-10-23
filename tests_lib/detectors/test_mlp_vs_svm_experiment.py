@@ -530,7 +530,7 @@ class TestTimingBenchmark:
             warmup=1,
         )
         assert set(df["phase"].unique()) == {"train", "infer"}
-        assert (df["median_seconds"] >= 0).all()
+        assert bool((df["median_seconds"] >= 0).all())
         assert {"torch", "sklearn", "gpu"}.issubset(df.columns)
         # sklearn on a CPU box.
-        assert (df[df.trainer == "svm_linear"]["backend"] == "sklearn-cpu").all()
+        assert bool((df[df.trainer == "svm_linear"]["backend"] == "sklearn-cpu").all())
