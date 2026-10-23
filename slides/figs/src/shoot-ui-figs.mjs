@@ -1083,13 +1083,17 @@ const BROWSE_ICON_SCALE = { XS: 0.5, S: 0.75, M: 1, L: 1.6, XL: 2.5, '2XL': 4 }[
 
 /**
  * How many steps of Browse's "Bigger thumbnails" button the map of Find's
- * results is shot at. That map has one bin level, so the saved size cannot
- * coarsen it the way it does the whole pile's; the button draws the same bins
- * bigger instead, by zooming in, and the photos at the map's edges go out of
- * the frame for it. One step, and one back afterwards, since the button saves
- * the size it sets.
+ * results is shot at: none, so the map is at its fit. That map has one bin
+ * level, so the saved size cannot coarsen it the way it does the whole pile's;
+ * the button draws the same bins bigger instead, by zooming in, and one step
+ * put the photos at the map's edges out of the frame. The fit
+ * (`computeFitZoom` in `browse-canvas/view-transform.ts`) is as far out as the
+ * canvas goes, and it holds every tile whole, the edge ones included, with 5%
+ * to spare, so it is the one framing that shows all of Find's results, a
+ * little closer together (owner, #5203). Any steps taken are taken back
+ * afterwards, since the button saves the size it sets.
  */
-const BROWSE_RESULTS_SIZE_STEPS = 1;
+const BROWSE_RESULTS_SIZE_STEPS = 0;
 
 /** Where the Find Results frame is sending its list: the exporter with one field, filled in. */
 const BROWSE_EXPORT = { exporter: 'Server CSV File', field: 'filepath', value: '/data/books.csv' };
