@@ -33,9 +33,13 @@ function discoverChromium() {
       if (shell(a) !== shell(b)) return shell(a) - shell(b);
       return b.localeCompare(a, undefined, { numeric: true });
     })
+    // Older Playwright builds unpack to `chrome-linux/`; current ones to
+    // `chrome-linux64/` (and the shell to its own `chrome-headless-shell-linux64/`).
     .flatMap((d) => [
       join(root, d, 'chrome-linux', 'chrome'),
       join(root, d, 'chrome-linux', 'headless_shell'),
+      join(root, d, 'chrome-linux64', 'chrome'),
+      join(root, d, 'chrome-headless-shell-linux64', 'chrome-headless-shell'),
     ]);
   return candidates.find((p) => existsSync(p)) ?? null;
 }
