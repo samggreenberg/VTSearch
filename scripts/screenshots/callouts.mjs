@@ -8,9 +8,13 @@
  *   - `box`       — a red outline round the target, with an optional label pill
  *                   above it (or `at: 'right'` / `'bottom'`)
  *   - `highlight` — the same outline, with everything else dimmed
- *   - `ring`      — a red ring round the target, its ends fully rounded and
- *                   its inside `pad` clear of the target: the thing a
- *                   presenter points at, rather than a control to click
+ *   - `ring`      — a red loop round the target, drawn the way a hand draws
+ *                   one: a little tilted, not quite round, clipping the
+ *                   target's corners and overshooting where it started. The
+ *                   thing a presenter points at, rather than a control to
+ *                   click; a ruled stadium read as a widget the app drew
+ *                   (owner, #5171). Its wobble is fixed, so a reshoot draws
+ *                   the same loop.
  *   - `step`      — a numbered marker: the outline plus a filled red disc
  *                   carrying `step` (1, 2, 3 …), and an optional label pill
  *                   beside the disc. `at` puts the disc against the target's
@@ -50,6 +54,20 @@
 
 const ACCENT = '#e8453c';
 const LAYER_ID = '__shot_callouts';
+
+/**
+ * The hand-drawn loop's shape (`ring`): how far past the target's ends and
+ * past its top and bottom the loop reaches, in CSS px before `scale`; how
+ * square it is (a superellipse exponent: 2 is an ellipse, and a little more
+ * hugs a long field's ends instead of ballooning over and under it); its
+ * tilt; where the pen starts and how far past a full turn it runs; and the
+ * wobble and the outward drift that keep the overshoot from landing on the
+ * start.
+ */
+const LOOP = {
+  reachX: 18, reachY: 5, square: 2.6, tiltDeg: 0.8,
+  startTurn: 0.31, overshootTurn: 0.09, wobble: 0.04, drift: 0.05,
+};
 
 /** Every visual size, in CSS px, so one knob scales them for a smaller slot. */
 const SIZES = {
@@ -102,7 +120,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
   }
   const sizes = Object.fromEntries(Object.entries(SIZES).map(([k, v]) => [k, v * scale]));
   return page.evaluate(
-    ({ items, sizes, accent, layerId }) => {
+    ({ items, sizes, accent, layerId, loopShape }) => {
       document.getElementById(layerId)?.remove();
       const layer = document.createElement('div');
       layer.id = layerId;
@@ -135,21 +153,64 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
         layer.appendChild(l);
         return place(l, left, top);
       };
+      // A hand-drawn loop round *box*: a superellipse, tilted, its radius
+      // wobbling and drifting outward as the pen goes round, so the end passes
+      // just outside where it began. Drawn as an SVG path in its own box.
+      const loop = (box) => {
+        const cx = box.x + box.w / 2;
+        const cy = box.y + box.h / 2;
+        const rx = box.w / 2 + loopShape.reachX * sizes.stroke / 4;
+        const ry = box.h / 2 + loopShape.reachY * sizes.stroke / 4;
+        const tilt = (loopShape.tiltDeg * Math.PI) / 180;
+        const turns = 1 + loopShape.overshootTurn;
+        const steps = 240;
+        const pts = [];
+        for (let k = 0; k <= steps; k++) {
+          const s = k / steps;
+          // Clockwise on screen, from the top left.
+          const t = 2 * Math.PI * (loopShape.startTurn - s * turns);
+          const m = 1 + loopShape.wobble * Math.sin(3 * t + 1.1) + loopShape.drift * s;
+          const c = Math.cos(t);
+          const n = Math.sin(t);
+          const ex = rx * m * Math.sign(c) * Math.abs(c) ** (2 / loopShape.square);
+          const ey = -ry * m * Math.sign(n) * Math.abs(n) ** (2 / loopShape.square);
+          pts.push([
+            cx + ex * Math.cos(tilt) - ey * Math.sin(tilt),
+            cy + ex * Math.sin(tilt) + ey * Math.cos(tilt),
+          ]);
+        }
+        const half = sizes.stroke / 2 + 1;
+        const left = Math.min(...pts.map((p) => p[0])) - half;
+        const top = Math.min(...pts.map((p) => p[1])) - half;
+        const right = Math.max(...pts.map((p) => p[0])) + half;
+        const bottom = Math.max(...pts.map((p) => p[1])) + half;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', String(right - left));
+        svg.setAttribute('height', String(bottom - top));
+        Object.assign(svg.style, { position: 'absolute', left: `${left}px`, top: `${top}px`, overflow: 'visible' });
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pts.map(([px, py], k) => `${k ? 'L' : 'M'}${(px - left).toFixed(2)},${(py - top).toFixed(2)}`).join(''));
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', accent);
+        path.setAttribute('stroke-width', String(sizes.stroke));
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(path);
+        layer.appendChild(svg);
+      };
       for (const [i, a] of items.entries()) {
         const { x, y, w, h } = a.box;
-        const ring = a.kind === 'ring';
-        // A ring's inside, not its outside, clears the target by `pad`, and its
-        // round ends reach out as far as it takes to clear the target's corners.
-        const pad = ring ? sizes.pad + sizes.stroke : sizes.pad;
-        const radius = h / 2 + pad;
-        const inner = radius - sizes.stroke;
-        const reach = ring ? Math.max(0, radius - pad - Math.sqrt(inner * inner - (h / 2) ** 2)) : 0;
+        if (a.kind === 'ring') {
+          loop(a.box);
+          continue;
+        }
+        const pad = sizes.pad;
         // The outline, `pad` clear of the target, except on a side where that
         // would put it past the viewport's edge (a panel running to the edge of
         // the window): there it is drawn just inside.
-        const left = Math.max(x - pad - reach, sizes.edge);
+        const left = Math.max(x - pad, sizes.edge);
         const top = Math.max(y - pad, sizes.edge);
-        const right = Math.min(x + w + pad + reach, vw - sizes.edge);
+        const right = Math.min(x + w + pad, vw - sizes.edge);
         const bottom = Math.min(y + h + pad, vh - sizes.edge);
         if (right - left < sizes.stroke * 2 || bottom - top < sizes.stroke * 2) {
           throw new Error(`callout ${i + 1} (${a.label ?? a.step ?? a.kind}): its target is off screen`);
@@ -159,7 +220,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
           position: 'absolute',
           left: `${left}px`, top: `${top}px`,
           width: `${right - left}px`, height: `${bottom - top}px`,
-          border: `${sizes.stroke}px solid ${accent}`, borderRadius: ring ? `${radius}px` : `${sizes.radius}px`,
+          border: `${sizes.stroke}px solid ${accent}`, borderRadius: `${sizes.radius}px`,
           boxShadow: a.kind === 'highlight' ? '0 0 0 4000px rgba(0,0,0,0.28)' : 'none',
           boxSizing: 'border-box',
         });
@@ -230,7 +291,7 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
         x: bounds.left, y: bounds.top, w: bounds.right - bounds.left, h: bounds.bottom - bounds.top,
       };
     },
-    { items: resolved, sizes, accent: ACCENT, layerId: LAYER_ID }
+    { items: resolved, sizes, accent: ACCENT, layerId: LAYER_ID, loopShape: LOOP }
   );
 }
 

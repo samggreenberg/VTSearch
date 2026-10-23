@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterator
 
-from vtscore.datasets.vote_provenance import attach_provenance
+from vtscore.datasets.vote_provenance import attach_provenance, portable_metadata
 from vtscore.utils.hits import hit_custom_metadata
 
 
@@ -113,6 +113,71 @@ class LabeledElement:
         )
 
 
+def imported_region_box(label: str, raw: Any) -> tuple[float, float, float, float] | None:
+    """The drawn box an imported label entry carries, or ``None``.
+
+    For the label-import paths, which read ``region_box`` from a file that may
+    have been edited by hand.  A box is kept only on a ``"good"`` label (no-votes
+    are image-level) and only when it is four numbers; anything else reads as no
+    box rather than failing the import.
+    """
+    if label != "good" or not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in raw):
+        return None
+    return (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
+
+
+def labelset_for_export(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return serialised labelset *payload* as it leaves this server.
+
+    An exported labelset is references to the Good and Bad labels: which
+    media, where each came from, which label it has.  That keeps it
+    embedder-agnostic - labels made under one embedder rebuild the detector
+    under another - so a number measured in one embedder's space, or by one
+    trained head, stays behind (#5131):
+
+    * each entry's ``metadata`` loses the vote provenance's
+      :data:`~vtscore.datasets.vote_provenance.NON_PORTABLE_FIELDS`
+      (``rank_at_vote``, ``score_at_vote``);
+    * ``detector_meta`` loses ``threshold``.
+
+    Every labelset export passes through here: a
+    :class:`~vtscore.labels.sources.base.LabelsetSource` push and the payload
+    handed to an exporter's ``export_labelset``.  Everything else passes
+    through untouched, keys this function does not know included (the Export
+    modal's ``selected_columns``, an entry's ``custom_metadata``).  Copies
+    rather than mutating, since *payload* may be the detector's own record.
+    """
+    out = dict(payload)
+    labels = payload.get("labels")
+    if isinstance(labels, list):
+        out["labels"] = [_portable_entry(entry) for entry in labels]
+    meta = payload.get("detector_meta")
+    if isinstance(meta, dict) and "threshold" in meta:
+        kept = {k: v for k, v in meta.items() if k != "threshold"}
+        if kept:
+            out["detector_meta"] = kept
+        else:
+            del out["detector_meta"]
+    return out
+
+
+def _portable_entry(entry: Any) -> Any:
+    """One serialised :class:`LabeledElement` as :func:`labelset_for_export` sends it."""
+    if not isinstance(entry, dict) or "metadata" not in entry:
+        return entry
+    metadata = portable_metadata(entry["metadata"])
+    if metadata is entry["metadata"]:
+        return entry
+    out = dict(entry)
+    if metadata is None:
+        del out["metadata"]
+    else:
+        out["metadata"] = metadata
+    return out
+
+
 class LabelSet:
     """An ordered collection of :class:`LabeledElement` instances.
 
@@ -123,12 +188,14 @@ class LabelSet:
         elements: Initial list of :class:`LabeledElement` instances.
         detector_meta: Optional detector-level metadata block.  When
             present, lets a labelset round-trip a detector's
-            ``media_type``, ``input_spec`` (clipper + params), and current
-            ``threshold`` so an external consumer can reproduce the
-            detector's expected input format and decision boundary without
-            reading the detector JSON directly.  Strictly informational -
-            ``None`` (the default) means the labelset carries only labels,
-            preserving the legacy format.
+            ``media_type`` and ``input_spec`` (clipper + params) so an
+            external consumer can reproduce the detector's expected input
+            format without reading the detector JSON directly.  It never
+            carries a ``threshold`` out of this server
+            (:func:`labelset_for_export`): a threshold belongs to the head
+            that drew it.  Strictly informational - ``None`` (the default)
+            means the labelset carries only labels, preserving the legacy
+            format.
     """
 
     def __init__(

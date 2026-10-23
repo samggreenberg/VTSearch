@@ -10,6 +10,8 @@
 
 <!-- build: figs/calib-region-max.build3.webp -->
 
+<!-- build: figs/calib-region-max.build4.webp -->
+
 <!-- **a** — Back to that maximum. Two photos in regions, one with a book, one
      without. -->
 
@@ -23,3 +25,7 @@
 <!-- **d** — A max isn't an average, it leans right. Gumbel is to a max what
      Gaussian is to an average, so fit THAT. Does it pay off? We'll know when
      the runs come in. -->
+
+<!-- **e** — The two curves written out, in the same z. The Gaussian falls off
+     as z squared on both sides. The Gumbel falls off fast on the left, but
+     only as e to the minus z on the right: that long right tail is the max. -->

@@ -253,6 +253,56 @@ describe('SettingsModalComponent', () => {
     req.flush(mockSettings);
   });
 
+  describe('alert switches (#5170)', () => {
+    function checkbox(label: string): HTMLInputElement | undefined {
+      return [...(fixture.nativeElement as HTMLElement).querySelectorAll('.checkbox-row')]
+        .find((row) => row.textContent?.includes(label))
+        ?.querySelector('input[type="checkbox"]') as HTMLInputElement | undefined;
+    }
+
+    async function openTab(tab: 'imports' | 'autofind', extraSettings: Record<string, unknown>): Promise<void> {
+      await flushInit(extraSettings);
+      component.activeSettingsTab.set(tab);
+      await settleZoneless(fixture);
+      // Each tab loads its picker lists on init; what they hold does not matter here.
+      httpMock.match(() => true).forEach((req) => req.flush('', { status: 500, statusText: 'unused' }));
+      await settleZoneless(fixture);
+    }
+
+    it('offers import alerts only on a server with import hooks', async () => {
+      await openTab('imports', { import_hooks_configured: false, import_alerts_enabled: true });
+      expect(checkbox('Alert me when an import finishes')).toBeUndefined();
+    });
+
+    it('saves the import-alerts checkbox', async () => {
+      await openTab('imports', { import_hooks_configured: true, import_alerts_enabled: true });
+      const box = checkbox('Alert me when an import finishes') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      box.click();
+      await settleZoneless(fixture);
+      const req = httpMock.expectOne('/api/settings');
+      expect(req.request.body.import_alerts_enabled).toBe(false);
+      req.flush(mockSettings);
+    });
+
+    it('offers to pause the AutoFind export only with an exporter picked', async () => {
+      await openTab('autofind', { autofind_exporter: '', autofind_export_enabled: true });
+      expect(checkbox('Export results when AutoFind finishes')).toBeUndefined();
+    });
+
+    it('pauses the AutoFind export and keeps the exporter', async () => {
+      await openTab('autofind', { autofind_exporter: 'email_smtp', autofind_export_enabled: true });
+      const box = checkbox('Export results when AutoFind finishes') as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      box.click();
+      await settleZoneless(fixture);
+      const req = httpMock.expectOne('/api/settings');
+      expect(req.request.body.autofind_export_enabled).toBe(false);
+      expect(req.request.body.autofind_exporter).toBe('email_smtp');
+      req.flush(mockSettings);
+    });
+  });
+
   it('should default the Graphics pulldown to auto when the setting is unset', async () => {
     await flushInit();
     expect(component.browseGraphics).toBe('auto');

@@ -12,19 +12,20 @@
 
 <!-- build: figs/atlas-far.build4.webp -->
 
-<!-- **a** — Back in our room: seventy-six photos on the floor, none of them
-     ones the atlas has seen. -->
+<!-- **a** — Back in our room: seventy-six photos on the floor. How would we
+     know a photo doesn't belong here? -->
 
-<!-- **b** — Now the real atlas, built on that floor: the center of each of
-     its cells. -->
+<!-- **b** — Split the floor in half. The gray half stays put: it's what
+     every photo gets measured against. -->
 
-<!-- **c** — For each photo it asks: how far am I from my cell's center,
-     against how far that cell's own photos are? On the floor, close. Two of
-     seventy-six look strange, about chance. -->
+<!-- **c** — Each white photo finds its nearest gray one. Short hops, all over
+     the floor. That's our yardstick for near, and a new floor photo would
+     rarely fall outside it. -->
 
 <!-- **d** — Now the ceiling collection. The detector scored these without
      blinking. -->
 
-<!-- **e** — But every one is a long way from every center, and the atlas
-     calls 68 of 76 strange. It knows nothing about books, just where its data
-     was. Not "is this a match?" but "have I been here?" -->
+<!-- **e** — But every one's nearest gray photo is a long way down, farther
+     than any hop on the floor, so all seventy-six look strange. It knows
+     nothing about books, just where our data was. Not "is this a match?" but
+     "have I been here?" -->

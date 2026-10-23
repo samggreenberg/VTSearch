@@ -17,6 +17,9 @@ writes, to ``--out``:
 * ``REPORT_cross_corpus.md``, ``figures/``, and the mandatory quality-over-clicks pair and ``viewer.html`` over the
   in-corpus read of the first leg (the trajectories every leg shares).
 
+``--categories`` reads only the cells a file names, one ``class@band`` a line, in every leg: the Objects365 leg is
+read on the 107 cells both corpora hold (#4815), beside the no-shift leg on the same cells.
+
     python analyze_cross_corpus_4739.py --root /expscratch/$USER/cross-corpus-4739 --out OUTDIR
 """
 
@@ -73,7 +76,9 @@ TRAJECTORY = (
 SPAN_BY = (25, 50, 100, 150)
 
 
-def leg_frames(root: Path, leg: str, seeds: "list[int] | None") -> dict[str, pd.DataFrame]:
+def leg_frames(
+    root: Path, leg: str, seeds: "list[int] | None", keep: "set[str] | None" = None
+) -> dict[str, pd.DataFrame]:
     """Every arm's base rows in *leg*, keyed ``<arm>_<preset>``; an arm with no cells is absent."""
     out = {}
     for p in PRESETS:
@@ -86,6 +91,8 @@ def leg_frames(root: Path, leg: str, seeds: "list[int] | None") -> dict[str, pd.
                 continue
             if seeds is not None:
                 frame = frame[frame["seed"].isin(seeds)]
+            if keep is not None:
+                frame = frame[frame["category"].isin(keep)]
             out[f"{arm}_{p}"] = frame
     return out
 
@@ -161,9 +168,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--legs", help="comma-separated legs to read; default every leg with cells")
     ap.add_argument("--horizon", type=int, default=150)
     ap.add_argument("--seeds", help="comma-separated seeds to read (an interim read); default all")
+    ap.add_argument("--categories", type=Path, help="read only these cells, one class@band a line")
     ap.add_argument("--no-figures", action="store_true")
     ap.add_argument("--no-viewer", action="store_true")
     args = ap.parse_args(argv)
+    keep = ap4671.read_categories(args.categories)
     root, out = Path(args.root), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     bl_path = Path(args.baseline) if args.baseline else root / "text_baseline.csv"
@@ -193,6 +202,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         ]
         if args.seeds:
             leg_args += ["--seeds", args.seeds]
+        if args.categories:
+            leg_args += ["--categories", str(args.categories)]
         if args.no_figures:
             leg_args.append("--no-figures")
         rc = ap4671.main(leg_args)
@@ -210,12 +221,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     # The trajectories: one read of Span, and every leg checked against the first.
     ref_leg = legs[0]
-    ref = leg_frames(root, ref_leg, seeds)
+    ref = leg_frames(root, ref_leg, seeds, keep)
     span = pd.DataFrame(span_rows(ref, args.horizon))
     span.to_csv(out / "span.csv", index=False, float_format="%.6g")
     ident: list[dict] = []
     for leg in legs[1:]:
-        ident += identity_rows(ref_leg, ref, leg, leg_frames(root, leg, seeds))
+        ident += identity_rows(ref_leg, ref, leg, leg_frames(root, leg, seeds, keep))
     ident_frame = pd.DataFrame(ident)
     ident_frame.to_csv(out / "identity.csv", index=False)
     differing = int(ident_frame["runs_differing"].sum()) if not ident_frame.empty else 0
@@ -288,7 +299,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             )
     (out / "REPORT_cross_corpus.md").write_text("\n".join(lines).rstrip("\n") + "\n")
     (out / "provenance.json").write_text(
-        json.dumps({"root": "<root>", "legs": legs, "reference_leg": ref_leg, "seeds": seeds}, indent=2) + "\n"
+        json.dumps(
+            {
+                "root": "<root>",
+                "legs": legs,
+                "reference_leg": ref_leg,
+                "seeds": seeds,
+                "categories": args.categories and args.categories.name,
+            },
+            indent=2,
+        )
+        + "\n"
     )
     print("\n".join(lines))
 

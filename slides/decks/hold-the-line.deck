@@ -72,13 +72,15 @@ slides:
   # become vectors; a detector as a boundary through them, retrained on every
   # vote; then the boundary itself, a linear SVM: what it fits, and how fast it
   # is to fit after every click and to run over the whole pile
-  # (`make-svm-figs.py`). Pics on a Plane's last two pages, the line's two jobs,
-  # are what Calibration opens on.
+  # (`make-svm-figs.py`), and the other heads tried before it (owner, #5171).
+  # Pics on a Plane's last two pages, the line's two jobs, are what Calibration
+  # opens on.
   outline-hold-the-line +at2
   embed-flow
   vote-boundary
   svm-margin
   svm-speed
+  svm-heads
 
   # III — Calibration: how to threshold a model without reusing the data that
   # trained it. The three ideas the labels line (section IV) is built from,
@@ -150,10 +152,12 @@ slides:
   # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure and the walk down its tree, the second job that
-  # structure also does, and the atlas doing it on that very room (#4517).
-  # A Likely Story, how calibrated the atlas's typicality score is, was cut:
-  # too technical about a feature the app rarely uses (owner, #4872).
+  # for, the structure and the walk down its tree, then a bigger blind spot no
+  # vote can reach, and the domain-shift check finding it in that very room
+  # (#4517). That check was the atlas's second job until #3348 moved it onto
+  # the reference's own photos. A Likely Story, how calibrated the atlas's
+  # typicality score was, was cut: too technical about a feature the app
+  # rarely uses (owner, #4872).
   outline-hold-the-line +at5
   atlas-blindspot
   atlas-cells
@@ -190,6 +194,10 @@ slides:
   # of signs (`shoot-ui-figs.mjs`'s `browse` group, `make-signpost-figs.py`).
   outline-hold-the-line +at7
   vision-umap
+  # Lost & Found again, Find's 19 as a list and then as a map, so the room
+  # knows what it is about to look at (owner, #5171): one slide shown twice,
+  # 6c and 6d here.
+  vision-find
   vision-map
   vision-tile
   vision-names
@@ -208,11 +216,11 @@ slides:
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
-  # Up and Up: what the F-beta era bought at beta 1/4, in two lifts (#4668),
-  # with today's app re-run on the same sessions (#4835), then the text
-  # query's sort at an oracle's cut, unfair against us; then the same chart at
-  # beta 1 and 4, all frames of one slide (owner, #4884). At beta 1 the line at
-  # F-beta's peak only ties cross-calibration, and the notes say so.
+  # Up and Up: what the F-beta era bought at beta 1/4, the old mechanics
+  # against the new (#4668, owner #5171): cross-calibration in red, today's app
+  # re-run on the same sessions (#4835) in green, then the text query's sort at
+  # an oracle's cut, unfair against us; then the same chart at beta 1 and 4, all
+  # frames of one slide (owner, #4884).
   up-and-up
   # Follow Suit, what the work since the first rule bought (#4548), is in the
   # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
@@ -242,7 +250,8 @@ slides:
   # known size on its own (#4932: Clopper–Pearson only as the endless-list
   # contrast), what a check says about the line without moving it (#4427,
   # #4452, #4517).
-  # Flight Plan in section VI names it as step A (#4836, #4872).
+  # All Sorts of Sorts (once Flight Plan) in section VI names it as step A
+  # (#4836, #4872, #5171).
   floor-ask
   clopper-pearson
   floor-check

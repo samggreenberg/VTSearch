@@ -92,14 +92,14 @@ detector can apply. The default `_do_load_full()` wraps each dict in a
 for sources that only round-trip label/MD5 pairs.
 
 Override `_do_load_full()` when your source carries detector-level
-metadata you want the receiving detector to adopt - input spec
-(media type, embedder, clipper choice), threshold, etc. The returned
+metadata you want the receiving detector to adopt - its input spec
+(media type, clipper choice). The returned
 `LabelSet.detector_meta` is folded into the detector's on-disk JSON
 via `apply_detector_meta`
 ([`vtscore/detectors/input_spec.py`](../../detectors/input_spec.py))
-on import. Threshold is intentionally **not** persisted from
-`detector_meta` - the receiving detector retrains its head from the
-imported labels and computes its own threshold; remember the
+on import. A `threshold` in `detector_meta` (an older VTSearch pushed
+one) is intentionally **not** persisted - the receiving detector retrains
+its head from the imported labels and computes its own threshold; remember the
 [no-persisted-vectors-or-MLPs invariant](README.md#shared-rules-for-every-plugin).
 
 The built-in server-JSON-file source
@@ -182,8 +182,11 @@ call it; knowing what it does tells you what your source can assume.
 one, so votes, label imports, corrections and renames all reach your
 source. The `LabelSet` you receive is the detector file's **whole**
 labelset - every dataset's labels, not just the active dataset's votes -
-plus a `detector_meta` block, read when the push runs. Pushes are paced
-per detector:
+plus a `detector_meta` block (`media_type`, `input_spec`), read when the
+push runs. It is references to labels, nothing measured from them: no
+threshold, and no `rank_at_vote` / `score_at_vote` in an element's
+`vt:provenance` (#5131), so the labels can rebuild the detector under
+another embedder. Pushes are paced per detector:
 
 - never two at once for one detector, so `_do_save` is not re-entered for
   the same detector (different detectors may push concurrently);

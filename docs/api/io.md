@@ -42,6 +42,10 @@ the `GET /api/labels/export` response). When omitted it is inferred: a dict
 with a top-level `labels` key is a labelset. A kind the exporter doesn't list in `supported_payloads` is a 400.
 `detector_bundles` is refused with a 422: it is the trained classifiers
 themselves, which only the CLI pipeline has, so this route cannot build one.
+A `labelset` reaches the exporter without what this server's embedder and head
+measured: each entry's `metadata["vt:provenance"]` loses `rank_at_vote` and
+`score_at_vote`, and a `detector_meta` loses `threshold`. An exported labelset
+is references to labels, so it can rebuild the detector under another embedder.
 
 → `{success, message, open_url, display_results}`: `success` always, the rest
 only when the exporter returns them

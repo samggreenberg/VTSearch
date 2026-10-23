@@ -251,7 +251,7 @@ same kind of thing:
 | | What it is | What the speaker page draws |
 |---|---|---|
 | `build` (the default) | One picture revealed in stages, so the last frame contains all of them | The earlier frames in letter order, in the smallest square grid that holds them (1×1, 2×2, 3×3, …), then that last frame large beneath them |
-| `equal` | Frames of equal standing — three screens of a click-through, six votes in a row | Every frame at one size, no hero, so each is bigger than a strip thumbnail |
+| `equal` | Frames of equal standing — three screens of a click-through, six votes in a row | Every frame at one size, no hero, so each is bigger than a strip thumbnail: a pair stacks, three or four sit in a 2×2, more go three to a row |
 
 Build-up is the default because that is what a build marker usually means, and
 most figure builds are additive. Declare `equal` when no frame contains the
@@ -310,7 +310,10 @@ into the speaker's hand sixteen times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with every earlier page of the group as a lettered contact sheet, in letter
-order, and the final stage large under it, beside the notes. The speaker
+order, and the final stage large under it, beside the notes. A picture the
+deck shows more than once the same way (a fragment repeated with the same
+`+class` tokens) is drawn once, captioned with all its letters (`a, c`), so a
+repeat does not shrink the frames it repeats. The speaker
 narrates from the complete picture,
 sees what each advance will put on screen, and refers to them by the letters
 the audience deck prints. Markers never leak into presenter notes.

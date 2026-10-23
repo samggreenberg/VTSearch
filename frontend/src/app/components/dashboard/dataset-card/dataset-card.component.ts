@@ -15,6 +15,7 @@ import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/contex
 import { IconComponent } from '../../icon/icon.component';
 import { buildDatasetCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
+import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +33,7 @@ import { DashboardLoadingTasksService } from '../../../services/dashboard-loadin
 })
 export class DatasetCardComponent {
   private readonly loadingTasksSvc = inject(DashboardLoadingTasksService);
+  private readonly mediaTypeCaps = inject(MediaTypeCapabilityService);
 
   readonly dataset = input<any>(undefined);
   readonly currentUser = input('');
@@ -238,6 +240,12 @@ export class DatasetCardComponent {
   get importSiblingsTitle(): string {
     const siblings = this.importSiblings() ?? [];
     return `Imported together with ${siblings.join(', ')}`;
+  }
+
+  /** The Type cell's icon, as the media-type registry serves it (the
+   *  dashboard loads it), so every type gets one, not a hardcoded few (#5178). */
+  get typeIcon(): string {
+    return this.mediaTypeCaps.iconFor(this.dataset()?.media_type);
   }
 
   capitalizeType(type: string | undefined): string {

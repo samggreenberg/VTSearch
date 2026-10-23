@@ -217,7 +217,7 @@ from vtscore.datasets.labelset import LabelSet
 
 labelset = LabelSet(
     [elem1, elem2, ...],
-    detector_meta={"media_type": "audio", "threshold": 0.41},
+    detector_meta={"media_type": "audio"},
 )
 len(labelset)                              # 2 - delegates to .elements
 labelset.elements[0].label                 # "good"
@@ -236,7 +236,9 @@ origin). Serialisation is dict-shaped, not string-shaped: `to_dict` /
 labelset-source / labelset-exporter plugin contracts, and JSON encoding is
 the caller's business. `LabeledElement.metadata` is the recommended escape
 hatch for per-label data that doesn't fit the core fields - it survives
-every serialisation boundary.
+every serialisation boundary. The one thing an export leaves behind is the
+rank and score in VTSearch's own `"vt:provenance"` record, which were
+measured by this server's embedder and head (`labelset_for_export`, #5131).
 
 ## 5. Embedder
 

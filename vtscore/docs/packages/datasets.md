@@ -18,14 +18,14 @@ The largest package in the library. Every module, grouped by role.
 | Module | Concern |
 |--------|---------|
 | `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
-| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key` |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export` |
 | `vtscore/datasets/metadata.py` | Per-media metadata extraction |
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
 | `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
 | `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
-| `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped; nothing acts on it yet) |
+| `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped, less its rank and score on export; nothing acts on it yet) |
 
 **Loading and persistence**
 
@@ -171,14 +171,27 @@ re-export.
 serialised form compact for legacy consumers that only look at
 `md5` and `label`.
 
+A label import path reads an entry's box through `imported_region_box(label, raw)`
+(same module). It returns the box as a float 4-tuple only for a `"good"` label
+whose value is four numbers, and `None` for anything else, so a hand-edited file
+degrades to an image-level label rather than failing the import.
+
 ### `LabelSet`
 
 `vtscore/datasets/labelset.py`: `LabelSet(elements=None, *,
 detector_meta=None)` - an ordered list of `LabeledElement` plus an
-optional `detector_meta` block (`media_type`, `input_spec`,
-`threshold`). The serialised form
-`{"labels": [...], "detector_meta": {...}}` is a strict superset of
-the legacy `{"labels": [{"md5", "label"}, …]}` shape.
+optional `detector_meta` block (`media_type`, `input_spec`). The
+serialised form `{"labels": [...], "detector_meta": {...}}` is a strict
+superset of the legacy `{"labels": [{"md5", "label"}, …]}` shape.
+
+`labelset_for_export(payload)` (same module) is that serialised form as it
+leaves the server, and every labelset export goes through it: a
+`LabelsetSource` push and the payload an exporter's `export_labelset`
+receives. It drops what was measured by this server's embedder or head, which
+means nothing to a receiver that trains its own (#5131): `threshold` from
+`detector_meta`, and `rank_at_vote` / `score_at_vote` from each element's
+`vt:provenance` (`vote_provenance.NON_PORTABLE_FIELDS`). The rest of the
+payload passes through, and the detector's own JSON keeps every field.
 
 ```python
 from vtscore.datasets import LabelSet, LabeledElement
@@ -315,7 +328,10 @@ fresh. `converter_name` loads the source type and converts it (cached
 under a separate key). The package root also re-exports the raw
 downloaders behind some demos (`download_esc50`, `download_cifar10`,
 `download_ucf101_subset`, `download_20newsgroups`) and the generic
-`download_file_with_progress` (`vtscore/datasets/downloader/`). Unknown names raise `ValueError`. The actual download / embedding is delegated to each
+`download_file_with_progress` (`vtscore/datasets/downloader/`), which
+resumes a dropped transfer and, for a demo URL in the downloader's mirror
+table (`_MIRRORS` in `downloader/core.py`), falls back to its mirrors when the
+canonical host fails. Unknown names raise `ValueError`. The actual download / embedding is delegated to each
 `MediaType.load_demo_source` implementation, so adding a new demo
 dataset is a media-tier concern.
 
@@ -571,9 +587,10 @@ its own and lands as its own registry entry with its own
 **When an import ends.** `_run_origin_load_in_background(...,
 on_finished=None)` calls *on_finished* once with a frozen
 `DatasetImported(outcome, dataset_id, name, user, media_type, n_media,
-origin, error)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
-is not reported). The app routes it to the functions an admin names with
-`--on-dataset-imported`.
+origin, error, notify)` (`outcome` is `SUCCEEDED` or `FAILED`; a cancelled import
+is not reported). The pipeline leaves `notify` at `True`; the app sets it from
+the user's `import_alerts_enabled` setting and routes the event to the
+functions an admin names with `--on-dataset-imported`.
 
 ---
 

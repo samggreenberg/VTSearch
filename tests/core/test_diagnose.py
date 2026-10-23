@@ -23,7 +23,7 @@ LOGGER = "vtsearch.diagnose"
 def _clean_env(monkeypatch):
     """Start from an unset environment; each test opts into what it needs."""
     monkeypatch.delenv(diagnose.DIAGNOSE_ENV, raising=False)
-    for name in diagnose.PRESET:
+    for name in (*diagnose.PRESET, *diagnose.BAR_ENVS):
         monkeypatch.delenv(name, raising=False)
     yield
 
@@ -109,15 +109,52 @@ class TestEffectiveSettings:
 
 
 class TestStartupLine:
-    def test_logged_at_warning_so_a_stock_deployment_records_it(self, caplog):
-        """The failure this prevents: a log whose 'no slow requests' cannot be
-        told from 'the bar was a second'. At INFO it would be absent from
-        exactly the deployments that need it."""
-        with caplog.at_level(logging.WARNING, logger=LOGGER):
+    @staticmethod
+    def _levels(caplog) -> list[int]:
+        with caplog.at_level(logging.INFO, logger=LOGGER):
             diagnose.log_effective_settings()
-        records = [r for r in caplog.records if "diagnostics config" in r.getMessage()]
-        assert len(records) == 1
-        assert records[0].levelno == logging.WARNING
+        return [r.levelno for r in caplog.records if "diagnostics config" in r.getMessage()]
+
+    def test_stock_bars_stay_below_a_stock_log_level(self, caplog):
+        """#5174: the shipped defaults are not worth a WARNING on every start,
+        and with every bar stock the line's absence says the same thing."""
+        assert self._levels(caplog) == [logging.INFO]
+
+    @pytest.mark.parametrize("name", diagnose.BAR_ENVS)
+    def test_a_customized_bar_is_logged_at_warning(self, caplog, monkeypatch, name):
+        """The failure this prevents: a log whose 'no slow requests' cannot be
+        told from 'the bar was a second'. At INFO a hand-set bar would be
+        absent from exactly the deployments that need it."""
+        monkeypatch.setenv(name, "1")
+        assert self._levels(caplog) == [logging.WARNING]
+
+    def test_the_diagnose_switch_is_logged_at_warning(self, caplog, monkeypatch):
+        monkeypatch.setenv(diagnose.DIAGNOSE_ENV, "1")
+        assert self._levels(caplog) == [logging.WARNING]
+
+    def test_an_empty_variable_reads_as_stock(self, caplog, monkeypatch):
+        """Every accessor reads an empty value as its default, so it moved no bar."""
+        monkeypatch.setenv("VTSEARCH_SLOW_PHASE_MS", "")
+        assert self._levels(caplog) == [logging.INFO]
+
+    def test_bar_envs_name_the_variables_the_accessors_read(self):
+        """A renamed variable would leave its bar customizable without the
+        line noticing, which is the ambiguity WARNING exists to prevent."""
+        from vtscore.concurrency import stalls
+        from vtscore.detectors import store
+
+        from vtsearch import hooks
+
+        assert set(diagnose.BAR_ENVS) == {
+            hooks._SLOW_REQUEST_MS_ENV,
+            stalls.SLOW_PHASE_MS_ENV,
+            stalls.GC_WARN_MS_ENV,
+            stalls.WATCHDOG_MS_ENV,
+            stalls.STARTUP_MS_ENV,
+            stalls.LIVE_DUMP_ENV,
+            stalls.GC_FREEZE_ENV,
+            store.WRITE_MODE_ENV,
+        }
 
     def test_line_carries_every_threshold(self, caplog, monkeypatch):
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "654")

@@ -1,5 +1,13 @@
 # Coverage Atlas: domain-shift and evidence-aware verification for transferred detectors
 
+> **Status 2026-10-23 (#3348): Q1 typicality is no longer the atlas's job.** The
+> per-node calibration below (leave-one-out `μ̂ᵀx` quantiles, averaged along the
+> path) was measured as miscalibrated on every embedder (KS 0.11) and useless on
+> patch spaces. The domain-shift report is now a split-conformal kNN against the
+> reference dataset's vectors (`vtscore/coverage/domain_shift.py`). The atlas
+> keeps the partition, evidence channels and moments. See
+> [the #3348 report](../experiments/2026-10-23-atlas-node-model-3348/REPORT.md).
+
 **Status:** design writeup; the first slices have shipped (Background below). This document is the output of a first-principles design discussion ("invent the perfect density structure, don't adapt the existing one"). It scopes the science; the sections below remain the spec for the unshipped parts.
 
 **Background — what already exists:** the Diversity Tree has been migrated to a `CoverageAtlas` (`vtscore/coverage/atlas.py`): the same hierarchical k-means partition, now over mean-centered renormalized embeddings (§4.1's cone fix), keeping per-node per-class evidence counts (`n_pos`/`n_neg`), mean-direction moments (`mu`, `rbar`), and 21-point leave-one-out typicality quantiles. Q1 typicality is live (path-averaged p-values, calibration gated on node size ≥ 20 and `rbar` ≥ 0.1 — the root is degenerate by construction after centering). The autopilot's diversity step samples mass-first (siblings stored largest-first) and picks the node's most typical element when unscored. The atlas serializes into the dataset pickle (`"coverage_atlas"` cache key), and an in-session domain-shift report exists at `GET /api/datasets/registry/<id>/domain-shift` (active dataset's items vs `<id>`'s atlas; refuses on embedder mismatch) — surfaced in the Find view's result pane (`line-test-result`) as a **Training-domain overlap** section.

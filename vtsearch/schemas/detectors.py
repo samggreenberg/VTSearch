@@ -792,8 +792,8 @@ class AutoDetectResponseSchema(Schema):
     # reference from another user's deletion). Reported so a scheduled run
     # never silently drops a detector the user thinks is still active.
     missing_detectors = fields.List(fields.String(), required=True)
-    # Present only when an AutoFind results exporter is configured: the
-    # outcome of auto-exporting these results.
+    # Present only when an AutoFind results exporter is configured and the
+    # user has not paused it: the outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
 
 
@@ -1100,7 +1100,7 @@ class FindStatsResponseSchema(Schema):
 class FindEvidenceCoverageResponseSchema(Schema):
     """Response for ``GET /api/find/evidence-coverage``.
 
-    The cross-user complement to the atlas domain-shift report: how much of the
+    The cross-user complement to the domain-shift report: how much of the
     active dataset the detector is calling *without labeled evidence behind the
     call*, measured from the detector's own labelset (re-embedded in memory at
     load), so it fires even when the training haystack was never handed over.

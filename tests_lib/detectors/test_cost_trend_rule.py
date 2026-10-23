@@ -181,6 +181,17 @@ class TestNoiseGate:
         assert "bounces around" in noisy["reason"]
         assert "bounces around" not in settled["reason"]
 
+    def test_no_green_tells_the_user_to_stop(self):
+        # #5137: Smart greens at a median click 13 with 0.28 of F-beta still to come; stopping is Done's to say.
+        greens = [
+            smart_status_from_costs(PLATEAU_WINDOW, 9, 9),
+            smart_status_from_costs([0.43] * SMART_WINDOW, 9, 9),
+            rising_status_from_scores(PLATEAU_FBETAS, 9, 9),
+            rising_status_from_scores([0.57] * SMART_WINDOW, 9, 9),
+        ]
+        assert {g["status"] for g in greens} == {"green"}
+        assert not any("stop" in g["reason"].lower().replace("stopped rising", "") for g in greens)
+
 
 class TestFalseYellowRateIsNoiseInvariant:
     """A flat series must not turn the light yellow, however noisy it is.

@@ -19,38 +19,33 @@ class DomainShiftUnavailable(Exception):
 
 
 def domain_shift_against(reference_id: str, active_ctx: Any) -> dict[str, Any]:
-    """Report domain shift of *active_ctx*'s vectors under *reference_id*'s coverage atlas.
+    """Report domain shift of *active_ctx*'s vectors against *reference_id*'s own vectors.
 
-    Raises :class:`DomainShiftUnavailable` when the reference is not loaded or
-    has no atlas, is the active dataset itself, uses another embedder or a
-    patch embedder, or the active dataset has no embeddings.  The caller has
-    already checked that *reference_id* is registered and readable.
+    :func:`vtscore.coverage.domain_shift_report`: a split-conformal kNN over the
+    reference dataset's whole-image vectors, so a p-value is uniform for an
+    item drawn from the reference, on every embedder, patch spaces included
+    (#3348).  Raises :class:`DomainShiftUnavailable` when the reference is not
+    loaded, is the active dataset itself, uses another embedder, has too few
+    embeddings to calibrate, or the active dataset has no embeddings.  The
+    caller has already checked that *reference_id* is registered and readable.
 
-    **Refused for patch embedders.**  The guard's separation between "my own
-    data" and "a different corpus" collapses to 0.13 on ``dinov3_patch`` —
-    close to a constant — because patch spaces are far less concentrated than
-    single-vector ones, and every threshold repair was priced and failed.  See
-    ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
+    Until #3348 this ranked against the reference's coverage atlas, needed the
+    atlas built, and refused patch embedders, where it fired on 60-80 % of the
+    reference's own held-out data.
     """
     import numpy as np
 
-    from vtscore.coverage.atlas import domain_shift_report
+    from vtscore.coverage.domain_shift import ReferenceTooSmall, domain_shift_report
     from vtscore.datasets.registry import get_dataset
-    from vtscore.embedding.binding import embedder_supports_patch_regions
-    from vtscore.embedding.media_vectors import media_embedding
     from vtscore.state.core import get_context
 
     ref_ctx = get_context(reference_id)
     if ref_ctx is None:
         raise DomainShiftUnavailable("Load the reference dataset before running a domain-shift check")
-    atlas = ref_ctx.coverage_atlas
-    if atlas is None:
-        raise DomainShiftUnavailable("Reference dataset has no coverage atlas; build it first")
     if active_ctx.dataset_id == reference_id:
         raise DomainShiftUnavailable("Active dataset and reference dataset are the same")
     # Typicality p-values are meaningless across embedding spaces: refuse
-    # instead of returning confident nonsense (the atlas geometry is stamped
-    # by its dataset's embedder).
+    # instead of returning confident nonsense.
     ref_embedder = (get_dataset(reference_id) or {}).get("embedder", "")
     active_embedder = (get_dataset(active_ctx.dataset_id) or {}).get("embedder", "")
     if ref_embedder != active_embedder:
@@ -58,28 +53,31 @@ def domain_shift_against(reference_id: str, active_ctx: Any) -> dict[str, Any]:
             f"Embedder mismatch: reference uses {ref_embedder or 'unknown'!r}, "
             f"active dataset uses {active_embedder or 'unknown'!r}"
         )
-    # Patch spaces are too diffuse for the atlas's fixed-alpha guard to carry
-    # information — measured, not assumed: on ``dinov3_patch`` it fires on 80%
-    # of the reference dataset's *own* held-out data against 93% for a
-    # different corpus, a separation of 0.13, i.e. close to a constant.  Both
-    # obvious repairs (dropping the path averaging, refitting alpha per
-    # embedder) were priced and made it worse.  Refusing is the honest answer;
-    # returning a verdict here answers a direct question with noise.
-    if embedder_supports_patch_regions(ref_embedder):
-        raise DomainShiftUnavailable(
-            f"Domain-shift checks are not supported for patch embedders "
-            f"({ref_embedder!r}): the typicality guard does not separate "
-            f"in-domain from out-of-domain data in a patch space"
-        )
 
-    vectors = [
-        np.asarray(emb, dtype=np.float32)
-        for media in active_ctx.medias.values()
-        if (emb := media_embedding(media)) is not None
-    ]
+    vectors = _media_vectors(active_ctx)
     if not vectors:
         raise DomainShiftUnavailable("Active dataset has no embeddings to compare")
-    return {"reference_dataset_id": reference_id, **domain_shift_report(atlas, np.stack(vectors))}
+    reference = _media_vectors(ref_ctx)
+    if not reference:
+        raise DomainShiftUnavailable("Reference dataset has no embeddings to compare against")
+    try:
+        report = domain_shift_report(np.stack(reference), np.stack(vectors))
+    except ReferenceTooSmall as e:
+        raise DomainShiftUnavailable(f"Reference dataset is too small for a domain-shift check: {e}") from e
+    return {"reference_dataset_id": reference_id, **report}
+
+
+def _media_vectors(ctx: Any) -> list[Any]:
+    """The whole-image vector of every media of *ctx* that has one, in id order."""
+    import numpy as np
+
+    from vtscore.embedding.media_vectors import media_embedding
+
+    return [
+        np.asarray(emb, dtype=np.float32)
+        for _cid, media in sorted(ctx.medias.items())
+        if (emb := media_embedding(media)) is not None
+    ]
 
 
 def infer_training_reference(labelset: Any, active_dataset_id: str) -> tuple[str, dict[str, int]]:

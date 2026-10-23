@@ -1059,3 +1059,81 @@ VGGFACE2_IDENTITIES: list[tuple[str, str]] = [
 
 # Display-name category list, in the same order as ``VGGFACE2_IDENTITIES``.
 VGGFACE2_CATEGORIES: list[str] = [name for _cid, name in VGGFACE2_IDENTITIES]
+
+
+# ------------------------------------------------------------------
+# Celebrity Together (Celebrities in Context demo) - a curated subset
+# ------------------------------------------------------------------
+# Celebrity Together (Zhong, Arandjelovic & Zisserman, ACCV 2018) is ~194k
+# red-carpet / event / press photos, most holding two to four people, each
+# celebrity face boxed and named.  Where VGGFace2's photos are framed on one
+# face, these are whole scenes, so a face search has to localise the face
+# first.  The demo takes 60 recognisable people with 150+ photos each on the
+# HuggingFace mirror (30 women, 30 men; actors, musicians, TV hosts, Bollywood
+# and sport).  Names are the dataset's own (VGG Face's 2,622-identity list).
+# A photo's ``category`` is the person it was picked for; anyone else in it
+# goes unlabelled.  The photos per person are pinned in
+# ``vtscore/media/assets/celebrity_together.json``, which
+# ``scripts/build_celebrity_together_manifest.py`` builds from this list.
+CELEBRITY_TOGETHER_CATEGORIES: list[str] = [
+    "Aamir Khan",
+    "Adam Driver",
+    "Akshay Kumar",
+    "Amitabh Bachchan",
+    "Amy Poehler",
+    "Andrew Garfield",
+    "Anne Hathaway",
+    "Blake Lively",
+    "Bradley Cooper",
+    "Cara Delevingne",
+    "Carrie Underwood",
+    "Chris Hemsworth",
+    "Colin Firth",
+    "Daniel Craig",
+    "Emma Stone",
+    "Eva Longoria",
+    "Harry Styles",
+    "Helen Mirren",
+    "Helena Bonham Carter",
+    "Hugh Jackman",
+    "Hugh Laurie",
+    "Idris Elba",
+    "James Corden",
+    "Jamie Chung",
+    "Jamie Foxx",
+    "Jared Leto",
+    "Jimmy Fallon",
+    "Julia Roberts",
+    "Katy Perry",
+    "Kerry Washington",
+    "Kevin Bacon",
+    "Kevin Hart",
+    "Kristen Stewart",
+    "Maria Sharapova",
+    "Marion Cotillard",
+    "Megan Fox",
+    "Melissa McCarthy",
+    "Michael Fassbender",
+    "Mila Kunis",
+    "Miley Cyrus",
+    "Mindy Kaling",
+    "Natalie Portman",
+    "Nicki Minaj",
+    "Quentin Tarantino",
+    "Rachel McAdams",
+    "Rita Ora",
+    "Robert Pattinson",
+    "Ryan Reynolds",
+    "Samuel L. Jackson",
+    "Sandra Oh",
+    "Seth Rogen",
+    "Snoop Dogg",
+    "Sonam Kapoor",
+    "Steve Carell",
+    "Steven Yeun",
+    "Taraji P. Henson",
+    "Taylor Swift",
+    "Tom Hiddleston",
+    "Zac Efron",
+    "Zoe Saldana",
+]

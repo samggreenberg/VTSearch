@@ -17,6 +17,60 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Exported labels no longer carry this server's scores or threshold** (issue #5131). An exported labelset says
+  which items are Good and Bad and where each came from, so the labels can rebuild the detector under another
+  embedder. A labelset-source push and Export labels (Webhook included) used to send the trained head's threshold
+  and, per label, the rank and score it had when you voted: numbers from this server's embedder that mean nothing
+  at the other end. Both now leave them behind. The detector keeps them, and how each label was drawn (flow, phase,
+  select mode, sort) still travels.
+
+- **A green Smart light no longer says you can stop** (issue #5137). Smart goes green about as soon as it can read
+  anything (a median click 13 on Binary Photo), with over a quarter of the session's F-beta still to come. Its
+  reason in `/api/labeling-status` now says only what it measures ("F-beta has stopped rising."); Done is still what
+  tells you the session has ended. And until a detector ranks what you see (the learned sort), a green Smart shows
+  yellow, its tooltip saying why: it used to green while you were still labeling your search's matches. On Binary
+  Photo that moves its first green from about click 13 to about click 32, where what is still to come drops from
+  0.26 to 0.11 of F-beta at β 1. Autopilot behaves exactly as before: it reads no light until its learned sort.
+
+- **Demos load from a mirror when their home server is down.** On 2026-10-22 Stanford's cs.stanford.edu and
+  ai.stanford.edu stopped answering, and the Visual Genome and IMDB demos failed with "Couldn't reach
+  cs.stanford.edu". A demo whose file has a known mirror still tries its original host first, then, after three
+  failed connections (or at once, if the host says the file is gone or serves a web page instead), downloads the
+  same file from the mirror. The progress line says when it switches. Visual Genome, IMDB, Caltech-101,
+  Caltech-256, Food-101, Oxford Flowers and Reuters-21578 have a copy on Hugging Face (no sign-in needed);
+  Places365, Oxford Buildings' labels, Enrico, BBC News and KTH Actions, and some of the first group as a last
+  resort, have the Internet Archive's Wayback Machine. Each copy was checked to be the same file, byte for byte.
+  Oxford Buildings' image archive has no copy anywhere, so that demo still needs its home server.
+
+- **A converted import keeps its progress bar moving** (issue #5176). Importing a demo with a Convert to choice
+  (images to faces, say) first embedded every source item with the target's embedder, work the conversion then threw
+  away: an image→face demo ran FaceNet over every whole photo before looking for a single face. That pass filled most
+  of the bar, so the conversion and the real embedding crawled along its last few percent and the import looked
+  stalled. The sources are no longer embedded, and a conversion has its own stretch of the bar after the load, for
+  folder imports with a converter too.
+
+- **Toasty's hints are shorter, and bold every button they name** (issue #5175). Hints no longer repeat what
+  their step already says or explain what the next sentence makes plain. **Add Dataset**'s now says "Pick where your
+  images or other media come from, then click **Import**.", since picking the source *is* filling in the form, and
+  **New Detector**'s just "Describe what you're looking for or give an example." Most hints on the path are
+  shorter, "images, sounds or other media" is now "images or other media", and **Use This Example?** names the
+  example's kind ("**OK** uses the whole image."). A button or tab a hint names is in bold, under the label it
+  carries: the Tune view's verdict hint says **Move to AutoFind**, and **Tune** and the Review tab's **Good** /
+  **Bad** are bold now too. A detector's name no longer is.
+
+- **A normal start no longer logs a `diagnostics config` warning** (issue #5174). Every start used to print the
+  stall-diagnostics thresholds as a WARNING-level JSON line, shipped defaults and all. It now goes out at WARNING
+  only when a threshold is off its default (`VTSEARCH_DIAGNOSE=1`, or a bar set by hand), and at INFO otherwise, so
+  `-v` or `VTSEARCH_LOG_LEVEL=INFO` still shows it.
+
+- **A Find results Browse link opens on its own** (issue #5129). A link copied from Browse after clicking
+  Browse in the Find Results dialog used to work only in the tab that made it: reloaded, opened in a new tab or
+  sent to someone, it said the map had expired. Browse now fetches the run the link names and lays out the same
+  rows (Good, Bad or both, which the link now records), as long as the server still keeps the run: its most recent
+  runs, none from before a restart, each for the user who ran it. Past that it says the results are gone. Old
+  `/find/<dataset>/<detector>` and `/test/<dataset>/<detector>` links now open that pair in Tune instead of the
+  Dashboard.
+
 - **The Smart light reads F-beta going up, not mistakes going down** (issue #5134). Smart asks whether the detector
   is still getting better. It used to answer by watching each recent detector's mistakes (FPR + FNR) stop falling,
   the last place the app scored a detector in anything but F-beta. It now watches each one's best F-beta on your
@@ -472,6 +526,22 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
+  and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~86 / ~259 MB), taken from the
+  Celebrity Together dataset's red-carpet, event and press photos. Unlike the VGGFace2 Faces demo, whose photos are
+  framed on one face, each photo shows the scene around the person, usually with other people in it, so the face
+  path has to find the faces first: load it with the **Images → Faces** converter. A photo is labelled with the
+  person it was picked for; anyone else in it is unlabelled. Each variant downloads only its own photos, and (M)
+  reuses the ones (S) already fetched.
+
+- **Turn off the server's alerts for yourself** (issue #5170). A server can be set up to email you (or alert you
+  some other way) when an import you started finishes; Settings › **Import Defaults** now has **Alert me when an
+  import finishes**, shown only on a server that sends such alerts. Untick it and the server's alert code is told
+  you said no. That code is your administrator's, so it has to honour the setting: the
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows how. Settings › **AutoFind** gains **Export
+  results when AutoFind finishes**, which pauses your AutoFind exporter (an emailing one, say) without losing its
+  settings; a command-line AutoFind still exports.
 
 - **Build a large dataset's coverage atlas from its Stats window** (issue #4995). A dataset of more than
   50,000 items loads without its coverage atlas, the map that **Select: New** picks from and the
@@ -1123,6 +1193,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
+  Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
+  none. Both now draw the icon the server's media-type registry names, the same one the importer and
+  Settings show, so audio rows also switch from a music note to the app's usual speaker. Face's own icon,
+  everywhere it appears, is now a head-and-shoulders portrait in a photo frame instead of a smiley.
+
+- **A moved patch detector keeps the boxes drawn on its Goods** (issue #5130). On a patch dataset, a
+  Good's drawn box decides which patch the label teaches. **Export labels** left the box out of the
+  file, so a detector moved with **Server JSON File** or **Server CSV File** and rebuilt with
+  **Trained → Create & Import** taught its Goods whole-image: a different detector from the one
+  exported. The file now carries each Good's box, and both **Create & Import** and **Import labels**
+  read it back.
+
 - **A server restart no longer leaves an open Train or Tune tab dead** (issue #5155). A restarted server
   has nothing loaded, so every request from a tab already open on a dataset and detector failed under a
   red *Detector is not loaded* toast, and the cure, back to the Dashboard to open the queue again, was
@@ -1135,6 +1218,13 @@ not list every commit. Use `git log` for the full history.
   for failed without a word and stayed blank. The tab now loads the dataset again on its own, as Train
   and Tune do, and redraws the map from the layout saved with the dataset, without fitting it again. A
   map of a Find run's results is fitted again from its items.
+
+- **A map of a detector's positives no longer goes quietly blank after a server restart** (issue #5159).
+  That map lives only in the server's memory, so a restart loses it for good, and an open tab on it
+  went on painting the tiles the browser had cached while every new one stayed blank, with nothing
+  saying why. The tab now goes back to the Dashboard and says to browse the detector's positives again
+  from there. Reloading the page on such a map now does the same, instead of a *Dataset is empty*
+  error, and reloading one the server still has shows it.
 
 - **Autopilot no longer tells you to keep voting when nothing is left to vote on** (issue #5151).
   When the vote that labeled a dataset's last item also finished training, Toasty said the detector

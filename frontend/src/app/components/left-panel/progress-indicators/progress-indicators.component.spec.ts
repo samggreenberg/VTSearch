@@ -176,6 +176,46 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.smartTooltip).not.toContain('noise rather than progress');
   });
 
+  describe('until a detector ranks the screen (#5137)', () => {
+    const withSmart = (status: string) =>
+      fixture.componentRef.setInput('labelingStatus', {
+        good_count: 0,
+        bad_count: 0,
+        total_count: 0,
+        smart: { status, drift_within_noise: false },
+        stable: { status: '' },
+        span: { status: '' },
+      });
+
+    it('shows a green Smart as yellow and says why', async () => {
+      withSmart('green');
+      fixture.componentRef.setInput('detectorShown', false);
+      await settleZoneless(fixture);
+      expect(component.smartHeld).toBe(true);
+      expect(component.smartStatus).toBe('yellow');
+      expect(component.smartTooltip).toContain('stays yellow until a detector ranks what you see');
+      const smart = fixture.nativeElement.querySelector('[aria-label="Smart indicator"]');
+      expect(smart.getAttribute('data-status')).toBe('yellow');
+    });
+
+    it('leaves red and yellow as they are', () => {
+      fixture.componentRef.setInput('detectorShown', false);
+      for (const status of ['red', 'yellow']) {
+        withSmart(status);
+        expect(component.smartHeld).toBe(false);
+        expect(component.smartStatus).toBe(status);
+      }
+    });
+
+    it('shows green once the detector ranks the screen', () => {
+      withSmart('green');
+      fixture.componentRef.setInput('detectorShown', true);
+      expect(component.smartHeld).toBe(false);
+      expect(component.smartStatus).toBe('green');
+      expect(component.smartTooltip).not.toContain('stays yellow');
+    });
+  });
+
   it('should say so in the stable tooltip when green is a plateau', () => {
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,

@@ -15,9 +15,12 @@ whole set, applied together, by one switch.
 as *nothing was slow* and as *the bar was a second* equally well, and nothing
 in a log distinguished them -- so every absence in this issue had to be
 re-litigated from memory of how the process was launched.
-:func:`log_effective_settings` writes one line at startup, at WARNING so it
-survives a stock deployment's log level, and :func:`effective_settings` is
-what it reports.
+:func:`log_effective_settings` writes one line at startup, and
+:func:`effective_settings` is what it reports. It goes out at WARNING, so it
+survives a stock deployment's log level, whenever a bar is off its shipped
+default; with every bar stock it drops to INFO, so a normal start stays quiet
+(#5174) and a WARNING-level log without the line still reads unambiguously as
+"the shipped bars".
 
 The preset is applied with ``setdefault`` semantics: an explicit environment
 variable always wins, so ``VTSEARCH_DIAGNOSE=1 VTSEARCH_SLOW_PHASE_MS=50`` is
@@ -54,6 +57,21 @@ PRESET: dict[str, str] = {
     "VTSEARCH_SLOW_PHASE_MS": "150",
 }
 
+#: Env vars that move a bar :func:`effective_settings` reports. With none of
+#: them set (and :data:`DIAGNOSE_ENV` off) every bar is the shipped default,
+#: which is what lets :func:`log_effective_settings` stay at INFO. A new bar
+#: in :func:`effective_settings` needs its variable here.
+BAR_ENVS: tuple[str, ...] = (
+    "VTSEARCH_SLOW_REQUEST_MS",
+    "VTSEARCH_SLOW_PHASE_MS",
+    "VTSEARCH_GC_WARN_MS",
+    "VTSEARCH_STALL_WATCHDOG_MS",
+    "VTSEARCH_STALL_STARTUP_MS",
+    "VTSEARCH_STALL_LIVE_DUMP",
+    "VTSEARCH_GC_FREEZE",
+    "VTSEARCH_DETECTOR_WRITE_MODE",
+)
+
 
 def diagnose_enabled() -> bool:
     """Whether ``VTSEARCH_DIAGNOSE`` asks for the preset."""
@@ -77,6 +95,15 @@ def apply_diagnostic_preset() -> dict[str, str]:
             os.environ[name] = value
             applied[name] = value
     return applied
+
+
+def customized_bars() -> list[str]:
+    """The :data:`BAR_ENVS` this process sets; empty means every bar is stock.
+
+    An empty value counts as unset, because every accessor reads it as the
+    default.
+    """
+    return [name for name in BAR_ENVS if os.environ.get(name, "").strip()]
 
 
 def effective_settings() -> dict[str, Any]:
@@ -121,13 +148,18 @@ def effective_settings() -> dict[str, Any]:
 def log_effective_settings() -> dict[str, Any]:
     """Record the settings above in the log; returns them.
 
-    **WARNING, not INFO, on purpose**, for the same reason the slow-request
-    line is: ``VTSEARCH_LOG_LEVEL`` defaults to WARNING, and a log that omits
-    its own thresholds makes every absence in it ambiguous. One line per
-    process start.
+    **WARNING whenever a bar is customized** (:data:`DIAGNOSE_ENV` on, or any
+    of :data:`BAR_ENVS` set), for the same reason the slow-request line is:
+    ``VTSEARCH_LOG_LEVEL`` defaults to WARNING, and a log that omits thresholds
+    somebody chose makes every absence in it ambiguous. **INFO when every bar
+    is stock**: printing the shipped defaults on every start is noise (#5174),
+    and the line's absence from a WARNING-level log then says the same thing.
+    One line per process start.
     """
     settings = effective_settings()
-    log.warning(
+    level = logging.WARNING if settings["diagnose"] or customized_bars() else logging.INFO
+    log.log(
+        level,
         "diagnostics config: diagnose=%s log_level=%s slow_request=%.0fms slow_phase=%.0fms "
         "gc_warn=%.0fms watchdog=%.0fms watchdog_startup=%.0fms live_dump=%s gc_freeze=%s "
         "detector_write=%s log_file=%s",

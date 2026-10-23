@@ -125,6 +125,8 @@ class TestSchemaBackedByModels:
         extras = set(AppSettingsSchema().fields) - _pydantic_fields()
         assert extras == {
             "effective_solo_embedder_per_media_type",
+            # Whether ``--on-dataset-imported`` hooks exist; never persisted.
+            "import_hooks_configured",
         }, f"Unexpected non-model AppSettingsSchema fields: {sorted(extras)}"
 
     def test_scalar_setters_have_real_accessors(self):

@@ -82,7 +82,7 @@ describe('OfflineBannerComponent (zoneless)', () => {
     expect(hint.classList).not.toContain('toasty-hint--off');
     expect(hint.querySelector('img')?.getAttribute('src')).toBe('toasty-sad.png');
     expect(hint.querySelector('.toasty-hint__text')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      "The server isn't answering, so nothing else will work until it's back. Check that it's still running, then click Retry.",
+      "The server isn't answering. Check it's still running, then click Retry.",
     );
     expect(hint.querySelector('input')).toBeNull();
 

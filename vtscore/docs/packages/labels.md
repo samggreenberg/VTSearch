@@ -62,7 +62,7 @@ entry-point group; discovery and name-clash rules are in
 | Name               | Display name      | Notes                                                                          |
 |--------------------|-------------------|--------------------------------------------------------------------------------|
 | `server_json_file` | Server JSON File  | Reads a `LabelSet`-format JSON file on the server filesystem.                  |
-| `server_csv_file`  | Server CSV File   | Reads a CSV with `md5,label` columns (optional `origin_name`, `filename`, `category`, JSON `origin`) from the server filesystem. |
+| `server_csv_file`  | Server CSV File   | Reads a CSV with `md5,label` columns (optional `origin_name`, `filename`, `category`, JSON `origin`, and a Good's JSON `region_box`) from the server filesystem. |
 
 ### Custom-importer skeleton
 
@@ -117,7 +117,7 @@ call the underscored hook - **subclasses override the hooks**:
 | Public method | Override | Returns |
 |---------------|----------|---------|
 | `load(field_values)` | `_do_load` (required) | `list[{"md5": ..., "label": ...}]` - the raw label list, same shape as `LabelImporter.run`. |
-| `load_full(field_values)` | `_do_load_full` (optional) | The full `LabelSet`, including any `detector_meta` block. The default wraps `_do_load` into a metadata-less `LabelSet`; override to surface `media_type` / `input_spec` / `threshold`. |
+| `load_full(field_values)` | `_do_load_full` (optional) | The full `LabelSet`, including any `detector_meta` block. The default wraps `_do_load` into a metadata-less `LabelSet`; override to surface `media_type` / `input_spec`. |
 | `save(labelset, field_values)` | `_do_save` (required) | `None` - persist the labelset. |
 | `peek_version(field_values)` | `_do_peek_version` (optional) | A cheap freshness token, or `None` ("can't tell"). See [sync.md](sync.md). |
 
@@ -240,8 +240,13 @@ update_detector(
 
 The payload is the detector file's **whole labelset** - every dataset's
 labels, not the active dataset's votes - plus `detector_meta`
-(`media_type`, `input_spec`, and the live threshold when a trained head
-is loaded), read when the push runs. Pacing is per detector name:
+(`media_type`, `input_spec`), read when the push runs. It goes out as every
+labelset export does, through `labelset_for_export`
+(`vtscore/datasets/labelset.py`): no threshold in `detector_meta`, and no
+`rank_at_vote` / `score_at_vote` in any element's `vt:provenance`. Those were
+measured by this server's embedder and head, so they mean nothing to a
+receiver, which trains its own (#5131); the detector's own JSON keeps them.
+Pacing is per detector name:
 
 - pushes never overlap; a change during one sets a dirty flag and rides
   the next push;

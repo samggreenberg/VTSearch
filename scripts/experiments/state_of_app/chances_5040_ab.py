@@ -23,7 +23,10 @@ detector's line, carried over clicks with no row. "After the closing check" is t
 there stops at that click, or at 200 if it never comes.
 
     python chances_5040_ab.py --root <state-of-the-app dir> --date 2026-10-17 --seeds 5 \\
-        --baseline <text_baseline.csv> --out <dir> [--docs <report dir>/tables] [--tag smoke]
+        --baseline <text_baseline.csv> --out <dir> [--docs <report dir>/tables] [--tag smoke] [--categories <file>]
+
+``--categories`` reads only the cells a file names, one ``class@band`` a line: #4817 re-reads the contrast on
+``o365_better`` over the 107 cells that pair with a built ``coco_better`` cell.
 """
 
 from __future__ import annotations
@@ -333,11 +336,13 @@ def main() -> int:
     ap.add_argument("--docs", type=Path, help="the report's tables dir; figures go beside it")
     ap.add_argument("--procs", type=int, default=8)
     ap.add_argument("--arms", default=",".join(ARMS), help="the arms to read; the control is always one")
+    ap.add_argument("--categories", type=Path, help="read only these cells, one class@band a line")
     a = ap.parse_args()
     if CONTROL not in a.arms.split(","):
         a.arms = f"{CONTROL},{a.arms}"
     base = pd.read_csv(a.baseline)
     base = base[(base["embedder"] == "siglip") & (base["seed"] < a.seeds)]
+    keep = set(a.categories.read_text().split("\n")) - {""} if a.categories else None
     res: dict[float, dict] = {}
     counts = {}
     for beta in (float(b) for b in a.betas.split(",")):
@@ -347,6 +352,8 @@ def main() -> int:
         runs = {}
         for arm in [x for x in ARMS if x in a.arms.split(",")]:
             steps, picks = load_arm(run_dir(a.root, a.date, a.tag, arm, beta), a.seeds, a.procs)
+            if keep is not None:
+                steps, picks = steps[steps["category"].isin(keep)], picks[picks["category"].isin(keep)]
             runs[arm] = per_run(steps, picks, tq, beta)
             counts[f"{arm}-b{t}"] = len(runs[arm])
             print(f"beta {beta:g} {arm}: {len(runs[arm])} runs", flush=True)

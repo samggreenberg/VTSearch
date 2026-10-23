@@ -62,7 +62,7 @@ export class DetectorsFindApiService {
   /** Evidence-coverage report for the active detector on the active dataset:
    *  how much of the scored dataset the detector is calling *without labeled
    *  evidence behind the call*, measured from the detector's own labelset. The
-   *  cross-user complement to the atlas domain-shift report — it needs no
+   *  cross-user complement to the domain-shift report — it needs no
    *  reference dataset loaded. `available` is false when there's nothing to
    *  measure (no scored Find run / no resolvable labelset). Pure read. */
   getEvidenceCoverage(): Observable<FindEvidenceCoverageResponse> {

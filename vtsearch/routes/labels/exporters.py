@@ -42,6 +42,7 @@ import logging
 
 from flask_smorest import Blueprint, abort
 
+from vtscore.datasets.labelset import labelset_for_export
 from vtscore.exporters import get_exporter, list_exporters
 from vtscore.exporters.base import ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
@@ -79,9 +80,14 @@ def _infer_payload_kind(payload: dict) -> str:
 
 
 def _run(exporter: ResultsExporter, payload_kind: str, payload: dict, field_values: dict) -> dict:
-    """Dispatch to the exporter method for *payload_kind*."""
+    """Dispatch to the exporter method for *payload_kind*.
+
+    A labelset goes out as every labelset export does, without the numbers
+    measured by this server's embedder and head (#5131), so no exporter has to
+    remember to drop them.
+    """
     if payload_kind == "labelset":
-        return exporter.export_labelset(payload, field_values)
+        return exporter.export_labelset(labelset_for_export(payload), field_values)
     return exporter.export_find_results(payload, field_values)
 
 

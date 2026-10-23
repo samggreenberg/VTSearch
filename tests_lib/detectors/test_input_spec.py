@@ -7,6 +7,10 @@ exercised separately in tests/cli and tests/io.
 
 from __future__ import annotations
 
+import warnings
+
+import pytest
+
 # Plugin registries are populated eagerly at PluginRegistry construction
 # (seam 5 of ../../vtscore/docs/architecture.md), so no app-side import is
 # needed to ensure converters/clippers are discoverable.
@@ -124,16 +128,20 @@ class TestBuildDetectorMeta:
         meta["input_spec"]["clipper"] = "changed"
         assert det["input_spec"]["clipper"] == "sound_tiling"
 
-    def test_with_threshold(self):
-        meta = build_detector_meta({"media_type": "audio"}, threshold=0.42)
-        assert meta == {"media_type": "audio", "threshold": 0.42}
+    def test_a_threshold_is_deprecated_and_never_emitted(self):
+        """#5131: a head's threshold means nothing to a receiver, so the block never carries one."""
+        with pytest.warns(DeprecationWarning, match="threshold"):
+            meta = build_detector_meta({"media_type": "audio"}, threshold=0.42)
+        assert meta == {"media_type": "audio"}
 
     def test_skips_empty_input_spec(self):
         meta = build_detector_meta({"media_type": "audio", "input_spec": {}})
         assert "input_spec" not in meta
 
     def test_threshold_none_omitted(self):
-        meta = build_detector_meta({"media_type": "audio"}, threshold=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            meta = build_detector_meta({"media_type": "audio"}, threshold=None)
         assert "threshold" not in meta
 
 

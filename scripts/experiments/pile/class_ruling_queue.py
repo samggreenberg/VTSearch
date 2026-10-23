@@ -42,6 +42,7 @@ import random
 import sys
 import zipfile
 from pathlib import Path
+from typing import Any, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -68,6 +69,40 @@ MAX_SIDE = 900
 MIN_WINDOW = 480
 MIN_SIDE = 640
 QUALITY = 85
+
+
+def outlined_crop(im: Any, bbox: Sequence[float]) -> Any:
+    """*im* cropped around *bbox* (``x, y, w, h``) with context, the box outlined, sized to judge.
+
+    Shared with ``o365_ruling_queue.py``, so every ruling queue is drawn the same way.
+    """
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+
+    w, h = im.size
+    x, y, bw, bh = bbox
+    pad = CONTEXT * max(bw, bh)
+    # Widen symmetrically until the window has MIN_WINDOW real pixels on its
+    # longer side, or we run out of image.
+    while max(bw + 2 * pad, bh + 2 * pad) < MIN_WINDOW and (pad < w or pad < h):
+        pad *= 1.5
+    x0, y0 = max(0, x - pad), max(0, y - pad)
+    x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
+    crop = im.crop((int(x0), int(y0), int(x1), int(y1)))
+    # Outline the target, since a widened window no longer says which object
+    # is being asked about. Two strokes so it reads on light and dark alike.
+    draw = ImageDraw.Draw(crop)
+    bx0, by0, bx1, by1 = x - x0, y - y0, x + bw - x0, y + bh - y0
+    lw = max(2, int(0.004 * max(crop.size)))
+    draw.rectangle([bx0 - lw, by0 - lw, bx1 + lw, by1 + lw], outline=(255, 255, 255), width=lw)
+    draw.rectangle([bx0, by0, bx1, by1], outline=(255, 64, 0), width=lw)
+    scale = None
+    if max(crop.size) > MAX_SIDE:
+        scale = MAX_SIDE / max(crop.size)
+    elif max(crop.size) < MIN_SIDE:
+        scale = MIN_SIDE / max(crop.size)
+    if scale:
+        crop = crop.resize((max(1, int(crop.width * scale)), max(1, int(crop.height * scale))), Image.LANCZOS)
+    return crop
 
 
 def _boxes(path: Path) -> tuple[dict, dict]:
@@ -114,7 +149,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20260920)
     args = ap.parse_args()
 
-    from PIL import Image, ImageDraw  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
 
     coco: dict[int, list] = collections.defaultdict(list)
     sizes: dict[int, tuple] = {}
@@ -178,35 +213,13 @@ def main() -> int:
     manifest, kb = [], []
     zcache: dict = {}
     for idx, r in enumerate(picked):
-        w, h, fname = sizes[r["image_id"]]
+        _, _, fname = sizes[r["image_id"]]
         zp, member = members[fname]
         if zp not in zcache:
             zcache[zp] = zipfile.ZipFile(zp)
         with zcache[zp].open(member) as fh:
             im = Image.open(_io.BytesIO(fh.read())).convert("RGB")
-        x, y, bw, bh = r["bbox"]
-        pad = CONTEXT * max(bw, bh)
-        # Widen symmetrically until the window has MIN_WINDOW real pixels on its
-        # longer side, or we run out of image.
-        while max(bw + 2 * pad, bh + 2 * pad) < MIN_WINDOW and (pad < w or pad < h):
-            pad *= 1.5
-        x0, y0 = max(0, x - pad), max(0, y - pad)
-        x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
-        crop = im.crop((int(x0), int(y0), int(x1), int(y1)))
-        # Outline the target, since a widened window no longer says which object
-        # is being asked about. Two strokes so it reads on light and dark alike.
-        draw = ImageDraw.Draw(crop)
-        bx0, by0, bx1, by1 = x - x0, y - y0, x + bw - x0, y + bh - y0
-        lw = max(2, int(0.004 * max(crop.size)))
-        draw.rectangle([bx0 - lw, by0 - lw, bx1 + lw, by1 + lw], outline=(255, 255, 255), width=lw)
-        draw.rectangle([bx0, by0, bx1, by1], outline=(255, 64, 0), width=lw)
-        scale = None
-        if max(crop.size) > MAX_SIDE:
-            scale = MAX_SIDE / max(crop.size)
-        elif max(crop.size) < MIN_SIDE:
-            scale = MIN_SIDE / max(crop.size)
-        if scale:
-            crop = crop.resize((max(1, int(crop.width * scale)), max(1, int(crop.height * scale))), Image.LANCZOS)
+        crop = outlined_crop(im, r["bbox"])
         # The filename must not leak the stratum: a reviewer who can see which
         # arm a crop is from is answering a different question.
         stem = hashlib.sha1(f"{args.seed}:{r['ann_id']}".encode()).hexdigest()[:12]  # noqa: S324

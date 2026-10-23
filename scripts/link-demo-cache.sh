@@ -39,7 +39,7 @@ DATADIR="$(cd "$DATADIR" && pwd)"
 # tests_lib/downloads/test_demo_cache_script.py.
 DEMO_DIRS=(
   aclImdb apollo11_audio bbc-fulltext birdvox_full_night caltech-101 caltech-256
-  cifar-10-batches-py clotho dbpedia_csv enrico ESC-50-master EuroSAT_RGB
+  celebrity_together cifar-10-batches-py clotho dbpedia_csv enrico ESC-50-master EuroSAT_RGB
   food-101 gtzan hmdb51 nixon_tapes openlogo oxford_flowers places365
   reuters21578 rico_icons rico_screen2words roxford5k rvl_cdip
   speech_commands_v2

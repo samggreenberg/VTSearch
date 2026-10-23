@@ -534,6 +534,7 @@ class TestTheFindCorpusFlagsArePinned:
         ("find.training_domain", "app", "vtsearch/training_domain.py", "domain_shift_against"),
         ("find.training_domain", "harness", HARNESS, "training_domain_flags"),
         ("find.training_domain", "harness", HARNESS, "FindCorpus.matrix"),
+        ("find.training_domain", "harness", HARNESS, "FindCorpus.pool_matrix"),
         ("find.evidence_coverage", "app", "vtsearch/routes/detectors/scoring.py", "find_evidence_coverage"),
         ("find.evidence_coverage", "harness", HARNESS, "evidence_flags"),
         ("find.evidence_coverage", "harness", HARNESS, "vote_vectors"),

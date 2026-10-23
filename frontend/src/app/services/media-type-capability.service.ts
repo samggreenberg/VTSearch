@@ -85,6 +85,17 @@ export class MediaTypeCapabilityService {
   }
 
   /**
+   * The served ``icon`` for *mediaType*: an `IconComponent` type name (for
+   * ``vt-icon [type]``), so a newly registered media type gets its icon from
+   * the backend ``MediaType.icon`` with no frontend edit (#5178). Empty until
+   * the registry loads, and for a type it does not list, so a caller renders no
+   * icon rather than a wrong one; a caller must have called {@link ensureLoaded}.
+   */
+  iconFor(mediaType: string): string {
+    return this.infos()?.find((m) => m.type_id === mediaType)?.icon ?? '';
+  }
+
+  /**
    * Whether *mediaType* is a convert-in type: one no importer makes, whose
    * items only ever come out of a converter (`face`, from `image2face`), as
    * the served ``importable: false`` says. Every item of such a dataset has a

@@ -304,3 +304,52 @@ class TestPersistenceThroughTheLoadedDetector:
         by_md5 = {el["md5"]: el for el in self._labels("ProvSync2")}
         assert by_md5[medias[first]["md5"]]["metadata"][METADATA_KEY]["phase"] == "hard"
         assert by_md5[medias[second]["md5"]]["metadata"][METADATA_KEY]["rank_at_vote"] == 2
+
+    def test_a_webhook_label_export_leaves_rank_and_score_behind(self, client):
+        """#5131, the Export modal's path: labels in, Webhook body out, the detector JSON untouched.
+
+        The rank and score were measured by this server's embedder and head, so
+        an export carries only how the item was drawn; the detector keeps both.
+        """
+        from unittest import mock
+
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        media_id = next(iter(medias))
+        self._loaded_detector(client, "ProvExport")
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "good", "provenance": FULL})
+
+        # What the Export modal fetches, then posts to the chosen exporter.
+        labels = client.get("/api/labels/export?detector_name=ProvExport&enrich=1").get_json()["labels"]
+        resp = mock.MagicMock(status_code=200)
+        with (
+            mock.patch(
+                "vtscore.security.url_validation.socket.getaddrinfo",
+                return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+            ),
+            mock.patch("requests.Session.post", return_value=resp) as post,
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "webhook",
+                    "field_values": {"url": "https://example.com/hook"},
+                    "payload_kind": "labelset",
+                    "results": {"labels": labels, "selected_columns": ["md5", "label"]},
+                },
+            )
+        assert res.status_code == 200, res.get_data(as_text=True)
+
+        body = post.call_args.kwargs["json"]
+        assert body["selected_columns"] == ["md5", "label"]
+        (sent,) = body["labels"]
+        assert sent["metadata"][METADATA_KEY] == {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "hard",
+            "sort_kind": "learned",
+        }
+        (kept,) = self._labels("ProvExport")
+        assert kept["metadata"][METADATA_KEY] == {"v": 1, **FULL}

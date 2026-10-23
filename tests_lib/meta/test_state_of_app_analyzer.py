@@ -635,7 +635,7 @@ def test_the_returned_sets_path_is_read_at_each_click_and_after_the_check(run, t
     )  # fmt: skip
     path = pd.read_csv(out / "precision_recall_path.csv")
     assert path["point"].astype(str).tolist() == ["typed query", "25", "50", "100", "150", "after the check"]
-    assert (path["runs"] == len(cells)).all(), "every run, the never-trained included (#4631)"
+    assert bool((path["runs"] == len(cells)).all()), "every run, the never-trained included (#4631)"
     end = path[path["point"] == "after the check"].iloc[0]
     assert end["precision"] == pytest.approx(cells["thr_precision_final"].mean())
     assert end["recall"] == pytest.approx(cells["thr_recall_final"].mean())
@@ -654,7 +654,7 @@ def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:
     for idx, cat in enumerate(CATS):
         main = _main_frame(run["exp"], idx)
         ordinary = main.loc[main["phase"] != "check"]
-        assert (main["phase"] == "check").any() and main.loc[main["phase"] == "check", "t"].min() > MAX_STEPS
+        assert bool((main["phase"] == "check").any()) and main.loc[main["phase"] == "check", "t"].min() > MAX_STEPS
         last = ordinary.sort_values("t").iloc[-1]
         row = run["cells"].loc[cat]
         assert row["final_t"] == last["t"] == MAX_STEPS
@@ -856,7 +856,7 @@ def test_a_run_that_never_leaves_the_opening_keeps_its_typed_query_after_the_che
     shutil.copytree(run["exp"] / "results", exp / "results")
     main = exp / "results" / "cells" / "task_0000.csv"  # cat0@small
     df = pd.read_csv(main)
-    assert (df["phase"].astype(str) == "check").any(), "the fixture's run checks at the end"
+    assert bool((df["phase"].astype(str) == "check").any()), "the fixture's run checks at the end"
     df["app_trained"] = 0
     df.to_csv(main, index=False)
     out = _analyze(exp, run["exp"] / "text_baseline.csv")

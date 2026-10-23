@@ -446,12 +446,12 @@ class TestLabelSetConcepts:
 
     def test_constructor_len_iter_and_elements(self):
         a, b = self._elem("a.wav"), self._elem("b.wav", "bad")
-        labelset = LabelSet([a, b], detector_meta={"media_type": "audio", "threshold": 0.41})
+        labelset = LabelSet([a, b], detector_meta={"media_type": "audio"})
 
         assert len(labelset) == 2
         assert labelset.elements == [a, b]
         assert list(labelset) == [a, b]
-        assert labelset.detector_meta == {"media_type": "audio", "threshold": 0.41}
+        assert labelset.detector_meta == {"media_type": "audio"}
 
     def test_no_labels_keyword_and_no_json_helpers(self):
         # The pre-rename spelling the docs used to show.  Called through a

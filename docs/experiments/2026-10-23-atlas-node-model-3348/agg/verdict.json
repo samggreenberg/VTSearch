@@ -1,0 +1,428 @@
+{
+  "gates": {
+    "grid_deepest": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.140",
+        "clip: rate@0.05 0.151",
+        "clip: false alarm 0.93",
+        "clip: separation 0.07 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.139",
+        "clip_l: rate@0.05 0.166",
+        "clip_l: false alarm 0.93",
+        "clip_l: separation 0.07 < shipped 0.54 - 0.1",
+        "dinov3_patch: KS 0.204",
+        "dinov3_patch: rate@0.05 0.230",
+        "dinov3_patch: false alarm 1.00",
+        "dinov3_patch: separation 0.00",
+        "siglip: KS 0.135",
+        "siglip: rate@0.05 0.150",
+        "siglip: false alarm 0.93",
+        "siglip: separation 0.07 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.125",
+        "siglip2_l: rate@0.05 0.141",
+        "siglip2_l: false alarm 0.93",
+        "siglip2_l: separation 0.01 < shipped 0.56 - 0.1"
+      ],
+      "min_separation": 0.0
+    },
+    "grid_mean_shipped": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.112",
+        "clip_l: KS 0.108",
+        "dinov3_patch: KS 0.134",
+        "dinov3_patch: rate@0.05 0.116",
+        "dinov3_patch: false alarm 0.60",
+        "dinov3_patch: separation 0.36",
+        "siglip: KS 0.109",
+        "siglip2_l: KS 0.108"
+      ],
+      "min_separation": 0.36296296296296293
+    },
+    "grid_median": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.076",
+        "clip_l: KS 0.073",
+        "clip_l: rate@0.05 0.087",
+        "clip_l: false alarm 0.33",
+        "dinov3_patch: KS 0.125",
+        "dinov3_patch: rate@0.05 0.162",
+        "dinov3_patch: false alarm 0.80",
+        "dinov3_patch: separation 0.20",
+        "siglip: KS 0.076",
+        "siglip2_l: KS 0.073"
+      ],
+      "min_separation": 0.19999999999999996
+    },
+    "knn_global": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.6666666666666666
+    },
+    "knn_loo_deepest": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.090",
+        "clip: rate@0.05 0.089",
+        "clip: false alarm 0.40",
+        "clip_l: KS 0.088",
+        "clip_l: rate@0.05 0.102",
+        "clip_l: false alarm 0.60",
+        "clip_l: separation 0.29 < shipped 0.54 - 0.1",
+        "dinov3_patch: KS 0.148",
+        "dinov3_patch: rate@0.05 0.157",
+        "dinov3_patch: false alarm 0.80",
+        "dinov3_patch: separation 0.20",
+        "siglip: KS 0.085",
+        "siglip: rate@0.05 0.090",
+        "siglip: false alarm 0.47",
+        "siglip: separation 0.50 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.081",
+        "siglip2_l: rate@0.05 0.087",
+        "siglip2_l: false alarm 0.20"
+      ],
+      "min_separation": 0.19999999999999996
+    },
+    "knn_loo_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.065",
+        "clip_l: KS 0.061",
+        "dinov3_patch: KS 0.093",
+        "dinov3_patch: rate@0.05 0.108",
+        "dinov3_patch: false alarm 0.53",
+        "dinov3_patch: separation 0.45",
+        "siglip: KS 0.061",
+        "siglip2_l: KS 0.050"
+      ],
+      "min_separation": 0.4481481481481482
+    },
+    "knn_loo_median": {
+      "passes": false,
+      "fails": [
+        "clip_l: rate@0.05 0.079",
+        "dinov3_patch: KS 0.103",
+        "dinov3_patch: rate@0.05 0.134",
+        "dinov3_patch: false alarm 0.73",
+        "dinov3_patch: separation 0.27"
+      ],
+      "min_separation": 0.2666666666666667
+    },
+    "knn_split_deepest": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5555555555555556
+    },
+    "knn_split_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.056",
+        "siglip: KS 0.053",
+        "siglip: rate@0.05 0.028",
+        "siglip: separation 0.50 < shipped 0.61 - 0.1"
+      ],
+      "min_separation": 0.5
+    },
+    "knn_split_median": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5925925925925926
+    },
+    "mix_loo_deepest": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.093",
+        "clip: rate@0.05 0.091",
+        "clip: false alarm 0.47",
+        "clip: separation 0.42 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.088",
+        "clip_l: rate@0.05 0.104",
+        "clip_l: false alarm 0.67",
+        "clip_l: separation 0.22 < shipped 0.54 - 0.1",
+        "dinov3_patch: KS 0.155",
+        "dinov3_patch: rate@0.05 0.162",
+        "dinov3_patch: false alarm 0.80",
+        "dinov3_patch: separation 0.20",
+        "siglip: KS 0.086",
+        "siglip: rate@0.05 0.088",
+        "siglip: false alarm 0.47",
+        "siglip: separation 0.50 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.081",
+        "siglip2_l: rate@0.05 0.083",
+        "siglip2_l: false alarm 0.27"
+      ],
+      "min_separation": 0.19999999999999996
+    },
+    "mix_loo_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.093",
+        "clip_l: KS 0.091",
+        "dinov3_patch: KS 0.120",
+        "dinov3_patch: rate@0.05 0.106",
+        "dinov3_patch: false alarm 0.53",
+        "dinov3_patch: separation 0.37",
+        "siglip: KS 0.091",
+        "siglip2_l: KS 0.091"
+      ],
+      "min_separation": 0.3740740740740741
+    },
+    "mix_loo_median": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.057",
+        "clip_l: KS 0.062",
+        "dinov3_patch: KS 0.100",
+        "dinov3_patch: rate@0.05 0.135",
+        "dinov3_patch: false alarm 0.73",
+        "dinov3_patch: separation 0.27",
+        "siglip: KS 0.060",
+        "siglip2_l: KS 0.053"
+      ],
+      "min_separation": 0.2666666666666667
+    },
+    "mix_split_deepest": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5370370370370371
+    },
+    "mix_split_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.078",
+        "clip: separation 0.44 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.073",
+        "clip_l: rate@0.05 0.029",
+        "dinov3_patch: KS 0.073",
+        "dinov3_patch: rate@0.05 0.028",
+        "siglip: KS 0.072",
+        "siglip: rate@0.05 0.027",
+        "siglip: separation 0.50 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.083",
+        "siglip2_l: rate@0.05 0.030"
+      ],
+      "min_separation": 0.4444444444444444
+    },
+    "mix_split_median": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.051",
+        "dinov3_patch: KS 0.053",
+        "siglip: KS 0.055"
+      ],
+      "min_separation": 0.5
+    },
+    "ppca_loo_deepest": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.061",
+        "clip_l: KS 0.071",
+        "clip_l: rate@0.05 0.083",
+        "clip_l: false alarm 0.13",
+        "dinov3_patch: KS 0.107",
+        "dinov3_patch: rate@0.05 0.137",
+        "dinov3_patch: false alarm 0.73",
+        "dinov3_patch: separation 0.27",
+        "siglip: KS 0.059",
+        "siglip2_l: KS 0.055"
+      ],
+      "min_separation": 0.2666666666666667
+    },
+    "ppca_loo_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.069",
+        "clip_l: KS 0.065",
+        "dinov3_patch: KS 0.101",
+        "dinov3_patch: rate@0.05 0.092",
+        "dinov3_patch: false alarm 0.40",
+        "dinov3_patch: separation 0.47",
+        "siglip: KS 0.067",
+        "siglip2_l: KS 0.070"
+      ],
+      "min_separation": 0.4703703703703703
+    },
+    "ppca_loo_median": {
+      "passes": false,
+      "fails": [
+        "dinov3_patch: KS 0.093",
+        "dinov3_patch: rate@0.05 0.115",
+        "dinov3_patch: false alarm 0.73",
+        "dinov3_patch: separation 0.23"
+      ],
+      "min_separation": 0.22962962962962963
+    },
+    "ppca_split_deepest": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5740740740740741
+    },
+    "ppca_split_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.066",
+        "clip_l: KS 0.057",
+        "dinov3_patch: KS 0.054",
+        "dinov3_patch: rate@0.05 0.028",
+        "siglip: KS 0.060",
+        "siglip: rate@0.05 0.025",
+        "siglip: separation 0.50 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.065",
+        "siglip2_l: rate@0.05 0.027"
+      ],
+      "min_separation": 0.48148148148148145
+    },
+    "ppca_split_median": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5370370370370371
+    },
+    "vmf_loo_deepest": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.112",
+        "clip: rate@0.05 0.098",
+        "clip: false alarm 0.60",
+        "clip: separation 0.31 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.106",
+        "clip_l: rate@0.05 0.110",
+        "clip_l: false alarm 0.73",
+        "clip_l: separation 0.16 < shipped 0.54 - 0.1",
+        "dinov3_patch: KS 0.173",
+        "dinov3_patch: rate@0.05 0.176",
+        "dinov3_patch: false alarm 0.80",
+        "dinov3_patch: separation 0.20",
+        "siglip: KS 0.108",
+        "siglip: rate@0.05 0.096",
+        "siglip: false alarm 0.60",
+        "siglip: separation 0.36 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.094",
+        "siglip2_l: rate@0.05 0.093",
+        "siglip2_l: false alarm 0.47"
+      ],
+      "min_separation": 0.15555555555555556
+    },
+    "vmf_loo_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.111",
+        "clip_l: KS 0.106",
+        "dinov3_patch: KS 0.131",
+        "dinov3_patch: rate@0.05 0.108",
+        "dinov3_patch: false alarm 0.53",
+        "dinov3_patch: separation 0.39",
+        "siglip: KS 0.108",
+        "siglip2_l: KS 0.108"
+      ],
+      "min_separation": 0.3925925925925926
+    },
+    "vmf_loo_median": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.075",
+        "clip_l: KS 0.069",
+        "clip_l: rate@0.05 0.075",
+        "dinov3_patch: KS 0.109",
+        "dinov3_patch: rate@0.05 0.145",
+        "dinov3_patch: false alarm 0.80",
+        "dinov3_patch: separation 0.20",
+        "siglip: KS 0.077",
+        "siglip2_l: KS 0.073"
+      ],
+      "min_separation": 0.19999999999999996
+    },
+    "vmf_split_deepest": {
+      "passes": true,
+      "fails": [],
+      "min_separation": 0.5740740740740741
+    },
+    "vmf_split_mean": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.093",
+        "clip: rate@0.05 0.028",
+        "clip: separation 0.39 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.087",
+        "clip_l: rate@0.05 0.024",
+        "clip_l: separation 0.35 < shipped 0.54 - 0.1",
+        "dinov3_patch: KS 0.076",
+        "dinov3_patch: rate@0.05 0.025",
+        "dinov3_patch: separation 0.43",
+        "siglip: KS 0.092",
+        "siglip: rate@0.05 0.022",
+        "siglip: separation 0.44 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.091",
+        "siglip2_l: rate@0.05 0.024"
+      ],
+      "min_separation": 0.35185185185185186
+    },
+    "vmf_split_median": {
+      "passes": false,
+      "fails": [
+        "clip: KS 0.062",
+        "clip: separation 0.44 < shipped 0.57 - 0.1",
+        "clip_l: KS 0.054",
+        "dinov3_patch: KS 0.054",
+        "siglip: KS 0.063",
+        "siglip: separation 0.46 < shipped 0.61 - 0.1",
+        "siglip2_l: KS 0.061"
+      ],
+      "min_separation": 0.4444444444444444
+    }
+  },
+  "passers": [
+    "knn_global",
+    "knn_split_median",
+    "ppca_split_deepest",
+    "vmf_split_deepest",
+    "knn_split_deepest",
+    "mix_split_deepest",
+    "ppca_split_median"
+  ],
+  "tree_passers": [
+    "knn_split_median",
+    "ppca_split_deepest",
+    "vmf_split_deepest",
+    "knn_split_deepest",
+    "mix_split_deepest",
+    "ppca_split_median"
+  ],
+  "top": "knn_global",
+  "winner": "vmf_split_deepest",
+  "predictions": {
+    "P1": false,
+    "P2": true,
+    "P3": true,
+    "P4": true
+  },
+  "patch_best_calibrated": {
+    "knn": 0.8333333333333334,
+    "vmf": 0.7037037037037037
+  },
+  "shipped_separation": {
+    "clip": 0.5740740740740741,
+    "clip_l": 0.5370370370370371,
+    "dinov3_patch": 0.36296296296296293,
+    "siglip": 0.6111111111111112,
+    "siglip2_l": 0.5555555555555556
+  },
+  "tasks": [
+    "timing_clip__s0",
+    "timing_clip__s1",
+    "timing_clip__s2",
+    "timing_clip_l__s0",
+    "timing_clip_l__s1",
+    "timing_clip_l__s2",
+    "timing_dinov3_patch__s0",
+    "timing_dinov3_patch__s1",
+    "timing_dinov3_patch__s2",
+    "timing_siglip2_l__s0",
+    "timing_siglip2_l__s1",
+    "timing_siglip2_l__s2",
+    "timing_siglip__s0",
+    "timing_siglip__s1",
+    "timing_siglip__s2"
+  ]
+}

@@ -593,7 +593,8 @@ labels for a trained one runs as its typed description, or as the Goods'
 centroid, as in [Tune](#tuning-a-detector), and the dialog names it, with the
 labels it still needs. If you picked a results
 exporter on the Settings **AutoFind** tab, the run has already sent the
-results there too. If none of your AutoFind detectors can run on the new
+results there too, unless you untick **Export results when AutoFind
+finishes** there to pause it. If none of your AutoFind detectors can run on the new
 dataset - they are all for another media type, or were built with a kind
 of embedder the dataset doesn't have - a notice says so instead.
 
@@ -1617,7 +1618,9 @@ eight tabs:
   toggles, the **Enable achievements** toggle, **Hide All** / **Show All** for
   [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
   mode and thumbnail size).
-- **AutoFind** - what exporter to send AutoFind results to, and whether
+- **AutoFind** - what exporter to send AutoFind results to, whether to
+  send them (untick **Export results when AutoFind finishes** to pause the
+  exporter without losing its settings), and whether
   a command-line run deletes the dataset it imported once AutoFind has run
   (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
   (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
@@ -1639,7 +1642,9 @@ eight tabs:
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
 - **Import Defaults** - default embedder, clipper, and converters per
-  media type.
+  media type. On a server set up to tell you when an import finishes
+  (often by email), **Alert me when an import finishes** is here too:
+  untick it to ask the server not to.
 - **Server** - read-only settings fixed when the server started and
   shared by everyone, including the **Solo media type** and **Autopilot
   only** restrictions.

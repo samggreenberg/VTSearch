@@ -841,7 +841,7 @@ so the CLI can re-clip a dataset whose clipping doesn't match.
 
 ```python
 def extract_input_spec_from_medias(medias) -> dict | None: ...
-def build_detector_meta(detector_data, *, threshold=None) -> dict: ...
+def build_detector_meta(detector_data, *, threshold=None) -> dict: ...  # threshold: deprecated, ignored
 def apply_detector_meta(detector_data, detector_meta) -> bool: ...
 def clipper_matches(detector_spec, dataset_spec) -> bool: ...
 ```
@@ -850,7 +850,13 @@ An `input_spec` is `{"clipper": "sound_tiling", "clipper_params": {"duration": "
 or `None`. Detectors with no input spec accept any dataset (legacy
 behaviour). The `detector_meta` block is what travels with a labelset
 through a `LabelsetSource`, so a downstream consumer can reproduce the
-training clipper without reading the detector JSON.
+training clipper without reading the detector JSON. It holds `media_type`
+and `input_spec` only: they describe the input format, not a measurement.
+It no longer carries the live head's `threshold` (#5131), a number from one
+embedder's space and one trained head that means nothing to a receiver,
+which trains its own; `build_detector_meta`'s `threshold` keyword is
+accepted with a `DeprecationWarning` and ignored. `apply_detector_meta`
+still ignores a `threshold` arriving from an older server.
 
 ---
 

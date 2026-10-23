@@ -191,9 +191,9 @@ export class LineTestResultComponent {
   readonly stats = signal<FindStatsResponse | null>(null);
   readonly statsError = signal('');
 
-  // --- Training-domain overlap (coverage-atlas domain-shift report) --------
-  // Compares the active dataset against a reference dataset's coverage atlas,
-  // the dataset the detector was trained on. The picker lists the loaded
+  // --- Training-domain overlap (domain-shift report) --------
+  // Compares the active dataset against a reference dataset's own embeddings
+  // (a split-conformal kNN, #3348), the dataset the detector was trained on. The picker lists the loaded
   // datasets with a matching embedder and preselects the one holding most of
   // the detector's labelled examples (#4961); a handed-over detector's
   // haystack may not be loaded at all, so the user can still pick another.
@@ -324,7 +324,7 @@ export class LineTestResultComponent {
       });
   }
 
-  /** Run the domain-shift report against *refId*'s coverage atlas, or clear it. */
+  /** Run the domain-shift report against *refId*, or clear it. */
   selectRef(refId: string): void {
     this.selectedRefId.set(refId);
     this.domainShift.set(null);

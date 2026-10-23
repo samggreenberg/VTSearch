@@ -12,6 +12,56 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Domain shift is a split-conformal kNN against the reference dataset's vectors, not the Coverage Atlas's
+  typicality** (issue #3348). The new `vtscore.coverage.domain_shift.domain_shift_report(reference, matrix,
+  alpha=0.05)` (also exported as `vtscore.coverage.domain_shift_report`) splits the reference in half by a fixed
+  seed, scores each item by its mean cosine to the 5 nearest fit-half vectors, and ranks that among the
+  calibration half's scores. A reference item's p-value is therefore uniform on every embedder, patch embedders
+  included. The return keys and the `shifted` rule (z > 3 and >= 2 alpha) are unchanged. At most
+  `DOMAIN_SHIFT_MAX_QUERY` (4 000) rows of *matrix* are scored, so `n_items` can be smaller than the matrix. A
+  reference under 40 vectors raises `ReferenceTooSmall`. Measured
+  (`docs/experiments/2026-10-23-atlas-node-model-3348/`): KS 0.021-0.033 from uniform on five embedders against
+  the atlas's 0.11-0.13, and on `dinov3_patch` 0 false alarms on own held-out data (was 0.60) and separation
+  1.00 (was 0.36). **Breaking:** the atlas-based `domain_shift_report(atlas, matrix)` is removed from
+  `vtscore.coverage.atlas`, along with `CoverageAtlas.typicality_pvalues` / `typicality_pvalue` and the per-node
+  `t_quantiles` calibration grid. They had no consumer besides the report, and `next_sample` never read them.
+  New atlas snapshots carry no `t_quantiles`, and `from_serializable` ignores them on an older snapshot (same
+  `coverage-atlas/1` format). `vtscore.state.coverage_atlas` no longer re-exports `domain_shift_report`. The eval
+  harness's `find_corpus.training_domain_flags(reference, matrix)` now takes the sim pool's vectors instead of an
+  atlas, and so reads the `shift_*` columns on patch embedders and non-Autopilot strategies too, where they were
+  NaN before.
+
+- **An exported labelset no longer carries numbers measured by one embedder or head** (issue #5131). A labelset
+  export is references to the Good and Bad labels, so it can rebuild the detector under another embedder; a number
+  from this server's embedder space or trained head means nothing at the other end. The new
+  `vtscore.datasets.labelset.labelset_for_export(payload)` is the form every labelset export takes, and both export
+  paths use it: a `LabelsetSource` push and the payload VTSearch hands an exporter's `export_labelset()`. It drops
+  `threshold` from `detector_meta` and `rank_at_vote` / `score_at_vote` from each element's `vt:provenance`
+  (`vote_provenance.NON_PORTABLE_FIELDS`, via the new `vote_provenance.portable_metadata`), and passes everything
+  else through. **Format change:** `detector_meta` is no longer emitted with a `threshold`; it holds `media_type` and
+  `input_spec` only. `build_detector_meta(..., threshold=...)` still accepts the keyword, now ignored with a
+  `DeprecationWarning`. The detector's own JSON keeps the full provenance, and `apply_detector_meta` still ignores a
+  `threshold` arriving from an older server.
+
+- **Smart's green reasons drop "You can likely stop labeling."** (issue #5137).
+  `cost_trend.rising_status_from_scores` and `smart_status_from_costs` return the same statuses and numbers; their
+  green `reason` now says only what the rule read (F-beta stopped rising, or the error cost levelled off, and whether
+  within the noise). Stopping is the phase machine's `done`.
+
+- **Demo downloads fall back to mirrors.** `download_file_with_progress` (and so `download_file_atomic` and every
+  demo downloader built on them) now tries the canonical URL first, then each mirror its `downloader.core._MIRRORS`
+  entry lists, restarting the file for each. A source is abandoned after `_FAILOVER_AFTER_ATTEMPTS` (3) attempts that
+  never received a byte, at once on a non-retryable status or 401/403, or when it serves something other than the
+  archive its filename names (a host that is mid-transfer keeps the full retry budget). When every source fails, one
+  `RemoteUnreachableError` gives each one's reason in order. A URL with no mirrors behaves exactly as before.
+  `_validate_archive` now raises `InvalidArchiveError`, a `RuntimeError` subclass, so existing handlers still catch
+  it.
+- **A converted demo load no longer embeds its source media** (issue #5176). `load_demo_dataset` now passes
+  `MediaType.load_demo_source(skip_embedding=True)` whenever a converter is set, as it already did for a clipper: the
+  converter replaces every loaded media, and the framework embed stage embeds its outputs. An override that honours
+  `skip_embedding` skips that wasted pass; its `embedder` may then belong to the converter's target type. The load's
+  `AdaptiveLoadPacer` paces a conversion (status `"converting"`) as its own `convert` phase within step 2, after
+  `load`, so the bar keeps moving through it. Additive.
 - **Smart reads F-beta going flat, not FPR + FNR** (issue #5134; owner, 2026-10-20). Smart re-scores its last 10
   cached detectors on the current votes; each point is now the detector's best F-beta over every cut at the session's
   balance (F1 with none), green once it stops rising: `cost_trend.rising_status_from_scores` (#3832's test with its
@@ -467,6 +517,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
+  `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
+  `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
+  is `False`, and one that only records imports can ignore it. Additive; a hook that never reads it is unchanged.
 
 - **The detector registry records the datasets a detector holds labels from** (issue #5142). New
   `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
@@ -2225,6 +2280,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A Good's `region_box` survives the CSV labelset round trip** (issue #5130). The `server_csv_file`
+  label importer ignored a `region_box` column, so a boxed Good came back image-level. The exporter now writes
+  `region_box` as a JSON list, includes it in its default label columns, and leaves the column out when no label
+  has a box (every label off a patch dataset). The importer reads it back on Good rows. New
+  `vtscore.datasets.labelset.imported_region_box(label, raw)` is the shared check for an imported entry's box: a
+  float 4-tuple for a `"good"` label whose value is four numbers, else `None`. Additive.
 
 - **Label training and label ingest replay a converter output no clipper touched** (issue #5058).
   `labelset_training._embed_one` replayed a label's unit only when its origin carried a `clipper` key, and

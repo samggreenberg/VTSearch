@@ -631,16 +631,36 @@ def export(args) -> int:
                 "file": r["file"],
             }
         )
+    doc = {"source": args.source, "n_answered": len(seen), "rows": rows}
+    # --append: a later review ADDS to the record. Rewriting it from this review's
+    # queues alone would drop every earlier review's findings, and no rebuild can
+    # bring a human's look back (#4954). A pair already in the record keeps its
+    # row: the earlier answer was cast first and is what every build since used.
+    if args.append:
+        old = json.loads(args.out.read_text())
+        have = {(r["image_id"], r["class"]) for r in old["rows"]}
+        dup = [r for r in rows if (r["image_id"], r["class"]) in have]
+        if dup:
+            print(
+                f"  {len(dup)} pair(s) already in the record keep their earlier row: "
+                f"{[(r['image_id'], r['class']) for r in dup]}"
+            )
+        for r in rows:
+            r["source"] = args.source
+        rows = old["rows"] + [r for r in rows if (r["image_id"], r["class"]) not in have]
+        doc = {
+            "source": f"{old['source']}; then {args.source}",
+            "n_answered": old["n_answered"] + len(seen),
+            "rows": rows,
+        }
     rows.sort(key=lambda r: (r["class"], r["image_id"]))
-    doc = {
-        "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side "
-        "3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26",
-        "n_answered": len(seen),
-        "rows": rows,
-    }
     args.out.write_text(json.dumps(doc, indent=1) + "\n")
-    c = collections.Counter(r["finding"] for r in rows)
-    print(f"{len(rows)} findings ({dict(c)}) from {len(seen)} answers; skipped {dict(skipped)} -> {args.out}")
+    mine = [r for r in rows if not args.append or r.get("source") == args.source]
+    c = collections.Counter(r["finding"] for r in mine)
+    print(
+        f"{len(mine)} findings ({dict(c)}) from {len(seen)} answers; skipped {dict(skipped)}; "
+        f"{len(rows)} rows in {args.out}"
+    )
     return 0
 
 
@@ -757,6 +777,15 @@ def main() -> int:
     e = sub.add_parser("export")
     e.add_argument("--queues", type=Path, nargs="+", required=True)
     e.add_argument("--out", type=Path, default=pc.COCO_BETTER_CORRECTIONS)
+    e.add_argument(
+        "--source",
+        default="#4179 owner hand review of the State of the App flags (click-side z<-3; test-side "
+        "3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26",
+        help="what review the answers come from; written to the record",
+    )
+    e.add_argument(
+        "--append", action="store_true", help="add to the record in --out instead of rewriting it (a later review)"
+    )
     z = sub.add_parser("rezoom")
     z.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     z.add_argument("--queues", type=Path, required=True)

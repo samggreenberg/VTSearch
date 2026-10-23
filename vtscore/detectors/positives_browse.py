@@ -35,7 +35,8 @@ from vtscore.state.core import DatasetContext
 
 #: ``dataset_id`` prefix for ephemeral detector-positives browse contexts.
 #: The frontend keys off this to skip the dataset-registry check in the
-#: browse route guard and to release the context when leaving the view.
+#: browse route guard, to release the context when leaving the view, and to
+#: send a tab whose context the server lost (a restart) back to the Dashboard.
 DETPOS_PREFIX = "__detpos__"
 
 #: Progress callback: ``(current, total, message)``.

@@ -661,7 +661,10 @@ field lists — this document names the tiers and the shape, not every key.
   `autofind_exporter_field_values`, `autofind_on_import` (whether a web
   import runs the AutoFind detectors; the Add Dataset checkbox's memory), and
   `autofind_cli_delete_dataset` (whether a CLI `--autodetect` run deletes the
-  dataset it imported once its detectors have run).
+  dataset it imported once its detectors have run), `autofind_export_enabled`
+  (whether a web AutoFind run sends its results to the exporter), and
+  `import_alerts_enabled` (whether the admin's import hooks are told this user
+  wants alerts, as `DatasetImported.notify`).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
@@ -1278,6 +1281,14 @@ Two rules keep the record honest: it is written **only on a vote-state change**
 cannot rewrite it), and `restore_labels_from_detector` carries it back into
 vote state on load — without that, the next vote's labelset resync would erase
 every recorded vote's provenance.
+
+The detector keeps the whole record, but a labelset **export** carries only
+the part that survives a change of embedder: `rank_at_vote` and
+`score_at_vote` were measured in this server's embedder space by its trained
+head, so `labelset_for_export` (`vtscore/datasets/labelset.py`) drops them,
+with `detector_meta`'s `threshold`, from every labelset that leaves, whether
+through an exporter or a labelset-source push. The categorical fields travel:
+they say how the item was drawn, which holds under any embedder.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  It answers two different questions, and the caller picks which:
