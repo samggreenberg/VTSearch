@@ -12,7 +12,7 @@
      forty-five times, all three radios, each scored at its own β, so it's not
      a race. Flat through the opening, then climbing. -->
 
-<!-- **b** — Same sessions as precision against recall: clicks mostly buy
+<!-- **b** — Same sessions as precision against recall: votes mostly buy
      precision. Big things do well, small ones don't: tennis rackets 0.97,
      chairs 0.12, because to SigLIP the whole photo's "a seat", chair or
      couch. -->

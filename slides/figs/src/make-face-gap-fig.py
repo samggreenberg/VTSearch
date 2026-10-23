@@ -125,7 +125,7 @@ def figure(curves: dict[tuple[str, str], np.ndarray], panels: int) -> Figure:
         ax.yaxis.grid(True, which="both", color=Y_GRID, lw=1.3)
         ax.set_axisbelow(True)
         ax.set_title(title, loc="left", fontsize=18, pad=12)
-        ax.set_xlabel("Clicks")
+        ax.set_xlabel("Votes")
         if i == 0:
             ax.set_ylabel("Fβ, β = 1")
         ends = [float(curves[(name, pronoun)][-1]) for pronoun, *_ in GROUPS]

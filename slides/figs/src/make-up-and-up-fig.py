@@ -19,24 +19,19 @@ vote 23 and dipped; the query's hold (#4736) keeps the text query's set on scree
 One panel per preset, the objective (F-beta of the withheld half above the line the app shows) over votes, filled
 from the text query's set until a detector shows. The x axis runs from the text query through every 25 votes to
 150, then to the session's end after the spot check, "∞", as Photo Finish's does (owner, #4835). b1 ran no
-check, so its line stops at 150. One slide, five pages (owner, #4884: the three radios are frames of one slide).
+check, so its line stops at 150. One slide, four pages (owner, #4884: the three radios are frames of one slide).
 At beta 1/4, a build, each page adding a line:
 
 - a: cross-calibration (rung b1), red;
-- b: today's app, green;
-- c: the text query's own sort cut where an oracle would cut it, grey and dashed: the best F-beta any cut of that
-  ranking reaches, which no session sees (owner, #4884: not a fair comparison, since the sessions' lines got no
-  oracle, but it is unfair against us). It takes no votes, so it is flat, and it stops where the sessions' votes do.
+- b: today's app, green.
 
 Then the beta 1 and beta 4 panels whole, one page each (owner, #5171). Every session line carries its own click-0
-dot: b1 starts at the text query's old line (the mixture midpoint), today's app at its own. The oracle is the same
-ranking as that old line, so the gap between them at click 0 is calibration alone: the midpoint let through a median
-of about 4,250 photos at precision 0.01 (#4668's `returned_curve.csv`).
+dot: b1 starts at the text query's old line (the mixture midpoint), today's app at its own. Both cut the same
+ranking, the text query's sort, so the gap between them at click 0 is calibration alone: the midpoint let through a
+median of about 4,250 photos at precision 0.01 (#4668's `returned_curve.csv`).
 
-The oracle is the State of the App review of 2026-10-16's (`ORACLE_SUMMARY`): its text sort's `oracle_fbeta`, on
-the same bench at every class and size, 45 seeds a preset. The sort is the typed query's embedding against the
-withheld half, which no app change moves, so the review's 45 seeds stand in for these sessions' 5 (the 2026-10-08
-review's 24 gave the same three values).
+A third line, the text query's sort at an oracle's best cut (grey, dashed), was drawn on every panel, with a beta 1/4
+page of its own, until the owner cut it (#5203).
 """
 
 from __future__ import annotations
@@ -63,34 +58,23 @@ EXPERIMENTS = REPO / "docs" / "experiments"
 BUILDUP_CSV = EXPERIMENTS / "2026-10-08-fbeta-buildup-4668" / "buildup_curve.csv"
 #: Today's app on the same sessions (#4835): per preset, every vote and the end after the check.
 TODAY_CSV = EXPERIMENTS / "2026-10-13-up-and-up-4835" / "today_curve.csv"
-#: The text sort's best cut, from the State of the App review's per-beta table (the `app line` rows at `text`).
-ORACLE_SUMMARY = EXPERIMENTS / "2026-10-16-state-of-the-app-binary-photo" / "perbeta_summary.md"
-#: What the notes say the oracle reaches, per preset: `main` fails if the review's table says otherwise.
-ORACLE_EXPECT = {"b025": 0.557, "b1": 0.449, "b4": 0.564}
 #: The presets, as both CSVs name them, and how the axis writes each one's beta.
 PRESETS: dict[str, str] = {"b025": "¼", "b1": "1", "b4": "4"}
-#: The review's betas, as its table writes them.
-SUMMARY_BETA = {"b025": "0.25", "b1": "1.0", "b4": "4.0"}
-#: The deck's palette (`make-calib-figs.py`, `slides/STYLE.md`): red the losing arm, green a measured win; the
-#: oracle is a reference rather than an arm, so it takes no hue.
-RED, GREEN, GREY = "#b91c1c", "#0d8a5f", "#8a929e"
-#: (line, label, colour, line width, bold label), in build order. ``today`` is `TODAY_CSV`'s, ``oracle`` is
-#: `ORACLE_SUMMARY`'s, ``b1`` is a `BUILDUP_CSV` rung. Each session line's name is in its own hue.
+#: The deck's palette (`make-calib-figs.py`, `slides/STYLE.md`): red the losing arm, green a measured win.
+RED, GREEN = "#b91c1c", "#0d8a5f"
+#: (line, label, colour, line width, bold label), in build order. ``today`` is `TODAY_CSV`'s, ``b1`` is a
+#: `BUILDUP_CSV` rung. Each line's name is in its own hue.
 LINES: tuple[tuple[str, str, str, float, bool], ...] = (
     ("b1", "cross-calibration", RED, 2.8, False),
     ("today", "today's app", GREEN, 3.6, True),
-    ("oracle", "text query, oracle's cut", GREY, 2.4, False),
 )
-#: The reference, not a session: dashed, and drawn under the sessions' lines.
-DASHED = {"oracle"}
 #: The pages, in order: (preset, how many of `LINES` are drawn, file). The beta 1/4 build, then the other two
 #: radios whole; the last page is the slide's own figure.
 PAGES: tuple[tuple[str, int, str], ...] = (
     ("b025", 1, "up-and-up.build1"),
-    ("b025", 2, "up-and-up.build2"),
-    ("b025", 3, "up-and-up"),
-    ("b1", 3, "up-and-up-b1"),
-    ("b4", 3, "up-and-up-b4"),
+    ("b025", 2, "up-and-up"),
+    ("b1", 2, "up-and-up-b1"),
+    ("b4", 2, "up-and-up-b4"),
 )
 YLIM = (0.0, 0.7)
 #: The last vote the sessions ran to, and where the end after the check is drawn: past it, as on Photo Finish
@@ -132,18 +116,6 @@ def _need(path: Path) -> Path:
     return path
 
 
-def read_oracle(preset: str) -> float:
-    """The text sort's best-cut F-beta at *preset*: the review's ``app line`` row at ``text``."""
-    for line in _need(ORACLE_SUMMARY).read_text().splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 13 and cells[1:5] == ["SigLIP binary", "app line", SUMMARY_BETA[preset], "text"]:
-            oracle = float(cells[9])
-            if round(oracle, 3) != ORACLE_EXPECT[preset]:
-                raise SystemExit(f"the review's oracle at {preset} is {oracle}, the notes say {ORACLE_EXPECT[preset]}")
-            return oracle
-    raise SystemExit(f"{ORACLE_SUMMARY} has no text-sort row at {preset}")
-
-
 def read_curves(preset: str) -> dict[str, Curve]:
     """``line -> (votes, mean, end after the check)`` at *preset*."""
     pts: dict[str, list[tuple[int, float]]] = {}
@@ -160,7 +132,6 @@ def read_curves(preset: str) -> dict[str, Curve]:
                 pts.setdefault("today", []).append((int(float(row["t"])), float(row["mean"])))
             elif row["point"] == "after the check":
                 end = float(row["mean"])
-    pts["oracle"] = [(t, read_oracle(preset)) for t in range(HORIZON + 1)]
     missing = [name for name, *_ in LINES if name not in pts]
     if missing or end is None:
         raise SystemExit(f"no {preset} curve for {', '.join(missing) or 'today after the check'}")
@@ -214,13 +185,10 @@ def _figure(curves: dict[str, Curve], beta_name: str, shown: int) -> Figure:
             xs.append(END_X)
             ys.append(end)
             ax.plot([END_X], [end], marker="o", color=colour, markersize=9, zorder=6, clip_on=False)
-        if name in DASHED:
-            ax.plot(xs, ys, color=colour, lw=lw, linestyle=(0, (5, 4)), zorder=2)
-        else:
-            ax.plot(xs, ys, color=colour, lw=lw, solid_capstyle="round", zorder=3 + i)
-            ax.plot([0], [float(y[0])], marker="o", color=colour, markersize=9, zorder=6, clip_on=False)
-        ax.text(ends[i][0] + 4, lab[i], label, color=INK if name in DASHED else colour,
-                fontweight="bold" if bold else "normal", ha="left", va="center", clip_on=False)  # fmt: skip
+        ax.plot(xs, ys, color=colour, lw=lw, solid_capstyle="round", zorder=3 + i)
+        ax.plot([0], [float(y[0])], marker="o", color=colour, markersize=9, zorder=6, clip_on=False)
+        ax.text(ends[i][0] + 4, lab[i], label, color=colour, fontweight="bold" if bold else "normal", ha="left",
+                va="center", clip_on=False)  # fmt: skip
     return fig
 
 
