@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **New Detector takes its example from the dataset's own items** (issue #5205). The media tab (**Face**,
+  **Image**, …) gains **Pick from Dataset…** beside **Browse …**: it shows the selected dataset's items as a grid,
+  and a click adds one as the example (**+ Pick from Dataset…** under the stack adds another). On a Face dataset,
+  which can't search by text, this was missing: the only way in was a picture of the face brought from outside
+  the app and cropped by hand, since a whole photo is not searched for its faces first.
+
 - **A demo loads as linked photo and face datasets.** Add Dataset › Demo › **Downloaded Media** gains the
   **Multi-Dataset** box: tick it, then **Face** beside **Image**, and a demo such as Celebrities in Context loads as
   two datasets of one import, the photos and the faces cut out of them, so a face's **Show in photo** and the

@@ -34,6 +34,16 @@ export class MediasApiService {
     return listMediaIds(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
+  /**
+   * {@link getMediaIds} out of *datasetId* rather than the active dataset,
+   * with no detector (`DATASET_OVERRIDE`): New Detector lists the items of
+   * the dataset it was opened for, which need not be the active one (#5205).
+   */
+  getMediaIdsIn(datasetId: string): Observable<MediaIdsListResponse[]> {
+    const context = new HttpContext().set(DATASET_OVERRIDE, datasetId);
+    return listMediaIds(this.http, this.config.rootUrl, undefined, context).pipe(map((r) => r.body));
+  }
+
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {
     return batchMedias(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }

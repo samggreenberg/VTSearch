@@ -578,9 +578,12 @@ is cut from, so that every face can show you its photo.
    two rows ticked.
 4. With the Face dataset selected, click **Train**. A face can't be
    described in words, so **New Detector** asks for an example on its
-   **Face** tab: drop in a picture of the person's face, cropped to the face
-   (an uncropped photo is not searched for faces first), and click
-   **Create**. Then vote as usual; every vote goes on a face, never a photo.
+   **Face** tab: click **Pick from Dataset…**, click one of the person's
+   faces in the grid of the dataset's faces, and click **Create**. (A
+   picture of the face from your own computer works too, dropped on the box
+   below; crop it to the face, since an uncropped photo is not searched for
+   faces first.) Then vote as usual; every vote goes on a face, never a
+   photo.
 5. To see the whole photos, rank the faces (in Train's **Manual** tab,
    **Sort: Learned**; or Tune's **Review** tab) and switch **Show: Faces |
    Photos** to **Photos**: every photo with a matching face, the face
@@ -1291,7 +1294,10 @@ It has two tabs:
   quickest way to supply the first one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
   click it to browse; it asks **Use This Example?** and offers to crop it
-  first. For anything else, the **Browse Images…** button
+  first. To take an item the dataset already holds, **Pick from Dataset…**
+  shows the selected dataset's items as a grid; click one to add it. It is
+  there while that dataset is loaded and of the detector's media type. For
+  anything else, the **Browse Images…** button
   (it's named for the dataset's media type) opens a picker with the same
   two-row tab bar as the Add Dataset dialog, offering three sources out of
   the box: **Downloaded Media** (the path of a file inside a downloaded demo
@@ -1299,7 +1305,8 @@ It has two tabs:
   **URL** (VTSearch downloads the file for you); plugins can add more.
   Picked examples stack vertically, each with its own **Remove**
   button; use **+ Add** below the stack to append another (from the picker's
-  sources; only the first example can come from your own computer). An
+  sources; only the first example can come from your own computer), or
+  **+ Pick from Dataset…** for another of the dataset's items. An
   example picture also names the detector after its file until you type a
   name. With several
   examples, Autopilot's first sort ranks the dataset against their
