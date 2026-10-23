@@ -358,8 +358,9 @@ LVIS_SPLITS = ("train", "val")
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
 
-#: The owner's hand corrections to COCO's labels for ``coco_better`` (#4179): one
-#: row per (image, class) a human looked at and found COCO wrong about. Committed
+#: The owner's hand corrections to COCO's labels for ``coco_better`` (#4179, then
+#: #4954 appended with ``harmful_review.py export --append``): one row per
+#: (image, class) a human looked at and found COCO wrong about. Committed
 #: here rather than on scratch because it is a record of someone having looked,
 #: which no rebuild can bring back (#3729). Two findings, and each is applied
 #: through a door ``scale_core`` already has:

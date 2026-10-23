@@ -1,6 +1,6 @@
 {
- "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side 3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26",
- "n_answered": 3308,
+ "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side 3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26; then #4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22",
+ "n_answered": 3521,
  "rows": [
   {
    "image_id": 10581,
@@ -23,6 +23,17 @@
    "file": "airplane_6be43d3714cd.jpg"
   },
   {
+   "image_id": 275450,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_44579b524b10.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 358442,
    "class": "airplane",
    "finding": "not_positive",
@@ -31,6 +42,17 @@
    "rule": "airplane fixed wing",
    "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
    "file": "airplane_982964377d06.jpg"
+  },
+  {
+   "image_id": 361275,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_8ec44445c1f0.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 484256,
@@ -143,6 +165,17 @@
    "file": "bag_or_luggage_2bcd169e961a.jpg"
   },
   {
+   "image_id": 322558,
+   "class": "bag or luggage",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_730ae5130b71.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 338703,
    "class": "bag or luggage",
    "finding": "not_positive",
@@ -201,6 +234,17 @@
    "rule": "banana fruit",
    "asked": "banana fruit - is there one here? (if boxed, is the box one?) [test set]",
    "file": "banana_38abec57030e.jpg"
+  },
+  {
+   "image_id": 308522,
+   "class": "banana",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "banana fruit",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_00392fa32718.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 430160,
@@ -283,6 +327,17 @@
    "file": "bench_7f6f60df7f9e.jpg"
   },
   {
+   "image_id": 141532,
+   "class": "bench",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bench not chairs",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_870e8513661e.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 231941,
    "class": "bench",
    "finding": "present",
@@ -333,6 +388,17 @@
    "file": "bicycle_05adea350c4a.jpg"
   },
   {
+   "image_id": 418373,
+   "class": "bicycle",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_eaf0f43f6e85.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 438620,
    "class": "bicycle",
    "finding": "present",
@@ -381,6 +447,17 @@
    "rule": "bird incl dead not food",
    "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
    "file": "bird_e8b6600e52fc.jpg"
+  },
+  {
+   "image_id": 109907,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_f2301c23d4fb.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 160822,
@@ -503,6 +580,17 @@
    "file": "boat_5629d2479d37.jpg"
   },
   {
+   "image_id": 470354,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "boat_363fc1b3663a.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 470882,
    "class": "boat",
    "finding": "not_positive",
@@ -533,6 +621,28 @@
    "file": "boat_8f30147cb0c3.jpg"
   },
   {
+   "image_id": 138521,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "book_b6c64d2b3ce0.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 150502,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "book_3e42354d4072.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 172342,
    "class": "book",
    "finding": "not_positive",
@@ -541,6 +651,17 @@
    "rule": "book incl magazines",
    "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
    "file": "book_101d3f85ee66.jpg"
+  },
+  {
+   "image_id": 238768,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "book_c517bc518a38.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 275585,
@@ -563,6 +684,17 @@
    "file": "recheck_9516579b9eac.jpg"
   },
   {
+   "image_id": 331507,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "book_49d42fcf931d.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 339177,
    "class": "book",
    "finding": "not_positive",
@@ -571,6 +703,17 @@
    "rule": "book incl magazines",
    "asked": "coco_better recheck - is the boxed object the class on the banner?",
    "file": "recheck_1b3cf1060a96.jpg"
+  },
+  {
+   "image_id": 362740,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "book_7836296dadcb.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 490400,
@@ -903,6 +1046,17 @@
    "file": "bowl_7422010f8cfe.jpg"
   },
   {
+   "image_id": 81287,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_e3ec0a5055a3.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 90787,
    "class": "bus",
    "finding": "not_positive",
@@ -983,6 +1137,28 @@
    "file": "recheck_5b88f00de5f1.jpg"
   },
   {
+   "image_id": 536109,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_1a770d336971.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 105605,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_7aff30de1669.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 134297,
    "class": "cell phone",
    "finding": "not_positive",
@@ -1001,6 +1177,17 @@
    "rule": "cell phone not landlines",
    "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
    "file": "cell_phone_35bebc35fa71.jpg"
+  },
+  {
+   "image_id": 173469,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_62993766a389.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 240903,
@@ -1123,6 +1310,17 @@
    "file": "chair_5efbd073bf97.jpg"
   },
   {
+   "image_id": 396581,
+   "class": "chair",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "chair incl stools not couches",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_f06fcf662993.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 471405,
    "class": "chair",
    "finding": "present",
@@ -1131,6 +1329,17 @@
    "rule": "chair incl stools not couches",
    "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?)",
    "file": "chair_0c1fdc5d882d.jpg"
+  },
+  {
+   "image_id": 520091,
+   "class": "chair",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?)",
+   "file": "mixed_3e32b32f9e47.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 113338,
@@ -1151,6 +1360,17 @@
    "rule": "clock not watches",
    "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
    "file": "clock_4db10fdeef3a.jpg"
+  },
+  {
+   "image_id": 195188,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_9f5b234d88de.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 363349,
@@ -1233,6 +1453,17 @@
    "file": "dining_table_5ef8040cbc3f.jpg"
   },
   {
+   "image_id": 98304,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_03f2a7bcf2c5.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 129407,
    "class": "dining table",
    "finding": "not_positive",
@@ -1291,6 +1522,17 @@
    "rule": "dining table surface in dining use",
    "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
    "file": "dining_table_ad83e31c2ae4.jpg"
+  },
+  {
+   "image_id": 453622,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_170fcc33b9da.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 453755,
@@ -1371,6 +1613,17 @@
    "rule": "enclosed road vehicle not bus or bike",
    "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
    "file": "enclosed_road_vehicle_860fa4fd4b8e.jpg"
+  },
+  {
+   "image_id": 14375,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_43ac81cc5fa3.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 52020,
@@ -1503,6 +1756,17 @@
    "file": "recheck_73340d396bb5.jpg"
   },
   {
+   "image_id": 253577,
+   "class": "fork",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "fork incl sporks not strainers",
+   "asked": "fork incl sporks not strainers - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "fork_5d704d37cb9d.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 261858,
    "class": "fork",
    "finding": "not_positive",
@@ -1531,6 +1795,17 @@
    "rule": "frisbee disc",
    "asked": "frisbee disc - is there one here? (if boxed, is the box one?)",
    "file": "frisbee_70997d8e90f0.jpg"
+  },
+  {
+   "image_id": 324338,
+   "class": "frisbee",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "frisbee disc",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_fefdb4aaeb29.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 408057,
@@ -1573,6 +1848,17 @@
    "file": "keyboard_76ed32156d3d.jpg"
   },
   {
+   "image_id": 203937,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "keyboard_80cfcc9ce384.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 341712,
    "class": "keyboard",
    "finding": "not_positive",
@@ -1581,6 +1867,50 @@
    "rule": "keyboard computer not piano",
    "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?)",
    "file": "keyboard_bb45d2f69112.jpg"
+  },
+  {
+   "image_id": 481124,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "keyboard_5eee3d64faa5.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 519432,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_553453475a46.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 568418,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "keyboard_5da5218e4bb9.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 578107,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "keyboard_4bffe295eaae.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 397500,
@@ -1603,6 +1933,17 @@
    "file": "kite_52238e4950ec.jpg"
   },
   {
+   "image_id": 22340,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_c6235cfe36a6.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 286442,
    "class": "knife",
    "finding": "not_positive",
@@ -1621,6 +1962,17 @@
    "rule": "knife incl butter knives and servers",
    "asked": "knife incl butter knives and servers - is there one here? (if boxed, is the box one?)",
    "file": "knife_d9bcee043ac1.jpg"
+  },
+  {
+   "image_id": 386896,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_9a9980838465.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 436859,
@@ -1651,6 +2003,17 @@
    "rule": "laptop not a monitor",
    "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
    "file": "laptop_6701c04f35d9.jpg"
+  },
+  {
+   "image_id": 126814,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_e8a37bfebbaa.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 150164,
@@ -1843,6 +2206,17 @@
    "file": "mouse_cbe2cbc67eee.jpg"
   },
   {
+   "image_id": 362751,
+   "class": "mouse",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mouse_9417e5a6b031.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 394481,
    "class": "mouse",
    "finding": "not_positive",
@@ -1993,6 +2367,17 @@
    "file": "remote_36eafcebdd68.jpg"
   },
   {
+   "image_id": 79721,
+   "class": "remote",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "remote control handheld",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_9319eea0f861.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 166043,
    "class": "remote",
    "finding": "not_positive",
@@ -2001,6 +2386,17 @@
    "rule": "remote control handheld",
    "asked": "remote control handheld - is there one here? (if boxed, is the box one?)",
    "file": "remote_b146530bc5fa.jpg"
+  },
+  {
+   "image_id": 492846,
+   "class": "remote",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "remote control handheld",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_ca79a805bd8d.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 266443,
@@ -2033,6 +2429,17 @@
    "file": "single_serving_drinking_vessel_88ca2f444800.jpg"
   },
   {
+   "image_id": 183218,
+   "class": "single serving drinking vessel",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_c021a4505feb.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 281557,
    "class": "single serving drinking vessel",
    "finding": "present",
@@ -2051,6 +2458,17 @@
    "rule": "single serving drinking vessel any stem",
    "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
    "file": "single_serving_drinking_vessel_a3e1fb5a0ef5.jpg"
+  },
+  {
+   "image_id": 363869,
+   "class": "single serving drinking vessel",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_234ca979de22.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 562059,
@@ -2101,6 +2519,17 @@
    "rule": "sink basin not counter",
    "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
    "file": "sink_16e1a03b425b.jpg"
+  },
+  {
+   "image_id": 497443,
+   "class": "sink",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "sink_656114f11b96.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 561514,
@@ -2303,6 +2732,28 @@
    "file": "skis_06a5a3841708.jpg"
   },
   {
+   "image_id": 465795,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_564b8311bd09.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
+   "image_id": 505391,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_9a534d2b5985.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 514518,
    "class": "skis",
    "finding": "present",
@@ -2473,6 +2924,17 @@
    "file": "snowboard_4c0978e9bda4.jpg"
   },
   {
+   "image_id": 576431,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "snowboard_9b3c1b202303.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 66041,
    "class": "spoon",
    "finding": "not_positive",
@@ -2613,6 +3075,17 @@
    "file": "stop_sign_598c10991c13.jpg"
   },
   {
+   "image_id": 457824,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_e5fe2d0562c9.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 475389,
    "class": "stop sign",
    "finding": "not_positive",
@@ -2621,6 +3094,17 @@
    "rule": "stop sign not other signs",
    "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?) [test set]",
    "file": "stop_sign_f4f15d36ef3e.jpg"
+  },
+  {
+   "image_id": 37955,
+   "class": "surfboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "surfboard not snowboard",
+   "asked": "surfboard not snowboard - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "surfboard_e422ec8777e1.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 130413,
@@ -2703,6 +3187,17 @@
    "file": "tie_030b83116284.jpg"
   },
   {
+   "image_id": 72582,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_c922f3951b57.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 76619,
    "class": "tie",
    "finding": "not_positive",
@@ -2733,6 +3228,17 @@
    "file": "tie_86f7c68a10af.jpg"
   },
   {
+   "image_id": 355736,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_d6c26ea7c212.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 369341,
    "class": "tie",
    "finding": "not_positive",
@@ -2761,6 +3267,17 @@
    "rule": "tie necktie incl bow ties",
    "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
    "file": "tie_56dd076fc3ef.jpg"
+  },
+  {
+   "image_id": 60077,
+   "class": "toothbrush",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "toothbrush manual or electric",
+   "asked": "toothbrush manual or electric - is there one here? (if boxed, is the box one?) [4954 scan]",
+   "file": "toothbrush_0a69afb77b86.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 289746,
@@ -2883,6 +3400,17 @@
    "file": "tv_999183c8b099.jpg"
   },
   {
+   "image_id": 247234,
+   "class": "tv",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "tv incl computer monitors",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_5be12ddffbdd.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
+  },
+  {
    "image_id": 250124,
    "class": "tv",
    "finding": "present",
@@ -2941,6 +3469,17 @@
    "rule": "umbrella incl parasols not canopies",
    "asked": "umbrella incl parasols not canopies - is there one here? (if boxed, is the box one?) [test set]",
    "file": "umbrella_1fd66830d62d.jpg"
+  },
+  {
+   "image_id": 7476,
+   "class": "vase or potted plant",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "vase or potted plant incl cut flowers",
+   "asked": "coco_better mixed - is the class on the banner here? (if boxed, is the box one?) [4954 scan]",
+   "file": "mixed_53c41b703c73.jpg",
+   "source": "#4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22"
   },
   {
    "image_id": 139994,

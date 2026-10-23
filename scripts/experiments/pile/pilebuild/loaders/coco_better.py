@@ -226,7 +226,7 @@ def _lvis_boxes(lvis_dir: Path, wanted: dict[str, str]) -> dict[int, dict[str, l
 
 
 def human_corrections(path: Path | None = None) -> tuple[set[tuple[int, str]], set[tuple[int, str]]]:
-    """``(present, not_positive)`` from the committed owner review (#4179).
+    """``(present, not_positive)`` from the committed owner reviews (#4179, #4954).
 
     See :data:`pile_config.COCO_BETTER_CORRECTIONS` for what each finding does.
     A missing file is no corrections, so a checkout without the record builds
@@ -319,7 +319,7 @@ def _plan(dataset: str) -> _Plan:
     excluded |= not_positive
     if present or not_positive:
         log(
-            f"  coco_better: owner corrections (#4179): {len(present):,} present-not-boxed, "
+            f"  coco_better: owner corrections (#4179, #4954): {len(present):,} present-not-boxed, "
             f"{len(not_positive):,} not-a-positive"
         )
     for cls in pc.SCALE_LUMP_FILTER:
