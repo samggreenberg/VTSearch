@@ -12,20 +12,20 @@
 
 <!-- build: figs/atlas-far.build4.webp -->
 
-<!-- **a** — Back in our room: seventy-six new photos on the floor, none of
-     them ones we trained on. -->
+<!-- **a** — Back in our room: seventy-six photos on the floor. How would we
+     know a photo doesn't belong here? -->
 
-<!-- **b** — Now the photos we did train on: each cube stands for a patch of
-     them. -->
+<!-- **b** — Split the floor in half. The gray half stays put: it's what
+     every photo gets measured against. -->
 
-<!-- **c** — For each photo the check asks: how far am I from the photos we
-     trained on, against how far those photos sit from each other? On the
-     floor, close. Seven of seventy-six look strange; chance alone flags a
-     few. -->
+<!-- **c** — Each white photo finds its nearest gray one. Short hops, all over
+     the floor. That's our yardstick for near, and a new floor photo would
+     rarely fall outside it. -->
 
 <!-- **d** — Now the ceiling collection. The detector scored these without
      blinking. -->
 
-<!-- **e** — But every one is a long way from every cube, and the check calls
-     all seventy-six strange. It knows nothing about books, just where our data
-     was. Not "is this a match?" but "have I been here?" -->
+<!-- **e** — But every one's nearest gray photo is a long way down, farther
+     than any hop on the floor, so all seventy-six look strange. It knows
+     nothing about books, just where our data was. Not "is this a match?" but
+     "have I been here?" -->
