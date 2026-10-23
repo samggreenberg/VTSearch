@@ -1,5 +1,9 @@
 # Does the Coverage Atlas walk pay on a corpus unlike the votes'? The screens legs (issue #4739)
 
+**Leg 1 (Objects365 Better) ran on 2026-10-23: [its report](../2026-10-23-cross-corpus-o365-4739/REPORT.md).
+There the walk costs more than in-corpus (+0.010 / +0.010 / +0.009 against +0.006 / +0.007 / +0.008 on the same 107
+cells), and the late crossover is gone.**
+
 **Not on screenshots: the walk's price on the Find corpus is its in-corpus price.** Today's app is set against
 New taking the Hard pick (`CALIB_NEW_WALK=hard`, #4671's arm), in 720 paired runs a preset, on #4671's bench. Each
 run Finds on a second corpus beside the withheld half (#4960). The Objects365 leg, the one that can change the ship
