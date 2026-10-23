@@ -26,6 +26,11 @@ under the :data:`METADATA_KEY` namespace, so it round-trips through labelset
 JSON export/import with no format change.  Scalars only: the
 no-persisted-vectors rule is untouched.
 
+An export carries only the part that survives a change of embedder: the
+:data:`NON_PORTABLE_FIELDS` (a rank in one embedder's sort, a score from one
+trained head) stay in the detector's own JSON, and
+:func:`portable_metadata` drops them on the way out (#5131).
+
 Axes
 ----
 
@@ -131,6 +136,13 @@ _ENUM_FIELDS: dict[str, frozenset[str]] = {
 
 #: Every key a recorded payload may carry, in serialisation order.
 FIELDS = ("v", "flow", "phase", "select_mode", "sort_kind", "rank_at_vote", "score_at_vote")
+
+#: The fields measured by the ranking that surfaced the item: a position in one
+#: embedder's sort and a score from one trained head.  They mean nothing to a
+#: receiver with another embedder or head, so a labelset export leaves them
+#: behind (:func:`portable_metadata`, #5131).  The categorical fields say how
+#: the item was drawn, which holds whatever embedder the labels go on to train.
+NON_PORTABLE_FIELDS = ("rank_at_vote", "score_at_vote")
 
 
 def _clean_int(value: Any, field: str) -> int | None:
@@ -314,3 +326,25 @@ def attach_provenance(
     merged = dict(metadata) if metadata else {}
     merged[METADATA_KEY] = cleaned
     return merged
+
+
+def portable_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return *metadata* as a labelset export carries it: without :data:`NON_PORTABLE_FIELDS`.
+
+    Copies rather than mutating, since the caller's dict is the detector's own
+    record, which keeps every field for its local readers.  A provenance left
+    holding nothing but its schema version is dropped, and so is a metadata
+    dict left empty.  Returns *metadata* itself when there is nothing to drop.
+    """
+    if not isinstance(metadata, dict):
+        return metadata
+    provenance = metadata.get(METADATA_KEY)
+    if not isinstance(provenance, dict) or not any(f in provenance for f in NON_PORTABLE_FIELDS):
+        return metadata
+    kept = {k: v for k, v in provenance.items() if k not in NON_PORTABLE_FIELDS}
+    out = dict(metadata)
+    if set(kept) - {"v"}:
+        out[METADATA_KEY] = kept
+    else:
+        del out[METADATA_KEY]
+    return out or None

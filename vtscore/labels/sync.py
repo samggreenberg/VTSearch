@@ -12,7 +12,10 @@ file schedules one - :mod:`vtscore.detectors.store` calls
 renames all reach the source without each route having to remember to.  The
 payload is the detector file's **whole labelset** (every dataset's labels,
 not just the active dataset's votes) plus its ``detector_meta``, read when the
-push runs, so it is always the newest state.  Pushes are paced per detector:
+push runs, so it is always the newest state.  Like every labelset export it
+leaves behind the numbers this server's embedder and head measured
+(:func:`~vtscore.datasets.labelset.labelset_for_export`).  Pushes are paced
+per detector:
 
 * never two at once for one detector - a change landing while a push is in
   flight rides the next one;
@@ -283,23 +286,19 @@ def _run_push(name: str) -> None:
             _slots_cv.notify_all()
 
 
-def _push_payload(data: dict[str, Any], detector_id: str) -> LabelSet:
-    """The labelset a push sends: the file's whole labelset plus ``detector_meta``."""
-    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtscore.detectors.input_spec import build_detector_meta  # noqa: PLC0415
-    from vtscore.detectors.query_head import is_quota_head  # noqa: PLC0415
-    from vtscore.state.core import get_detector_context  # noqa: PLC0415
+def _push_payload(data: dict[str, Any]) -> LabelSet:
+    """The labelset a push sends: the file's whole labelset plus ``detector_meta``, as an export carries it.
 
-    labelset = LabelSet.from_dict(data.get("labelset") or {})
-    # The live threshold travels only from a trained head: a Goods' centroid's
-    # (#4643), or a typed query's head's (#4758), is its own head's 0.5, which
-    # says nothing about the labels to anyone without that head.
-    ctx = get_detector_context(detector_id) if detector_id else None
-    threshold = None
-    if ctx is not None and ctx.model is not None and not is_quota_head(ctx.model):
-        threshold = ctx.threshold
-    labelset.detector_meta = build_detector_meta(data, threshold=threshold) or None
-    return labelset
+    No threshold, rank or score goes with it (#5131): those were measured by
+    this server's embedder and head, and the receiver trains its own.  The
+    file keeps them.
+    """
+    from vtscore.datasets.labelset import LabelSet, labelset_for_export  # noqa: PLC0415
+    from vtscore.detectors.input_spec import build_detector_meta  # noqa: PLC0415
+
+    payload = dict(data.get("labelset") or {})
+    payload["detector_meta"] = build_detector_meta(data)
+    return LabelSet.from_dict(labelset_for_export(payload))
 
 
 def _push_detector(name: str) -> None:
@@ -338,7 +337,7 @@ def _push_detector(name: str) -> None:
     data = _read_detector(_detector_path(name))
     if data is None:
         return
-    labelset = _push_payload(data, detector_id)
+    labelset = _push_payload(data)
     digest = _digest(labelset)
     with _slots_cv:
         if _last_synced.get(name) == digest:

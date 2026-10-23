@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **An exported labelset no longer carries numbers measured by one embedder or head** (issue #5131). A labelset
+  export is references to the Good and Bad labels, so it can rebuild the detector under another embedder; a number
+  from this server's embedder space or trained head means nothing at the other end. The new
+  `vtscore.datasets.labelset.labelset_for_export(payload)` is the form every labelset export takes, and both export
+  paths use it: a `LabelsetSource` push and the payload VTSearch hands an exporter's `export_labelset()`. It drops
+  `threshold` from `detector_meta` and `rank_at_vote` / `score_at_vote` from each element's `vt:provenance`
+  (`vote_provenance.NON_PORTABLE_FIELDS`, via the new `vote_provenance.portable_metadata`), and passes everything
+  else through. **Format change:** `detector_meta` is no longer emitted with a `threshold`; it holds `media_type` and
+  `input_spec` only. `build_detector_meta(..., threshold=...)` still accepts the keyword, now ignored with a
+  `DeprecationWarning`. The detector's own JSON keeps the full provenance, and `apply_detector_meta` still ignores a
+  `threshold` arriving from an older server.
+
 - **Smart's green reasons drop "You can likely stop labeling."** (issue #5137).
   `cost_trend.rising_status_from_scores` and `smart_status_from_costs` return the same statuses and numbers; their
   green `reason` now says only what the rule read (F-beta stopped rising, or the error cost levelled off, and whether

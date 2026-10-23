@@ -18,14 +18,14 @@ The largest package in the library. Every module, grouped by role.
 | Module | Concern |
 |--------|---------|
 | `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
-| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key` |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export` |
 | `vtscore/datasets/metadata.py` | Per-media metadata extraction |
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
 | `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
 | `vtscore/datasets/source_item.py` | Find a converter output's source item (a face's photo) in the sibling dataset of the same multi-dataset import |
 | `vtscore/datasets/source_groups.py` | Group a ranking of converter outputs by source item (faces by photo), each group scored as its best member |
-| `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped; nothing acts on it yet) |
+| `vtscore/datasets/vote_provenance.py` | Vocabulary + validation for a vote's surfacing provenance, stored in `LabeledElement.metadata` (recorded and round-tripped, less its rank and score on export; nothing acts on it yet) |
 
 **Loading and persistence**
 
@@ -180,10 +180,18 @@ degrades to an image-level label rather than failing the import.
 
 `vtscore/datasets/labelset.py`: `LabelSet(elements=None, *,
 detector_meta=None)` - an ordered list of `LabeledElement` plus an
-optional `detector_meta` block (`media_type`, `input_spec`,
-`threshold`). The serialised form
-`{"labels": [...], "detector_meta": {...}}` is a strict superset of
-the legacy `{"labels": [{"md5", "label"}, …]}` shape.
+optional `detector_meta` block (`media_type`, `input_spec`). The
+serialised form `{"labels": [...], "detector_meta": {...}}` is a strict
+superset of the legacy `{"labels": [{"md5", "label"}, …]}` shape.
+
+`labelset_for_export(payload)` (same module) is that serialised form as it
+leaves the server, and every labelset export goes through it: a
+`LabelsetSource` push and the payload an exporter's `export_labelset`
+receives. It drops what was measured by this server's embedder or head, which
+means nothing to a receiver that trains its own (#5131): `threshold` from
+`detector_meta`, and `rank_at_vote` / `score_at_vote` from each element's
+`vt:provenance` (`vote_provenance.NON_PORTABLE_FIELDS`). The rest of the
+payload passes through, and the detector's own JSON keeps every field.
 
 ```python
 from vtscore.datasets import LabelSet, LabeledElement

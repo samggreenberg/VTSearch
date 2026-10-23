@@ -72,6 +72,13 @@ axis. There are three payload kinds, each with its own method:
 | `labelset` | `export_labelset()` | a detector's labels - origins and vote provenance |
 | `detector_bundles` | `export_cli_detectors()` | the trained classifiers themselves |
 
+A labelset reaches `export_labelset()` already stripped of the numbers this
+server's embedder and head measured (`labelset_for_export`,
+`vtscore/datasets/labelset.py`): each element's `vt:provenance` keeps how the
+item was drawn but not its `rank_at_vote` / `score_at_vote` (#5131). An
+exported labelset is references to labels, so it can rebuild the detector
+under another embedder; your exporter has nothing to drop.
+
 `supported_payloads` is **derived** from which of these you overrode
 (never declared, so there is nothing to forget), and it is what each
 picker filters on: an exporter is only offered for the kinds it claims,
