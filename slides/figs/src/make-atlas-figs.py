@@ -31,10 +31,14 @@ and hard to parse — a fair verdict, and the diagnosis worth keeping is that
 points on a sphere give the eye nothing to judge position against. A floor,
 four posts and a lid do.
 
-`atlas-far` is drawn in that same room: the shipped atlas built on its floor,
-and the distance from each item to its cell's centre, which is what the atlas's
-typicality score ranks. A plot of how calibrated that score is (`atlas-pvalues`)
-was cut from the deck as too technical for a feature rarely used (#4872).
+`atlas-far` is drawn in that same room: the domain-shift check, with a
+reference built on its floor and a spoke from each item to a cube standing for
+where the reference is. The cubes and spokes were drawn when the check ranked
+against the atlas's cells, and are kept as the illustration (owner, #5197); the
+counts are the shipped rule's, a split-conformal kNN against the reference's
+own photos (#3348). A plot of how calibrated the old atlas score was
+(`atlas-pvalues`) was cut from the deck as too technical for a feature rarely
+used (#4872).
 """
 
 import functools
@@ -1459,28 +1463,35 @@ def depth_fig() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3b. Far Out — the atlas finding the room's second collection (#4517)
+# 3b. Far Out — the domain-shift check finding the room's second collection (#4517)
 # ──────────────────────────────────────────────────────────────────────────────
 
 FAR_STAGES = 5
-#: How many floor points the atlas is built on. Denser than the drawing's
-#: `N_ITEMS`, because the shipped atlas splits only nodes of twenty and more
-#: and calibrates only those: built on the drawn seventy-six it would have a
-#: handful of calibrated nodes and say little. The drawn floor items are then
-#: *held out* — the atlas never saw them — which is the honest test.
+#: How many floor points the reference holds. Denser than the drawing's
+#: `N_ITEMS`, so the rule's two halves (a thousand photos each) cover the floor
+#: finely. The drawn floor items are then *held out* — the reference never
+#: holds them — which is the honest test.
 FAR_BUILD = 2000
 FAR_SEED = 23
 #: The threshold an item is flagged at: the domain-shift report's own alpha.
 FAR_ALPHA = 0.05
-#: What the notes say the atlas makes of each collection, flagged of drawn.
-FAR_FLAGGED = (2, 68)
-#: The cells whose centres the slide draws: the atlas's own rule (three at a
-#: time) two levels down, nine cells, on the floor it is built on. Like the
-#: plane's partition above, a k-means on positions rather than on the centred
-#: directions the shipped atlas splits: the picture is "how far from your
-#: cell's centre", and that is what the shipped score ranks (owner, #4872).
+#: What the notes say the rule makes of each collection, flagged of drawn.
+FAR_FLAGGED = (7, 76)
+#: How far above the room a position is lifted before the rule sees it, in
+#: world units. The rule compares directions, the cosines of unit vectors, and
+#: a room position taken as a vector is a direction from the room's corner: two
+#: photos on one ray from it would be the same photo. Centred on the floor and
+#: lifted to `(u, v, h, FAR_LIFT)`, every position is seen from this far off,
+#: where cosine falls with room distance `d` as `1 - d^2 / 2 FAR_LIFT^2` to
+#: within a percent. So the rule's "near" is the room's.
+FAR_LIFT = 50.0
+#: Where the cubes go: two levels of the atlas's three-way split, nine cells,
+#: on the reference, one cube at each cell's centre. They were the cells'
+#: centres when the check ranked against the atlas (owner, #4872). Now they
+#: stand for where the reference is, which is what the rule measures an item
+#: against; where exactly each one sits is the drawing's choice (owner, #5197).
 FAR_LEVELS = 2
-#: A centre's mark: a white cube, a shape no item has, half sunk in the floor as
+#: The reference's mark: a white cube, a shape no item has, half sunk in the floor as
 #: every item is (owner, #4884: not a black diamond laid over everything). Its
 #: half-side in world units, sized so the cube stands as big on the page as a
 #: sphere does.
@@ -1490,7 +1501,7 @@ FAR_CUBE = 0.11
 #: floor's own wash, as a sphere's crescent is.
 CUBE_FACES = {"top": "white", "front": "#f3f5f8", "right": "#e2e7ee"}
 CUBE_FACES_SUNK = {"front": PLANE_FILL, "right": "#d6dde6"}
-#: The spokes from each item to its cell's centre.
+#: The spokes from each item to its cube.
 FAR_SPOKE = {"color": SOFT, "linewidth": 1.2}
 #: How finely a spoke is cut to be tested against what stands in front of it,
 #: in page units, before each change between seen and hidden is refined.
@@ -1510,24 +1521,24 @@ def _far_build() -> np.ndarray:
 
 @functools.lru_cache(maxsize=1)
 def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
-    """The shipped atlas, built on the floor, scoring the drawn floor items and the ceiling.
+    """The shipped rule, with the floor's build as the reference, scoring the drawn floor items and the ceiling.
 
-    Real code on drawing coordinates: `CoverageAtlas` and its
-    `typicality_pvalues`, the same pair the domain-shift route calls. Each item
-    is its room position `(u, v, h)` as a three-number vector.
+    Real code on drawing coordinates: `typicality_pvalues`, the function the
+    domain-shift check calls. Each item is its room position `(u, v, h)`,
+    lifted as `FAR_LIFT` says.
     """
-    from vtscore.coverage.atlas import CoverageAtlas  # noqa: PLC0415
+    from vtscore.coverage.domain_shift import typicality_pvalues  # noqa: PLC0415
 
-    build = _far_build()
-    build3 = np.column_stack([build, np.zeros(len(build))])
-    atlas = CoverageAtlas({i: row for i, row in enumerate(build3.astype(np.float32))})
+    def lifted(points: np.ndarray, h: float) -> np.ndarray:
+        n = len(points)
+        return np.column_stack(
+            [points[:, 0] - BOX_U / 2, points[:, 1] - BOX_V / 2, np.full(n, h), np.full(n, FAR_LIFT)]
+        ).astype(np.float32)
+
+    reference = lifted(_far_build(), 0.0)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
-
-    def scored(points: np.ndarray, h: float) -> np.ndarray:
-        return atlas.typicality_pvalues(np.column_stack([points, np.full(len(points), h)]).astype(np.float32))
-
-    return scored(floor, 0.0), scored(ceiling, NEW_H)
+    return typicality_pvalues(reference, lifted(floor, 0.0)), typicality_pvalues(reference, lifted(ceiling, NEW_H))
 
 
 @functools.lru_cache(maxsize=1)
@@ -1544,28 +1555,32 @@ def _far_tree() -> list[tuple[np.ndarray, list[np.ndarray]]]:
 
 
 def _far_centre(u: float, v: float) -> np.ndarray:
-    """The centre of the cell an item routes to: the nearest part, then that part's nearest child, as the atlas walks."""
+    """The cube an item's spoke runs to: the nearest part, then that part's nearest child, as the atlas walked.
+
+    The route from when the cubes were the atlas's cells, kept with them, so
+    a spoke does not always end on the nearest cube.
+    """
     q = np.array([u, v])
     centre, kids = min(_far_tree(), key=lambda node: float(np.hypot(*(node[0] - q))))
     return min(kids, key=lambda c: float(np.hypot(*(c - q))))
 
 
 def far_fig() -> None:
-    """The atlas finding Out of Its Depth's second collection, drawn in the same room (#4517).
+    """The domain-shift check finding Out of Its Depth's second collection, drawn in the same room (#4517).
 
     Five pages (owner, #4872: "show the centers in a), the distance lines in
     b), the second domain in c), and the (longer) distance lines in d)", with
-    the floor alone first, #5132): the floor's items; then with the centres of
-    the atlas's cells; each floor item's spoke to its
-    cell's centre, short; the second collection on the ceiling, as Out of Its
-    Depth showed it; and its spokes, each down to the nearest centre, long.
-    How far an item is from its cell's centre, against how far the cell's own
-    items are, is what the shipped score ranks, and the counts the notes give
-    are that score's (`_far_pvalues`).
+    the floor alone first, #5132): the floor's items; then the cubes that
+    stand for the reference; each floor item's spoke to its cube, short; the
+    second collection on the ceiling, as Out of Its Depth showed it; and its
+    spokes, each down to a cube, long. The rule asks how far an item is from
+    the reference's nearest photos, against how far the reference's own photos
+    sit from theirs, and the counts the notes give are the rule's
+    (`_far_pvalues`).
     """
     floor_p, ceiling_p = _far_pvalues()
     flagged = (int((floor_p < FAR_ALPHA).sum()), int((ceiling_p < FAR_ALPHA).sum()))
-    assert flagged == FAR_FLAGGED, f"the notes say {FAR_FLAGGED} flagged, the atlas says {flagged}"
+    assert flagged == FAR_FLAGGED, f"the notes say {FAR_FLAGGED} flagged, the rule says {flagged}"
     for stage in range(1, FAR_STAGES):
         save(_far_stage(stage), OUT, f"atlas-far.build{stage}.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
     save(_far_stage(FAR_STAGES), OUT, "atlas-far.webp", column=FULL_BLEED, tight=False, notch=NOTCH)
@@ -1592,7 +1607,7 @@ def _sunk(colour: str) -> str:
 
 
 def _cube(ax: plt.Axes, u: float, v: float, zorder: float) -> None:
-    """A cell's centre: a cube half sunk in the floor, drawn as a sphere is.
+    """A stand-in for the reference: a cube half sunk in the floor, drawn as a sphere is.
 
     The camera sees the top, the south face and the east face. The floor cuts
     the two side faces at half height: above it they are white-ish with ink
@@ -1743,7 +1758,7 @@ def _near_edges(ax: plt.Axes) -> None:
 
 
 def _far_stage(stage: int) -> plt.Figure:
-    # Step 0 is the floor's items alone (owner, #5132); the atlas's centres arrive at step 1.
+    # Step 0 is the floor's items alone (owner, #5132); the cubes arrive at step 1.
     step = stage - 1
     fig, ax = _canvas()
     planes = _wireframe(ax)

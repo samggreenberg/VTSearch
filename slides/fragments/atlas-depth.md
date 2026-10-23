@@ -12,8 +12,8 @@
 
 <!-- build: figs/atlas-depth.build4.webp -->
 
-<!-- **a** — The atlas has a second job. Same picture: photos, votes, a
-     boundary. -->
+<!-- **a** — One more blind spot, and a bigger one. Same picture: photos,
+     votes, a boundary. -->
 
 <!-- **b** — Now tilt it. That sheet's the floor of a room; our collection just
      happens to sit there. -->
@@ -25,5 +25,5 @@
      it sorts the new stuff in and out with no hint it's guessing. -->
 
 <!-- **e** — We'd want a dome, where the concept stops. But every vote's on the
-     floor, so votes can't tell dome from pillar. That takes something that
-     knows where our data was. -->
+     floor, so votes can't tell dome from pillar. For that we ask the photos
+     themselves: where was our data? -->

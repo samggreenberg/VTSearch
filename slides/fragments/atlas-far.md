@@ -12,19 +12,20 @@
 
 <!-- build: figs/atlas-far.build4.webp -->
 
-<!-- **a** — Back in our room: seventy-six photos on the floor, none of them
-     ones the atlas has seen. -->
+<!-- **a** — Back in our room: seventy-six new photos on the floor, none of
+     them ones we trained on. -->
 
-<!-- **b** — Now the real atlas, built on that floor: the center of each of
-     its cells. -->
+<!-- **b** — Now the photos we did train on: each cube stands for a patch of
+     them. -->
 
-<!-- **c** — For each photo it asks: how far am I from my cell's center,
-     against how far that cell's own photos are? On the floor, close. Two of
-     seventy-six look strange, about chance. -->
+<!-- **c** — For each photo the check asks: how far am I from the photos we
+     trained on, against how far those photos sit from each other? On the
+     floor, close. Seven of seventy-six look strange; chance alone flags a
+     few. -->
 
 <!-- **d** — Now the ceiling collection. The detector scored these without
      blinking. -->
 
-<!-- **e** — But every one is a long way from every center, and the atlas
-     calls 68 of 76 strange. It knows nothing about books, just where its data
+<!-- **e** — But every one is a long way from every cube, and the check calls
+     all seventy-six strange. It knows nothing about books, just where our data
      was. Not "is this a match?" but "have I been here?" -->
