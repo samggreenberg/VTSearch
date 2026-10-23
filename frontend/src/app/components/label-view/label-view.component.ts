@@ -1296,6 +1296,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       defaultMediaType: media?.media_type ?? '',
       datasetEmbedder: media?.embedder ?? '',
       datasetEmbedders: media?.embedders ?? [],
+      datasetId: this.activeContext.datasetId,
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });

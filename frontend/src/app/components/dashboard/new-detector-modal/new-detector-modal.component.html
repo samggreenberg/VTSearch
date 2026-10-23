@@ -90,7 +90,12 @@
               @if (hasMediaExample) {
                 <ng-container [ngTemplateOutlet]="exampleStack" [ngTemplateOutletContext]="{ showAdd: true }"></ng-container>
               } @else {
-                <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse demos, server folders, or upload a file to pick an example">{{ browseMediaLabel }}</button>
+                <div class="example-sources">
+                  @if (exampleDataset()) {
+                    <button type="button" class="btn btn--secondary btn--sm pick-dataset-btn" (click)="openDatasetPicker()" [title]="pickFromDatasetTitle">Pick from Dataset…</button>
+                  }
+                  <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse demos, server folders, or upload a file to pick an example">{{ browseMediaLabel }}</button>
+                </div>
                 <vt-drop-zone
                   [label]="dropMediaLabel"
                   sublabel="or click to upload from this computer"
@@ -517,6 +522,27 @@
       }
     </div>
   }
+
+  <!-- An item of the dataset the form was opened for (#5205). Shares the
+       media picker's frame, so the dialog widens for the grid the same way. -->
+  @if (view() === 'dataset-picker') {
+    <div class="media-picker">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()" title="Return to the detector creation form">&larr; Back</button>
+      @if (exampleDataset(); as dataset) {
+        <vt-dataset-example-picker
+          [datasetId]="dataset.id"
+          [mediaType]="dataset.media_type"
+          [busy]="datasetPickBusy()"
+          (picked)="onDatasetItemPicked($event)"
+        ></vt-dataset-example-picker>
+      } @else {
+        <p class="empty-state">That dataset is no longer loaded.</p>
+      }
+      @if (datasetPickError()) {
+        <p class="error-text">{{ datasetPickError() }}</p>
+      }
+    </div>
+  }
 </vt-modal>
 
 @if (pendingFile) {
@@ -562,7 +588,12 @@
       </div>
     }
     @if (showAdd) {
-      <button type="button" class="btn btn--secondary btn--sm add-example-btn" (click)="openMediaPicker()" title="Add another example. The detector starts from what the examples have in common.">+ Add</button>
+      <div class="add-example-row">
+        @if (exampleDataset()) {
+          <button type="button" class="btn btn--secondary btn--sm pick-dataset-btn" (click)="openDatasetPicker()" [title]="pickFromDatasetTitle">+ Pick from Dataset…</button>
+        }
+        <button type="button" class="btn btn--secondary btn--sm add-example-btn" (click)="openMediaPicker()" title="Add another example. The detector starts from what the examples have in common.">+ Add</button>
+      </div>
     }
   </div>
 </ng-template>

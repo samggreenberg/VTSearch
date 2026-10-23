@@ -1278,8 +1278,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.embedderSourceDataset?.bound_embedders ?? [];
   }
 
-  /** The dataset the two getters above describe: the single selected one when
-   *  it records an embedder, else the first loaded one. */
+  /** The dataset the two getters above describe, and whose items the
+   *  new-detector modal offers as examples (#5205): the single selected one
+   *  when it records an embedder, else the first loaded one. */
   private get embedderSourceDataset(): DatasetRegistryEntry | undefined {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
@@ -1295,6 +1296,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       defaultMediaType: this.activeDatasetMediaType,
       datasetEmbedder: this.activeDatasetEmbedder,
       datasetEmbedders: this.activeDatasetEmbedders,
+      datasetId: this.embedderSourceDataset?.id ?? '',
     });
   }
 

@@ -9,6 +9,8 @@ import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
+import { DATASET_OVERRIDE } from '../../../interceptors/active-context.interceptor';
+import { settleResource } from '../../../testing/settle-resource';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -1060,6 +1062,109 @@ describe('NewDetectorModalComponent', () => {
     const req = httpMock.expectOne('/api/browse-media-files/select');
     req.flush({ ok: true, filename: 'ex.wav', original_name: 'blues.00000.wav' });
     expect(component.mediaExamples().length).toBe(1);
+  });
+
+  // A Face dataset can't search by text, so before this the only way in was a
+  // face picture brought from outside the app.
+  describe('picking the example out of the dataset in context (#5205)', () => {
+    const faces = { id: 'faces-ds', name: 'Celebs – Face', media_type: 'face', loaded: true, num_items: 4332 };
+
+    function openOn(dataset: Record<string, unknown>): void {
+      (TestBed.inject(DatasetStateService) as any)._datasets.set([dataset]);
+      fixture.componentRef.setInput('datasetId', dataset['id']);
+      component.mediaType.set('face');
+      component.setExampleTab('media');
+    }
+
+    const pickButton = () => (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.pick-dataset-btn');
+
+    it('offers Pick from Dataset beside Browse for a loaded dataset of the detector’s type', async () => {
+      openOn(faces);
+      await fixture.whenStable();
+      expect(pickButton()?.textContent?.trim()).toBe('Pick from Dataset…');
+      expect(pickButton()?.getAttribute('title')).toBe('Pick one of the 4,332 items in Celebs – Face as the example');
+
+      // Another media type (the user unlocked the field and changed it).
+      component.mediaType.set('image');
+      await fixture.whenStable();
+      expect(pickButton()).toBeNull();
+    });
+
+    it('offers nothing for an unloaded dataset, or none', () => {
+      openOn({ ...faces, loaded: false });
+      expect(component.exampleDataset()).toBeNull();
+      fixture.componentRef.setInput('datasetId', '');
+      expect(component.exampleDataset()).toBeNull();
+    });
+
+    it('saves the picked item out of that dataset and adds it to the stack', () => {
+      openOn(faces);
+      component.openDatasetPicker();
+      expect(component.view()).toBe('dataset-picker');
+      expect(component.modalTitle).toBe('Pick an Example from Celebs – Face');
+
+      component.onDatasetItemPicked(42);
+      // A second click while the first saves would add the face twice.
+      component.onDatasetItemPicked(43);
+
+      const req = httpMock.expectOne('/api/server-media-files/from-media-id');
+      expect(req.request.body).toEqual({ media_id: 42 });
+      // Read out of the dataset the form was opened for, whatever pair is active.
+      expect(req.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
+      req.flush({ filename: 'abc.png', original_name: 'face_42.png' });
+
+      expect(component.mediaExamples().map((e) => [e.value, e.display, e.mediaType])).toEqual([
+        ['abc.png', 'face_42.png', 'face'],
+      ]);
+      expect(component.view()).toBe('main');
+      expect(component.datasetPickBusy()).toBe(false);
+      expect(component.effectiveName).toBe('face_42');
+    });
+
+    it('stays on the grid with the reason when the item can’t be saved', () => {
+      openOn(faces);
+      component.openDatasetPicker();
+      component.onDatasetItemPicked(42);
+      httpMock
+        .expectOne('/api/server-media-files/from-media-id')
+        .flush({ message: 'Media bytes unavailable' }, { status: 404, statusText: 'Not Found' });
+
+      expect(component.view()).toBe('dataset-picker');
+      expect(component.datasetPickError()).toBe('Media bytes unavailable');
+      expect(component.mediaExamples()).toEqual([]);
+      expect(component.datasetPickBusy()).toBe(false);
+    });
+
+    it('opens the grid of that dataset from the button, with Back to the form', async () => {
+      openOn(faces);
+      await fixture.whenStable();
+      pickButton()!.click();
+      // Render the grid now: whenStable would wait on the listing it issues.
+      fixture.detectChanges();
+      TestBed.tick();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-dataset-example-picker')).toBeTruthy();
+      expect(el.querySelector('.media-picker .back-btn')?.textContent).toContain('Back');
+      httpMock.expectOne('/api/media-types').flush({ media_types: [] });
+      const ids = httpMock.expectOne('/api/medias/ids');
+      expect(ids.request.context.get(DATASET_OVERRIDE)).toBe('faces-ds');
+      ids.flush([]);
+      await settleResource();
+
+      component.backToMain();
+      await fixture.whenStable();
+      expect(el.querySelector('vt-dataset-example-picker')).toBeNull();
+    });
+
+    it('offers the dataset again under the stack, to add another', async () => {
+      openOn(faces);
+      component.mediaExamples.set([{ value: 'abc.png', display: 'face_42.png', mediaType: 'face', thumbFailed: false }]);
+      await fixture.whenStable();
+      const row = (fixture.nativeElement as HTMLElement).querySelector('.add-example-row');
+      expect(row?.querySelector('.pick-dataset-btn')?.textContent?.trim()).toBe('+ Pick from Dataset…');
+      expect(row?.querySelector('.add-example-btn')?.textContent?.trim()).toBe('+ Add');
+    });
   });
 });
 

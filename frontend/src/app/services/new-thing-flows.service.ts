@@ -20,6 +20,10 @@ export interface NewDetectorFlowState {
    *  (#4666): a text description alone could not start the detector. Empty
    *  when unknown, which never blocks. */
   datasetEmbedders?: string[];
+  /** Id of the dataset the form is opened for. While it is loaded and holds
+   *  the detector's media type, the form offers its items as examples
+   *  (#5205). Empty when there is none. */
+  datasetId?: string;
   /** ID of a loaded media to use as the new detector's seed example.
    *  When set, the modal materialises this media to ``example_media/``
    *  on open and pre-fills the example field, skipping the picker. */
@@ -117,6 +121,7 @@ export class NewThingFlowsService {
       defaultMediaType: opts.defaultMediaType ?? '',
       datasetEmbedder: opts.datasetEmbedder ?? '',
       datasetEmbedders: opts.datasetEmbedders ?? [],
+      datasetId: opts.datasetId ?? '',
       seedMediaId: opts.seedMediaId,
       seedCropParams: opts.seedCropParams,
     });
@@ -128,6 +133,7 @@ export class NewThingFlowsService {
       defaultMediaType: '',
       datasetEmbedder: '',
       datasetEmbedders: [],
+      datasetId: '',
       seedMediaId: undefined,
       seedCropParams: undefined,
     });

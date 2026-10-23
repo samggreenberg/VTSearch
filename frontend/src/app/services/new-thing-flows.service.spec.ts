@@ -53,17 +53,19 @@ describe('NewThingFlowsService', () => {
       defaultMediaType: '',
       datasetEmbedder: '',
       datasetEmbedders: [],
+      datasetId: '',
       seedMediaId: undefined,
       seedCropParams: undefined,
     });
   });
 
-  it('openNewDetector carries seed media + crop params', () => {
+  it('openNewDetector carries the dataset, seed media + crop params', () => {
     const seedCropParams = { box: [0, 0, 10, 10] };
     service.openNewDetector({
       defaultMediaType: 'image',
       datasetEmbedder: 'siglip',
       datasetEmbedders: ['siglip', 'dinov2_patch'],
+      datasetId: 'ds-1',
       seedMediaId: 42,
       seedCropParams,
     });
@@ -72,6 +74,7 @@ describe('NewThingFlowsService', () => {
       defaultMediaType: 'image',
       datasetEmbedder: 'siglip',
       datasetEmbedders: ['siglip', 'dinov2_patch'],
+      datasetId: 'ds-1',
       seedMediaId: 42,
       seedCropParams,
     });
@@ -85,6 +88,7 @@ describe('NewThingFlowsService', () => {
       defaultMediaType: '',
       datasetEmbedder: '',
       datasetEmbedders: [],
+      datasetId: '',
       seedMediaId: undefined,
       seedCropParams: undefined,
     });

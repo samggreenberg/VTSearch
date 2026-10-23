@@ -94,9 +94,17 @@
   }
 }
 
-.media-btn {
-  width: 100%;
-  text-align: center;
+// "Pick from Dataset…" (when the dataset in context offers its items, #5205)
+// beside "Browse Media…" (`.media-btn`, which the docs screenshots point at),
+// sharing the row above the drop zone.
+.example-sources {
+  display: flex;
+  gap: var(--space-sm);
+
+  .btn {
+    flex: 1 1 0;
+    text-align: center;
+  }
 }
 
 // In the example panel the drop zone sits below the "Browse Media…" button,
@@ -111,7 +119,7 @@
 }
 
 // Vertical stack of picked media examples, each row with its own Remove
-// button, followed by the "+ Add" affordance for appending another.
+// button, followed by the "+ Add" affordances for appending another.
 .example-stack {
   display: flex;
   flex-direction: column;
@@ -119,7 +127,9 @@
   margin-top: var(--space-xs);
 }
 
-.add-example-btn {
+.add-example-row {
+  display: flex;
+  gap: var(--space-sm);
   align-self: flex-start;
 }
 
