@@ -841,27 +841,25 @@ GET /api/datasets/registry/{dataset_id}/domain-shift
 ```
 
 Reports how typical the **active** dataset's items (the `X-Dataset-Id`
-header) look under `{dataset_id}`'s coverage atlas — `{dataset_id}` is the
+header) look against `{dataset_id}`'s own embeddings — `{dataset_id}` is the
 *reference*, i.e. the dataset a detector was trained on. Use it before
 trusting a detector trained on the reference against the active dataset.
 
 → `{reference_dataset_id, n_items, alpha, frac_atypical, expected_atypical,
-z_score, median_pvalue, shifted}`. `frac_atypical` is the fraction of active-dataset items whose typicality
-score falls below `alpha` — roughly the shifted proportion (it stays near
-`expected_atypical` when there is no shift). `shifted` is the headline
-verdict (statistically clear **and** practically large excess).
+z_score, median_pvalue, shifted}`. Each active item gets a split-conformal
+kNN p-value against the reference's vectors, uniform for an item drawn from
+the reference, on every embedder including patch embedders (#3348).
+`frac_atypical` is the fraction of active-dataset items whose p-value falls
+below `alpha`, roughly the shifted proportion; it stays near
+`expected_atypical` when there is no shift. `shifted` is the headline verdict
+(statistically clear **and** practically large excess). `n_items` is the
+number scored: at most 4 000, sampled. Needs no coverage atlas. See
+[`docs/ML.md`](../ML.md#domain-shift).
 
-**Not supported for patch embedders** (`dinov3_patch`, `dinov2_patch`,
-`eupe_patch`), which are refused with 400. In a patch space the guard does
-not separate in-domain from out-of-domain data: on `dinov3_patch` it fires
-on 80 % of the reference's own held-out data against 93 % for a different
-corpus. See [`docs/ML.md`](../ML.md#how-good-are-these-p-values) for what
-the scores are and are not.
-
-400 if the reference isn't loaded or has no coverage atlas, the two
-datasets use different embedders, the reference uses a patch embedder, the
-active dataset equals the reference, or the active dataset has no embeddings;
-403 if access is denied; 404 if the reference doesn't exist.
+400 if the reference isn't loaded or has fewer than 40 embeddings, the two
+datasets use different embedders, the reference is the active dataset, or
+the active dataset has no embeddings; 403 if access is denied; 404 if the
+reference doesn't exist.
 
 ---
 

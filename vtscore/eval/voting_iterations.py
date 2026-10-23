@@ -1741,7 +1741,6 @@ def _find_corpus_columns(
     line_beta: float | None,
     centroid_line: str | None,
     flags_at: int | None,
-    atlas: Any,
 ) -> dict[str, Any]:
     """A click's Find on the second corpus (#4960): what the click's Test gives, cut where a Find there draws it.
 
@@ -1869,7 +1868,9 @@ def _find_corpus_columns(
     return {
         **cols,
         "flags_at": int(flags_at),
-        **training_domain_flags(atlas, matrix, patch_space=region_aware),
+        # The app compares against the reference dataset's own vectors (#3348);
+        # the harness's reference is the sim pool, every media of it.
+        **training_domain_flags(find.pool_matrix(find.pool_ids) if find.pool_ids else None, matrix),
         **evidence_flags(
             pos, neg, matrix, predicted, pool_baseline(pos, neg, base_matrix, base_predicted) if base_ids else None
         ),
@@ -3482,11 +3483,10 @@ def simulate_voting_iterations(  # noqa: C901
         find_flag_steps: The snapshot clicks: at the first click at or past
             each, the row also reads the app's two domain-shift flags against
             the Find corpus (:data:`~vtscore.eval.voting_columns.FIND_FLAG_COLUMNS`):
-            the Training-domain overlap against the sim pool's coverage atlas
-            (NaN on a patch embedder, which the app refuses, and on a
-            non-Autopilot strategy, which builds no atlas) and the Evidence
+            the Training-domain overlap against the sim pool's vectors (every
+            strategy and embedder, as the app since #3348) and the Evidence
             coverage from the votes' vectors and the Find cut.  Off every
-            other click, because routing a whole corpus through the atlas is
+            other click, because ranking a whole corpus against the pool is
             the costly step.  Needs *find_corpus*.
         cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
             swept over for issue #2865, into *cut_inclusion_sink* (columns
@@ -4850,7 +4850,6 @@ def simulate_voting_iterations(  # noqa: C901
             line_beta=beta,
             centroid_line=centroid_line,
             flags_at=flags_at,
-            atlas=atlas,
         )
 
     while True:
