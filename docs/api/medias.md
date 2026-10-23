@@ -253,6 +253,8 @@ element's labelset `metadata` under `"vt:provenance"` and round-trips through
 label export/import, except `rank_at_vote` and `score_at_vote`: they were
 measured by this server's embedder and head, so the detector keeps them and a
 labelset export (an exporter or a labelset-source push) leaves them behind.
+`GET /api/labels/export`, the server's own read of the detector's labels that
+the Export window sends on to an exporter, still shows them.
 
 Six optional fields, four of them independent categorical axes rather than one
 fused enum (the bias this recording exists to measure tracks *how the item was
