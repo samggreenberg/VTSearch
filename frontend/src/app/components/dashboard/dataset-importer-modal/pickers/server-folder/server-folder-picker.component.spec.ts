@@ -53,6 +53,24 @@ describe('ServerFolderPickerComponent', () => {
     expect(component.folderPath()).toBe('');
   });
 
+  it('leaves Face out of the dropdown: a Face dataset is made beside its images, in Multi-Dataset mode', () => {
+    const withFace = {
+      ...serverFolderImporter,
+      fields: [{ key: 'media_type', field_type: 'select', default: 'audio', options: ['audio', 'face', 'image'] }],
+    };
+    fixture.componentRef.setInput('importers', [withFace]);
+    fixture.componentRef.setInput('mediaTypes', [
+      { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
+      { type_id: 'face', name: 'Face', folder_import_name: 'face', importable: false } as any,
+      { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
+    ]);
+    fixture.componentRef.setInput('guessedMediaType', 'face');
+    openAndFlush();
+    expect(component.mediaTypeOptions).toEqual(['audio', 'image']);
+    // Nor does a guess of Face (every dataset so far a Face one) pick it.
+    expect(component.mediaType()).toBe('audio');
+  });
+
   it('applyPathInput commits the path, derives a dataset name, and runs detection', () => {
     openAndFlush();
     component.onPathInput('/data/my-photos/');

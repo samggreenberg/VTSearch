@@ -8,7 +8,7 @@
               [mediaTypeFieldId]="'field-' + field.key"
               [mediaType]="formValues[field.key] || ''"
               (mediaTypeChange)="onMediaTypeChange($event)"
-              [mediaTypeOptions]="field.options || []"
+              [mediaTypeOptions]="mediaTypeOptions"
               [mediaTypeOptionLabels]="mediaTypeOptionLabels"
               [mediaTypeOptionIcons]="mediaTypeOptionIcons"
               [showMultiToggle]="supportsMultiOutput"

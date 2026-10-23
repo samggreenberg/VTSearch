@@ -485,7 +485,7 @@ def _apply_demo_media_type_fields(field_values: dict, converter_name: str, demo_
 @datasets_load_bp.route("/api/dataset/load-demo", methods=["POST"])
 @datasets_load_bp.arguments(DatasetLoadDemoRequestSchema)
 @datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
-@datasets_load_bp.alt_response(400, description="Unknown demo dataset name.")
+@datasets_load_bp.alt_response(400, description="Unknown demo dataset name, or invalid outputs.")
 @datasets_load_bp.alt_response(500, description="The demo importer is unavailable.")
 def load_demo_dataset_route(body: dict):
     """Load a demo dataset in a background thread.
@@ -494,6 +494,10 @@ def load_demo_dataset_route(body: dict):
     original media type, then converted to the converter's target type.
     The resulting dataset has the *target* type, not the demo's original
     type.
+
+    With ``outputs``, the demo becomes several linked datasets instead, one
+    per output (the photos and the faces cut out of them, say), through the
+    multi-dataset pipeline the other import routes use.
     """
     dataset_name = body.get("name")
     embedder_name = body.get("embedder", "")
@@ -517,6 +521,16 @@ def load_demo_dataset_route(body: dict):
         field_values["build_projection"] = "true"
     if _form_flag(body.get("merge_near_duplicates")):
         field_values["merge_near_duplicates"] = "true"
+    outputs = _demo_outputs_or_400(body.get("outputs"), demo_info.get("media_type", ""))
+    if outputs:
+        task_ids = _run_multi_output_load_in_background(
+            importer,
+            field_values,
+            outputs,
+            post_load=import_post_load(body.get("autofind")),
+            on_finished=fire_dataset_imported,
+        )
+        return {"ok": True, "message": "Loading started", "task_id": task_ids[0], "task_ids": task_ids}
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     _apply_demo_media_type_fields(field_values, converter_name, demo_info)
@@ -534,7 +548,27 @@ def load_demo_dataset_route(body: dict):
         post_load=import_post_load(body.get("autofind")),
         on_finished=fire_dataset_imported,
     )
-    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+    task_id = str(task_id) if task_id else ""
+    return {"ok": True, "message": "Loading started", "task_id": task_id, "task_ids": [task_id] if task_id else []}
+
+
+def _demo_outputs_or_400(raw: Any, demo_type: str) -> list[OutputSpec]:
+    """Parse a demo load's ``outputs``; ``[]`` for a single-dataset load.
+
+    A demo is one download of one media type, so every output reads that type
+    alone: one source row, direct (the photos) or through one converter (the
+    faces cut out of them).  Anything else is the caller's error.
+    """
+    try:
+        outputs = parse_output_specs(raw)
+    except ValueError as exc:
+        abort(400, message=f"Invalid outputs: {exc}")
+    for output in outputs:
+        specs = output.source_specs
+        if len(specs) != 1 or specs[0].source_type != demo_type:
+            abort(400, message=f"Invalid outputs: each output of a {demo_type} demo reads one {demo_type} source row.")
+        abort_if_semantic_only_embedders([output.embedder, *(output.embedders or [])])
+    return outputs
 
 
 @datasets_load_bp.route("/api/dataset/load-file", methods=["POST"])

@@ -30,6 +30,7 @@ import {
   mediaTypeOptionIcons,
   mediaTypeOptionLabels,
   readRecursiveDefault,
+  singleDatasetMediaTypes,
   toFolderName,
   toTypeId,
 } from '../shared/media-type.util';
@@ -195,7 +196,7 @@ export class LocalFolderPickerComponent {
 
     const folderImporter = this.importers().find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
-    this.mediaTypeOptions = mtField?.options || [];
+    this.mediaTypeOptions = singleDatasetMediaTypes(this.mediaTypes(), mtField?.options || []);
 
     const guessedFolder = toFolderName(this.mediaTypes(), this.guessedMediaType());
     if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder)) {

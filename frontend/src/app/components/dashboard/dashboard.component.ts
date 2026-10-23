@@ -6,7 +6,8 @@ import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angul
 import { EMPTY, forkJoin, Observable, of, timer } from 'rxjs';
 import { catchError, filter, map, switchMap, take } from 'rxjs/operators';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { DatasetsCrudApiService, DemoLoadParams } from '../../services/datasets-crud-api.service';
+import type { OutputRequest } from './dataset-importer-modal/pickers/shared/multi-output.util';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
@@ -1212,12 +1213,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       clipper_params?: Record<string, number | string>;
       cleaners?: CleanerSelection[];
       converter?: string;
+      outputs?: OutputRequest[];
       dataset_name?: string;
       build_projection?: boolean;
       merge_near_duplicates?: boolean;
       autofind?: boolean;
     };
-    const params: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]> = {};
+    const params: DemoLoadParams = {};
+    // Multi-Dataset: one linked dataset per entry (the photos, and the faces
+    // cut out of them); each carries its own embedder / clipper / cleanup.
+    if (extras.outputs && extras.outputs.length > 0) params['outputs'] = extras.outputs;
     if (extras.embedder) params['embedder'] = extras.embedder;
     if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
     if (extras.clipper) {

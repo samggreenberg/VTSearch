@@ -809,6 +809,21 @@ class DatasetLoadDemoRequestSchema(Schema):
     )
     converter = fields.String(load_default="")
     dataset_name = fields.String(load_default="")
+    outputs = fields.List(
+        fields.Dict(),
+        load_default=None,
+        metadata={
+            "description": (
+                "Multi-dataset load: one object per dataset to make from the demo, in the shape "
+                "`POST /api/dataset/import/{importer_name}` takes (`media_type`, `category`, `source_specs`, "
+                "and per-dataset `embedder` / `embedders` / `clipper` / `clipper_params` / `cleaners`). "
+                "Each output's `source_specs` is one row of the demo's own media type, direct or through one "
+                "converter; converters run with their default parameters. The datasets are linked as one "
+                "import, so a face can open the photo it was cut from. When set, the single-dataset "
+                "`embedder` / `embedders` / `clipper` / `cleaners` / `converter` are ignored."
+            )
+        },
+    )
     build_projection = fields.String(
         load_default="false",
         metadata={"description": "When 'true', compute + persist the 2-D Browse projection at ingest."},
@@ -852,9 +867,9 @@ class DatasetLoadStartedResponseSchema(Schema):
     SSE progress stream; it may be empty when the load completes
     synchronously (rare).
 
-    ``task_ids`` is set by the three routes that accept a multi-dataset
+    ``task_ids`` is set by the four routes that accept a multi-dataset
     ``outputs`` list (``import/{importer_name}``, ``import-local-folder``,
-    ``import-local-files``): one task id per dataset the request started, in
+    ``import-local-files``, ``load-demo``): one task id per dataset the request started, in
     the outputs' order, so a client can follow (and cancel) each row.  A
     single-dataset request through those routes gets ``[task_id]``.
     """
@@ -868,7 +883,7 @@ class DatasetLoadStartedResponseSchema(Schema):
             "description": (
                 "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order "
                 "(a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / "
-                "local-files routes set it."
+                "local-files / load-demo routes set it."
             )
         },
     )

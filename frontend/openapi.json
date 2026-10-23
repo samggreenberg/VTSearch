@@ -1930,6 +1930,16 @@
           "name": {
             "minLength": 1,
             "type": "string"
+          },
+          "outputs": {
+            "default": null,
+            "description": "Multi-dataset load: one object per dataset to make from the demo, in the shape `POST /api/dataset/import/{importer_name}` takes (`media_type`, `category`, `source_specs`, and per-dataset `embedder` / `embedders` / `clipper` / `clipper_params` / `cleaners`). Each output's `source_specs` is one row of the demo's own media type, direct or through one converter; converters run with their default parameters. The datasets are linked as one import, so a face can open the photo it was cut from. When set, the single-dataset `embedder` / `embedders` / `clipper` / `cleaners` / `converter` are ignored.",
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "nullable": true,
+            "type": "array"
           }
         },
         "required": [
@@ -1964,7 +1974,7 @@
             "type": "string"
           },
           "task_ids": {
-            "description": "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order (a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / local-files routes set it.",
+            "description": "One task id per dataset a multi-dataset import started, in the request's ``outputs`` order (a single-dataset request lists its one ``task_id``).  Only the importer / local-folder / local-files / load-demo routes set it.",
             "items": {
               "type": "string"
             },
@@ -10686,7 +10696,7 @@
     },
     "/api/dataset/load-demo": {
       "post": {
-        "description": "When a ``converter`` is specified, the demo data is loaded using its\noriginal media type, then converted to the converter's target type.\nThe resulting dataset has the *target* type, not the demo's original\ntype.",
+        "description": "When a ``converter`` is specified, the demo data is loaded using its\noriginal media type, then converted to the converter's target type.\nThe resulting dataset has the *target* type, not the demo's original\ntype.\n\nWith ``outputs``, the demo becomes several linked datasets instead, one\nper output (the photos and the faces cut out of them, say), through the\nmulti-dataset pipeline the other import routes use.",
         "operationId": "load_demo_dataset_route",
         "requestBody": {
           "content": {
@@ -10710,7 +10720,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Unknown demo dataset name."
+            "description": "Unknown demo dataset name, or invalid outputs."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

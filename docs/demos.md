@@ -141,7 +141,10 @@ The tables below are generated from the demo-dataset registry (each media type's
 >
 > **Face demos.** Both face demos are image datasets meant to be loaded with
 > the **Images → Faces** converter (`image2face`), which crops each face it
-> finds for the FaceNet embedder; each photo's category is a person.
+> finds for the FaceNet embedder; each photo's category is a person. Tick
+> **Multi-Dataset** and then **Face** beside **Image** to load the faces and
+> their photos as linked datasets, so a face can show its photo; **Convert
+> to: Face** loads the faces alone.
 > `vggface2_faces_*` photos are framed on one face. `celebrity_together_*`
 > photos are whole scenes from [Celebrity Together](https://www.robots.ox.ac.uk/~vgg/data/celebrity_together/)
 > (red carpets, events, press photos): 60 people, 20 (S) or 60 (M) photos

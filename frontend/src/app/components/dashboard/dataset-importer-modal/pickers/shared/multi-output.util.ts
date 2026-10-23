@@ -172,6 +172,33 @@ export function tickCategory(drafts: OutputDraft[], category: string): OutputDra
   return drafts.map((d) => (d.category === category ? { ...d, checked: true } : d));
 }
 
+/** The Multi-Dataset rows of a demo of *demoType*: the demo's own type when
+ *  it is embeddable, then each type a converter makes from it (*targets*:
+ *  face, text…, named ``<demo type>2<target>`` as the demo picker's Convert to
+ *  names them).  Every row reads the demo's own files alone, so the datasets
+ *  it makes are one import, linked: a face finds the photo it was cut from.
+ *  A row is keyed by the type of dataset it makes.  The demo's own type starts
+ *  ticked, with *tick*, what the single-dataset form had picked to convert to
+ *  (the first row when the demo has no type of its own to keep). */
+export function demoOutputDrafts(mediaTypes: MediaTypeInfo[], demoType: string, targets: string[], tick = ''): OutputDraft[] {
+  const native = mediaTypes.find((m) => m.type_id === demoType)?.embeddable !== false;
+  const rows = [...(native ? [demoType] : []), ...targets.filter((t) => t !== demoType)];
+  const ticked = new Set([native ? demoType : tick || rows[0], tick]);
+  return rows.map((typeId) => ({
+    category: typeId,
+    mediaType: typeId,
+    checked: ticked.has(typeId),
+    convertTarget: '',
+    sourceSpecs: [{ source_type: demoType, converter: typeId === demoType ? null : `${demoType}2${typeId}`, params: {} }],
+    embedder: '',
+    patchEmbedder: '',
+    structuralEmbedder: '',
+    clipper: '',
+    clipperParams: {},
+    cleaners: [],
+  }));
+}
+
 /** The request entry for one ticked draft. */
 export function draftToOutputRequest(draft: OutputDraft): OutputRequest {
   const out: OutputRequest = {

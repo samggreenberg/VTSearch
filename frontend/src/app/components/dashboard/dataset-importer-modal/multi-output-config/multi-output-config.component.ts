@@ -74,6 +74,10 @@ export class MultiOutputConfigComponent {
   /** Prefix for the rows' element ids, unique per flow so several flows can
    *  be mounted at once without duplicate ids. */
   readonly idPrefix = input('mo');
+  /** Whether each row's source is fixed by its draft: a demo, whose rows read
+   *  the demo's own files alone (see `demoOutputDrafts`).  Its rows offer no
+   *  include-media rows, and the Import Defaults never replace their sources. */
+  readonly fixedSources = input(false);
 
   /** The two ingest toggles shared across every dataset of the import. */
   readonly buildProjection = input(false);
@@ -130,6 +134,12 @@ export class MultiOutputConfigComponent {
   rowTitle(draft: OutputDraft): string {
     const mt = this.category(draft);
     const label = this.labelFor(draft);
+    if (this.fixedSources()) {
+      const source = draft.sourceSpecs[0];
+      if (!source?.converter) return `Make a dataset of the ${label.toLowerCase()} files.`;
+      const from = this.typeLabels()[source.source_type] || source.source_type;
+      return `Make a ${label} dataset from the ${from.toLowerCase()} files (${source.converter}). Tick ${from} too, and each item can open the file it came from.`;
+    }
     if (mt?.embeddable === false) {
       return `Make a dataset of the ${label.toLowerCase()} files, converted to ${this.typeLabels()[draft.mediaType] || draft.mediaType} so they can be searched.`;
     }
@@ -280,7 +290,7 @@ export class MultiOutputConfigComponent {
       const clipper = this.importDefaults.chooseClipperForType(options.clippers, mediaType, mediaTypes);
       const clipperParams = clipper.params ?? this.defaultClipperParams(options.clippers, clipper.name);
       const sourceSpecs =
-        this.isConvertOut(d) || !this.nativeImportable(d)
+        this.fixedSources() || this.isConvertOut(d) || !this.nativeImportable(d)
           ? d.sourceSpecs
           : this.importDefaults.specsListWithDefaultsFor(mediaTypes, mediaType, this.convertersFor(d));
       return {

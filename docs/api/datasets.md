@@ -357,7 +357,17 @@ clipper's defaults. The pre-selected default clipper for a media type is a
 no-op. Clipped clips inherit their parent media's category. Example:
 `{"name": "tut_sound_events_2017_a", "clipper": "sound_tiling", "clipper_params": {"duration": 5.0}}`.
 
-→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
+→ `{"ok": true, "message": "Loading started", "task_id": "...", "task_ids": ["..."]}`
+
+**Multi-dataset demo load.** An `outputs` list loads the demo as several
+linked datasets, one per entry, in the shape the importer route below takes.
+Each entry's `source_specs` is one row of the demo's own media type, direct or
+through one converter (which runs with its default parameters); any other row
+is a 400. With `outputs`, the single-dataset `embedder`, `embedders`,
+`clipper`, `clipper_params`, `cleaners` and `converter` are ignored, and
+`task_ids` lists one task per entry. Example, the photos and the faces cut out
+of them:
+`{"name": "celebrity_together_s", "outputs": [{"media_type": "image", "source_specs": [{"source_type": "image"}]}, {"media_type": "face", "source_specs": [{"source_type": "image", "converter": "image2face"}]}]}`.
 
 **From importer:**
 
