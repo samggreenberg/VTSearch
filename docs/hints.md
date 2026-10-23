@@ -104,7 +104,7 @@ any run.
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `start-voting` | happy | Autopilot picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
-| `fix-votes` | happy | Your vote went to **Labels** on the right, where you can change it. Keep clicking. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
+| `fix-votes` | happy | Your vote went to **Labels** on the right. Open here to change it, or keep clicking. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
 | `revote` | happy | You already labeled this **{label}**. Click **{other}** to change it, or Autopilot's step on the left to carry on. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
 | `find-goods` | happy | Autopilot is looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |
 | `find-bads` | happy | Autopilot is looking for Bads now. Keep clicking. | As `find-goods`, in **Find Initial Bads**. |
