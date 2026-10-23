@@ -1265,8 +1265,10 @@ class DatasetRegistryReadersResponseSchema(Schema):
 class DatasetDomainShiftResponseSchema(Schema):
     """Response for ``GET /api/datasets/registry/<id>/domain-shift``.
 
-    Reports how typical the *active* dataset's items look under the named
-    reference dataset's coverage atlas.  ``frac_atypical`` is the observed
+    Reports how typical the *active* dataset's items look against the named
+    reference dataset's own embeddings (a split-conformal kNN, #3348).
+    ``n_items`` is the number of active items scored (at most 4 000, sampled).
+    ``frac_atypical`` is the observed
     fraction of items with typicality p-value below ``alpha`` (roughly the
     shifted proportion); under no shift it stays near ``expected_atypical``.
     ``shifted`` is True when the excess is both statistically clear and

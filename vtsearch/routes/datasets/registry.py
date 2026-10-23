@@ -480,30 +480,28 @@ def build_dataset_coverage_atlas(dataset_id: str):
 @datasets_registry_bp.alt_response(
     400,
     description=(
-        "Reference dataset has no coverage atlas, embedders differ, the reference uses a "
-        "patch embedder (unsupported), or the active dataset has no embeddings."
+        "Reference dataset is not loaded or is the active one, embedders differ, the reference has too "
+        "few embeddings to calibrate, or either dataset has no embeddings."
     ),
 )
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def dataset_domain_shift(dataset_id: str):
-    """Report domain shift of the active dataset against *dataset_id*'s atlas.
+    """Report domain shift of the active dataset against *dataset_id*.
 
     *dataset_id* names the **reference** dataset — the one a detector was
-    trained on.  Its coverage atlas is queried with every embedding of the
-    **active** dataset (the ``X-Dataset-Id`` header), yielding calibrated
-    typicality p-values.  The response summarises them: ``frac_atypical``
-    is roughly the proportion of the active dataset that lies outside the
-    reference domain, and ``shifted`` is the headline verdict.  Use it
-    before trusting a detector trained on *dataset_id* against the active
-    dataset without hands-on verification.
+    trained on.  Every embedding of the **active** dataset (the
+    ``X-Dataset-Id`` header; at most 4 000, sampled) is ranked against the
+    reference dataset's own embeddings by a split-conformal kNN, yielding
+    typicality p-values that are uniform for an item drawn from the
+    reference.  The response summarises them: ``frac_atypical`` is roughly
+    the proportion of the active dataset that lies outside the reference
+    domain, and ``shifted`` is the headline verdict.  Use it before trusting
+    a detector trained on *dataset_id* against the active dataset without
+    hands-on verification.
 
-    **Refused for patch embedders** (400).  The guard's separation between
-    "my own data" and "a different corpus" collapses to 0.13 on
-    ``dinov3_patch`` — close to a constant — because patch spaces are far
-    less concentrated than single-vector ones, and every threshold repair
-    was priced and failed.  See
-    ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
+    Works on every embedder, patch embedders included, and needs no coverage
+    atlas (#3348; ``docs/experiments/2026-10-23-atlas-node-model-3348/REPORT.md``).
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import get_active_context

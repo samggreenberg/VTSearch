@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vtscore.coverage.atlas import CoverageAtlas, domain_shift_report
+from vtscore.coverage.atlas import CoverageAtlas
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +170,8 @@ class TestConstruction:
             assert node["mu"].shape == (32,)
             assert abs(float(np.linalg.norm(node["mu"])) - 1.0) < 1e-3
             assert 0.0 <= node["rbar"] <= 1.0 + 1e-6
-            assert len(node["t_quantiles"]) == 21
+            # The typicality calibration grid went with #3348.
+            assert "t_quantiles" not in node
 
 
 # ---------------------------------------------------------------------------
@@ -719,116 +720,6 @@ class TestNextSample:
 
 
 # ---------------------------------------------------------------------------
-# Typicality and domain shift
-# ---------------------------------------------------------------------------
-
-
-def _two_block_vectors(n=200, dim=32, seed=7):
-    """Unit vectors confined to the first dim//2 coordinates, two clusters."""
-    rng = np.random.default_rng(seed)
-    half = dim // 2
-    base = rng.standard_normal((n, half)).astype(np.float32)
-    base[: n // 2, 0] += 4.0
-    base[n // 2 :, 1] += 4.0
-    full = np.concatenate([base, np.zeros((n, half), dtype=np.float32)], axis=1)
-    full /= np.linalg.norm(full, axis=1, keepdims=True)
-    return full
-
-
-class TestTypicality:
-    def test_empty_atlas_returns_fully_typical(self):
-        atlas = CoverageAtlas({})
-        pvals = atlas.typicality_pvalues(np.ones((3, 8), dtype=np.float32))
-        assert pvals.shape == (3,)
-        assert np.all(pvals == 1.0)
-
-    def test_in_domain_queries_look_typical(self):
-        """Fresh draws from the build distribution get bulk p-values."""
-        train = _two_block_vectors(n=300, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(300)}, k=3, max_depth=5)
-        fresh = _two_block_vectors(n=200, seed=99)
-        pvals = atlas.typicality_pvalues(fresh)
-        assert 0.3 < float(np.median(pvals)) < 0.7
-        assert float(np.mean(pvals < 0.05)) < 0.08
-
-    def test_shifted_queries_look_atypical(self):
-        """Directions the build data never had get small p-values."""
-        train = _two_block_vectors(n=300, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(300)}, k=3, max_depth=5)
-        # Queries confined to the *other* half of the coordinates.
-        rng = np.random.default_rng(11)
-        out = rng.standard_normal((100, 16)).astype(np.float32)
-        out[:, 0] += 4.0
-        out_full = np.concatenate([np.zeros((100, 16), dtype=np.float32), out], axis=1)
-        out_full /= np.linalg.norm(out_full, axis=1, keepdims=True)
-        pvals = atlas.typicality_pvalues(out_full)
-        assert float(np.median(pvals)) < 0.1
-        assert float(np.mean(pvals < 0.05)) > 0.9
-
-    def test_single_vector_helper_matches_batch(self):
-        train = _two_block_vectors(n=100, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(100)}, k=2)
-        single = atlas.typicality_pvalue(train[0])
-        batch = atlas.typicality_pvalues(train[:1])
-        assert single == pytest.approx(float(batch[0]))
-
-    def test_pvalues_survive_serialization(self):
-        train = _two_block_vectors(n=150, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(150)}, k=3)
-        clone = CoverageAtlas.from_serializable(atlas.to_serializable())
-        fresh = _two_block_vectors(n=50, seed=13)
-        # float16 mu quantization perturbs p-values slightly; ranks must hold.
-        p_orig = atlas.typicality_pvalues(fresh)
-        p_clone = clone.typicality_pvalues(fresh)
-        assert np.allclose(p_orig, p_clone, atol=0.05)
-
-
-class TestDomainShiftReport:
-    def test_no_shift_not_flagged(self):
-        train = _two_block_vectors(n=300, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(300)}, k=3, max_depth=5)
-        report = domain_shift_report(atlas, _two_block_vectors(n=200, seed=23))
-        assert report["n_items"] == 200
-        assert not report["shifted"]
-        assert report["frac_atypical"] < 2 * report["alpha"]
-
-    def test_full_shift_flagged(self):
-        train = _two_block_vectors(n=300, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(300)}, k=3, max_depth=5)
-        rng = np.random.default_rng(29)
-        out = rng.standard_normal((100, 16)).astype(np.float32)
-        out[:, 0] += 4.0
-        out_full = np.concatenate([np.zeros((100, 16), dtype=np.float32), out], axis=1)
-        out_full /= np.linalg.norm(out_full, axis=1, keepdims=True)
-        report = domain_shift_report(atlas, out_full)
-        assert report["shifted"]
-        assert report["frac_atypical"] > 0.9
-        assert report["median_pvalue"] < 0.05
-
-    def test_partial_injection_flagged(self):
-        """A foreign cluster hidden in mostly in-domain data still flags."""
-        train = _two_block_vectors(n=300, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(300)}, k=3, max_depth=5)
-        fresh = _two_block_vectors(n=160, seed=31)
-        rng = np.random.default_rng(37)
-        out = rng.standard_normal((40, 16)).astype(np.float32)
-        out[:, 0] += 4.0
-        out_full = np.concatenate([np.zeros((40, 16), dtype=np.float32), out], axis=1)
-        out_full /= np.linalg.norm(out_full, axis=1, keepdims=True)
-        report = domain_shift_report(atlas, np.concatenate([fresh, out_full]))
-        assert report["shifted"]
-        # frac_atypical approximates the injected proportion (20%).
-        assert 0.1 < report["frac_atypical"] < 0.35
-
-    def test_empty_matrix(self):
-        train = _two_block_vectors(n=100, seed=7)
-        atlas = CoverageAtlas({i: train[i] for i in range(100)}, k=2)
-        report = domain_shift_report(atlas, np.zeros((0, 32), dtype=np.float32))
-        assert report["n_items"] == 0
-        assert not report["shifted"]
-
-
-# ---------------------------------------------------------------------------
 # Integration / workflow
 # ---------------------------------------------------------------------------
 
@@ -987,7 +878,7 @@ class TestSerialization:
         assert set(snap) == self._SNAP_KEYS
         assert isinstance(snap["center"], np.ndarray)
         for node in snap["nodes"].values():
-            assert set(node) == {"ids", "children", "depth", "parent", "n", "mu", "rbar", "t_quantiles"}
+            assert set(node) == {"ids", "children", "depth", "parent", "n", "mu", "rbar"}
             for vid in node["ids"]:
                 _assert_plain(vid)
             for child in node["children"]:
@@ -996,7 +887,6 @@ class TestSerialization:
             _assert_plain(node["parent"])
             assert isinstance(node["mu"], np.ndarray)
             assert node["mu"].dtype == np.float16
-            assert all(isinstance(q, float) for q in node["t_quantiles"])
         for vid, leaf in snap["vector_to_leaf"].items():
             _assert_plain(vid)
             _assert_plain(leaf)
@@ -1014,6 +904,16 @@ class TestSerialization:
         buf.seek(0)
         restored = safe_pickle_load(buf)["coverage_atlas"]
         assert restored["format"] == "coverage-atlas/1"
+
+    def test_reads_a_pre_3348_snapshot(self):
+        """A cache written while nodes still carried ``t_quantiles`` loads, the grid ignored."""
+        atlas = CoverageAtlas(_make_vectors(120), k=3, min_node_size=10)
+        snap = atlas.to_serializable()
+        for node in snap["nodes"].values():
+            node["t_quantiles"] = [i / 20.0 for i in range(21)]
+        clone = CoverageAtlas.from_serializable(snap)
+        assert set(clone.nodes) == set(atlas.nodes)
+        assert all("t_quantiles" not in node for node in clone.nodes.values())
 
     def test_round_trip_preserves_structure(self):
         """from_serializable rebuilds an equivalent atlas without k-means."""
@@ -1033,7 +933,6 @@ class TestSerialization:
             assert restored["parent"] == node["parent"]
             assert restored["n"] == node["n"]
             assert restored["rbar"] == pytest.approx(node["rbar"])
-            assert restored["t_quantiles"] == node["t_quantiles"]
             assert np.allclose(restored["mu"], node["mu"], atol=1e-3)  # float16 round-trip
         assert clone.vector_to_leaf == atlas.vector_to_leaf
         assert clone.nodes_by_depth == atlas.nodes_by_depth

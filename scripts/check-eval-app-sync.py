@@ -1026,27 +1026,28 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="find.training_domain",
         app="py:vtsearch.training_domain.domain_shift_against",
-        harness="vtscore/eval/find_corpus.py::training_domain_flags,FindCorpus.matrix",
+        harness="vtscore/eval/find_corpus.py::training_domain_flags,FindCorpus.matrix,FindCorpus.pool_matrix",
         kind="ported",
         note=(
             "The Training-domain overlap chip (#4961) read against #4960's Find corpus at the snapshot "
-            "clicks. The report itself is delegated - both sides call vtscore.coverage.atlas."
+            "clicks. The report itself is delegated - both sides call vtscore.coverage.domain_shift."
             "domain_shift_report - so what is ported is how the app's route calls it: at the report's "
-            "default alpha, against the reference dataset's coverage atlas, over media_embedding of every "
-            "media of the dataset searched (FindCorpus.matrix), and refused (NaN here) with no atlas, no "
-            "vectors, or on a patch embedder (#3329). If the route changes its alpha, the vectors it "
-            "stacks or a refusal, follow it; the harness reads shifted / frac_atypical / z_score off the "
-            "report, so a renamed key surfaces as a KeyError in the tests."
+            "default alpha, with the reference dataset's media_embedding vectors as the reference and "
+            "media_embedding of every media of the dataset searched (FindCorpus.matrix) as the matrix, and "
+            "refused (NaN here) with no vectors on either side or a reference too small to calibrate "
+            "(ReferenceTooSmall). Since #3348 it needs no coverage atlas and runs on patch embedders. If the "
+            "route changes its alpha, the vectors it stacks or a refusal, follow it; the harness reads "
+            "shifted / frac_atypical / z_score off the report, so a renamed key surfaces as a KeyError in "
+            "the tests."
         ),
         divergence=(
-            "INTENTIONAL: the harness's reference is the sim pool and its atlas the one "
-            "step_trainers._build_eval_atlas builds there for the New phase, which the app's dataset atlas "
-            "models. The route's embedder-mismatch refusal is the harness's same-embedder rule, enforced when "
-            "the corpus is built (build_find_corpus refuses another vector width or patch grids on one side) "
-            "and by the runner reading the Find corpus out of the cell's own embedder's pickle; the patch "
-            "refusal reads the run's region_aware, the harness's spelling of a patch embedder. The route's "
-            "same-dataset refusal has no harness case: a Find corpus never holds the sim pool, and a share-0 "
-            "corpus (the withheld half) is read on purpose, as the no-shift baseline."
+            "INTENTIONAL: the harness's reference is the sim pool (FindCorpus.pool_matrix over every pool "
+            "id), which the app's reference dataset models. The route's embedder-mismatch refusal is the "
+            "harness's same-embedder rule, enforced when the corpus is built (build_find_corpus refuses "
+            "another vector width or patch grids on one side) and by the runner reading the Find corpus out "
+            "of the cell's own embedder's pickle. The route's same-dataset refusal has no harness case: a "
+            "Find corpus never holds the sim pool, and a share-0 corpus (the withheld half) is read on "
+            "purpose, as the no-shift baseline."
         ),
     ),
     Mirror(

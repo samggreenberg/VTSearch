@@ -1100,7 +1100,7 @@ class FindStatsResponseSchema(Schema):
 class FindEvidenceCoverageResponseSchema(Schema):
     """Response for ``GET /api/find/evidence-coverage``.
 
-    The cross-user complement to the atlas domain-shift report: how much of the
+    The cross-user complement to the domain-shift report: how much of the
     active dataset the detector is calling *without labeled evidence behind the
     call*, measured from the detector's own labelset (re-embedded in memory at
     load), so it fires even when the training haystack was never handed over.

@@ -1,0 +1,7 @@
+preset,arm,reference,leg,runs_compared,runs_differing,only_in_reference,only_in_leg
+b025,ctl,screens0,o365,535,0,0,0
+b1,ctl,screens0,o365,535,0,0,0
+b4,ctl,screens0,o365,535,0,0,0
+b025,nowalk,screens0,o365,535,0,0,0
+b1,nowalk,screens0,o365,535,0,0,0
+b4,nowalk,screens0,o365,535,0,0,0

@@ -181,14 +181,15 @@ class TestTrainingDomain:
         assert "none of the loaded datasets" in data["reason"].lower()
 
     def test_reference_without_atlas(self, client):
+        """The check reads the reference's vectors, not its atlas (#3348), so an unbuilt atlas does not stop it."""
         _ref_entry, ref_ctx = _dataset("photos", 60, seed_offset=0)
         target_entry, target_ctx = _dataset("screens", 40, seed_offset=2000, shifted=True)
         set_thread_dataset_context(target_ctx)
         detector_id = _detector(_labels_from(ref_ctx, range(6)))
 
         data = _check(client, target_entry["id"], detector_id)
-        assert data["domain_shift"] is None
-        assert "coverage atlas" in data["reason"]
+        assert ref_ctx.coverage_atlas is None
+        assert data["domain_shift"]["shifted"] is True
 
     def test_embedder_mismatch(self, client):
         _ref_entry, ref_ctx = _dataset("photos", 120, seed_offset=0, atlas=True, embedder="clap")
@@ -200,16 +201,15 @@ class TestTrainingDomain:
         assert data["domain_shift"] is None
         assert "mismatch" in data["reason"].lower()
 
-    def test_patch_embedder_is_refused(self, client):
-        """The typicality guard says nothing in a patch space (#3329), so the check stays silent there."""
-        _ref_entry, ref_ctx = _dataset("photos", 120, seed_offset=0, atlas=True, embedder="dinov3_patch")
+    def test_patch_embedder_is_answered(self, client):
+        """Refused until #3348, when the atlas guard (silent in a patch space, #3329) gave way to the kNN report."""
+        _ref_entry, ref_ctx = _dataset("photos", 120, seed_offset=0, embedder="dinov3_patch")
         target_entry, target_ctx = _dataset("screens", 40, seed_offset=2000, shifted=True, embedder="dinov3_patch")
         set_thread_dataset_context(target_ctx)
         detector_id = _detector(_labels_from(ref_ctx, range(6)))
 
         data = _check(client, target_entry["id"], detector_id)
-        assert data["domain_shift"] is None
-        assert "patch embedder" in data["reason"].lower()
+        assert data["domain_shift"]["shifted"] is True
 
     def test_detector_without_examples(self, client):
         target_entry, target_ctx = _dataset("screens", 40, seed_offset=2000, shifted=True)

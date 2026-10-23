@@ -646,9 +646,9 @@ def defer_learned_sort_baseline(
 def find_evidence_coverage():
     """Evidence-coverage report for the active detector on the active dataset.
 
-    The cross-user complement to the atlas domain-shift report
+    The cross-user complement to the domain-shift report
     (``GET /api/datasets/registry/<id>/domain-shift``): that one needs the
-    *training* dataset loaded with a built atlas, which is absent in a true
+    *training* dataset loaded, which is absent in a true
     detector handoff (userB has userA's detector JSON, not userA's haystack).
     This asks only what the detector itself carries — its labelset, re-embedded
     in memory against the active dataset's embedder at load, and the training

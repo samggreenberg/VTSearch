@@ -12,7 +12,7 @@ here on synthetic medias:
 * a corpus with no positive scores NaN F-beta and still counts what it returns;
 * a mixed corpus holds exactly the withheld half plus the share;
 * the flags are read at the snapshot clicks only, and the training-domain
-  overlap is NaN on a patch embedder, which the app refuses.
+  overlap is read on a patch embedder too, as the app reads it since #3348.
 """
 
 from __future__ import annotations
@@ -365,9 +365,13 @@ def _patch_medias(n_pos: int, n_neg: int, *, seed: int, first_id: int = 1, shift
 
 
 class TestAPatchEmbedder:
-    def test_the_overlap_is_nan_and_the_evidence_is_read(self):
-        """The app refuses the training-domain overlap on a patch embedder (#3329); the evidence chip it runs."""
-        cell = _patch_medias(16, 44, seed=0)
+    def test_both_flags_are_read(self):
+        """The training-domain overlap runs on a patch embedder since #3348 (refused until then), beside the evidence chip.
+
+        The cell is sized so the sim pool clears the report's 40-vector floor;
+        :meth:`test_a_pool_too_small_to_calibrate_reads_nan` covers the floor.
+        """
+        cell = _patch_medias(32, 88, seed=0)
         foreign = _patch_medias(4, 26, seed=9, shift=0.5)
         kw = {"seed": 3, "calibrate_count": 2, "beta": 1.0, "max_steps": 14, "region_voting": True}
         off = simulate_voting_iterations(cell, "alpha", **kw)
@@ -378,6 +382,17 @@ class TestAPatchEmbedder:
         at = [r for r in on if r["flags_at"] == 8]
         assert at
         for r in at:
-            assert all(math.isnan(r[c]) for c in ("shift_frac_atypical", "shift_z", "shift_shifted"))
+            assert not any(math.isnan(r[c]) for c in ("shift_frac_atypical", "shift_z", "shift_shifted"))
             assert not math.isnan(r["evidence_frac_unsupported"]) and not math.isnan(r["evidence_z"])
         assert all(r["find_n_pos"] == 4 and r["find_n_neg"] == 26 for r in on)
+
+    def test_a_pool_too_small_to_calibrate_reads_nan(self):
+        """Under 40 pool vectors no p-value reaches below alpha: NaN, as the app answers 400."""
+        cell = _patch_medias(16, 44, seed=0)
+        foreign = _patch_medias(4, 26, seed=9, shift=0.5)
+        kw = {"seed": 3, "calibrate_count": 2, "beta": 1.0, "max_steps": 14, "region_voting": True}
+        on = simulate_voting_iterations(cell, "alpha", find_corpus=foreign, find_flag_steps=[8], **kw)
+        at = [r for r in on if r["flags_at"] == 8]
+        assert at
+        for r in at:
+            assert all(math.isnan(r[c]) for c in ("shift_frac_atypical", "shift_z", "shift_shifted"))

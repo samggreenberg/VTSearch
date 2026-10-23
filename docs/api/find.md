@@ -450,7 +450,7 @@ ratio against the other class. It needs only the detector's labelset
 (re-embedded in memory at load), not the dataset it was trained on, so it works
 for a detector handed over from another user — the complement to the
 [domain-shift report](datasets.md#domain-shift-report), which needs the
-training dataset's atlas. Pure read.
+training dataset loaded. Pure read.
 
 → `{available, n_items, n_pos_labels, n_neg_labels, k, alpha,
 frac_unsupported, expected_unsupported, z_score, median_support,
@@ -486,7 +486,7 @@ is *likely domain shift*. Pure read.
   "labels_total": 52, "labels_in_reference": 40, "labels_in_active": 0,
   "domain_shift": {
     "reference_dataset_id": "…", "n_items": 4000, "alpha": 0.05,
-    "frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 24.1,
+    "frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 75.4,
     "median_pvalue": 0.18, "shifted": true
   },
   "reason": ""
@@ -496,8 +496,8 @@ is *likely domain shift*. Pure read.
 `domain_shift` is `null`, and `reason` says why, rather than a 4xx whenever
 there is nothing to compare: no active detector or dataset, a detector with no
 labelled examples, none of them in a loaded dataset, the examples coming from
-the active dataset itself, or any refusal of the domain-shift report (no atlas,
-embedder mismatch, a patch embedder). The counts are filled in as far as the
+the active dataset itself, or any refusal of the domain-shift report (embedder
+mismatch, a reference under 40 embeddings). The counts are filled in as far as the
 check got, so a caller can say what the reference rests on.
 
 ### Fold corrections into the detector

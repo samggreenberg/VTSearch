@@ -1,11 +1,10 @@
-"""Labelset-kNN evidence coverage: cross-user decision support without an atlas.
+"""Labelset-kNN evidence coverage: cross-user decision support without the training dataset.
 
-The Coverage Atlas (``vtscore/state/coverage_atlas.py``) answers "how typical is
-this item of the data the detector was trained on?" — but only against a
-*loaded reference dataset* whose atlas has been built.  In the cross-user
-handoff this feature exists for (userB has userA's detector JSON, not userA's
-haystack), that reference is absent and the atlas/domain-shift endpoint can't
-fire.
+The domain-shift report (``vtscore/coverage/domain_shift.py``) answers "how
+typical is this item of the data the detector was trained on?" — but only
+against a *loaded reference dataset*.  In the cross-user handoff this feature
+exists for (userB has userA's detector JSON, not userA's haystack), that
+reference is absent and the domain-shift endpoint can't fire.
 
 This module answers the *decision-support* half of the question
 (``docs/plans/coverage-atlas.md`` §3, §6.1, phase v0) using only what already
@@ -25,7 +24,7 @@ For each active-dataset item ``x`` with predicted class ``ŷ``, two signals:
   the null "``x`` is drawn from the class it was assigned", ``D`` is
   approximately uniform, so an excess of small values (well above ``alpha``) is
   the domain-shift signal — the same shape as
-  :func:`~vtscore.coverage.atlas.domain_shift_report`, but keyed on
+  :func:`~vtscore.coverage.domain_shift.domain_shift_report`, but keyed on
   *evidence* coverage rather than *data* coverage.
 - **TS(x)** — the trust-score ratio of Jiang et al. [11]: distance to the
   nearest evidence of the *other* class over distance to the predicted class.
@@ -64,7 +63,7 @@ _EPS = 1e-12
 DEFAULT_K = 1
 
 #: Default significance level for the support p-value.  Matches
-#: :func:`~vtscore.coverage.atlas.domain_shift_report` so the two reports
+#: :func:`~vtscore.coverage.domain_shift.domain_shift_report` so the two reports
 #: read on the same scale.
 DEFAULT_ALPHA = 0.05
 
@@ -388,7 +387,7 @@ def evidence_coverage_report(
     vote 150.  Ranked against the training haystack's own items it reads
     ``alpha`` in-domain, and on a foreign corpus fires from vote 10.  Without a
     baseline ``unsupported`` is ``False``: the share is reported, no verdict is
-    drawn from it.  Mirrors :func:`~vtscore.coverage.atlas.domain_shift_report`
+    drawn from it.  Mirrors :func:`~vtscore.coverage.domain_shift.domain_shift_report`
     so the two read on one scale.
     """
     pos = _normalize(pos_vectors)
