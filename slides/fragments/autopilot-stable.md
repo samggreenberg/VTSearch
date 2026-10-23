@@ -21,7 +21,7 @@
 
 <!-- **c** — Six changed side. Count them all and it never settles: a photo it
      can't place wobbles forever. On one pile that kept Autopilot asking at
-     the line for 127 of 150 clicks. -->
+     the line for 127 of 150 votes. -->
 
 <!-- **d** — So, a band around the line. A flip only counts if the photo was
      clear of it both times: D and N. Two super changed side. -->
