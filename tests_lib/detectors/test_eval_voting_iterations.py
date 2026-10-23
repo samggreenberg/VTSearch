@@ -781,7 +781,7 @@ class TestRegionVotingSimulate:
             region_voting=True,
         )
         assert not df.empty
-        assert (df["category"] == "apple").all()
+        assert bool((df["category"] == "apple").all())
 
 
 # ------------------------------------------------------------------

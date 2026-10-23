@@ -275,6 +275,14 @@ known_first_party = [
     # script so it reads the same cell definitions the build used.
     "pile_config",
     "_cells_io",
+    # More of scripts/experiments/calibration, put on sys.path by #4739's
+    # price_gap_o365.py to reuse the analysis it extends.
+    "common",
+    "curves",
+    "_rank_metrics",
+    "analyze_autopilot_4671",
+    "analyze_buildup_4668",
+    "analyze_progression_4184",
     # scripts/experiments/fullmarks, put on sys.path by the FullMarks study
     # scripts under docs/experiments/ (#3922 v4.2 measure_*.py).
     "fullmarks_config",
