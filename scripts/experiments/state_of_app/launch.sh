@@ -41,10 +41,17 @@ if [[ -n "${SOTA_BETA:-}" ]]; then
 fi
 export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$SOTA_DATE}"
-export CALIB_DATASETS=coco_better
+# SOTA_DATASET=o365_better re-reads a contrast on the confirmation bench (#4817):
+# `coco_better`'s construction on Objects365, nothing tuned on it. A review never
+# sets it. Each dataset has its own embedders variable, so both are set alike.
+export SOTA_DATASET="${SOTA_DATASET:-coco_better}"
+case "$SOTA_DATASET" in coco_better|o365_better) ;;
+  *) echo "SOTA_DATASET must be coco_better or o365_better" >&2; exit 2 ;; esac
+export CALIB_DATASETS="$SOTA_DATASET"
 # SOTA_EMBEDDERS swaps the columns for an A/B on the embedder itself (#4837 runs
 # `siglip,embeddinggemma2`); a review never sets it, so "the app" stays named here.
 export CALIB_COCO_BETTER_EMBEDDERS="${SOTA_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_O365_BETTER_EMBEDDERS="$CALIB_COCO_BETTER_EMBEDDERS"
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
@@ -138,9 +145,9 @@ esac
 if [[ "${1:-}" == "subset" ]]; then
   CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
   SUBSET_PATH="${SOTA_PATH:-binary}"
-  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" "$SUBSET_PATH" "$CALIB_COCO_BETTER_EMBEDDERS" <<'PYIDX'
+  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" "$SUBSET_PATH" "$CALIB_COCO_BETTER_EMBEDDERS" "$SOTA_DATASET" <<'PYIDX'
 import json, sys
-info = json.load(open(sys.argv[1]))["datasets"]["coco_better"]
+info = json.load(open(sys.argv[1]))["datasets"][sys.argv[6]]
 keep = {c.strip() for c in sys.argv[2].split(",") if c.strip()}
 n_seeds = int(sys.argv[3])
 embedders = tuple(sys.argv[5].split(","))
