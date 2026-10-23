@@ -13,6 +13,8 @@ Reads the nine arms ``launch_autopilot_4671.sh`` wrote under ``--base`` (``ctl_*
 * ``REPORT_autopilot.md`` - the machine summary; ``provenance.json``; ``figures/``.
 
 ``--arms`` reads a subset (``ctl`` always among them): #4739's legs run ``ctl`` and ``nowalk`` only.
+``--categories`` reads only the cells a file names, one ``class@band`` a line, in the baseline as in the arms: #4739's
+Objects365 leg reads the 107 cells both corpora hold (#4815).
 
 On arms run with a second corpus to Find on (#4960, ``CALIB_FIND_CORPUS``; #4739's legs), the ``find_*`` columns
 are read the same way, every run at every vote, paired by (category, seed), into ``find_curves.csv`` (the objective
@@ -118,6 +120,11 @@ def flag_rows(frame: pd.DataFrame) -> list[dict]:
     return out
 
 
+def read_categories(path: "Path | None") -> "set[str] | None":
+    """The cells *path* names, one ``class@band`` a line; None (every cell) with no path."""
+    return None if path is None else set(path.read_text().split("\n")) - {""}
+
+
 def premise_failures(arm: str, frame: pd.DataFrame, knobs: dict[str, set[str]], want: dict[str, str], beta: float):
     out = []
     if not knobs:
@@ -148,6 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     ap.add_argument("--horizon", type=int, default=150)
     ap.add_argument("--seeds", help="comma-separated seeds to read (an interim read); default all")
     ap.add_argument("--arms", default=",".join(a for a, *_ in ARMS), help="the arms to read; ctl must be one")
+    ap.add_argument("--categories", type=Path, help="read only these cells, one class@band a line")
     ap.add_argument("--no-figures", action="store_true")
     args = ap.parse_args(argv)
     wanted = {a.strip() for a in args.arms.split(",") if a.strip()}
@@ -158,9 +166,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     base, out = Path(args.base), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
+    keep = read_categories(args.categories)
     bl_path = Path(args.baseline) if args.baseline else base / "text_baseline.csv"
     bl = curves.text_sort_baseline(bl_path)
     raw = pd.read_csv(bl_path)
+    if keep is not None:
+        bl, raw = bl[bl["category"].isin(keep)], raw[raw["category"].isin(keep)]
     H = args.horizon
 
     lines = ["# #4671 Autopilot pieces - machine summary", ""]
@@ -181,6 +192,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                 continue
             if seeds is not None:
                 frame = frame[frame["seed"].isin(seeds)]
+            if keep is not None:
+                frame = frame[frame["category"].isin(keep)]
             failures += premise_failures(name, frame, logged_knobs(base / name), want, beta)
             frames[name] = frame
     failures += [f"baseline: {m}" for m in baseline_mismatches(raw, frames)]
