@@ -8,6 +8,8 @@
 
 <!-- build: figs/embed-flow.build2.webp -->
 
+<!-- build: figs/embed-flow.build3.webp -->
+
 <!-- **a** — Let's talk about how this works. There's an embedder called
      SigLIP. It can take a pile of pictures and make them vectors in content
      space. (Content-space is like 768-dimensions, but of course we drew it 3-d
@@ -17,3 +19,7 @@
 
 <!-- **c** — and put THAT into content space. So now we can see which photos
      are close to each other or to our text. -->
+
+<!-- **d** — Now here's a line from "book" to every photo. Each one is how
+     close that photo is to "book", and that closeness is what the next slides
+     use. -->
