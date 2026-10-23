@@ -81,16 +81,19 @@ REPO = SRC.parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(SRC))
-from slide_figure import FULL_BLEED, INK, SOFT, save  # noqa: E402
+from slide_figure import BOUNDARY_DOTS, BOUNDARY_LW, CUT_WASH, FULL_BLEED, INK, SOFT, save  # noqa: E402
 
 TIMINGS = SRC / "svm-timings.json"
 
-#: The palette of Pics on a Plane (`make-intro-figs.py`): blue is the detector's line, the shipped
-#: decision, and its street the band; green the Good side, red the Bad side; ghost a line the slide
-#: is not choosing.
+#: The palette of Pics on a Plane (`make-intro-figs.py`): the detector's line in round black dots
+#: (`slide_figure.BOUNDARY_LW`), as a plane draws a threshold (#5206), and its street a neutral
+#: wash with grey curbs; green the Good side, red the Bad side; ghost a line the slide is not
+#: choosing. Blue is left only on Speed Reading, where it is the shipped code's timings, not a line.
 BLUE = "#0b5fa5"
-BAND = "#dce7f2"
+BAND = CUT_WASH
 GHOST = "#aab3c0"
+#: The line, wherever a slide here draws a head's boundary.
+LINE = {"color": INK, "linestyle": BOUNDARY_DOTS, "dash_capstyle": "round"}
 RED = "#b91c1c"
 GREEN = "#0d8a5f"
 
@@ -276,7 +279,11 @@ def _margin_line(model: SVC) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _margin_street(ax: plt.Axes, model: SVC) -> None:
-    """Page c's street: the band between the curbs, the curbs dashed, and the votes on them ringed."""
+    """Page c's street: the band between the curbs, the curbs grey and dashed, and the votes on them ringed.
+
+    The curbs are not cuts, so they take neither the line's dots nor its ink: they are the edges of
+    its band, which is a neutral wash (#5206).
+    """
     w = model.coef_[0]
     b0 = float(model.intercept_[0])
     norm = float(np.linalg.norm(w))
@@ -285,7 +292,7 @@ def _margin_street(ax: plt.Axes, model: SVC) -> None:
     ax.add_patch(Polygon([lower[0], lower[1], upper[1], upper[0]], closed=True, facecolor=BAND, edgecolor="none",
                          zorder=1))  # fmt: skip
     for edge in (lower, upper):
-        ax.plot(edge[:, 0], edge[:, 1], color=BLUE, lw=1.8, ls=(0, (5, 4)), zorder=2)
+        ax.plot(edge[:, 0], edge[:, 1], color=SOFT, lw=1.8, ls=(0, (5, 4)), zorder=2)
     for p in model.support_vectors_:
         ax.add_patch(Circle(tuple(p), 2.1 * R, facecolor="none", edgecolor=INK, lw=2.0, zorder=5))
 
@@ -334,7 +341,7 @@ def _margin_call(stage: int, model: SVC) -> Figure:
         normal, line = _margin_line(model)
         if stage == 3:
             _margin_street(ax, model)
-        ax.plot(line[:, 0], line[:, 1], color=BLUE, lw=3.4, zorder=3)
+        ax.plot(line[:, 0], line[:, 1], lw=BOUNDARY_LW, zorder=3, **LINE)
 
     # ── d: the photos nobody voted on ────────────────────────────────────────────────────────────
     if stage >= 4:
@@ -406,8 +413,11 @@ def _off_with_their_heads() -> Figure:
         field = _heads_field(model, xs, ys)
         ax.imshow(field, extent=(0, PLANE_W, 0, PLANE_H), origin="lower", cmap=HEADS_FIELD, vmin=0.0, vmax=1.0,
                   interpolation="nearest", zorder=1)  # fmt: skip
-        ax.contour(xs, ys, field, levels=[0.5], colors=[BLUE if ships else INK], linewidths=3.0 if ships else 2.2,
-                   zorder=3)  # fmt: skip
+        # Every head's boundary is a threshold, so each is drawn as one (#5206); which head ships is
+        # its bold name, not its line.
+        boundary = ax.contour(xs, ys, field, levels=[0.5], colors=[INK], linewidths=BOUNDARY_LW,
+                              linestyles=[BOUNDARY_DOTS], zorder=3)  # fmt: skip
+        boundary.set_capstyle("round")
         for p in BADS:
             _cross(ax, p)
         for p in GOODS:

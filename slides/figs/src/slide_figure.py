@@ -173,6 +173,23 @@ TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
 INK = "#14181f"
 SOFT = "#5b6472"
 
+#: A threshold, on any figure: a thin dotted black line, as Beta Max draws its
+#: cuts (`slides/STYLE.md`, *A threshold is a dotted black line*). One style
+#: for every slide's line, so the room learns it once (#5203, #5206).
+CUT_LW = 1.4
+CUT_DOTS = (0, (2, 3))
+#: The wash a band round a threshold is filled with: a neutral grey, not a
+#: tint of the line, since the line is black.
+CUT_WASH = "#e3e6ea"
+#: A detector's boundary drawn on a plane of items, where the line is the
+#: drawing's subject and every item round it is an ink outline too: round dots
+#: (a dash of no length, which a round cap draws as a disc the width of the
+#: line) at the weight of Twin Peaks' middle cut, so it reads as a chain among
+#: the circles. The looser and tighter cuts of its band take `CUT_LW` and
+#: `CUT_DOTS`, as a lesser line does on Twin Peaks. Draw it with a round cap.
+BOUNDARY_LW = 2.8
+BOUNDARY_DOTS = (0, (0.01, 2.5))
+
 
 def spread_labels(ys: list[float], gap: float, floor: float | None = None) -> list[float]:
     """Heights for labels at the ends of lines ending at *ys*: each on its own end where it fits.

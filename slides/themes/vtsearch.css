@@ -15,7 +15,9 @@
  *    slides/figs/src/make-calib-figs.py, so a colour means the same thing on a
  *    slide as it does in the chart beside it:
  *
- *      --hue-cut   blue   the threshold, and the shipped decision it makes
+ *      --hue-cut   blue   the shipped thing: today's app, and what it runs
+ *                         and decides. Never a threshold line, which is
+ *                         dotted black (STYLE.md)
  *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *      --hue-step  red    a numbered click marker, as the screenshot draws it

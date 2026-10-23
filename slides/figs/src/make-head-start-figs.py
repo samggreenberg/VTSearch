@@ -49,17 +49,19 @@ from matplotlib.patches import Circle, FancyArrowPatch, Polygon  # noqa: E402
 import numpy as np  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
+from slide_figure import BOUNDARY_DOTS, CUT_WASH, FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
 
 SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
 CURVES = REPO / "docs" / "experiments" / "2026-10-11-face-handover-4776" / "prior_curves.csv"
 
-#: The palette of Pics on a Plane (`make-intro-figs.py`): blue is the detector's line, the shipped
-#: decision; ghost is a line as it was; green the Good side, red the Bad side.
-BLUE = "#0b5fa5"
-BAND = "#dce7f2"
+#: The palette of Pics on a Plane (`make-intro-figs.py`): the detector's line in round black dots
+#: over a neutral wash, as a plane draws a threshold (#5206); ghost is a line as it was; green the
+#: Good side, red the Bad side.
+BAND = CUT_WASH
+#: Both panels' lines, the ghost and the detector's: one weight, so they compare as lines.
+LINE_LW = 4.0
 GHOST = "#aab3c0"
 GHOST_BAND = "#eef0f3"
 RED = "#b91c1c"
@@ -247,7 +249,7 @@ def _head_start(stage: int) -> Figure:
         u, c = BEFORE
         left.add_patch(Polygon(_kept_side(u, c), closed=True, facecolor=GHOST_BAND, edgecolor="none", zorder=0))
         a, b = _clip_line(u, c)
-        left.plot([a[0], b[0]], [a[1], b[1]], color=GHOST, lw=4.0, ls=(0, (6, 3)), zorder=2)
+        left.plot([a[0], b[0]], [a[1], b[1]], color=GHOST, lw=LINE_LW, ls=(0, (6, 3)), zorder=2)
         g, bm = GOODS.mean(0), BADS.mean(0)
         _mean_mark(left, bm, RED)
         _mean_mark(left, g, GREEN)
@@ -264,7 +266,9 @@ def _head_start(stage: int) -> Figure:
             u, c = AFTER
             right.add_patch(Polygon(_kept_side(u, c), closed=True, facecolor=BAND, edgecolor="none", zorder=0))
             a, b = _clip_line(u, c)
-            right.plot([a[0], b[0]], [a[1], b[1]], color=BLUE, lw=4.0, zorder=2)
+            # At the ghost's weight, so neither panel's line outweighs the other's.
+            right.plot([a[0], b[0]], [a[1], b[1]], color=INK, lw=LINE_LW, ls=BOUNDARY_DOTS, dash_capstyle="round",
+                       zorder=2)  # fmt: skip
     _key(fig)
     return fig
 

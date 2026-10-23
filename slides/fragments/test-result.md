@@ -12,7 +12,7 @@
      Fβ at your radio. Found leads with words, because below the line it
      leans on the detector. -->
 
-<!-- **b** — Dotted is the planted truth, which you'd never have for real. Every
+<!-- **b** — Dashed is the planted truth, which you'd never have for real. Every
      range holds it. -->
 
 <!-- **c** — The verdict sits in the middle pane, where you voted. Its Lean the

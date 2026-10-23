@@ -74,7 +74,7 @@ beside it.** `themes/vtsearch.css` defines three hues, matching the palette in
 
 | class | hue | means |
 |---|---|---|
-| `.cut` | blue | the shipped decision. Not the threshold *line*, which is dotted black (below) |
+| `.cut` | blue | the shipped thing: today's app, and what it runs and decides. Never a threshold *line*, which is dotted black (below) |
 | `.neg` | red | the negative side: the Bad component, the losing arm |
 | `.pos` | green | the positive side: the Good component, a measured win |
 | `.side.steps` list numbers | red disc | a numbered place to click, drawn on the screenshot beside it |
@@ -95,7 +95,8 @@ If the slide has no figure, it has no reason to colour a word.
 
 The line a ranking is cut at, drawn on a chart, is a **dotted black line**
 (owner, #5203: "we're using a dotted black line for the threshold everywhere
-else"). Beta Max's three cuts are the pattern: thin, `INK`, dashed `(0, (2, 3))`.
+else"). Beta Max's three cuts are the pattern: thin, `INK`, dashed `(0, (2, 3))`,
+which `slide_figure.CUT_LW` and `CUT_DOTS` hold for every generator.
 It used to be blue, and a blue line among black ones made the room ask what the
 colour meant, when all it meant was "this is the line", which being the line
 already says.
@@ -106,11 +107,28 @@ already says.
   in a colour, and none carries a count of what it keeps.
 - **A line stops at the axis it cuts.** It runs from its own mark to that axis
   and no further, rather than up through the panels stacked above it.
-- **A band around the line is a neutral wash**, not a tint of its colour.
+- **A band around the line is a neutral wash**, not a tint of its colour
+  (`slide_figure.CUT_WASH`).
 - **A dotted line that is not a cut stays finer.** A Cut Above's question mark
   hangs off its own fine dotted line, which is the question's, not a radio's.
+- **On a plane, the detector's boundary is the line.** The curve Pics on a Plane
+  draws through the photos is where the detector's score is cut, so it is
+  dotted black too, and so is every boundary drawn on that plane after it:
+  Marginal at Best's line, all five of Off With Their Heads' (the bold name
+  says which head ships), Head Start's and In So Many Words', and the atlas's.
+  There the line is the drawing's subject among items outlined in ink, so it
+  takes round dots at Twin Peaks' middle weight (`slide_figure.BOUNDARY_LW`,
+  `BOUNDARY_DOTS`), and the band's looser and tighter cuts take the thin line.
+- **What is not a cut is not dotted black.** A boundary the slide has moved
+  past (Pics on a Plane's before the retrain, Head Start's "Before") stays a grey
+  dash, and so do an SVM street's curbs. Report Card's planted truth was a dotted
+  black curve; it is a grey dash now, because on that chart dotted black means
+  the line.
 
-The slides that still draw their threshold in blue are #5206's to redraw.
+Blue is still the shipped thing where it is not a line: today's app on Follow
+Suit, the shipped rule on Raise the Bar, Speed Reading's timings, Weight and
+See's schedule, Running Start's head start, the cell Cover Story's walk stops
+at, Beta Max's chosen radio.
 
 <!-- item-sep -->
 

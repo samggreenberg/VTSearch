@@ -59,7 +59,7 @@ from matplotlib.path import Path as MplPath
 from sklearn.cluster import KMeans
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, save  # noqa: E402
+from slide_figure import BOUNDARY_DOTS, BOUNDARY_LW, FULL_BLEED, save  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -86,7 +86,12 @@ INK, SOFT, RULE = INTRO.INK, INTRO.SOFT, "#d8dee6"
 #: under text on a screen; a partition drawn in it disappears off a projector,
 #: and the partition is the figure.
 CELL_LINE = "#aeb8c6"
-BLUE, RED, GREEN = INTRO.BLUE, INTRO.RED, INTRO.GREEN
+RED, GREEN = INTRO.RED, INTRO.GREEN
+#: Cover Story's one colour: the cell the walk stops at, outlined over its
+#: wash, and its node ringed in the tree, which pair across the slide by it.
+#: The cell is the walk's decision, not a threshold, so it keeps the deck's
+#: blue rather than a threshold's dots (#5206).
+BLUE, PICK_WASH = "#0b5fa5", "#dce7f2"
 CANVAS, UNIT_PT, R = INTRO.CANVAS, INTRO.UNIT_PT, INTRO.R
 #: All four figures sit under one-line headlines, so all four take the deck
 #: plane's measured one-line notch rather than the deck's two-line reserve —
@@ -282,23 +287,25 @@ def _blindspot_stage(stage: int) -> plt.Figure:
         INTRO._band(ax, second, INTRO._band_width(second, pts, labeled + (asked,)))
     INTRO._boundary(ax, second)
 
-    # The ring is solid, never dashed: a dashed line on this plane is one of the
-    # band's looser and tighter cuts, and the ring is not a cut. On the last page
-    # it is drawn exactly as the detector's own curve is — the same blue, the
-    # same weight — because that is what it is: a second piece of the boundary
-    # between Good and Bad, the piece the detector never drew.
+    # The ring is solid until the last page, never dashed: a dashed line on this
+    # plane is one of the band's looser and tighter cuts, and the ring is not a
+    # cut. On the last page it is drawn exactly as the detector's own curve is,
+    # the same dots at the same weight, because that is what it is: a second
+    # piece of the boundary between Good and Bad, the piece the detector never
+    # drew.
     centre, radius, inside = _ring()
     if stage >= 3:
-        ax.add_patch(
-            plt.Circle(
-                tuple(centre),
-                radius,
-                facecolor="none",
-                edgecolor=BLUE if stage >= 4 else SOFT,
-                linewidth=3.0 if stage >= 4 else 2.4,
-                zorder=2,
-            )
+        ring = plt.Circle(
+            tuple(centre),
+            radius,
+            facecolor="none",
+            edgecolor=INK if stage >= 4 else SOFT,
+            linewidth=BOUNDARY_LW if stage >= 4 else 2.4,
+            linestyle=BOUNDARY_DOTS if stage >= 4 else "-",
+            zorder=2,
         )
+        ring.set_capstyle("round")
+        ax.add_patch(ring)
 
     voted = {**{i: "good" for i in seed_good + (asked,)}, **{i: "bad" for i in seed_bad}}
     for i, p in enumerate(pts):
@@ -564,7 +571,7 @@ def _cells_stage(stage: int) -> plt.Figure:
         if stage >= 6:
             _fade(ax, chosen, xs, ys)
         else:
-            ax.contourf(xs, ys, chosen, levels=[0.5, 1.5], colors=[INTRO.BAND], zorder=0)
+            ax.contourf(xs, ys, chosen, levels=[0.5, 1.5], colors=[PICK_WASH], zorder=0)
         ax.contour(xs, ys, chosen, levels=[0.5], colors=[BLUE], linewidths=3.0, zorder=3)
 
     voted = {**{i: "good" for i in seed_good + (asked,)}, **{i: "bad" for i in seed_bad}}
@@ -758,6 +765,11 @@ def _wireframe(ax: plt.Axes) -> dict[int, plt.Polygon]:
 #: itself. At a half — the obvious first guess — that is a quarter, and the
 #: items behind the pillar stopped being items.
 PILLAR_ALPHA = 0.26
+#: The glass both solids are cut from: a neutral grey, as a band round a
+#: threshold is (#5206), but a shade darker than `INTRO.BAND`'s wash, because
+#: a wall is paid at `PILLAR_ALPHA` and the wash's grey at that strength left
+#: the pillar an outline round nothing.
+GLASS = "#b9c0ca"
 
 
 #: Where the boundary's own outline runs up the page: the two angles at which
@@ -768,8 +780,11 @@ PILLAR_ALPHA = 0.26
 SILHOUETTE_ANGLE = math.atan2(CURVE_RV * PROJ_V, CURVE_RU * PROJ_U)
 #: How wide every line belonging to the boundary is drawn — the foot, the mouth
 #: and the two silhouettes are one outline around one solid, so they are one
-#: weight.
-OUTLINE_LW = 2.6
+#: weight: the plane's boundary's, since it is that boundary (#5206).
+OUTLINE_LW = BOUNDARY_LW
+#: And how they are drawn: the plane's boundary's round black dots
+#: (`INTRO._boundary`), so the floor's curve is the one the room already knows.
+OUTLINE = {"color": INK, "linewidth": OUTLINE_LW, "linestyle": BOUNDARY_DOTS, "dash_capstyle": "round"}
 #: And how far the glass stops short of the outlines that cap it, in world
 #: height. A wall running the whole way from the foot to the mouth ends *on*
 #: them, so it tints the outer half of each stroke and the near arcs — the ones
@@ -799,7 +814,7 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
             plt.Polygon(
                 [glass[0][i], glass[0][i + 1], glass[1][i + 1], glass[1][i]],
                 closed=True,
-                facecolor=INTRO.BAND,
+                facecolor=GLASS,
                 edgecolor="none",
                 alpha=PILLAR_ALPHA,
                 zorder=Z_PILLAR,
@@ -807,7 +822,7 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
         )
     for side in (SILHOUETTE_ANGLE, SILHOUETTE_ANGLE + math.pi):
         edge = np.array([_footprint(np.array([side]), h)[0] for h in (0.0, TUBE_H)])
-        ax.plot(edge[:, 0], edge[:, 1], color=BLUE, linewidth=OUTLINE_LW, zorder=Z_PILLAR + 0.1)
+        ax.plot(edge[:, 0], edge[:, 1], **OUTLINE, zorder=Z_PILLAR + 0.1)
 
 
 @functools.lru_cache(maxsize=1)
@@ -887,14 +902,14 @@ def _dome(ax: plt.Axes) -> None:
             plt.Polygon(
                 np.vstack([meridians[i], meridians[i + 1][::-1]]),
                 closed=True,
-                facecolor=INTRO.BAND,
+                facecolor=GLASS,
                 edgecolor="none",
                 alpha=PILLAR_ALPHA,
                 zorder=Z_PILLAR,
             )
         )
     outline = _dome_outline()
-    ax.plot(outline[:, 0], outline[:, 1], color=BLUE, linewidth=OUTLINE_LW, zorder=Z_PILLAR + 0.1)
+    ax.plot(outline[:, 0], outline[:, 1], **OUTLINE, zorder=Z_PILLAR + 0.1)
 
 
 #: The item radius, on the page.
@@ -1140,7 +1155,7 @@ def _clear_of_edge(u: float, v: float) -> bool:
 
 
 #: The paint order, as bands rather than as numbers. Anything the pillar stands
-#: in front of is painted *under* it, which is what makes the blue shading right
+#: in front of is painted *under* it, which is what makes the glass's shading right
 #: without computing any of it: each of the pillar's wall quads is
 #: half-transparent, a point inside the pillar is behind one wall, and a point
 #: beyond it is behind two, so the compositor tints them once and twice on its
@@ -1368,7 +1383,7 @@ def _plan_stage() -> plt.Figure:
     )
     angles = np.linspace(0, 2 * np.pi, 180)
     curve = np.array([plan(CURVE_U + CURVE_RU * math.cos(a), CURVE_V + CURVE_RV * math.sin(a)) for a in angles])
-    ax.plot(curve[:, 0], curve[:, 1], color=BLUE, linewidth=OUTLINE_LW, zorder=Z_IN_PLANE)
+    ax.plot(curve[:, 0], curve[:, 1], **OUTLINE, zorder=Z_IN_PLANE)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     voted = _votes(floor)
     for index in range(len(floor)):
@@ -1408,7 +1423,7 @@ def _depth_stage(stage: int) -> plt.Figure:
         _tube(ax, base, top, angles)
     if stage == 5:
         _dome(ax)
-    _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=OUTLINE_LW)
+    _draw_in_plane(ax, base, crescents, **OUTLINE)
 
     lids: list[np.ndarray] = []
     if stage >= 3:
@@ -1418,7 +1433,7 @@ def _depth_stage(stage: int) -> plt.Figure:
             if crescent is not None:
                 lids.append(crescent)
     if stage == 4:
-        _draw_in_plane(ax, top, [(lids, Z_CEILING_OVERLAY)], base_z=Z_PILLAR + 0.05, color=BLUE, linewidth=OUTLINE_LW)
+        _draw_in_plane(ax, top, [(lids, Z_CEILING_OVERLAY)], base_z=Z_PILLAR + 0.05, **OUTLINE)
 
     return fig
 
