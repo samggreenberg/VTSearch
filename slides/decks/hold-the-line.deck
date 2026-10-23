@@ -218,9 +218,9 @@ slides:
   data-set-coco-better
   # Up and Up: what the F-beta era bought at beta 1/4, the old mechanics
   # against the new (#4668, owner #5171): cross-calibration in red, today's app
-  # re-run on the same sessions (#4835) in green, then the text query's sort at
-  # an oracle's cut, unfair against us; then the same chart at beta 1 and 4, all
-  # frames of one slide (owner, #4884).
+  # re-run on the same sessions (#4835) in green; then the same chart at beta 1
+  # and 4, all frames of one slide (owner, #4884). The text query's sort at an
+  # oracle's cut was drawn too, until the owner cut it (#5203).
   up-and-up
   # Follow Suit, what the work since the first rule bought (#4548), is in the
   # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
