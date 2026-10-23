@@ -1,6 +1,6 @@
 {
- "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side 3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26; then #4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22",
- "n_answered": 3521,
+ "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side 3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26; then #4954 owner hand review of the 2026-10-16 Binary Photo SotA (3 named images; 157 of 367 harmful Goods pre-screened at full size; Bad controls re-asked boxed), 2026-10-22; then #5191 re-ask of the two open #4954 controls with their box drawn (owner voted in chat over Remote Control), 2026-10-23",
+ "n_answered": 3523,
  "rows": [
   {
    "image_id": 10581,
@@ -386,6 +386,17 @@
    "rule": "bicycle incl trikes not motorcycles",
    "asked": "bicycle incl trikes not motorcycles - is there one here? (if boxed, is the box one?)",
    "file": "bicycle_05adea350c4a.jpg"
+  },
+  {
+   "image_id": 372233,
+   "class": "bicycle",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_c09735584641.jpg",
+   "source": "#5191 re-ask of the two open #4954 controls with their box drawn (owner voted in chat over Remote Control), 2026-10-23"
   },
   {
    "image_id": 418373,
@@ -1492,6 +1503,17 @@
    "rule": "dining table surface in dining use",
    "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
    "file": "dining_table_0478e06e79fc.jpg"
+  },
+  {
+   "image_id": 234929,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_eaeefcbbc88e.jpg",
+   "source": "#5191 re-ask of the two open #4954 controls with their box drawn (owner voted in chat over Remote Control), 2026-10-23"
   },
   {
    "image_id": 240972,
