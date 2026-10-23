@@ -350,7 +350,7 @@ export class DatasetImporterModalComponent implements OnInit {
     // the row; there is no single block for a footer toggle to open (#4703).
     switch (this.activePickerView) {
       case 'demo':
-        return this.demoPicker().importAdvanced();
+        return this.demoPicker().multiDataset() ? undefined : this.demoPicker().importAdvanced();
       case 'local_folder':
       case 'local_files':
         return this.localFolderPicker().multiDataset() ? undefined : this.localFolderPicker().importAdvanced();

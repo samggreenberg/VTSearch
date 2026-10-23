@@ -19,11 +19,7 @@ import type { DatasetStagingStartedResponse } from '../generated/api-client/mode
 import type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
 import type { ImporterFieldOptionsResponse } from '../generated/api-client/models/importer-field-options-response';
 import type { ImporterSuggestedNameResponse } from '../generated/api-client/models/importer-suggested-name-response';
-import type {
-  CleanerSelection,
-  ImporterInfo,
-  ImporterPickerTab,
-} from '../models/api.models';
+import type { ImporterInfo, ImporterPickerTab } from '../models/api.models';
 import { availableDatasetFiles } from '../generated/api-client/fn/datasets-staging/available-dataset-files';
 import { clearDatasetRoute } from '../generated/api-client/fn/datasets-load/clear-dataset-route';
 import { clearStaging } from '../generated/api-client/fn/datasets-staging/clear-staging';
@@ -41,6 +37,9 @@ import { stageDemo } from '../generated/api-client/fn/datasets-staging/stage-dem
 /** ``GET /api/dataset/importers`` omits ``tabs``; ``/all-importers`` includes
  *  it.  One union type lets both callers share the picker code. */
 type ImportersResponse = { importers: ImporterInfo[]; tabs?: ImporterPickerTab[] };
+
+/** What a demo load sends besides the demo's ``name``. */
+export type DemoLoadParams = Omit<DatasetLoadDemoRequest, 'name'>;
 
 /** Dataset CRUD: importer listings, import, stage, clear, export,
  *  detect-media-type, plus the load-from-source / load-demo entry points
@@ -136,10 +135,7 @@ export class DatasetsCrudApiService {
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-files', formData);
   }
 
-  loadDemo(
-    name: string,
-    params?: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]>,
-  ): Observable<DatasetLoadStartedResponse> {
+  loadDemo(name: string, params?: DemoLoadParams): Observable<DatasetLoadStartedResponse> {
     const body: DatasetLoadDemoRequest = { name, ...params };
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
   }

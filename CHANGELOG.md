@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A demo loads as linked photo and face datasets.** Add Dataset › Demo › **Downloaded Media** gains the
+  **Multi-Dataset** box: tick it, then **Face** beside **Image**, and a demo such as Celebrities in Context loads as
+  two datasets of one import, the photos and the faces cut out of them, so a face's **Show in photo** and the
+  **Show: Faces | Photos** switch work as they do for a folder import. Its rows are the kinds a demo can be
+  loaded as (an Image demo: Image, Face, Text). **Face** leaves the single *Dataset media type* dropdown of the
+  other importers, where a Face dataset read no files and failed with *Import produced no medias*: it is
+  offered only under Multi-Dataset now. The user guide has a [Faces](docs/user/USER_GUIDE.md#faces-find-a-person-in-a-set-of-photos)
+  walkthrough.
+
 - **Exported labels no longer carry this server's scores or threshold** (issue #5131). An exported labelset says
   which items are Good and Bad and where each came from, so the labels can rebuild the detector under another
   embedder. A labelset-source push and Export labels (Webhook included) used to send the trained head's threshold

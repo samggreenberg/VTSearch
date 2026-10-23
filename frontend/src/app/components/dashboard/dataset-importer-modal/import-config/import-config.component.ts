@@ -73,6 +73,10 @@ export class ImportConfigComponent {
    *  (``<vt-multi-output-config>``), so this component shows only the box. */
   readonly multiDataset = input(false);
   readonly multiDatasetChange = output<boolean>();
+  /** Whether Multi-Dataset mode hides the dropdown.  Off for the demo flow,
+   *  where the dropdown picks which demos are listed rather than the type of
+   *  the dataset, and so still matters with several datasets to make. */
+  readonly multiHidesMediaType = input(true);
 
   /** ``id`` for the Multi-Dataset box, derived like :prop:`listboxId`. */
   get multiToggleId(): string {

@@ -1,6 +1,7 @@
 import { ConverterInfo, DetectMediaTypeResponse, MediaTypeInfo } from '../../../../../models/api.models';
 import {
   buildOutputDrafts,
+  demoOutputDrafts,
   detectedCount,
   draftToOutputRequest,
   isMultiOutputImporter,
@@ -104,6 +105,35 @@ describe('multi-output.util', () => {
     expect(detectedCount(detection, 'document')).toBe(2);
     expect(detectedCount(detection, 'face')).toBe(0);
     expect(detectedCount(null, 'image')).toBe(0);
+  });
+
+  describe('demoOutputDrafts', () => {
+    const rows = (drafts: ReturnType<typeof demoOutputDrafts>) =>
+      drafts.map((d) => [d.category, d.mediaType, d.checked, d.sourceSpecs[0].converter]);
+
+    it('an image demo: its photos ticked, then each type a converter makes from them', () => {
+      expect(rows(demoOutputDrafts(mediaTypes, 'image', ['face']))).toEqual([
+        ['image', 'image', true, null],
+        ['face', 'face', false, 'image2face'],
+      ]);
+    });
+
+    it('every row reads the demo own files', () => {
+      const drafts = demoOutputDrafts(mediaTypes, 'image', ['face', 'text']);
+      expect(drafts.every((d) => d.sourceSpecs.length === 1 && d.sourceSpecs[0].source_type === 'image')).toBe(true);
+    });
+
+    it('ticks what the single form was converting to', () => {
+      expect(demoOutputDrafts(mediaTypes, 'image', ['face'], 'face').map((d) => d.checked)).toEqual([true, true]);
+    });
+
+    it('a demo with no type of its own to keep offers only its conversions', () => {
+      expect(rows(demoOutputDrafts(mediaTypes, 'document', ['image', 'text'], 'text'))).toEqual([
+        ['image', 'image', false, 'document2image'],
+        ['text', 'text', true, 'document2text'],
+      ]);
+      expect(demoOutputDrafts(mediaTypes, 'document', ['image', 'text']).map((d) => d.checked)).toEqual([true, false]);
+    });
   });
 
   describe('draftToOutputRequest', () => {

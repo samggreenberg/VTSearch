@@ -38,6 +38,10 @@
           [mediaTypeOptions]="demoPicker().demoTabs()"
           [mediaTypeOptionLabels]="demoPicker().mediaTypeLabels"
           [mediaTypeOptionIcons]="demoPicker().demoMediaTypeIcons"
+          [showMultiToggle]="demoPicker().supportsMultiOutput"
+          [multiDataset]="demoPicker().multiDataset()"
+          (multiDatasetChange)="demoPicker().setMultiDataset($event)"
+          [multiHidesMediaType]="false"
         ></vt-import-config>
       }
     </ng-container>
@@ -223,7 +227,7 @@
   @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo()">Import</button>
+      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo() || !demoPicker().hasOutputs">Import</button>
     </div>
   }
 </vt-modal>

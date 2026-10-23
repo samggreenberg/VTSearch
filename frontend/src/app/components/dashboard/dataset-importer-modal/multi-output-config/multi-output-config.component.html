@@ -70,7 +70,7 @@
             [cleaners]="options(draft).cleaners"
             [selectedCleaners]="draft.cleaners"
             (selectedCleanersChange)="onCleanersChange(draft, $event)"
-            [showSourceSpecs]="!isConvertOut(draft)"
+            [showSourceSpecs]="!fixedSources() && !isConvertOut(draft)"
             [sourceSpecs]="draft.sourceSpecs"
             (sourceSpecsChange)="onSourceSpecsChange(draft, $event)"
             [selectedEmbedder]="draft.embedder"

@@ -479,7 +479,9 @@ form:
 - **Convert to** - on the **Demo** importer, whose dataset is fixed:
   which type to convert the demo's media into on load (scanned documents
   into page images, say). The equivalent choice on the other importers is
-  *Include media* above.
+  *Include media* above. To keep the demo's own media too, linked to what is
+  converted from it, use [Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder)
+  instead.
 - **Clipper** - a pre-processing pass applied before each item is
   analyzed, e.g. cutting long audio into shorter segments. On most importers
   it is the **Details ▸** button beside each media type under *Include
@@ -536,7 +538,10 @@ AutoFind run.
 - Rows are pre-ticked from what the folder scan finds; tick or untick as you
   like. **Document** makes an image dataset of the rendered pages (or, under
   its **Details ▾**, extracted text); **Face** makes a dataset of the faces
-  cropped out of the images, so it has no files of its own to find.
+  cropped out of the images, so it has no files of its own to find. This list
+  is the only place Face is offered: the *Dataset media type* dropdown leaves
+  it out, because a Face dataset made on its own could not show the photo any
+  of its faces came from.
 - Each ticked row's **Details ▾** opens that dataset's own Advanced settings
   (*Include media*, embedders, clipper, cleanup), in place of the dialog's
   single **Advanced ▾** toggle. *Build Browse map now* and *Merge
@@ -546,8 +551,40 @@ AutoFind run.
   folder's name.
 
 Cancelling one row while the folder is still being read stops that dataset
-alone; the others carry on. The **Downloaded Media** importer has no
-Multi-Dataset box: a demo is one dataset of one kind.
+alone; the others carry on.
+
+**Demos.** The **Downloaded Media** catalogue has the box too, above its
+media-type dropdown, which stays: there it picks which demos are listed. Its
+rows are the kinds the demo can be loaded as, its own and each it converts
+into, so an Image demo offers **Image**, **Face** and **Text**. Every row reads
+the demo's own files, so the datasets are linked just as a folder's are. A
+row's **Details ▾** has its embedder, clipper and cleanup; a conversion runs
+with its default settings.
+
+### Faces: find a person in a set of photos
+
+VTSearch can search the faces in photos rather than the photos themselves: it
+finds each face, cuts it out, and compares faces by who they are rather than
+by how the picture looks. A Face dataset is always made beside the photos it
+is cut from, so that every face can show you its photo.
+
+1. Click **+** on the **Datasets** card, then **Demo** and **Downloaded
+   Media**, and pick **Image** in the media-type dropdown.
+2. Tick **Multi-Dataset**, then tick **Face** beside the ticked **Image**.
+3. Pick **Celebrities in Context (S)**, 1,200 event photos of 60 well-known
+   people, and click **Import**. Two datasets load side by side,
+   `Celebrities in Context (S) – Image` and `Celebrities in Context (S) – Face`.
+   For photos of your own, use **Files** › **Folder** instead, with the same
+   two rows ticked.
+4. With the Face dataset selected, click **Train**. A face can't be
+   described in words, so **New Detector** asks for an example on its
+   **Face** tab: drop in a picture of the person's face, cropped to the face
+   (an uncropped photo is not searched for faces first), and click
+   **Create**. Then vote as usual; every vote goes on a face, never a photo.
+5. To see the whole photos, rank the faces (in Train's **Manual** tab,
+   **Sort: Learned**; or Tune's **Review** tab) and switch **Show: Faces |
+   Photos** to **Photos**: every photo with a matching face, the face
+   outlined. **Show in photo** under a face opens its photo.
 
 **Show in photo.** When an import made both a Face and an Image dataset, a
 face in Train or Tune is one click from the photo it was cut out of. Click

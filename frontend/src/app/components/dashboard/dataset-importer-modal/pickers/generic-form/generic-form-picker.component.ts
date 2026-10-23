@@ -26,7 +26,16 @@ import {
   SourceSpec,
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
-import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
+import {
+  availableConvertersFor,
+  composeEmbedders,
+  mediaTypeLabels,
+  mediaTypeOptionIcons,
+  mediaTypeOptionLabels,
+  singleDatasetMediaTypes,
+  toFolderName,
+  toTypeId,
+} from '../shared/media-type.util';
 import { OutputDraft, buildOutputDrafts, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
@@ -90,6 +99,9 @@ export class GenericFormPickerComponent {
   readonly selectedImporter = signal<ImporterInfo | null>(null);
   formValues: Record<string, any> = {};
   selectedFile: File | null = null;
+  /** The media-type dropdown's options: the importer's own, less Face (see
+   *  ``singleDatasetMediaTypes``). */
+  mediaTypeOptions: string[] = [];
   readonly submitting = signal(false);
   readonly error = signal('');
   /** Whether the user has manually edited the generic-form dataset_name
@@ -239,16 +251,17 @@ export class GenericFormPickerComponent {
     }
 
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
+    this.mediaTypeOptions = singleDatasetMediaTypes(this.mediaTypes(), mediaTypeField?.options || []);
     const guessedMediaType = this.guessedMediaType();
     if (mediaTypeField && guessedMediaType) {
       const folderName = toFolderName(this.mediaTypes(), guessedMediaType);
-      if (folderName && mediaTypeField.options?.includes(folderName)) {
+      if (folderName && this.mediaTypeOptions.includes(folderName)) {
         this.formValues['media_type'] = folderName;
       }
     }
 
     if (mediaTypeField && this.effectiveSoloFolderName) {
-      if (mediaTypeField.options?.includes(this.effectiveSoloFolderName)) {
+      if (this.mediaTypeOptions.includes(this.effectiveSoloFolderName)) {
         this.formValues['media_type'] = this.effectiveSoloFolderName;
       }
     }

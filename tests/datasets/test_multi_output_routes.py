@@ -1,9 +1,9 @@
-"""The ``outputs`` request shape on the three import routes (#4703).
+"""The ``outputs`` request shape on the import routes (#4703).
 
-``POST /api/dataset/import/<importer>``, ``import-local-folder`` and
-``import-local-files`` take an ``outputs`` list and answer with one task id
-per dataset in ``task_ids``; without it they behave as before and list their
-single task.  The background runner is patched out: what these pin down is
+``POST /api/dataset/import/<importer>``, ``import-local-folder``,
+``import-local-files`` and ``load-demo`` take an ``outputs`` list and answer
+with one task id per dataset in ``task_ids``; without it they behave as before
+and list their single task.  The background runner is patched out: what these pin down is
 the request parsing and the hand-off, not the load itself.
 
 ``GET /api/datasets/registry`` then says which datasets came from the same
@@ -210,6 +210,92 @@ class TestLocalFilesRoute:
         assert captured["field_values"]["paths_file"].endswith("paths_file.txt")
         origin = captured["kwargs"]["origin_for"](captured["outputs"][0], {"media_type": "audio"})
         assert origin["params"] == {"paths_file": "<browser_upload>", "media_type": "audio"}
+
+
+_DEMO_OUTPUTS = [
+    {"media_type": "image", "source_specs": [{"source_type": "image", "converter": None, "params": {}}]},
+    {"media_type": "face", "source_specs": [{"source_type": "image", "converter": "image2face", "params": {}}]},
+]
+
+
+class TestDemoRoute:
+    """A demo loads as linked datasets: its photos and the faces cut out of them."""
+
+    def test_outputs_start_a_multi_dataset_demo_load(self, client):
+        captured: dict = {}
+
+        def fake_multi(importer, field_values, outputs, **kwargs):
+            captured.update(importer=importer, field_values=field_values, outputs=outputs, kwargs=kwargs)
+            return ["t-1", "t-2"]
+
+        with patch("vtsearch.routes.datasets.load._run_multi_output_load_in_background", side_effect=fake_multi):
+            resp = client.post(
+                "/api/dataset/load-demo",
+                json={"name": "celebrity_together_s", "outputs": _DEMO_OUTPUTS, "build_projection": "true"},
+            )
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        assert resp.get_json()["task_id"] == "t-1"
+        assert resp.get_json()["task_ids"] == ["t-1", "t-2"]
+        assert captured["importer"].name == "demo"
+        assert [o.media_type for o in captured["outputs"]] == ["image", "face"]
+        assert captured["outputs"][1].source_specs[0].converter == "image2face"
+        # The shared values name the demo; nothing single-dataset rides along.
+        assert captured["field_values"] == {"name": "celebrity_together_s", "build_projection": "true"}
+        assert captured["kwargs"]["on_finished"] is not None
+
+    def test_single_demo_load_lists_its_one_task(self, client):
+        with patch("vtsearch.routes.datasets.load._run_importer_in_background", return_value="t-9"):
+            resp = client.post("/api/dataset/load-demo", json={"name": "celebrity_together_s"})
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        assert resp.get_json()["task_ids"] == ["t-9"]
+
+    def test_an_output_reading_another_type_is_a_400(self, client):
+        """An image demo has no documents to render, so a document row reads nothing."""
+        with patch(
+            "vtsearch.routes.datasets.load._run_multi_output_load_in_background",
+            side_effect=AssertionError("a refused load must not start"),
+        ):
+            resp = client.post(
+                "/api/dataset/load-demo",
+                json={
+                    "name": "celebrity_together_s",
+                    "outputs": [
+                        {
+                            "media_type": "image",
+                            "source_specs": [{"source_type": "document", "converter": "document2image", "params": {}}],
+                        }
+                    ],
+                },
+            )
+        assert resp.status_code == 400
+        assert "one image source row" in resp.get_json()["message"]
+
+    def test_an_output_with_two_source_rows_is_a_400(self, client):
+        resp = client.post(
+            "/api/dataset/load-demo",
+            json={
+                "name": "celebrity_together_s",
+                "outputs": [
+                    {
+                        "media_type": "image",
+                        "source_specs": [
+                            {"source_type": "image", "converter": None, "params": {}},
+                            {"source_type": "video", "converter": "video2image", "params": {}},
+                        ],
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_invalid_outputs_are_a_400(self, client):
+        resp = client.post(
+            "/api/dataset/load-demo", json={"name": "celebrity_together_s", "outputs": [{"media_type": "hologram"}]}
+        )
+        assert resp.status_code == 400
+        assert "Unknown media type" in resp.get_json()["message"]
 
 
 class TestRegistryListsTheImportGroup:

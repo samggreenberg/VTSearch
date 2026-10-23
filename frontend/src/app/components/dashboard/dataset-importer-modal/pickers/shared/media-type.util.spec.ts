@@ -10,6 +10,7 @@ import {
   mediaTypeOptionIcons,
   mediaTypeOptionLabels,
   readRecursiveDefault,
+  singleDatasetMediaTypes,
   toFolderName,
   toTypeId,
 } from './media-type.util';
@@ -114,5 +115,15 @@ describe('media-type.util', () => {
     expect(composeEmbedders('clip', 'clip', '')).toBeNull();
     expect(composeEmbedders('clip', 'patch-clip', '')).toEqual(['clip', 'patch-clip']);
     expect(composeEmbedders('clip', 'patch-clip', 'struct-clip')).toEqual(['clip', 'patch-clip', 'struct-clip']);
+  });
+
+  it('singleDatasetMediaTypes leaves out Face, which has no files of its own', () => {
+    const withFace = [
+      ...mediaTypes,
+      { type_id: 'face', name: 'Face', folder_import_name: 'face', importable: false } as MediaTypeInfo,
+    ];
+    expect(singleDatasetMediaTypes(withFace, ['audio', 'face', 'images'])).toEqual(['audio', 'images']);
+    const options = ['audio', 'images'];
+    expect(singleDatasetMediaTypes(mediaTypes, options)).toBe(options);
   });
 });

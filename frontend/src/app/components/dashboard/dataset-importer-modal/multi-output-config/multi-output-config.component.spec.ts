@@ -6,7 +6,7 @@ import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../testing/test-providers';
 import { settleZoneless } from '../../../../testing/settle-resource';
 import { ConverterInfo, MediaTypeInfo } from '../../../../models/api.models';
-import { OutputDraft, buildOutputDrafts, tickCategory } from '../pickers/shared/multi-output.util';
+import { OutputDraft, buildOutputDrafts, demoOutputDrafts, tickCategory } from '../pickers/shared/multi-output.util';
 
 describe('MultiOutputConfigComponent', () => {
   let component: MultiOutputConfigComponent;
@@ -130,6 +130,28 @@ describe('MultiOutputConfigComponent', () => {
     expect(retargeted.convertTarget).toBe('text');
     expect(retargeted.sourceSpecs).toEqual([{ source_type: 'document', converter: 'document2text', params: {} }]);
     expect(retargeted.embedder).toBe('e5');
+  });
+
+  it('with fixed sources (a demo), a row keeps the source it was given and offers no include rows', async () => {
+    fixture.componentRef.setInput('fixedSources', true);
+    fixture.componentRef.setInput('drafts', demoOutputDrafts(mediaTypes, 'audio', ['image'], 'image'));
+    await settleZoneless(fixture);
+    flushOptions('audio');
+    flushOptions('image');
+    await settleZoneless(fixture);
+
+    // Seeded like any row, but the Import Defaults' include rows never replace
+    // the demo's own: an image dataset of this demo reads its audio.
+    const image = drafts.find((d) => d.category === 'image')!;
+    expect(image.embedder).toBe('e1');
+    expect(image.sourceSpecs).toEqual([{ source_type: 'audio', converter: 'audio2image', params: {} }]);
+    expect(component.rowTitle(image)).toContain('from the audio files (audio2image)');
+    expect(component.rowTitle(drafts.find((d) => d.category === 'audio')!)).toBe('Make a dataset of the audio files.');
+
+    const imageRow = rows().find((r) => r.querySelector('.mo-row-label')?.textContent?.trim() === 'Image')!;
+    (imageRow.querySelector('.mo-details-toggle') as HTMLButtonElement).click();
+    await settleZoneless(fixture);
+    expect(imageRow.querySelector('vt-source-specs-picker')).toBeNull();
   });
 
   it('a convert-out row offers Convert to but no include rows; a convert-in row the reverse', () => {
