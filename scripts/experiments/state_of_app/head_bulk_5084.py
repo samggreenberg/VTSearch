@@ -277,8 +277,29 @@ GRID_CANDS = (
     "quad1.5-2.5_max3",
     "quad1-3_max3",
     "quad1-3_z4",
+    "lab_prec_z3",
+    "lab_prec_z4",
+    "lab_rec_z4",
     "oracle",
 )
+#: The bulk-tail grid the tail-shape figure reads: the withheld negatives above median + z spreads.
+Z_TAIL = (2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0)
+
+
+def label_counts(x: np.ndarray, med: float, sd: float, xg: np.ndarray, xb: np.ndarray) -> dict[str, float]:
+    """Counts read from the labels: what stands out above median + z spreads, thinned by the share of the labelled items
+    up there that are Goods (``lab_prec``), and divided again by the share of the held-out Goods up there
+    (``lab_rec``, the line's recall as the labels see it). Shares are smoothed (+0.5 / +1) for the few labels a head
+    serves on."""
+    out = {}
+    for z in (3.0, 4.0):
+        thr = med + z * sd
+        g, b = int(np.count_nonzero(xg > thr)), int(np.count_nonzero(xb > thr))
+        prec = (g + 0.5) / (g + b + 1)
+        out[f"lab_prec_z{z:g}"] = float(np.count_nonzero(x > thr)) * prec
+        if z == 4.0:
+            out["lab_rec_z4"] = out["lab_prec_z4"] / ((g + 0.5) / (xg.size + 1))
+    return out
 
 
 def gap_and_count(x_desc: np.ndarray, beta: float, n_hat: float, c: float | None = None) -> int:
@@ -303,6 +324,7 @@ def _snap(args) -> list[dict]:
         est = estimators(x)
         med, sd = bulk(x)
         npos = int(yv.sum())
+        xg, xb = _logit(goods), _logit(bads)
         base = {
             **{k: ident[k] for k in ("run", "path", "run_beta", "idx", "t", "class", "seed")},
             "scenario": scen,
@@ -312,10 +334,19 @@ def _snap(args) -> list[dict]:
             "pos_above_z3": int(np.count_nonzero(x[yv == 1] > med + 3 * sd)),
             "neg_above_z4": int(np.count_nonzero(x[yv == 0] > med + 4 * sd)),
             "neg_above_z3": int(np.count_nonzero(x[yv == 0] > med + 3 * sd)),
+            "n_goods": int(xg.size),
+            "n_bads": int(xb.size),
+            "pos_z_med": float(np.median((x[yv == 1] - med) / sd)) if npos else math.nan,
+            "goods_z_med": float(np.median((xg - med) / sd)) if xg.size else math.nan,
+            "pos_share_z4": float(np.mean(x[yv == 1] > med + 4 * sd)) if npos else math.nan,
+            "goods_share_z4": float(np.mean(xg > med + 4 * sd)) if xg.size else math.nan,
+            "neg_tail": np.array([np.count_nonzero(x[yv == 0] > med + z * sd) for z in Z_TAIL], dtype=np.int32),
         }
         for k, v in est.items():
             base[f"n_{k}"] = v
         cands = dict(est)
+        if "gauss_z4" in est:
+            cands.update(label_counts(x, med, sd, xg, xb))
         cands["oracle"] = float(max(npos, 1))
         for beta in BETAS:
             r = dict(base, beta=beta)
