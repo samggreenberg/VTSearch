@@ -3,7 +3,7 @@
 **Status (2026-10-24): offline on every snapshot on the head's count line of three benches (Binary Photo, Region
 Photo, FHIBE faces), at beta 1/4, 1 and 4, in four corpora each (0.44%, 0.1%, 1% and no positives); closed loop at
 beta 1/4 and 1 on Binary Photo (720 sessions per arm and preset, 5 seeds) and Region Photo (144 per arm and preset,
-1 seed, REGION_PENDING). Not shipped yet: the knob (`HEAD_COUNT_PRECISION_SCALE`, `HEAD_COUNT_PRECISION_EXPONENT`)
+1 seed; beta 1 read, beta 1/4 REGION_B025_PENDING). Not shipped yet: the knob (`HEAD_COUNT_PRECISION_SCALE`, `HEAD_COUNT_PRECISION_EXPONENT`)
 is in, default off.**
 
 **The count of what stands out over-reads the head's scores because the heads' bulks are not Gaussian above 3
@@ -43,8 +43,10 @@ heads, against today's line:
 5. **Closed loop.** On Binary, where the line serves the first ~40 clicks and weak classes beyond, 0.71 beta adds
    +0.0030 (± 0.0007) to Find's mean F-beta over clicks 0 to 50 at beta 1 and +0.0014 (± 0.0013) at beta 1/4, and is
    level over 0 to 200 (+0.0002 ± 0.0003, +0.0006 ± 0.0005); F-beta at the stop moves -0.0015 (± 0.0005) at beta 1 and
-   +0.0012 (± 0.0018) at beta 1/4. 0.5 beta is worse at both (stop -0.0035 ± 0.0008 at beta 1). Region:
-   REGION_PENDING.
+   +0.0012 (± 0.0018) at beta 1/4. 0.5 beta is worse at both (stop -0.0035 ± 0.0008 at beta 1). On Region at beta 1,
+   where the line serves from the first trained click (7), 0.71 beta adds +0.034 at click 10, +0.0093 (± 0.0023) over
+   clicks 0 to 50 and +0.0075 (± 0.0019) over 0 to 100, and +0.0040 (± 0.0018) at the stop (+0.0006 ± 0.0005 after
+   the closing check); 4 of 144 sessions pick a different image. Beta 1/4: REGION_B025_PENDING.
 
 | beta <= 1, on the head's count line (mean over classes; people on faces) | Binary Photo | Region Photo | FHIBE faces |
 |---|---|---|---|
@@ -57,9 +59,9 @@ heads, against today's line:
 | beta 1: 0.5 beta (0.5x) | +0.006 / +0.026 / -0.025 | +0.065 / +0.061 / +0.022 | -0.001 / +0.011 / -0.005 |
 | images kept on a corpus with no positives, beta 1/4: today / 0.71 beta / 0.5 beta | 12 / 6.3 / 4.7 | 54 / 26 / 18 | 2.4 / 2.4 / 2.4 |
 | … beta 1 | 31 / 22 / 16 | 145 / 103 / 72 | 3.6 / 3.6 / 3.6 |
-| **closed loop, 0.71 beta: Find's mean F-beta gain, clicks 0-50 / 0-200, beta 1** | **+0.0030 (± 0.0007) / +0.0002 (± 0.0003)** | REGION_PENDING | not run |
-| … beta 1/4 | +0.0014 (± 0.0013) / +0.0006 (± 0.0005) | REGION_PENDING | not run |
-| … F-beta at the stop, beta 1 / beta 1/4 | -0.0015 (± 0.0005) / +0.0012 (± 0.0018) | REGION_PENDING | not run |
+| **closed loop, 0.71 beta: Find's mean F-beta gain, clicks 0-50 / 0-200 (Region 0-100), beta 1** | **+0.0030 (± 0.0007) / +0.0002 (± 0.0003)** | **+0.0093 (± 0.0023) / +0.0075 (± 0.0019)** | not run |
+| … beta 1/4 | +0.0014 (± 0.0013) / +0.0006 (± 0.0005) | REGION_B025_PENDING | not run |
+| … F-beta at the stop, beta 1 / beta 1/4 | -0.0015 (± 0.0005) / +0.0012 (± 0.0018) | +0.0040 (± 0.0018) / REGION_B025_PENDING | not run |
 
 *± one SE over classes: offline 0.004 to 0.008 on Binary, 0.004 to 0.015 on Region, under 0.002 on faces
 (`tables/offline_presets.csv`). Faces' corpora are at a person's own prevalence (about 4 of 5,439 crops) and its
@@ -186,7 +188,25 @@ until the class model holds 6 held-out Goods (~40 for most classes):
 - Sessions barely part: 1.3% of beta 1 runs pick a different image before click 200 (median click 61), all on a
   phase change, and Done moves by under 0.06 clicks.
 
-**Region Photo:** REGION_PENDING
+![Region Photo closed loop](figures/ab_region_over_clicks.png)
+
+*Figure 4: Region Photo, as figure 3, 144 sessions per arm (1 seed, 100 clicks on the cpu partition).*
+
+**Region Photo** (`tables/ab_region_summary.csv`, `ab_region_splits.csv`, `ab_region_examples.csv`). The patch path
+trains from click 7, and the head's count line serves from there until 6 held-out Goods:
+
+- **beta 1:** 0.71 beta gains +0.034 at click 10 (the first trained line keeps 2.6x its positives today, offline), then
+  +0.005 to +0.012 out to click 75 and +0.0035 at click 100. Over clicks 0-25 +0.012 (± 0.0022), 0-50 +0.0093
+  (± 0.0023), 0-100 +0.0075 (± 0.0019). At the stop +0.0040 (± 0.0018), after the closing check +0.0006 (± 0.0005).
+  Done is reached as often (76%) at the same median click (48).
+- **By band** (clicks 0-50): large objects +0.016 (± 0.005, 86% of classes better), medium +0.0084 (± 0.0022, 80%),
+  small +0.0031 (± 0.0016, 52%). Classes both arms leave under F 0.2 at click 100 are level (-0.0007 ± 0.0015).
+- **The gain is the line, not the session:** 4 of 144 sessions pick a different image (median click 12.5, all on a
+  phase change). The other 140 label the same images and return a smaller, more precise set.
+- **Sessions that part:** "orange", medium (parts at click 10): F at click 50 0.76 → 0.84, 49 Goods by click 100
+  instead of 41, Done at 43 instead of 47. "bus", large (parts at 13): F at click 50 0.92 → 0.90, Done at 61 instead
+  of 44, mean F over 0-100 -0.053, the run that costs most.
+- **beta 1/4:** REGION_B025_PENDING
 
 ## Literal examples
 
@@ -213,7 +233,7 @@ From `tables/offline_examples.csv`, the head at the median of today's kept / pos
 
 ## What this leaves
 
-- REGION_PENDING
+- Region's closed loop is 1 seed (144 sessions per arm) to 100 clicks; more seeds wait for the V100s (#4711 holds them).
 - Binary at 1% prevalence pays for any smaller count (-0.004 at beta 1, -0.014 at beta 1/4 offline). What separates
   a head whose positives sit under the bulk's tail (Binary's "book") from one whose positives sit above it (Region's
   "person") is not in the scores' shape or in 2 to 4 labels; the class model takes over at 6 held-out Goods.
