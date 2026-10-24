@@ -7,6 +7,7 @@ bulks are heavier than a Gaussian above 3 spreads, so the count reads the bulk's
 
   head_bulk_5084.py extract --results DIR [--results DIR ...] --out DIR [--procs N]
   head_bulk_5084.py price --x DIR --out FILE.pkl [--procs N] [--limit N]
+  head_bulk_5084.py tables --priced FILE.pkl [FILE.pkl ...] --out TABLES [--figures FIGURES]
 
 ``extract`` keeps, for every snapshot of a Binary / Region snapshot run (``fold_scale_4936.sh``,
 ``CALIB_SAVE_TEST_SCORES_AT``) on the head's count line (the class model holds fewer than ``HEAD_COUNT_GOODS``
@@ -392,6 +393,205 @@ def cmd_price(a) -> None:
     print(f"wrote {len(df)} rows -> {a.out}")
 
 
+SCEN = ("native", "pos1/4", "neg0.44")
+BENCH = {"binary": "Binary Photo", "region": "Region Photo", "face": "FHIBE faces"}
+
+
+def _by_class(h: pd.DataFrame, col: str) -> pd.Series:
+    """Per-class means of *col* (a scalar or a grid array per row)."""
+    if h.empty:
+        return pd.Series(dtype=object)
+    return h.groupby("class")[col].apply(lambda v: np.mean(np.stack(v.values), 0) if v.dtype == object else v.mean())
+
+
+def _gain(h: pd.DataFrame, col: str, base: str = "F_gauss_z4") -> tuple[float, float, float, float]:
+    """(today, arm, paired gain, its SE over classes), each class weighted once."""
+    h = h[h[col].notna()]
+    a, b = _by_class(h, base), _by_class(h, col)
+    g = b - a
+    return float(a.mean()), float(b.mean()), float(g.mean()), float(g.std(ddof=1) / np.sqrt(max(len(g), 1)))
+
+
+def _grid_gain(h: pd.DataFrame, name: str) -> np.ndarray:
+    """Class-mean F-beta gain over today on MULTS for candidate *name*."""
+    h = h[h[f"G_{name}"].notna()]
+    return np.stack(_by_class(h, f"G_{name}").values).mean(0) - float(_by_class(h, "F_gauss_z4").mean())
+
+
+def presets_table(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for bench in [b for b in BENCH if b in set(df["path"])]:
+        for beta in BETAS:
+            d = df[(df["path"] == bench) & (df["beta"] == beta)]
+            for scen in (*SCEN, "empty"):
+                h = d[d["scenario"] == scen]
+                if h.empty:
+                    continue
+                r = {"bench": bench, "beta": beta, "scenario": scen, "snapshots": len(h), "classes": h["class"].nunique(),
+                     "kept_today": float(h["k_gauss_z4"].mean()), "positives": float(h["n_pos"].mean())}  # fmt: skip
+                if scen != "empty":
+                    r["kept_over_pos_today"] = float(np.median(h["k_gauss_z4"] / h["n_pos"]))
+                    r["best_f"] = float(_by_class(h, "best_f").mean())
+                for arm in ARM_MULTS if beta <= 1.0 else ():
+                    r[f"kept_{arm}"] = float(h[f"k_{arm}"].mean())
+                    if scen != "empty":
+                        r["F_today"], r[f"F_{arm}"], r[f"gain_{arm}"], r[f"se_{arm}"] = _gain(h, f"F_{arm}")
+                        r[f"kept_over_pos_{arm}"] = float(np.median(h[f"k_{arm}"] / h["n_pos"]))
+                if beta > 1.0 and scen != "empty":
+                    r["F_today"] = float(_by_class(h, "F_gauss_z4").mean())
+                rows.append(r)
+    return pd.DataFrame(rows)
+
+
+def candidates_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Each candidate count at the one multiplier best over Binary and Region Photo's six preset cells (per beta), what
+    the same multiplier does on faces, and the gain each path would take at its own multiplier."""
+    rows = []
+    for beta in (0.25, 1.0):
+        d = df[df["beta"] == beta]
+        emp = d[d["scenario"] == "empty"]
+        photo = [q for q in ("binary", "region") if q in set(d["path"])]
+        for name in GRID_CANDS:
+            if f"G_{name}" not in d:
+                continue
+            cur = {(p, s): _grid_gain(d[(d["path"] == p) & (d["scenario"] == s)], name)
+                   for p in photo for s in SCEN}  # fmt: skip
+            mean = np.mean(list(cur.values()), 0)
+            j = int(np.argmax(mean))
+            r = {"beta": beta, "count": name, "c": float(MULTS[j]), "multiplier_vs_today": float(MULTS[j] / mult(beta)),
+                 "gain_binary_region": float(mean[j])}  # fmt: skip
+            for (p, s), g in cur.items():
+                r[f"gain_{p}_{s}"] = float(g[j])
+            for p in photo:
+                r[f"gain_{p}_own_c"] = float(np.mean([cur[(p, s)] for s in SCEN], 0).max())
+            if "face" in set(d["path"]):
+                for s in SCEN:
+                    r[f"gain_face_{s}"] = float(_grid_gain(d[(d["path"] == "face") & (d["scenario"] == s)], name)[j])
+            for p in [b for b in BENCH if b in set(emp["path"])]:
+                e = emp[emp["path"] == p]
+                r[f"empty_kept_{p}"] = float(np.stack(e[f"K_{name}"].values)[:, j].mean())
+                r[f"empty_kept_{p}_today"] = float(e["k_gauss_z4"].mean())
+            rows.append(r)
+    return pd.DataFrame(rows)
+
+
+def diagnosis_table(df: pd.DataFrame) -> pd.DataFrame:
+    """What the count reads at beta 1: positives, today's count, the withheld negatives above median + 4 spreads (and
+    what a Gaussian bulk would put there), and where the held-out Goods sit against the withheld positives."""
+    from scipy.special import ndtr
+
+    rows = []
+    d = df[df["beta"] == 1.0]
+    for bench in [b for b in BENCH if b in set(d["path"])]:
+        for scen in (*SCEN, "empty"):
+            h = d[(d["path"] == bench) & (d["scenario"] == scen)]
+            pos = h["n_pos"].clip(lower=1)
+            rows.append({
+                "bench": bench, "scenario": scen, "snapshots": len(h), "n": float(h["n"].median()),
+                "positives": float(h["n_pos"].median()), "count_today": float(h["n_gauss_z4"].median()),
+                "count_over_pos": float(np.median(h["n_gauss_z4"] / pos)) if scen != "empty" else math.nan,
+                "kept_over_pos_b1": float(np.median(h["k_gauss_z4"] / pos)) if scen != "empty" else math.nan,
+                "pos_above_z4": float(h["pos_above_z4"].median()), "neg_above_z4": float(h["neg_above_z4"].median()),
+                "gauss_above_z4": float(np.median(h["n"] * ndtr(-4.0))),
+                "pos_z_med": float(h["pos_z_med"].median()), "goods_z_med": float(h["goods_z_med"].median()),
+                "pos_share_z4": float(h["pos_share_z4"].mean()), "goods_share_z4": float(h["goods_share_z4"].mean()),
+                "share_corr": float(h[["pos_share_z4", "goods_share_z4"]].dropna().corr().iloc[0, 1]),
+                "goods": float(h["n_goods"].median()), "bads": float(h["n_bads"].median()),
+            })  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def examples_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Literal snapshots at beta 1 and 1/4, native: per bench the one at the median of today's kept / positives."""
+    rows = []
+    for beta in (0.25, 1.0):
+        for bench in [b for b in BENCH if b in set(df["path"])]:
+            h = df[(df["path"] == bench) & (df["beta"] == beta) & (df["scenario"] == "native")]
+            if h.empty:
+                continue
+            ratio = h["k_gauss_z4"] / h["n_pos"]
+            r = h.loc[(ratio - ratio.median()).abs().idxmin()]
+            rows.append({"bench": bench, "beta": beta, "run": r["run"], "idx": r["idx"], "t": r["t"], "class": r["class"],
+                         "n": r["n"], "positives": r["n_pos"], "goods": r["n_goods"], "count_today": r["n_gauss_z4"],
+                         "neg_above_z4": r["neg_above_z4"], "pos_above_z4": r["pos_above_z4"], "best_k": r["best_k"],
+                         "best_f": r["best_f"], "kept_today": r["k_gauss_z4"], "F_today": r["F_gauss_z4"],
+                         **{f"{p}_{a}": r[f"{p}_{a}"] for a in ARM_MULTS for p in ("k", "F")}})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def figures(df: pd.DataFrame, out: str) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from early_check_4664 import INK, MUTED, _axes_style
+    from scipy.special import ndtr
+
+    benches = [b for b in BENCH if b in set(df["path"])]
+    colors = {"native": "#2a78d6", "pos1/4": "#eb6834", "neg0.44": "#3a9e5c"}
+    fig, axes = plt.subplots(2, len(benches), figsize=(4.6 * len(benches), 7.4), squeeze=False)
+    for i, beta in enumerate((0.25, 1.0)):
+        for j, bench in enumerate(benches):
+            ax = axes[i, j]
+            d = df[(df["path"] == bench) & (df["beta"] == beta)]
+            rel = MULTS / mult(beta)
+            on = (rel >= 0.2) & (rel <= 2.0)
+            for s in SCEN:
+                ax.plot(rel[on], _grid_gain(d[d["scenario"] == s], "gauss_z4")[on], color=colors[s], lw=1.8, label=s)
+            ax.axhline(0, color=MUTED, lw=0.8)
+            ax.set_xscale("log")
+            ax.set_xlim(0.2, 2.0)
+            ax.set_xticks([0.25, 0.5, 0.71, 1.0, 1.4, 2.0], ["0.25", "0.5", "0.71", "1", "1.4", "2"])
+            ax.minorticks_off()
+            for arm, (sc, ex) in ARM_MULTS.items():
+                ax.axvline(sc * beta**ex / mult(beta), color=MUTED, lw=0.8, ls="--")
+                ax.text(sc * beta**ex / mult(beta), ax.get_ylim()[1], f" {arm}", color=MUTED, fontsize=7, va="top")
+            ax.set_title(f"{BENCH[bench]}, beta {beta:g}", color=INK, fontsize=10, loc="left")
+            ax.set_xlabel("count multiplier / today's", color=MUTED, fontsize=8)
+            if j == 0:
+                ax.set_ylabel("F-beta gain over today (class mean)", color=MUTED, fontsize=8)
+            _axes_style(ax)
+            ax.legend(frameon=False, fontsize=7, loc="lower left")
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "offline_gain_vs_multiplier.png"), dpi=150)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(6.2, 4.2))
+    bc = {"binary": "#2a78d6", "region": "#eb6834", "face": "#3a9e5c"}
+    for bench in benches:
+        h = df[(df["path"] == bench) & (df["beta"] == 1.0) & (df["scenario"] == "native")]
+        tail = np.median(np.stack(h["neg_tail"].values), 0).astype(float)
+        exp = float(h["n"].median()) * ndtr(-np.asarray(Z_TAIL))
+        ok = tail > 0
+        ax.plot(np.asarray(Z_TAIL)[ok], tail[ok] / exp[ok], "o-", color=bc[bench], lw=1.8, label=BENCH[bench])
+    ax.axhline(1, color=MUTED, lw=0.8)
+    ax.set_yscale("log")
+    ax.set_xlabel("median + z spreads (1.4826 MAD)", color=MUTED, fontsize=9)
+    ax.set_ylabel("withheld negatives above (median) / a Gaussian bulk's", color=MUTED, fontsize=9)
+    ax.set_title("The heads' bulks are heavier than a Gaussian above 3 spreads", color=INK, fontsize=10, loc="left")
+    _axes_style(ax)
+    ax.legend(frameon=False, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "bulk_tail.png"), dpi=150)
+    plt.close(fig)
+
+
+def cmd_tables(a) -> None:
+    df = pd.concat([pd.read_pickle(p) for p in a.priced], ignore_index=True)  # noqa: S301 (price wrote them)
+    # Each head at the preset its own session ran (the line steered the session that reached it); a bench with runs at
+    # one preset only (Region Photo's beta 1 snapshots) lends those heads to every preset.
+    one = df.groupby("path")["run_beta"].transform("nunique") == 1
+    df = df[one | np.isclose(df["run_beta"], df["beta"])].reset_index(drop=True)
+    os.makedirs(a.out, exist_ok=True)
+    for name, fn in (("presets", presets_table), ("candidates", candidates_table), ("diagnosis", diagnosis_table),
+                     ("examples", examples_table)):  # fmt: skip
+        t = fn(df)
+        t.to_csv(os.path.join(a.out, f"offline_{name}.csv"), index=False)
+        with pd.option_context("display.width", 250, "display.max_columns", 60):
+            print(f"== {name}\n{t.round(3).to_string(index=False)}", flush=True)
+    figures(df, a.figures or a.out)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -406,6 +606,11 @@ def main() -> None:
     p.add_argument("--procs", type=int, default=16)
     p.add_argument("--limit", type=int, default=0, help="price an even sample of this many snapshots (a test)")
     p.set_defaults(func=cmd_price)
+    p = sub.add_parser("tables")
+    p.add_argument("--priced", nargs="+", required=True, help="price's pickles, one per bench")
+    p.add_argument("--out", required=True, help="the report's tables dir")
+    p.add_argument("--figures", help="the report's figures dir (default: --out)")
+    p.set_defaults(func=cmd_tables)
     a = ap.parse_args()
     a.func(a)
 
