@@ -310,6 +310,7 @@ describe('ImportAdvancedComponent', () => {
       ['a lone forced convert target', { convertTargets: ['image'], convertOptional: false }, false],
       ['include-media rows', { showSourceSpecs: true, availableConverters: converters }, true],
       ['the include-media flow with no converters', { showSourceSpecs: true, availableConverters: [] }, false],
+      ['the Multi-Dataset box (#5230)', { showMultiToggle: true }, true],
     ];
 
     it.each(cases)('with %s is %s', async (_label, inputs, expected) => {

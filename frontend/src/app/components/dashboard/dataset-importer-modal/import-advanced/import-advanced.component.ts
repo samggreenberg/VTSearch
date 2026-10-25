@@ -315,6 +315,9 @@ export class ImportAdvancedComponent {
    *  ``@if`` of the template; a new field must be added here too. */
   get hasContent(): boolean {
     return (
+      this.showMultiToggle() ||
+      // The picker's Multi-Dataset editor, projected in place of the fields below.
+      this.multiDataset() ||
       this.hasSourceSpecsColumn ||
       this.showConvertTargetPicker ||
       this.showEmbedderPicker ||
