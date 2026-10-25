@@ -209,7 +209,7 @@ export class AutopilotPanelComponent implements OnInit {
       // service ignores every call after the first, so later votes — which of
       // course push these counts above zero — can't rewrite the answer.
       if (votesLoaded) {
-        this.autopilotState.noteInitialLabelset(labelsetGoodCount, labelsetBadCount);
+        this.autopilotState.noteInitialLabelset(labelsetGoodCount, labelsetBadCount, goodVotes.size + badVotes.size);
       } else {
         // Labelset un-loaded: either we have not started yet, or the active
         // pair just changed under a running autopilot. Either way any reading

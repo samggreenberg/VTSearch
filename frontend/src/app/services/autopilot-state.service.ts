@@ -225,6 +225,11 @@ export class AutopilotStateService {
    * ``completionAnnounced`` cannot carry that on its own, because it is
    * per-run and every re-entry to the Train window is a new run. The labelset
    * is what remembers across runs, so the run's first look at it decides.
+   *
+   * Trained means a Good and a Bad (#5229). A detector made from a media
+   * example holds that example as a Good from the start (#3045), and on a Face
+   * dataset, which has no text search, every detector starts that way: one
+   * class is no detector yet, so the run that follows is the one that trains it.
    */
   private readonly startedTrained = signal(false);
 
@@ -232,12 +237,30 @@ export class AutopilotStateService {
   private readonly initialLabelsetKnown = signal(false);
 
   /**
-   * Whether this run started on a detector with no labels (#4807): the run
-   * that trains it, which Toasty's phase hints are for, as the hand-off is.
-   * False until the labelset has been read, so a run never reads as training
-   * from not-yet-loaded zeroes.
+   * The labels the run started with, at that one reading: the labelset's
+   * total, and the votes on this dataset. {@link runVotes} counts from them.
+   */
+  private readonly startingLabels = signal({ labelset: 0, here: 0 });
+
+  /**
+   * Whether this run started on an untrained detector (#4807): the run that
+   * trains it, which Toasty's phase hints are for, as the hand-off is. False
+   * until the labelset has been read, so a run never reads as training from
+   * not-yet-loaded zeroes.
    */
   readonly startedUntrained = computed(() => this.initialLabelsetKnown() && !this.startedTrained());
+
+  /**
+   * The votes this run has cast, from the two tallies the Train view reads:
+   * the labelset's total, which moves a round trip after a click, and the votes
+   * on this dataset, which move as it lands. Each counts from where it stood at
+   * the run's first reading, so an example the detector was made from is not
+   * the run's first vote (#5229). Meaningful once {@link startedUntrained} is.
+   */
+  runVotes(labelsetTotal: number, votedHere: number): number {
+    const start = this.startingLabels();
+    return Math.max(labelsetTotal - start.labelset, votedHere - start.here);
+  }
 
   /**
    * The vote counts at the last {@link checkPhaseTransition}. The phase check
@@ -273,20 +296,24 @@ export class AutopilotStateService {
    * of anything, so only the first reading — taken as soon as ``/api/votes``
    * has landed, before the user can have voted — is meaningful.
    *
-   * Two things read it. {@link startedTrained} asks whether the detector held
-   * *any* labels, and gates the completion hand-off. ``retrainMode`` asks the
-   * stricter question — both classes, so learned sort is available from the
-   * first moment — and it is corrected here rather than left at whatever
-   * {@link activate} guessed, because on entry to the Train window that guess
-   * is always ``false``: the panel mounts on the first render, two round trips
-   * before ``/api/votes`` answers, so a fully trained detector activated as
-   * untrained and spent its first sort on the text hint (#3535).
+   * Both things that read it ask whether the detector held both classes.
+   * {@link startedTrained} gates the completion hand-off and Toasty's phase
+   * hints. ``retrainMode`` puts learned sort in use from the first moment, and
+   * it is corrected here rather than left at whatever {@link activate} guessed,
+   * because on entry to the Train window that guess is always ``false``: the
+   * panel mounts on the first render, two round trips before ``/api/votes``
+   * answers, so a fully trained detector activated as untrained and spent its
+   * first sort on the text hint (#3535).
+   *
+   * *votedHere* is the votes on this dataset at the same reading, the baseline
+   * {@link runVotes} counts this dataset's tally from.
    */
-  noteInitialLabelset(goodCount: number, badCount: number): void {
+  noteInitialLabelset(goodCount: number, badCount: number, votedHere = 0): void {
     if (this.initialLabelsetKnown()) return;
     this.initialLabelsetKnown.set(true);
-    this.startedTrained.set(goodCount > 0 || badCount > 0);
     const retrainMode = goodCount > 0 && badCount > 0;
+    this.startedTrained.set(retrainMode);
+    this.startingLabels.set({ labelset: goodCount + badCount, here: votedHere });
     // A detector already at the cap (#4903) is past Done: like one whose first
     // status reads Done, it has nothing to check before Done.
     const atCap = goodCount + badCount >= STOP_CAP_VOTES;
@@ -310,6 +337,7 @@ export class AutopilotStateService {
   forgetInitialLabelset(): void {
     this.initialLabelsetKnown.set(false);
     this.startedTrained.set(false);
+    this.startingLabels.set({ labelset: 0, here: 0 });
   }
 
   /**
@@ -332,8 +360,7 @@ export class AutopilotStateService {
     if (this.running) return;
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained.set(false);
-    this.initialLabelsetKnown.set(false);
+    this.forgetInitialLabelset();
     this.lastCounts = null;
     this.lastTotal = 0;
     this.statusRead = false;
@@ -560,8 +587,7 @@ export class AutopilotStateService {
   clear(): void {
     this.handoff.set(null);
     this.completionAnnounced = false;
-    this.startedTrained.set(false);
-    this.initialLabelsetKnown.set(false);
+    this.forgetInitialLabelset();
     this.lastCounts = null;
     this.lastTotal = 0;
     this.statusRead = false;
