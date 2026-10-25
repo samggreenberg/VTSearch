@@ -473,6 +473,10 @@ embedder's space, so switching later means analyzing the dataset again.
 The rest of the Advanced section, and one toggle on the importer's own
 form:
 
+- **Multi-Dataset** - first in the section, on importers that can make
+  several datasets from one import: one per kind of media you tick, in place
+  of the single dataset's settings below. See
+  [Multi-Dataset import](#multi-dataset-import-several-datasets-from-one-folder).
 - **Include media** - which source media types feed the dataset. The
   dataset's own type is included directly; other types are pulled in and
   converted (images out of videos, pages out of documents).
@@ -525,15 +529,14 @@ datasets of the same type reuse the downloaded model.
 
 A folder (or archive) often holds more than one kind of media: photos, the
 PDFs that go with them, a few recordings. Each kind needs its own dataset,
-and importing the folder once per kind means reading it once per kind. Tick
-**Multi-Dataset**, the box above the *Dataset media type* dropdown on the
+and importing the folder once per kind means reading it once per kind. Open
+**Advanced ▾** and tick **Multi-Dataset**, the first box in the section, on the
 **Folder** and **Manifest** importers (and on any Services importer that lists
-a media type), and the dropdown gives way
-to a **Datasets to make** list: one row per kind of media, each a dataset of
-its own. The folder is read once; every ticked row becomes a dataset named
-after the import and the kind (`holiday – Image`, `holiday – Document`), with
-its own row on the Dashboard while it loads, its own **Cancel**, and its own
-AutoFind run.
+a media type). The single dataset's settings give way to a **Datasets to
+make** list: one row per kind of media, each a dataset of its own. The folder
+is read once; every ticked row becomes a dataset named after the import and
+the kind (`holiday – Image`, `holiday – Document`), with its own row on the
+Dashboard while it loads, its own **Cancel**, and its own AutoFind run.
 
 - Rows are pre-ticked from what the folder scan finds; tick or untick as you
   like. **Document** makes an image dataset of the rendered pages (or, under
@@ -542,19 +545,23 @@ AutoFind run.
   is the only place Face is offered: the *Dataset media type* dropdown leaves
   it out, because a Face dataset made on its own could not show the photo any
   of its faces came from.
-- Each ticked row's **Details ▾** opens that dataset's own Advanced settings
-  (*Include media*, embedders, clipper, cleanup), in place of the dialog's
-  single **Advanced ▾** toggle. *Build Browse map now* and *Merge
-  near-duplicates* apply to every dataset of the import and sit once, under
-  the list.
+- Each ticked row's **Details ▾** opens that dataset's own settings
+  (*Include media*, embedders, clipper, cleanup). *Build Browse map now* and
+  *Merge near-duplicates* apply to every dataset of the import and sit once,
+  under the list.
+- The *Dataset media type* dropdown gives way to a **Datasets to make** line
+  naming the ticked kinds, so what the import will make stays in sight with
+  **Advanced** closed (and an **Import** button greyed out for want of a ticked
+  row says why).
 - **Dataset name** becomes the shared base name; leave it blank for the
   folder's name.
 
 Cancelling one row while the folder is still being read stops that dataset
 alone; the others carry on.
 
-**Demos.** The **Downloaded Media** catalogue has the box too, above its
-media-type dropdown, which stays: there it picks which demos are listed. Its
+**Demos.** The **Downloaded Media** catalogue has the box too, under its
+**Advanced ▾**. Its media-type dropdown stays, with the **Datasets to make**
+line beneath it: there the dropdown picks which demos are listed. Its
 rows are the kinds the demo can be loaded as, its own and each it converts
 into, so an Image demo offers **Image**, **Face** and **Text**. Every row reads
 the demo's own files, so the datasets are linked just as a folder's are. A
@@ -570,7 +577,8 @@ is cut from, so that every face can show you its photo.
 
 1. Click **+** on the **Datasets** card, then **Demo** and **Downloaded
    Media**, and pick **Image** in the media-type dropdown.
-2. Tick **Multi-Dataset**, then tick **Face** beside the ticked **Image**.
+2. Click **Advanced ▾**, tick **Multi-Dataset**, then tick **Face** beside
+   the ticked **Image**.
 3. Pick **Celebrities in Context (S)**, 1,200 event photos of 60 well-known
    people, and click **Import**. Two datasets load side by side,
    `Celebrities in Context (S) – Image` and `Celebrities in Context (S) – Face`.
