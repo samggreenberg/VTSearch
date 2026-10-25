@@ -154,8 +154,20 @@ Memory followed the same pattern: about 58-60 GB per tree cell against a median 
 study at larger scale should raise or style-scale that cap first. That is filed as a follow-up. It changes run
 time, not results.
 
-The app does not use this harness's memo, so its cost for a tree would be the inherent ~2x in scoring plus the
-build. That has not been measured at collection scale here, and a ship decision should price it.
+The app does not use this harness's memo, so its cost for a tree is the inherent part. That part was measured
+separately (`scripts/experiments/state_of_app/region_styles_4711_bench.py`, cpu node, AMD EPYC 7713). Timings
+depend on array shapes, not values, so the benchmark used synthetic 14x14x768 grids.
+
+| app-side cost | `max_patch` (shipped) | `max_patch_hac` | `max_patch_pca_hac` |
+|---|---|---|---|
+| Ingest: tree build per image (1 / 8 threads) | none | 41 / 21 ms | 442 / 479 ms |
+| Ingest: tree build for coco_better's 24,507 images (1 / 8 threads) | none | 17 / 8 min | 3.0 / 3.3 h |
+| Scoring after each retrain, 24,507 images (1 / 8 threads) | 2.3 / 1.4 s | 4.5 / 2.7 s | as `hac` |
+| Scoring ratio over `max_patch` | 1x | 2.0x | 2.0x |
+| Patch-side rows stored per image (fp16) | 197 rows, 0.30 MB | 391 rows, 0.60 MB | as `hac` |
+
+Scoring scales linearly in rows, at exactly 2x. The build adds 21-41 ms an image to ingest, on top of the DINOv3
+pass. The PCA variant's per-image PCA makes its build 10-20x slower, which is another reason to prefer `hac`.
 
 ## Checks
 
