@@ -1109,6 +1109,33 @@ describe('LabelViewComponent', () => {
     expect(fixture.nativeElement.querySelector('vt-toasty-hint')).toBeNull();
   });
 
+  it("walks Toasty's hints from the user's first vote on a detector made from an example (#5229)", async () => {
+    const medias = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    // The example is the detector's one Good, here and in its labelset (#3045):
+    // still the run that trains it, and not a vote the user cast.
+    flushInitialRequests({ good: [1], bad: [], click_times: {}, learned_scores: {} }, medias);
+    await settleResource();
+    component.onMediaSelect(2);
+    TestBed.tick();
+    expect(component.voteHint()).toBe('start-voting');
+    expect(component.labelsHint()).toBe(false);
+
+    const votes = (good: number[], bad: number[]) => {
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach((req) => req.flush({ good, bad, click_times: {}, learned_scores: {} }));
+      TestBed.tick();
+      component.onMediaSelect(2);
+      TestBed.tick();
+    };
+    votes([1, 3], []);
+    expect(component.voteHint()).toBeNull();
+    expect(component.labelsHint()).toBe(true);
+
+    votes([1, 3, 4], []);
+    expect(component.labelsHint()).toBe(false);
+    expect(component.voteHint()).toBe('find-bads');
+  });
+
   describe('changing a label (#4824)', () => {
     const medias = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
     const labeled = { good: [1], bad: [5], click_times: {}, learned_scores: {} };

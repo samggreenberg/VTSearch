@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot says Done on a detector made from an example** (issue #5229). A media example is a Good label from
+  the moment the detector exists, and Autopilot read any label at the start of a run as "this detector is already
+  trained", so a run that started from one never got Toasty's **Your detector is trained!** under **Dashboard**,
+  nor the hints along the way: the panel went from **Spot Check** to **Keep Improving** without a word. Every
+  Face detector starts this way, since a Face dataset can't search by text. A detector now counts as trained once
+  it holds a Good and a Bad, and the hints count the user's own votes, not the example.
+
 - **New Detector takes its example from the dataset's own items** (issue #5205). The media tab (**Face**,
   **Image**, …) gains **Pick from Dataset…** beside **Browse …**: it shows the selected dataset's items as a grid,
   and a click adds one as the example (**+ Pick from Dataset…** under the stack adds another). On a Face dataset,

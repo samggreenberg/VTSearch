@@ -826,6 +826,28 @@ describe('AutopilotPanelComponent', () => {
       expect(navigate).not.toHaveBeenCalled();
     });
 
+    it('raises it on a detector made from a media example, before Keep Improving (#5229)', async () => {
+      // A Face detector starts from a face picked as its example: a Good in its
+      // labelset, and a vote on this dataset, before the run casts any (#3045).
+      fixture.componentRef.setInput('labelsetGoodCount', 1);
+      fixture.componentRef.setInput('labelsetBadCount', 0);
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('goodVotes', new Set([1]));
+      await settleZoneless(fixture);
+      expect(autopilotState.startedUntrained()).toBe(true);
+
+      reachDone();
+      await settleZoneless(fixture);
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25 });
+
+      // The check's votes retrain the detector and a light falls off green: the
+      // panel moves on to Keep Improving, and Toasty has said Done.
+      fixture.componentRef.setInput('labelingStatus', SPAN_SHORT);
+      await settleZoneless(fixture);
+      expect(component.steps.find((st) => st.state === 'active')!.phase).toBe('improve');
+      expect(autopilotState.handoff()).toEqual({ kind: 'done', votes: 25 });
+    });
+
     it('drops the hand-off on the next vote: voting on is the answer', async () => {
       reachDone();
       await settleZoneless(fixture);
