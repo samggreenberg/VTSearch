@@ -137,6 +137,19 @@ class _Images:
         return k, px
 
 
+def _no_masks():
+    """A module to stand in for ``Sam3Model.mask_decoder`` (a child module must be a Module): computes nothing."""
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    import torch  # noqa: PLC0415
+
+    class NoMasks(torch.nn.Module):
+        def forward(self, **_kw):
+            return SimpleNamespace(pred_masks=None, semantic_seg=None, attentions=None)
+
+    return NoMasks()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, help="grid results dir (prepare_info.json names the cells)")
@@ -152,12 +165,18 @@ def main() -> int:
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp16", "fp32"])
+    ap.add_argument(
+        "--masks",
+        action="store_true",
+        help="run the mask head too (the scores never read it; it is most of the decode)",
+    )
     args = ap.parse_args()
 
     import json  # noqa: PLC0415
 
     import torch  # noqa: PLC0415
     from transformers import Sam3Model, Sam3Processor  # noqa: PLC0415
+    from transformers.modeling_outputs import BaseModelOutputWithPooling  # noqa: PLC0415
 
     from _cells_io import load_medias  # noqa: PLC0415
     from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
@@ -188,6 +207,10 @@ def main() -> int:
     dev = torch.device("cuda")
     processor = Sam3Processor.from_pretrained(args.model)
     model = Sam3Model.from_pretrained(args.model, torch_dtype=dtype).to(dev).eval()
+    if not args.masks:
+        # Logits, boxes and presence come out of the DETR encoder/decoder before the mask head runs, so an image's
+        # score is unchanged without it; the stub returns what forward() reads off the mask output.
+        model.mask_decoder = _no_masks()
 
     # Text features once per prompt; expanded to the batch inside the loop.
     text_cache = {}
@@ -216,7 +239,7 @@ def main() -> int:
             a = time.time()
             for j, p in enumerate(prompts):
                 emb, mask = text_cache[p]
-                emb_b = type(emb)(
+                emb_b = BaseModelOutputWithPooling(
                     last_hidden_state=emb.last_hidden_state.expand(b, -1, -1),
                     pooler_output=emb.pooler_output.expand(b, -1, -1),
                 )
