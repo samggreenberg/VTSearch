@@ -181,9 +181,14 @@ HEAD_COUNT_RECALL_Z: float | None = 2.75
 #: HEAD_COUNT_PRECISION_EXPONENT`` times what stands out, in place of #4603's ``beta ** 0.708``
 #: (:func:`head_count_cut`).  The count of what stands out reads the bulk's heavy upper tail as positives on a
 #: weak head (Region Photo's keeps 2.6x its positives at beta 1), so a smaller multiplier keeps nearer the
-#: positives.  ``None`` is #4603's piece: a scale of 1, an exponent of 0.708.
-HEAD_COUNT_PRECISION_SCALE: float | None = None
-HEAD_COUNT_PRECISION_EXPONENT: float | None = None
+#: positives.  0.71 beta (0.18x the count at beta 1/4 where #4603 kept 0.375x, 0.71x at beta 1): offline on the
+#: head's count line Region Photo gains +0.007 to +0.084 F-beta at every prevalence, Binary Photo +0.007 to +0.037
+#: at 0.44% and 0.1% and -0.014 / -0.004 at 1%, faces at most 0.008 either way; closed loop, Find's mean F-beta
+#: over clicks 0-50 +0.0093 / +0.021 on Region Photo (beta 1 / 1/4) and +0.0030 / +0.0014 on Binary Photo
+#: (``docs/experiments/2026-10-24-head-bulk-5084``).  ``None`` is #4603's piece: a scale of 1, an exponent of
+#: 0.708.
+HEAD_COUNT_PRECISION_SCALE: float | None = 0.71
+HEAD_COUNT_PRECISION_EXPONENT: float | None = 1.0
 #: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
 #: the labels line expects at least this F-beta at the session's balance over the corpus it was
 #: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
@@ -852,6 +857,10 @@ def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) ->
     fewer than that drop) counts what stands out; the cut keeps exactly those items,
     placed between the last kept and the first dropped as :func:`corpus_cut` places
     its own.  An empty corpus keeps nothing.
+
+    At a balance of 1 and below (#5084) the multiplier is
+    ``HEAD_COUNT_PRECISION_SCALE * beta ** HEAD_COUNT_PRECISION_EXPONENT`` (0.71 beta) in
+    place of ``beta ** 0.708`` (:func:`_scaled_count`); both at ``None`` is the rule's own.
 
     Above a balance of 1 (#5039) the count grows as ``beta **``
     :data:`HEAD_COUNT_RECALL_EXPONENT` instead, and where one of

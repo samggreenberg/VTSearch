@@ -195,7 +195,7 @@ class TestAboveBetaOne:
         s, _ = _weak_head()
         x = _logits(s)
         deep = x[300:301]
-        with head_count_recall("off", "off"):
+        with head_count_recall("off", "off"), head_count_precision("off", "off"):
             for beta in (0.25, 1.0, 4.0):
                 assert _kept(s, head_count_cut(s, beta, deep)) == int(np.count_nonzero(x >= centroid_cut(x, beta=beta)))
 
@@ -403,6 +403,16 @@ class TestThePrecisionKnob:
         with head_count_precision(0.05, 1.0):
             for beta in (0.25, 1.0):
                 assert _kept(faces, head_count_cut(faces, beta)) >= 4
+
+    def test_the_app_keeps_071_beta(self):
+        """#5084 shipped 0.71 beta: 0.71x what stands out at beta 1, fewer than #4603's count on a heavy tail."""
+        from vtscore.training.thresholds import labels_line
+
+        assert (labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT) == (0.71, 1.0)
+        s, _ = _heavy_head()
+        with head_count_precision("off", "off"):
+            today = _kept(s, head_count_cut(s, 1.0))
+        assert _kept(s, head_count_cut(s, 1.0)) < today
 
     def test_a_recall_lean_is_untouched(self):
         s, _ = _heavy_head()

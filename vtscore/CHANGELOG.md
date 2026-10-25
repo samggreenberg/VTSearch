@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The head's count line keeps 0.71·β times what stands out at a balance of 1 and below, not β^0.708** (issue
+  #5084). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods, `head_count_cut` now keeps
+  `HEAD_COUNT_PRECISION_SCALE * beta ** HEAD_COUNT_PRECISION_EXPONENT` (new constants in
+  `vtscore.training.thresholds.labels_line`, 0.71 and 1) times the larger of #4603's count and the top's widest
+  drop, never fewer than that drop: 0.18x at beta 1/4 (was 0.375x) and 0.71x at beta 1 (was 1x). Beta above 1 is
+  unchanged. A weak head's bulk is heavier than a Gaussian above 3 spreads, so the count read its tail as
+  positives. Measured (`docs/experiments/2026-10-24-head-bulk-5084/`): offline F-beta +0.007 to +0.084 on Region
+  Photo at every prevalence, +0.007 to +0.037 on Binary Photo at 0.44% and 0.1% and -0.014 / -0.004 at 1%, faces
+  within 0.008; closed loop, Find's mean F-beta over clicks 0-50 +0.0093 / +0.021 on Region Photo (beta 1 / 1/4)
+  and +0.0030 / +0.0014 on Binary Photo. Both constants at `None` (or
+  `vtscore.eval.live_threshold_rules.head_count_precision("off", "off")`) restore the old count.
 - **Domain shift is a split-conformal kNN against the reference dataset's vectors, not the Coverage Atlas's
   typicality** (issue #3348). The new `vtscore.coverage.domain_shift.domain_shift_report(reference, matrix,
   alpha=0.05)` (also exported as `vtscore.coverage.domain_shift_report`) splits the reference in half by a fixed
