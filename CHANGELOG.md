@@ -1215,6 +1215,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A (?) hint's text is no longer cut off at a dialog's edge** (issue #5226). A **(?)** beside a field opens
+  its explanation in a box centred over the icon. Near a dialog's edge (Add Dataset › Demo › Downloaded Media's
+  **Multi-Dataset** box, the file-list hint under Files › Manifest, a Settings section heading) the box ran past
+  the dialog, which hid the part outside it, so much of the text was unreadable. The box now floats above the
+  dialog, slides back inside the window when it would run off an edge, and opens below the icon when there is no
+  room above.
+
 - **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
   Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed
   none. Both now draw the icon the server's media-type registry names, the same one the importer and

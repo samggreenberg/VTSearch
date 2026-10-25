@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { BalanceComponent } from './balance.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { BALANCE_STATES, CHECKED_PRECISION, CHECKED_RECALL, lineBalance } from '../../../testing/line-balance';
@@ -291,8 +293,9 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(component.hint.match(/\./g)!.length).toBeLessThanOrEqual(2);
     });
 
-    it('opens below the control, so the left panel cannot clip it', () => {
-      expect(hints()[0].querySelector('.field-hint-icon')!.classList).toContain('field-hint-icon--below-block');
+    it('opens below the control, so it leaves the spectrum in view', () => {
+      const hint = fixture.debugElement.query(By.directive(FieldHintIconComponent));
+      expect((hint.componentInstance as FieldHintIconComponent).placement()).toBe('below-block');
     });
   });
 });

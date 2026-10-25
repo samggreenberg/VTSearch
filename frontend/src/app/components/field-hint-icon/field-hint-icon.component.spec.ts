@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FieldHintIconComponent } from './field-hint-icon.component';
+import { FieldHintIconComponent, fieldHintPlacement } from './field-hint-icon.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
 
@@ -20,19 +20,58 @@ describe('FieldHintIconComponent', () => {
     await settleZoneless(fixture);
   });
 
+  // Specs here spy on `HTMLElement.prototype`; spec files share one module
+  // graph (`isolate: false`), so the spies must not outlive the test.
+  afterEach(() => vi.restoreAllMocks());
+
   it('creates', () => {
     expect(component).toBeTruthy();
     expect(tooltip()).toBeNull();
   });
 
-  it('opens above the icon by default', () => {
-    expect(iconSpan().classList).not.toContain('field-hint-icon--below-block');
+  it('fixes the tooltip to the window, kept inside its left edge (#5226)', async () => {
+    // An icon 20px from the window's left edge, as the Add Dataset dialog's
+    // Multi-Dataset hint is: centred on it, the tooltip would start left of 0.
+    vi.spyOn(iconSpan(), 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({ x: 20, y: 300, width: 13, height: 13 }),
+    );
+    // jsdom lays nothing out; give the tooltip its real width.
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(260);
+    iconSpan().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settleZoneless(fixture);
+
+    const tip = tooltip()!;
+    expect(tip.getAttribute('popover')).toBe('manual');
+    expect(tip.style.left).toBe('8px');
+    expect(tip.style.top).toBe('296px');
   });
 
-  it('can hang its tooltip below the enclosing block instead', async () => {
+  it('follows the icon when something under it scrolls', async () => {
+    const rect = vi.spyOn(iconSpan(), 'getBoundingClientRect');
+    rect.mockReturnValue(DOMRect.fromRect({ x: 400, y: 300, width: 13, height: 13 }));
+    iconSpan().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settleZoneless(fixture);
+    const before = tooltip()!.style.top;
+
+    rect.mockReturnValue(DOMRect.fromRect({ x: 400, y: 200, width: 13, height: 13 }));
+    document.body.dispatchEvent(new Event('scroll'));
+
+    expect(tooltip()!.style.top).not.toBe(before);
+  });
+
+  it('takes the enclosing block\'s width for below-block', async () => {
     fixture.componentRef.setInput('placement', 'below-block');
     await settleZoneless(fixture);
-    expect(iconSpan().classList).toContain('field-hint-icon--below-block');
+    // jsdom has no offsetParent, so the host's parent stands in for the block.
+    const block = fixture.nativeElement.parentElement as HTMLElement;
+    vi.spyOn(block, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({ x: 0, y: 100, width: 240, height: 40 }),
+    );
+    iconSpan().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await settleZoneless(fixture);
+
+    expect(tooltip()!.style.width).toBe('240px');
+    expect(tooltip()!.style.top).toBe('144px');
   });
 
   it('shows the tooltip immediately on click (no hover delay)', async () => {
@@ -118,5 +157,48 @@ describe('FieldHintIconComponent', () => {
     );
     await settleZoneless(fixture);
     expect(component.visible()).toBe(false);
+  });
+});
+
+describe('fieldHintPlacement', () => {
+  const viewport = { width: 1000, height: 800 };
+  const tip = { width: 260, height: 60 };
+  const icon = (x: number, y: number) => DOMRect.fromRect({ x, y, width: 13, height: 13 });
+
+  it('centres the tooltip above the icon when it fits', () => {
+    expect(fieldHintPlacement(icon(500, 400), tip, viewport, 'above')).toEqual({
+      left: 500 + 6.5 - 130,
+      top: 400 - 4 - 60,
+      side: 'above',
+    });
+  });
+
+  it('slides right rather than run off the left edge (#5226)', () => {
+    expect(fieldHintPlacement(icon(20, 400), tip, viewport, 'above').left).toBe(8);
+  });
+
+  it('slides left rather than run off the right edge', () => {
+    expect(fieldHintPlacement(icon(980, 400), tip, viewport, 'above').left).toBe(1000 - 8 - 260);
+  });
+
+  it('flips below when there is no room above', () => {
+    const p = fieldHintPlacement(icon(500, 20), tip, viewport, 'above');
+    expect(p.side).toBe('below');
+    expect(p.top).toBe(20 + 13 + 4);
+  });
+
+  it('flips above when there is no room below', () => {
+    const p = fieldHintPlacement(icon(500, 760), tip, viewport, 'below');
+    expect(p.side).toBe('above');
+    expect(p.top).toBe(760 - 4 - 60);
+  });
+
+  it('keeps the preferred side, clamped, when neither side fits', () => {
+    const tall = { width: 260, height: 790 };
+    expect(fieldHintPlacement(icon(500, 400), tall, viewport, 'above')).toEqual({
+      left: 500 + 6.5 - 130,
+      top: 8,
+      side: 'above',
+    });
   });
 });
