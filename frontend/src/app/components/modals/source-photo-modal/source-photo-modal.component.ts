@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, HostListener, inject, input, output, viewChild } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable, catchError, map, of, switchMap } from 'rxjs';
 
 import { Media } from '../../../models/api.models';
 import { ModalComponent } from '../../modal/modal.component';
 import { ImageViewerComponent } from '../../center-panel/image-viewer/image-viewer.component';
+import { ImageViewControlsComponent } from '../../center-panel/image-view-controls/image-view-controls.component';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { SiblingLoadService } from '../../../services/sibling-load.service';
@@ -23,12 +24,15 @@ type SourcePhotoView =
  * `SourcePhotoService`), so the ranking behind the overlay is exactly where
  * the user left it when they go Back. When that dataset is not loaded the
  * lookup answers 409 and the overlay offers to load it, then asks again.
+ *
+ * The photo gets the centre panel's image toolbar and its zoom and rotate
+ * keys (#5227).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-photo-modal',
   standalone: true,
-  imports: [ModalComponent, ImageViewerComponent],
+  imports: [ModalComponent, ImageViewerComponent, ImageViewControlsComponent],
   providers: [SiblingLoadService],
   templateUrl: './source-photo-modal.component.html',
   styleUrl: './source-photo-modal.component.scss',
@@ -41,6 +45,8 @@ export class SourcePhotoModalComponent {
 
   readonly request = input.required<SourcePhotoRequest>();
   readonly closed = output<void>();
+
+  private readonly viewer = viewChild(ImageViewerComponent);
 
   private readonly resource = rxResource({
     params: () => this.request().mediaId,
@@ -70,6 +76,36 @@ export class SourcePhotoModalComponent {
 
   close(): void {
     this.closed.emit();
+  }
+
+  /**
+   * The centre panel's zoom and rotate keys, which its toolbar's tooltips name.
+   * `KeyboardService` holds every shortcut off while a modal is open, so the
+   * overlay answers these for its own photo.
+   */
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(e: KeyboardEvent): void {
+    const viewer = this.viewer();
+    if (!viewer || e.ctrlKey || e.metaKey || e.altKey) return;
+    switch (e.key) {
+      case '+':
+      case '=':
+        viewer.zoomIn();
+        break;
+      case '-':
+      case '_':
+        viewer.zoomOut();
+        break;
+      case '[':
+        viewer.rotateLeft();
+        break;
+      case ']':
+        viewer.rotateRight();
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
   }
 
   /** Load the sibling the lookup named, then look again. */

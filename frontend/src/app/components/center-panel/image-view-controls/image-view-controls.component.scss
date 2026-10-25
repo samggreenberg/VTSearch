@@ -1,0 +1,68 @@
+// In the centre panel the strip sits outside the swipe wrapper, so it stays
+// fixed during a vote's swipe.
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  opacity: 0.7;
+  transition: opacity var(--transition-base);
+  flex-shrink: 0;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+// The image-view toolbar buttons build on the shared `.btn.btn--toolbar`
+// primitive (see scss/_components.scss). These add-ons layer only what is
+// genuinely distinct: the roomier horizontal padding for the rotate/zoom/reset
+// controls, and the accent-fill active state for the marquee / highlight
+// toggles. All glyphs are now `vt-icon`s sized via their `[size]` input.
+.ivc-btn {
+  padding: var(--space-2xs) var(--space-md);
+}
+
+.ivc-btn-toggle {
+  padding: var(--space-2xs) var(--space-sm);
+
+  &.active,
+  &.active:hover {
+    color: var(--btn-filled-text);
+  }
+
+  &.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &.active:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+}
+
+.ivc-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  display: inline-block;
+}
+
+.ivc-zoom-slider {
+  width: 100px;
+  // Every other control down here carries its own `cursor: pointer`, and a rule
+  // matching an element directly beats a value inherited from an ancestor - so
+  // the `.center-panel.region-draw` crosshair leaves them alone for free. The
+  // slider had no cursor of its own and would have inherited it.
+  cursor: pointer;
+}
+
+.ivc-zoom-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  min-width: 3em;
+}
