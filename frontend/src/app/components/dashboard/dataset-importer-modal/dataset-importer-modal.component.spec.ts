@@ -641,6 +641,14 @@ describe('DatasetImporterModalComponent', () => {
       expect(component.activeImportAdvanced).toBe(component.serverFolderPicker().importAdvanced());
     });
 
+    it('offers no toggle for a block with nothing to show (#5225)', async () => {
+      flushImporters();
+      openServerFolder();
+      await settleZoneless(fixture);
+      vi.spyOn(component.serverFolderPicker().importAdvanced()!, 'hasContent', 'get').mockReturnValue(false);
+      expect(component.activeImportAdvanced).toBeUndefined();
+    });
+
     it("opens the showing picker's block, which stays in the form", async () => {
       flushImporters();
       openServerFolder();

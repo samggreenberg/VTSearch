@@ -50,6 +50,31 @@ describe('AutopilotStateService', () => {
       expect(service.shouldAnnounceCompletion).toBe(false);
     });
 
+    it('offers it on a detector made from a media example: Goods alone are no detector yet (#5229)', () => {
+      service.activate();
+      // The example is a Good in the labelset from the start (#3045).
+      service.noteInitialLabelset(1, 0, 1);
+      expect(service.startedUntrained()).toBe(true);
+      expect(service.shouldAnnounceCompletion).toBe(true);
+      expect(service.state.retrainMode).toBe(false);
+    });
+
+    it("counts the run's votes from where it began (#5229)", () => {
+      service.activate();
+      // A face picked from this dataset: in the labelset, and voted here.
+      service.noteInitialLabelset(1, 0, 1);
+      expect(service.runVotes(1, 1)).toBe(0);
+      // The first vote lands here a round trip before the labelset's count.
+      expect(service.runVotes(1, 2)).toBe(1);
+      expect(service.runVotes(2, 2)).toBe(1);
+
+      // A picture brought from outside the app: in the labelset only.
+      service.forgetInitialLabelset();
+      service.noteInitialLabelset(1, 0, 0);
+      expect(service.runVotes(1, 0)).toBe(0);
+      expect(service.runVotes(1, 1)).toBe(1);
+    });
+
     it('ignores every reading after the first, so the user\'s own votes cannot flip it', () => {
       service.activate();
       service.noteInitialLabelset(0, 0);

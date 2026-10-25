@@ -290,6 +290,40 @@ describe('ImportAdvancedComponent', () => {
     });
   });
 
+  // Every case runs with the ingest toggles hosted elsewhere, as the
+  // Multi-Dataset editor does, so only the field under test can fill the
+  // block. Checking the opened DOM as well as the getter keeps the getter in
+  // step with the template's top-level @ifs (#5225).
+  describe('hasContent', () => {
+    const cases: Array<[string, Record<string, unknown>, boolean]> = [
+      ['nothing to choose', {}, false],
+      ['the ingest toggles', { showIngestToggles: true }, true],
+      ['a lone embedder', { embedders: [embedders[0]] }, false],
+      ['two embedders', { embedders: embedders.slice(0, 2) }, true],
+      ['two embedders, one locked', { embedders: embedders.slice(0, 2), lockedEmbedder: 'clap' }, false],
+      ['a lone region embedder', { embedders: [embedders[2]] }, true],
+      ['a lone instance embedder', { embedders: [embedders[3]] }, true],
+      ['a lone clipper', { clippers: [clippers[0]] }, false],
+      ['two clippers', { clippers }, true],
+      ['cleanup gates', { cleaners }, true],
+      ['an optional convert target', { convertTargets: ['image'], convertOptional: true }, true],
+      ['a lone forced convert target', { convertTargets: ['image'], convertOptional: false }, false],
+      ['include-media rows', { showSourceSpecs: true, availableConverters: converters }, true],
+      ['the include-media flow with no converters', { showSourceSpecs: true, availableConverters: [] }, false],
+    ];
+
+    it.each(cases)('with %s is %s', async (_label, inputs, expected) => {
+      await setInputs({ showIngestToggles: false, ...inputs });
+      component.advancedOpen.set(true);
+      await settleZoneless(fixture);
+      const host = fixture.nativeElement as HTMLElement;
+      expect(component.hasContent).toBe(expected);
+      expect(host.children.length > 0).toBe(expected);
+      // An open block with nothing in it takes no box either.
+      expect(host.classList.contains('is-open')).toBe(expected);
+    });
+  });
+
   describe('hasSourceSpecsColumn', () => {
     it('is false when the source-specs flow is off', async () => {
       await setInputs({ showSourceSpecs: false, availableConverters: converters });
