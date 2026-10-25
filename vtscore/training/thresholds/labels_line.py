@@ -177,6 +177,18 @@ HEAD_COUNT_RECALL_EXPONENT: float | None = 0.18925
 #: and Binary half (``docs/experiments/2026-10-18-head-count-5039``).  ``None`` never reaches, the line
 #: before #5039.
 HEAD_COUNT_RECALL_Z: float | None = 2.75
+#: How the head's count scales at a balance of 1 and below (#5084): ``HEAD_COUNT_PRECISION_SCALE * beta **
+#: HEAD_COUNT_PRECISION_EXPONENT`` times what stands out, in place of #4603's ``beta ** 0.708``
+#: (:func:`head_count_cut`).  The count of what stands out reads the bulk's heavy upper tail as positives on a
+#: weak head (Region Photo's keeps 2.6x its positives at beta 1), so a smaller multiplier keeps nearer the
+#: positives.  0.71 beta (0.18x the count at beta 1/4 where #4603 kept 0.375x, 0.71x at beta 1): offline on the
+#: head's count line Region Photo gains +0.007 to +0.084 F-beta at every prevalence, Binary Photo +0.007 to +0.037
+#: at 0.44% and 0.1% and -0.014 / -0.004 at 1%, faces at most 0.008 either way; closed loop, Find's mean F-beta
+#: over clicks 0-50 +0.0093 / +0.021 on Region Photo (beta 1 / 1/4) and +0.0030 / +0.0014 on Binary Photo
+#: (``docs/experiments/2026-10-24-head-bulk-5084``).  ``None`` is #4603's piece: a scale of 1, an exponent of
+#: 0.708.
+HEAD_COUNT_PRECISION_SCALE: float | None = 0.71
+HEAD_COUNT_PRECISION_EXPONENT: float | None = 1.0
 #: The level Autopilot's Done also reads (#4878): Done once every quality light is green, or once
 #: the labels line expects at least this F-beta at the session's balance over the corpus it was
 #: cut on (:func:`stop_level_met`).  Priced on 2,160 sessions and A/B'd in the phase machine:
@@ -846,6 +858,10 @@ def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) ->
     placed between the last kept and the first dropped as :func:`corpus_cut` places
     its own.  An empty corpus keeps nothing.
 
+    At a balance of 1 and below (#5084) the multiplier is
+    ``HEAD_COUNT_PRECISION_SCALE * beta ** HEAD_COUNT_PRECISION_EXPONENT`` (0.71 beta) in
+    place of ``beta ** 0.708`` (:func:`_scaled_count`); both at ``None`` is the rule's own.
+
     Above a balance of 1 (#5039) the count grows as ``beta **``
     :data:`HEAD_COUNT_RECALL_EXPONENT` instead, and where one of
     *held_out_goods* (the class model's held-out Goods, logits) ranks below the
@@ -869,7 +885,10 @@ def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) ->
         if above and HEAD_COUNT_RECALL_EXPONENT is not None
         else b
     )
-    k = int(np.count_nonzero(x >= centroid_cut(x, beta=b_count)))
+    if not above and (HEAD_COUNT_PRECISION_SCALE is not None or HEAD_COUNT_PRECISION_EXPONENT is not None):
+        k = _scaled_count(x, b)
+    else:
+        k = int(np.count_nonzero(x >= centroid_cut(x, beta=b_count)))
     goods = None if held_out_goods is None else np.asarray(held_out_goods, dtype=np.float64)
     if above and HEAD_COUNT_RECALL_Z is not None and goods is not None and goods.size:
         standouts = int(np.count_nonzero(x >= centroid_cut(x, beta=1.0)))
@@ -878,6 +897,32 @@ def head_count_cut(scores_desc: Any, beta: float, held_out_goods: Any = None) ->
     if k <= 0:
         return 1.0 + 1e-9
     return float(s[k - 1]) if k >= s.size else float((s[k - 1] + s[k]) / 2.0)
+
+
+def _scaled_count(x: np.ndarray, beta: float) -> int:
+    """How many of the logits *x* the head's count keeps at *beta* <= 1 under #5084's multiplier.
+
+    :func:`~vtscore.detectors.centroid_head.centroid_cut`'s rule
+    (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`) with the multiplier
+    ``HEAD_COUNT_PRECISION_SCALE * beta ** HEAD_COUNT_PRECISION_EXPONENT`` in place of
+    ``beta ** 0.708``: that many times the larger of #4603's count and the top's widest drop
+    (from beta 1, the drop below a standout first, #4783), never fewer than that drop.  With
+    too few scores to count, the guarded line the rule falls back to.
+    """
+    from vtscore.detectors.centroid_head import _top_gap_count, centroid_cut  # noqa: PLC0415
+    from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT, _count_estimate  # noqa: PLC0415
+
+    counted = _count_estimate(x)
+    if counted is None:
+        return int(np.count_nonzero(x >= centroid_cut(x, beta=beta)))
+    scale = 1.0 if HEAD_COUNT_PRECISION_SCALE is None else float(HEAD_COUNT_PRECISION_SCALE)
+    exponent = (
+        TEXT_SORT_COUNT_EXPONENT if HEAD_COUNT_PRECISION_EXPONENT is None else float(HEAD_COUNT_PRECISION_EXPONENT)
+    )
+    gap = _top_gap_count(x, drop="skip25" if beta >= 1.0 else "widest")
+    keep = min(max(1, round(scale * beta**exponent * max(counted, float(gap)))), x.size)
+    srt = -np.sort(-x)
+    return int(np.count_nonzero(x >= min(float(srt[keep - 1]), float(srt[gap - 1]))))
 
 
 def _excess_depth(x_desc: np.ndarray, beta: float, z_min: float) -> int:

@@ -326,3 +326,33 @@ def head_count_recall(exponent: "float | str | None" = None, z: "float | str | N
         yield
     finally:
         labels_line.HEAD_COUNT_RECALL_EXPONENT, labels_line.HEAD_COUNT_RECALL_Z = shipped
+
+
+@contextmanager
+def head_count_precision(scale: "float | str | None" = None, exponent: "float | str | None" = None) -> Iterator[None]:
+    """Hold the head's count multiplier at a balance of 1 and below at an arm's while the block runs (#5084).
+
+    The count keeps *scale* ``* beta **`` *exponent* times what stands out
+    (:data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_PRECISION_SCALE`,
+    :data:`~vtscore.training.thresholds.labels_line.HEAD_COUNT_PRECISION_EXPONENT`).  ``"off"`` is
+    that piece before #5084 (#4603's scale 1, exponent 0.708), and ``None`` leaves it as the app
+    ships it.  Process-wide, as :func:`head_count_recall`'s swap is, and undone on the way out.
+    """
+    for name, v in (("scale", scale), ("exponent", exponent)):
+        if v is None or v == "off":
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+            raise ValueError(
+                f"head_count_precision {name} must be a positive number, 'off' or None (the app's); got {v!r}"
+            )
+    from vtscore.training.thresholds import labels_line  # noqa: PLC0415
+
+    shipped = labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT
+    if scale is not None:
+        labels_line.HEAD_COUNT_PRECISION_SCALE = None if scale == "off" else float(scale)
+    if exponent is not None:
+        labels_line.HEAD_COUNT_PRECISION_EXPONENT = None if exponent == "off" else float(exponent)
+    try:
+        yield
+    finally:
+        labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT = shipped
