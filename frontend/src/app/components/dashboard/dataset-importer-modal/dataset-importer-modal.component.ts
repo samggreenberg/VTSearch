@@ -343,8 +343,15 @@ export class DatasetImporterModalComponent implements OnInit {
   /** The showing picker's "Advanced" block, whose toggle this modal renders at
    *  the left end of the footer row (#4305): collapsed, it shares the Cancel /
    *  Import line instead of taking a half-empty one at the foot of the form.
-   *  ``undefined`` before an importer is picked, when there is no footer. */
+   *  ``undefined`` before an importer is picked, when there is no footer, and
+   *  when the block has nothing to show, so no toggle opens onto nothing
+   *  (#5225). */
   get activeImportAdvanced(): ImportAdvancedComponent | undefined {
+    const block = this.pickerImportAdvanced;
+    return block?.hasContent ? block : undefined;
+  }
+
+  private get pickerImportAdvanced(): ImportAdvancedComponent | undefined {
     if (!this.selectedImporter()) return undefined;
     // In Multi-Dataset mode every ticked row has its own block, opened from
     // the row; there is no single block for a footer toggle to open (#4703).

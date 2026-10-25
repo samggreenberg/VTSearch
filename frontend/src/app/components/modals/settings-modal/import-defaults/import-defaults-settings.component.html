@@ -21,7 +21,7 @@
       <p class="empty-state">Loading options for {{ activeTypeLabel }}…</p>
     } @else {
       <!-- Source specs (converters per source mediaType + native clipper) -->
-      @if (activeConverters.length > 0 || activeClippers.length > 1) {
+      @if (showSourceSpecsPicker) {
         @if (activeConverters.length > 0) {
           <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media:</label>
         }
@@ -39,7 +39,7 @@
       }
 
       <!-- Embedder -->
-      @if (activeEmbedders.length > 1) {
+      @if (showEmbedderPicker) {
         <label class="form-label" [for]="'import-default-embedder-' + activeType" title="The embedder used to analyze each {{ activeTypeLabel }} item so it can be searched">Embedder:</label>
         <select
           [id]="'import-default-embedder-' + activeType"
@@ -64,6 +64,10 @@
         @if (licenseNotice; as notice) {
           <div class="license-warning" role="note">⚠ {{ notice }}</div>
         }
+      }
+
+      @if (!showSourceSpecsPicker && !showEmbedderPicker) {
+        <p class="empty-state">{{ activeTypeLabel }} imports have no defaults to set.</p>
       }
 
       <div class="import-defaults-footer">
