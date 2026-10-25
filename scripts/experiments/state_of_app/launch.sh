@@ -52,7 +52,11 @@ export CALIB_DATASETS="$SOTA_DATASET"
 # `siglip,embeddinggemma2`); a review never sets it, so "the app" stays named here.
 export CALIB_COCO_BETTER_EMBEDDERS="${SOTA_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 export CALIB_O365_BETTER_EMBEDDERS="$CALIB_COCO_BETTER_EMBEDDERS"
-export CALIB_PATCH_STYLES=max_patch
+# SOTA_PATCH_STYLES swaps the region column's geometry for an A/B on the style
+# itself (#4711 runs the raw-patch HAC trees `max_patch_hac`/`max_patch_pca_hac`);
+# a review never sets it. One style per run dir keeps the grid at 288 cells a seed.
+# A style without max_patch is declared to preflight check 12 (patch_style).
+export CALIB_PATCH_STYLES="${SOTA_PATCH_STYLES:-max_patch}"
 export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
 export CALIB_MAX_STEPS="${SOTA_MAX_STEPS:-150}"
