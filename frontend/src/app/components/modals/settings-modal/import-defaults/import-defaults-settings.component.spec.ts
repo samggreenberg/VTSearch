@@ -152,6 +152,24 @@ describe('ImportDefaultsSettingsComponent', () => {
     expect(embedderCalls).toEqual(['image']);
   });
 
+  // The stub gives Image no embedders, clippers or converters, as the real
+  // registry does Document: a tab with nothing to set says so (#5225).
+  it('says a type has no defaults to set rather than showing a blank tab', async () => {
+    await create({ solo: 'image' });
+    const body = fixture.nativeElement.querySelector('.import-defaults-body') as HTMLElement;
+    expect(component.showSourceSpecsPicker).toBe(false);
+    expect(component.showEmbedderPicker).toBe(false);
+    expect(body.querySelector('.empty-state')?.textContent?.trim()).toBe('Image imports have no defaults to set.');
+    expect(body.querySelector('.import-defaults-footer')).not.toBeNull();
+  });
+
+  it('shows no such note on a type with something to set', async () => {
+    await create();
+    const body = fixture.nativeElement.querySelector('.import-defaults-body') as HTMLElement;
+    expect(body.querySelector('vt-source-specs-picker')).not.toBeNull();
+    expect(body.querySelector('.empty-state')).toBeNull();
+  });
+
   it('lazy-loads a tab on first switch and caches it afterwards', async () => {
     await create();
     expect(embedderCalls).toEqual(['audio']);
