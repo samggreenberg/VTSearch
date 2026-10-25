@@ -3,8 +3,9 @@
 **Status (2026-10-24): offline on every snapshot on the head's count line of three benches (Binary Photo, Region
 Photo, FHIBE faces), at beta 1/4, 1 and 4, in four corpora each (0.44%, 0.1%, 1% and no positives); closed loop at
 beta 1/4 and 1 on Binary Photo (720 sessions per arm and preset, 5 seeds) and Region Photo (144 per arm and preset,
-1 seed; beta 1 read, beta 1/4 REGION_B025_PENDING). Not shipped yet: the knob (`HEAD_COUNT_PRECISION_SCALE`, `HEAD_COUNT_PRECISION_EXPONENT`)
-is in, default off.**
+1 seed, 100 clicks). Shipped: `HEAD_COUNT_PRECISION_SCALE` 0.71 and `HEAD_COUNT_PRECISION_EXPONENT` 1 are the
+defaults (the owner's call on these numbers); `CALIB_HEAD_COUNT_PRECISION_SCALE=off
+CALIB_HEAD_COUNT_PRECISION_EXPONENT=off` is the count before.**
 
 **The count of what stands out over-reads the head's scores because the heads' bulks are not Gaussian above 3
 spreads: Region Photo's withheld negatives above median + 4 spreads number 96 where a Gaussian bulk puts 0.36, and its
@@ -46,7 +47,8 @@ heads, against today's line:
    +0.0012 (± 0.0018) at beta 1/4. 0.5 beta is worse at both (stop -0.0035 ± 0.0008 at beta 1). On Region at beta 1,
    where the line serves from the first trained click (7), 0.71 beta adds +0.034 at click 10, +0.0093 (± 0.0023) over
    clicks 0 to 50 and +0.0075 (± 0.0019) over 0 to 100, and +0.0040 (± 0.0018) at the stop (+0.0006 ± 0.0005 after
-   the closing check); 4 of 144 sessions pick a different image. Beta 1/4: REGION_B025_PENDING.
+   the closing check); 4 of 144 sessions pick a different image. At beta 1/4: +0.045 at click 10, +0.021 (± 0.0048) over 0 to 50, +0.014 (± 0.0032) over 0 to
+   100, +0.0031 (± 0.0032) at the stop; no session picks a different image.
 
 | beta <= 1, on the head's count line (mean over classes; people on faces) | Binary Photo | Region Photo | FHIBE faces |
 |---|---|---|---|
@@ -60,8 +62,8 @@ heads, against today's line:
 | images kept on a corpus with no positives, beta 1/4: today / 0.71 beta / 0.5 beta | 12 / 6.3 / 4.7 | 54 / 26 / 18 | 2.4 / 2.4 / 2.4 |
 | … beta 1 | 31 / 22 / 16 | 145 / 103 / 72 | 3.6 / 3.6 / 3.6 |
 | **closed loop, 0.71 beta: Find's mean F-beta gain, clicks 0-50 / 0-200 (Region 0-100), beta 1** | **+0.0030 (± 0.0007) / +0.0002 (± 0.0003)** | **+0.0093 (± 0.0023) / +0.0075 (± 0.0019)** | not run |
-| … beta 1/4 | +0.0014 (± 0.0013) / +0.0006 (± 0.0005) | REGION_B025_PENDING | not run |
-| … F-beta at the stop, beta 1 / beta 1/4 | -0.0015 (± 0.0005) / +0.0012 (± 0.0018) | +0.0040 (± 0.0018) / REGION_B025_PENDING | not run |
+| … beta 1/4 | +0.0014 (± 0.0013) / +0.0006 (± 0.0005) | +0.021 (± 0.0048) / +0.014 (± 0.0032) | not run |
+| … F-beta at the stop, beta 1 / beta 1/4 | -0.0015 (± 0.0005) / +0.0012 (± 0.0018) | +0.0040 (± 0.0018) / +0.0031 (± 0.0032) | not run |
 
 *± one SE over classes: offline 0.004 to 0.008 on Binary, 0.004 to 0.015 on Region, under 0.002 on faces
 (`tables/offline_presets.csv`). Faces' corpora are at a person's own prevalence (about 4 of 5,439 crops) and its
@@ -206,7 +208,15 @@ trains from click 7, and the head's count line serves from there until 6 held-ou
 - **Sessions that part:** "orange", medium (parts at click 10): F at click 50 0.76 → 0.84, 49 Goods by click 100
   instead of 41, Done at 43 instead of 47. "bus", large (parts at 13): F at click 50 0.92 → 0.90, Done at 61 instead
   of 44, mean F over 0-100 -0.053, the run that costs most.
-- **beta 1/4:** REGION_B025_PENDING
+- **beta 1/4:** +0.045 at click 10, +0.017 at clicks 25 to 50, +0.003 at 75 and 100. Over clicks 0-25 +0.025
+  (± 0.0053), 0-50 +0.021 (± 0.0048), 0-100 +0.014 (± 0.0032). At the stop +0.0031 (± 0.0032), after the closing
+  check -0.0006 (± 0.0007). Not one session picks a different image: the line is the only change. Done is reached as
+  often (84%) at the same median click (35).
+- **By band at beta 1/4** (clicks 0-50): large +0.035 (± 0.011, 71% of classes better), medium +0.019 (± 0.0053, 73%),
+  small +0.0090 (± 0.0027, 65%); classes both arms leave under F 0.2 at click 100 level (-0.0001 ± 0.0011).
+- Six beta 1/4 cells of the 0.71 beta arm failed to start on one node (`OSError: failed to make path absolute`) and
+  were rerun on another; a first rerun went to 150 clicks by mistake and was set aside, the second to 100 clicks
+  pairs click for click with the control.
 
 ## Literal examples
 
