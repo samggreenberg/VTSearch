@@ -1,8 +1,9 @@
 # Telling a head whose positives sit under the bulk's tail before shrinking its count (issue #5215)
 
-**Status (2026-10-25): offline only, on #5084's snapshots on the head's count line (Binary Photo, Region Photo, FHIBE
-faces), at beta 1/4 and 1, in three corpora each (0.44% as run, 0.1%, 1%). Nothing shipped; no knob added. The gate is
-chosen on Binary + Region Photo and read on faces.**
+**Status (2026-10-25): offline on #5084's snapshots on the head's count line (Binary Photo, Region Photo, FHIBE faces), at
+beta 1/4 and 1, in three corpora each (0.44% as run, 0.1%, 1%), then a closed loop on Binary Photo at 0.44%. The gate
+is a knob, `HEAD_COUNT_PRECISION_TOP_Z`, off by default (`None`); nothing in the app changes. The gate is chosen on
+Binary + Region Photo and read on faces.**
 
 **One label-free signal tells the two kinds of head apart well enough to price: how far the head's top score stands
 above the bulk.** Keeping #4603's count (`beta ** 0.708`) wherever the top corpus logit sits under 6.1 bulk spreads,
@@ -91,18 +92,53 @@ Literal heads (Binary Photo, beta 1/4, 0.44%, median over each class's snapshots
 The gate is not clean. Banana and clock still lose to the shrink although their tops stand out, and "book", the issue's
 example, sits above 6.1 and wins under the shrink at 0.44%.
 
+## The closed loop (Binary Photo, 0.44%)
+
+The knob was run on the app's trajectory pass (`head_tail_5215.sh`): Binary Photo, 144 cells x 5 seeds, 200 clicks, at
+beta 1/4 and 1. Each run is paired with a control run of the same cell and seed, which runs with the knob off. The
+runs come from a frozen tree at 086882fd6. Gains are class means ± SE over classes (`tables/ab_binary_summary.csv`,
+`ab_binary_gains.csv`).
+
+| Binary Photo, 0.44%, gate over 0.71 beta | beta 1/4 | beta 1 |
+|---|---|---|
+| runs per arm | 720 | 720 |
+| mean F-beta, clicks 0-50 | +0.0012 ± 0.0003 | +0.0007 ± 0.0001 |
+| mean F-beta, clicks 0-200 | +0.0009 ± 0.0002 | +0.0005 ± 0.0001 |
+| F-beta at the stop (control 0.616 / 0.507) | +0.0031 ± 0.0014 | +0.0010 ± 0.0003 |
+| F-beta after the closing check | +0.0008 ± 0.0004 | +0.0003 ± 0.0001 |
+| runs whose clicks depart from the control | 0 | 0 |
+
+![Closed loop over clicks](figures/ab_binary_over_clicks.png)
+
+*Figure 2. Top: F-beta of the returned set over clicks, the app (grey) and the gate (blue). Bottom: the paired gain,
+± 1 SE over classes.*
+
+The gate changes only what the head returns. No run's clicks depart from its control, because the line does not steer
+the queries. Most of the gain comes between clicks 30 and 75, where the head's count line is in use. It peaks at
++0.003-0.004 at beta 1/4 around click 50, then decays as held-out Goods take over the line. At beta 1/4 the gain sits
+in medium-sized classes (+0.0021 ± 0.0009 at 0-50; large +0.0003, small +0.0001; `tables/ab_binary_splits.csv`).
+
+The loop confirms the offline sign at 0.44% but at about a quarter of the offline size (+0.0049 / +0.0033 at the head's
+snapshots). The head's line covers only part of a run. The loop did not run 1% (offline +0.012 at beta 1/4) or 0.1%
+(offline -0.005 at beta 1/4). The 0.1% cost is what the gate trades for the 1% gain.
+
 ## What it would take to ship
 
-The gate gains about 0.002 on average over Binary + Region and would add a second knob with a fixed scale. A closed
-loop on Binary Photo at beta 1/4 and 1 (the bench it moves) is the test. #5084's loop at 1% read -0.0015 at the stop,
-so a gain there would be at the 0.001 level, near the loop's noise.
+Default `HEAD_COUNT_PRECISION_TOP_Z = 6.1`. That moves Binary Photo by about +0.001 mean F-beta and +0.003 at the stop
+at beta 1/4, and Region within 0.003 offline. The costs:
+
+- a second fixed-scale knob on the head's line;
+- the offline 0.1% loss on Binary (-0.005) and on faces at beta 1 (-0.005), which the loop did not test.
 
 ## Reproduce
 
 ```
 head_tail_5215.py price --x /expscratch/sgreenberg/head-bulk-5084/{xbin,xreg_old,xfaces.tmp} --out pr_<bench>.pkl
 head_tail_5215.py tables --priced pr_xbin.pkl pr_xreg_old.pkl pr_xfaces.pkl --out tables --figures figures
+head_tail_5215.sh cpack {ctl,tz61} {0.25,1}     # 4 packs per run, from a frozen tree
+head_tail_5215_ab.py --root state-of-the-app --date 2026-10-25 --seeds 5 --path binary \
+    --baseline head-bulk-5084/text_baseline.csv --out ab_binary --docs tables
 ```
 
 The snapshot dirs are #5084's extractions (`head_bulk_5084.py extract`, `head_count_5039.py extract-faces`), on dev
-a86fb4f2b. Pricing took about 4 minutes per bench on 16 CPUs.
+a86fb4f2b. Pricing took about 4 minutes per bench on 16 CPUs; the loop took 2.5 hours on 16 cpu packs.
