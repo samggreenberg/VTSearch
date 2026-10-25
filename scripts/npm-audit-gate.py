@@ -49,19 +49,7 @@ class Waiver:
     reason: str
 
 
-WAIVERS: tuple[Waiver, ...] = (
-    Waiver(
-        ghsa="GHSA-ch52-4w7c-c8xp",
-        package="http-cache-semantics",
-        range="<=4.2.0",
-        reason=(
-            "No patched release (4.2.0 is the latest). The exploit needs a shared, "
-            "multi-user HTTP cache; here the package sits under @angular/cli -> pacote "
-            "-> make-fetch-happen, the CLI's private on-disk package cache for "
-            "`ng add` / `ng update`. Nothing in the built app or the dev server uses it."
-        ),
-    ),
-)
+WAIVERS: tuple[Waiver, ...] = ()
 
 
 @dataclass(frozen=True)
