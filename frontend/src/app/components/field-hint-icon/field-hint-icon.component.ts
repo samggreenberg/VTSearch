@@ -4,13 +4,62 @@ import {
   Component,
   ElementRef,
   HostListener,
+  afterRenderEffect,
   computed,
+  effect,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
+import type { RectLike } from '../toasty-hint/toasty-hint.component';
 
 const HOVER_DELAY_MS = 500;
+
+/** Clearance (px) between the icon, or its block, and the tooltip. */
+const GAP = 4;
+/** The closest (px) the tooltip comes to the edge of the window. */
+const EDGE = 8;
+
+/** Which side of its anchor the tooltip sits on. */
+export type FieldHintSide = 'above' | 'below';
+
+/** Where the tooltip goes, in viewport px, and which side it ended up on. */
+export interface FieldHintPlacement {
+  left: number;
+  top: number;
+  side: FieldHintSide;
+}
+
+/**
+ * Place a tooltip against `anchor` (viewport coordinates, as
+ * `getBoundingClientRect()` returns them): centred on it, on the preferred
+ * `side`, flipped to the other side when the preferred one runs off the window
+ * and the other does not, then pushed back inside the window's edges. A
+ * tooltip near the left of a dialog box therefore slides right rather than
+ * running off the window (#5226), and one on the top row of the window opens
+ * below instead. `tip` is the tooltip's own size and `viewport` the window's.
+ */
+export function fieldHintPlacement(
+  anchor: RectLike,
+  tip: { width: number; height: number },
+  viewport: { width: number; height: number },
+  side: FieldHintSide,
+): FieldHintPlacement {
+  const aboveTop = anchor.top - GAP - tip.height;
+  const belowTop = anchor.bottom + GAP;
+  const fitsAbove = aboveTop >= EDGE;
+  const fitsBelow = belowTop + tip.height <= viewport.height - EDGE;
+  if (side === 'above' && !fitsAbove && fitsBelow) side = 'below';
+  else if (side === 'below' && !fitsBelow && fitsAbove) side = 'above';
+  const clamp = (v: number, size: number, room: number): number =>
+    Math.max(EDGE, Math.min(v, room - EDGE - size));
+  return {
+    left: clamp((anchor.left + anchor.right) / 2 - tip.width / 2, tip.width, viewport.width),
+    top: clamp(side === 'above' ? aboveTop : belowTop, tip.height, viewport.height),
+    side,
+  };
+}
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -20,7 +69,6 @@ const HOVER_DELAY_MS = 500;
   template: `
     <span
       class="field-hint-icon"
-      [class.field-hint-icon--below-block]="placement() === 'below-block'"
       tabindex="0"
       role="img"
       [attr.aria-label]="ariaLabel() || hint()"
@@ -43,14 +91,19 @@ const HOVER_DELAY_MS = 500;
         >?</text>
       </svg>
       @if (visible()) {
-        <span class="field-hint-tooltip" role="tooltip">{{ hint() }}</span>
+        <span
+          #tip
+          class="field-hint-tooltip"
+          [class.field-hint-tooltip--block]="placement() === 'below-block'"
+          role="tooltip"
+          popover="manual"
+        >{{ hint() }}</span>
       }
     </span>
     `,
   styles: [
     `
       .field-hint-icon {
-        position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -65,20 +118,18 @@ const HOVER_DELAY_MS = 500;
         color: var(--text-primary);
         outline: none;
       }
-      /* \`below-block\`: the icon stops being the tooltip's containing block,
-         so the tooltip hangs below the host's nearest positioned ancestor and
-         spans its width (see \`placement\`). */
-      .field-hint-icon--below-block {
-        position: static;
-      }
+      /* Fixed to the window and, where the browser has popovers, raised into
+         the top layer, so no dialog body or panel that clips its overflow can
+         cut it off (#5226). \`place()\` sets \`left\` / \`top\`; the inset
+         and margin reset undo the popover's own centring. */
       .field-hint-tooltip {
-        position: absolute;
-        bottom: calc(100% + 4px);
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 1000;
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        overflow: visible;
+        z-index: var(--z-tooltip);
         width: max-content;
-        max-width: 260px;
+        max-width: min(260px, calc(100vw - 16px));
         padding: 6px 8px;
         background: var(--bg-surface);
         color: var(--text-primary);
@@ -93,14 +144,9 @@ const HOVER_DELAY_MS = 500;
         pointer-events: none;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
       }
-      .field-hint-icon--below-block .field-hint-tooltip {
-        top: calc(100% + 4px);
-        bottom: auto;
-        left: 0;
-        right: 0;
-        transform: none;
-        width: auto;
-        max-width: none;
+      /* \`below-block\`: \`place()\` sets the width to the block's. */
+      .field-hint-tooltip--block {
+        max-width: calc(100vw - 16px);
       }
     `,
   ],
@@ -113,13 +159,16 @@ export class FieldHintIconComponent {
   /**
    * Where the tooltip opens. `above` (the default) centres it over the icon,
    * which suits a form row in a modal. `below-block` hangs it under the
-   * host's nearest *positioned* ancestor, as wide as that ancestor: for an
-   * icon in a narrow, clipped column (the left panel, whose `overflow: hidden`
-   * cuts off a tooltip above the first row and one centred on an icon near
-   * its edge), give the column's block `position: relative` and the tooltip
-   * fits inside it.
+   * host's nearest *positioned* ancestor, as wide as that ancestor, so it
+   * leaves the control that block holds in view (the left panel's Threshold
+   * spectrum): give the block `position: relative`. Either way the tooltip
+   * flips to the other side when its own runs off the window, and slides back
+   * inside the window's edges (see {@link fieldHintPlacement}).
    */
   readonly placement = input<'above' | 'below-block'>('above');
+
+  /** The tooltip, while it shows. */
+  private readonly tip = viewChild<ElementRef<HTMLElement>>('tip');
 
   /** Sticky state set by clicking the icon; stays open until dismissed. */
   private readonly pinned = signal(false);
@@ -130,6 +179,31 @@ export class FieldHintIconComponent {
   readonly visible = computed(() => this.pinned() || this.hovered());
 
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    // Place the tooltip when it renders, and again when its text or placement
+    // changes its size.
+    afterRenderEffect(() => {
+      this.hint();
+      this.placement();
+      const tip = this.tip()?.nativeElement;
+      if (tip) this.place(tip);
+    });
+    // While it shows, follow the icon as whatever holds it scrolls, and as
+    // the window resizes. Captured, because a dialog body's `scroll` does
+    // not bubble.
+    effect((onCleanup) => {
+      const tip = this.tip()?.nativeElement;
+      if (!tip) return;
+      const follow = (): void => this.place(tip);
+      window.addEventListener('scroll', follow, { capture: true, passive: true });
+      window.addEventListener('resize', follow, { passive: true });
+      onCleanup(() => {
+        window.removeEventListener('scroll', follow, { capture: true });
+        window.removeEventListener('resize', follow);
+      });
+    });
+  }
 
   onMouseEnter(): void {
     // Already showing (pinned or hovered): nothing to schedule.
@@ -184,6 +258,34 @@ export class FieldHintIconComponent {
     if (!this.elementRef.nativeElement.contains(event.target as Node)) {
       this.hide();
     }
+  }
+
+  /**
+   * Raise the tooltip into the top layer (once per showing) and put it beside
+   * its anchor: the icon, or for `below-block` the block, whose width it
+   * takes. Writes the tooltip's style directly; no template binding reads it.
+   */
+  private place(tip: HTMLElement): void {
+    if (typeof tip.showPopover === 'function' && !tip.matches(':popover-open')) {
+      tip.showPopover();
+    }
+    const host = this.elementRef.nativeElement;
+    const block = this.placement() === 'below-block';
+    // jsdom has no layout, so no `offsetParent`; the parent stands in there.
+    const anchor = block
+      ? ((host.offsetParent as HTMLElement | null) ?? host.parentElement ?? host)
+      : (host.querySelector<HTMLElement>('.field-hint-icon') ?? host);
+    const rect = anchor.getBoundingClientRect();
+    tip.style.width = block ? `${rect.width}px` : '';
+    const root = document.documentElement;
+    const { left, top } = fieldHintPlacement(
+      rect,
+      { width: tip.offsetWidth, height: tip.offsetHeight },
+      { width: root.clientWidth || window.innerWidth, height: root.clientHeight || window.innerHeight },
+      block ? 'below' : 'above',
+    );
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
   }
 
   private clearTimer(): void {
