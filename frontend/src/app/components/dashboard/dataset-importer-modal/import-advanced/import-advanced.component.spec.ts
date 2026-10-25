@@ -1,3 +1,4 @@
+import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ImportAdvancedComponent } from './import-advanced.component';
@@ -12,6 +13,26 @@ import {
   EmbedderInfo,
   SourceSpec,
 } from '../../../../models/api.models';
+
+/** A picker in miniature: the block with the Multi-Dataset box offered and
+ *  an editor projected into it, the way the pickers mount
+ *  `<vt-multi-output-config>`. */
+@Component({
+  standalone: true,
+  imports: [ImportAdvancedComponent],
+  template: `
+    <vt-import-advanced [showMultiToggle]="true" [multiDataset]="multi()" [embedders]="embedders">
+      <p class="projected-editor">Datasets to make</p>
+    </vt-import-advanced>
+  `,
+})
+class MultiHostComponent {
+  readonly multi = signal(false);
+  readonly embedders = [
+    { name: 'a', is_default: true } as EmbedderInfo,
+    { name: 'b', is_default: false } as EmbedderInfo,
+  ];
+}
 
 describe('ImportAdvancedComponent', () => {
   let component: ImportAdvancedComponent;
@@ -520,6 +541,88 @@ describe('ImportAdvancedComponent', () => {
 
       await setInputs({ selectedCleaners: [{ name: 'trim', params: {} }] });
       expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(1);
+    });
+  });
+
+  describe('Multi-Dataset box (#5230)', () => {
+    function box(): HTMLInputElement | null {
+      return fixture.nativeElement.querySelector('#import-advanced-multi');
+    }
+
+    it('is absent unless offered', async () => {
+      component.advancedOpen.set(true);
+      await settleZoneless(fixture);
+      expect(box()).toBeNull();
+    });
+
+    it('is behind the toggle like everything else in the block', async () => {
+      await setInputs({ showMultiToggle: true });
+      expect(box()).toBeNull();
+    });
+
+    it('heads the open block and emits the switch', async () => {
+      component.advancedOpen.set(true);
+      await setInputs({ showMultiToggle: true, embedders });
+      expect(box()).not.toBeNull();
+      expect(box()!.checked).toBe(false);
+      const first = fixture.nativeElement.querySelector('.form-group') as HTMLElement;
+      expect(first.contains(box())).toBe(true);
+
+      let emitted: boolean | undefined;
+      component.multiDatasetChange.subscribe((v) => (emitted = v));
+      box()!.click();
+      expect(emitted).toBe(true);
+    });
+
+    it('names Multi-Dataset in the toggle tooltip when offered', async () => {
+      expect(component.advancedToggleTitle).not.toContain('Multi-Dataset');
+      await setInputs({ showMultiToggle: true });
+      expect(component.advancedToggleTitle).toContain('Multi-Dataset');
+    });
+
+    it('says so in the tooltip, and lists none of the single dataset\'s overrides, while on', async () => {
+      await setInputs({ embedders, selectedEmbedder: 'custom', showMultiToggle: true, multiDataset: true });
+      expect(component.advancedToggleTitle).toContain('Multi-Dataset: on');
+      expect(component.advancedToggleTitle).not.toContain('Embedder:');
+    });
+
+    describe('with an editor projected', () => {
+      let host: ComponentFixture<MultiHostComponent>;
+      let block: ImportAdvancedComponent;
+
+      beforeEach(async () => {
+        host = TestBed.createComponent(MultiHostComponent);
+        await settleZoneless(host);
+        block = host.debugElement.children[0].componentInstance as ImportAdvancedComponent;
+        block.advancedOpen.set(true);
+        await settleZoneless(host);
+      });
+
+      it('shows the single dataset\'s fields, not the editor, while off', () => {
+        const el = host.nativeElement as HTMLElement;
+        expect(el.querySelector('.projected-editor')).toBeNull();
+        expect(el.querySelector('#import-advanced-embedder')).not.toBeNull();
+      });
+
+      it('swaps them for the editor while on, under the box and above the shared toggles', async () => {
+        host.componentInstance.multi.set(true);
+        await settleZoneless(host);
+        const el = host.nativeElement as HTMLElement;
+        expect(el.querySelector('#import-advanced-embedder')).toBeNull();
+        const multiBox = el.querySelector('#import-advanced-multi')!;
+        const editor = el.querySelector('.projected-editor')!;
+        const projection = el.querySelector('#import-advanced-projection')!;
+        expect((multiBox as HTMLInputElement).checked).toBe(true);
+        expect(multiBox.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(editor.compareDocumentPosition(projection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      });
+
+      it('folds the editor away with the rest of the block', async () => {
+        host.componentInstance.multi.set(true);
+        block.toggleAdvanced();
+        await settleZoneless(host);
+        expect((host.nativeElement as HTMLElement).querySelector('.projected-editor')).toBeNull();
+      });
     });
   });
 });

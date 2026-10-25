@@ -112,7 +112,6 @@ describe('MultiOutputConfigComponent', () => {
     expect(block.classList.contains('is-open')).toBe(true);
     // The two shared ingest toggles are not repeated inside the row's block.
     expect(block.querySelector('#import-advanced-projection')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#mo-projection')).not.toBeNull();
   });
 
   it('a convert-out row re-targets its dataset type and reseeds from the new type', async () => {
@@ -197,10 +196,8 @@ describe('MultiOutputConfigComponent', () => {
     expect(image.clipperParams).toEqual({ n: 9 });
   });
 
-  it('forwards the shared ingest toggles', () => {
-    let projection: boolean | undefined;
-    component.buildProjectionChange.subscribe((v) => (projection = v));
-    (fixture.nativeElement.querySelector('#mo-projection') as HTMLInputElement).click();
-    expect(projection).toBe(true);
+  it('leaves the shared ingest toggles to the Advanced block it sits in (#5230)', () => {
+    expect(fixture.nativeElement.querySelector('#mo-projection')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#mo-near-dupes')).toBeNull();
   });
 });

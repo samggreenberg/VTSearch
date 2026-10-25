@@ -28,22 +28,6 @@
     }
   </div>
 
-  @if (multiDataset()) {
-    <vt-multi-output-config
-      idPrefix="lf"
-      [mediaTypes]="mediaTypes()"
-      [convertersByType]="convertersByType"
-      [drafts]="outputDrafts()"
-      (draftsChange)="onOutputDraftsChange($event)"
-      [detection]="detection()"
-      [guessedMediaEmbedder]="guessedMediaEmbedder()"
-      [buildProjection]="buildProjection()"
-      (buildProjectionChange)="buildProjectionChange.emit($event)"
-      [mergeNearDuplicates]="mergeNearDuplicates()"
-      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-      (clipperChooserRequested)="openClipperChooserFor($event)"
-    ></vt-multi-output-config>
-  } @else {
   <vt-import-advanced
     [availableConverters]="availableConverters"
     [nativeType]="outputTypeId"
@@ -70,8 +54,25 @@
     (buildProjectionChange)="buildProjectionChange.emit($event)"
     [mergeNearDuplicates]="mergeNearDuplicates()"
     (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-  ></vt-import-advanced>
-  }
+    [showMultiToggle]="supportsMultiOutput && !effectiveSoloMediaType"
+    [multiDataset]="multiDataset()"
+    (multiDatasetChange)="setMultiDataset($event)"
+  >
+    <!-- Multi-Dataset: the list of datasets to make stands in for the
+         single dataset's fields, under the same Advanced toggle (#5230). -->
+    @if (multiDataset()) {
+      <vt-multi-output-config
+        idPrefix="lf"
+        [mediaTypes]="mediaTypes()"
+        [convertersByType]="convertersByType"
+        [drafts]="outputDrafts()"
+        (draftsChange)="onOutputDraftsChange($event)"
+        [detection]="detection()"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        (clipperChooserRequested)="openClipperChooserFor($event)"
+      ></vt-multi-output-config>
+    }
+  </vt-import-advanced>
 
   @if (error()) {
     <p class="error-text">{{ error() }}</p>

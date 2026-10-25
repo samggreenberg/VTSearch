@@ -1,8 +1,8 @@
 // The Multi-Dataset editor: a column of category rows, each a checkbox line
-// with an optional per-row Advanced block beneath it, then the two shared
-// ingest toggles. The host is a flex column with the importer form's own
-// rhythm (style-guide §2.3: a projected component's stacked fields need their
-// own gap; an ancestor's never crosses the boundary).
+// with an optional per-row Advanced block beneath it. The host is a flex
+// column with the importer form's own rhythm (style-guide §2.3: a projected
+// component's stacked fields need their own gap; an ancestor's never crosses
+// the boundary).
 :host {
   display: flex;
   flex-direction: column;

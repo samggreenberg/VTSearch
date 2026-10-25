@@ -232,9 +232,16 @@ describe('ServerFolderPickerComponent', () => {
         ['document', false],
       ]);
       expect(component.hasOutputs).toBe(true);
-      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).not.toBeNull();
-      // The single-dataset block is gone; the one Advanced block left is the ticked row's own.
-      expect(component.importAdvanced()).toBeUndefined();
+      // The editor is the picker's Advanced block's content (#5230): folded
+      // away with it, and in place of the single dataset's fields once open,
+      // the one Advanced block inside it being the ticked row's own.
+      const advanced = component.importAdvanced()!;
+      expect(advanced.multiDataset()).toBe(true);
+      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).toBeNull();
+      advanced.toggleAdvanced();
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('vt-import-advanced > vt-multi-output-config')).not.toBeNull();
+      expect((fixture.nativeElement.querySelector('#import-advanced-multi') as HTMLInputElement).checked).toBe(true);
       expect(fixture.nativeElement.querySelectorAll('vt-multi-output-config vt-import-advanced').length).toBe(1);
     });
 
@@ -297,8 +304,10 @@ describe('ServerFolderPickerComponent', () => {
       component.setMultiDataset(true);
       await settleZoneless(fixture);
       flushTypeOptions('audio');
+      expect(component.multiDatasetSummary).toBe('Audio');
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
       expect(component.hasOutputs).toBe(false);
+      expect(component.multiDatasetSummary).toBe('');
     });
 
     it('open() leaves multi mode', async () => {

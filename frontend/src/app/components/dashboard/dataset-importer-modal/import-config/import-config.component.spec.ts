@@ -26,37 +26,45 @@ describe('ImportConfigComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('Multi-Dataset box (#4703)', () => {
-    it('is absent unless offered', () => {
-      expect(fixture.nativeElement.querySelector('.multi-toggle')).toBeNull();
-    });
+  describe('Multi-Dataset summary (#5230)', () => {
+    function summary(): HTMLElement | null {
+      return fixture.nativeElement.querySelector('.multi-summary');
+    }
 
-    it('renders beside the dropdown and emits the switch', async () => {
-      fixture.componentRef.setInput('showMultiToggle', true);
-      await settleZoneless(fixture);
-      const box = fixture.nativeElement.querySelector('.multi-toggle') as HTMLInputElement;
-      expect(box).not.toBeNull();
-      expect(box.checked).toBe(false);
+    it('is absent in single-dataset mode, beside the dropdown', () => {
+      expect(summary()).toBeNull();
       expect(fixture.nativeElement.querySelector('.media-type-trigger')).not.toBeNull();
-
-      let emitted: boolean | undefined;
-      component.multiDatasetChange.subscribe((v) => (emitted = v));
-      box.click();
-      expect(emitted).toBe(true);
     });
 
-    it('hides the media-type dropdown while multi mode is on', async () => {
-      fixture.componentRef.setInput('showMultiToggle', true);
+    it('offers no Multi-Dataset box: that is under Advanced now', async () => {
       fixture.componentRef.setInput('multiDataset', true);
       await settleZoneless(fixture);
-      expect((fixture.nativeElement.querySelector('.multi-toggle') as HTMLInputElement).checked).toBe(true);
-      expect(fixture.nativeElement.querySelector('.media-type-trigger')).toBeNull();
+      expect(fixture.nativeElement.querySelector('input[type="checkbox"]')).toBeNull();
     });
 
-    it('derives the box id from the trigger id', async () => {
-      fixture.componentRef.setInput('mediaTypeFieldId', 'sf-media-type');
+    it('stands in for the dropdown, naming the ticked kinds, while multi mode is on', async () => {
+      fixture.componentRef.setInput('multiDataset', true);
+      fixture.componentRef.setInput('multiSummary', 'Image, Document');
       await settleZoneless(fixture);
-      expect(component.multiToggleId).toBe('sf-media-type-multi');
+      expect(fixture.nativeElement.querySelector('.media-type-trigger')).toBeNull();
+      expect(summary()!.textContent).toContain('Image, Document');
+      expect(summary()!.textContent).toContain('under Advanced');
+      expect(fixture.nativeElement.querySelector('.multi-summary-empty')).toBeNull();
+    });
+
+    it('says when nothing is ticked, so a greyed-out Import has a reason in sight', async () => {
+      fixture.componentRef.setInput('multiDataset', true);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.multi-summary-empty')?.textContent).toContain('None ticked');
+    });
+
+    it('sits under the dropdown where multi mode keeps it (the demo flow)', async () => {
+      fixture.componentRef.setInput('multiDataset', true);
+      fixture.componentRef.setInput('multiHidesMediaType', false);
+      fixture.componentRef.setInput('multiSummary', 'Image, Face');
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.media-type-trigger')).not.toBeNull();
+      expect(summary()!.textContent).toContain('Image, Face');
     });
   });
 
