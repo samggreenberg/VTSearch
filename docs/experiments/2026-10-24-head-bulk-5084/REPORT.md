@@ -243,10 +243,10 @@ From `tables/offline_examples.csv`, the head at the median of today's kept / pos
 
 ## What this leaves
 
-- Region's closed loop is 1 seed (144 sessions per arm) to 100 clicks; more seeds wait for the V100s (#4711 holds them).
+- Region's closed loop is 1 seed (144 sessions per arm) to 100 clicks; more seeds and 150 clicks wait for the V100s (#4711 holds them): #5214.
 - Binary at 1% prevalence pays for any smaller count (-0.004 at beta 1, -0.014 at beta 1/4 offline). What separates
   a head whose positives sit under the bulk's tail (Binary's "book") from one whose positives sit above it (Region's
-  "person") is not in the scores' shape or in 2 to 4 labels; the class model takes over at 6 held-out Goods.
+  "person") is not in the scores' shape or in 2 to 4 labels; the class model takes over at 6 held-out Goods. Finding a signal that does: #5215.
 - The earlier label check in this study read the held-out Goods' probabilities against the corpus's logits and put
   them at 6 to 8 spreads; corrected (logits on both), they sit at 4 to 5, and the labels route was priced in full
   above.
