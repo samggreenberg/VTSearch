@@ -129,8 +129,10 @@ launch|gpack)
   if [[ "$1" == gpack ]]; then
     export CALIB_PARTITION=gpu CALIB_PACK_GRES="${CALIB_PACK_GRES:-gpu:v100:1}" CALIB_CPUS=1
     export CALIB_PACK_JOBS=1 CALIB_PACK_PAR="${CALIB_PACK_PAR:-12}" CALIB_TIME="${CALIB_PACK_TIME:-16:00:00}"
-    # A core per cell: the V100 nodes are hyperthreaded, and two cells on one core each ran ~3x slower than the smoke.
+    # A core per cell: the V100 nodes are hyperthreaded, and 14 CPUs were 7 cores.
     export CALIB_PACK_CPUS="${CALIB_PACK_CPUS:-$((2 * CALIB_PACK_PAR))}"
+    # And memory interleaved over both NUMA nodes: the balancer swapped 14 ~58 GB tree cells on one socket's node.
+    export CALIB_PACK_INTERLEAVE="${CALIB_PACK_INTERLEAVE:-1}"
     exec bash "$HERE/launch.sh" pack "$idx"
   fi
   export CALIB_PARTITION=cpu CALIB_CPUS="${CALIB_CPUS:-1}"

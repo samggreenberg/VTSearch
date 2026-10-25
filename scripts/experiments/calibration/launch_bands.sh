@@ -342,8 +342,12 @@ pack)
   # CALIB_PACK_MEM (e.g. 12G) sets the job's memory outright, where cells peak well under CALIB_MEM each (#4664:
   # 200-click Binary cells at ~0.9 GB); unset, it is CALIB_PACK_PAR x CALIB_MEM.
   # CALIB_PACK_CPUS sets the job's CPUs outright; unset, it is CALIB_PACK_PAR x CALIB_CPUS. On a hyperthreaded node a
-  # CPU is half a core, so cells at one thread each want twice that (#4711: 14 CPUs on a V100 node were 7 cores, and
-  # 14 cells ran ~3x slower than on the cpu partition). The threads a cell computes with stay CALIB_CPUS either way.
+  # CPU is half a core, so cells at one thread each want twice that (#4711: 14 CPUs on a V100 node were 7 cores, two
+  # cells to a core). The threads a cell computes with stay CALIB_CPUS either way.
+  # CALIB_PACK_INTERLEAVE=1 runs each cell under `numactl --interleave=all`. A pack's CPUs can all sit on one socket,
+  # and the kernel's NUMA balancing then pulls every cell's memory onto that socket's node: #4711's 14 Region tree
+  # cells (~58 GB each) filled node 0 of a two-node V100 node, swapped with node 1 half empty, and spent ~90% of their
+  # time in the kernel (24 h system against 3 h user a cell). Interleaved pages are not migrated. Numerics unchanged.
   IDXS="${2:?usage: launch_bands.sh pack <comma-separated indices>}"
   PJOBS="${CALIB_PACK_JOBS:-1}"
   PAR="${CALIB_PACK_PAR:-16}"
@@ -353,6 +357,8 @@ pack)
   [[ "$MEM_GB" =~ ^[0-9]+$ ]] || { echo "pack needs CALIB_MEM in whole G (got $MEM)" >&2; exit 2; }
   read -r -a ALL_IDX <<<"${IDXS//,/ }"
   THREADS="OMP_NUM_THREADS=$CPUS MKL_NUM_THREADS=$CPUS OPENBLAS_NUM_THREADS=$CPUS"
+  NUMA=""
+  [[ "${CALIB_PACK_INTERLEAVE:-0}" == 1 ]] && NUMA="numactl --interleave=all "
   for ((j = 0; j < PJOBS; j++)); do
     SHARD=()
     for ((i = j; i < ${#ALL_IDX[@]}; i += PJOBS)); do SHARD+=("${ALL_IDX[$i]}"); done
@@ -363,7 +369,7 @@ pack)
       --partition="$PARTITION" "${GRES_ARG[@]}" --export=ALL \
       --output="$LOGS/pack$j-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && export CUDA_VISIBLE_DEVICES= $THREADS && cd $HERE && \
-printf '%s\n' ${SHARD[*]} | xargs -P $PAR -I{} sh -c 'python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
+printf '%s\n' ${SHARD[*]} | xargs -P $PAR -I{} sh -c '${NUMA}python run_cells.py --index {} > $LOGS/cell-{}.out 2>&1 || echo FAILED {}'; echo pack done"
   done
   ;;
 
