@@ -11,6 +11,12 @@ the same geometry. The split is reproduced exactly: ``simulate_voting_iterations
 draws ``RandomState(seed)`` and, at natural prevalence, the media split is its
 first draw.
 
+``--sam3 DIR`` swaps the sort for SAM3's zero-shot detector (#5213): an image's score is its best
+detection for the class's prompts (``sam3_score_5213.py`` writes them), and everything else -- the pool,
+the split, the app's line, the columns -- is unchanged, so a SAM3 row reads against a SigLIP row cell for
+cell. The ``embedder`` column names the prompt set (``sam3_typed``, ``sam3_noun``), and ``text_native_*``
+adds SAM3's own cut (a detection over 0.5).
+
 Text is only available where the embedder has a text tower: ``dinov3_patch`` is
 vision-only and ``embed_text`` returns None there, which is reported as n/a
 rather than silently skipped.
@@ -48,6 +54,51 @@ def _split(clips: dict, sim_fraction: float, seed: int) -> tuple[list[int], list
     return _split_media_ids(clips, sim_fraction, np.random.RandomState(seed))
 
 
+#: SAM3's own operating point: a detection whose score clears 0.5 (#5213).
+SAM3_NATIVE_CUT = 0.5
+
+
+def _load_sam3(root: Path, which: str):
+    """``(cat, medias) -> ({id: score}, query)`` from ``sam3_score_5213.py``'s shards (#5213).
+
+    An image's score for a class is its best detection over the class's prompts in *which*
+    (``typed``, ``noun``, or ``both``): a merged class ("car", "truck") takes the max over its members.
+    """
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    table = json.loads((root / "prompts.json").read_text())["classes"]
+    shards = sorted(p for p in root.glob("shard_*_of_*.npz") if "limit" not in p.name)
+    if not shards:
+        raise SystemExit(f"no full shards in {root}")
+    n = int(shards[0].name.split("_of_")[1].split(".")[0])
+    if len(shards) != n:
+        raise SystemExit(f"{root}: {len(shards)} of {n} shards present")
+    ids, top1, prompts = [], [], None
+    for p in shards:
+        z = np.load(p, allow_pickle=True)
+        prompts = list(z["prompts"]) if prompts is None else prompts
+        if list(z["prompts"]) != prompts:
+            raise SystemExit(f"{p}: prompt list differs from the first shard's")
+        ids.extend(z["ids"].tolist())
+        top1.append(z["top1"].astype(np.float32))
+    mat = np.concatenate(top1)
+    row = {i: k for k, i in enumerate(ids)}
+    col = {q: j for j, q in enumerate(prompts)}
+    common.log(f"SAM3 scores: {mat.shape[0]} images x {mat.shape[1]} prompts from {n} shards ({which})")
+
+    def score(cat: str, medias: dict):
+        cls, _ = scale_bands.parse_cell(cat)
+        kinds = ("typed", "noun") if which == "both" else (which,)
+        qs = [q for k in kinds for q in table[cls][k]]
+        best = mat[:, [col[q] for q in qs]].max(axis=1)
+        missing = [i for i in medias if i not in row]
+        if missing:
+            raise SystemExit(f"{cat}: {len(missing)} pool images have no SAM3 score (e.g. {missing[:3]})")
+        return {i: float(best[row[i]]) for i in medias}, " | ".join(qs)
+
+    return score
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, help="experiment results dir (for prepare_info.json)")
@@ -58,6 +109,8 @@ def main() -> int:
         help="Also write per-media text predictions here (same schema as VTS_DUMP_TEST_SCORES), "
         "so a typed query's errors can be inspected the same way a detector's are.",
     )
+    ap.add_argument("--sam3", default=None, help="sam3_score_5213.py output dir: score with SAM3, not the text tower")
+    ap.add_argument("--sam3-prompts", default="typed", choices=["typed", "noun", "both"])
     args = ap.parse_args()
 
     from sklearn.metrics import average_precision_score, roc_auc_score
@@ -88,7 +141,12 @@ def main() -> int:
     common.log(f"cost weights at inclusion {cfg.INCLUSION}: fpr x{wf:g}, fnr x{wn:g}")
     rows: list[dict] = []
 
+    sam3 = _load_sam3(Path(args.sam3), args.sam3_prompts) if args.sam3 else None
+
     for ds, per_emb in prepare.get("datasets", {}).items():
+        if sam3 is not None:
+            # One pass per dataset: SAM3 does not depend on the cell's embedder; any pickle gives ids + labels.
+            per_emb = dict(list(per_emb.items())[:1])
         for emb, info in per_emb.items():
             cats = info.get("selected_categories") or []
             if not cats:
@@ -108,12 +166,18 @@ def main() -> int:
             # a number rather than a blank.
             text_emb = cfg.text_embedder(emb)
             pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
+            if sam3 is not None:
+                emb = f"sam3_{args.sam3_prompts}"
             if not pkl.exists():
                 common.log(f"SKIP {ds} x {emb}: no text pickle {pkl.name}")
                 continue
 
             # Probe the text tower once before loading a multi-GB pickle.
-            probe = embed_text_query("a photo", "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
+            probe = (
+                True
+                if sam3 is not None
+                else embed_text_query("a photo", "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
+            )
             if probe is None:
                 common.log(f"{ds} x {emb}: NO TEXT TOWER on {text_emb} (vision-only) - recorded as n/a")
                 for cat in cats:
@@ -135,8 +199,12 @@ def main() -> int:
                 # measured a *different sort* from the one every arm opened on,
                 # so the zero-click anchor was not the run's own seed sort.
                 query = cfg.seed_query_text(ds, cat) or cat
-                tvec = embed_text_query(query, "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
-                if tvec is None:
+                tvec = (
+                    None
+                    if sam3 is not None
+                    else embed_text_query(query, "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
+                )
+                if sam3 is None and tvec is None:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                     continue
 
@@ -146,7 +214,10 @@ def main() -> int:
                 medias_cat = evaluable_pool(medias, cat)
 
                 # Same scorer the seed phase uses, text vector in place of a crop.
-                sims = style.exemplar_sims(medias_cat, np.asarray(tvec, dtype=np.float32))
+                if sam3 is not None:
+                    sims, query = sam3(cat, medias_cat)
+                else:
+                    sims = style.exemplar_sims(medias_cat, np.asarray(tvec, dtype=np.float32))
                 ids = sorted(medias_cat.keys())
                 scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
                 labels = np.asarray([1 if media_is_positive(medias_cat[i], cat) else 0 for i in ids])
@@ -261,6 +332,12 @@ def main() -> int:
                         )
                         line_cols[f"text_oracle_recall_{tag}"] = round(1.0 - o_fnr, 6)
                         line_cols[f"text_oracle_fpr_{tag}"] = round(o_fpr, 6)
+                    if sam3 is not None:
+                        nat = detection_metrics(s, y, SAM3_NATIVE_CUT)
+                        line_cols["text_native_precision"] = round(nat["precision"], 6)
+                        line_cols["text_native_recall"] = round(nat["recall"], 6)
+                        line_cols["text_native_f1"] = round(nat["f1"], 6)
+                        line_cols["text_native_k"] = int((s > SAM3_NATIVE_CUT).sum())
                     rows.append(
                         {
                             "dataset": ds,
