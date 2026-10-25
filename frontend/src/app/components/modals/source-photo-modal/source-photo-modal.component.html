@@ -10,11 +10,13 @@
     @if (v.kind === 'found') {
       <div class="source-photo-stage">
         <vt-image-viewer
+          #photoViewer
           [media]="v.photo"
           [datasetId]="v.datasetId"
           [outlineBox]="v.box"
           [regionDraw]="false"
         />
+        <vt-image-view-controls [viewer]="photoViewer" />
       </div>
       <p class="source-photo-caption">
         {{ v.photo.filename || 'Photo #' + v.mediaId }}

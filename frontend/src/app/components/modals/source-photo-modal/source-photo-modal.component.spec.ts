@@ -86,6 +86,46 @@ describe('SourcePhotoModalComponent', () => {
     expect(text()).toContain('b.jpg');
   });
 
+  it("gives the photo the centre panel's toolbar and zoom/rotate keys (#5227)", async () => {
+    await answerSource({ dataset_id: 'photos', media_id: 2, box: [0.1, 0.2, 0.3, 0.4] });
+    await answerPhoto();
+    const viewer = fixture.debugElement.query((d) => d.componentInstance instanceof ImageViewerComponent)
+      .componentInstance as ImageViewerComponent;
+    const toolbar = fixture.nativeElement.querySelector('.image-view-controls') as HTMLElement;
+    const control = (label: string) => toolbar.querySelector(`[aria-label="${label}"]`) as HTMLElement;
+
+    for (const label of ['Rotate image left', 'Rotate image right', 'Zoom out', 'Zoom in', 'Zoom level', 'Reset image view']) {
+      expect(control(label)).toBeTruthy();
+    }
+    // Nothing is voted on here, so no Marquee or Highlight to lead the strip.
+    expect(toolbar.querySelector('.ivc-btn-toggle')).toBeNull();
+    expect(toolbar.querySelector('.ivc-sep')).toBeNull();
+
+    control('Zoom in').click();
+    control('Rotate image right').click();
+    expect(viewer.zoom()).toBeGreaterThan(1);
+    expect(viewer.rotation()).toBe(90);
+    control('Reset image view').click();
+    TestBed.tick();
+    expect(viewer.zoom()).toBe(1);
+    expect(viewer.rotation()).toBe(0);
+    expect(toolbar.querySelector('.ivc-zoom-label')!.textContent).toBe('1×');
+
+    // The ranking's shortcuts are off under a modal; the overlay answers these.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '+' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '[' }));
+    expect(viewer.zoom()).toBeGreaterThan(1);
+    expect(viewer.rotation()).toBe(-90);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '-' }));
+    expect(viewer.zoom()).toBeLessThan(1.15);
+    // Ctrl/Cmd with -/+ is the browser's page zoom; leave it alone.
+    const pageZoom = new KeyboardEvent('keydown', { key: '-', ctrlKey: true, cancelable: true });
+    const before = viewer.zoom();
+    document.dispatchEvent(pageZoom);
+    expect(viewer.zoom()).toBe(before);
+    expect(pageZoom.defaultPrevented).toBe(false);
+  });
+
   it('never moves the active pair', async () => {
     await answerSource({ dataset_id: 'photos', media_id: 2, box: null });
     await answerPhoto();
