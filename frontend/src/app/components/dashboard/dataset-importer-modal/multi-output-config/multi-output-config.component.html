@@ -96,27 +96,3 @@
     <p class="info-text">Tick at least one kind of media to import.</p>
   }
 </div>
-
-<!-- Shared across every dataset of the import, so rendered once rather than
-     inside each row's Details. Same two toggles as the single-dataset Advanced
-     block. -->
-<div class="form-group">
-  <label class="form-label" [for]="idPrefix() + '-projection'" title="Build the Browse map — and its region signposts, where supported — now, while importing. Costs extra time up front but makes Browse open instantly, already lettered. When off, the map and signs are built the first time you open Browse.">
-    <input
-      [id]="idPrefix() + '-projection'"
-      type="checkbox"
-      [ngModel]="buildProjection()"
-      (ngModelChange)="buildProjectionChange.emit($event)"
-    />
-    Build Browse map now
-  </label>
-  <label class="form-label" [for]="idPrefix() + '-near-dupes'" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
-    <input
-      [id]="idPrefix() + '-near-dupes'"
-      type="checkbox"
-      [ngModel]="mergeNearDuplicates()"
-      (ngModelChange)="mergeNearDuplicatesChange.emit($event)"
-    />
-    Merge near-duplicates
-  </label>
-</div>

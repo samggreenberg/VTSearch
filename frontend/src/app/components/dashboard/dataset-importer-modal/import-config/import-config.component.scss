@@ -6,17 +6,26 @@
   display: contents;
 }
 
-// The Multi-Dataset box reads as one line: box, label text and hint icon
-// inline, like the other checkbox labels in the importer forms.
-.multi-toggle-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
+// Multi-Dataset summary standing in for the dropdown: the ticked kinds, then
+// a muted note on where they are set.  Margin-free: the enclosing
+// `.form-group` owns the gap to the label above it (style-guide
+// anti-pattern 14).
+.multi-summary {
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  font-size: var(--font-md);
 }
 
-.multi-toggle {
-  margin: 0;
+.multi-summary-empty {
+  color: var(--text-warning);
+}
+
+.multi-summary-hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 // Detection hint shown below the output-media-type dropdown after the

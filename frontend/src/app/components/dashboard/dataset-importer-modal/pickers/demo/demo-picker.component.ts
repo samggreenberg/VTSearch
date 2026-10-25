@@ -10,7 +10,7 @@ import { DemoDatasetEntry } from '../../../../../generated/api-client/models/dem
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { composeEmbedders, getTabLabel, mediaTypeIconsById, mediaTypeLabels } from '../shared/media-type.util';
-import { OutputDraft, demoOutputDrafts, outputsFromDrafts } from '../shared/multi-output.util';
+import { OutputDraft, checkedKindsSummary, demoOutputDrafts, outputsFromDrafts } from '../shared/multi-output.util';
 import { sortRowsByColumn } from '../../../../../utils/sort-rows';
 import { demoSortValue } from '../shared/demo-sort';
 
@@ -40,8 +40,9 @@ export class DemoPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
-  /** The Multi-Dataset editor, mounted in place of the Advanced block while
-   *  :prop:`multiDataset` is on. */
+  /** The Multi-Dataset editor, projected into the Advanced block in place of
+   *  the single dataset's fields while :prop:`multiDataset` is on (#4703,
+   *  #5230). */
   readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   readonly guessedMediaType = input('');
@@ -113,8 +114,8 @@ export class DemoPickerComponent {
 
   /** Multi-Dataset mode: the selected demo becomes one linked dataset per
    *  ticked row of :prop:`outputDrafts` (its photos, and the faces cut out of
-   *  them, say).  Read by the parent modal (the box above the dropdown, and
-   *  the Import button), hence signals. */
+   *  them, say).  Read by the parent modal (the dropdown's summary line, the
+   *  footer toggle and the Import button), hence signals. */
   readonly multiDataset = signal(false);
   readonly outputDrafts = signal<OutputDraft[]>([]);
   /** The row whose Details opened the clipper chooser, or ``null`` when the
@@ -468,6 +469,13 @@ export class DemoPickerComponent {
    *  least one ticked row in multi mode. */
   get hasOutputs(): boolean {
     return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
+  /** The ticked rows' kinds (``"Image, Document"``) for the line that stands
+   *  in for the media-type dropdown in multi mode, the list itself being
+   *  under Advanced (#5230). */
+  get multiDatasetSummary(): string {
+    return checkedKindsSummary(this.outputDrafts(), this.mediaTypes());
   }
 
   /** Invoked via a listener bound on the sibling `<vt-source-picker>`

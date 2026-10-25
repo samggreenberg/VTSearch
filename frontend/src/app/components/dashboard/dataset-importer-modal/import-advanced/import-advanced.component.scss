@@ -18,6 +18,19 @@
   margin-top: var(--space-xl);
 }
 
+// The Multi-Dataset box reads as one line: box, label text and hint icon
+// inline, like the other checkbox labels in the importer forms.
+.multi-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.multi-toggle {
+  margin: 0;
+}
+
 // Sized to its own label rather than stretched across the modal by the
 // enclosing `.form-group`'s column layout.
 .clipper-btn {

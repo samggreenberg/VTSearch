@@ -199,6 +199,22 @@ export function demoOutputDrafts(mediaTypes: MediaTypeInfo[], demoType: string, 
   }));
 }
 
+/** A row's label: its category's media-type name (``"Image"``), or the raw
+ *  ``type_id`` before the media types have loaded. */
+export function categoryLabel(mediaTypes: MediaTypeInfo[], category: string): string {
+  return mediaTypes.find((m) => m.type_id === category)?.name.trim() || category;
+}
+
+/** The ticked rows' labels, joined (``"Image, Document"``), or ``''`` when
+ *  none is ticked: the summary that stands in for the media-type dropdown
+ *  while the list itself sits under Advanced (#5230). */
+export function checkedKindsSummary(drafts: OutputDraft[], mediaTypes: MediaTypeInfo[]): string {
+  return drafts
+    .filter((d) => d.checked)
+    .map((d) => categoryLabel(mediaTypes, d.category))
+    .join(', ');
+}
+
 /** The request entry for one ticked draft. */
 export function draftToOutputRequest(draft: OutputDraft): OutputRequest {
   const out: OutputRequest = {

@@ -1,7 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 
-import { FormsModule } from '@angular/forms';
-
 import {
   CleanerInfo,
   CleanerSelection,
@@ -17,7 +15,7 @@ import { IconComponent } from '../../../icon/icon.component';
 import { ImportAdvancedComponent } from '../import-advanced/import-advanced.component';
 import { ImportDefaultsService } from '../pickers/shared/import-defaults.service';
 import { mediaTypeLabels } from '../pickers/shared/media-type.util';
-import { OutputDraft, detectedCount, sourceRowsFor } from '../pickers/shared/multi-output.util';
+import { OutputDraft, categoryLabel, detectedCount, sourceRowsFor } from '../pickers/shared/multi-output.util';
 
 /** What the per-row Advanced block needs to know about one dataset type:
  *  the embedders, clippers and cleanup gates registered for it. */
@@ -45,16 +43,17 @@ const NO_TARGETS: string[] = [];
  *  the user's Import Defaults the first time its type's options arrive, the
  *  same way the single-dataset pickers seed theirs.
  *
- *  Each row hosts its own `<vt-import-advanced>`, opened by the row's
- *  "Details ▾" link rather than the modal's footer toggle (which the modal
- *  hides in multi mode: there is no single block for it to open).  The two
- *  ingest toggles that are shared across every dataset of the import render
- *  once, at the foot of the list, instead of inside every row. */
+ *  It renders inside the picker's own Advanced block (#5230), projected in
+ *  place of the single dataset's fields, right under the Multi-Dataset box
+ *  that switched it on.  Each row hosts its own nested `<vt-import-advanced>`,
+ *  opened by the row's "Details ▾" link.  The two ingest toggles shared across
+ *  every dataset of the import are not here: the enclosing block renders them
+ *  once, below this list, as it does in single-dataset mode. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-multi-output-config',
   standalone: true,
-  imports: [FormsModule, IconComponent, ImportAdvancedComponent],
+  imports: [IconComponent, ImportAdvancedComponent],
   templateUrl: './multi-output-config.component.html',
   styleUrl: './multi-output-config.component.scss',
 })
@@ -78,12 +77,6 @@ export class MultiOutputConfigComponent {
    *  the demo's own files alone (see `demoOutputDrafts`).  Its rows offer no
    *  include-media rows, and the Import Defaults never replace their sources. */
   readonly fixedSources = input(false);
-
-  /** The two ingest toggles shared across every dataset of the import. */
-  readonly buildProjection = input(false);
-  readonly buildProjectionChange = output<boolean>();
-  readonly mergeNearDuplicates = input(false);
-  readonly mergeNearDuplicatesChange = output<boolean>();
 
   /** A row's clipper "Details" was clicked: the parent opens its clipper
    *  chooser for that category, with the clippers of the row's dataset type. */
@@ -112,7 +105,7 @@ export class MultiOutputConfigComponent {
   }
 
   labelFor(draft: OutputDraft): string {
-    return this.category(draft)?.name.trim() || draft.category;
+    return categoryLabel(this.mediaTypes(), draft.category);
   }
 
   iconFor(draft: OutputDraft): string {

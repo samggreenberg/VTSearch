@@ -1,6 +1,8 @@
 import { ConverterInfo, DetectMediaTypeResponse, MediaTypeInfo } from '../../../../../models/api.models';
 import {
   buildOutputDrafts,
+  categoryLabel,
+  checkedKindsSummary,
   demoOutputDrafts,
   detectedCount,
   draftToOutputRequest,
@@ -175,5 +177,17 @@ describe('multi-output.util', () => {
       const drafts = tickCategory(tickCategory(base, 'image'), 'audio');
       expect(outputsFromDrafts(drafts).map((o) => o.category)).toEqual(['audio', 'image']);
     });
+  });
+
+  it('categoryLabel names the media type, or falls back to its id', () => {
+    expect(categoryLabel(mediaTypes, 'document')).toBe('Document');
+    expect(categoryLabel([], 'document')).toBe('document');
+  });
+
+  it('checkedKindsSummary joins the ticked rows in category order, or is empty', () => {
+    const base = buildOutputDrafts(mediaTypes, convertersByType);
+    expect(checkedKindsSummary(base, mediaTypes)).toBe('');
+    const drafts = tickCategory(tickCategory(base, 'image'), 'audio');
+    expect(checkedKindsSummary(drafts, mediaTypes)).toBe('Audio, Image');
   });
 });

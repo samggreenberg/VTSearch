@@ -14,52 +14,53 @@
     }
   </div>
 
-  @if (multiDataset()) {
-    <vt-multi-output-config
-      idPrefix="demo"
-      [fixedSources]="true"
-      [mediaTypes]="mediaTypes()"
-      [drafts]="outputDrafts()"
-      (draftsChange)="onOutputDraftsChange($event)"
-      [guessedMediaEmbedder]="guessedMediaEmbedder()"
-      [buildProjection]="buildProjection()"
-      (buildProjectionChange)="buildProjectionChange.emit($event)"
-      [mergeNearDuplicates]="mergeNearDuplicates()"
-      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-      (clipperChooserRequested)="openClipperChooserFor($event)"
-    ></vt-multi-output-config>
-  } @else {
-    <vt-import-advanced
-      [availableConverters]="[]"
-      [nativeType]="activeTab()"
-      [typeLabels]="mediaTypeLabels"
-      [convertTargets]="activeTabConvertsTo()"
-      [convertOptional]="activeTabConvertsToOptional()"
-      [selectedConvertTarget]="selectedConverterTarget()"
-      (selectedConvertTargetChange)="onConverterTargetChange($event)"
-      [embedders]="demoEmbedders()"
-      [clippers]="demoClippers()"
-      [cleaners]="cleaners()"
-      [selectedCleaners]="selectedCleaners()"
-      (selectedCleanersChange)="selectedCleaners.set($event)"
-      [showSourceSpecs]="false"
-      [sourceSpecs]="[]"
-      [selectedEmbedder]="selectedDemoEmbedder()"
-      (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-      [selectedPatchEmbedder]="selectedDemoPatchEmbedder()"
-      (selectedPatchEmbedderChange)="selectedDemoPatchEmbedder.set($event)"
-      [selectedStructuralEmbedder]="selectedDemoStructuralEmbedder()"
-      (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
-      [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
-      [selectedClipper]="selectedDemoClipper()"
-      [selectedClipperParams]="demoClipperParamValues()"
-      (clipperChooserRequested)="openClipperChooser()"
-      [buildProjection]="buildProjection()"
-      (buildProjectionChange)="buildProjectionChange.emit($event)"
-      [mergeNearDuplicates]="mergeNearDuplicates()"
-      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-    ></vt-import-advanced>
-  }
+  <vt-import-advanced
+    [availableConverters]="[]"
+    [nativeType]="activeTab()"
+    [typeLabels]="mediaTypeLabels"
+    [convertTargets]="activeTabConvertsTo()"
+    [convertOptional]="activeTabConvertsToOptional()"
+    [selectedConvertTarget]="selectedConverterTarget()"
+    (selectedConvertTargetChange)="onConverterTargetChange($event)"
+    [embedders]="demoEmbedders()"
+    [clippers]="demoClippers()"
+    [cleaners]="cleaners()"
+    [selectedCleaners]="selectedCleaners()"
+    (selectedCleanersChange)="selectedCleaners.set($event)"
+    [showSourceSpecs]="false"
+    [sourceSpecs]="[]"
+    [selectedEmbedder]="selectedDemoEmbedder()"
+    (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+    [selectedPatchEmbedder]="selectedDemoPatchEmbedder()"
+    (selectedPatchEmbedderChange)="selectedDemoPatchEmbedder.set($event)"
+    [selectedStructuralEmbedder]="selectedDemoStructuralEmbedder()"
+    (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
+    [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
+    [selectedClipper]="selectedDemoClipper()"
+    [selectedClipperParams]="demoClipperParamValues()"
+    (clipperChooserRequested)="openClipperChooser()"
+    [buildProjection]="buildProjection()"
+    (buildProjectionChange)="buildProjectionChange.emit($event)"
+    [mergeNearDuplicates]="mergeNearDuplicates()"
+    (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+    [showMultiToggle]="supportsMultiOutput && !effectiveSoloMediaType"
+    [multiDataset]="multiDataset()"
+    (multiDatasetChange)="setMultiDataset($event)"
+  >
+    <!-- Multi-Dataset: the list of datasets to make stands in for the
+         single dataset's fields, under the same Advanced toggle (#5230). -->
+    @if (multiDataset()) {
+      <vt-multi-output-config
+        idPrefix="demo"
+        [fixedSources]="true"
+        [mediaTypes]="mediaTypes()"
+        [drafts]="outputDrafts()"
+        (draftsChange)="onOutputDraftsChange($event)"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        (clipperChooserRequested)="openClipperChooserFor($event)"
+      ></vt-multi-output-config>
+    }
+  </vt-import-advanced>
 </div>
 
 <vt-clipper-chooser

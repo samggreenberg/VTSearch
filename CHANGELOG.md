@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Multi-Dataset sits under Advanced, with its list** (issue #5230). Add Dataset's **Multi-Dataset** box used to
+  sit above the *Dataset media type* dropdown while the **Datasets to make** list it opened landed at the foot of
+  the form, and the **Advanced ▾** toggle disappeared. The box now heads the Advanced section, and ticking it swaps
+  the single dataset's settings there for the list, each row with its own **Details ▾**; *Build Browse map now*
+  and *Merge near-duplicates* follow below, once for the whole import. With Advanced closed, a **Datasets to make**
+  line in the dropdown's place names the kinds ticked, or says none is (the reason **Import** is greyed out).
+
 - **Autopilot says Done on a detector made from an example** (issue #5229). A media example is a Good label from
   the moment the detector exists, and Autopilot read any label at the start of a run as "this detector is already
   trained", so a run that started from one never got Toasty's **Your detector is trained!** under **Dashboard**,

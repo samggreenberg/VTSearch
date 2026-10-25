@@ -39,6 +39,7 @@ describe('DatasetImporterModalComponent', () => {
       icon: '🖥',
       picker_view: 'server_folder',
       category: 'server',
+      supports_multi_output: true,
       fields: [
         { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
         { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
@@ -662,6 +663,32 @@ describe('DatasetImporterModalComponent', () => {
       expect(block.classList.contains('is-open')).toBe(true);
       expect(footerToggle()?.textContent?.trim()).toBe('Advanced ▴');
       expect(footerToggle()?.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('stays in Multi-Dataset mode, and opens the block that holds the list (#5230)', async () => {
+      flushImporters();
+      openServerFolder();
+      await settleZoneless(fixture);
+      component.serverFolderPicker().setMultiDataset(true);
+      await settleZoneless(fixture);
+      // The editor loads the option lists of its ticked row (the dropdown's audio).
+      httpMock.match((r) => r.url === '/api/embedders').forEach((r) => r.flush({ embedders: [] }));
+      httpMock.match((r) => r.url === '/api/clippers').forEach((r) => r.flush({ clippers: [] }));
+      httpMock.match((r) => r.url === '/api/cleaners').forEach((r) => r.flush({ cleaners: [] }));
+      await settleZoneless(fixture);
+
+      expect(component.activeImportAdvanced).toBe(component.serverFolderPicker().importAdvanced());
+      expect(footerToggle()?.textContent?.trim()).toBe('Advanced ▾');
+      // With the block shut, the summary keeps what the import makes in sight.
+      expect(fixture.nativeElement.querySelector('#sf-media-type')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.multi-summary')?.textContent).toContain('Audio');
+      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).toBeNull();
+
+      footerToggle()!.click();
+      await settleZoneless(fixture);
+
+      expect(fixture.nativeElement.querySelector('vt-server-folder-picker vt-import-advanced > vt-multi-output-config')).not.toBeNull();
+      expect((fixture.nativeElement.querySelector('#import-advanced-multi') as HTMLInputElement).checked).toBe(true);
     });
   });
 

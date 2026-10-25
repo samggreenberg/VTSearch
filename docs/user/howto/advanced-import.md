@@ -45,6 +45,11 @@ open it; pointing at **Advanced** names a changed embedder, clipper or cleanup.
   <img src="../assets/import-advanced.light.webp" alt="Step 2: in Advanced, (1) the kinds of media to include, (2) the embedder, (3) cleanup, (4) build the Browse map now, or merge near-copies" width="720" />
 </picture>
 
+Where the importer can make several datasets at once, the section opens with
+a **Multi-Dataset** box: tick it to make one dataset per kind of media you
+tick, each with its own settings in place of the ones above (see
+[Multi-Dataset import](../USER_GUIDE.md#multi-dataset-import-several-datasets-from-one-folder)).
+
 The **Folder** importer's own form (not under **Advanced**) also has
 **Reference files in place (don't copy)**: VTSearch reads the pictures where
 they are instead of keeping its own copy. That saves space, but the dataset
