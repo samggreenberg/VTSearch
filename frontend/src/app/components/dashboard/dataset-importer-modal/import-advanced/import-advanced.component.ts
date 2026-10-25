@@ -50,7 +50,7 @@ import { revealInScrollParent } from '../../../../utils/reveal-in-scroll-parent'
   imports: [FormsModule, SourceSpecsPickerComponent],
   templateUrl: './import-advanced.component.html',
   styleUrl: './import-advanced.component.scss',
-  host: { '[class.is-open]': 'advancedOpen()' },
+  host: { '[class.is-open]': 'advancedOpen() && hasContent' },
 })
 export class ImportAdvancedComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -274,6 +274,26 @@ export class ImportAdvancedComponent {
   /** Cleanup block is offered whenever the media type registers gates. */
   get showCleanupSection(): boolean {
     return this.cleaners().length > 0;
+  }
+
+  /** Whether opening the block would show anything.  Every field in it is
+   *  offered only when it poses a real choice, so a type with one embedder,
+   *  one clipper and no cleanup gates leaves the block empty once the ingest
+   *  toggles are hosted elsewhere - a Face row in the Multi-Dataset editor
+   *  (#5225).  Each host hides its toggle when this is false, rather than
+   *  offer a "Details ▾" that opens onto nothing.  Lists every top-level
+   *  ``@if`` of the template; a new field must be added here too. */
+  get hasContent(): boolean {
+    return (
+      this.hasSourceSpecsColumn ||
+      this.showConvertTargetPicker ||
+      this.showEmbedderPicker ||
+      this.patchEmbedderOptions.length > 0 ||
+      this.structuralEmbedderOptions.length > 0 ||
+      this.showStandaloneClipperButton ||
+      this.showCleanupSection ||
+      this.showIngestToggles()
+    );
   }
 
   /** Human label for a cleaner's checkbox row. */
