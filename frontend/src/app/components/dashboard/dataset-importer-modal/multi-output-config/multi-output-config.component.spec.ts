@@ -50,14 +50,16 @@ describe('MultiOutputConfigComponent', () => {
   afterEach(() => httpMock.verify());
 
   /** Answer the three option fetches for *mediaType*. */
-  function flushOptions(mediaType: string, embedders: Array<Record<string, unknown>> = [{ name: 'e1', is_default: true }]): void {
+  function flushOptions(
+    mediaType: string,
+    embedders: Array<Record<string, unknown>> = [{ name: 'e1', is_default: true }],
+    cleaners: Array<Record<string, unknown>> = [{ name: 'tidy', default_enabled: true }],
+  ): void {
     httpMock.expectOne((r) => r.url === '/api/embedders' && r.params.get('media_type') === mediaType).flush({ embedders });
     httpMock
       .expectOne((r) => r.url === '/api/clippers' && r.params.get('media_type') === mediaType)
       .flush({ clippers: [{ name: `${mediaType}_default`, parameters: [{ key: 'n', default: 3 }] }] });
-    httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({
-      cleaners: [{ name: 'tidy', default_enabled: true }],
-    });
+    httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({ cleaners });
   }
 
   function rows(): HTMLLIElement[] {
@@ -152,6 +154,23 @@ describe('MultiOutputConfigComponent', () => {
     (imageRow.querySelector('.mo-details-toggle') as HTMLButtonElement).click();
     await settleZoneless(fixture);
     expect(imageRow.querySelector('vt-source-specs-picker')).toBeNull();
+  });
+
+  // A demo's Face row: one embedder, one clipper, no cleanup gates, no
+  // include rows, and the ingest toggles live below the list, so its block
+  // has nothing to show and the row offers no Details link to open it (#5225).
+  it('offers no Details link on a row whose block would open onto nothing', async () => {
+    fixture.componentRef.setInput('fixedSources', true);
+    fixture.componentRef.setInput('drafts', demoOutputDrafts(mediaTypes, 'image', ['face'], 'face'));
+    await settleZoneless(fixture);
+    flushOptions('image');
+    flushOptions('face', [{ name: 'facenet', is_default: true }], []);
+    await settleZoneless(fixture);
+
+    const byLabel = (label: string) => rows().find((r) => r.querySelector('.mo-row-label')?.textContent?.trim() === label)!;
+    expect(byLabel('Image').querySelector('.mo-details-toggle')).not.toBeNull();
+    expect(byLabel('Face').querySelector('vt-import-advanced')).not.toBeNull();
+    expect(byLabel('Face').querySelector('.mo-details-toggle')).toBeNull();
   });
 
   it('a convert-out row offers Convert to but no include rows; a convert-in row the reverse', () => {

@@ -44,15 +44,18 @@
             @if (countHint(draft); as hint) {
               <span class="mo-row-count">{{ hint }}</span>
             }
-            <button
-              type="button"
-              class="link-btn mo-details-toggle"
-              (click)="adv.toggleAdvanced()"
-              [attr.aria-expanded]="adv.advancedOpen()"
-              [title]="adv.advancedToggleTitle"
-            >
-              Details {{ adv.advancedOpen() ? '▴' : '▾' }}
-            </button>
+            <!-- No link at all when the block would open onto nothing (#5225). -->
+            @if (adv.hasContent) {
+              <button
+                type="button"
+                class="link-btn mo-details-toggle"
+                (click)="adv.toggleAdvanced()"
+                [attr.aria-expanded]="adv.advancedOpen()"
+                [title]="adv.advancedToggleTitle"
+              >
+                Details {{ adv.advancedOpen() ? '▴' : '▾' }}
+              </button>
+            }
           </div>
           <vt-import-advanced
             #adv
