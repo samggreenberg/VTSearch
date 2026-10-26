@@ -92,7 +92,8 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
     print(f"  Chunk size: {chunk_size if chunk_size else 'whole dataset'}", flush=True)
     if source_description.get("stream_results"):
         neg = "included" if source_description.get("keep_negatives") else "dropped"
-        print(f"  Streaming: yes (hits written to the exporter per chunk; negatives {neg})", flush=True)
+        mode = "yes, as a labelset (label entries" if source_description.get("as_labelset") else "yes (hits"
+        print(f"  Streaming: {mode} written to the exporter per chunk; negatives {neg})", flush=True)
     if source_description.get("delete_after_detection"):
         print(
             "  Save to dashboard: until detection has run (the autofind_cli_delete_dataset setting then deletes it;"
@@ -1498,13 +1499,21 @@ class _SourceSpec:
             raise ValueError("This source produces one dataset; open it with load().")
         return _load_importer_outputs(self.importer_name, self.field_values, list(self.outputs), self.chunk_size)
 
-    def describe(self, *, stream_results: bool, keep_negatives: bool, save_dataset: bool = False) -> dict[str, Any]:
+    def describe(
+        self,
+        *,
+        stream_results: bool,
+        keep_negatives: bool,
+        save_dataset: bool = False,
+        as_labelset: bool = False,
+    ) -> dict[str, Any]:
         """Build the ``source_description`` block reported by ``--dry-run``."""
         common: dict[str, Any] = {
             "kind": self.kind,
             "chunk_size": self.chunk_size,
             "stream_results": stream_results,
             "keep_negatives": keep_negatives,
+            "as_labelset": as_labelset,
             "save_dataset": save_dataset,
         }
         if self.kind == "pickle":
@@ -1660,6 +1669,8 @@ def _run_dry_run(
     _validate_dry_run_source(sd)
     if exporter_name:
         _validate_dry_run_exporter(exporter_name, exporter_field_values)
+    if sd.get("stream_results"):
+        _streaming_exporter(exporter_name, as_labelset=bool(sd.get("as_labelset")))
     _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values, override_detectors)
 
 
@@ -1786,11 +1797,41 @@ def _run_live_pipeline(
     _run_exporter(exporter_name or "gui", exporter_field_values or {}, results, detector_mlps)
 
 
-def _list_streaming_exporter_names() -> list[str]:
-    """Return the names of exporters that support ``--stream-results``."""
+def _list_streaming_exporter_names(*, as_labelset: bool = False) -> list[str]:
+    """Return the names of exporters that support ``--stream-results`` (``--as-labelset`` when asked)."""
     from vtscore.exporters import list_exporters
 
-    return [exp.name for exp in list_exporters() if getattr(exp, "supports_streaming", False)]
+    flag = "supports_labelset_streaming" if as_labelset else "supports_streaming"
+    return [exp.name for exp in list_exporters() if getattr(exp, flag, False)]
+
+
+def _streaming_exporter(exporter_name: str | None, *, as_labelset: bool) -> Any:
+    """Resolve the exporter a streaming run writes to, refusing one that cannot stream.
+
+    *exporter_name* ``None`` is the ``gui`` default.  The error names the
+    exporters that can, which is what a user who picked the wrong one needs.
+    Shared by the run and its ``--dry-run``, so the plan fails where the run
+    would.
+    """
+    from vtscore.exporters import get_exporter
+
+    exporter = get_exporter(exporter_name or "gui")
+    if exporter is None:
+        available = _list_exporter_names()
+        raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
+    if as_labelset:
+        if not getattr(exporter, "supports_labelset_streaming", False):
+            streaming = ", ".join(_list_streaming_exporter_names(as_labelset=True))
+            raise ValueError(
+                f"Exporter '{exporter.name}' cannot stream a labelset (--stream-results --as-labelset). "
+                f"Exporters that can: {streaming}."
+            )
+    elif not getattr(exporter, "supports_streaming", False):
+        streaming = ", ".join(_list_streaming_exporter_names())
+        raise ValueError(
+            f"Exporter '{exporter.name}' does not support --stream-results. Streaming-capable exporters: {streaming}."
+        )
+    return exporter
 
 
 def _stream_hit_records(
@@ -1839,6 +1880,24 @@ def _stream_hit_records(
                     yield det_name, {**hit, "label": "bad"}
 
 
+def _stream_label_records(records: Iterator[tuple[str, dict[str, Any]]]) -> Iterator[dict[str, Any]]:
+    """Turn a ``(detector_name, hit)`` stream into label entries, each naming its detector.
+
+    Each hit becomes the elements a labelset export records for it
+    (:func:`~vtscore.datasets.labelset.elements_for_media`, so a dupe set
+    expands to its members), serialised and passed through
+    :func:`~vtscore.datasets.labelset.label_entry_for_export`.  The hit's
+    ``score`` and media ``id`` stay behind: a score is a number this head
+    measured, and the id is this run's numbering, gone once it ends.  Lazy, like
+    the hit stream it wraps.
+    """
+    from vtscore.datasets.labelset import elements_for_media, label_entry_for_export  # noqa: PLC0415
+
+    for detector_name, hit in records:
+        for element in elements_for_media(hit, hit["label"]):
+            yield {**label_entry_for_export(element.to_dict()), "detector": detector_name}
+
+
 def _run_streaming_pipeline(
     media_source: Iterator[dict[int, dict[str, Any]]],
     *,
@@ -1849,6 +1908,7 @@ def _run_streaming_pipeline(
     keep_negatives: bool,
     empty_error: str,
     dataset: "_RunDataset | None" = None,
+    as_labelset: bool = False,
 ) -> None:
     """Stream scored hits straight to a streaming-capable exporter.
 
@@ -1858,18 +1918,13 @@ def _run_streaming_pipeline(
     source with more items (and more hits) than fit in RAM.  *dataset*, when
     the run produces several (#4707), rides into the header as a ``dataset``
     block.
-    """
-    from vtscore.exporters import get_exporter
 
-    exporter = get_exporter(exporter_name or "gui")
-    if exporter is None:
-        available = _list_exporter_names()
-        raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
-    if not getattr(exporter, "supports_streaming", False):
-        streaming = ", ".join(_list_streaming_exporter_names())
-        raise ValueError(
-            f"Exporter '{exporter.name}' does not support --stream-results. Streaming-capable exporters: {streaming}."
-        )
+    With *as_labelset* the hits go out as label entries instead, through
+    ``export_labelset_streaming``: every detector's labels in one export, each
+    entry naming its detector, and a header carrying no threshold or balance
+    state (see :func:`_stream_label_records`).
+    """
+    exporter = _streaming_exporter(exporter_name, as_labelset=as_labelset)
     exporter.validate_cli_field_values(exporter_field_values or {})
 
     # Pull the first non-empty chunk so we can detect the media type and train
@@ -1905,7 +1960,19 @@ def _run_streaming_pipeline(
         header["dataset"] = dataset.to_dict()
 
     records = _stream_hit_records(first_chunk, iterator, detector_mlps, keep_negatives, routed)
-    result = exporter.export_cli_streaming(header, records, exporter_field_values or {})
+    if as_labelset:
+        label_header: dict[str, Any] = {
+            "media_type": media_type,
+            "detectors": list(detector_mlps),
+            "keep_negatives": bool(keep_negatives),
+        }
+        if dataset is not None:
+            label_header["dataset"] = dataset.to_dict()
+        result = exporter.export_labelset_streaming(
+            label_header, _stream_label_records(records), exporter_field_values or {}
+        )
+    else:
+        result = exporter.export_cli_streaming(header, records, exporter_field_values or {})
     message = result.get("message", "Export complete.")
     cli_progress.emit("export_complete", text=message, message=message)
 
@@ -1921,6 +1988,7 @@ def _run_pipeline(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     source_description: dict[str, Any] | None = None,
     skip_without_detectors: bool = False,
     dataset: "_RunDataset | None" = None,
@@ -2003,6 +2071,7 @@ def _run_pipeline(
                 override_detectors=override_detectors,
                 autofind_detectors=autofind_detectors,
                 keep_negatives=keep_negatives,
+                as_labelset=as_labelset,
                 empty_error=empty_error,
                 dataset=dataset,
             )
@@ -2523,6 +2592,7 @@ def _run_multi_source(
     dry_run: bool,
     stream_results: bool,
     keep_negatives: bool,
+    as_labelset: bool,
 ) -> None:
     """Run a multi-dataset source (#4707): one importer run, then detect and export per dataset.
 
@@ -2542,7 +2612,10 @@ def _run_multi_source(
     so one bad output costs nothing but its own results.
     """
     source_description = spec.describe(
-        stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
+        as_labelset=as_labelset,
     )
     if dry_run:
         _run_pipeline(
@@ -2555,6 +2628,7 @@ def _run_multi_source(
             dry_run=True,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            as_labelset=as_labelset,
             source_description=source_description,
             skip_without_detectors=save_dataset,
         )
@@ -2583,6 +2657,7 @@ def _run_multi_source(
             empty_error=f"No medias loaded for dataset {run.dataset.name!r} by importer '{spec.importer_name}'",
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            as_labelset=as_labelset,
             source_description=source_description,
             skip_without_detectors=True,
             dataset=run.dataset,
@@ -2615,6 +2690,7 @@ def _run_source(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
 ) -> None:
     """Optionally save *spec*'s dataset to the dashboard, then detect and export.
 
@@ -2640,7 +2716,12 @@ def _run_source(
     while the process is still single-threaded (the loader-lock/GIL deadlock
     guard) and seeds the stat-free ``packages_distributions`` before anything
     imports transformers (#3715).  A dry run loads nothing and skips it.
+
+    *as_labelset* is a form of streaming, so it is refused without
+    *stream_results* rather than ignored.
     """
+    if as_labelset and not stream_results:
+        raise ValueError("as_labelset streams the hits as a labelset, so it requires stream_results.")
     if settings_path:
         from vtscore.config import redirect_settings_path  # noqa: PLC0415
 
@@ -2660,10 +2741,14 @@ def _run_source(
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            as_labelset=as_labelset,
         )
         return
     source_description = spec.describe(
-        stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
+        as_labelset=as_labelset,
     )
     imported: dict[str, Any] | None = None
     if save_dataset and not dry_run:
@@ -2683,6 +2768,7 @@ def _run_source(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         source_description=source_description,
         skip_without_detectors=save_dataset,
     )
@@ -2699,6 +2785,7 @@ def _autodetect(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
 ) -> None:
@@ -2720,6 +2807,7 @@ def _autodetect(
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            as_labelset=as_labelset,
         )
     except Exception as e:
         cli_progress.emit_error(str(e))
@@ -2735,6 +2823,7 @@ def autodetect_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
 ) -> None:
@@ -2749,6 +2838,11 @@ def autodetect_main(
     the settings file's ``autofind_detectors`` list (which is then not read
     for this run; the file on disk is never modified).  ``--import-labels-into``
     uses it to run exactly the detector it just imported into.
+
+    *as_labelset*, with *stream_results*, streams the hits as label entries
+    (every detector's, each naming its detector, no scores) through the
+    exporter's ``export_labelset_streaming``, so the export reads back in
+    through a label importer.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path),
@@ -2758,6 +2852,7 @@ def autodetect_main(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
     )
@@ -2773,6 +2868,7 @@ def autodetect_importer_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
@@ -2795,6 +2891,7 @@ def autodetect_importer_main(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
     )
@@ -2810,6 +2907,7 @@ def autodetect_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
 ) -> None:
@@ -2827,6 +2925,7 @@ def autodetect_main_chunked(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
     )
@@ -2843,6 +2942,7 @@ def autodetect_importer_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
@@ -2868,6 +2968,7 @@ def autodetect_importer_main_chunked(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
     )

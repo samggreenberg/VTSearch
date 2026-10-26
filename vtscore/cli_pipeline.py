@@ -33,6 +33,7 @@ _TOP_LEVEL_KEYS = {
     "chunk_size",
     "stream_results",
     "keep_negatives",
+    "as_labelset",
     "import_labels",
     "exporter",
     "tempimport",
@@ -132,6 +133,11 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'stream_results:' requires 'chunk_size:' (it streams chunk by chunk).")
     if keep_negatives and not stream_results:
         raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
+    as_labelset = raw.get("as_labelset", False)
+    if not isinstance(as_labelset, bool):
+        raise ValueError("'as_labelset:' must be a boolean.")
+    if as_labelset and not stream_results:
+        raise ValueError("'as_labelset:' only applies with 'stream_results:'.")
     tempimport = raw.get("tempimport", False)
     if not isinstance(tempimport, bool):
         raise ValueError("'tempimport:' must be a boolean.")
@@ -163,6 +169,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "chunk_size": chunk_size,
         "stream_results": stream_results,
         "keep_negatives": keep_negatives,
+        "as_labelset": as_labelset,
         "tempimport": tempimport,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
@@ -488,4 +495,5 @@ def _dispatch(config: dict[str, Any]) -> None:
         override_detectors=detectors,
         stream_results=config.get("stream_results", False),
         keep_negatives=config.get("keep_negatives", False),
+        as_labelset=config.get("as_labelset", False),
     )
