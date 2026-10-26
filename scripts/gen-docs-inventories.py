@@ -29,8 +29,9 @@ Region ids
 ----------
 Fixed ids: ``embedders``, ``embedder-files``, ``embedder-dims``,
 ``media-types``, ``plugin-families``, ``achievements`` (the achievement
-catalog, ``vtsearch.achievements_catalog``), ``lessons-index`` (the last one
-indexes ``scripts/experiments/lessons/`` off the filesystem rather than a
+catalog, ``vtsearch.achievements_catalog``), ``lessons-index`` and
+``scratch-deletions-index`` (the last two index ``scripts/experiments/lessons/``
+and ``scripts/experiments/scratch-deletions/`` off the filesystem rather than a
 registry).
 Parameterised ids:
 ``plugins:<family>`` (roster of one plugin family, e.g.
@@ -259,6 +260,12 @@ LESSONS_DIR = REPO_ROOT / "scripts" / "experiments" / "lessons"
 LESSON_TITLE_RE = re.compile(r"^# (?P<date>\d{4}-\d{2}-\d{2})\s*—\s*(?P<title>.+)$")
 
 
+def _newest_first(directory: Path) -> list[Path]:
+    """The ``YYYY-MM-DD-slug.md`` files in *directory*: newest day first, and
+    alphabetical by slug within a day."""
+    return sorted(directory.glob("*.md"), key=lambda p: (p.name[:10], [-ord(c) for c in p.name[10:]]), reverse=True)
+
+
 def build_lessons_index() -> str:
     """Index of `scripts/experiments/lessons/`, newest first.
 
@@ -271,9 +278,7 @@ def build_lessons_index() -> str:
     rows = []
     # Newest day first; within a day, alphabetical, because the flat file it
     # replaced recorded no finer ordering than the date.
-    for path in sorted(
-        LESSONS_DIR.glob("*.md"), key=lambda p: (p.name[:10], [-ord(c) for c in p.name[10:]]), reverse=True
-    ):
+    for path in _newest_first(LESSONS_DIR):
         first = path.read_text(encoding="utf-8").splitlines()[0]
         match = LESSON_TITLE_RE.match(first)
         if not match:
@@ -295,6 +300,38 @@ def build_lessons_index() -> str:
     return _table(["Date", "Lesson", "Issue"], rows)
 
 
+SCRATCH_DELETIONS_DIR = REPO_ROOT / "scripts" / "experiments" / "scratch-deletions"
+SCRATCH_DELETION_TITLE_RE = re.compile(r"^# (?P<date>\d{4}-\d{2}-\d{2}):\s*(?P<title>.+)$")
+
+
+def build_scratch_deletions_index() -> str:
+    """Index of `scripts/experiments/scratch-deletions/`, newest first.
+
+    The same shape as :func:`build_lessons_index`, for the same reason: one
+    cleanup per file, so two sessions recording deletes add two files instead of
+    two sections at the top of one.  The title is the heading verbatim; it
+    already names the size and the issues, so neither gets a column.
+    """
+    rows = []
+    # Within a day, alphabetical by slug.  The entries split out of the flat file
+    # were given slugs that reproduce its newest-first order for the days that
+    # had more than one.
+    for path in _newest_first(SCRATCH_DELETIONS_DIR):
+        first = path.read_text(encoding="utf-8").splitlines()[0]
+        match = SCRATCH_DELETION_TITLE_RE.match(first)
+        if not match:
+            raise SystemExit(
+                f"ERROR: {path.relative_to(REPO_ROOT)} must start with '# YYYY-MM-DD: title'; found {first!r}"
+            )
+        if match.group("date") != path.name[:10]:
+            raise SystemExit(
+                f"ERROR: {path.relative_to(REPO_ROOT)} is dated {match.group('date')} in its heading "
+                f"but {path.name[:10]} in its name; the index sorts by the name"
+            )
+        rows.append([match.group("date"), f"[{match.group('title')}](scratch-deletions/{path.name})"])
+    return _table(["Date", "Cleanup"], rows)
+
+
 def build_region(region_id: str) -> str:
     fixed = {
         "embedders": build_embedders,
@@ -304,6 +341,7 @@ def build_region(region_id: str) -> str:
         "plugin-families": build_plugin_families,
         "achievements": build_achievements,
         "lessons-index": build_lessons_index,
+        "scratch-deletions-index": build_scratch_deletions_index,
     }
     if region_id in fixed:
         return fixed[region_id]()
