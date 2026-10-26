@@ -24,8 +24,8 @@ misses more; toward False Positives it returns the most, with more wrong ones
 among them; the middle radio weighs the two mistakes equally. The line keeps
 the top of the ranking, and how far down it reaches is no fixed count: it is
 worked out from your labels and from how common matches look in this
-collection. In the example the middle radio keeps the top 36 and the False
-Positives radio the top 65. So moving toward False Positives moves the line
+collection. In the example the middle radio keeps the top 32 and the False
+Positives radio the top 81. So moving toward False Positives moves the line
 down by a band of borderline pictures, and everything the line kept before it
 still keeps.
 
@@ -35,9 +35,9 @@ the **Autopilot** tab found on it:
 - **Untested · top 32 kept** - nothing has measured the line on this
   collection yet. A Threshold that keeps a different count moves the line
   straight away.
-- **Tested · likely 55–80% right, about half of them found (checked 32) ·
-  48 kept** - the Tune autopilot has measured it with random picks from
-  either side of the line, and the note says how much of what it keeps is
+- **Tested · likely 88–100% right, about three quarters of them found
+  (checked 41) · 32 kept** - the Tune autopilot has measured it with random
+  picks from either side of the line, and the note says how much of what it keeps is
   likely right and how much of what the collection holds it likely found;
   see [Tuning a detector](../USER_GUIDE.md#tuning-a-detector).
   Moving the Threshold after a test reads *tested at another line* until you
@@ -67,7 +67,7 @@ At the top of the left-hand panel:
 
 1. Click the radio under the **False Positives** end of the spectrum: from
    the middle radio, that is the one to its left.
-2. Read the note under it. It ends with how many the line keeps now (**65
+2. Read the note under it. It ends with how many the line keeps now (**81
    kept** in the example): the line has moved down, so more pictures sit
    above it and the count of **Unverified Good** on the right grows by the
    pictures it has just let in. It begins *Tested at another line*: the
@@ -107,8 +107,9 @@ below the line are left for you to check by hand.
    matches, at every band edge, from the picks alone. Returning more (to the
    right) catches more matches, but the share that are right falls. The
    upright line is where your **Line** is now, and the legend under the chart
-   says what it keeps (**Line: the top 48**). Moving the Threshold toward
-   False Positives moves the Line to the right.
+   says what it keeps (**Line: the top 32** in the example, the middle radio's
+   line that Tune tested first). Moving the Threshold toward False Positives
+   moves the Line to the right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
