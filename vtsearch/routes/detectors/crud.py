@@ -236,6 +236,7 @@ def delete_detector(name: str):
 @detectors_crud_bp.route("/api/detectors/<name>/rename", methods=["PUT"])
 @detectors_crud_bp.arguments(DetectorRenameRequestSchema)
 @detectors_crud_bp.response(200, DetectorRenameResponseSchema)
+@detectors_crud_bp.alt_response(400, description="Empty name after stripping.")
 @detectors_crud_bp.alt_response(404, description="Detector not found.")
 @detectors_crud_bp.alt_response(409, description="A detector with the new name already exists.")
 def rename_detector(body: dict, name: str):
