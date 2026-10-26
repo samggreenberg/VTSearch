@@ -40,6 +40,4 @@ Two constraints shaped it, and both still bind anything built on top:
 
 <!-- item-sep -->
 
-- [ ] #5285 — Labelset streaming export mode, if a labelset outgrows RAM
-
 <!-- item-sep -->
