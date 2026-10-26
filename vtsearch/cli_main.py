@@ -299,6 +299,34 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--override-clipper",
+        type=str,
+        default=None,
+        dest="override_clipper",
+        metavar="NAME",
+        help=(
+            "Score every detector at this clipper's granularity instead of the one "
+            "its input_spec records (e.g. sound_tiling, with "
+            "--override-clipper-param duration=5, for a detector trained on 2 s "
+            "tiles). The dataset is re-clipped to it unless already clipped to match; "
+            "a *_default clipper scores each media as loaded. The clipper must clip "
+            "the media type each detector scores. Niche: the run already re-clips "
+            "to each detector's own input_spec. Used with --autodetect."
+        ),
+    )
+    parser.add_argument(
+        "--override-clipper-param",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        dest="override_clipper_params",
+        help=(
+            "Set one of --override-clipper's parameters (repeatable); the rest keep "
+            "the clipper's defaults. A key the clipper does not take is refused, "
+            "with the names of the ones it does."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
@@ -374,6 +402,13 @@ def _maybe_list_plugins(args, parser) -> None:
         sys.exit(0)
 
 
+#: The repeatable flags, whose list-valued dest is not the flag's own spelling.
+_REPEATABLE_FLAGS = {
+    "label_importer_fields": "--label-importer-field",
+    "override_clipper_params": "--override-clipper-param",
+}
+
+
 def _check_pipeline_flags(args, parser, remaining) -> None:
     """Refuse ``--pipeline FILE`` beside a flag the YAML file declares instead.
 
@@ -404,11 +439,13 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
         "label_importer_fields",
         "create_detector",
         "detector_media_type",
+        "override_clipper",
+        "override_clipper_params",
         "dry_run",
         "tempimport",
     ):
         if getattr(args, conflicting, None):
-            cli_flag = f"--{conflicting.replace('_', '-')}"
+            cli_flag = _REPEATABLE_FLAGS.get(conflicting) or f"--{conflicting.replace('_', '-')}"
             parser.error(f"--pipeline cannot be combined with {cli_flag}; declare it in the YAML file instead.")
     # --label-importer always has a value (its default), so test for a change.
     if args.label_importer != parser.get_default("label_importer"):
@@ -752,6 +789,32 @@ def _given_on_command_line(parser, dests: list[str]) -> list[str]:
     return [dest for dest in dests if getattr(given, dest, _NOT_GIVEN) is not _NOT_GIVEN]
 
 
+def _override_clipper(args, parser) -> dict[str, Any] | None:
+    """The ``--override-clipper`` / ``--override-clipper-param`` pair as an ``input_spec``, or ``None``.
+
+    Checked here, at startup, by the same resolver the run uses
+    (:func:`~vtscore.detectors.input_spec.resolve_clipper_spec`): an unknown
+    clipper, a key it does not take, or a value it refuses is a usage error
+    before anything is imported.
+    """
+    params: dict[str, str] = {}
+    for item in args.override_clipper_params or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            parser.error(f"--override-clipper-param expects KEY=VALUE, got {item!r}")
+        params[key.strip()] = value
+    if not args.override_clipper:
+        if params:
+            parser.error("--override-clipper-param only applies with --override-clipper <name>")
+        return None
+    from vtscore.detectors.input_spec import resolve_clipper_spec
+
+    try:
+        return resolve_clipper_spec(args.override_clipper, params)
+    except ValueError as exc:
+        parser.error(f"--override-clipper: {exc}")
+
+
 def _label_importer_field_values(args, parser) -> dict[str, str]:
     """Collect ``--label-importer-file`` / ``--label-importer-field`` into field values."""
     field_values: dict[str, str] = {}
@@ -781,12 +844,15 @@ def _dispatch_autodetect(
     stream_results,
     keep_negatives,
     save_dataset,
+    override_clipper=None,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path.
 
     ``--import-labels-into NAME`` makes NAME the run's only detector, in place
     of the settings file's AutoFind list, so a labelled detector can be run
     headlessly without first moving it to AutoFind in the UI (#4235).
+    *override_clipper* is ``--override-clipper``'s ``input_spec``
+    (:func:`_override_clipper`).
     """
     from vtscore.cli import (
         autodetect_importer_main,
@@ -831,6 +897,7 @@ def _dispatch_autodetect(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=[args.import_labels_into] if args.import_labels_into else None,
+        override_clipper=override_clipper,
         **source_kwargs,
     )
 
@@ -903,6 +970,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         from vtscore.cli import _STREAM_CANNOT_SAVE
 
         parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
+    override_clipper = _override_clipper(args, parser)
 
     _maybe_import_labels(args, parser, settings_path, dry_run, importer)
 
@@ -918,6 +986,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         stream_results,
         keep_negatives,
         save_dataset,
+        override_clipper,
     )
 
 

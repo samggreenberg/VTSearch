@@ -141,12 +141,13 @@ def _print_dry_run_plan(
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Print the autodetect plan that ``--dry-run`` would otherwise execute.
 
     With *override_detectors* the plan lists those instead of the settings
     file's *autofind_detectors*, and says so - the run will not read the
-    AutoFind list at all.
+    AutoFind list at all.  An *override_clipper* gets a line of its own.
     """
     print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
     print("", flush=True)
@@ -175,12 +176,48 @@ def _print_dry_run_plan(
                     f"  - {s['name']}  [media_type={s['media_type'] or '?'}, labels={s['labels']}, file={s['path']}]",
                     flush=True,
                 )
+    if override_clipper:
+        print(
+            f"Clipper override: {_describe_clipper_spec(override_clipper)} (in place of each detector's input_spec)",
+            flush=True,
+        )
     print("", flush=True)
 
     print(f"Exporter: {exporter_name or 'gui (default - print to console)'}", flush=True)
     if exporter_field_values:
         for k, v in exporter_field_values.items():
             print(f"  {k}: {v if v != '' else '(empty)'}", flush=True)
+
+
+def _describe_clipper_spec(spec: dict[str, Any] | None) -> str:
+    """``'sound_tiling' (duration=5.0, min_overlap=0.0)``: an ``input_spec`` in one phrase."""
+    if not spec or not spec.get("clipper"):
+        return "(none)"
+    params = spec.get("clipper_params") or {}
+    listed = f" ({', '.join(f'{k}={v}' for k, v in params.items())})" if params else ""
+    return f"{spec['clipper']!r}{listed}"
+
+
+def _resolve_override_clipper(override_clipper: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Validate an ``override_clipper`` and return it with its effective parameters.
+
+    *override_clipper* is ``input_spec``-shaped - ``{"clipper": name,
+    "clipper_params": {...}}`` - and goes through
+    :func:`~vtscore.detectors.input_spec.resolve_clipper_spec`, so an unknown
+    clipper or parameter fails before any media is loaded.  ``None`` (no
+    override) passes through.
+    """
+    if override_clipper is None:
+        return None
+    from vtscore.detectors.input_spec import resolve_clipper_spec  # noqa: PLC0415
+
+    name = override_clipper.get("clipper") if isinstance(override_clipper, dict) else None
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"override_clipper must be a mapping with a 'clipper' name, got {override_clipper!r}.")
+    params = override_clipper.get("clipper_params") or {}
+    if not isinstance(params, dict):
+        raise ValueError(f"override_clipper's 'clipper_params' must be a mapping, got {params!r}.")
+    return resolve_clipper_spec(name, params)
 
 
 def _list_exporter_names() -> list[str]:
@@ -257,6 +294,7 @@ def _load_and_train_detectors(
     media_type: str,
     snap: dict[int, dict[str, Any]],
     routed: "_RoutedSnapshots | None" = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Resolve, re-embed, and train a head for each named detector.
 
@@ -270,7 +308,11 @@ def _load_and_train_detectors(
     ``detector_skipped`` event.  Detectors that declare an ``input_spec`` (a
     clipper the detector was trained on) the loaded dataset wasn't clipped to
     match have the dataset re-clipped to that granularity at scoring time,
-    announced with a ``detector_reclip`` event.
+    announced with a ``detector_reclip`` event.  An *override_clipper* (an
+    ``input_spec`` from :func:`_resolve_override_clipper`) stands in for every
+    detector's own ``input_spec``, so each is scored at that granularity
+    instead (:func:`_override_reclip`); one whose type the clipper does not
+    clip raises :class:`ValueError`.
 
     When *routed* is given, each detector's threshold is calibrated on the
     snapshot **scoring will read** - the converted, re-clipped, re-embedded one
@@ -289,10 +331,7 @@ def _load_and_train_detectors(
     """
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.converter_routing import detector_can_score
-    from vtscore.detectors.input_spec import (
-        clipper_matches,
-        extract_input_spec_from_medias,
-    )
+    from vtscore.detectors.input_spec import extract_input_spec_from_medias
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.detectors.labelset_training import Haystack, train_from_labelset
     from vtscore.detectors.query_head import detector_text_query, head_score_embedder
@@ -336,25 +375,15 @@ def _load_and_train_detectors(
         # at scoring time (auto-clip + re-embed) instead of skipping. The clipper
         # spec rides on the detector's scoring info and is applied by
         # ``route_and_embed``. A matching (or absent) clipper needs no re-clip.
+        # A clipper override takes that spec's place for every detector (#5282).
         det_input_spec = det.get("input_spec") if isinstance(det.get("input_spec"), dict) else None
-        reclip_clipper = ""
-        reclip_params: dict[str, Any] = {}
-        if det_input_spec and not clipper_matches(det_input_spec, dataset_spec):
-            reclip_clipper = det_input_spec.get("clipper") or ""
-            reclip_params = dict(det_input_spec.get("clipper_params") or {})
-            if reclip_clipper:
-                dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
-                cli_progress.emit(
-                    "detector_reclip",
-                    text=(
-                        f"Re-clipping dataset for detector '{det_name}' with "
-                        f"clipper {reclip_clipper!r} to match its input_spec "
-                        f"(dataset clipper: {dataset_clipper!r})."
-                    ),
-                    detector=det_name,
-                    detector_input_spec=det_input_spec,
-                    dataset_input_spec=dataset_spec or {},
-                )
+        target_type = det_media_type or media_type
+        if override_clipper is not None:
+            reclip_clipper, reclip_params = _override_reclip(
+                det_name, target_type, override_clipper, det_input_spec, dataset_spec
+            )
+        else:
+            reclip_clipper, reclip_params = _input_spec_reclip(det_name, det_input_spec, dataset_spec)
 
         labelset = LabelSet.from_dict(det.get("labelset") or {})
         if not labelset.elements and not detector_text_query(det):
@@ -365,8 +394,6 @@ def _load_and_train_detectors(
         # The context is keyed by name, not a registry id, so it is handed the
         # balance the detector keeps (#4665) from the JSON already read.
         seed_detector_beta(det_ctx, det)
-
-        target_type = det_media_type or media_type
 
         def _haystack_for(
             embedder_name: str,
@@ -432,6 +459,84 @@ def _load_and_train_detectors(
             "clipper_params": reclip_params,
         }
     return out
+
+
+def _input_spec_reclip(
+    det_name: str,
+    det_input_spec: dict[str, Any] | None,
+    dataset_spec: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any]]:
+    """The re-clip *det_name*'s own ``input_spec`` asks for: ``(clipper, params)``, or ``("", {})`` for none.
+
+    A detector with no ``input_spec`` clipper, or one the loaded dataset is
+    already clipped to match, needs none.
+    """
+    from vtscore.detectors.input_spec import clipper_matches  # noqa: PLC0415
+
+    if not det_input_spec or clipper_matches(det_input_spec, dataset_spec):
+        return "", {}
+    reclip_clipper = det_input_spec.get("clipper") or ""
+    reclip_params = dict(det_input_spec.get("clipper_params") or {})
+    if reclip_clipper:
+        dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
+        cli_progress.emit(
+            "detector_reclip",
+            text=(
+                f"Re-clipping dataset for detector '{det_name}' with "
+                f"clipper {reclip_clipper!r} to match its input_spec "
+                f"(dataset clipper: {dataset_clipper!r})."
+            ),
+            detector=det_name,
+            detector_input_spec=det_input_spec,
+            dataset_input_spec=dataset_spec or {},
+        )
+    return reclip_clipper, reclip_params
+
+
+def _override_reclip(
+    det_name: str,
+    target_type: str,
+    override_clipper: dict[str, Any],
+    det_input_spec: dict[str, Any] | None,
+    dataset_spec: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any]]:
+    """The re-clip a clipper override asks of *det_name*: ``(clipper, params)``, or ``("", {})`` for none.
+
+    The override takes the place of the detector's own ``input_spec`` (#5282),
+    so it re-clips on the same terms: not when the dataset is already clipped
+    to match it, and never for a ``*_default`` clipper, which leaves each media
+    as it was loaded.  A clipper for a media type other than the one the
+    detector scores (its own, or the dataset's for a legacy detector with
+    none) cannot apply, and raises :class:`ValueError` naming both types.
+    """
+    from vtscore.detectors.input_spec import clipper_matches  # noqa: PLC0415
+    from vtscore.media import clippers_for_type, get_clipper  # noqa: PLC0415
+
+    name = override_clipper["clipper"]
+    clipper_type = get_clipper(name).media_type
+    if clipper_type != target_type:
+        fitting = ", ".join(sorted(c.name for c in clippers_for_type(target_type))) or "none"
+        hint = f" Clippers for {target_type}: {fitting}." if target_type else ""
+        raise ValueError(
+            f"Clipper override {name!r} clips {clipper_type} media, but detector {det_name!r} scores "
+            f"{target_type or 'untyped'} media.{hint}"
+        )
+    if name.endswith("_default") or clipper_matches(override_clipper, dataset_spec):
+        return "", {}
+    cli_progress.emit(
+        "detector_reclip",
+        text=(
+            f"Re-clipping dataset for detector '{det_name}' with clipper "
+            f"{_describe_clipper_spec(override_clipper)} from the clipper override "
+            f"(its input_spec: {_describe_clipper_spec(det_input_spec)}; "
+            f"dataset clipper: {_describe_clipper_spec(dataset_spec)})."
+        ),
+        detector=det_name,
+        detector_input_spec=det_input_spec or {},
+        dataset_input_spec=dataset_spec or {},
+        override_input_spec=override_clipper,
+    )
+    return name, dict(override_clipper.get("clipper_params") or {})
 
 
 def _report_centroid(det_name: str, det_ctx: Any, labelset: Any) -> None:
@@ -1618,12 +1723,14 @@ def _emit_dry_run_plan(
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Emit the JSON ``dry_run_plan`` event or the human-readable plan text.
 
     The JSON event's ``autofind_detectors`` always lists the detectors the run
     would train - *override_detectors* when given - and ``detectors_source``
-    (``"autofind"`` / ``"override"``) says which list that was.
+    (``"autofind"`` / ``"override"``) says which list that was.  Its
+    ``override_clipper`` is the clipper override's ``input_spec``, or ``None``.
     """
     if cli_progress.get_format() == "json":
         detector_names = autofind_detectors if override_detectors is None else override_detectors
@@ -1633,6 +1740,7 @@ def _emit_dry_run_plan(
             settings_path=settings_path,
             autofind_detectors=_summarize_autofind_detectors(detector_names),
             detectors_source="autofind" if override_detectors is None else "override",
+            override_clipper=override_clipper,
             exporter=exporter_name,
             exporter_field_values=exporter_field_values or {},
         )
@@ -1644,6 +1752,7 @@ def _emit_dry_run_plan(
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             override_detectors=override_detectors,
+            override_clipper=override_clipper,
         )
 
 
@@ -1654,13 +1763,22 @@ def _run_dry_run(
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Validate the planned pipeline + exporter and emit the dry-run plan."""
     sd = source_description or {}
     _validate_dry_run_source(sd)
     if exporter_name:
         _validate_dry_run_exporter(exporter_name, exporter_field_values)
-    _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values, override_detectors)
+    _emit_dry_run_plan(
+        sd,
+        settings_path,
+        autofind_detectors,
+        exporter_name,
+        exporter_field_values,
+        override_detectors,
+        override_clipper,
+    )
 
 
 class _NoApplicableDetectorsError(ValueError):
@@ -1678,6 +1796,7 @@ def _train_detectors_for_first_chunk(
     media_type: str,
     override_detectors: list[str] | None,
     autofind_detectors: list[str],
+    override_clipper: dict[str, Any] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], _RoutedSnapshots]:
     """Train each AutoFind (or override) detector once against the first chunk.
 
@@ -1693,7 +1812,9 @@ def _train_detectors_for_first_chunk(
     detector_names = list(override_detectors) if override_detectors is not None else list(autofind_detectors)
     routed = _RoutedSnapshots(chunk_medias)
     detector_mlps: dict[str, dict[str, Any]] = (
-        _load_and_train_detectors(detector_names, media_type, chunk_medias, routed) if detector_names else {}
+        _load_and_train_detectors(detector_names, media_type, chunk_medias, routed, override_clipper)
+        if detector_names
+        else {}
     )
     if not detector_mlps:
         if override_detectors is not None:
@@ -1737,6 +1858,7 @@ def _run_live_pipeline(
     autofind_detectors: list[str],
     empty_error: str,
     dataset: "_RunDataset | None" = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Iterate *media_source*, score each chunk, and run the exporter on the merged results.
 
@@ -1762,7 +1884,7 @@ def _run_live_pipeline(
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
             detector_mlps, routed = _train_detectors_for_first_chunk(
-                chunk_medias, media_type, override_detectors, autofind_detectors
+                chunk_medias, media_type, override_detectors, autofind_detectors, override_clipper
             )
 
         if detector_mlps:
@@ -1849,6 +1971,7 @@ def _run_streaming_pipeline(
     keep_negatives: bool,
     empty_error: str,
     dataset: "_RunDataset | None" = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Stream scored hits straight to a streaming-capable exporter.
 
@@ -1886,7 +2009,7 @@ def _run_streaming_pipeline(
     apply_custom_metadata_md5(first_chunk)
     media_type = _detect_media_type(first_chunk)
     detector_mlps, routed = _train_detectors_for_first_chunk(
-        first_chunk, media_type, override_detectors, autofind_detectors
+        first_chunk, media_type, override_detectors, autofind_detectors, override_clipper
     )
 
     header = {
@@ -1924,6 +2047,7 @@ def _run_pipeline(
     source_description: dict[str, Any] | None = None,
     skip_without_detectors: bool = False,
     dataset: "_RunDataset | None" = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> bool:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
@@ -1940,6 +2064,11 @@ def _run_pipeline(
     YAML loader uses this to declare detectors inline, and
     ``--import-labels-into`` to run just the detector it imported into, both
     without mutating the settings file on disk.
+
+    *override_clipper*, an ``input_spec`` already through
+    :func:`_resolve_override_clipper`, re-clips the dataset for every detector
+    at that granularity in place of the detector's own ``input_spec``
+    (``--override-clipper``, #5282).
 
     *skip_without_detectors* is set by a run that saved its dataset first:
     there the import is the point and detection is the extra, so having no
@@ -1982,6 +2111,7 @@ def _run_pipeline(
             exporter_name,
             exporter_field_values,
             override_detectors,
+            override_clipper,
         )
         return False
 
@@ -2005,6 +2135,7 @@ def _run_pipeline(
                 keep_negatives=keep_negatives,
                 empty_error=empty_error,
                 dataset=dataset,
+                override_clipper=override_clipper,
             )
         else:
             _run_live_pipeline(
@@ -2015,6 +2146,7 @@ def _run_pipeline(
                 autofind_detectors=autofind_detectors,
                 empty_error=empty_error,
                 dataset=dataset,
+                override_clipper=override_clipper,
             )
     except _NoApplicableDetectorsError as exc:
         if not skip_without_detectors:
@@ -2523,6 +2655,7 @@ def _run_multi_source(
     dry_run: bool,
     stream_results: bool,
     keep_negatives: bool,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Run a multi-dataset source (#4707): one importer run, then detect and export per dataset.
 
@@ -2557,6 +2690,7 @@ def _run_multi_source(
             keep_negatives=keep_negatives,
             source_description=source_description,
             skip_without_detectors=save_dataset,
+            override_clipper=override_clipper,
         )
         return
 
@@ -2586,6 +2720,7 @@ def _run_multi_source(
             source_description=source_description,
             skip_without_detectors=True,
             dataset=run.dataset,
+            override_clipper=override_clipper,
         )
         detected_any = detected_any or detected
         if detected and run.entry is not None:
@@ -2615,6 +2750,7 @@ def _run_source(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Optionally save *spec*'s dataset to the dashboard, then detect and export.
 
@@ -2640,7 +2776,12 @@ def _run_source(
     while the process is still single-threaded (the loader-lock/GIL deadlock
     guard) and seeds the stat-free ``packages_distributions`` before anything
     imports transformers (#3715).  A dry run loads nothing and skips it.
+
+    *override_clipper* is validated here, before any of that, so an unknown
+    clipper or parameter fails before a dataset is saved
+    (:func:`_resolve_override_clipper`).
     """
+    override_clipper = _resolve_override_clipper(override_clipper)
     if settings_path:
         from vtscore.config import redirect_settings_path  # noqa: PLC0415
 
@@ -2660,6 +2801,7 @@ def _run_source(
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            override_clipper=override_clipper,
         )
         return
     source_description = spec.describe(
@@ -2685,6 +2827,7 @@ def _run_source(
         keep_negatives=keep_negatives,
         source_description=source_description,
         skip_without_detectors=save_dataset,
+        override_clipper=override_clipper,
     )
     if detected and imported is not None:
         _delete_after_detection(imported, settings_path)
@@ -2701,6 +2844,7 @@ def _autodetect(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """Shared body of the four public ``autodetect_*_main`` entry points.
 
@@ -2720,6 +2864,7 @@ def _autodetect(
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
+            override_clipper=override_clipper,
         )
     except Exception as e:
         cli_progress.emit_error(str(e))
@@ -2737,6 +2882,7 @@ def autodetect_main(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """CLI entry point: run autodetect with all AutoFind detectors.
 
@@ -2749,6 +2895,14 @@ def autodetect_main(
     the settings file's ``autofind_detectors`` list (which is then not read
     for this run; the file on disk is never modified).  ``--import-labels-into``
     uses it to run exactly the detector it just imported into.
+
+    *override_clipper*, when given, is an ``input_spec`` -
+    ``{"clipper": "sound_tiling", "clipper_params": {"duration": "5"}}`` - that
+    every detector is scored at in place of its own (``--override-clipper``):
+    the dataset is re-clipped to it unless already clipped to match, and a
+    ``*_default`` clipper scores each media as loaded.  An unknown clipper or
+    parameter, or a clipper for another media type than a detector scores,
+    fails the run.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path),
@@ -2760,6 +2914,7 @@ def autodetect_main(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
+        override_clipper=override_clipper,
     )
 
 
@@ -2776,10 +2931,12 @@ def autodetect_importer_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results.
 
-    *save_dataset* and *override_detectors* behave as in :func:`autodetect_main`.
+    *save_dataset*, *override_detectors* and *override_clipper* behave as in
+    :func:`autodetect_main`.
     *outputs*, when given, makes the one importer run produce several datasets
     (#4707), one per :class:`~vtscore.datasets.importers.base.OutputSpec`,
     each saved (unless temporary), scored and exported on its own; see
@@ -2797,6 +2954,7 @@ def autodetect_importer_main(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
+        override_clipper=override_clipper,
     )
 
 
@@ -2812,10 +2970,11 @@ def autodetect_main_chunked(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset.
 
-    *save_dataset* and *override_detectors* behave as in
+    *save_dataset*, *override_detectors* and *override_clipper* behave as in
     :func:`autodetect_main`; *chunk_size* bounds the scoring pass over the
     saved copy.
     """
@@ -2829,6 +2988,7 @@ def autodetect_main_chunked(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
+        override_clipper=override_clipper,
     )
 
 
@@ -2846,11 +3006,12 @@ def autodetect_importer_main_chunked(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer.
 
-    *save_dataset*, *override_detectors* and *outputs* behave as in
-    :func:`autodetect_importer_main`; *chunk_size* bounds the scoring pass over
+    *save_dataset*, *override_detectors*, *override_clipper* and *outputs*
+    behave as in :func:`autodetect_importer_main`; *chunk_size* bounds the scoring pass over
     the saved copy (the import itself is held in memory whole, as a GUI import
     is).
     """
@@ -2870,4 +3031,5 @@ def autodetect_importer_main_chunked(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         override_detectors=override_detectors,
+        override_clipper=override_clipper,
     )
