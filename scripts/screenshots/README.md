@@ -164,9 +164,9 @@ stub randomness the UI exposes (never rely on unseeded draws).
   may still differ (default 150).
   It lists every shot with pixels still differing, passes included as `near`,
   so a near miss stays visible. Without ImageMagick it compares bytes. The
-  tolerance covers rasterisation, not typefaces: the app's font stack ends in
-  the system sans-serif (Inter in the cloud container), so a render on a
-  machine that resolves it to another face (macOS, Windows) drifts everywhere.
+  tolerance covers rasterisation, not typefaces, which `capture.ts` pins
+  (above). Its defaults were measured between two Linux Chromiums, not yet
+  against a Mac's rasteriser.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the user-facing
   docs (the guide, its how-to pages, README.md and demos.md) has a matching

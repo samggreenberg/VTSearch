@@ -27,11 +27,11 @@
 # pixels still differ is listed as "near", with its count: a near miss stays
 # visible. Without ImageMagick this compares bytes, with no tolerance at all.
 #
-# The tolerance is for rasterisation, not typefaces. The app's font stack ends
-# in the system sans-serif (Inter in the cloud container), so a machine that
-# resolves it to another face (San Francisco on macOS, Segoe UI on Windows)
-# moves every line of text, and no setting passes that and still catches a
-# moved control.
+# The tolerance is for rasterisation, not typefaces. capture.ts draws every shot
+# in faces it carries (README.md, "One typeface on every machine"), so a render
+# on macOS or Windows draws the container's glyphs and differs only in how its
+# rasteriser paints them; whether these defaults cover a Mac's CoreText is not
+# yet measured. Emoji are the exception: each platform draws its own.
 set -euo pipefail
 cd "$(dirname "$0")"
 
