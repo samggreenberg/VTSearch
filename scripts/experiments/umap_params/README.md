@@ -1,5 +1,10 @@
 # VTSBrowse UMAP parameter sweep (`scripts/experiments/umap_params/`)
 
+> **Concluded; a re-run measures today's app, not the report.**
+> "Running on the GRID" below records how it ran, not how to run now: it sources a
+> user-specific `/exp/sgreenberg/umap_env.sh` and writes to `/exp/scale26`, which
+> [`GRID-PLAYBOOK.md`](../GRID-PLAYBOOK.md) calls read-mostly and 98% full.
+
 Dev-only experiment harness for **Part 1** of `docs/plans/vtsbrowse-empirical-tuning.md`:
 choose the VTSBrowse Stage-1 projection defaults (`n_neighbors`, `min_dist`, and
 the `compact` boolean) **per embedder**, by a parameter sweep scored with a

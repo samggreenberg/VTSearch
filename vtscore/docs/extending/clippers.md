@@ -236,28 +236,29 @@ don't need to override it.
 
 ## Worked example
 
-A 50%-overlap audio tiling clipper. Drop it into
-`vtscore/media/audio/clipper.py` (alongside the existing default and
-tiling clippers) and add an instance to the audio package's
-`CLIPPERS` list.
+An audio tiling clipper whose neighbouring tiles overlap by at least
+half a window. Drop it into `vtscore/media/audio/clipper.py` (alongside
+the existing default and tiling clippers) and add an instance to the
+audio package's `CLIPPERS` list. It is built on the
+[shared helpers](#shared-helpers): `tile_starts` does the tiling
+arithmetic and `_emit_wav_segments` slices the WAV and stamps each clip
+through `clip_with_bounds`, so `clip()` only has to say where the tiles
+go.
 
 ```python
-# vtscore/media/audio/clipper.py  (new class added to the existing file)
-from __future__ import annotations
-
-import io
-import wave
+# vtscore/media/audio/clipper.py  (new class added to the existing file,
+# which already has these imports and defines _emit_wav_segments)
 from typing import Any
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.audio.wav import AudioDecodeError, wav_duration
+from vtscore.media.clipper import MediaClipper, tile_starts, validate_tiling_params
 
 
 class SoundOverlapClipper(MediaClipper):
-    """Tile audio with 50% overlap between consecutive segments."""
+    """Tile audio so neighbouring segments overlap by at least half a window."""
 
     def __init__(self, duration: float) -> None:
-        if duration <= 0:
-            raise ValueError("duration must be positive")
+        validate_tiling_params(duration, duration / 2)
         self._duration = duration
 
     @property
@@ -271,7 +272,7 @@ class SoundOverlapClipper(MediaClipper):
 
     @property
     def description(self) -> str:
-        return "Tile audio with 50% overlap between consecutive segments."
+        return "Tile audio so neighbouring segments overlap by at least half their length."
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
@@ -295,49 +296,24 @@ class SoundOverlapClipper(MediaClipper):
         wav_bytes = media.get("media_bytes")
         if wav_bytes is None:
             return [media]
-
-        with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
-            sr = wf.getframerate()
-            total_frames = wf.getnframes()
-            n_ch = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            full_pcm = wf.readframes(total_frames)
-
-        window = self._duration
-        step = window / 2  # 50% overlap
-        total_s = total_frames / sr
-
-        # Short clips pass through unchanged.
-        if total_s <= window:
+        try:
+            total = wav_duration(wav_bytes)
+        except AudioDecodeError:
             return [media]
 
-        clips = []
-        t = 0.0
-        while t + window <= total_s + 1e-9:
-            start_f = int(t * sr)
-            end_f = int((t + window) * sr)
-            buf = io.BytesIO()
-            with wave.open(buf, "wb") as out:
-                out.setnchannels(n_ch)
-                out.setsampwidth(sampwidth)
-                out.setframerate(sr)
-                bps = n_ch * sampwidth
-                out.writeframes(full_pcm[start_f * bps:end_f * bps])
-            sliced = buf.getvalue()
-            clips.append({
-                # preserves id / media_type / category / origin / origin_name
-                **media,
-                "media_bytes": sliced,
-                "duration": window,
-                "file_size": len(sliced),
-                # The audio media type reads these back to serve a window of
-                # the parent file; "start"/"end" would be ignored.
-                "clip_index": len(clips),
-                "clip_start": round(t, 6),
-                "clip_end": round(t + window, 6),
-            })
-            t += step
-        return clips
+        window = self._duration
+        # Short clips pass through unchanged.
+        if total <= window:
+            return [media]
+
+        # Equally spaced starts: the first tile at 0, the last ending at
+        # `total`, neighbours overlapping by at least half a window.
+        starts = tile_starts(total, window, min_overlap=window / 2)
+        # Each clip keeps id / media_type / category / origin / origin_name,
+        # and gets the sliced bytes, file_size, duration and the clip_index /
+        # clip_start / clip_end the audio media type reads back to serve a
+        # window of the parent file.
+        return _emit_wav_segments(media, wav_bytes, [(t0, t0 + window) for t0 in starts])
 ```
 
 Register it by appending to the package's `CLIPPERS` list:
@@ -356,8 +332,10 @@ CLIPPERS = [
 The next import of `vtscore.media.audio` registers the new clipper
 under the name `sound_overlap`; the dataset-loader pipeline routes
 audio files through it when the user picks that clipper in the
-chooser, and each produced clip carries an `origin` plus a 50%-overlap
-slice of the original WAV.
+chooser, and each produced clip carries an `origin` plus its slice of
+the original WAV. Because `tile_starts` spaces the tiles evenly between
+the two ends of the file, the last tile ends exactly where the
+recording does, and nothing at the tail is dropped.
 
 ## Testing pattern
 

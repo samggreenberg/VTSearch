@@ -97,10 +97,13 @@ deliver an empty export.
             "threshold": 0.5,
             "balance": {...},  # may be absent or None
             "total_hits": 15,  # positives only
-            "hits": [{"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "...", ...}, ...],
+            "hits": [
+                {"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "..."},  # + more keys
+                ...,
+            ],
             "negative_hits": [...],
         },
-        ...
+        # ... one entry per detector run
     },
     "missing_detectors": [...],
 }
@@ -115,8 +118,8 @@ Each hit is built by `vtscore.utils.hits.build_media_hit`; the
 ```python
 {
     "labels": [
-        {"md5": "...", "label": "good", "filename": "...", "custom_metadata": {...}, ...},
-        ...
+        {"md5": "...", "label": "good", "filename": "...", "custom_metadata": {...}},  # + more keys
+        ...,
     ],
     "selected_columns": ["md5", "label", "Catalogue ID"],
 }

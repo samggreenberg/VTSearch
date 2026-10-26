@@ -91,12 +91,14 @@ Optional overrides:
 | `folder_import_name` | `type_id` | Alias used by folder-style importers |
 | `dir_key` | `type_id + "_dir"` | Key in pickle files for external directories |
 | `pickle_extra_fields` | `[]` | Custom clip-dict keys to preserve through pickle round-trip |
-| `display_metadata(media)` | base fields | Extra fields surfaced in the labeling UI |
+| `display_metadata(media)` | base fields | Extra fields surfaced in the labeling UI; merge the base's (see the rules below the table) |
 | `image_response(media)` | `None` | A *paintable image* for the media, as a `MediaResponse` - the waveform, frame, or page a grid tile shows. `None` = this type has no visual form |
 | `ensure_thumbnail_bytes(media)` | cached value | Build + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that arrived with no readable file |
 | `load_demo_source(...)` | raises `ValueError` | Download and embed one of this type's `demo_datasets` entries |
 | `load_thin_media_data(file_path)` | `load_media_data` minus payload keys | Display fields for a *thin* (reference) load that keeps only `media_path` |
-| `has_thumbnail` | `False` | Class attr: `True` when items have a browsable still (every shipped type except `text`; audio uses its waveform). In VTSearch's Train and Tune pane, a type with no viewer of its own is shown in the image viewer, painting `image_response`, when this is `True`, and as a raw embed of `media_response` otherwise |
+| `load_models()` | no-op | Legacy: load inline embedding models. Embedding belongs to a registered [embedder](embedders.md), so a new type leaves it alone |
+| `embed_text(text)` | `None` | Legacy: inline text embedding, same story - leave it to the embedder |
+| `has_thumbnail` | `False` | Class attr: `True` when items have a browsable still (every shipped type except `text`; audio uses its waveform). It picks the VTSBrowse bin shape (square with a thumbnail, hex without; [`vtscore/projection/pyramid.py`](../../projection/pyramid.py)). In VTSearch's Train and Tune pane, a type with no viewer of its own is shown in the image viewer, painting `image_response`, when this is `True`, and as a raw embed of `media_response` otherwise |
 | `converts_to` | `[]` | Class attr: embeddable `type_id`s a non-embeddable type must be converted into (first = default) |
 | `importable` | `True` | Whether users import this type directly; `False` for a type that only arises from converting another |
 
@@ -125,9 +127,9 @@ Two shipped types are *half types*. `document` is **convert-out**:
 importable but not embeddable, with `converts_to = ["image", "text"]`, so
 a PDF must pass through `document2image` or `document2text` before it can
 be searched. `face` is **convert-in**: embeddable (FaceNet) but not
-importable, because face crops only ever come from the `image2face`
-converter. A new type that fits either shape sets the same attributes;
-nothing else special-cases them.
+importable (`importable = False`, empty `file_extensions`), because face
+crops only ever come from the `image2face` converter. A new type that fits
+either shape sets the same attributes; nothing else special-cases them.
 
 ### `image_response` vs. `media_response`
 
@@ -163,8 +165,10 @@ def image_response(self, media: dict) -> MediaResponse | None:
 Some media have no file: an **archive-member** media
 ([`vtscore/datasets/importers/local_archive_member/`](../../datasets/importers/local_archive_member/))
 carries only `{archive path, member}` and re-derives its bytes by streaming
-one tar/zip member, so it leaves import with no thumbnail at all. Override
-`ensure_thumbnail_bytes` to generate one on demand; the background warm-up
+one tar/zip member, so it leaves import with no thumbnail at all - and every
+browse tile would otherwise stream and decode a member on the request
+thread. Override `ensure_thumbnail_bytes` to generate one on demand; the
+background warm-up
 pass in [`vtscore/datasets/thumbnail_warm.py`](../../datasets/thumbnail_warm.py)
 calls it per media after a load, and the serving path calls it too - so
 route the `image_response` above through it and a warmed thumbnail is

@@ -413,3 +413,13 @@ name alone, and where they actually live:
 
 This package is small on purpose: new helpers should land in the topical
 package they belong to.
+
+---
+
+## Cross-references
+
+- [`cli.md`](cli.md) - the autodetect pipeline, which builds every result row through `build_media_hit`.
+- [`exporters.md`](exporters.md#resultsexporter-abc) - the `find_results` payload and streamed `records` whose hits have that shape.
+- [`training.md`](training.md#decision-thresholds) - the threshold estimators that drop unscorable media with `scored_only` / `scored_mask` before fitting.
+- [`datasets.md`](datasets.md#what-you-load-into) - the `md5` every loader stamps with `content_md5` / `file_md5`; the built-in [`synthetic` importer](datasets.md#built-in-importers) wraps `vtscore.utils.synthetic`.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#installing-without-the-agpl-dependencies) - the install that makes the `optional_deps` errors appear: what is unavailable without the AGPL extra.

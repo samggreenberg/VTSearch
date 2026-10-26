@@ -59,7 +59,9 @@ PACKAGES = ("vtscore", "vtsearch")
 #: need only exist on one of them.
 SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     # --- app tier -------------------------------------------------------
-    ("docs/EXTENDING-media.md", "MediaType abstract interface reference", ("MediaType",)),
+    # No ``MediaType`` entry here: the member tables live only in the library
+    # guide (``media-types.md``, registered below); ``EXTENDING-media.md`` links
+    # to them rather than restating them (#5263).
     ("docs/EXTENDING-media.md", "MediaEmbedder abstract interface reference", ("MediaEmbedder",)),
     ("docs/EXTENDING-media.md", "Embedder capability flags", ("MediaEmbedder",)),
     ("docs/EXTENDING-media.md", "MediaClipper abstract interface reference", ("MediaClipper",)),
