@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Dialogs are the browser's own** (issue #5297). Every dialog is now a native modal dialog. What a keyboard or
+  screen-reader user notices: a notification that pops up while a dialog is open can be reached with Tab, where
+  before only the mouse could get at it; the page behind a dialog is hidden from screen readers; and Tab past a
+  dialog's last control moves to the browser's toolbar, then back to the dialog's first control, instead of
+  wrapping straight round. The ☰ menu button no longer shows through a dialog's dimmed backdrop.
+
 - **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
   under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
   field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
