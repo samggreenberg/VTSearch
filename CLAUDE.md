@@ -547,7 +547,7 @@ means the test **passed**; "error" is part of its name.
 
 - [`docs/SETUP.md`](docs/SETUP.md) — prerequisites, virtualenv, dependency install, frontend build, Docker, running the tests. The SLURM walkthrough lives beside its scripts, in [`scripts/slurm/README.md`](scripts/slurm/README.md).
 - [`docs/TESTING.md`](docs/TESTING.md) — the `run-tests.sh` gate chain, test groups and markers, fixture isolation, flaky-test patterns.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — key concepts (media items, votes, media types, processors, origins), directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — key concepts (media items, votes, media types, origins), directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
 - [`docs/FRONTEND.md`](docs/FRONTEND.md) — Angular SPA architecture: feature-area boundaries, the service layer, the **zoneless change-detection rules**, active dataset/detector propagation, the generated OpenAPI client, component/modal conventions. Read this before changing frontend state or reactivity.
 - [`docs/API.md`](docs/API.md) and `docs/api/*.md` — REST API reference.
 - [`docs/CLI.md`](docs/CLI.md) — CLI flags and autodetect workflow.
@@ -556,7 +556,7 @@ means the test **passed**; "error" is part of its name.
 - [`docs/SETTINGS.md`](docs/SETTINGS.md) — the server (`data/settings.json`) and per-user (`user_settings.json`) settings files, key by key.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — symptoms and fixes, including GPU driver / CUDA / cuML installs.
 - [`docs/EVAL.md`](docs/EVAL.md) — the `vtscore.eval` harness and calibration experiments.
-- [`docs/EXTENDING.md`](docs/EXTENDING.md) + [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md) + [`docs/EXTENDING-media.md`](docs/EXTENDING-media.md) + [`docs/EXTENDING-processors.md`](docs/EXTENDING-processors.md) — how to add plugins.
+- [`docs/EXTENDING.md`](docs/EXTENDING.md) + [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md) + [`docs/EXTENDING-media.md`](docs/EXTENDING-media.md) — how to add plugins.
 - [`vtscore/docs/README.md`](vtscore/docs/README.md) — the library tier's own doc set (quickstart, concepts, per-package reference, tutorials, FAQ).
 - [`slides/STYLE.md`](slides/STYLE.md) — house rules for every slide deck (no running footer, real subscripts, colour reserved for meaning, the 20px type floor, the opening outline); [`slides/README.md`](slides/README.md) is the build mechanics.
 - [`docs/plans/`](docs/plans/) — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.

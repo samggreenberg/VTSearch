@@ -70,7 +70,7 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
 
 
 def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
-    """Settings JSON that activates *tm_names* but defines no autorun processors.
+    """Settings JSON that activates *tm_names* as AutoFind detectors.
 
     Includes ``detectors_dir`` so ``set_settings_path`` doesn't reset
     the directory to the production default after conftest redirected it.
@@ -92,7 +92,7 @@ def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
 class TestAutofindDetectorsCLI:
     def test_settings_drives_trainable_model_scoring(self, client, tmp_path, monkeypatch):
         """A settings file with autofind_detectors scores the dataset
-        with each named detector.  No autorun_processors needed."""
+        with each named detector."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
 

@@ -1,14 +1,11 @@
 """Multi-media coverage tests.
 
 Exercises key workflows (text sort, learned sort, vote, label export/import,
-example sort, extract, localize) against image, text, video, and document
+example sort) against image, text, video, and document
 media types; not just audio.  Also covers previously-untested endpoints:
 
   - POST /api/example-sort-server
   - POST /api/example-sort-origin
-  - POST /api/extract
-  - POST /api/auto-extract
-  - POST /api/auto-localize
 """
 
 from __future__ import annotations
@@ -349,103 +346,6 @@ class TestExampleSortOrigin:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
-
-
-# ===================================================================
-# EXTRACT / AUTO-EXTRACT / AUTO-LOCALIZE endpoints
-# ===================================================================
-
-
-class TestExtractEndpoint:
-    """POST /api/extract; run a single extractor."""
-
-    def test_missing_extractor_type_returns_422(self, client):
-        resp = client.post("/api/extract", json={"name": "test", "config": {"foo": 1}})
-        assert resp.status_code == 422
-        assert "extractor_type" in str(resp.get_json()).lower()
-
-    def test_missing_config_returns_422(self, client):
-        resp = client.post("/api/extract", json={"name": "test", "extractor_type": "image_class"})
-        assert resp.status_code == 422
-        assert "config" in str(resp.get_json()).lower()
-
-    def test_unknown_type_returns_400(self, client):
-        resp = client.post(
-            "/api/extract",
-            json={"name": "test", "extractor_type": "not_real", "config": {"x": 1}},
-        )
-        assert resp.status_code == 400
-
-    def test_media_type_mismatch_returns_400(self, client):
-        resp = client.post(
-            "/api/extract",
-            json={
-                "name": "test",
-                "extractor_type": "image_class",
-                "config": {"target_class": "person"},
-            },
-        )
-        # Default medias are audio; image_class extractor expects image
-        assert resp.status_code == 400
-        assert "media type" in resp.get_json()["message"].lower()
-
-    def test_no_medias_returns_400(self, client):
-        saved = dict(medias)
-        medias.clear()
-        try:
-            resp = client.post(
-                "/api/extract",
-                json={
-                    "name": "test",
-                    "extractor_type": "image_class",
-                    "config": {"target_class": "person"},
-                },
-            )
-            assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["message"]
-        finally:
-            medias.clear()
-            medias.update(saved)
-
-
-class TestAutoExtractEndpoint:
-    """POST /api/auto-extract; run all autorun extractors."""
-
-    def test_no_medias_returns_400(self, client):
-        saved = dict(medias)
-        medias.clear()
-        try:
-            resp = client.post("/api/auto-extract")
-            assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["message"]
-        finally:
-            medias.clear()
-            medias.update(saved)
-
-    def test_no_autorun_extractors_returns_400(self, client):
-        resp = client.post("/api/auto-extract")
-        assert resp.status_code == 400
-        assert "No autorun extractors" in resp.get_json()["message"]
-
-
-class TestAutoLocalizeEndpoint:
-    """POST /api/auto-localize; run all autorun localizers."""
-
-    def test_no_medias_returns_400(self, client):
-        saved = dict(medias)
-        medias.clear()
-        try:
-            resp = client.post("/api/auto-localize")
-            assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["message"]
-        finally:
-            medias.clear()
-            medias.update(saved)
-
-    def test_no_autorun_localizers_returns_400(self, client):
-        resp = client.post("/api/auto-localize")
-        assert resp.status_code == 400
-        assert "No autorun localizers" in resp.get_json()["message"]
 
 
 # ===================================================================

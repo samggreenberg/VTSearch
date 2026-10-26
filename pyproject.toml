@@ -150,8 +150,7 @@ agpl = [
     # PDF page rendering + document text extraction: vtscore.datasets.pdf,
     # vtscore.converters.document2image / document2text.
     "PyMuPDF",
-    # YOLO object detection: the image extractor (vtscore.media.image.extractor)
-    # and the image clipper (vtscore.media.image.clipper).
+    # YOLO object detection: the image object clipper (vtscore.media.image.clipper).
     "ultralytics",
 ]
 dev = [
@@ -423,8 +422,8 @@ markers = [
     "api: API contracts, error handling, dashboard",
     "sorting: text sort, learned sort, diversity, safe thresholds",
     "datasets: dataset loading, splitting, combining, origins, dedup",
-    "io: importers, exporters, labels, processors",
-    "detectors: detectors, extractors, processors, clippers, eval",
+    "io: importers, exporters, labels",
+    "detectors: detectors, clippers, eval",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",

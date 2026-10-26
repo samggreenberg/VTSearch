@@ -19,7 +19,7 @@ better when the input is already a face-centred crop.
 torch<2.3 / numpy<2 pins are empirically unnecessary and would otherwise
 downgrade the app's stack) and declared in pyproject's ``DEP001`` ignore-list.
 The same install also provides the MTCNN detector used by the ``image2face``
-converter and ``FaceLocalizer``. If it is not installed, :meth:`load_models`
+converter. If it is not installed, :meth:`load_models`
 raises an :class:`ImportError` that the :class:`MediaEmbedder` base class
 re-wraps with an install hint.
 """

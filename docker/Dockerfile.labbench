@@ -114,7 +114,7 @@ RUN if [ ! -f "requirements/labbench-${MEDIA_TYPE}.txt" ]; then \
         --prefer-binary \
         -r "requirements/labbench-${MEDIA_TYPE}.txt"
 
-# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
+# ---------- FaceNet (image2face, the face embedder) ----------
 # Docker builds never run scripts/install.sh, so this step mirrors its
 # `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
 # numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically

@@ -48,12 +48,6 @@ from vtscore.media.base import (
 from vtscore.media.cleaner import MediaCleaner
 from vtscore.media.clipper import MediaClipper
 from vtscore.media.embedder import MediaEmbedder
-from vtscore.media.processors import (
-    Detector,
-    Extractor,
-    Localizer,
-    Processor,
-)
 
 # ------------------------------------------------------------------
 # Media type registry
@@ -475,10 +469,6 @@ __all__ = [
     "MediaCleaner",
     "MediaResponse",
     "DemoDataset",
-    "Processor",
-    "Detector",
-    "Localizer",
-    "Extractor",
     "ProgressCallback",
     "register",
     "register_embedder",

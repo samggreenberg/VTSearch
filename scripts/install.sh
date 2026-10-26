@@ -80,7 +80,7 @@ set -euo pipefail
 #   VTSEARCH_NO_AGPL=1 bash scripts/install.sh
 #
 # That installs requirements/{base,gpu}-no-agpl.txt instead of the default
-# requirements/{base,gpu}.txt. The YOLO image extractor and clipper, the PDF
+# requirements/{base,gpu}.txt. The YOLO image clipper, the PDF
 # importer, and the document converters then fail with a message naming the
 # missing package instead of working; nothing else changes. See NOTICE.
 
@@ -847,7 +847,7 @@ vts_requirements_file() {
     local flavour="$1"
     if [ "${VTSEARCH_NO_AGPL:-0}" = "1" ]; then
         echo "  (VTSEARCH_NO_AGPL=1 -> skipping ultralytics + PyMuPDF; the YOLO" >&2
-        echo "   extractor/clipper, PDF import, and document converters stay unavailable)" >&2
+        echo "   clipper, PDF import, and document converters stay unavailable)" >&2
         echo "$REPO_ROOT/requirements/${flavour}-no-agpl.txt"
     else
         echo "$REPO_ROOT/requirements/${flavour}.txt"

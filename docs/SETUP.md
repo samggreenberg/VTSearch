@@ -255,7 +255,7 @@ step, below.
 **Skipping the AGPL dependencies.** Two dependencies are AGPL-3.0-or-later —
 `ultralytics` (YOLO) and `PyMuPDF` — and a default install includes them. To
 install without them, set `VTSEARCH_NO_AGPL=1` on the install command (or
-install `requirements/base-no-agpl.txt` directly); the YOLO extractor/clipper,
+install `requirements/base-no-agpl.txt` directly); the YOLO clipper,
 PDF import, and the document converters then report themselves as unavailable
 and everything else works unchanged. See
 [DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
@@ -642,8 +642,8 @@ The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_
   of loading a dataset, labeling with Autopilot, and exporting results.
 - **Run tests**: See [Running the tests](#running-the-tests) above.
 - **Learn the codebase**: See [ARCHITECTURE.md](ARCHITECTURE.md#key-concepts)
-  for the core vocabulary (media items, votes, media types, processors,
-  origins) and the package-level map, and
+  for the core vocabulary (media items, votes, media types, origins) and the
+  package-level map, and
   [FRONTEND.md](FRONTEND.md) for the Angular SPA.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
   exporters from the command line.

@@ -11,7 +11,7 @@
 #
 # docker/Dockerfile.labbench installs this file first, as a layer every
 # MEDIA_TYPE build shares, then requirements/labbench-$MEDIA_TYPE.txt. Video,
-# document, text, face and extractor deps are skipped to keep the images small.
+# document, text and face deps are skipped to keep the images small.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
