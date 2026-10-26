@@ -45,7 +45,7 @@ first backticked token:
   you modified (a modal, a panel, a toolbar).
 - **A slide figure** is named `slides:<group>`, where the group is one
   `shoot-ui-figs.mjs` takes on its command line: `steps`, `make-detector`,
-  `train-loop`, `find` or `region-voting` (its header comment maps each to its
+  `train-loop`, `find`, `browse` or `region-voting` (its header comment maps each to its
   files).
 
 Don't agonise over precision. The drain re-renders the whole docs set, so a shot

@@ -253,8 +253,9 @@ alongside them), and writes all study output under
 prefix.
 
 #2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
-head. Both now follow the app instead: the head is the shipped linear SVM
-(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+head. Both now follow the app instead: the head is the shipped centroid-started
+linear SVM (`linear_svm_prior`, #4785; `CALIB_HEAD` unset, `CALIB_HEAD=linear_svm`
+the plain SVM before it, `CALIB_HEAD=mlp` the historical arm), and the
 fraction resolves per space through `production_split_for` (0.3 single-vector,
 0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it. The line follows the app
 too: an unset `CALIB_BETA` draws it at the app's default balance (beta 1), so
@@ -301,8 +302,8 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 `CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
 `analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
 `python selftest_analyze_anchored.py`. Results land under
-`/expscratch/$USER/calibration-anchored`. Design and pre-registered decision rules:
-`docs/plans/population-anchored-calibration.md`.
+`/expscratch/$USER/calibration-anchored`. Results and decision rules:
+`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`.
 
 Cost note: the fold-anchored arms score the sim set once per calibration fold
 per step (`calibrate_count=2` → two extra scoring passes); disable them with

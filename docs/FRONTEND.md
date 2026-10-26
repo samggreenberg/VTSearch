@@ -92,9 +92,10 @@ active context in the URL:
 | `/tune/:datasetId/:detectorId` | `activeContextGuard` | Tune (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
 
-Bare `/label`, `/test`, `/browse` (and anything unmatched) redirect to
+Bare `/label`, `/tune`, `/browse` (and anything unmatched) redirect to
 `/dashboard`: a half-specified pair is not a representable state, so there is
-nothing to render.
+nothing to render. The legacy `/find/…` and `/test/…` pair paths redirect to
+`/tune/…`.
 
 ---
 
@@ -365,8 +366,7 @@ the step underneath. Toasty has no hint for the step: there is nothing to do
 differently. No re-sort follows the check's end: a retrain moves the list
 under the result, which is what reports it `stale`, and the owner's model is
 that *later* votes do that. The result lives in the balance control, on the
-Manual tab. The line draws the same in every state; the state
-and its likely range live in the balance control, and a stale range differs
+Manual tab: the line draws the same in every state, and a stale range differs
 only in its tooltip (`staleNote`).
 
 ### Tune view (`components/find-view/`)
@@ -385,7 +385,7 @@ dialog's **Browse** lays the listed items out in Browse through the same
 to Tune. The origin also makes the link stand alone (#5129): opened without the
 in-memory handoff (a reload, a new tab, a link someone was sent), Browse fetches
 the run and lays out the same rows (`runBrowseIds`), for as long as the server
-keeps the run. The old `/find/…` and `/test/…` paths redirect to `/tune/…`.
+keeps the run.
 
 From the Tune click until the route activates, a bar stands under the button
 in its reason's slot (`DashboardComponent.tuneBar`, #5098). It reads the

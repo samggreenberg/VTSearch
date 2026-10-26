@@ -136,6 +136,10 @@ def settings_importer_field_options(body: dict, importer_name: str):
 
 
 @settings_io_bp.route("/api/settings-importers/import/<importer_name>", methods=["POST"])
+@settings_io_bp.alt_response(400, description="Invalid request body or field value, or the importer rejected the run.")
+@settings_io_bp.alt_response(404, description="Unknown settings importer name.")
+@settings_io_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
+@settings_io_bp.alt_response(500, description="The importer failed, or did not return a settings dict.")
 def run_settings_import(importer_name: str):
     """Run the named settings importer and apply imported settings.
 

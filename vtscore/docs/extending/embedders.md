@@ -200,11 +200,12 @@ These flags on the subclass change framework behaviour:
 | `supports_text` | `True` | Set `False` for vision-only or patch-only encoders that don't have a text tower. The frontend hides text-search affordances for datasets using them. |
 | `supports_patch_regions` | `False` | Set `True` for patch-based image encoders that implement `_patch_forward_impl`. The dataset loader runs the patch pass after the standard CLS pass. |
 | `supports_geometric_verification` | `False` | Set `True` for structural (local-feature) encoders that implement `_local_features_forward_impl`. The dataset loader then stores per-image local features for the geometric re-rank. |
+| `supports_tiled_stage1` | `False` | Set `True` only for structural document-page encoders whose datasets should carry `media["tile_vectors"]` (`vtscore/media/structural_tiles.py`); you must then override `tile_vectors_forward_bulk`. |
 | `license_notice` | `None` | Non-`None` when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend surfaces this as a warning chip in the picker. |
 | `eval_only` | `False` | Set `True` for a research arm: still resolvable by name through `get_embedder()`, but withheld from every picker, from the per-media-type default and from `GET /api/embedders`. |
 
-All but `eval_only` appear in `MediaEmbedder.to_dict()` and the
-`GET /api/embedders` payload.
+All but `eval_only` and `supports_tiled_stage1` appear in
+`MediaEmbedder.to_dict()` and the `GET /api/embedders` payload.
 
 ## Worked example
 

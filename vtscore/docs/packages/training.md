@@ -1,9 +1,12 @@
 # `vtscore.training` - Learned-sort training primitives
 
 Generic neural-net training and decision-threshold helpers extracted from
-the detector pipeline. Everything in this package operates on raw numpy
-arrays and PyTorch tensors - there are no media-type, embedder, vote,
-or context dependencies. Library consumers can use it as a stand-alone
+the detector pipeline. The head (`mlp`, `svm`, `logreg`) and threshold
+modules operate on raw numpy arrays and PyTorch tensors, with no
+media-type, embedder, vote, or context dependencies. The exceptions are
+`query_sort.py` (which sorts the active dataset through `vtscore.state`)
+and the structural re-rank modules (which read `vtscore.media`).
+Library consumers can use the array-level core as a stand-alone
 learned-sort toolkit: feed in `(N, D)` feature matrices and binary
 labels, get back a trained classifier head, a calibrated threshold, and
 (optionally) patch-level cosine scoring against a query vector.
@@ -113,7 +116,7 @@ nn.Sequential(
 With only a handful of labelled positives the MLP is under-determined and its
 retrains wobble, so it is an eval arm (see [eval.md](eval.md)), not a
 production path. See
-[`docs/ML.md`](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
+[`docs/ML.md`](../../../docs/ML.md#the-heads-which-one-is-shipped-and-why)
 for why the SVM head ships.
 
 All five are built by
@@ -681,7 +684,7 @@ range comes only from those picks, never from a model.
 - `likely_range(right, labelled, candidate, tail)` is the exact bound for a
   set of known size (`hypergeometric_lower` / `hypergeometric_upper`, each tail
   at *tail*; #4483), exact once the labels cover the band and 0-100% with no
-  labels. `range_tail(bands)` is `CHECK_ALPHA` whatever the bands (no
+  labels. `range_tail(rounds)` is `CHECK_ALPHA` whatever the bands (no
   union-bound split since #4483); `clopper_pearson_lower` / `_upper` remain
   exported.
 - `balance_count(beta, result, proposal, shape)`, `balance_line(ranking,

@@ -48,10 +48,11 @@ npm test          # watch mode
 ```
 
 Specs run on **Vitest + jsdom** via the `@angular/build:unit-test` builder — no
-browser required, so they work in the cloud container. Karma is gone. The suite
+browser required, so they work in the cloud container. The suite
 also runs from the repo root as part of `./run-tests.sh` (full) and
-`./run-tests.sh frontend` (build + `npm audit` + Vitest); the fast
-`./run-tests.sh core` path runs `build:prod` and `npm audit` but not Vitest.
+`./run-tests.sh frontend` (build + `npm audit` + Vitest); `./run-tests.sh core`
+runs `build:prod` and `npm audit` (only when the branch touches `frontend/`) but
+not Vitest. See [`../docs/TESTING.md`](../docs/TESTING.md#test-groups).
 
 ## Upgrading Angular
 
@@ -133,10 +134,9 @@ detector → sort).
 ## Code scaffolding
 
 ```bash
-npx ng generate component component-name --prefix vt --change-detection OnPush
+npx ng generate component component-name --change-detection OnPush
 ```
 
-Pass both flags: `angular.json` still declares the CLI-default `app` prefix and
-no change-detection default, but every component here uses a `vt-` selector and
-`OnPush` (see [FRONTEND.md § Component composition conventions](../docs/FRONTEND.md#8-component-composition-conventions)).
+`angular.json` sets the `vt` selector prefix but no change-detection default, so
+pass the flag: every component here is `OnPush` (see [FRONTEND.md § Component composition conventions](../docs/FRONTEND.md#8-component-composition-conventions)).
 `npx ng generate --help` lists the other schematics.

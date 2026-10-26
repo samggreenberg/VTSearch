@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
+  under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
+  field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
+  now reads **Server path**.
+
 - **Settings is grouped by what you're doing** (issue #5246). The tabs ran alphabetically, and **Appearance**, the
   one Settings opens on, held a dozen unrelated controls whose Scroll Style ran off the bottom of the window. The
   rail now reads **General** (theme, animations, RAM / Disk bars, achievements, Toasty's hints), **Panels** (the
@@ -1238,6 +1243,15 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers
+  options as `(id, name)` pairs and accepts typed values (`allow_free_text`) used the browser's own suggestion
+  list, which put each option's id (a dataset's UUID, say) in large type with its name in small print beneath, and
+  wrote the id into the box on a pick. The list now leads each row with the name, with the id beneath; the box
+  shows the picked name, with its id under the box; and the form still sends the id. Two options that share a
+  name stay distinct, so picking the second "my-cool-dataset" imports that one. Typing a name exactly one option
+  has picks that option; anything else typed is sent as typed. This applies to every form that renders plugin
+  fields: Add Dataset, Export, Import Labels, New Detector, AutoFind, and the settings importers and exporters.
 
 - **A Face dataset no longer keeps a face from each copy of a merged photo.** In a Multi-Dataset import with
   **Image** and **Face** ticked, *Merge near-duplicates* merged two copies of a photo (a resize, a re-save) into

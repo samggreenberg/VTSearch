@@ -35,7 +35,7 @@ import logging
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._context import require_detector_header
+from vtsearch.routes._context import MISSING_DETECTOR_HEADER, require_detector_header
 from vtsearch.schemas.sorting import PrecisionCheckResponseSchema, PrecisionCheckVotesRequestSchema
 
 log = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ def get_precision_check():
 @precision_check_bp.route("/api/precision-check/start", methods=["POST"])
 @require_detector_header
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
+@precision_check_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @precision_check_bp.alt_response(
     409, description="No ranking to draw from, nothing unvoted in it, or the same list as the last check."
 )
@@ -124,6 +125,7 @@ def start_precision_check():
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 @precision_check_bp.alt_response(400, description="A vote on an item that is not one of this band's picks.")
 @precision_check_bp.alt_response(409, description="No check is running.")
+@precision_check_bp.alt_response(500, description="The votes could not be written to the detector store.")
 def vote_precision_check(body: dict):
     """Record votes on the running check's picks.
 
@@ -173,6 +175,7 @@ def vote_precision_check(body: dict):
 @precision_check_bp.route("/api/precision-check/cancel", methods=["POST"])
 @require_detector_header
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
+@precision_check_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 def cancel_precision_check():
     """Abandon the running check.  Its votes so far stay ordinary votes; the balance's state is as it was."""
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415

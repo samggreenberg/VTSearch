@@ -16,7 +16,7 @@
 #                   scripts/, .claude/hooks/, the gates themselves, the test
 #                   harness — nothing that ships as vtsearch/vtscore code),
 #                   frontend (build + audit + Vitest, no Python tests),
-#                   slides (the four gates a deck can trip, no Python
+#                   slides (only the gates a deck can trip, no Python
 #                   tests — see the note below),
 #                   docs (markdown-only: every cheap gate, plus the few tests
 #                   that read a doc — see the note below), gpu
@@ -103,9 +103,9 @@
 # to slides/ cannot reach anything else in the repo: nothing imports
 # slides/build.py (it is a standalone script), pyrightconfig.json does not
 # include it, and no test in either tree touches a deck. So the group runs
-# only the four gates that can actually observe a deck -- ruff (build.py),
-# codespell (slide prose), check-docs.py (fragments are tracked markdown), and
-# build.py --check -- and skips pytest and every whole-repo gate. The group
+# only the gates that can actually observe a deck -- the stale-tree check, ruff
+# check and ruff format (build.py), codespell (slide prose), check-docs.py
+# (fragments are tracked markdown), and build.py --check -- and skips pytest and every whole-repo gate. The group
 # refuses to run when the branch touches anything outside slides/, so the
 # exemption cannot be taken by mistake.
 #

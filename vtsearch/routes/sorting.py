@@ -22,7 +22,12 @@ from pathlib import Path
 from flask import request
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._context import (
+    MISSING_DATASET_HEADER,
+    MISSING_DETECTOR_HEADER,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._progress import sort_idle
 from vtsearch.routes._sort_window import windowed_sort_response
@@ -292,6 +297,7 @@ def sort_page(query: dict):
         "``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
     ),
 )
+@sorting_bp.alt_response(400, description=MISSING_DATASET_HEADER)
 @require_dataset_header
 def sort_collapsed(query: dict):
     """Return one window of a ranking grouped by source photo: Collapse to photos (#4751).
@@ -729,6 +735,7 @@ def get_votes(query: dict):
 
 @sorting_bp.route("/api/votes/clear", methods=["POST"])
 @sorting_bp.response(200, OkResponseSchema)
+@sorting_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @require_detector_header
 def clear_votes_route():
     """Clear all votes without clearing medias.
@@ -772,6 +779,7 @@ def get_balance_route():
 @sorting_bp.route("/api/balance", methods=["POST"])
 @sorting_bp.arguments(BalanceRequestSchema)
 @sorting_bp.response(200, BalanceResponseSchema)
+@sorting_bp.alt_response(400, description="``beta`` is rejected by the balance setting's validator.")
 def set_balance_route(body: dict):
     """Set the balance, F-beta's beta, clamped to ``[0.25, 4]`` (#4413).
 

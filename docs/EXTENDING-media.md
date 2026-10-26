@@ -555,7 +555,7 @@ checkpoint; a sibling model's templates are not evidence.
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports through the process-wide default, which resolves to the calling thread's tracker and is a no-op on a thread that bound none. |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `vtscore.media.set_progress_callback()` (per embedder, `set_default_progress_callback()`); **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports through the process-wide default, which resolves to the calling thread's tracker and is a no-op on a thread that bound none. |
 
 ### Built-in embedders
 
@@ -583,7 +583,7 @@ def supports_text(self) -> bool:
 | `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]` (it skips media your `embed_media_bulk` already stored them on, which is how the shipped SIFT/VLAD embedders detect once per image), enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
-All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
+All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`. Two further properties also change framework behaviour but stay out of that payload: `eval_only` (above) and `supports_tiled_stage1`, which only document structural embedders turn on (see [`vtscore/docs/packages/media.md`](../vtscore/docs/packages/media.md)).
 
 ---
 
@@ -1345,21 +1345,13 @@ SOURCE = _S3SourceFactory()
 
 ### FetchedItem fields
 
-Every fetch and resolve method returns `FetchedItem`. The `path` field is
-always required; the rest are optional bonuses that let sources surface
-data they already have without forcing VTSearch to re-derive it.
-
-| Field | Type | When to set |
-|-------|------|-------------|
-| `path` | `Path \| None` | Always — local file path, or `None` if not found/downloadable |
-| `embedding` | `np.ndarray \| None` | When your API returns a pre-computed vector. The ingest path skips re-embedding when this is present (provided the origin has no clip params) |
-| `embedder_name` | `str` | Required alongside `embedding` — names the embedding space so vectors can be matched against the dataset |
-| `extra` | `dict[str, Any]` | Source-authoritative field overrides written into the media record (e.g. `{"file_size": 12345, "duration": 3.5, "created_at": "2024-01-01T00:00:00Z"}`) |
-
-For a simple source that just downloads files, returning
-`FetchedItem(path=local_path)` is sufficient. The other fields are only
-worth populating when your backing API already provides them in the same
-round-trip.
+Every fetch and resolve method returns `FetchedItem`. Only `path` is
+required (`None` when the item cannot be found); `embedding` +
+`embedder_name` (a pre-computed vector, which lets re-ingestion skip the
+embed step) and `extra` (source-authoritative media fields such as
+`file_size` or `duration`) are worth filling only when your backend returns
+them in the same round trip. The field-by-field contract is in
+[media-sources.md § `FetchedItem`](../vtscore/docs/extending/media-sources.md#fetcheditem-returning-more-than-a-path).
 
 ### MediaSource abstract interface reference
 

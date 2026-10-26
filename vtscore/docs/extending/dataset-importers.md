@@ -50,6 +50,15 @@ implement one of two flow shapes:
 | `description: str` | One-sentence subtitle |
 | `fields: list[PluginField]` | User-configurable inputs (rendered into a form / CLI flags / validation schema) |
 
+Optional class attributes worth knowing (all on `ImporterBase` in
+`base/core.py`): `picker_view` (`"form"` by default, which builds a
+generic form from `fields`; the other values select a dedicated widget in
+the app's Add Dataset modal), `category` (picker tab, default
+`"services"`), `handles_own_clipping` (set `True` only if your `run()`
+applies the clipper itself, so the load pipeline must not clip a second
+time), `multi_output` (see [Multi-dataset imports](#multi-dataset-imports)),
+and the origin knobs covered under [Origins](#origins).
+
 Then either:
 
 - Override `run(field_values, medias, thin=False)` to populate `medias`
@@ -146,8 +155,10 @@ keep `origin.params` round-trippable through your `fields`.
 ## Pre-computed embeddings, MD5s, and metadata
 
 Importers that already have vectors or hashes shouldn't waste compute
-re-deriving them. The base class provides three instance attributes to
-populate during `run()`:
+re-deriving them. Call `self.yield_precomputed(filename, embedding=...,
+md5=..., metadata=...)` once per file during `run()`; it writes the three
+instance attributes below in one motion (writing them directly still
+works):
 
 | Attribute | Purpose |
 |-----------|---------|
@@ -162,7 +173,17 @@ relative-path entry. When a bare basename would match multiple files
 in the folder (e.g. `class_a/foo.wav` and `class_b/foo.wav` with a
 single `"foo.wav"` key) without an explicit relative-path entry for
 every match, the loader raises `ValueError`; supply the full
-relative path for each file to disambiguate. Don't persist vectors
+relative path for each file to disambiguate.
+
+Supplied vectors are validated once, at ingestion, by
+`vtscore.embedding.precomputed.normalize_vector`: a ragged, non-1-D,
+empty or non-finite vector, or one whose width disagrees with the
+embedder it is filed under, raises `MismatchedVectorError` (a
+`ValueError` subclass) naming the file. A `(1, D)` row is flattened and
+any float dtype becomes `float32`. A *nameless* vector (a
+`custom_metadata_map` `"embedding"`, or `content_vectors` with no
+embedder name) is stamped with the load's embedder by the embed stage,
+which checks its width then. Don't persist vectors
 or model weights to disk on your own; the library re-derives them
 from origins.
 

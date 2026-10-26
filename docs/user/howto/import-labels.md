@@ -52,7 +52,7 @@ for, as in Step 2 of the first search, and add the file to it.
 The window is titled **Import Labels into Yellow Smileys**. Click **Server CSV
 File**, then:
 
-1. Under **Path or URL**, type the file's path on the server.
+1. Under **Server path**, type the file's path on the server.
 2. Click **Import**.
 
 <picture>

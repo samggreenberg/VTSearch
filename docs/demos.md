@@ -1,6 +1,6 @@
 # Demo Datasets
 
-This is the reference catalogue of every demo dataset VTSearch can download and embed on demand. For the step-by-step loading walkthrough (opening the **Add Dataset** dialog, the **Demo** tab, and the **🏭 Synthetic Media** offline generator), see **[user/USER_GUIDE.md](user/USER_GUIDE.md)**.
+This is the reference catalogue of every demo dataset VTSearch can download and embed on demand. For the step-by-step loading walkthrough (opening the **Add Dataset** dialog, the **Demo** tab, and the **Synthetic Media** offline generator), see [Load a ready-made demo dataset](user/howto/load-a-demo.md) and [Loading a dataset](user/USER_GUIDE.md#loading-a-dataset) in the User Guide.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.webp" />
@@ -9,7 +9,7 @@ This is the reference catalogue of every demo dataset VTSearch can download and 
 
 Datasets are grouped by media type below. Most demos come in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset); a few offer only some of them (e.g. only **A**), and the synthetic generators have none. Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo usually share one download, and **—** marks demos that need no network download at all, like the synthetic generators). The three long-form audio demos are the exception — see the note under the Audio table. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 
-The tables below are generated from the demo-dataset registry (each media type's `demo_datasets` declaration), so they always match what the app actually offers.
+The tables below are generated from the demo-dataset registry (each media type's `demo_datasets` declaration), so they always match what the app actually offers. The **Demo** column is each demo's id, as the command line takes it; the app's catalogue lists the same demo by its display name with the size in brackets (`esc50_s` is **ESC-50 (S)**, `celebrity_together_s` is **Celebrities in Context (S)**).
 
 ## Audio
 
@@ -146,7 +146,7 @@ The tables below are generated from the demo-dataset registry (each media type's
 > their photos as linked datasets, so a face can show its photo; **Convert
 > to: Face** loads the faces alone.
 > `vggface2_faces_*` photos are framed on one face. `celebrity_together_*`
-> photos are whole scenes from [Celebrity Together](https://www.robots.ox.ac.uk/~vgg/data/celebrity_together/)
+> photos (listed in the app as **Celebrities in Context**) are whole scenes from [Celebrity Together](https://www.robots.ox.ac.uk/~vgg/data/celebrity_together/)
 > (red carpets, events, press photos): 60 people, 20 (S) or 60 (M) photos
 > each, picked so the person's face is at most 22% of the photo's height and
 > no photo appears twice. Most photos hold other people too, labelled or not,

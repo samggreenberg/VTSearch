@@ -114,8 +114,10 @@ object rather than a union over scattered instances.
 - **DINOv3 is gated.** No `HF_TOKEN` → prepare skips `dinov3_patch` (loudly)
   and the report simply lacks those arms.
 - **Memory**: `visual_genome_m` × `max_patch` flattens ~N×(14²–16²) patch rows;
-  the style keeps the matrix fp16 and scores in chunks, but budget ~64G per
-  task to be safe.
+  the style keeps the matrix fp16 and scores in chunks. Measured patch-cell
+  peaks are 9-14 GB, so `MAXPATCH_MEM=24G` covers them (the launchers default
+  to 64G / 48G); size from `sacct MaxRSS`, not from a guess (`../GRID-PLAYBOOK.md` §1a: an over-fat `--mem` starves your own
+  later jobs).
 - **Pairing**: within a `(dataset, category, seed)` cell all of an embedder's
   styles share the same load, the same sim/test split, and the same opening.
   Across embedders the split is also identical (it is derived from seeds/ids,

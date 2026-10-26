@@ -49,7 +49,7 @@ from vtsearch.schemas.media import (
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
-from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._context import MISSING_DATASET_HEADER, require_dataset_header, require_detector_header
 from vtsearch.routes._media_response import cached_thumbnail_response, image_thumbnail_response
 from vtsearch.state import (
     _state_lock,
@@ -705,6 +705,7 @@ _SOURCE_NOT_FOUND_REPLIES = {
         "``dataset_id`` names it for ``POST /api/datasets/registry/<id>/load``."
     ),
 )
+@medias_bp.alt_response(400, description=MISSING_DATASET_HEADER)
 @require_dataset_header
 def media_source(media_id: int):
     """Resolve a converter output to the item it was made from, in its sibling dataset.
@@ -739,6 +740,7 @@ def media_source(media_id: int):
         "``dataset_id`` names it."
     ),
 )
+@medias_bp.alt_response(400, description=MISSING_DATASET_HEADER)
 @require_dataset_header
 def media_source_batch(body: dict):
     """Batch form of ``GET /api/medias/<id>/source``, for a whole results page.
@@ -1077,6 +1079,7 @@ def media_generic(query: dict, media_id: int):
     400, description="region_box or provenance is malformed, or a non-good target carries a region_box."
 )
 @medias_bp.alt_response(404, description="Media not found.")
+@medias_bp.alt_response(500, description="The vote could not be written to the detector store.")
 @require_dataset_header
 @require_detector_header
 def vote_media(body: dict, media_id: int):
@@ -1153,6 +1156,7 @@ def vote_media(body: dict, media_id: int):
 @medias_bp.arguments(MediaVoteBulkRequestSchema)
 @medias_bp.response(200, MediaVoteBulkResponseSchema)
 @medias_bp.alt_response(400, description="No ids supplied, or provenance is malformed.")
+@medias_bp.alt_response(500, description="The votes could not be written to the detector store.")
 @require_dataset_header
 @require_detector_header
 def vote_media_bulk(body: dict):

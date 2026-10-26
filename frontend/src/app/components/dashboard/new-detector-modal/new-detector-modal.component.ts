@@ -74,6 +74,7 @@ import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 import {
   fieldsComplete,
   LabelsetSourceFieldsComponent,
@@ -124,7 +125,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent, LabelsetSourceFieldsComponent, DatasetExamplePickerComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, PluginComboboxComponent, BalanceComponent, LabelsetSourceFieldsComponent, DatasetExamplePickerComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })

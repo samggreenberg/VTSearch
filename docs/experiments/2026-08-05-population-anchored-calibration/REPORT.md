@@ -26,7 +26,7 @@
 
 
 **Issues #2852 / #2853 · design pre-registered in
-`docs/plans/population-anchored-calibration.md` · estimators PR #2857 ·
+the population-anchored-calibration plan (retired by #5261) · estimators PR #2857 ·
 shipped by PR #2861 · reports PR #2860 (run A) and PR #2864 (run B)**
 
 Two runs:
