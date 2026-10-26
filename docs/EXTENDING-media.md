@@ -240,7 +240,7 @@ changes to `vtscore/media/__init__.py` are needed.
 | `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
 | `importable`         | `bool`      | `True`             | Whether the user imports this type natively (folder scan). Set `False` for a *convert-in* half type produced only by a converter (e.g. `face`) |
 | `converts_to`        | `list[str]` | `[]`               | Class attribute. For a non-embeddable *convert-out* half type (e.g. `document`), the embeddable targets it converts into (first = default), e.g. `["image", "text"]` |
-| `has_thumbnail`      | `bool`      | `False`            | Class attribute. Whether items have a browsable still image (waveform, frame, page); drives the VTSBrowse bin shape and is sent to the frontend via `GET /api/media-types` |
+| `has_thumbnail`      | `bool`      | `False`            | Class attribute. Whether items have a browsable still image (waveform, frame, page); drives the VTSBrowse bin shape (`vtscore/projection/pyramid.py`) and, sent to the frontend via `GET /api/media-types`, whether a type with no viewer of its own is shown in the image viewer (see [`media-types.md`](../vtscore/docs/extending/media-types.md)) |
 
 `embeddable` is derived (true when any embedder is registered for the
 type), not overridden. Types that are importable but not embeddable
