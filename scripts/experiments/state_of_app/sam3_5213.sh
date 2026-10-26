@@ -5,6 +5,8 @@
 #                                  into <root>/smoke-GPU; also the dtype check (bf16 vs fp32 on l40s/a100)
 #   sam3_5213.sh score [NSHARDS]   every image of the grid's pool, as an array of NSHARDS (default 8) shards
 #   sam3_5213.sh baseline          text_baseline.py --sam3 on the scores, both prompt sets -> <root>/sam3_*.csv
+#   sam3_5213.sh overlap DIR       #5240: SigLIP + both SAM3 sets graded on all / in-VG / not-in-VG images -> DIR,
+#                                  then sam3_overlap_5240.py analyze -> DIR/analysis
 #
 # The GPU half is calibration/sam3_score_5213.py; the CPU half is text_baseline.py's --sam3 mode, which scores the
 # cells' own pools and splits, so a SAM3 row reads against SigLIP's text_baseline.csv row cell for cell.
@@ -72,8 +74,26 @@ baseline)
   } >"$ROOT/baseline.sh"
   sbatch --parsable -p cpu -c 4 --mem 32G -t 2:00:00 -J sam3-baseline -o "$ROOT/logs/baseline-%j.out" "$ROOT/baseline.sh"
   ;;
+overlap)
+  out="${2:?out dir}"; mkdir -p "$out/logs"
+  {
+    echo '#!/bin/bash'
+    echo 'set -euo pipefail'
+    env_lines
+    echo "python $HERE/sam3_overlap_5240.py ids --out $out"
+    for half in all vg novg; do
+      k=""; [[ $half != all ]] && k=" --keep-ids $out/${half}_ids.txt"
+      echo "python text_baseline.py --results $GRID/results --out $out/siglip_$half.csv$k"
+      for p in typed noun; do
+        echo "python text_baseline.py --results $GRID/results --out $out/sam3_${p}_$half.csv --sam3 $ROOT/scores --sam3-prompts $p$k"
+      done
+    done
+    echo "python $HERE/sam3_overlap_5240.py analyze --root $out --out $out/analysis"
+  } >"$out/overlap.sh"
+  sbatch --parsable -p cpu -c 4 --mem 32G -t 3:00:00 -J sam3-overlap -o "$out/logs/overlap-%j.out" "$out/overlap.sh"
+  ;;
 *)
-  sed -n '2,13p' "$0"
+  sed -n '2,15p' "$0"
   exit 2
   ;;
 esac

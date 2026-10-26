@@ -17,6 +17,10 @@ the split, the app's line, the columns -- is unchanged, so a SAM3 row reads agai
 cell. The ``embedder`` column names the prompt set (``sam3_typed``, ``sam3_noun``), and ``text_native_*``
 adds SAM3's own cut (a detection over 0.5).
 
+``--keep-ids FILE`` grades only those medias of each test half (#5240): the pool, the split and the cuts are
+the whole cell's, so the rows of two complementary files partition the plain run's test halves item for item.
+#5240 grades the COCO images Visual Genome holds (in SAM3's training) apart from the rest.
+
 Text is only available where the embedder has a text tower: ``dinov3_patch`` is
 vision-only and ``embed_text`` returns None there, which is reported as n/a
 rather than silently skipped.
@@ -111,6 +115,7 @@ def main() -> int:
     )
     ap.add_argument("--sam3", default=None, help="sam3_score_5213.py output dir: score with SAM3, not the text tower")
     ap.add_argument("--sam3-prompts", default="typed", choices=["typed", "noun", "both"])
+    ap.add_argument("--keep-ids", default=None, help="file of media ids, one per line: grade only these (#5240)")
     args = ap.parse_args()
 
     from sklearn.metrics import average_precision_score, roc_auc_score
@@ -142,6 +147,7 @@ def main() -> int:
     rows: list[dict] = []
 
     sam3 = _load_sam3(Path(args.sam3), args.sam3_prompts) if args.sam3 else None
+    keep = {int(t) for t in Path(args.keep_ids).read_text().split()} if args.keep_ids else None
 
     for ds, per_emb in prepare.get("datasets", {}).items():
         if sam3 is not None:
@@ -261,7 +267,8 @@ def main() -> int:
                         gmm_cut = float(text_sort_threshold(seen_scores))
                         line_cut = {b: float(text_sort_threshold(seen_scores, beta=b)) for b in BETAS}
                     tset = set(test_ids)
-                    mask = np.asarray([i in tset for i in ids])
+                    mask = np.asarray([i in tset and (keep is None or i in keep) for i in ids])
+                    graded = [i for i, m in zip(ids, mask) if m]
                     y, s = labels[mask], scores[mask]
                     if args.dump_dir and seed == cfg.SEEDS[0]:
                         # One seed is enough: the ranking and the cut are
@@ -270,7 +277,7 @@ def main() -> int:
                         write_prediction_dump(
                             Path(args.dump_dir) / f"text__{ds}__{emb}__{cat.replace(' ', '_')}.csv",
                             medias,
-                            [i for i in ids if i in tset],
+                            graded,
                             s,
                             y,
                             gmm_cut,
@@ -298,7 +305,7 @@ def main() -> int:
                     fp = np.cumsum(1 - ys)
                     ocost = np.min(wf * (fp / max(nneg, 1)) + wn * ((npos - tp) / max(npos, 1)))
                     # The line each floor would keep on this sort (#4357).
-                    ranks = ranks_from_scores([i for i in ids if i in tset], s, y)
+                    ranks = ranks_from_scores(graded, s, y)
                     floor_cols = {
                         f"text_{name}_{floor_tag(x)}": round(float(v), 6)
                         for x in FLOORS
