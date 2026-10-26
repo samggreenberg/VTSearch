@@ -868,11 +868,38 @@ is why they are two helpers rather than one with a flag.
 
 ### Modals
 
-`vt-modal` (`components/modal/`) is the shared shell: backdrop, CDK focus
-trap, close button, and a module-level **stack** of open instances so Escape
-dismisses only the topmost one. Modals genuinely nest here (New Detector →
-media crop, Settings → importer picker, anything → a confirm dialog), and
-without the stack one keypress closed them all and lost the outer form.
+`vt-modal` (`components/modal/`) is the shared shell: a native `<dialog>`
+opened with `showModal()`, close button, and a module-level **stack** of open
+instances so Escape dismisses only the topmost one. Modals genuinely nest here
+(New Detector → media crop, Settings → importer picker, anything → a confirm
+dialog), and without the stack one keypress closed them all and lost the outer
+form.
+
+The `<dialog>` (#5297) replaced the CDK's `CdkTrapFocus`, which took ~9 kB of
+`@angular/cdk/a11y` off the eager bundle. What the platform does for it, and
+the seams `vt-modal` adds:
+
+- **Focus.** `showModal()` focuses the first `autofocus` element inside, else
+  the first focusable one (`initialFocus="dialog"` puts `autofocus` on the
+  box). Tab past the last control leaves to the browser's toolbar rather than
+  wrapping; the page behind is inert, so it is never reached. Focus goes back
+  to the trigger only on `close()`, and the `@if` removes the element instead,
+  so `vt-modal` restores it itself.
+- **Escape is `vt-modal`'s.** `closedby="none"` stops the browser closing the
+  element, because `[open]` belongs to the parent and `(closed)` only asks it.
+  The document-level handler closes the topmost modal and claims the keypress;
+  `(cancel)` and `(close)` cover browsers without `closedby`.
+- **The top layer.** Dialogs stack in the order they opened, over every
+  z-index, and everything outside the topmost one is inert. A page-level
+  overlay that must stay usable over a dialog (the toast stack, the offline
+  banner) carries `vtAboveDialogs` (`directives/above-dialogs.directive.ts`),
+  which moves it into the topmost open dialog and back. A `popover` does not
+  escape the inertness. Code that appends a helper element to `<body>` while a
+  dialog may be open (a clipboard-fallback `<textarea>`) must append it inside
+  the dialog instead.
+- **The backdrop is the `<dialog>` itself**, stretched over the window and
+  still classed `.modal-backdrop` (which the keyboard-shortcut guards look for), so
+  a click outside the box lands on it as before.
 
 - `dialog-host` + `VtDialogService` provide promise-returning `confirm()` /
   `prompt()`, including the standardised `confirmDestructive()` phrasing.

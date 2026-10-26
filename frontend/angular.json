@@ -58,7 +58,8 @@
                 // deferred chunk. Measured 2026-09-12 (#3811) the eager split
                 // is 317.54kB framework to 121.47kB app code.
                 //
-                // Measured initial total: 483.71kB (#3811). The ~41kB of
+                // Measured initial total: 515.86kB (#5297; it was 483.71kB
+                // at #3811 and had crept to 524.28kB before #5297). The
                 // headroom is deliberate and is NOT spare capacity for app
                 // code. Angular's own patch releases move this number ~3kB at
                 // a time, and when the margin was last under 1kB a routine
@@ -73,11 +74,11 @@
                 // that, because the budget no longer can: see
                 // TestEagerBundleComposition in tests/core/test_frontend.py.
                 //
-                // Still eager on purpose: @angular/cdk a11y (~9kB), reached
-                // via `vt-modal` inside the always-rendered `vt-dialog-host`.
-                // Dropping it would cost the focus trap on all 23 dialogs,
-                // and deferring the dialog host would put a chunk fetch in
-                // front of every confirm()/prompt().
+                // #5297 took @angular/cdk/a11y (~9kB) off the eager path, where
+                // `vt-modal`'s CdkTrapFocus put it via the always-rendered
+                // `vt-dialog-host`: `vt-modal` is a native <dialog> opened with
+                // showModal(), which handles focus for all 23 dialogs with no
+                // library (-8.42kB). TestEagerBundleComposition guards that too.
                 //
                 // Do not raise without first auditing the eager path for
                 // genuine bloat.

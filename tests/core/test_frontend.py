@@ -226,7 +226,8 @@ class TestEagerBundleComposition:
     `maximumWarning` in frontend/angular.json.  The budget alone cannot police
     this: #3811 reclaimed ~38kB, so a re-added FormsModule would still fit
     under the number while silently spending the margin that exists so a
-    framework bump does not turn the gate red for everyone (#3795).
+    framework bump does not turn the gate red for everyone (#3795).  The same
+    goes for @angular/cdk/a11y, which #5297 took off the eager path.
     """
 
     @staticmethod
@@ -276,6 +277,20 @@ class TestEagerBundleComposition:
             "used to pull it (#3811). A single uncontrolled input does not need it:\n"
             "use `[value]` + `(input)` instead. If the import is genuinely required,\n"
             "re-audit the budget in frontend/angular.json rather than deleting this."
+        )
+
+    def test_cdk_focus_trap_is_not_eager(self):
+        # `cdk-focus-trap-anchor` is the class CDK's FocusTrap gives its Tab
+        # sentinels and appears nowhere outside @angular/cdk/a11y.  `vt-modal`
+        # is a native <dialog> (#5297), so nothing on the eager path needs it.
+        assert "cdk-focus-trap-anchor" not in self._eager_bundle_text(), (
+            "@angular/cdk/a11y's focus trap (~9kB) is back in the EAGER bundle.\n"
+            "Something on the eager path imports CdkTrapFocus / FocusTrap -- most\n"
+            "likely `vt-modal`, which reaches the initial bundle through the\n"
+            "always-rendered `vt-dialog-host`. vt-modal opens a <dialog> with\n"
+            "showModal(), which handles focus natively (#5297); a lazy component may\n"
+            "still use the CDK. If the eager import is genuinely required, re-audit\n"
+            "the budget in frontend/angular.json rather than deleting this."
         )
 
 
