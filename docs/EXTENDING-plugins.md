@@ -195,60 +195,32 @@ don't pick one get a letter instead of inheriting yours), and its
 
 **Do not write input-handling boilerplate in your plugin body.** Before
 `field_values` reaches your `run()` / `export()` / `_do_load()` /
-`_do_save()`, the framework runs it through
-`normalize_field_values()` (`vtscore/plugins/normalize.py`). One pass
-applies to **every** non-`file` field:
+`_do_save()`, the framework runs it through `normalize_field_values()`
+(`vtscore/plugins/normalize.py`), which, for every declared non-`file`
+field:
 
-1. **Declared defaults fill in blanks.** A field that arrives missing,
-   empty, or whitespace-only takes its `default`, so you never have to
-   write `field_values.get(key) or MY_DEFAULT`. This runs first, which is
-   why a declared default satisfies `required`.
+1. fills a missing / blank value from the field's `default` (so a
+   declared default satisfies `required`);
+2. strips whitespace, then raises `ValueError("<Label> is required.")`
+   for a required field that is still empty;
+3. substitutes the field's declared `template_vars` (see below);
+4. runs the field-type security check: `url` through the SSRF guard
+   `validate_url` (or `validate_browser_url` when `opened_in_browser=True`),
+   `server_path` / `folder` through `confine_server_filepath()` at the
+   per-user data dir, with the **approved path written back** into
+   `field_values`. Consume `field_values[key]`, never a raw value from
+   elsewhere: re-deriving the path yourself can resolve into another
+   user's directory even though the check passed.
 
-The remaining three apply to every text-like field (`text`, `url`,
-`email`, `password`, `folder`, `server_path`, `select`):
-
-2. **Whitespace strip.** `field_values[key]` is already trimmed — no
-   `.strip()` in your body. A required field that is still empty (or
-   missing) after stripping — meaning it declares no default either —
-   raises `ValueError("<Label> is required.")`, so no
-   `if not foo: raise` boilerplate either.
-3. **Template-variable substitution**, for fields that declare
-   `template_vars` (see below).
-4. **Field-type-driven security validation.** A `url` field is passed
-   through `vtscore.security.url_validation.validate_url` (the SSRF
-   guard), unless it declares `opened_in_browser=True`, in which case it
-   gets the browser-side scheme guard `validate_browser_url` instead. A `server_path` or `folder` field is passed through
-   `confine_server_filepath()` anchored at the per-user data dir, and
-   the **approved, canonicalised path is written back** into
-   `field_values` — so your body must consume `field_values[key]`, not
-   the raw value it saw elsewhere. That write-back is the point: under
-   multi-user confinement the validator resolves a relative path against
-   the user's data dir while your plugin would resolve it against the
-   process CWD, so re-deriving the path yourself can read another user's
-   directory even though the check passed.
-
-Both ingress points run the pass, so HTTP and CLI behave identically:
-
-| Path | Where it runs |
-|------|---------------|
-| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_plugins.py`, after the marshmallow load and file-upload population |
-| HTTP, nested `{"..._name", "field_values"}` body | `validate_exporter_field_values()` in the same module |
-| CLI  | `PluginBase.validate_cli_field_values()`, after the presence check |
-| Saved settings | The AutoFind results exporter is handed its persisted `field_values` map with no schema in the loop, so this pass is the only one that runs |
-| Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a **copy** of `field_values` before dispatching to your `_do_*` hook (`vtscore/sync/__init__.py`) |
-
-Calling `validate_url()` or `validate_server_filepath()` by hand still
-works — re-validation is idempotent — but it is redundant for anything
-that arrives as a declared field. You still need them for a URL or path
-your plugin *constructs* (e.g. a second endpoint derived from a
-configured base URL, or a path joined from a field plus a filename).
-
-**Two families are not covered**, because their values ride in as
-pass-through payloads rather than plugin form bodies: media converters
-(`params`, validated by `convert_normalized()` against the `fields`
-schema — types and ranges, but no URL/path guard) and media clipper
-`parameters`. A converter that accepts a URL or a server path must
-validate it itself.
+The pass runs on every ingress (HTTP flat and nested bodies in
+`vtsearch/routes/_plugins.py`, the CLI, AutoFind's saved exporter config,
+and the `SyncSource` wrappers), so HTTP and CLI behave identically. It
+does **not** cover media converter `params` or clipper `parameters`, and
+it cannot vet a URL or path your plugin *constructs*; validate those
+yourself. The full rules, the per-ingress table and the security
+rationale are in
+[`vtscore/docs/extending/README.md` § Framework-side normalization](../vtscore/docs/extending/README.md#framework-side-normalization),
+the canonical statement of this contract.
 
 #### Template variables (`template_vars`)
 
@@ -267,20 +239,13 @@ PluginField(
 
 With `template_vars` omitted (the default `()`), a user's
 `{detector_name}` reaches your plugin as that literal string — a silent
-no-op that looks like a plugin bug. Supported names:
-
-| Variable | Resolves to |
-|----------|-------------|
-| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp — unique per run, so consecutive exports don't overwrite each other |
-| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs (`results_{YYYY}.{MM}.{DD}.csv`) |
-| `{detector_name}` / `{detector_id}` | The active `DetectorContext`'s name / id |
-| `{username}` | The current user (single-user installs: `"default"`) |
-
-Declaring a name that isn't on this list raises `ValueError` on the
-first request, so a typo fails fast rather than shipping a literal
-placeholder into a filename. Every substituted value is run through
-`sanitize_template_value()`, so a detector named `../../etc/passwd`
-cannot escape the directory implied by an admin-configured template.
+no-op that looks like a plugin bug. The supported names are
+`{YYYYMMDD-HHMMSS}`, `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` (UTC),
+`{detector_name}` / `{detector_id}` (the active detector) and
+`{username}`; an unknown name raises `ValueError` on the first request,
+and every value is sanitised so it cannot escape the templated directory.
+The resolution table is in the
+[library guide](../vtscore/docs/extending/README.md#template-variables).
 
 **Declaring the variable is also what makes the GUI show the value.**
 Run-now plugin forms (the Export modal, the Find Results export)
@@ -347,7 +312,7 @@ def run(self, field_values):
 
 Your `display_name` is attached automatically as the notification's source,
 so the toast says which plugin spoke. Code that isn't a `PluginBase`
-subclass (an embedder, a processor, a route helper) calls the underlying
+subclass (an embedder, a clipper, a route helper) calls the underlying
 function directly and passes its own label:
 
 ```python
@@ -433,14 +398,11 @@ name on the left. After `pip install` of the third-party package, the
 plugin appears in `list_importers()`, the relevant `/api/...` endpoint, and
 `python app.py --list-plugins` without any changes to the core repo.
 
-Built-in plugins take precedence: if an entry point's plugin `name` clashes
-with a name already registered by the package scan, it is skipped and a
-warning is emitted. An entry point with no `name` attribute warns and is
-skipped. One whose own import raises (typically a missing optional
-dependency) warns and is registered as a *tombstone* under the entry-point
-name: it is left out of listings, but a by-name lookup still resolves and
-re-raises the original error (as `ImportError`) on first use. Neither case blocks discovery of other
-plugins.
+Built-in plugins win a `name` clash (the entry point is skipped with a
+warning), and an entry point whose own import raises is kept as a
+*tombstone* that re-raises on first use, so one broken plugin cannot break
+discovery of the rest. Packaging and the failure modes are covered in
+[`vtscore/docs/extending/README.md` § Entry-point registration](../vtscore/docs/extending/README.md#entry-point-registration-in-pyprojecttoml).
 
 ### Listing every registered plugin
 
@@ -666,13 +628,15 @@ to the framework.
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default wraps `file` field paths as `CliUploadedFile` and delegates to `run()`. Override only when CLI behaviour genuinely diverges |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
 | `default_display_name()` | `(field_values: dict) -> str` | Name the datasets this importer produces. Shown live in the form's Dataset Name box and used verbatim when the user leaves it blank. Default derives a name from your URL / path / upload fields. See [Naming the imported dataset](#naming-the-imported-dataset) |
-| `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
+| `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Also override the `supports_chunked` property to return `True` |
 | `run_outputs()` | `(field_values, outputs: list[OutputSpec], thin) -> Iterator[tuple[OutputSpec, dict]]` | **Multi-dataset import:** produce every dataset in `outputs` from one run, yielding `(output, medias)`. Default runs `run()` once per output. Override to acquire the source once. See [Multi-dataset imports](#multi-dataset-imports) |
 | `run_outputs_chunked()` | `(field_values, outputs, chunk_size, thin) -> Iterator[tuple[OutputSpec, dict]]` | Chunked twin of `run_outputs()`; the hook the pipeline drives when `supports_chunked` is `True`. Default runs `run_chunked()` once per output |
 | `multi_output` | `bool` (class attribute, default `True`) | Whether one run may produce several datasets. Set `False` on an importer fixed to one dataset (the demo importer); the form then never offers **Multi-Dataset** and the API refuses `outputs` |
 | `category` | `str` (class attribute, default `"services"`) | The Add Dataset picker tab: `"services"`, `"server"`, `"local"`, `"demo"`, or `""` (left out of the tabbed picker). A new tab id can be given a label and icon with `vtscore.datasets.importers.tabs.register_picker_tab()` |
 | `origin_suppressed` | `bool` (class attribute, default `False`) | `True` makes `build_origin()` return empty `params`; for importers that set a per-media origin on every record (see [Direct media dict construction](#direct-media-dict-construction)) |
 | `extra_origin_keys` | `tuple[str, ...]` (class attribute, default `()`) | Non-field `field_values` keys to copy into the origin `params`; `source_specs` is always added |
+| `handles_own_clipping` | `bool` (class attribute, default `False`) | `True` when `run()` applies the clipper itself (the demo importer), so the pipeline skips its own clipper stage instead of clipping twice |
+| `picker_view` | `str` (class attribute, default `"form"`) | Which Add Dataset widget renders the importer; the other values (`"local_folder"`, `"local_files"`, `"server_folder"`, `"demo"`) select built-in UI sections, so a new importer keeps `"form"` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |

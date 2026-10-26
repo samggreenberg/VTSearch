@@ -2,8 +2,8 @@
 # Anchored-mixture calibration study (#2852) on the HLTCOE Grid.
 #
 # Thin wrapper over launch_all.sh that flips the pre-registered knobs for the
-# population-anchored-calibration experiment (design + decision rules:
-# docs/plans/population-anchored-calibration.md): safe_thresholds ON (the
+# population-anchored-calibration experiment (results + decision rules:
+# docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md): safe_thresholds ON (the
 # anchored arms ride the variant-row path and need the shipped blend +
 # xcal_only controls emitted alongside), CALIB_ANCHORED=1, the production
 # linear head, Visual Genome region voting with the production max_patch arm

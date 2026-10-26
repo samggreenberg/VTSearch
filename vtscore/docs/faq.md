@@ -229,7 +229,7 @@ It improves through about 50 labels. Above 100 the gains are mostly noise. The
 production head is linear (a single `Linear(D, 1)` fitted as a maximum-margin
 SVM), which is what makes it usable that low: with 3-5 positives an MLP is
 under-determined and its scores wobble from retrain to retrain. See
-[docs/ML.md](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
+[docs/ML.md](../../docs/ML.md#the-heads-which-one-is-shipped-and-why).
 
 ### Is training deterministic?
 

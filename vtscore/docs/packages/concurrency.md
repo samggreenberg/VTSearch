@@ -571,8 +571,9 @@ misconfigured setting cannot deadlock the pipeline.
 
 ```python
 from vtscore.concurrency.gate import ConcurrencyGate
+from vtscore.config import get_setting
 
-gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
+gate = ConcurrencyGate(lambda: get_setting("max_concurrent_dataset_downloads"))
 if gate.acquire(timeout=30):
     try:
         ...
@@ -598,7 +599,7 @@ to each tracker's notify stream, and emits
 | Name | Description |
 |----------|-------------|
 | `initial_snapshot() -> list[str]` | SSE frames a freshly-connected client should receive first: a `server` frame carrying `BOOT_ID` (per-process UUID), then one per channel |
-| `stream_progress_events(*, heartbeat_seconds=5.0, keepalive_seconds=1.0, max_queue=1024)` | Generator yielding SSE strings until disconnect |
+| `stream_progress_events(*, heartbeat_seconds=5.0, keepalive_seconds=1.0, max_queue=1024, viewer=None)` | Generator yielding SSE strings until disconnect; `viewer` filters kept failures to that user's (see [`LoadingTasksTracker`](#loadingtaskstracker)) |
 | `acquire_sse_slot()` / `release_sse_slot()` / `active_sse_connections()` | Bounded connection slots (`MAX_SSE_CONNECTIONS`, from `VTSEARCH_SSE_MAX_CONNECTIONS`, default `VTSEARCH_THREADS - 2`); `acquire` returns `False` at the cap |
 | `uncap_sse_connections()` | Lift the cap for servers with no bounded thread pool (unless the env var is set) |
 

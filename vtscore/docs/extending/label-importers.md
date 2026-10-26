@@ -34,7 +34,7 @@ This guide focuses on the library API.
 |-----------|---------|
 | One-shot import of an existing label file / query | **`LabelImporter`** - `run()` returns a list of label dicts; the user triggers it manually |
 | Auto-export as labels change, auto-import on detector load | **`LabelsetSource`** - `load()` / `save()` for bidirectional sync; can also surface detector metadata |
-| Both - manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<name>/labelset-source/sync`) |
+| Both - manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<detector_ref>/labelset-source/sync`) |
 
 Importers are simpler - no push pacing, no merging pulls, no atexit
 flush. Reach for the source only when ongoing sync is the

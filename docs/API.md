@@ -136,7 +136,10 @@ a global handler, or from schema validation — carries the same envelope
 `code` is the numeric HTTP status and `status` its name. `request_id` is
 present on every error raised inside a request (it also comes back in the
 `X-Request-Id` header), so a user can quote it in a bug report and an
-operator can grep the structured logs for it.
+operator can grep the structured logs for it. (Two non-route replies are not
+errors in this sense: the `/readyz` 503 carries its own `{status, checks}`
+body, and the [`GET /api/events`](api/events.md#endpoint) connection-cap 503 a
+bare `{"message"}`.)
 
 Three optional fields appear when they apply, plus any endpoint-specific
 extras (e.g. `available`, `missing_fields`, `dataset_id`):

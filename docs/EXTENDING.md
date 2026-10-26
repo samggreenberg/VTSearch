@@ -11,7 +11,7 @@ Most extension points are documented **twice**, on purpose, for two
 different readers:
 
 - **These `docs/EXTENDING-*.md` guides are the in-repo front door.** They
-  are self-contained: interface contract, where the file goes, how
+  cover the interface contract, where the file goes, how
   discovery works, app-tier wiring (routes, forms, the pickers the
   frontend renders), and a complete worked example. Read these if you are
   adding a plugin *to this repository*.
@@ -21,6 +21,13 @@ different readers:
   out-of-tree author needs: `importlib.metadata` entry-point registration,
   packaging, and the Flask-free import rules. Read these if you are
   shipping a plugin as a **separate distribution**.
+
+**Which side owns what.** A mechanism implemented in `vtscore` (field
+normalization and template variables, entry-point packaging, the
+`MediaType` thumbnail hooks, `FetchedItem`) is stated canonically in the
+library guide; the app guide summarises it and links there. App-tier
+wiring (routes, the SPA's forms and pickers, settings sync, auth) lives
+only here. Each side keeps its own contract table per ABC.
 
 Where the two overlap, they describe one class, so they can contradict
 each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)

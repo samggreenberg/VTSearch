@@ -26,7 +26,7 @@
 **Verdict: keep `mid_tilt`.** No candidate both delivered more of the knob than
 the shipped rule and stayed within the pre-registered regret tolerance at every
 stop of it. That is the outcome
-[the plan](../../plans/population-anchored-calibration.md) flagged as the honest
+the population-anchored-calibration plan (since retired, #5261) flagged as the honest
 possibility — *"`mid_tilt` may already be delivering most of the slider, in
 which case the honest outcome is keep it"* — and the sweep says it is delivering
 **95%** of it.
@@ -439,7 +439,7 @@ constraint** — which is the reason #2868's repair worked at all.
 
 Both are now tracked in **#3557** (a plan bullet is not a tracked follow-up).
 They were previously parked as open items in
-[`docs/plans/population-anchored-calibration.md`](../../plans/population-anchored-calibration.md),
+the population-anchored-calibration plan,
 in the space the closed `#2865` item vacated:
 
 - **A sign-dependent tilt.** `cross_tilt` beats the incumbent at k ∈ [−4, −1] in

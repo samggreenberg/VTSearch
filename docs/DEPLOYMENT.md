@@ -275,8 +275,8 @@ startup sequence runs at WSGI import time. See
 |---|---|---|---|
 | `docker/Dockerfile` | `docker-compose.yml` | `python:3.12-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
 | `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
-| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml`, `docker-compose.labbench-audio.yml` | `python:3.12-slim` | The slim build for one media type, given as the `MEDIA_TYPE` build arg: `image` (the default, SigLIP) or `audio` (CLAP General). Installs only `requirements/labbench.txt` plus `requirements/labbench-<type>.txt`, locks the media type (`VTSEARCH_SOLO_MEDIA_TYPE`) and the embedder, and bakes that embedder's weights in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. A fresh data volume is seeded with the embedder lock and the hidden plugins (`scripts/seed_labbench_settings.py`), and the image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`, so every dataset expires two weeks after it is created. |
-| `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg (`VTSEARCH_SOLO_MEDIA_TYPE`), with that type's default embedder weights baked in under `/opt/vtsearch/models` (CLAP General for `audio`, X-CLIP for `video`; for the half types, SigLIP for `document`'s page images and FaceNet for `face` crops). |
+| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml`, `docker-compose.labbench-audio.yml` | `python:3.12-slim` | The slim build for one media type (`MEDIA_TYPE` build arg: `image`, the default, or `audio`): only that type's dependencies, the media type and embedder locked, the embedder's weights baked under `/opt/vtsearch/models`, and every dataset expiring after 14 days. What it locks and hides, and why each LabBench variant needs its own data volume: [SETUP.md § LabBench](SETUP.md#labbench-slim-image-or-audio). |
+| `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg, with that type's default embedder weights baked under `/opt/vtsearch/models`; see [SETUP.md § Single media type](SETUP.md#single-media-type-audio-only-video-only). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
 | `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
 
@@ -294,12 +294,14 @@ R535, R550, R560, R565 or R570 branches. Anything else is refused at
 
 ### Resource considerations
 
-- **Memory**: Each embedding model uses ~500 MB–1.5 GB of RAM when loaded.
-  With all five loaded simultaneously, expect ~4–6 GB total application
-  memory. Models are loaded lazily; only the media types actually used are
-  loaded.
-- **Disk**: The `data/models/` directory uses ~4.1 GB. Dataset embeddings
-  and media files vary by dataset size.
+- **Memory**: Each embedding model uses ~500 MB–1.5 GB of RAM when loaded
+  (the heaviest alternatives more). With the five
+  [prefetched models](#embedding-models-huggingface-hub) loaded at once,
+  expect ~4–6 GB total application memory. Models are loaded lazily; only the
+  embedders a dataset or detector uses are loaded.
+- **Disk**: The model cache (`data/models/`, or `VTSEARCH_MODELS_DIR`) holds
+  ~4.1 GB for the prefetched set, plus any alternative embedder someone picks.
+  Dataset embeddings and media files vary by dataset size.
 - **CPU**: the server sizes its torch/OpenMP/MKL thread pool to the
   container's CPU allocation (the `OMP_NUM_THREADS=1` in the Dockerfiles is
   overwritten at startup). Cap it with `VTSEARCH_TORCH_THREADS` (e.g.
@@ -930,7 +932,7 @@ These are read by the installer, not the running app.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu129` (and `cu13x`): RAPIDS ≥ 26.8, the first whose cudf takes the pandas 3 pinned in `pyproject.toml`, needs the CUDA 12.9 libraries only the `cu129` torch wheel pins. See [cuML crashes compiling a kernel](#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors). |
+| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu129` (and `cu13x`); see [GPU install's cuML step](#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129). |
 | `VTS_CUML_CU12_SPEC` | unset | Replace the pip requirement the cuML step installs (`cuml-cu12>=26.8` on `cu129`, `cuml-cu13>=26.8` on `cu13x`), and run the step on a tag it would otherwise skip. For assembling a different RAPIDS on your own terms, e.g. `VTS_CUML_CU12_SPEC='cuml-cu12<26'` on a Volta card, which costs pandas dropping to 2.x. |
 | `VTSEARCH_NO_AGPL` | `0` | Set to `1` to install the `*-no-agpl.txt` requirement set, omitting the AGPL-licensed dependencies. See [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies). |
 | `VTSEARCH_AUTO_DRIVER` | `0` | On a box with NVIDIA hardware but no working driver, `1` installs the driver unattended instead of prompting. |

@@ -1,15 +1,11 @@
 # Running eval experiments on the GRID (SLURM) — playbook
 
 Practical, hard-won ops notes for running the `scripts/experiments/*` sweeps on
-the JHU-HLTCOE GRID (a shared SLURM cluster) — and the older `scripts/sod`
-sweeps, which live **only on the `evaluation-framework` branch** and are not
-present on `dev` (see
-[`lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md`](lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md)
-and
-`docs/experiments/2026-08-07-spike-check-2847/REPORT.md` for why that harness can't be
-pointed at `dev`). The patterns are general; HLTCOE-specific values are marked
-**[HLTCOE]**. Read this before launching a big sweep — most of it was learned by
-getting it wrong.
+the JHU-HLTCOE GRID (a shared SLURM cluster). The patterns are general;
+HLTCOE-specific values are marked **[HLTCOE]**. Read this before launching a big
+sweep — most of it was learned by getting it wrong. (The older `scripts/sod`
+sweeps live only on the `evaluation-framework` branch and cannot be pointed at
+`dev`; see `docs/experiments/2026-08-07-spike-check-2847/REPORT.md`.)
 
 This file covers **SLURM resources**. Its companions cover the rest of running a
 study, and the `grid-experiments` skill ties all three together:
@@ -38,6 +34,73 @@ jobs, so your fat request doesn't fit.
   ones update). Dropping 48G→16G has taken a wedged run from 1 GPU to the full 4.
 - When the pending reason flips to **`JobArrayTaskLimit`**, you're saturated at
   your own `%N` array throttle (good — that means you're using your full cap).
+
+## 1a. Memory is a per-user quota, not just a per-job request
+
+`cpu_limit` (the `cpu` partition's QOS) caps **cpu=360 and mem=1126400M (1100 GiB)
+per user** as of 2026-10-13. It moves, so read it rather than this line:
+
+```bash
+scontrol show assoc_mgr qos=cpu_limit flags=qos | grep -m1 -o 'MaxTRESPU=[^ ]*'
+# MaxTRESPU=cpu=360(<used>),mem=1126400(<used MB>),...
+```
+
+Never copy the numbers into a driver or a governor; `preflight.sh` check 8 reads the
+memory cap live for the same reason. SLURM charges a whole 2-thread core to a 1-CPU
+task, so the cap in tasks is half the CPU figure. The `gpu` partition carries no
+partition QOS: a job there counts only against your GPU tier (`4gpu_tier`, 4 GPUs).
+CPU is rarely the binding constraint; memory usually is, and it binds against *your
+own* jobs.
+
+An array of `16 x --mem=64G` claims 1024G — 93 % of the allowance — so every
+later job you submit sits in `QOSMaxMemoryPerUser` behind it. That is
+indistinguishable from a busy cluster and it is entirely self-inflicted. In
+#3129 it delayed a prepare job, throttled a second array to 2 slots instead of
+12, and parked five small diagnostic jobs for 25 minutes.
+
+**Size `--mem` from a real cell, the same way you size wall-clock:**
+
+```bash
+sacct -j <jobid> --format=JobID,JobName%20,MaxRSS,Elapsed
+```
+
+Measured peaks for the calibration harness (#3129):
+
+| cell | medias | peak RSS | sensible `--mem` |
+|---|---:|---:|---|
+| whole-image (siglip / siglip2_l) | 4–5k | ~1.1 GB | 8G |
+| whole-image, 12k set | 12k | ~3 GB | 8G |
+| `max_patch` (dinov3, 4–5k) | 4–5k | ~13–14 GB | 24G |
+| `max_patch` (dinov3, 12k) | 12k | ~14 GB | 24G |
+| `max_patch` (dinov3, `vg_scale`) | 7.7k | ~9.1 GB | 16G |
+| prepare (loads every pickle) | — | ~3.4 GB | 24G |
+
+`vg_scale` peaks *lower* than the 4–5k sets above despite holding more medias,
+because its cells are designated: three-valued labels cut each cell's evaluable
+pool to 4,000, and the working set is the cell, not the pickle. Do not read that
+as "patch cells got cheaper" — read it as "measure the cell you are about to
+run", which is the whole point of this table.
+
+**Size from a cell of the same KIND, and check the kind is the one you meant.**
+A `dinov3` cell that has silently fallen back to `whole_image` peaks near 4 GB
+and finishes in the same two minutes as a `siglip` cell — it looks like a
+perfectly good patch measurement and is not one (#3156: 74 of 108 cells then
+died at a `--mem` sized from it). `styles=` in the harness's own resolution
+output is the thing to read, not the runtime.
+
+Two QOS can bind and they disagree: `squeue %q` reports the association QOS
+while the partition carries its own. Read both and use the tightest —
+`preflight.sh --mem --conc` does this.
+
+Levers once an array is already running:
+
+```bash
+scontrol update JobId=<id> ArrayTaskThrottle=<n>   # frees quota as tasks finish
+scontrol update JobId=<id> MinMemoryNode=<MB>      # PENDING tasks only
+```
+
+`MinMemoryNode` cannot retarget tasks the scheduler has already dispatched, so
+throttling is usually the faster lever.
 
 ## 2. Know your QOS before chasing idle GPUs
 
@@ -134,12 +197,13 @@ it over a patch grid, so it needs **both** halves:
 | any boxed dataset x a single-vector embedder (`siglip`, `clip`, …) | yes | no | no — **binary** |
 | a boxless dataset (`caltech101_m`, …) x anything | no | — | no — **binary** |
 
-`dinov3_patch` is the only patch-capable embedder, so it is the only way to get
-a region arm. **A boxed dataset on a single-vector embedder does not error — it
+`dinov3_patch` is the pile's only patch embedder, so it is the only way to get
+a region arm from the pile. **A boxed dataset on a single-vector embedder does not error — it
 silently runs as binary voting**, which has now cost three studies (#2877,
 #2897, #2905). Assert the geometry rather than trusting the arm table:
 `build_pile.py --verify` checks that every region-capable cell actually carries
-`patch_grid`, and `launch_*.sh` has a `--require-region-voting` preflight.
+`patch_grid`, and `preflight.sh --require-region-voting DATASET:EMBEDDER`
+(which the region launchers pass) refuses a cell that would run binary.
 
 ## 5. Monitor from the GRID, not from your laptop
 
@@ -176,70 +240,3 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 - App-tier work that needs `./run-tests.sh` (deps, frontend build) belongs in the
   **Claude Code webapp** (`CLAUDE_CODE_REMOTE=true`, deps auto-install), not a local
   session or local agent. GRID SSH from a sandboxed remote won't work (no VPN/keys).
-
-## Memory is a per-user quota, not just a per-job request
-
-`cpu_limit` (the `cpu` partition's QOS) caps **cpu=360 and mem=1126400M (1100 GiB)
-per user** as of 2026-10-13. It moves, so read it rather than this line:
-
-```bash
-scontrol show assoc_mgr qos=cpu_limit flags=qos | grep -m1 -o 'MaxTRESPU=[^ ]*'
-# MaxTRESPU=cpu=360(<used>),mem=1126400(<used MB>),...
-```
-
-Never copy the numbers into a driver or a governor; `preflight.sh` check 8 reads the
-memory cap live for the same reason. SLURM charges a whole 2-thread core to a 1-CPU
-task, so the cap in tasks is half the CPU figure. The `gpu` partition carries no
-partition QOS: a job there counts only against your GPU tier (`4gpu_tier`, 4 GPUs).
-CPU is rarely the binding constraint; memory usually is, and it binds against *your
-own* jobs.
-
-An array of `16 x --mem=64G` claims 1024G — 93 % of the allowance — so every
-later job you submit sits in `QOSMaxMemoryPerUser` behind it. That is
-indistinguishable from a busy cluster and it is entirely self-inflicted. In
-#3129 it delayed a prepare job, throttled a second array to 2 slots instead of
-12, and parked five small diagnostic jobs for 25 minutes.
-
-**Size `--mem` from a real cell, the same way you size wall-clock:**
-
-```bash
-sacct -j <jobid> --format=JobID,JobName%20,MaxRSS,Elapsed
-```
-
-Measured peaks for the calibration harness (#3129):
-
-| cell | medias | peak RSS | sensible `--mem` |
-|---|---:|---:|---|
-| whole-image (siglip / siglip2_l) | 4–5k | ~1.1 GB | 8G |
-| whole-image, 12k set | 12k | ~3 GB | 8G |
-| `max_patch` (dinov3, 4–5k) | 4–5k | ~13–14 GB | 24G |
-| `max_patch` (dinov3, 12k) | 12k | ~14 GB | 24G |
-| `max_patch` (dinov3, `vg_scale`) | 7.7k | ~9.1 GB | 16G |
-| prepare (loads every pickle) | — | ~3.4 GB | 24G |
-
-`vg_scale` peaks *lower* than the 4–5k sets above despite holding more medias,
-because its cells are designated: three-valued labels cut each cell's evaluable
-pool to 4,000, and the working set is the cell, not the pickle. Do not read that
-as "patch cells got cheaper" — read it as "measure the cell you are about to
-run", which is the whole point of this table.
-
-**Size from a cell of the same KIND, and check the kind is the one you meant.**
-A `dinov3` cell that has silently fallen back to `whole_image` peaks near 4 GB
-and finishes in the same two minutes as a `siglip` cell — it looks like a
-perfectly good patch measurement and is not one (#3156: 74 of 108 cells then
-died at a `--mem` sized from it). `styles=` in the harness's own resolution
-output is the thing to read, not the runtime.
-
-Two QOS can bind and they disagree: `squeue %q` reports the association QOS
-while the partition carries its own. Read both and use the tightest —
-`preflight.sh --mem --conc` does this.
-
-Levers once an array is already running:
-
-```bash
-scontrol update JobId=<id> ArrayTaskThrottle=<n>   # frees quota as tasks finish
-scontrol update JobId=<id> MinMemoryNode=<MB>      # PENDING tasks only
-```
-
-`MinMemoryNode` cannot retarget tasks the scheduler has already dispatched, so
-throttling is usually the faster lever.

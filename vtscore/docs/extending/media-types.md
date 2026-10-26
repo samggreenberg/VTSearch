@@ -103,6 +103,22 @@ Optional overrides:
 `embeddable` is derived, not overridden: it is `True` exactly when at least
 one embedder is registered for the type.
 
+Two rules bind overrides:
+
+- **Always merge the base `display_metadata`.** Build your type-specific
+  fields first, then end with
+  `result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})`,
+  as every shipped override does. The base supplies Category, File Size,
+  the `Clip *` provenance and the "AI Caption" / "AI Tags" signpost row; a
+  type that returns its own dict silently drops them.
+- **Pixel types report *displayed* `width` / `height`.** Every box in the
+  system (clip boxes, face boxes, a user-drawn region) is expressed
+  against the picture as displayed, i.e. after EXIF orientation. Decode
+  through `vtscore.media.image.decode` (`decode_bounded`,
+  `decode_bounded_rgb`, `open_upright`; `upright_size()` for a
+  header-only size read). `open_image()` returns the untransposed original
+  and is the exception, not the default.
+
 ### Half types
 
 Two shipped types are *half types*. `document` is **convert-out**:

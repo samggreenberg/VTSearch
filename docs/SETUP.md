@@ -12,8 +12,6 @@ frontend build) Node.js 20.19+, 22.12+ or 24+.
 
 - [Prerequisites](#prerequisites)
 - [Getting the code](#getting-the-code)
-  - [Setting up an SSH key](#setting-up-an-ssh-key)
-  - [Clone the repository](#clone-the-repository)
 - [Setting up a virtual environment](#setting-up-a-virtual-environment)
 - [Installing dependencies](#installing-dependencies)
   - [How auto-detection decides](#how-auto-detection-decides)
@@ -107,55 +105,16 @@ brew install git
 
 ## Getting the code
 
-We recommend cloning over SSH so you don't have to enter your password on every push/pull.
-
-### Setting up an SSH key
-
-1. **Generate a key** (skip this if you already have one at `~/.ssh/id_ed25519`):
-
-   ```bash
-   ssh-keygen -t ed25519 -C "your_email@example.com"
-   ```
-
-   Press Enter to accept the default file location, then choose a passphrase (or leave it empty).
-
-2. **Start the SSH agent and add your key**:
-
-   ```bash
-   eval "$(ssh-agent -s)"
-   ssh-add ~/.ssh/id_ed25519
-   ```
-
-3. **Copy the public key** to your clipboard:
-
-   Linux:
-
-   ```bash
-   cat ~/.ssh/id_ed25519.pub
-   ```
-
-   macOS:
-
-   ```bash
-   pbcopy < ~/.ssh/id_ed25519.pub
-   ```
-
-4. **Add the key to GitHub**: Go to [github.com/settings/ssh/new](https://github.com/settings/ssh/new), paste the public key, give it a title, and click **Add SSH key**.
-
-5. **Verify the connection**:
-
-   ```bash
-   ssh -T git@github.com
-   ```
-
-   You should see a message like *"Hi username! You've successfully authenticated…"*.
-
-### Clone the repository
-
 ```bash
-git clone git@github.com:samggreenberg/VTSearch.git
+git clone https://github.com/samggreenberg/VTSearch.git    # read-only, no account needed
 cd VTSearch
 ```
+
+If you will push changes, clone over SSH instead
+(`git clone git@github.com:samggreenberg/VTSearch.git`), which needs an SSH key
+registered with GitHub; GitHub's
+[SSH guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
+walks through generating and adding one.
 
 ## Setting up a virtual environment
 
@@ -258,11 +217,11 @@ floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
 import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
-later, and it is the **only tag that gets cuML** (GPU UMAP / k-means): its
-torch pins the CUDA 12.9 libraries that RAPIDS ≥ 26.8 is built on, and RAPIDS
-≥ 26.8 is the first whose cudf takes the pandas 3 that `pyproject.toml` pins
-(#4390). A Volta card, or an older driver, steps down to `cu126` (or older),
-where the installer skips cuML and the app runs UMAP / k-means on the CPU.
+later, and it is the **only tag that gets cuML** (GPU UMAP / k-means). A
+Volta card, or an older driver, steps down to `cu126` (or older), where the
+installer skips cuML and the app runs UMAP / k-means on the CPU; why, and the
+by-hand escape hatch, are in
+[DEPLOYMENT.md § GPU install's cuML step](DEPLOYMENT.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
@@ -872,31 +831,10 @@ are in [TESTING.md § Test Groups](TESTING.md#test-groups). A bare
 `./run-tests.sh` on a branch that changes only markdown narrows itself to the
 `docs` gate automatically.
 
-You can also run pytest directly:
-
-```bash
-python -m pytest tests/ tests_lib/ -v
-```
-
-This runs fast CPU tests only. Additional test modes:
-
-**Full CPU tests** (adds the `slow`-marked tests: a CLI subprocess run and the toponymy fit tests):
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m 'not gpu'
-```
-
-**GPU tests** (requires CUDA):
-
-```bash
-python -m pytest tests_lib/gpu/test_gpu.py -v -m gpu
-```
-
-**All tests**:
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m ''
-```
+You can also run pytest directly: `python -m pytest tests/ tests_lib/` runs the
+fast CPU tests (the `pyproject.toml` default deselects the `slow` and `gpu`
+markers). How to add those back, and what each marker covers, is in
+[TESTING.md § Test Markers](TESTING.md#test-markers).
 
 ## Environment variables
 
