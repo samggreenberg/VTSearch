@@ -32,7 +32,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`structural-embedder.md`](structural-embedder.md)
 - [`half-media-types.md`](half-media-types.md)
 - [`media-cleaners.md`](media-cleaners.md)
-- [`visual-genome-dataset.md`](visual-genome-dataset.md)
 
 ## Thresholds and calibration
 
