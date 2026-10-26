@@ -25,10 +25,11 @@ against #4711's Region arms. Nothing ships from this PR. The follow-ups at the e
    backbone pass per image unless ~65 GB of features are cached (see Cost). The app's text-sort line, drawn on
    SAM3's scores, cuts at ~0.002 and keeps nearly everything (F1 0.04). SAM3 needs its own line.
 
-**Caveat, unresolved: training overlap.** The pool is COCO train2017. SAM3's paper lists 18 external training sets
-(Table 25); Objects365 is among them, COCO and LVIS are not named. That does not rule out COCO images reaching
-SAM3 another way. COCO Better's labels are the #4954-corrected ones, not COCO's. A check on a corpus SAM3 cannot
-have seen is #5240.
+**Training overlap: checked (#5240), and it does not explain the lead.** The pool is COCO train2017. SAM3's training
+sets (paper Table 26) name no COCO, but SA-Co/EXT holds Visual Genome, whose images are COCO images: 41.5% of this
+pool (10,161 of 24,507). Graded apart, SAM3 does no better on the images it trained on: AP 0.72 on them vs 0.73 on
+the rest (noun prompts), and its lead over SigLIP is +0.30 on the images it never had labels for. See
+[Training overlap](#training-overlap-5240).
 
 | seed 0, mean over cells (± SE over classes) | all (144) | small (46) | medium (49) | large (49) |
 |---|---|---|---|---|
@@ -145,6 +146,45 @@ From a literature pass (sources in `research_notes.md` beside this report):
   that paper **DINOv3 did worse than DINOv2** (32.8-33.8 vs 35.7). No head-to-head of mask pooling against a
   max-over-patches ranking was found.
 
+## Training overlap (#5240)
+
+**Question.** Is SAM3's lead memorisation of COCO? The paper's training-set table (Table 26) names no COCO and calls
+COCO and LVIS zero-shot. But SA-Co/EXT holds Visual Genome, and VG's 108,077 images include 51,208 COCO 2014 images
+(VG's `coco_id`). SAM3 saw those with VG's dense object labels, mapped to its ontology.
+
+**Design.** That splits this pool, inside the same cells, into **seen** (in VG: 10,161 images, 41.5%) and **unseen**
+(14,346). `text_baseline.py --keep-ids` grades each test half's seen and unseen images apart; the pool, split and
+cuts stay the whole cell's. So the two slices partition #5213's rows item for item. Every arm (SigLIP typed, SAM3
+typed, SAM3 noun) is graded on the same items. All 144 cells x 3 seeds are paired (none dropped). Prevalence is
+0.43% on the seen slice and 0.46% on the unseen slice (8,680 and 13,096 test positives). SigLIP is the control: it
+had no VG labels, so any difference between the slices themselves shows up in it too. The "all" run reproduces
+#5213's CSVs (SAM3 exactly; SigLIP to 6e-5, text-tower float noise). Means here are over 3 seeds, not seed 0 alone.
+
+| AP, mean over cells (± SE over classes) | seen (in VG) | unseen | seen - unseen |
+|---|---|---|---|
+| SigLIP typed sort | 0.42 | 0.42 | -0.001 |
+| SAM3 typed | 0.71 | 0.72 | -0.009 (± 0.009) |
+| SAM3 noun | 0.72 | 0.73 | -0.013 (± 0.009) |
+| **SAM3 noun lead over SigLIP** | +0.30 | **+0.31** (± 0.02) | **-0.012 (± 0.010)** |
+
+- **No lift on seen images.** If SAM3 remembered COCO it would rank seen images better. It ranks them slightly worse
+  (difference-in-difference -0.012 ± 0.010 noun, -0.007 ± 0.010 typed). This holds in every band: small -0.015 ±
+  0.019, medium -0.010 ± 0.015, large -0.011 ± 0.013 (noun). AUROC: -0.004 ± 0.003. Best-cut F1: +0.001 ± 0.009.
+- **No class hides an effect.** Per class the difference-in-difference is spread both ways: 22 of 49 classes above 0
+  (noun). The largest are knife +0.12 and bird +0.11; the smallest are bicycle -0.17 and traffic light -0.15. That is
+  the spread of noise at a class's positive count, not a tail.
+- **The unseen slice is the clean number for #5213's headline:** AP 0.73 (noun) vs SigLIP 0.42, lead +0.31.
+
+**What this does not rule out.** Unseen means "never given labels for". SAM3's image encoder was pretrained on web
+images (MetaCLIP is CommonCrawl), and COCO images are on Flickr, so some may have been crawled without labels. SigLIP's
+WebLI has the same exposure, so the comparison stays even. Labelled exposure is the strong form, and it bought
+nothing here. A corpus collected after SAM3 was trained would close the gap fully; none with COCO-style labels is on
+the GRID.
+
+Tables: `tables/sam3_5240_summary.csv` (every metric x band x arm x slice, with leads and differences),
+`tables/sam3_5240_per_class.csv`, `tables/sam3_5240_counts.json`.
+Reproduce: `sam3_5213.sh overlap DIR` (one CPU job, ~15 min).
+
 ## Follow-ups (filed)
 
 - **SAM3 as the opening (#5241):** replace SigLIP's typed sort, and its line, with SAM3's for the cells' first votes. The
@@ -156,8 +196,8 @@ From a literature pass (sources in `research_notes.md` beside this report):
   `max_patch`, the "DINO on SAM3 masks" question.
 - **Cross-image exemplars from votes (#5244):** the canvas trick with a cell's Good (and Bad) boxes, scored on the
   withheld half, against zero-shot. Includes whether negatives help or hurt.
-- **Training overlap (#5240), first:** the same zero-shot on a corpus SAM3 cannot have trained on, or a check of how much COCO is
-  in SA-Co, before any of the above is built.
+- **Training overlap (#5240), done:** see [Training overlap](#training-overlap-5240). Labelled exposure buys SAM3 nothing,
+  so the follow-ups above can be built on #5213's numbers.
 
 ## Files
 
@@ -165,5 +205,7 @@ From a literature pass (sources in `research_notes.md` beside this report):
 - `scripts/experiments/calibration/text_baseline.py`: `--sam3 DIR --sam3-prompts typed|noun|both`.
 - `scripts/experiments/state_of_app/sam3_5213.sh`: `smoke GPU`, `score N`, `baseline`.
 - `scripts/experiments/state_of_app/sam3_analyze_5213.py`: tables and figures here.
+- `scripts/experiments/state_of_app/sam3_overlap_5240.py`: #5240's id split (`ids`) and analysis (`analyze`);
+  `text_baseline.py --keep-ids`; `sam3_5213.sh overlap DIR` runs both.
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.
