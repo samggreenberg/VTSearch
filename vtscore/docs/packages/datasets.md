@@ -583,6 +583,11 @@ clipper, cleaners, name). Each goes through the post-import stages on
 its own and lands as its own registry entry with its own
 `DatasetImported` event; each output's origin records only its own
 `media_type` / `source_specs`, so a reload rebuilds that one dataset.
+An output whose converter rows read another output (a Face output reads
+the Image output) is finalized after it, and its outputs follow the
+merges made there (`vtscore.media.near_dupes.follow_source_merges`; see
+[`media.md`](media.md#near-duplicate-collapsing)), so two copies of a
+photo merged in the Image dataset leave one face, not one per copy.
 
 **When an import ends.** `_run_origin_load_in_background(...,
 on_finished=None)` calls *on_finished* once with a frozen

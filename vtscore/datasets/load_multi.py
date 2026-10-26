@@ -29,6 +29,11 @@ What is shared and what is per output:
 The N datasets stay linked: every registry entry records the run's
 ``import_group`` (one id minted per run) and the ``output_category`` it stands
 for, so a Face dataset can find the Image sibling its crops were cut from.
+They also agree on duplicates: an output converted from another output's
+media is finalized after it and follows the merges made there
+(:func:`~vtscore.media.near_dupes.follow_source_merges`), so two copies of a
+photo that the Image dataset merged leave one face in the Face dataset, not
+one per copy.
 
 Progress and cancellation: every output has its own loading task from the
 moment the request returns, so the dashboard shows N rows at once.  While the
@@ -103,6 +108,9 @@ class _OutputJob:
     #: Set once the job has reached a terminal state on its own (a cancel during
     #: the shared acquire); the shared phases then leave it alone.
     done: bool = False
+    #: Set once its dataset is finalized and saved; the outputs converted from
+    #: it then follow the merges it made.
+    saved: bool = False
 
     @property
     def tracker(self):
@@ -406,16 +414,56 @@ def _acquire_all(
             fanout.retire(job, exc)
 
 
+def _sources_of(job: _OutputJob, jobs: list[_OutputJob]) -> list[_OutputJob]:
+    """The other jobs whose dataset *job*'s converter rows read from.
+
+    Matched by category, as :func:`~vtscore.datasets.source_item.find_source_sibling`
+    matches siblings: a Face output's ``image2face`` row reads the Image output,
+    never a Document output of rendered pages beside it.
+    """
+    wanted = {spec.source_type for spec in job.output.source_specs if spec.converter}
+    return [other for other in jobs if other is not job and other.output.category in wanted]
+
+
+def _finalize_order(jobs: list[_OutputJob]) -> list[_OutputJob]:
+    """*jobs* with every source dataset ahead of the datasets converted from it, else as given."""
+    depths: dict[int, int] = {}
+
+    def depth(job: _OutputJob, seen: frozenset[int]) -> int:
+        if id(job) not in depths:
+            # A cycle needs two converters that undo each other; order it as given.
+            sources = [s for s in _sources_of(job, jobs) if id(s) not in seen]
+            depths[id(job)] = 1 + max((depth(s, seen | {id(job)}) for s in sources), default=-1)
+        return depths[id(job)]
+
+    return sorted(jobs, key=lambda job: depth(job, frozenset()))
+
+
+def _source_siblings(job: _OutputJob, jobs: list[_OutputJob]) -> list[dict[int, dict[str, Any]]]:
+    """Snapshots of the saved datasets *job*'s outputs were converted from."""
+    from vtscore.state.core import _state_lock  # noqa: PLC0415
+
+    siblings: list[dict[int, dict[str, Any]]] = []
+    for source in _sources_of(job, jobs):
+        if source.saved:
+            # Registered already, so readable (and in principle editable) by
+            # request threads: copy under the state lock.
+            with _state_lock:
+                siblings.append(dict(source.ctx.medias))
+    return siblings
+
+
 def _finalize_each(jobs: list[_OutputJob]) -> None:
     """Run the post-import stages on every live job in turn, each failure its own.
 
-    The rows still queued say which dataset they are waiting behind, so a user
-    watching three rows sees one of them working and the others explain the
-    pause.
+    Source datasets go first (:func:`_finalize_order`), so a dataset converted
+    from one can follow the merges it made.  The rows still queued say which
+    dataset they are waiting behind, so a user watching three rows sees one of
+    them working and the others explain the pause.
     """
     from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
 
-    pending = [job for job in jobs if not job.done]
+    pending = [job for job in _finalize_order(jobs) if not job.done]
     for index, job in enumerate(pending):
         for later in pending[index + 1 :]:
             if not later.done:
@@ -427,7 +475,9 @@ def _finalize_each(jobs: list[_OutputJob]) -> None:
                 job.tracker.check_cancelled()
                 if not job.ctx.medias:
                     raise ValueError(f"Import produced no {job.label} media.")
+                job.spec.source_siblings = _source_siblings(job, jobs)
                 _finish_dataset_load(job.ctx, job.tracker, job.pacer, job.spec, job.ids)
+                job.saved = True
             except Exception as exc:
                 _handle_load_failure(
                     exc,

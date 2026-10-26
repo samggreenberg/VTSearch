@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.media.near_dupes import follow_source_merges
 from vtscore.state import (
     build_coverage_atlas_for_context,
     collapse_duplicates,
@@ -165,6 +166,23 @@ def _collapse_near_duplicates_stage(ctx: DatasetContext, tracker) -> None:
     _progress(0, 0)
     collapse_near_duplicates(ctx.medias, on_progress=_progress)
     invalidate_embedding_matrix(ctx)
+
+
+def _follow_source_merges_stage(ctx: DatasetContext, source_siblings: list[dict[int, dict[str, Any]]]) -> None:
+    """Collapse converter outputs whose sources a sibling dataset merged.
+
+    *source_siblings* are the finished medias of the datasets this one's
+    converter rows read from, in the same multi-dataset import (the Image
+    dataset, for a Face dataset); empty for every other load, where this is a
+    no-op.  Runs whether or not near-duplicate merging was asked for: it
+    follows whatever the sibling merged, exact duplicates included.  See
+    :func:`~vtscore.media.near_dupes.follow_source_merges`.
+    """
+    collapsed = 0
+    for source_medias in source_siblings:
+        collapsed += follow_source_merges(ctx.medias, source_medias)
+    if collapsed:
+        invalidate_embedding_matrix(ctx)
 
 
 def _build_coverage_atlas_stage(ctx: DatasetContext, tracker) -> None:

@@ -1229,6 +1229,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A Face dataset no longer keeps a face from each copy of a merged photo.** In a Multi-Dataset import with
+  **Image** and **Face** ticked, *Merge near-duplicates* merged two copies of a photo (a resize, a re-save) into
+  one in the Image dataset, but the Face dataset kept the face cut from each copy, so the same face appeared twice.
+  The Face dataset now merges wherever the Image dataset did: the face from the photo the Image dataset kept
+  stays, and exporting it exports the face from every copy, as for the photo. With *Reference files in place* on,
+  a merged item that is cut from a file (a face, a video frame, a tile) also lost the recipe its picture is re-made
+  from, and showed the whole file in its place (the whole photo for a face); it shows its own picture again.
+
 - **A merged archive-member item still plays after its dataset is reopened** (issue #5238). When an
   **Archive members (no extract)** manifest lists one member twice, the import merges the two items into one.
   After the dataset was saved and reopened, that item had no bytes to serve, and reopening the dataset in full

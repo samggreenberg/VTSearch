@@ -529,6 +529,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
+  whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
+  merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of
+  each (`source_box` overlap, else output index); the one cut from the kept copy leads its `dupe_set`. A
+  multi-dataset load (`vtscore.datasets.load_multi`) now finalizes every output whose converter rows read another
+  output after that output, and runs this on it. Additive.
+
 - **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
   `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
   `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
@@ -2291,6 +2298,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.lazy_clip` read the recipe of a
+  reference-mode clip or converter output from `origin.params`, which a duplicate collapse replaces with the
+  group's, so a merged item had no recipe and the resolvers served its whole source file instead (the photo a face
+  was cut from). It now reads the representative's own origin, the group's first member.
 
 - **A merged archive-member item keeps its archive pointer across a reload** (issue #5238).
   `vtscore.datasets.archive_stream.archive_member_ref` found a `local_archive_member` item's shard and member in

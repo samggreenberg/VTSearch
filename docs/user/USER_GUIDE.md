@@ -548,7 +548,10 @@ Dashboard while it loads, its own **Cancel**, and its own AutoFind run.
 - Each ticked row's **Details ▾** opens that dataset's own settings
   (*Include media*, embedders, clipper, cleanup). *Build Browse map now* and
   *Merge near-duplicates* apply to every dataset of the import and sit once,
-  under the list.
+  under the list. The **Face** dataset merges with the **Image** dataset: when
+  two copies of a photo are merged into one, their faces are too, so a face
+  appears once rather than once per copy, cut from the photo the Image dataset
+  kept.
 - The *Dataset media type* dropdown gives way to a **Datasets to make** line
   naming the ticked kinds, so what the import will make stays in sight with
   **Advanced** closed (and an **Import** button greyed out for want of a ticked
