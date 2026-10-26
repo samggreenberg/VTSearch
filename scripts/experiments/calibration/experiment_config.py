@@ -963,7 +963,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: head the app-pipeline trainer fits, not a choice of pipeline: these studies
 #: always run ``trainer="app"`` (issue #3764).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
-#: the head the live detector actually trains — ``linear_svm``.  That is the
+#: the head the live detector actually trains — ``linear_svm_prior``
+#: (``vtscore.eval.step_model.PRODUCTION_HEAD``).  That is the
 #: only setting a study's headline numbers can be read off, because questions
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``
