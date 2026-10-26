@@ -790,7 +790,7 @@ only (Manual and Review are driven from its list); the right one folds on
 every tab. Click a strip, or drag its divider out, to open the panel, and the
 small ◀ / ▶ at the top of an open panel folds it again. Each side remembers
 your choice; **Hide left panel in Train and Tune** and **Hide right panel in
-Train and Tune**, in the Settings modal's Appearance tab, set it too. A test
+Train and Tune**, in the Settings modal's **Panels** tab, set it too. A test
 that reaches **Done!** opens its result panel on its own.
 
 ---
@@ -932,8 +932,8 @@ full phase list, and its ◀ collapses it again.
 
 ### Configuring Autopilot
 
-Most people never touch these, but the **Autopilot** tab in the Settings
-modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes:
+Most people never touch these, but the **Training** tab in the Settings
+modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes, under **Autopilot**:
 
 - **# Good to start** - how many good votes phase 1 requires (default 3).
 - **# Bad to start** - how many bad votes phase 2 requires (default 4).
@@ -1644,7 +1644,7 @@ Settings modal's **Server** tab. Once set:
   in Find Results and in the metadata panes, the Dashboard's **Type**
   columns, the type rows in the Stats windows and the combine dialogs, the
   type tags in the top-bar pulldowns, and the per-type tab bars under
-  Settings' Scroll Style and Browser. A dataset or detector of another
+  Settings' Scroll Style and Browse Map. A dataset or detector of another
   type, kept from before the restriction, still shows its type, and brings
   its table's Type column back.
 - The chosen type's default embedder is warmed at startup so the
@@ -1660,31 +1660,29 @@ per-user override.
 ## Settings tabs
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.webp" />
-  <img src="assets/settings-appearance.light.webp" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-general.dark.webp" />
+  <img src="assets/settings-general.light.webp" alt="The Settings, General pane: the tab rail, theme picker, animation and usage-bar pulldowns, and Toasty's hints" width="720" />
 </picture>
 
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
-eight tabs:
+eight tabs. The first six are your preferences, in the order you meet the
+work; below a divider, **HuggingFace** and **Server** are an account and the
+server's own values:
 
-- **Appearance** - theme, animations, the Dashboard's **RAM / Disk
+- **General** - theme, animations, the Dashboard's **RAM / Disk
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
-  largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Hide left panel** / **Hide right panel in Train and Tune**
-  toggles, the **Enable achievements** toggle, **Hide All** / **Show All** for
-  [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
-  mode and thumbnail size).
-- **AutoFind** - what exporter to send AutoFind results to, whether to
-  send them (untick **Export results when AutoFind finishes** to pause the
-  exporter without losing its settings), and whether
-  a command-line run deletes the dataset it imported once AutoFind has run
-  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
-  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
-  [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
-- **Autopilot** - the guided-workflow knobs described under
-  [Configuring Autopilot](#configuring-autopilot).
-- **Browser** - per-media-type look of the spatial Browse view
+  largest; **View** and **Hide** show them always or never), the **Enable
+  achievements** toggle, and **Hide All** / **Show All** for
+  [Toasty's hints](#toastys-hints).
+- **Panels** - the metadata panel, the **Hide left panel** / **Hide right
+  panel in Train and Tune** toggles, and per-media-type Scroll Style (focus
+  mode and thumbnail size for each side of Train, Tune and Find).
+- **Import** - default embedder, clipper, and converters per
+  media type. On a server set up to tell you when an import finishes
+  (often by email), **Alert me when an import finishes** is here too:
+  untick it to ask the server not to.
+- **Browse Map** - per-media-type look of the spatial Browse view
   (signposts, signpost text, colormap, cell size, thumbnail border,
   popup thumbnail size, mouse-zooms per level; the tile shape is chosen
   automatically from the media type — squares for browsable thumbnails,
@@ -1696,16 +1694,25 @@ eight tabs:
   map still feels laggy - every animation keeps playing, but the costly
   effects (image smoothing during motion, drop shadows) are dropped.
   **Full** always uses the richest animations.
+- **Training** - the knobs most people never touch: Autopilot's thresholds
+  (see [Configuring Autopilot](#configuring-autopilot)), **Enrich
+  descriptions** for text sorting, and how training places
+  [the line](#3-threshold): **Rounds** is how many times it holds out part of
+  your votes, trains on the rest and scores the held-out ones (default 2;
+  more rounds give a steadier line and take longer), and **Held-out
+  fraction** is the share held out each round (empty picks per model).
+- **AutoFind** - what exporter to send AutoFind results to, whether to
+  send them (untick **Export results when AutoFind finishes** to pause the
+  exporter without losing its settings), and whether
+  a command-line run deletes the dataset it imported once AutoFind has run
+  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
+  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
+  [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
-- **Import Defaults** - default embedder, clipper, and converters per
-  media type. On a server set up to tell you when an import finishes
-  (often by email), **Alert me when an import finishes** is here too:
-  untick it to ask the server not to.
 - **Server** - read-only settings fixed when the server started and
   shared by everyone, including the **Solo media type** and **Autopilot
   only** restrictions.
-- **Sorting** - options that control how the trained ranking behaves.
 
 Settings save as you change them. The buttons at the bottom of the window
 export them to a file, import them again, or put everything back to
@@ -1865,7 +1872,7 @@ away.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
-**Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
+**Settings → General → Toasty's hints** has **Hide All** and **Show All**,
 which brings back every hint, including ones you hid one at a time. Toasty
 also turns up on the notifications at the top of the screen: happy on good
 news, surprised on a warning, sad on an error.
@@ -1942,7 +1949,7 @@ moment after it appears; if the naming settings change, VTSearch re-runs
 the naming in the background the next time you browse rather than making
 you rebuild.
 
-Settings → **Browser** controls them per media type:
+Settings → **Browse Map** controls them per media type:
 
 - **Signposts** - show or hide the lettering (the same thing the canvas
   toggle does, but remembered as your default).
@@ -2182,7 +2189,7 @@ Two ways to bring in existing work:
 ## Achievements
 
 VTSearch has an optional light gamification layer. When **Enable
-achievements** is on (Settings → Appearance; it is on unless you turn it off), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.webp" /><img src="assets/icon-achievements.light.webp" alt="The Achievements (trophy) button" height="24" /></picture>
+achievements** is on (Settings → General; it is on unless you turn it off), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.webp" /><img src="assets/icon-achievements.light.webp" alt="The Achievements (trophy) button" height="24" /></picture>
 appears in the top bar; click it to open the **Achievements** panel, which lists the
 achievements and your tier progress on each.
 

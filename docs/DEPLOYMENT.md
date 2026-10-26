@@ -627,14 +627,14 @@ An abridged example; the full field list is `UserSettings` in
   `--on-dataset-imported` hooks as `DatasetImported.notify`; a hook that emails
   should skip the user when it is `false` (see
   [EXTENDING.md § Dataset-Import Hooks](EXTENDING.md#dataset-import-hooks)).
-  Settings › Import Defaults offers it only when hooks are configured.
+  Settings › Import offers it only when hooks are configured.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the
   frontend's per-type default.
 - `import_defaults_by_media_type`: the embedder, clipper (+ params),
   converter rows and cleanup gates to auto-fill into the Add Dataset advanced
-  panel for each output media type. Set from Settings → Import Defaults, or by
+  panel for each output media type. Set from Settings → Import, or by
   the **Save as default** offer after an import (the only way to save the
   cleanup gates).
 - `settings_source` (not shown; excluded from the defaults endpoint): opt-in

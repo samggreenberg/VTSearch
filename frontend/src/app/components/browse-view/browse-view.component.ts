@@ -205,7 +205,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
    * applied to the canvas's default target bin radius. ``M`` (index 2, scale 1)
    * is the default. The bigger/smaller buttons step through these and the
-   * Settings → Browser tab picks one by name. Growing the size makes the *same
+   * Settings → Browse Map tab picks one by name. Growing the size makes the *same
    * bins* use more pixels (the view zooms in lock-step, so the binning — which
    * vectors land in a hex — is unchanged); it is not the "Zoom" control, which
    * instead re-bins a smaller region more finely. The persisted per-media value

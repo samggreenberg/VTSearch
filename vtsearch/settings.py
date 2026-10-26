@@ -1507,7 +1507,7 @@ def filter_semantic_only_embedder_dicts(embedder_dicts: Iterable[dict[str, Any]]
     ``supports_patch_regions`` or ``supports_geometric_verification`` is
     withheld from the listing, so every picker fed by that endpoint (the Add
     Dataset "Advanced" block's Embedder / Region embedder / Instance embedder
-    selects, the Import Defaults tab) offers Semantic embedders only.
+    selects, the Import tab's defaults) offers Semantic embedders only.
 
     A no-op when the lock is off, so the ordinary deployment pays one boolean.
     """

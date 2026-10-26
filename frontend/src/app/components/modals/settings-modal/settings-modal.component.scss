@@ -93,18 +93,18 @@
 
 // Scroll Style's two-side layout sits inside the shared `.view-tab-content`
 // panel (base styling in `_components.scss`). Encapsulation scopes this
-// grid override to ScrollStyle's tab content only; other consumers
-// (e.g. Import Defaults) keep their own inner layout.
+// grid override to this component's panes; the child components (Import
+// defaults, AutoFind) keep their own inner layout.
 .view-tab-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-xl);
 }
 
-// The Browser tab reuses the paneled `.view-tab-content` look but stacks its
+// The Browse Map pane reuses the paneled `.view-tab-content` look but stacks its
 // controls in a single column (Scroll Style's two-side grid would leave a
 // dead right column here).
-.view-tab-content.browser-tab-content {
+.view-tab-content.browse-tab-content {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -129,7 +129,7 @@
 // (stretch variant) defined in `scss/_components.scss`.
 
 
-// Read-only value display for the Server Settings tab. Styled to read as
+// Read-only value display for the Server pane. Styled to read as
 // a static, non-editable field (muted surface, no focus affordance) so
 // it's visually distinct from the editable controls in the other tabs
 // while still sitting under a `.form-label` like every other setting.
@@ -156,7 +156,7 @@
 
 // Hidden-plugins breakdown: one `family: name, name` row per plugin
 // family. Shares the muted-surface look of `.server-value` so the whole
-// Server tab reads as a single read-only group.
+// Server pane reads as a single read-only group.
 .server-list {
   margin: 0;
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xl);

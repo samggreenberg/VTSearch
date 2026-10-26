@@ -49,8 +49,8 @@ ignored. Importing replaces your **AutoFind** list if the file has one.
 
 ## What is in the file
 
-Your own settings: everything under **Appearance**, **Autopilot**,
-**Browser**, **Import Defaults**, **Sorting** and **AutoFind**, your
+Your own settings: everything under **General**, **Panels**,
+**Import**, **Browse Map**, **Training** and **AutoFind**, your
 **AutoFind** list, and remembered layout such as panel widths.
 
 Not in it: the **Server** tab's settings, which belong to the server and
