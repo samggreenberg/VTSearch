@@ -169,19 +169,28 @@ describe('SettingsModalComponent', () => {
       Array.from(fixture.nativeElement.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).map((el) =>
         el.textContent?.trim(),
       );
+    // Scroll Style's bar, on the Panels pane.
+    async function openPanels(): Promise<void> {
+      component.activeSettingsTab.set('panels');
+      await settleZoneless(fixture);
+    }
 
     it('offers a tab per registered type on a server open to every type', async () => {
       await flushInit();
+      await openPanels();
       expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
       expect(tabNames()).toEqual(['Sound', 'Image']);
     });
 
     it('drops the bar on a server locked to one type, and settles on that type', async () => {
       await flushInit({ solo_media_type: 'image' });
+      await openPanels();
       expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['image']);
       expect(component.activeViewTab()).toBe('image');
       expect(component.activeBrowseTab()).toBe('image');
       expect(tabNames()).toEqual([]);
+      // The bar goes; the lone type's Left Side / Right Side controls stay.
+      expect(fixture.nativeElement.querySelectorAll('.view-side-section').length).toBe(2);
     });
 
     it('keeps every tab when the lock names a type the registry lacks', async () => {
