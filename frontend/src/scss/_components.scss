@@ -551,9 +551,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     background: transparent;
   }
 
-  // Focus is on the window-sized backdrop only when nothing inside can take it
-  // (or after a click on the box's padding); the box frame already shows
-  // where focus is, as for `initialFocus="dialog"` below.
+  // Focus is on the window-sized backdrop itself only when nothing inside can
+  // take it; a ring round the whole window says nothing the box's own frame
+  // does not, as for `initialFocus="dialog"` below.
   &:focus-visible {
     outline: none;
   }
