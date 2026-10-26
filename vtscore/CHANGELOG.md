@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Added
+
+- **A converter may hand over the vector it computed.** A `MediaConverter.convert` output may carry
+  `"embeddings": {embedder_name: vector}` (and `"embedder"`, naming the primary) when the conversion itself
+  embedded the media; `vtscore.converters.runner` files the vector on the media dict, so the embed stage finds
+  nothing missing. Additive: outputs without the key behave as before. The first user is `image2face`'s
+  `imagekit` provider, which detects and embeds each face from the full photo in one pass through the
+  `imagekit` face-provider seam, and the new `imagekit_face` face embedder (`vtscore.media.face.embedder_imagekit`)
+  that fronts that seam beside FaceNet, which is now explicitly the face type's default.
+
 ### Changed
 
 - **The head's count line keeps 0.71·β times what stands out at a balance of 1 and below, not β^0.708** (issue

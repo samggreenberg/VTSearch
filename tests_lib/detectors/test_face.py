@@ -122,13 +122,21 @@ class TestFaceEmbedder:
         assert emb.name == "face"
         assert emb.media_type_id == "face"
 
-    def test_not_default_and_no_text(self):
+    def test_default_for_faces_and_no_text(self):
         from vtscore.media.face.embedder_facenet import FaceEmbedder
 
         emb = FaceEmbedder()
-        assert emb.is_default is False
+        # The shipped face path stays the default now that the imagekit
+        # provider-seam embedder is registered beside it.
+        assert emb.is_default is True
         assert emb.supports_text is False
         assert emb.supports_patch_regions is False
+
+    def test_facenet_is_first_for_the_face_type(self):
+        from vtscore.media import embedders_for_type
+
+        names = [e.name for e in embedders_for_type("face")]
+        assert names[0] == "face" and "imagekit_face" in names
 
     def test_to_dict(self):
         from vtscore.media.face.embedder_facenet import FaceEmbedder
@@ -138,7 +146,7 @@ class TestFaceEmbedder:
             "display_name": "FaceNet (face identity, 512d)",
             "model_id": None,
             "media_type_id": "face",
-            "is_default": False,
+            "is_default": True,
             "supports_text": False,
             "supports_patch_regions": False,
             "supports_geometric_verification": False,
