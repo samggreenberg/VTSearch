@@ -34,9 +34,7 @@ SELF = FRONTEND_SRC / "components/plugin-combobox/plugin-combobox.component.ts"
 def _templates_rendering_free_text_selects() -> list[Path]:
     """Every ``.html`` template that has a branch for ``allow_free_text``."""
     found = [
-        path
-        for path in sorted(FRONTEND_SRC.rglob("*.html"))
-        if "allow_free_text" in path.read_text(encoding="utf-8")
+        path for path in sorted(FRONTEND_SRC.rglob("*.html")) if "allow_free_text" in path.read_text(encoding="utf-8")
     ]
     assert found, "found no templates rendering allow_free_text selects — has the SPA moved?"
     return found
