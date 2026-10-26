@@ -10,21 +10,28 @@
 # and machine-sensitive (font hinting, see below) to gate every test run.
 # (The cheap, browser-free docs⇄manifest gate is wiring-check.py.)
 #
-# Font hinting and anti-aliasing differ between machines, so a render from
-# another box differs from the baselines even when the GUI has not moved: faint
-# fringes along every edge, and the odd glyph drawn a sub-pixel along. With
-# ImageMagick (7's `magick`, or 6's `compare`), two knobs absorb that:
+# Font hinting and anti-aliasing differ between rendering stacks, so a render
+# from another one differs from the baselines even when the GUI has not moved:
+# faint fringes along every edge, and the odd glyph drawn a sub-pixel along.
+# With ImageMagick (7's `magick`, or 6's `compare`), two knobs absorb that:
 #
 #   SHOT_FUZZ    percent colour distance under which two pixels count as the
 #                same (compare -fuzz). Default 5: it absorbs the fringes.
 #   SHOT_MAX_PX  pixels that may still differ, past the fuzz, before a shot is
 #                drift. Default 150: it absorbs the shifted glyphs.
 #
-# The defaults come from a re-render of an unchanged GUI against baselines
-# another container rendered (#5278): its noisiest shot differed by 100 px past
-# the fuzz, and a one-word label change by 400 px or more. A pass whose pixels
-# still differ is listed as "near", with its count, so a near miss stays
+# The defaults come from shots of an unchanged GUI rendered before and after the
+# cloud container's Chromium upgrade of October 2026 (#5278). Past 5% fuzz the
+# noisiest differed by 100 px, and the smallest real text change, one digit, by
+# 241 px. A swapped tab icon (about 100 px) passes, which is why a pass whose
+# pixels still differ is listed as "near", with its count: a near miss stays
 # visible. Without ImageMagick this compares bytes, with no tolerance at all.
+#
+# The tolerance is for rasterisation, not typefaces. The app's font stack ends
+# in the system sans-serif (Inter in the cloud container), so a machine that
+# resolves it to another face (San Francisco on macOS, Segoe UI on Windows)
+# moves every line of text, and no setting passes that and still catches a
+# moved control.
 set -euo pipefail
 cd "$(dirname "$0")"
 
