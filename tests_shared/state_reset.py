@@ -271,6 +271,18 @@ def reset_shared_state(medias_snapshot) -> None:
     reset_dataset_registry()
     reset_detector_registry()
 
+    # The imagekit face-provider registry is process-global too: a test that
+    # registers a fake provider (or loads a fake entry point) must not leak it
+    # into the next test's ``get_pipeline()``.
+    from imagekit.face.pipeline import reset_for_tests as reset_face_providers
+
+    reset_face_providers()
+
+    # ...and the app's cached, initialised pipeline over that registry.
+    from vtscore.media.face.imagekit_bridge import reset_for_tests as reset_face_bridge
+
+    reset_face_bridge()
+
 
 @pytest.fixture(autouse=True)
 def allow_test_tmp_paths(monkeypatch):

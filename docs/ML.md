@@ -279,7 +279,8 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `audio` | `embeddinggemma2_audio` | EmbeddingGemma 2 (audio) | `google/embeddinggemma-2` | 768 | — |
 | `audio` | `paraspeechclap` | ParaSpeechCLAP (speech style) | `ajd12342/paraspeechclap-combined` | 768 | — |
 | `audio` | `whisper_encoder` | Whisper encoder (speech) | `openai/whisper-base` | 512 | no text queries |
-| `face` | `face` | FaceNet (face identity, 512d) | — | 512 | no text queries |
+| `face` | `face` | FaceNet (face identity, 512d) | — | 512 | **default** for its media type; no text queries |
+| `face` | `imagekit_face` | imagekit face provider (face identity, 512d) | — | 512 | no text queries; restricted model license |
 | `image` | `siglip` | SigLIP (general images) | `google/siglip-base-patch16-224` | 768 | **default** for its media type |
 | `image` | `clip` | CLIP (general images) | `openai/clip-vit-base-patch32` | 512 | — |
 | `image` | `clip_l` | CLIP ViT-L/14 (evaluation only) | `openai/clip-vit-large-patch14` | 768 | **evaluation only** — registered, but withheld from the app's pickers |

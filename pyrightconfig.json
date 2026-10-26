@@ -1,5 +1,5 @@
 {
-  "include": ["vtsearch", "vtscore", "tests", "tests_lib", "tests_shared"],
+  "include": ["vtsearch", "vtscore", "imagekit", "tests", "tests_lib", "tests_shared"],
   "exclude": [
     "**/__pycache__",
     "**/node_modules",
