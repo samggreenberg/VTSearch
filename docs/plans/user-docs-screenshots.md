@@ -1,8 +1,8 @@
 # User-Docs Screenshots
 
 **Status:** This doc is the full-system reference for the screenshot pipeline
-(manifest + Playwright harness + driver scripts); the open follow-ups below
-(annotation polish, pixel-diff tolerance) are the remaining work.
+(manifest + Playwright harness + driver scripts); the open follow-up below
+(annotation polish) is the remaining work.
 
 ## Open follow-ups
 
@@ -21,9 +21,6 @@
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause sub-pixel
-  noise across machines; may need a small per-pixel threshold).
 
 <!-- item-sep -->
 
@@ -162,6 +159,11 @@ stub randomness the UI exposes (never rely on unseeded draws).
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
+  With ImageMagick it tolerates the hinting and anti-aliasing noise of a render
+  from another machine: pixels within `SHOT_FUZZ` percent colour distance count
+  as equal (default 5), and up to `SHOT_MAX_PX` may still differ (default 150).
+  It lists every shot with pixels still differing, passes included as `near`,
+  so a near miss stays visible. Without ImageMagick it compares bytes.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the user-facing
   docs (the guide, its how-to pages, README.md and demos.md) has a matching
