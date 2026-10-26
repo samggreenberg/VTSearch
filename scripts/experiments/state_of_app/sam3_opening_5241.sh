@@ -5,9 +5,11 @@
 #
 #   sig    today's app: SigLIP's typed sort opens, its set until the quota / hold / miss, then the head
 #   sam3   SAM3's typed-prompt scores open (they order the opening's picks), its set at the 0.5 cut is what Test
-#          gives through click 150 on both paths (CALIB_QUERY_HOLD=151 + CALIB_QUERY_HOLD_PATCH, no miss), and the
-#          head trains and is scored all the same, its rows tagged hold:head. Picks never depend on what Test shows,
-#          so every takeover rule (and SAM3's other line, the GMM midpoint) is priced afterwards on these sessions.
+#          gives through click 150 on both paths (CALIB_QUERY_HOLD past any session + CALIB_QUERY_HOLD_PATCH, no
+#          miss), and the head trains and is scored all the same, its rows tagged hold:head. Picks never depend on
+#          what Test shows, so every takeover rule is priced afterwards on these sessions.
+#   sam3gmm  SAM3's other line, the GMM midpoint of its scores: one click on the Binary cells. The set is the same
+#          at every click and on both paths (the withheld half is the cell's), so its one row prices the line.
 #
 #   sam3_opening_5241.sh dirs [ARM]            run dirs <root>/<date>-sam3open5241<tag>-<arm>-b1 on #4711's grid
 #   sam3_opening_5241.sh preflight ARM [IDX]   the preflight a launch of the same cells would pass
@@ -21,7 +23,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 S="${SOTA_ROOT:-/expscratch/sgreenberg/state-of-the-app}"
 D="${S5241_DATE:-2026-10-26}"
 STEPS="${S5241_STEPS:-150}"
-ARMS=(sig sam3)
+ARMS=(sig sam3 sam3gmm)
 GRID_SRC="${S5241_GRID:-$S/2026-10-23-regstyles4711-grid/results}"
 SCORES="${SAM3_SCORES:-/expscratch/sgreenberg/sam3-5213/scores}"
 run_of() { echo "sam3open5241${S5241_TAG:-}-$1-b1"; }
@@ -39,12 +41,16 @@ common_env() {  # ARM: today's app at beta 1, trajectory pass, plus the arm's op
   unset CALIB_CENTROID_LINE CALIB_CENTROID_LINE_VARIANTS CALIB_QUERY_TIER CALIB_QUERY_HOLD CALIB_LABEL_QUOTA
   unset CALIB_QUERY_MISS VTSEARCH_SVM_HEAD_C SOTA_EMBEDDERS SOTA_DATASET SOTA_POOL_PREVALENCE SOTA_CELL_PREVALENCE
   unset CALIB_SEED_SAM3 CALIB_SEED_SAM3_PROMPTS CALIB_QUERY_LINE CALIB_QUERY_HOLD_PATCH CALIB_HANDOVER_SHADOW
-  if [[ "$arm" == sam3 ]]; then
+  if [[ "$arm" == sam3* ]]; then
     export CALIB_SEED_SAM3="$SCORES" CALIB_SEED_SAM3_PROMPTS=typed CALIB_QUERY_LINE=fixed:0.5
-    export CALIB_QUERY_HOLD=$((STEPS + 1)) CALIB_QUERY_HOLD_PATCH=1 CALIB_QUERY_MISS=0
+    # The hold counts labels, check votes included, so it is set past any session's.
+    export CALIB_QUERY_HOLD=100000 CALIB_QUERY_HOLD_PATCH=1 CALIB_QUERY_MISS=0
     # #4776's evidence (held-out Goods' ranks under the head), for a takeover rule; single-vector cells only.
     export CALIB_HANDOVER_SHADOW=1
     export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}seed_sam3,query_line,query_hold_patch"
+  fi
+  if [[ "$arm" == sam3gmm ]]; then
+    export CALIB_QUERY_LINE=gmm SOTA_MAX_STEPS=1
   fi
 }
 check_arm() { [[ " ${ARMS[*]} " == *" $1 "* ]] || { echo "arm must be one of ${ARMS[*]}" >&2; exit 2; }; }
@@ -54,13 +60,15 @@ dirs)
   for arm in "${ARMS[@]}"; do
     [[ -z "${2:-}" || "$2" == "$arm" ]] || continue
     r="$S/$D-$(run_of "$arm")/results"
+    st="$STEPS" n=288
+    [[ "$arm" == sam3gmm ]] && st=1 n=144
     mkdir -p "$r/cells"
     ln -sfn "$GRID_SRC/prepare_info.json" "$r/prepare_info.json"
     ln -sfn "$GRID_SRC/crops" "$r/crops"
     cat >"$r/grid_shape.json" <<JSON
-{"n_cells": 288, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": 1,
- "max_steps": $STEPS, "cell_order": "seed", "test_bands": "all", "job_name": "$(run_of "$arm")",
- "note": "#5241 arm $arm, Binary + Region (max_patch), beta 1, $STEPS clicks, trajectory pass; grid symlinked from $GRID_SRC"}
+{"n_cells": $n, "datasets": ["coco_better"], "embedders": ["siglip", "siglip+dinov3_patch"], "n_seeds": 1,
+ "max_steps": $st, "cell_order": "seed", "test_bands": "all", "job_name": "$(run_of "$arm")",
+ "note": "#5241 arm $arm, Binary + Region (max_patch), beta 1, $st clicks, trajectory pass; grid symlinked from $GRID_SRC"}
 JSON
     echo "$r"
   done
@@ -88,7 +96,9 @@ launch)
   check_arm "$arm"
   common_env "$arm"
   export CALIB_PARTITION=cpu CALIB_CPUS="${CALIB_CPUS:-1}"
-  exec bash "$HERE/launch.sh" redo "${3:-0-287}"
+  default=0-287
+  [[ "$arm" == sam3gmm ]] && default=0-143
+  exec bash "$HERE/launch.sh" redo "${3:-$default}"
   ;;
 *)
   sed -n '2,19p' "$0"
