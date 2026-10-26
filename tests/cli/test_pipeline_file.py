@@ -284,6 +284,40 @@ class TestLoadPipelineFile:
         assert cfg["as_labelset"] is True
         assert cfg["tempimport"] is True
 
+    def test_resume_requires_stream_results(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "resume": True}))
+        with pytest.raises(ValueError, match="'resume:' only applies with 'stream_results:'"):
+            load_pipeline_file(p)
+
+    def test_resume_refuses_a_labelset_stream(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "as_labelset": True, "resume": True}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        with pytest.raises(ValueError, match="'resume:' cannot resume a labelset stream"):
+            load_pipeline_file(p)
+
+    def test_resume_must_be_bool(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "resume": "yes"}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        with pytest.raises(ValueError, match="'resume:' must be a boolean"):
+            load_pipeline_file(p)
+
+    def test_resume_round_trips(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "resume": True}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        assert load_pipeline_file(p)["resume"] is True
+
     def test_stream_results_requires_tempimport(self, tmp_path):
         """A streamed run never holds the whole dataset, so it cannot be the
         saved one (#4226): the file must say it is temporary."""
@@ -869,6 +903,31 @@ class TestDispatchStreamingFlags:
         )
         assert seen["stream_results"] is True
         assert seen["as_labelset"] is True
+
+    def test_resume_reaches_the_run(self, monkeypatch):
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        seen = {}
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": ["Dogs"],
+                "chunk_size": 10,
+                "stream_results": True,
+                "keep_negatives": False,
+                "resume": True,
+                "import_labels": None,
+                "exporter": "server_json_file",
+                "exporter_fields": {"filepath": "hits.ndjson"},
+                "tempimport": True,
+            }
+        )
+        assert seen["resume"] is True
 
 
 class TestImportLabelsCreate:

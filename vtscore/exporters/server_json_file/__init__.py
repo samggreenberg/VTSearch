@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_json, atomic_write_stream
+from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
+from vtscore.io import atomic_write_json, atomic_write_stream, commit_write_stream, resumable_write_stream
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 
@@ -26,6 +26,25 @@ _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 # :func:`vtscore.io.atomic_write_text` or
 # :func:`vtscore.io.atomic_write_json` instead.
 from vtscore.io import atomic_write_text as _atomic_write_text  # noqa: E402, F401
+
+
+def _ndjson_meta(header: dict[str, Any]) -> dict[str, Any]:
+    """The ``_meta`` object an NDJSON hit stream opens with."""
+    meta: dict[str, Any] = {
+        "format": "vtsearch-hits-ndjson/v1",
+        "media_type": header.get("media_type", "unknown"),
+        "detectors": header.get("detectors", []),
+        "keep_negatives": bool(header.get("keep_negatives", False)),
+    }
+    if header.get("dataset"):
+        # One of several datasets from one run (#4707): say which.
+        meta["dataset"] = header["dataset"]
+    return meta
+
+
+def _ndjson_hit_line(detector_name: str, hit: dict[str, Any]) -> str:
+    """One hit as an NDJSON line, its ``detector`` name merged in."""
+    return json.dumps({"detector": detector_name, **hit}) + "\n"
 
 
 class ServerJsonResultsExporter(ResultsExporter):
@@ -93,27 +112,58 @@ class ServerJsonResultsExporter(ResultsExporter):
         same path can't clobber each other's temp file.
         """
         filepath = Path(field_values["filepath"])
-
-        meta = {
-            "format": "vtsearch-hits-ndjson/v1",
-            "media_type": header.get("media_type", "unknown"),
-            "detectors": header.get("detectors", []),
-            "keep_negatives": bool(header.get("keep_negatives", False)),
-        }
-        if header.get("dataset"):
-            # One of several datasets from one run (#4707): say which.
-            meta["dataset"] = header["dataset"]
+        meta = _ndjson_meta(header)
 
         total_hits = 0
         with atomic_write_stream(filepath) as f:
             f.write(json.dumps({"_meta": meta}) + "\n")
             for detector_name, hit in records:
-                f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
+                f.write(_ndjson_hit_line(detector_name, hit))
                 total_hits += 1
 
         return {
             "message": (
                 f"Streamed {total_hits} hit(s) across "
+                f"{len(meta['detectors'])} detector(s) to {filepath.resolve()} (NDJSON)."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
+    def resumable_stream_path(self, field_values: dict[str, Any]) -> str:
+        return str(field_values["filepath"])
+
+    def export_cli_streaming_resumable(
+        self,
+        header: dict[str, Any],
+        chunks: Iterator[list[tuple[str, dict[str, Any]]]],
+        field_values: dict[str, Any],
+        resume: StreamResume,
+    ) -> dict[str, Any]:
+        """Write the same NDJSON as :meth:`export_cli_streaming`, in place, a chunk at a time.
+
+        Each chunk's lines are ``fsync``\\ ed before the chunk is committed, so
+        the byte offset the CLI checkpoints always ends on a whole chunk; a
+        resumed run cuts the file back to it and appends, which leaves the same
+        file an uninterrupted run would have written.
+        """
+        filepath = Path(field_values["filepath"])
+        meta = _ndjson_meta(header)
+
+        total_hits = 0
+        with resumable_write_stream(filepath, resume.position) as f:
+            if resume.position is None:
+                f.write(json.dumps({"_meta": meta}) + "\n")
+                resume.commit(commit_write_stream(f))
+            for chunk in chunks:
+                for detector_name, hit in chunk:
+                    f.write(_ndjson_hit_line(detector_name, hit))
+                    total_hits += 1
+                resume.commit(commit_write_stream(f))
+
+        verb = "Streamed" if resume.position is None else "Appended"
+        return {
+            "message": (
+                f"{verb} {total_hits} hit(s) across "
                 f"{len(meta['detectors'])} detector(s) to {filepath.resolve()} (NDJSON)."
             ),
             "filepath": str(filepath.resolve()),

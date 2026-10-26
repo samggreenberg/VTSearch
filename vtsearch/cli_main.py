@@ -250,6 +250,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        dest="resume",
+        help=(
+            "With --stream-results, make the run resumable: a checkpoint beside the "
+            "output (<filepath>.resume.json) records each chunk once it is written, and "
+            "running the same command again after an interruption continues after the "
+            "last one, appending to the output without repeating or dropping a chunk. A "
+            "checkpoint from a different run (source, chunk size, detectors, settings or "
+            "exporter fields changed) is refused. Needs a fixed --filepath (no date "
+            "template) and server_json_file or server_csv_file; not with --as-labelset "
+            "or --outputs. The checkpoint is removed when the run completes."
+        ),
+    )
+    parser.add_argument(
         "--import-labels-into",
         type=str,
         default=None,
@@ -448,6 +463,7 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
         "stream_results",
         "keep_negatives",
         "as_labelset",
+        "resume",
         "import_labels_into",
         "label_importer_file",
         "label_importer_fields",
@@ -860,6 +876,7 @@ def _dispatch_autodetect(
     save_dataset,
     as_labelset=False,
     override_clipper=None,
+    resume=False,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path.
 
@@ -867,7 +884,8 @@ def _dispatch_autodetect(
     of the settings file's AutoFind list, so a labelled detector can be run
     headlessly without first moving it to AutoFind in the UI (#4235).
     *override_clipper* is ``--override-clipper``'s ``input_spec``
-    (:func:`_override_clipper`).
+    (:func:`_override_clipper`).  *resume* is ``--resume``, which only a
+    chunked run takes (``--stream-results`` already requires ``--chunk-size``).
     """
     from vtscore.cli import (
         autodetect_importer_main,
@@ -901,6 +919,8 @@ def _dispatch_autodetect(
             entry_point, source_args = autodetect_main, (args.dataset,)
     else:
         parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
+    if resume:
+        source_kwargs["resume"] = True
 
     entry_point(
         *source_args,
@@ -981,6 +1001,11 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         parser.error("--keep-negatives only applies with --stream-results")
     if as_labelset and not stream_results:
         parser.error("--as-labelset only applies with --stream-results")
+    resume = bool(getattr(args, "resume", False))
+    if resume and not stream_results:
+        parser.error("--resume only applies with --stream-results (it checkpoints the stream after each chunk)")
+    if resume and as_labelset:
+        parser.error("--resume cannot resume a labelset stream (--as-labelset); it resumes hit streams only")
     # The imported dataset is saved to the dashboard unless --tempimport says
     # otherwise (#4226). Streaming exists for sources too big to hold, and
     # saving means holding the whole dataset, so the two cannot be combined.
@@ -1007,6 +1032,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         save_dataset,
         as_labelset=as_labelset,
         override_clipper=override_clipper,
+        resume=resume,
     )
 
 

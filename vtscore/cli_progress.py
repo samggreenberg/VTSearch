@@ -14,6 +14,17 @@ app's ``vtsearch/cli_main.py``:
   fields: ``chunk_num`` (int), ``chunk_size`` (int)
 - ``chunks_done``    - chunked scoring finished
   fields: ``total_medias`` (int), ``chunks`` (int)
+- ``resume_start``   - a resumable streamed run (``--resume``) begins, fresh
+  or continuing from its checkpoint
+  fields: ``checkpoint`` (str), ``chunks_done`` (int), ``resumed`` (bool)
+- ``chunk_skipped``  - a resumed run re-read a chunk it had already written
+  and checked it against the checkpoint, without scoring it
+  fields: ``chunk_num`` (int), ``chunk_size`` (int)
+- ``resume_threshold_kept`` - a resumed run's retrained threshold moved by
+  floating-point noise; the checkpoint's is kept
+  fields: ``detector`` (str), ``retrained`` (float), ``recorded`` (float)
+- ``resume_complete`` - a resumable run finished and removed its checkpoint
+  fields: ``checkpoint`` (str), ``chunks`` (int)
 - ``medias_unembedded`` - media still carry no embedding after the load's
   embed pass, and score only through a converter route
   fields: ``unembedded`` (int), ``unembedded_ids`` (list[int] - the first 100)

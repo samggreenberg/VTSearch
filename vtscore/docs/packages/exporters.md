@@ -161,7 +161,13 @@ whole run. An exporter opts in with `supports_streaming` and
 as label entries to `export_labelset_streaming()` instead, each naming its
 detector and carrying no score, so the export reads back in through a label
 importer; `supports_labelset_streaming` is derived from overriding it.
-Neither is a payload kind. Every built-in that delivers a scored run streams
+A run with `--resume` writes through `export_cli_streaming_resumable()`
+instead, one list of hits per chunk plus a `StreamResume` naming where to
+pick up and how to commit progress, so an interrupted run can continue
+after its last completed chunk; `server_json_file` and `server_csv_file`
+implement it (with `vtscore.io.resumable_write_stream` and
+`commit_write_stream`), and `supports_resumable_streaming` is derived from
+overriding it. Neither is a payload kind. Every built-in that delivers a scored run streams
 both ways,
 except `open_url` - which returns a URL rather than writing anything, so
 it has nothing to write incrementally. `portable_detector` is outside

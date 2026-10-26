@@ -1,6 +1,6 @@
 # CLI streaming for massive media sources
 
-**Status:** Lazy enumeration, streaming export, and per-chunk embed are in place; remaining work is the open follow-ups below (global ordering, resume/checkpoint).
+**Status:** Lazy enumeration, streaming export, per-chunk embed and `--resume` are in place; remaining work is the open follow-ups below (global ordering, a faster resume for folders).
 
 **Parent:** [`scalability.md`](scalability.md) — the brainstorm that defines the
 `S#` IDs. This plan implements the CLI-specific pieces (S15 enumeration, S20
@@ -21,6 +21,9 @@ python app.py --autodetect --tempimport --importer server_folder --path /data/im
 
 <!-- item-sep -->
 
-- [ ] #5280 — Resume an interrupted streamed run from its last completed chunk
+
+<!-- item-sep -->
+
+- [ ] #5314 — `--resume`: skip a folder's completed chunks at the walk, without re-reading their files
 
 <!-- item-sep -->
