@@ -268,7 +268,8 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_embeddinggemma2_audio.py` | `AudioEmbeddingGemma2Embedder` | `embeddinggemma2_audio` | `audio` |  |
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` |  |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` |  |
-| `face/embedder_facenet.py` | `FaceEmbedder` | `face` | `face` |  |
+| `face/embedder_facenet.py` | `FaceEmbedder` | `face` | `face` | ✅ |
+| `face/embedder_imagekit.py` | `ImagekitFaceEmbedder` | `imagekit_face` | `face` |  |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
 | `image/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
 | `image/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |

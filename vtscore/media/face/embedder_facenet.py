@@ -75,7 +75,10 @@ class FaceEmbedder(MediaEmbedder):
 
     @property
     def is_default(self) -> bool:
-        return False
+        # The shipped face path, measured on the FHIBE face bench; the
+        # ``imagekit_face`` embedder (the provider seam) sits beside it and
+        # must not become the default by registration order.
+        return True
 
     @property
     def supports_text(self) -> bool:
