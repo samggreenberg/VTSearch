@@ -4,8 +4,8 @@ Both suites run thousands of tests in a handful of long-lived xdist worker
 processes, so every module-level cache, registry and progress tracker in
 ``vtscore`` is shared between tests and has to be put back before each one.
 The sequence below is the whole of that reset for the library tier; each
-conftest wraps it with its own tier-specific extras (the app tier's autorun
-processors, login provider and settings isolation; the library tier's
+conftest wraps it with its own tier-specific extras (the app tier's AutoFind
+runs, import hooks, login provider and settings isolation; the library tier's
 ``CoreConfig`` builder and temp registry paths).
 """
 

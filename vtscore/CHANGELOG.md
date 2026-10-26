@@ -2544,6 +2544,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Removed
 
+- **The processor ABCs and the four processors built on them** (issues #5259, #3452). `vtscore.media.processors`
+  (`Processor`, `Detector`, `Localizer`, `Extractor`) is deleted, and `vtscore.media` no longer re-exports those
+  four names. So are `vtscore.media.image.extractor` (`ImageClassExtractor`, YOLO),
+  `vtscore.media.image.ocr_extractor` (`OCRExtractor`, PaddleOCR), `vtscore.media.audio.speech_extractor`
+  (`SpeechExtractor`, Whisper) and `vtscore.media.image.face_localizer` (`FaceLocalizer`, MTCNN). **Breaking**, and
+  without a deprecation window although the ABCs shipped in 0.1.0: no code outside the repo subclasses them,
+  `Detector` was never wired to anything, and `Localizer` / `Extractor` had a single driver, the app's autorun
+  routes, which are removed with them. Importing any of these names now raises `ImportError`. The YOLO object
+  clipper (`ImageObjectClipper`), the `image2face` converter (MTCNN) and the `image2text` converter (PaddleOCR)
+  are unaffected.
+
 - **`vtscore.timing.fit`** (issue #4667). The module that fitted recorded timing rows into a
   profile document (`load_rows`, `normalize_row`, `affine_fit`, `fit_step`, `fit_branches`,
   `fit_profile`, `coverage_report`, …) is deleted, along with the recorder it read and the

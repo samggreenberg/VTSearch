@@ -30,33 +30,16 @@ Two constraints shaped it, and both still bind anything built on top:
 
 <!-- item-sep -->
 
-- **Decide what `negative_hits` means to an exporter.** The find-results
-  payload has carried `negative_hits` since the route was written, the CLI
-  emits them under `keep_negatives`, and **no exporter reads the key** — every
-  export is positives-only. That is now *documented* in
-  `export_find_results`'s contract, which was the minimum; the behavioural
-  question is still open. Either leave it conventional, or give exporters a way
-  to opt in (a `PluginField` on the file/webhook exporters, or a second records
-  stream for the streaming path). Worth settling deliberately rather than by
-  the accident of what the first exporter happened to read.
+- [ ] #5283 — Decide what find-results `negative_hits` means to an exporter
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Per-AutoFind exporter selection.** The second half of #3219: let a detector
-  moved to AutoFind carry its own exporter choice, falling back to the global
-  AutoFind setting when unset. Not designed here. The open design question is
-  the one the issue thread raises — whether an exporter preference is really
-  per-detector or per-user — and it is worth answering before building the UI.
+- [ ] #5284 — Per-detector AutoFind exporter selection
 
 <!-- item-sep -->
 
-- **No labelset streaming mode.** `export_cli_streaming` is find-results only,
-  and deliberately so: the NDJSON label stream in
-  `vtsearch/routes/labels/vote.py` is a built-in route rather than a plugin
-  path, so a plugin-side twin has no caller today. If a labelset export ever
-  needs to outgrow RAM, that is the shape to add — not a widening of the
-  existing streaming method, whose records are `(detector_name, hit)` tuples.
+- [ ] #5285 — Labelset streaming export mode, if a labelset outgrows RAM
 
 <!-- item-sep -->

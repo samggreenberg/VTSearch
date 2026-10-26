@@ -4,7 +4,7 @@
  * the shot's frame and writes docs/user/assets/<id>.<theme>.webp for each of
  * its themes, flipping the theme on the one frame (`captureShot`).
  *
- * Design notes (see docs/plans/user-docs-screenshots.md): the dev box is
+ * Design notes (see README.md beside this script): the dev box is
  * RAM-tight (~3.7 GB), so the harness connects to a SINGLE running app rather
  * than booting its own per shot — two app instances would load the image
  * embedder twice and risk OOM. refresh.sh starts that app on a fresh data dir

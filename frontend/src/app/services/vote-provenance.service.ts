@@ -25,8 +25,8 @@ export type VoteFlow =
  * `score` is overwritten by the next retrain — so a vote not annotated now is
  * annotated never. No server-side reader changes a threshold today: the one
  * that did, the precision estimate's evidence filter (#4245), retired with the
- * estimate in #4362. See `docs/plans/provenance-partitioned-calibration.md`
- * for the use still gated on an experiment.
+ * estimate in #4362, and the calibration partition the record was kept for
+ * was retired before it ran (#5260).
  *
  * Deliberately narrower than the generated `VoteProvenance` model, which
  * carries every value the wire format allows including the ones only the

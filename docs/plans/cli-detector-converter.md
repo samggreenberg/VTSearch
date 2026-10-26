@@ -19,22 +19,11 @@ and the "Scoring across source types" note in `docs/CLI.md`.
 
 <!-- item-sep -->
 
-- **Clip-score aggregation toggle.** Converter fan-out and re-clip sub-items both
-  aggregate to the source media by **max** today ("find the needle": positive if
-  *any* sub-item clears threshold). The design proposes an explicit
-  `input_spec.clip_aggregation` (`"max"` | `"mean"`, default `"max"`) so a
-  detector can instead score overall quality via the mean. The aggregation point
-  is the `best_by_source` reduction in `_score_one_detector` (`vtscore/cli.py`);
-  the field would select `max` vs `mean` there, and would need to travel on the
-  detector's scoring info the way `clipper` / `clipper_params` already do.
+- [ ] #5281 — `input_spec.clip_aggregation`: score sub-clips by mean instead of max
 
 <!-- item-sep -->
 
-- **`--override-clipper` CLI flag.** Power-user escape hatch to score with a
-  different granularity than the detector was trained on. Not the primary
-  interface; it would force a chosen clipper into the re-clip path
-  (`route_and_embed`'s `clipper` argument) regardless of the detector's
-  `input_spec`, overriding the auto-clip decision in `_load_and_train_detectors`.
+- [ ] #5282 — `--override-clipper` CLI flag
 
 <!-- item-sep -->
 
@@ -56,15 +45,8 @@ clipper-mismatched detector carries its `clipper` / `clipper_params` on its
 scoring info, and `route_and_embed` applies it (via the load-pipeline clipper
 stage) after routing to the target type and before scoring.
 
-### Clip-score aggregation (open)
-
-A clipper (or converter) yielding N sub-items per media gives N scores. Default
-**max** (positive if *any* sub-item clears threshold); optional **mean** (overall
-quality) via `input_spec.clip_aggregation` (default `"max"`).
-
 ### CLI surface
 
 For the common case nothing changes — the pipeline auto-converts per the
-detector's `media_type` and re-clips per its `input_spec`. A niche
-`--override-clipper sound_tiling_5s` escape hatch would force a different
-granularity than the detector was trained on.
+detector's `media_type` and re-clips per its `input_spec`. The two knobs on top
+of that, mean aggregation and a clipper override, are #5281 and #5282.

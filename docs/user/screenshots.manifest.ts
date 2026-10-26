@@ -1,6 +1,6 @@
 /**
  * User-docs screenshot manifest — the single source of truth for every
- * documentation screenshot. See `docs/plans/user-docs-screenshots.md`.
+ * documentation screenshot. See `scripts/screenshots/README.md`.
  *
  * One entry per *logical* shot. `themes` expands automatically: an entry with
  * `themes: ["light","dark"]` yields two files,

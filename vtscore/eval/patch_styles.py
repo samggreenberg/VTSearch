@@ -22,9 +22,11 @@ a cropped exemplar seeds the startup sort.  The styles are:
   (:func:`build_patch_hac_tree`), snap a Good vote to the best-matching node,
   and flood / max-pool over every node.  They lost the Max-Patch study at the
   operating point despite ranking best, and the calibration study pinned that
-  on calibration rather than geometry - the open "max-pool-aware calibration"
-  follow-up in ``docs/plans/calibration-experiment.md`` is why they are still
-  here.
+  on calibration rather than geometry.  On today's threshold stack that loss is
+  gone and both trees beat ``max_patch`` on Region Photo
+  (``docs/experiments/2026-10-25-region-styles-4711/REPORT.md``); confirming
+  ``max_patch_hac``'s gain on more seeds before it ships (#5222) is why they
+  are still here.
 
 The ``max_hac`` arm (the pre-#2886 production pipeline: K-means-pooled HAC
 leaves, snap-to-node Good votes, CLS+leaf floods) is **gone**.  It lost the

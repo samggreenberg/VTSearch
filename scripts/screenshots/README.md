@@ -1,37 +1,11 @@
-# User-Docs Screenshots
+# User-docs screenshots
 
-**Status:** This doc is the full-system reference for the screenshot pipeline
-(manifest + Playwright harness + driver scripts); the open follow-ups below
-(annotation polish, pixel-diff tolerance) are the remaining work.
-
-## Open follow-ups
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-- **Annotation polish.** The declarative `highlight` overlay dims the whole
-  viewport (including modals); a couple of boxes (`importer-subtab-bar`) sit a
-  few px low. Cosmetic; tune the overlay geometry.
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-- **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause sub-pixel
-  noise across machines; may need a small per-pixel threshold).
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
----
-
-## Reference — the full system
+The screenshots in the user docs (`docs/user/assets/`) are rendered, never
+hand-taken: a manifest names every shot, and the Playwright harness in this
+directory drives a running app to each one and writes it. This README is the
+reference for the whole system: the manifest, the harness, the driver scripts,
+the refresh workflow and the convention for embedding a shot in a doc. The slide
+deck's UI figures come from a separate shooter, `slides/figs/src/shoot-ui-figs.mjs`.
 
 **Goal.** Inline screenshots in the **user-facing** docs plus a system that
 **regenerates every shot with one command** when the GUI changes. The pain point
@@ -79,7 +53,7 @@ little padding — the guide's **inline crops**, embedded mid-sentence with a
 `height` and no `width` so the in-app Help panel keeps them in the line of
 text.
 
-### 1. The manifest — single source of truth
+## 1. The manifest — single source of truth
 
 `docs/user/screenshots.manifest.ts` (TS so the harness imports it directly). One
 entry per **logical** shot; `themes: ["light","dark"]` expands to two files.
@@ -90,7 +64,7 @@ each shot belongs to, so the wiring check can prove docs and manifest agree.
 The `Shot`, `Annotation`, `Target` and `Helpers` interfaces at the top of the
 manifest are the schema; read them there rather than from a copy here.
 
-### 2. The harness — `scripts/screenshots/capture.ts`
+## 2. The harness — `scripts/screenshots/capture.ts`
 
 For each shot: boot the app once (Smiley-example fixtures), set deterministic
 knobs, run the recipe, then for each theme apply it, inject declarative
@@ -148,7 +122,7 @@ text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
 and pin the RAM / disk gauges' fill bar at a fixed fraction;
 stub randomness the UI exposes (never rely on unseeded draws).
 
-### 3. Driver scripts — `scripts/screenshots/`
+## 3. Driver scripts — `scripts/screenshots/`
 
 - `refresh.sh` — regenerate **every** shot from the manifest in place; then
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI

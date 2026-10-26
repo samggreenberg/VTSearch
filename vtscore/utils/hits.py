@@ -23,7 +23,7 @@ def hit_custom_metadata(media: dict[str, Any]) -> dict[str, Any]:
     """Return *media*'s importer metadata, safe to serve, or ``{}`` for none.
 
     Public because every surface that hands a media's ``custom_metadata`` to
-    an outside caller — hits, the detector and processor scoring routes,
+    an outside caller — hits, the detector scoring routes,
     ``POST /api/medias/batch`` — has to agree on what it strips.  A top-level
     key filter cannot do the job: the vector rides *inside* ``custom_metadata``.
 

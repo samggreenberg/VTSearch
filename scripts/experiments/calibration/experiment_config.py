@@ -1,7 +1,8 @@
 """Pre-registered grid for the calibration study (issue #2781).
 
 One place the prepare stage, the SLURM array indexer, and the analyzer all agree
-on.  See ``docs/plans/calibration-experiment.md`` for the design.
+on.  The design and the results are in
+``docs/experiments/2026-07-31-calibration/REPORT.md``.
 
 Arms (each an ``(embedder, style)`` pair).  An embedder is either a single
 registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`),
@@ -548,12 +549,13 @@ SINGLE_STYLES = ["whole_image"]
 #: The style whose per-node scores get re-pooled into the remedial arms.
 REPOOL_STYLE = "max_patch_pca_hac"
 #: The #2781 re-pool arms, **off by default: the question is closed.**  Both
-#: pre-registered fixed re-pools failed (``docs/plans/set-scorer-experiment.md``:
-#: ``topk`` made regret worse, sign-corrected ``pnorm`` closed ~21% of the gap),
-#: and every analyzer filters ``pool_variant`` back down to the base rows
-#: (``_cells_io.BASE_POOL_VARIANTS``), so the arms cost a re-calibration and a
-#: re-pool per step per cell to produce rows nothing reads.  The live version of
-#: the question is learned set-pooling, not another fixed rule.
+#: pre-registered fixed re-pools failed (``docs/experiments/2026-07-31-calibration/REPORT.md``
+#: Finding 3: ``topk`` made regret worse, sign-corrected ``pnorm`` closed ~21% of
+#: the gap), and every analyzer filters ``pool_variant`` back down to the base
+#: rows (``_cells_io.BASE_POOL_VARIANTS``), so the arms cost a re-calibration and
+#: a re-pool per step per cell to produce rows nothing reads.  The gap itself is
+#: gone on today's line: the trees now sit closer to their oracle than
+#: ``max_patch`` does (#4711), which retired learned set-pooling as well (#5260).
 REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "").split(",") if v]
 REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
 

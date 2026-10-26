@@ -5,7 +5,7 @@
 # Use it wherever `gpu.txt` would be used (same --index-url / --extra-index-url
 # sequence for torch; see the header of that file) when AGPL-3.0-or-later code
 # cannot ship in your deployment. The features that need those packages -- the
-# YOLO image extractor and clipper, the PDF importer, the document converters
+# YOLO image clipper, the PDF importer, the document converters
 # -- then fail with an actionable message instead of working.
 #
 # `requirements/gpu.txt` remains the default; this file is the opt-out.
