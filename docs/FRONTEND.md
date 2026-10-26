@@ -852,6 +852,19 @@ is why they are two helpers rather than one with a flag.
   importer) and the New-Detector modal (materialise one example file). Layout
   that differs between hosts is projected into named content slots rather than
   branched on inside the child.
+- **Forms use `ngModel` as a value binding and nothing more.** Each control
+  binds `[ngModel]` + `(ngModelChange)` (or `[(ngModel)]`) to a signal or a
+  field. There is no `NgForm`, no `#ref="ngModel"` and no reactive form, so no
+  template reads Angular's field state (`valid`, `dirty`, `touched`). Validity
+  is a hand-written check (the importer pickers' `canSubmit`), and the Settings
+  modal saves on every change. Signal Forms (`@angular/forms/signals`, stable
+  from Angular 22) was evaluated for these forms in #5292 and not adopted.
+  Three reasons: its field state and schema validators replace machinery
+  nothing here uses; most of these forms render fields a plugin declares at
+  runtime, where a schema bound to static paths fits badly; and the package
+  imports `@angular/forms` itself, so adopting it removes nothing from the
+  bundle. Reconsider it for a new hand-written form with a fixed shape that
+  needs per-field errors or touched/dirty state.
 
 ### Modals
 
