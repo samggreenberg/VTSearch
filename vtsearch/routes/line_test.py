@@ -50,7 +50,7 @@ from typing import Any
 import numpy as np
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._context import require_detector_header
+from vtsearch.routes._context import MISSING_DETECTOR_HEADER, require_detector_header
 from vtsearch.schemas.line_test import LineTestResponseSchema, LineTestUnvoteRequestSchema, LineTestVotesRequestSchema
 
 log = logging.getLogger(__name__)
@@ -172,6 +172,7 @@ def get_line_test():
 @line_test_bp.route("/api/line-test/start", methods=["POST"])
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
+@line_test_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @line_test_bp.alt_response(409, description="No Find pass to test: score the dataset first.")
 @_one_at_a_time
 def start_line_test():
@@ -312,6 +313,7 @@ def unvote_line_test(body: dict):
 @line_test_bp.route("/api/line-test/cancel", methods=["POST"])
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
+@line_test_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @_one_at_a_time
 def cancel_line_test():
     """Abandon the running test.  Its votes so far stay session votes; a finished test is left as it is."""
@@ -327,6 +329,7 @@ def cancel_line_test():
 @line_test_bp.route("/api/line-test/forget", methods=["POST"])
 @require_detector_header
 @line_test_bp.response(200, LineTestResponseSchema)
+@line_test_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @line_test_bp.alt_response(500, description="The detector file could not be rewritten.")
 @_one_at_a_time
 def forget_line_test():

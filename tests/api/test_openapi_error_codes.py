@@ -20,11 +20,12 @@ with ``<code>`` an integer literal, or a parameter that a caller fills with
 one (``_abort_find(404, ...)``).  Any code of 400 or above missing from the
 operation's ``responses`` fails the test.
 
-What it does not cover, on purpose: the codes the global handlers in
-``vtsearch/errors.py`` produce from exceptions (409 / 404 for an unloaded or
-deleted context, 400 for a missing one, 500 for anything uncaught).  They
-apply to every route and are documented once, by the ``default`` response
-every operation carries.
+What it does not cover, on purpose: the codes every route shares.  Those
+are the global handlers in ``vtsearch/errors.py``, which turn exceptions
+into 409 / 404 for an unloaded or deleted context, 400 for a missing one and
+500 for anything uncaught, and the request hooks in ``vtsearch/hooks.py``,
+whose 401 refuses a request the login provider rejects.  They are documented
+once, by the ``default`` response every operation carries.
 
 The walk is static, so a call it cannot resolve (a method on an object, a
 function passed in as a value) is a place an undeclared code could hide.
@@ -49,8 +50,8 @@ import vtsearch
 from vtsearch.openapi_postprocess import _flask_to_openapi_path
 
 _VTSEARCH_DIR = Path(vtsearch.__file__).resolve().parent
-#: The global handlers: their codes are the ``default`` response's (see above).
-_GLOBAL_HANDLERS = _VTSEARCH_DIR / "errors.py"
+#: Modules whose codes apply to every route: the ``default`` response's (see above).
+_GLOBAL_MODULES = {_VTSEARCH_DIR / "errors.py", _VTSEARCH_DIR / "hooks.py"}
 #: Callee name -> (position, keyword) of its status argument.
 _ERROR_CALLS = {"abort": (0, None), "error_response": (1, "status")}
 _FUNCTION_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -64,11 +65,11 @@ def _source_path(code: types.CodeType) -> Path:
 
 
 def _is_app_function(obj) -> bool:
-    """True for a plain function defined in ``vtsearch/`` outside the global handlers."""
+    """True for a plain function defined in ``vtsearch/``, outside the global modules."""
     if not inspect.isfunction(obj):
         return False
     path = _source_path(obj.__code__)
-    return path.is_relative_to(_VTSEARCH_DIR) and path != _GLOBAL_HANDLERS
+    return path.is_relative_to(_VTSEARCH_DIR) and path not in _GLOBAL_MODULES
 
 
 def _int_literal(node: ast.AST | None) -> int | None:
@@ -279,10 +280,14 @@ def test_scanner_reaches_every_error_site():
 
     unreached = []
     for path in sorted(_VTSEARCH_DIR.rglob("*.py")):
-        if path == _GLOBAL_HANDLERS:
+        if path in _GLOBAL_MODULES:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Call) and _error_status_arg(node)[0] and (path, node.lineno) not in scanner.sites_seen:
+            if (
+                isinstance(node, ast.Call)
+                and _error_status_arg(node)[0]
+                and (path, node.lineno) not in scanner.sites_seen
+            ):
                 unreached.append(f"{path.relative_to(_VTSEARCH_DIR.parent)}:{node.lineno}")
     assert not unreached, (
         "No route reaches these abort() / error_response() calls through a call the scanner in this\n"

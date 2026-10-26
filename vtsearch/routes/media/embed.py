@@ -82,6 +82,15 @@ def _is_multipart_request() -> bool:
 
 
 @embed_bp.route("/api/embed", methods=["POST"])
+@embed_bp.alt_response(
+    400,
+    description=(
+        "Missing ``embedder``, ``text`` or ``file``; text for an embedder without text support; or a file "
+        "of another media type, or one the embedder could not embed."
+    ),
+)
+@embed_bp.alt_response(404, description="Unknown embedder name.")
+@embed_bp.alt_response(500, description="The embedder raised, or returned no vector for the text.")
 def embed():
     """Embed a media file (multipart) or text snippet (JSON) on demand."""
     if _is_multipart_request():
