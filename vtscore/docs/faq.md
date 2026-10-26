@@ -158,7 +158,8 @@ Depends on the embedder — each one declares its dimensionality via the
 | `embeddinggemma2_audio` | `audio` | 768 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
-| `face` | `face` | 512 |
+| `face` | `face` (default) | 512 |
+| `imagekit_face` | `face` | 512 |
 | `siglip` | `image` (default) | 768 |
 | `clip` | `image` | 512 |
 | `clip_l` | `image` | 768 |

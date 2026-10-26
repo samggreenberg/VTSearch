@@ -115,6 +115,11 @@ dependencies = [
     # MLP (vtscore.detectors.portable_bundle). Pure-Python protobuf builder; no
     # torch.onnx dependency (the graph is hand-assembled via onnx.helper).
     "onnx",
+    # The imagekit face package runs its SCRFD / RetinaFace detector and its
+    # ArcFace / MagFace embedder on ONNX Runtime (CPU by default; the CUDA
+    # execution provider when a deployment installs onnxruntime-gpu instead).
+    # Also loads the emitted graph in the portable-detector export test.
+    "onnxruntime",
     # Extract the Clotho audio demo, which ships as a single .7z archive on
     # Zenodo (vtscore.datasets.downloader.core._extract_7z). Imported lazily so
     # a missing install still surfaces an actionable error, but declared here so
@@ -164,10 +169,6 @@ dev = [
     "codespell",
     "vulture",
     "pip-audit",
-    # Used only by the portable-detector export test to load the emitted ONNX
-    # graph and confirm it scores identically to the trained torch model
-    # (imported via importorskip, so deptry sees it as declared-but-unused).
-    "onnxruntime",
     # `pyright` is the Python wrapper around the Node-based pyright CLI.
     # The wrapper lazy-downloads the binary on first invocation; the
     # exact binary version is pinned via PYRIGHT_PYTHON_FORCE_VERSION
@@ -176,12 +177,16 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["vtsearch*", "vtscore*"]
+include = ["vtsearch*", "vtscore*", "imagekit*"]
 
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
 # by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
 "vtscore.media" = ["assets/*.npy", "assets/*.json"]
+# The imagekit face models' JSON configs: the SCRFD defaults the detector falls
+# back to, and the reference configs a deployment copies beside its weights.
+"imagekit.face.detection" = ["*.json"]
+"imagekit.face.extraction" = ["*.json"]
 # Zero-shot tag vocabularies for the signpost text providers (AudioSet-527 /
 # OpenImages-600 class names; see vtscore.projection.signpost_texts).
 "vtscore.projection" = ["assets/*.txt"]
@@ -262,6 +267,9 @@ extend_exclude = [
 # imports as third-party). Everything else under slides/, .claude/ and
 # docs/ is still checked.
 known_first_party = [
+    # The face package: a third top-level package beside vtsearch and vtscore
+    # (see imagekit/README.md), so its imports are first-party, not missing.
+    "imagekit",
     "coco_fixture",
     "data_card",
     "dataset_samples",
@@ -391,9 +399,6 @@ DEP002 = [
     # imports them; our code never does, so they are declared-but-not-imported.
     "timm",
     "ftfy",
-    # Loaded via importorskip in the portable-export test; never imported
-    # statically, so deptry can't see the use.
-    "onnxruntime",
     # toponymy's real dependencies, declared on its behalf because it is
     # installed --no-deps (see the DEP001 note on "toponymy"); our code never
     # imports them directly.
@@ -429,6 +434,7 @@ markers = [
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
+    "imagekit: the imagekit face package (ONNX detector/embedder on synthetic graphs, the provider seam, the CLIs)",
     "meta: repo/tooling meta-tests (packaging, Dockerfiles, docs, scripts/, .claude/hooks/, the run-tests.sh gates, the test harness); no vtsearch/vtscore behaviour",
     "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
     "slides: slide-deck gate (ruff, codespell, check-docs, deck preflight); has no Python tests, runs via ./run-tests.sh slides",

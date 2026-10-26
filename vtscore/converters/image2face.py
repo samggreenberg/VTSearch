@@ -35,6 +35,18 @@ gained less, since it zooms in on faces in profile
 ignore-list, installed ``--no-deps`` by the install scripts because its pins
 would downgrade the app's torch/numpy stack); when it is missing the converter
 degrades gracefully to producing no faces.
+
+**The provider seam** (``provider``). ``mtcnn`` is everything above. ``imagekit``
+hands the photo to the face provider this server is configured with
+(:mod:`vtscore.media.face.imagekit_bridge`: the open SCRFD + ArcFace/MagFace
+ONNX weights, or a proprietary backend behind the same interface), which
+detects **and embeds** every face in one pass from the full photo. Each crop
+then leaves with its vector already filed under the ``imagekit_face`` embedder,
+its quality and its embedding-space tag in ``custom_metadata``, so the embed
+stage has nothing to do and no face is embedded twice. The crop itself is cut
+and aligned exactly as for ``mtcnn``, from the provider's box and landmarks.
+Without ``IMAGEKIT_FACE_CONFIG`` the provider is unconfigured and, like a missing
+``facenet-pytorch``, yields no faces with a log line saying why.
 """
 
 from __future__ import annotations
@@ -55,6 +67,10 @@ logger = logging.getLogger(__name__)
 #: How a crop is turned before it is embedded: not at all, upright about its own
 #: box, or upright and re-framed on the template (module docstring).
 ALIGN_MODES = ("none", "roll", "similarity")
+
+#: Who finds the faces: the shipped MTCNN, or the server's imagekit face
+#: provider, which also embeds them (module docstring).
+PROVIDERS = ("mtcnn", "imagekit")
 
 #: Where an upright face's five MTCNN landmarks sit in MTCNN's own box, as
 #: fractions of the box (x right, y down): the image-left eye, the other eye, the
@@ -91,6 +107,7 @@ class FaceParams(NamedTuple):
     min_size: int
     align: str
     sideways: bool
+    provider: str = "mtcnn"
 
 
 class FaceDetection(NamedTuple):
@@ -270,6 +287,19 @@ class Image2FaceMediaConverter(MediaConverter):
             default="false",
             required=False,
         ),
+        PluginField(
+            key="provider",
+            label="Face provider",
+            field_type="select",
+            description=(
+                "mtcnn: the shipped MTCNN detector; the dataset's face embedder embeds each crop. "
+                "imagekit: this server's face provider (IMAGEKIT_FACE_PROVIDER) detects and embeds "
+                "each face in one pass from the full photo."
+            ),
+            options=list(PROVIDERS),
+            default="mtcnn",
+            required=False,
+        ),
     ]
 
     def __init__(self) -> None:
@@ -354,7 +384,10 @@ class Image2FaceMediaConverter(MediaConverter):
         if align not in ALIGN_MODES:
             raise ValueError(f"image2face: align must be one of {ALIGN_MODES}, not {align!r}")
         sideways = parse_checkbox(self.get_param(params, "sideways"))
-        return FaceParams(threshold, max(0.0, padding), max(1, min_size), align, sideways)
+        provider = str(self.get_param(params, "provider") or "mtcnn")
+        if provider not in PROVIDERS:
+            raise ValueError(f"image2face: provider must be one of {PROVIDERS}, not {provider!r}")
+        return FaceParams(threshold, max(0.0, padding), max(1, min_size), align, sideways, provider)
 
     def _detect_faces(
         self, img: Any, threshold: float, padding: float, min_size: int, sideways: bool = False
@@ -438,13 +471,60 @@ class Image2FaceMediaConverter(MediaConverter):
         return faces
 
     # ------------------------------------------------------------------
+    # The imagekit provider seam
+    # ------------------------------------------------------------------
+
+    def _imagekit_faces(self, img: Any, p: FaceParams, media_id: str) -> list[tuple[FaceDetection, dict[str, Any]]]:
+        """Detect **and embed** every face through the server's face provider (module docstring).
+
+        Returns the kept detections, highest-confidence first, each with the
+        extra output fields its crop leaves with: the vector filed under the
+        ``imagekit_face`` embedder, and the quality and compat tag for its
+        ``custom_metadata``.  An unconfigured or failing provider yields no
+        faces, with a warning, like a missing ``facenet-pytorch``.
+        """
+        from vtscore.media.face import imagekit_bridge as bridge  # noqa: PLC0415
+
+        try:
+            pipeline = bridge.get_face_pipeline()
+            records = pipeline.process(np.asarray(img), confidence_threshold=p.threshold, media_id=media_id)
+        except bridge.FaceProviderUnconfigured as exc:
+            logger.warning("image2face: %s; producing no faces", exc)
+            return []
+        except Exception:
+            logger.warning(
+                "image2face: the %s face provider failed on %s", bridge.provider_name(), media_id, exc_info=True
+            )
+            return []
+        w, h = img.size
+        found: list[tuple[FaceDetection, dict[str, Any]]] = []
+        for rec in records:
+            resolved = self._box_from_detection(rec.bbox, rec.confidence, w, h, p.threshold, p.padding, p.min_size)
+            if resolved is None:
+                continue
+            x1, y1, x2, y2, conf = resolved
+            raw = tuple(float(v) for v in rec.bbox)
+            face = FaceDetection((x1, y1, x2, y2), conf, raw, _usable_landmarks(rec.landmarks))  # type: ignore[arg-type]
+            extra = {
+                "embeddings": {bridge.EMBEDDER_NAME: rec.unit_embedding()},
+                "embedder": bridge.EMBEDDER_NAME,
+                "custom_metadata": {
+                    bridge.QUALITY_METADATA_KEY: round(float(rec.quality), 3),
+                    bridge.COMPAT_METADATA_KEY: rec.compat,
+                },
+            }
+            found.append((face, extra))
+        found.sort(key=lambda pair: pair[0].conf, reverse=True)
+        return found
+
+    # ------------------------------------------------------------------
     # Conversion
     # ------------------------------------------------------------------
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
 
-        threshold, padding, min_size, align, sideways = self._resolve_params(params)
+        p = self._resolve_params(params)
 
         media_bytes = resolve_media_bytes(media)
         if not media_bytes:
@@ -459,32 +539,38 @@ class Image2FaceMediaConverter(MediaConverter):
         img_w, img_h = img.size
         fmt = img.format or "PNG"
 
-        faces = self._detect_faces(img, threshold, padding, min_size, sideways)
-
         stem = (media.get("filename") or "image").rsplit(".", 1)[0]
+        if p.provider == "imagekit":
+            found = self._imagekit_faces(img, p, media.get("filename") or stem)
+        else:
+            found = [(face, {}) for face in self._detect_faces(img, p.threshold, p.padding, p.min_size, p.sideways)]
+
         out_ext = "png" if fmt.upper() == "PNG" else fmt.lower()
         outputs: list[dict[str, Any]] = []
-        for idx, face in enumerate(faces):
+        for idx, (face, extra) in enumerate(found):
             x1, y1, x2, y2 = face.box
-            cropped = crop_face(img, face, align, padding)
+            cropped = crop_face(img, face, p.align, p.padding)
             buf = io.BytesIO()
             cropped.save(buf, format=fmt)
             crop_bytes = buf.getvalue()
-            outputs.append(
-                {
-                    "filename": f"{stem}_face_{idx + 1}.{out_ext}",
-                    "media_bytes": crop_bytes,
-                    "duration": 0,
-                    "width": cropped.width,
-                    "height": cropped.height,
-                    # Where the face sat in the photo, as a fraction of the
-                    # frame: the padded box, however the crop was turned. The
-                    # bounded decode may be a downsample, so pixels here are not
-                    # the original's (see SOURCE_BOX_FIELD).
-                    SOURCE_BOX_FIELD: [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h],
-                    "custom_metadata": {"Detection Confidence": round(face.conf, 4)},
-                }
-            )
+            output: dict[str, Any] = {
+                "filename": f"{stem}_face_{idx + 1}.{out_ext}",
+                "media_bytes": crop_bytes,
+                "duration": 0,
+                "width": cropped.width,
+                "height": cropped.height,
+                # Where the face sat in the photo, as a fraction of the
+                # frame: the padded box, however the crop was turned. The
+                # bounded decode may be a downsample, so pixels here are not
+                # the original's (see SOURCE_BOX_FIELD).
+                SOURCE_BOX_FIELD: [x1 / img_w, y1 / img_h, x2 / img_w, y2 / img_h],
+                "custom_metadata": {"Detection Confidence": round(face.conf, 4), **extra.get("custom_metadata", {})},
+            }
+            # A provider that embedded the face hands its vector over with the crop.
+            for key in ("embeddings", "embedder"):
+                if key in extra:
+                    output[key] = extra[key]
+            outputs.append(output)
         return outputs
 
 

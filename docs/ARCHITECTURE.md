@@ -89,7 +89,7 @@ detector training and label export.
 |---|---|---|---|
 | `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `embeddinggemma2_audio`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
-| `face` | `face` (FaceNet (face identity, 512d)) | — | — |
+| `face` | `face` (FaceNet (face identity, 512d)) | — | `imagekit_face` |
 | `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `embeddinggemma2`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
 | `text` | `e5` (E5 (text)) | `intfloat/e5-base-v2` | `bge` |
 | `video` | `xclip` (X-CLIP (video)) | `microsoft/xclip-base-patch32` | `languagebind`, `videomae` |
@@ -117,7 +117,11 @@ from.  See [Element-level origin tracking](#element-level-origin-tracking).
 The codebase is split into two top-level Python packages: **`vtscore/`**
 (the Flask-free library tier; everything ML, media, dataset, and
 plugin-related) and **`vtsearch/`** (the Flask app tier; routes,
-settings, auth, and the app-side state shim).
+settings, auth, and the app-side state shim). A third, **`imagekit/`**, is
+the face localisation + embedding package with the pluggable provider seam
+([`imagekit/README.md`](../imagekit/README.md)); it imports neither of the
+other two, and `vtscore` reaches it through
+`vtscore/media/face/imagekit_bridge.py` alone.
 
 This map stops at the package level and names only the files you need to find
 your way in. Each module's docstring says what it is for, so read the directory
@@ -186,6 +190,15 @@ VTSearch/
 │   ├── settings_io/        Settings import / export / sync plugins
 │   └── routes/             Flask blueprints; all HTTP handling (_context.py holds the
 │                           X-Dataset-Id / X-Detector-Id guards)
+│
+├── imagekit/               Face localisation + embedding behind a pluggable provider seam
+│   │                       (imagekit/README.md); imports neither vtscore nor vtsearch
+│   ├── face/               FaceRecord, the FacePipeline protocol + provider registry, the
+│   │   │                   compat guard, alignment, CSV/NPZ helpers
+│   │   ├── detection/      FaceDetector (SCRFD / RetinaFace on ONNX Runtime) + its JSON configs
+│   │   ├── extraction/     FaceEmbeddingExtractor (MagFace / ArcFace ONNX) + reference configs
+│   │   └── providers/      oss (this package's models) and vista (proprietary, lazy import)
+│   └── cli.py              detect_faces / process_faces (entry points under scripts/)
 │
 ├── frontend/               Angular SPA source (see docs/FRONTEND.md)
 ├── static/                 Angular build output (gitignored; only the favicons and logo art are tracked)
@@ -526,7 +539,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 29 |
+| `embedders` | library | Media embedders | 30 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 8 |
 | `settings_importers` | app | Settings importers | 2 |

@@ -30,6 +30,18 @@ what is on `dev` but not yet on `main`; each release dates that section
   refused with a message naming what changed. Works with `server_json_file` and `server_csv_file`; a pipeline file
   sets it as `resume:`. See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
+- **A pluggable face backend behind the `image2face` converter.** The new `imagekit` package (see
+  [`imagekit/README.md`](imagekit/README.md)) detects, aligns and embeds faces through one `FacePipeline`
+  interface with swappable providers: `oss` runs open SCRFD and ArcFace/MagFace ONNX weights on ONNX Runtime, and
+  `vista` wraps a proprietary backend behind the same interface. The converter's new **Face provider** option
+  (`provider`, default `mtcnn`, the shipped path) hands a photo to the server's provider, which detects and embeds
+  every face in one pass; each crop then arrives with its vector already filed under the new `imagekit_face`
+  embedder, plus its quality and embedding-space tag in its metadata, and the embedder refuses to mix two providers'
+  spaces in one dataset. The server picks the backend with `IMAGEKIT_FACE_PROVIDER` and names its models with
+  `IMAGEKIT_FACE_CONFIG` ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#environment-variables)). Two CLIs,
+  `scripts/detect_faces.py` and `scripts/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
+  now a runtime dependency.
+
 - **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the
   dataset to the clipper it was trained on; `--override-clipper NAME`, with `--override-clipper-param KEY=VALUE` for
   its parameters, scores at another one instead, say 5-second tiles for a detector trained on 2-second ones. An

@@ -66,10 +66,11 @@ VTSearch's `python app.py` entry point also runs detectors over a dataset and ex
 
 ## Project structure
 
-VTSearch is split into two Python packages along an **app tier / library tier** line:
+VTSearch is split into two Python packages along an **app tier / library tier** line, plus a third that stands on its own:
 
 - **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
 - **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document, and the convert-in `face` type), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+- **`imagekit/`** — face localisation + embedding with a pluggable backend ("provider") seam: open SCRFD + ArcFace/MagFace weights on ONNX Runtime by default, a proprietary backend behind the same interface when a server selects it. Imports neither of the other two; the `face` media type reaches it through one bridge module. See [imagekit/README.md](imagekit/README.md).
 
 The remaining top level:
 
@@ -78,6 +79,7 @@ The remaining top level:
 ├── gunicorn.conf.py  # Gunicorn WSGI config (single worker + threads)
 ├── vtsearch/         # App tier (Flask routes, auth, settings, CLI entry point)
 ├── vtscore/          # Library tier (ML, embedding, media, datasets, plugins, projection)
+├── imagekit/         # Face localisation + embedding with a pluggable provider seam
 ├── frontend/         # Angular SPA source (TypeScript, SCSS); builds into static/
 ├── static/           # Angular build output (HTML, JS, CSS, assets)
 ├── tests/            # App-tier test suite (pytest); grouped by folder (core, api, sorting, …)

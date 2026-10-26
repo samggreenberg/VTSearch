@@ -1,0 +1,12 @@
+{
+  "model": {
+    "name": "magface_ir100",
+    "compatibility": "oss-magface-ir100:1",
+    "embedding_dim": 512,
+    "transforms": [
+      {"name": "Align", "args": {"height": 112, "width": 112, "fallback": "crop"}},
+      {"name": "Normalize", "args": {"mean": [0.5, 0.5, 0.5], "std": [0.5, 0.5, 0.5]}},
+      {"name": "ToTensor"}
+    ]
+  }
+}
