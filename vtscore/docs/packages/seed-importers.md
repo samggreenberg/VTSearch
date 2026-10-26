@@ -12,11 +12,6 @@ It exists so that "here is roughly the neighbourhood I'm interested in"
 becomes an expressible way to start a detector, alongside a text query and
 a hand-picked exemplar. The user labels from there.
 
-Related docs: [`plugins.md`](plugins.md) for the registry machinery this
-family is built on; [`detectors.md`](detectors.md) for what a detector does
-with its examples; [`datasource-importers.md`](datasource-importers.md) for
-the single-item sibling and the durable-origin contract they share.
-
 ## Contents
 
 | Module | Concern |
@@ -149,3 +144,13 @@ A host renders each importer's `fields` as a form, calls `run`, and saves
 each returned item's bytes into the example-media directory
 (`vtscore.security.path_validation.example_media_dir()`). With no seed
 importers registered the family costs nothing.
+
+---
+
+## Cross-references
+
+- [`plugins.md`](plugins.md) - the registry machinery this family is built on: sentinels, entry points, `PluginField` normalization.
+- [`detectors.md`](detectors.md#media_seedinglabeled_elements_from_examplesexamples) - what a detector does with its media examples: `labeled_elements_from_examples` and `seed_good_votes_from_examples`, the two helpers a seed's `labeled: false` flag is read by.
+- [`datasource-importers.md`](datasource-importers.md#fetchedmediaitem) - the single-item sibling, and the durable-`origin` contract `SeedMediaItem` shares with it.
+- [`security.md`](security.md#example_media_dir) - `example_media_dir()`, the per-user directory a host saves each seed into.
+- [`docs/EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md#adding-a-seed-importer) - the app-side walk-through: the New Detector tabs and the `/api/seed-importers` routes.

@@ -2,7 +2,7 @@
 
 ``scripts/pyright-incremental.py`` lets a session's second and later full
 runs pay for the files they changed (plus everything importing them) instead
-of the 239s whole-tree check. That is sound only if its import resolution
+of a whole-tree check. That is sound only if its import resolution
 never misses a repository module and its baseline is only ever written by a
 green run -- a miss in either direction is a type error that silently goes
 unreported. So the resolution rules, the closure, and the baseline semantics

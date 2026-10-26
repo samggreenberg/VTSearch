@@ -41,6 +41,7 @@ from the submodule (`vtscore.security.path_validation`,
 - [HuggingFace credentials](#huggingface-credentials)
 - [Pickle safety](#pickle-safety)
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
+- [Cross-references](#cross-references)
 
 ---
 
@@ -593,3 +594,13 @@ If you find yourself wanting to add a `vtsearch.*` or `vtscore.*` class
 to the allowlist, stop: that would weaken the invariant. The right fix
 is to make the pickle's producer emit a plain dict (or numpy array)
 instead of an instance of that class.
+
+---
+
+## Cross-references
+
+- [`state.md`](state.md#current-user) - `get_current_user()`, which names the user a confinement root is built for.
+- [`plugins.md`](plugins.md#field-value-normalization) - the normalization pass that runs `confine_server_filepath`, `validate_url` and `sanitize_template_value` over plugin fields.
+- [`datasets.md`](datasets.md#pickle-loader) - the dataset ZIP container whose `medias.pkl` is read through `safe_pickle_load`.
+- [`../integration.md`](../integration.md#authentication-and-per-user-data) - registering a `LoginProvider` and per-user data directories from a host that is not the Flask app.
+- [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md#authentication-and-multi-user-support) and [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#security) - the providers the app ships, and what the default deployment leaves unconfined.

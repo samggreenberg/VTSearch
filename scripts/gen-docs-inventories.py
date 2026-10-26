@@ -236,7 +236,12 @@ def build_plugin_family_roster(family: str) -> str:
 
 
 def build_demos(type_id: str) -> str:
-    """Demo-dataset table for one media type, sizes included."""
+    """Demo-dataset table for one media type, display names and sizes included.
+
+    The display name is the label the in-app Demo catalogue shows ("ESC-50 (S)"),
+    so a reader can match a row to what they see there; the id is what the CLI
+    and the API take.
+    """
     types = {t.type_id: t for t in _media_types()}
     if type_id not in types:
         raise KeyError(f"unknown media type {type_id!r}; known: {', '.join(sorted(types))}")
@@ -244,8 +249,8 @@ def build_demos(type_id: str) -> str:
     rows = []
     for d in demos:
         size = f"~{d.download_size_mb:g} MB" if d.download_size_mb else "—"
-        rows.append([f"**{d.id}**", d.description, size])
-    return _table(["Demo", "Description", "Download"], rows)
+        rows.append([f"**{d.id}**", d.label, d.description, size])
+    return _table(["Demo", "Display name", "Description", "Download"], rows)
 
 
 def build_achievements() -> str:
