@@ -493,7 +493,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 The gate chain, the test-group table, markers, fixture isolation and the flaky-test patterns live in [`docs/TESTING.md`](docs/TESTING.md). Read it before adding a test or a gate. The rules it spells out, in brief:
 
-- **A full `./run-tests.sh` is mandatory before pushing.** A group run skips the whole-repo gates; the only exceptions are the self-policing `slides` and `docs` scopes. Keep the gate table in `docs/TESTING.md` in step with `run-tests.sh` in the same commit.
+- **A full `./run-tests.sh` is mandatory before pushing.** A group run skips the whole-repo gates; the only exceptions are the self-policing `slides` and `docs` scopes. Keep the gate table in `docs/TESTING.md` in step with `run-tests.sh` in the same commit (`scripts/check-docs.py` fails when their gate names disagree).
 - **Put a test in `tests_lib/` if it touches no app-tier module**, otherwise in `tests/`. `tests_lib/` must be import-clean of Flask and of `vtsearch` entirely; add a library seam rather than reaching across the tier. Import helpers tier-qualified (`from tests.helpers import …` / `from tests_lib.helpers import …`).
 - **Do not add per-file autouse reset fixtures or end-of-test cleanup** — the conftests reset all global state before every test. Add a new library-tier global's reset to `tests_shared/state_reset.py`. Only `medias` needs save/restore (try/finally) if a test empties it.
 - **A test that reads a repo doc** goes in `tests_lib/meta/` or is registered in `tests_shared/markdown_surface.py`.
