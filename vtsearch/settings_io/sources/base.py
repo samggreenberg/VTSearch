@@ -15,7 +15,9 @@ class cannot express: ``peek_version`` sits on the hot path of every
 settings read and must be cheap, local edits are protected from upstream
 values by a dirty-key set, and no settings file lock is held while your
 code runs. See ``docs/EXTENDING-plugins.md`` -> "Adding a Settings
-Source" -> "How the sync engine works" before implementing one.
+Source" -> "What the sync engine expects of a source" before
+implementing one (the engine itself is in ``docs/ARCHITECTURE.md`` ->
+"The settings sync engine").
 """
 
 from __future__ import annotations

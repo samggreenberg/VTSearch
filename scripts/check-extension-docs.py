@@ -67,9 +67,11 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ("docs/EXTENDING-media.md", "MediaSource abstract interface reference", ("MediaSource",)),
     # Not an ABC contract: this section spells out how ``dirty_keys`` on
     # ``UserSyncState`` arbitrates between a local write and an upstream pull.
-    # It is registered because invariant 2 (rightly) flags any "The ... contract"
-    # heading, and the names it does cite are members worth checking.
-    ("docs/EXTENDING-plugins.md", "The dirty-key contract", ("UserSyncState",)),
+    # It moved with the rest of the settings sync engine's internals to
+    # ARCHITECTURE.md (#5258), outside ``DOC_GLOBS``, so invariant 2 no longer
+    # requires it; it stays registered because the names it cites are members
+    # worth checking.
+    ("docs/ARCHITECTURE.md", "The dirty-key contract", ("UserSyncState",)),
     # --- library tier ---------------------------------------------------
     ("vtscore/docs/extending/clippers.md", "The contract", ("MediaClipper",)),
     ("vtscore/docs/extending/converters.md", "The contract", ("MediaConverter",)),

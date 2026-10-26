@@ -527,261 +527,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   sort can be paged. `SortResultsCache.__init__` takes `max_rows: int = SORT_CACHE_MAX_ROWS`, the new
   module constant (2,000,000). Additive.
 
-### Added
-
-- **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
-  whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
-  merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of
-  each (`source_box` overlap, else output index); the one cut from the kept copy leads its `dupe_set`. A
-  multi-dataset load (`vtscore.datasets.load_multi`) now finalizes every output whose converter rows read another
-  output after that output, and runs this on it. Additive.
-
-- **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
-  `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
-  `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
-  is `False`, and one that only records imports can ignore it. Additive; a hook that never reads it is unchanged.
-
-- **The detector registry records the datasets a detector holds labels from** (issue #5142). New
-  `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
-  labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's
-  `trained_on` list of dataset ids: a writer that composed its labels against one dataset adds it while the detector
-  still holds labels there and drops it once the last one is gone; a writer that names no dataset leaves the list
-  alone. The per-vote label sync calls it, and `VoteSnapshot` gains `dataset_id`, the dataset its `medias` belong to.
-  Additive.
-- **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
-  one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
-  generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends
-  the test), which `LineTest.ahead` reads back and `as_dict()` carries as `ahead` until a label changes. `draw()`
-  installs the copy whose labels match the ones recorded instead of drawing again: the same picks from the same
-  generator state, so a seeded test deals the same rounds, and reads the same numbers, whether or not anything was
-  dealt ahead. `RoundAhead` is exported from `vtscore.training.thresholds`. Additive: a caller that never deals ahead
-  sees no change but `as_dict()["ahead"]`, always `None`.
-
-- **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
-  (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
-  `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the
-  media whose rows have all been scored. A detector's train scores its haystack with its final head and each
-  calibration fold model before the detector's own pass, so this is how the app's Find bar counts all of them. The
-  hook is per thread, `None` reports nothing, and the outer callback comes back when the block exits.
-  `_forward_sigmoid_chunked` takes an optional `on_rows` (rows scored so far, per chunk). Additive.
-
-- **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
-  (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:
-  another dataset's medias in the run's embedder, whose cell of the same name is scored at every click by the
-  detector the click's Test gives, its line's corpus side refitted there, into the new
-  `voting_columns.FIND_CORPUS_COLUMNS` (`find_fbeta` and its presets, `find_precision`, `find_recall`,
-  `find_n_flagged`, `find_average_precision`, `find_n_pos`, `find_n_neg`). `find_mix` (`"only"`, the default;
-  `"equal"`, `0` or a share) mixes it into the withheld half as extra haystack. At `find_flag_steps` the row also
-  carries `FIND_FLAG_COLUMNS`: `domain_shift_report` against the sim pool's coverage atlas (NaN on a patch
-  embedder) and `evidence_coverage_report` from the votes' vectors and the Find cut. New module
-  `vtscore.eval.find_corpus` (`build_find_corpus`, `parse_find_mix`, `find_cell`, the two flag readers). Both
-  frames gain the columns, NaN without the knob; every other column is unchanged.
-
-- **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
-  `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
-  pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.
-  `frame_at` still returns stored pixels. `VideoLetterboxCropCleaner` now writes `clip_box_frame: [width,
-  height]`, the decoded frame size it measured `clip_box` on, beside the box, and
-  `vtscore.media.provenance.CLIP_WINDOW_FIELDS` carries it, so a saved dataset keeps it. The video thumbnailers
-  stretch the frame by the SAR, so an anamorphic video previews at its display aspect. Additive.
-
-- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
-  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
-  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
-  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
-  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
-  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
-  message. Additive.
-
-- **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
-  looks for each face MTCNN finds again in the photo turned a quarter each way
-  (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most
-  confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
-  boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
-  `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
-  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
-  face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
-  MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
-
-- **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
-  `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
-  ordinary step at or past each, the `test_score_sink` entry also carries each live fold model's scores of the
-  withheld half (`fold_test_scores`, aligned with the snapshot's `ids`) and of the whole sim set
-  (`fold_sim_scores`, beside the final model's `sim_scores`, the items' `sim_labels` and `sim_vote`), whether the
-  step's haystacks dropped the voted items (`fold_sim_excluding`), and the vote behind each held-out score
-  (`fold_ids`). Every remainder-fitted map's haystacks replay from these, so the fold models' scale can be read
-  against the final model's on images no model has seen. Record only; the session is unchanged.
-
-- **The eval harness can carry the folds' held-out scores onto the final model's scale before the labels line**
-  (issue #4910). `simulate_voting_iterations` takes `labels_scale` (`None`, the default and the app: each fold
-  model's scores as it scored them; `"quantile"`: fold *k*'s scores carried onto the final model's scale by their
-  quantile in fold *k*'s haystack, as the fold-anchored cut carries its cut; `"quantile_tails"`: the same, keeping a
-  score's logit distance past either end of the haystack) and `labels_scale_shadow`, which fits the line on another
-  scale beside it on the same head and draws nothing. The calibration frame's base row gains `shadow_*` (the
-  shadow's Train cut, its Find line's threshold, set size and F-beta on the withheld half, and its d') and `xfer_*`
-  (how far the transfer moved the held-out logits and the class model, and the share of held-out Goods above their
-  fold's haystack). `vtscore.training.thresholds` gains `FOLD_SCALES`, `transfer_fold_orderings`,
-  `fold_transfer_shift` and `fold_transfer_clipped`. An experiment arm; the app is unchanged.
-
-- **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
-  `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
-  `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
-  `CoreConfig.default_labelset_source`, whose non-empty field values are fixed and overlay the detector's
-  own; the result reports `missing_fields`. Also `labelset_source_status`, `unfixed_fields`,
-  `fixed_field_values`, `deployment_default_labelset_source`, `stored_labelset_source` and `OPT_OUT`. In
-  `vtscore.labels.sync`: `schedule_labelset_push(name)`, `note_detector_written(data)` and
-  `reconcile_labelset_source(name)` (pull with the file winning, then push - run when a detector loads or
-  is linked). In `vtscore.detectors.labelset_ops`: `follow_rename_with_labelset_file(detector_id,
-  old_name=, new_name=)` moves a `{detector_name}`-templated server file to follow a rename.
-
-- **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
-  takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
-  the app's own checks: at the first step from N votes past the opening, a prompted check already running, or one
-  whose rounds reached vote N, counts, and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks
-  with phase `"prompt"`. The pick log (`PICK_COLUMNS`) gains `check_kind`: `weak`, `done` or `early` on a prompted
-  check's picks, `end` on the end-of-run check's, blank on every other. `AutopilotFlow.begin_spot_check` takes
-  `"early"`, which latches nothing. An experiment arm; the app is unchanged.
-
-- **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
-  `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
-  meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
-  `0` otherwise. `LabelQuota.as_dict()` is unchanged. The CLI's `detector_query` event carries both, and its
-  text names the hold rather than calling a held detector "under the quota".
-
-- **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
-  scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
-  Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.
-  `simulate_voting_iterations(query_prior_sink=[...], query_vector=...)` records, at every click a trained
-  head is drawn on a single-vector typed-query run, one `vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`
-  row: where the withheld positives sit under candidate heads refitted on the same votes. Recorded only;
-  the session is unchanged. (#4859 made the prior the app's; see Changed.)
-
-- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
-  for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
-  text side; registered once per media type and loading only that type's encoder.
-  - **Recipe:** each input runs through the model's text backbone (images as soft tokens, audio at 25 tokens a
-    second), and the vector is the masked mean of its last hidden state, L2-normalised. That is the checkpoint's
-    sentence-transformers recipe, on plain `transformers`.
-  - **Queries** carry `EMBEDDINGGEMMA2_QUERY_PREFIX` (`"task: search result | query: "`); media take none.
-  - **Precision:** the model never runs in fp16, which overflows; it runs in bf16 when `VTSEARCH_EMBED_PRECISION`
-    asks.
-  - **Batch:** the image embedder's default batch is 8.
-  - **Audio** is 16 kHz mono, its first 30 s (`EMBEDDINGGEMMA2_MAX_SAMPLES`), padded to 1 s
-    (`EMBEDDINGGEMMA2_MIN_SAMPLES`).
-  - **Needs transformers >= 5.18;** loading on an older one raises `ImportError` naming the version.
-  - **New config constants:** `EMBEDDINGGEMMA2_MODEL_ID`, `EMBEDDINGGEMMA2_QUERY_PREFIX`,
-    `EMBEDDINGGEMMA2_SAMPLE_RATE`, `EMBEDDINGGEMMA2_MAX_SAMPLES`, `EMBEDDINGGEMMA2_MIN_SAMPLES`.
-
-- **Set overlap for the harness** (issue #4816). On a typed-query run,
-  `simulate_voting_iterations(set_overlap_sink=[...])` records, at every click a trained head scored the
-  pool, one `vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS` row: how the head's set and the typed query's
-  split the unvoted media (both, head only, query only, neither), the positives in each part, the head's
-  class model's expected positives there, and the voted Goods and Bads in each part. The pick log gains
-  `picked_in_head`, `picked_in_query`, `picked_head_rank`, `picked_part_rank` and `picked_head_posterior`
-  (where each pick sat at the click before it; NaN without the sink). Recorded only; the session is unchanged.
-
-- **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
-  records, at every click Test gives the trained head under a balance, one
-  `vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS` row: where the withheld half's positives sit in
-  the head's ranking, and what the labels line (each preset), the Goods' centroid's count line and the
-  count rule on the head's scores keep there. Recorded only; the session is unchanged.
-
-- **An eval head started from the Goods' centroid, and a hand-over shadow for the harness** (issue #4776).
-  `vtscore.training.svm_prior` (`centroid_prior_direction`, `fit_linear_svm_prior_head`) fits the
-  shipped linear SVM's objective with one extra feature, `CENTROID_PRIOR_SCALE` (10) times the dot
-  with the unit Goods' centroid, and folds it back into a `Linear(D, 1)`; `train_model` reaches it by
-  the new `LINEAR_SVM_PRIOR_HEAD` sentinel (`-3`), the harness by `head="linear_svm_prior"`. Eval
-  only: no production fit passes the sentinel. `simulate_voting_iterations(handover_shadow=True,
-  handover_sink=[...])` adds, past the label quota, the Goods' centroid's Test as rows tagged
-  `gmm_variant="handover:centroid"` and one `vtscore.eval.arms_handover.HANDOVER_COLUMNS` row per
-  click (held-out Goods' ranks in the unvoted pool under the centroid and under the head, and the
-  centroid-prior heads' AP). Additive; off by default.
-- **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
-  (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
-  `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through
-  `crop_face(img, detection, align, padding)`: `roll` turns the padded box upright about its
-  centre at the box's size, `similarity` also re-centres and re-scales it to the template on a
-  square. Detection, the kept faces and each crop's `source_box` do not depend on `align`; a
-  detection without landmarks is cropped plain. `FaceDetection` (`box`, `conf`, `raw`,
-  `landmarks`) is what `_detect_faces` / `_kept_faces` now return, and the stubbed MTCNN must
-  answer `detect(img, landmarks=True)` with `(boxes, probs, points)`. **Behaviour change:** a
-  conversion at the defaults now emits turned-upright crops, so its face vectors differ from a
-  conversion before this change; pass `align="none"` for the old crops. Priced on the FHIBE face
-  bench (`docs/experiments/2026-10-10-face-align-4777`): the face review's session mean rose in
-  every session set, and failed one-photo sessions fell from 12 to 7.
-- **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
-  `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
-  outputs into one of their sources: each output whose source resolves (`locate` is
-  `SourceLocator.locate`) joins its source item's group, a group scores as its best member and keeps
-  that member's place, and an output whose source cannot be named is a group of its own, so every
-  output is in exactly one group. `SourceGroup` carries `source_dataset_id`, `source_media_id`,
-  `score` and `members` (`SourceGroupMember`: `media_id`, `score`, `box`). It raises
-  `SourceNotLoadedError` (with `dataset_id`) when any output's source dataset is registered but not
-  loaded. `SortResultsCache.derived(token, key, build, *, dataset_id=None) -> (found, view)` keeps a
-  view built once over a stored ranking, evicted with it, and `forget_derived(token, key)` drops one.
-  Additive.
-- **`vtscore.datasets.source_item`: find a converter output's source item in its sibling dataset**
-  (issue #4749). `resolve_source_item(media, sibling_medias, *, name_lookup=None) -> int | None`
-  joins the output's `origin.params.source_file` to the sibling's `origin_name`, settles a shared
-  name by `source_path` against `media_path` (else `None`, never a guess), and follows `dupe_set`
-  members on either side; `SourceResolver` is the same, built once for many outputs.
-  `find_source_sibling(dataset_id, source_type, *, readable_by=None, entries=None)` picks the other
-  registry entry of the dataset's `import_group` whose `output_category` is the converter's
-  `source_type` (the Image output for faces, not the Document output beside it).
-  `SourceLocator(dataset_id, *, user=None)` / `locate_source(media, dataset_id, *, user=None)`
-  do both against the live contexts and return a `SourceLocation` (`status`, `dataset_id`,
-  `media_id`, `box`). Additive.
-- **A text or example sort keeps its display line, to redraw it at another balance** (issue #4760).
-  `vtscore.training.query_sort.SortLine` holds the rule that drew a cosine sort's line (`"text"`,
-  `"centroid"` or `"structural"`) and the scores it was drawn on; `threshold_at(beta)` draws the
-  sort's own number at that balance. `TextSortCuts` gains an optional `line` field (default `None`,
-  left out of equality and `repr`), which `text_sort_active`, `cosine_sort_cuts` and
-  `example_sort_cuts_from_paths` fill. `SortResultsCache.store` takes `line=`, and
-  `SortResultsCache.redraw(token, beta, *, dataset_id=None)` returns
-  `{"threshold", "above_threshold", "total"}` for a stored sort with a line, else `None`.
-  Additive.
-- **The dataset registry links the datasets of one multi-dataset import** (issue #4747).
-  `vtscore.datasets.registry.register_dataset` takes `import_group: str | None = None` and
-  `output_category: str = ""` and stores both on the entry; the multi-dataset load
-  (`vtscore.datasets.load_multi`) mints one group id per run and stamps every output's entry with
-  it and with the output's `OutputSpec.category`. Entries saved earlier lack the keys; read them
-  as `None` / `""`. Additive.
-- **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
-  raises the heartbeat-miss bar for a block (never lowers it, re-arms the opt-in live dump at it, and a stall
-  reported under it carries `bar …ms`); `startup_threshold_ms()` reads `VTSEARCH_STALL_STARTUP_MS` (default
-  5000; `0` keeps the normal bar); `startup_grace()` applies it to the active watchdog for the app's ML imports
-  and embedder preload, where a cold page cache holds the GIL across a second-long `dlopen` with exactly a
-  stall's signature. Additive.
-- **The CLI entry points take an `outputs` list** (issue #4707). `vtscore.cli.autodetect_importer_main`
-  and `autodetect_importer_main_chunked` accept `outputs=` (a list of `OutputSpec`, as
-  `parse_output_specs` returns) and then run the importer once through `run_outputs` /
-  `run_outputs_chunked`, saving, scoring and exporting one dataset per entry; a pipeline file's
-  `importer.outputs` and the `--outputs` flag resolve to it. The streaming-exporter `header`
-  (`ResultsExporter.export_cli_streaming`) gains an optional `dataset` block naming the dataset
-  the records belong to; the bundled NDJSON exporter writes it into its `_meta` line. Additive.
-- **Multi-dataset imports: one importer run, several datasets** (issue #4703).
-  `vtscore.datasets.importers.base` gains `OutputSpec` (one dataset of a multi-dataset import: its
-  `media_type`, `source_specs`, `category`, and the per-dataset embedder / clipper / cleaners the
-  pipeline applies), `parse_output_specs(raw)` and `output_dataset_name(base, output)`.
-  `ImporterBase` gains the hooks `run_outputs(field_values, outputs, thin)` and
-  `run_outputs_chunked(field_values, outputs, chunk_size, thin)`, yielding `(output, medias)`
-  pairs; their defaults run `run()` / `run_chunked()` once per output on `output.narrow(field_values)`,
-  so every existing importer produces every dataset with no change, and an importer whose acquire
-  is expensive overrides them to acquire once (the URL-archive importer does). The class attribute
-  `multi_output` (default `True`) opts an importer out, reported by `to_dict()` as
-  `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
-  context, registry entry, `DatasetImported` event and post-load hook per output, under the same
-  download / embed gates as a single load. Additive: no existing member changes.
-- **A converter output can say where it sat in its source** (issue #4748). A dict `convert()`
-  returns may carry `source_box`, a normalised `[x0, y0, x1, y1]` box in `[0, 1]` of the upright
-  source image (`vtscore.media.provenance.SOURCE_BOX_FIELD`). It reaches the media on every ingest
-  path, survives the dataset pickle, and renders as one **Source Box** row
-  (`provenance.describe_source_box`). `image2face` sets it on every face crop. The folder and demo
-  conversion path (`vtscore.converters.runner`) also now keeps a converter's `custom_metadata`,
-  as the importer-hook and clipper-chain paths already did. Additive.
-
-### Changed
-
 - **The Goods' centroid's line counts the unvoted media only** (issue #4779). `fit_centroid` and
   `fit_centroid_head` take `line_mask` (one flag per score: which media the line counts); the app's
   `install_centroid_head` passes the media the labelset does not label (`_unvoted_mask`).
@@ -1197,7 +942,704 @@ instead, since every commit on `dev` is effectively a new app release.)
     `range_hi`, `check_labelled`, `check_right` and `check_stale`, and
     `_safe_threshold_for_step` takes `check=`.
 
+- **Autopilot's opening walks for more goods** (issue #4282, measured by #4222).
+  After the 3-good / 4-bad quorum a new phase, `more`, goes back to the top of
+  the seed sort until the labelset holds `MORE_TARGET` (20) positives or
+  `MORE_DRY_RUN` (16) walk picks in a row held none, then hands over to `hard`.
+  `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is now
+  `"g3@top,b4@mid,g20+dry1/16@top"` (was `"g3@top,b4@mid"`), and the harness's
+  default arm runs it natively: `vtscore.eval.autopilot_flow` gains the `more`
+  phase, `MORE_TARGET` / `MORE_DRY_RUN`, `next_phase(..., more_target=,
+  more_done=)` and `AutopilotFlow(more_target=, more_dry_run=)`, all keyword
+  arguments with defaults. `vtscore.datasets.vote_provenance.PHASES` accepts
+  `"more"`. A study's default arm now differs from runs before this change:
+  on COCO Better at vote 150, +0.051 AP at the 0.44% pool and +0.030 at 0.1%,
+  with −0.036 / −0.067 at vote 25 while the walk runs.
+
+- **`vtscore.state.core`'s floor helpers drop their Inclusion argument** (issue
+  #4269). `recompute_detector_thresholds(min_precision)` (was
+  `(inclusion_value, min_precision)`) and
+  `detector_line_inclusion(ctx, min_precision)` (was
+  `(ctx, inclusion_value, min_precision)`), both unreleased since #4245. A
+  detector with no floor is re-cut at Inclusion 0. `user_inclusion()` is gone,
+  as are `DetectorContext.inclusion` and the private `_get_inclusion` /
+  `_set_inclusion`: there is no per-detector Inclusion left to hold.
+  `is_status_cache_fresh(label_history, inclusion_value=0)` gains a default, as
+  its siblings have.
+
+- **Smart no longer prices at the caller's inclusion** (issue #4243).
+  `calculate_error_cost_over_time`, `compute_labeling_status`,
+  `analyze_labeling_progress` and `cached_indicator_history` still take
+  `inclusion_value`, which picks the progress cache to read, but every cost
+  they report is FPR + FNR at each model's `smart_threshold`. Before, it was
+  priced at `inclusion_value` at the served threshold. Identical at inclusion 0.
+
+- **`generate_image_dataset` draws a small world of cartoon smiley faces**
+  (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
+  256x256) become three kinds at 512x512: a `face` in one of seven colours
+  with one of seven expressions, `shapes` (stars added), and a `scene` of
+  several small faces and shapes; backgrounds gain polka dots, stripes, checks
+  and gradients. File names are `face_` / `shapes_` / `scene_` plus the index
+  (were `smiley_` / `shapes_`). Each picture is now seeded on `(seed, index)`
+  rather than `seed + index`, which had made two seeds share nearly every
+  picture - so a `(count, seed)` still always gives the same files, but not
+  the files it gave before. The signature is unchanged.
+
+- **The `synthetic` importer takes a `seed`** (issue #4240): a third,
+  optional field (default `1`; the seed used to be a fixed `42`), recorded in
+  the origin. Its cache folder is now `<media_type>_<size>_seed<seed>`, plus a
+  `_v<n>` for a generator whose drawing has changed, so no cache written
+  before this is reused.
+
+- **Context-registry lookups no longer take `_state_lock`** (issue #3869).
+  `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only
+  `_context_registry_lock` - a plain `Lock` guarding the two registry dicts'
+  membership, taken across a dict operation and nothing else. Membership is
+  the only thing they read, and taking the lock that a vote, a training pass
+  or a dataset load holds for seconds meant an app's per-request
+  `X-Dataset-Id` / `X-Detector-Id` resolution blocked for the whole of a long
+  operation - so the routes explicitly exempted from the state sync (the
+  spinner poll, the SSE reconnect) queued behind it anyway. Writers are
+  unchanged from the outside: they take `_state_lock` first and the registry
+  lock inside it, an ordering that is one-way. New alongside them:
+  `rekey_dataset_context(old_id, new_id)`, so a re-key goes through the
+  registry lock rather than mutating `_contexts` directly, and
+  `loaded_detector_contexts()`, a snapshot for callers that want to walk every
+  loaded detector without iterating the live dict.
+
+- **The threshold's mixture fit is `vtscore`'s own EM, not sklearn's** (issue
+  #3585). `fit_score_gmm` fitted two Gaussians over one dimension with
+  `GaussianMixture(n_components=2, random_state=42)` - full-covariance machinery
+  and a k-means init on a problem whose covariance is a scalar. It is now a
+  deterministic 2-means init (`_two_means_init`) plus the same EM loop the
+  anchored refit uses with no anchors (`_plain_em`), stopped where sklearn
+  stopped it: when an iteration improves the mean log-likelihood by less than
+  `_EM_LOGLIK_TOL` = 1e-3.
+
+  **This moves the fit**, so it is licensed by measurement rather than by
+  argument: a different starting point lands EM elsewhere inside its tolerance
+  and sometimes in a different basin, and that reaches the green/red line
+  through the per-fold quantile and `snap_cut_to_sample`. Gated on 84 cells of
+  captured production inputs, it changes the admitted set on 7.0% of 2,258 fold
+  cases by a median of 2 medias - where keeping sklearn and changing only
+  `init_params="k-means++"` changes 16.1% by a median of 11.5, so the
+  replacement is *more* faithful to the incumbent than the smallest perturbation
+  of the incumbent. 7.3x cheaper per fit, 12.3x at `_GMM_MAX_SAMPLES`, and 1.7x
+  on a whole cosine/text sort.
+
+  The pre-#3585 fit stays in the module as **`fit_score_gmm_sklearn`**, unused
+  by production, so the equivalence can be re-measured rather than believed.
+  What was measured is in
+  `docs/experiments/2026-09-13-gmm-init-3585/REPORT.md`.
+
+- **The anchored refit stops on its own log-likelihood, not on a parameter
+  delta** (issue #3825). `fit_anchored_score_gmm` - the estimator behind the
+  shipped decision threshold - ran `_anchored_em` until no parameter moved by
+  more than 1e-8. On real fold haystacks that criterion is not slow but
+  **unreachable**: measured over 4,493 production refits it ran a median of 113
+  iterations, and **26.5% of them exited on `max_iter` rather than converging**
+  (given twice the budget, 10.7% still do). After #3585 made the initialiser 5x
+  cheaper, that loop was 92.9% of a fold's fit.
+
+  It now stops on `_ANCHORED_EM_LOGLIK_TOL` = **1e-8**, and on the likelihood of
+  *this* estimator - the weighted semi-supervised objective the anchored M-step
+  ascends, anchors included - rather than the free sample's alone, which under
+  that M-step is not monotone (it falls on 36.6% of iterations). The two are the
+  same arithmetic when there are no anchors, so `fit_score_gmm` is unaffected
+  bit for bit.
+
+  **The tolerance is deliberately not sklearn's 1e-3.** That value is correct
+  for `fit_score_gmm` and transferring it here is a regression worth +0.026 +/-
+  0.006 of cost over 114 paired trajectory cells, because at 1e-3 the refit
+  halts before the minority component has migrated to the high mode. At 1e-8 the
+  refit is 1.9x cheaper, the admitted set moves by a median of zero (p90 one
+  media in two thousand), and non-convergence falls to 7.4%. Measured in
+  `docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`.
+
+  `_anchored_em` and `fit_anchored_score_gmm` also take an optional `stats`
+  dict, filled with `n_iter` / `converged` / `loglik`.
+
+- **The voting simulation's app arm is now `trainer="app"`, not `trainer="mlp"`**
+  (issue #3764). `vtscore.eval.voting_iterations.simulate_voting_iterations`
+  takes two knobs that both read as "which model?", and they used to collide on
+  the string `"mlp"`. `trainer` picks the **pipeline** — `"app"` is VTSearch's
+  own (`train_model` plus production fold calibration), anything `svm_*` is a
+  standalone estimator that thresholds itself — while `head` picks **what that
+  pipeline fits**, defaulting to the shipped `linear_svm`. So the old
+  `trainer="mlp"` trained no MLP, and meant something different again from
+  `SWEEP_TRAINERS["mlp"]` in the label-curve sweep, which genuinely is one.
+
+  The retired spelling is still accepted on input and normalised to `"app"`, so
+  archived launch scripts keep running unchanged; the `trainer` **result column
+  now records `app`**, which is the one visible break. Frames written before
+  this change keep the old value, so read a mixed corpus through a normalising
+  load (`scripts/experiments/mlp_vs_svm/summarize.py` does exactly that).
+
+  The error raised for `head=` on a standalone estimator now says which knob
+  the caller wanted.
+
+- **`JOB_MANAGERS` is now the single registry of every module-level
+  `JobManager`, with visibility carried by the manager** (issue #3404). It
+  previously held only the managers surfaced by `/api/jobs/active`, which
+  forced `reset_all_async_jobs_for_tests()` to re-list the hidden ones by
+  hand — and that second list went stale, leaving `archive_thumbnail_jobs`
+  unreset between tests. `JobManager.__init__` gained a keyword-only
+  `user_visible: bool = True`, `list_active_pairs()` filters on it, and the
+  reset helper walks the whole registry. Registering a new manager is now one
+  edit in one place, and its visibility is declared at its own definition.
+
+  **For library consumers:** the `JobManager(...)` change is purely additive —
+  the default keeps existing constructions user-visible. `JOB_MANAGERS` itself
+  now enumerates the internal managers too (`labeling-status`,
+  `signpost-relabel`, `archive-thumbnail-warm`), so code that iterated it
+  expecting only user-facing work should read `list_active_pairs()` or filter
+  on `mgr.user_visible`. The keys of the visible entries are unchanged.
+
+- **`register_setting_persister` rejects an unrecognised key** (issue #3385).
+  It previously stored a persister under any key, but only `inclusion`,
+  `calibrate_count` and `calibration_fraction` are ever fired, so any other key
+  was a typo in the host's wiring that sat there silently never firing — the
+  failure mode `achievements_hooks.KNOWN_EVENTS` already existed to catch. The
+  key set is now public as `vtscore.state.KNOWN_SETTING_KEYS`, and an unknown
+  key raises `ValueError`. This is an extension-facing behaviour change, but no
+  working integration can be relying on it: a rejected key could never have
+  persisted anything.
+
+- **`vtscore.training.evt_mixture` moved to `vtscore.eval.evt_mixture`** (issue
+  #3396). The Gumbel/Normal score mixture is a research arm from the #2836 /
+  #2846 cut studies, not a shipped threshold rule: nothing in the app or the
+  library's production path fits a Gumbel, and its only consumers are the eval
+  harness's cut families and the calibration studies under
+  `scripts/experiments/calibration/`. Sitting in `vtscore/training/` put it
+  beside the `thresholds/` package that *is* offered to library consumers, with
+  nothing to tell the two apart.
+
+  **For library consumers:** this is a breaking move of a module path, taken
+  deliberately rather than shimmed. `GumbelNormalFit1D`,
+  `fit_gumbel_normal_mixture_state`, `gaussian_mixture_mean_loglik`,
+  `CROSSING_REASONS` and the rest are unchanged and keep their names; only the
+  module they live in changed, so an importer updates one line. There is no
+  re-export at the old path on purpose: `vtscore.training` importing from
+  `vtscore.eval` would invert the package layering and drag the eval package's
+  matplotlib import into the training tier. The Gaussian threshold rules that
+  production actually ships (`vtscore.training.thresholds`) are untouched.
+
+- **A broken `vtscore.datasets` install now fails loudly instead of silently
+  disabling origin resolution** (issue #3397).
+  `vtscore.detectors.resolver` used to defer its imports of
+  `vtscore.datasets.sources` / `vtscore.datasets.importers` into a first-use
+  auto-wire step wrapped in `except ImportError: pass`. Because both packages
+  ship in this same distribution, that `except` could only ever fire on a
+  genuinely broken install - and when it did, the module carried on with *no*
+  resolvers registered, so every label silently failed to resolve and the only
+  symptom was an "N of M labels resolved" warning. Both imports are now
+  module-level, and the defaults are bound at import time rather than on first
+  use, so the underlying `ImportError` reaches the caller with its real
+  traceback.
+
+  **For library consumers:** `register_source_resolver`,
+  `register_importer_resolver`, `SourceResolver` and `ImporterResolver` are
+  unchanged, and a registered resolver still replaces the default. The only
+  visible difference is *when* an already-fatal misconfiguration surfaces.
+
+- **`vtscore.config` is now a package, not a single module** (issue #3375). The
+  933-line file is split into `paths`, `runtime`, `models`, `device`,
+  `processor_backend` and `core_config`, layered so each reads only from the ones
+  before it. **Nothing about the import surface changes:** every public name is
+  re-exported from `vtscore/config/__init__.py` and listed in its `__all__`, so
+  `vtscore.config.X` and `from vtscore.config import X` resolve exactly as before,
+  and the old file path was never a documented import path anyway.
+
+  **For plugin authors:** the one behaviour that moved is *reloading*.
+  `importlib.reload(vtscore.config)` now only re-runs the re-exports - the
+  submodules are already in `sys.modules`, so the environment variables are not
+  re-read. Call `vtscore.config._reload_all()` for the old whole-module reload.
+  Likewise, stubbing a name on the package reaches callers outside the package
+  but not the package's own functions, which resolve their module globals: patch
+  `vtscore.config.device` / `vtscore.config.runtime` for those. Private names are
+  deliberately not re-exported, so an attempt to stub one on the package raises
+  instead of being silently ignored.
+
+- **`MediaClipper.resolve_for_durations` is documented as reserved and inert**
+  (issue #3395). The method is unchanged and still part of the ABC - removing
+  it would turn a third-party clipper's silently-inert override into a hard
+  error - but the docstring and all three clipper guides claimed it was "called
+  once per dataset at load time", which stopped being true when auto-routing
+  moved to the per-item `resolve_for_media`. Nothing invokes it. **If you
+  override it, your override never runs**; move the logic to
+  `resolve_for_media`.
+
+- **`apply_converter_to_demo`'s `embedder_name` is documented as accepted and
+  ignored** (issue #3395). Conversion changes the media type, so an embedder
+  chosen for the source type does not apply to the outputs - the framework
+  embed stage resolves the target type's embedder itself. The parameter is
+  kept, since out-of-tree callers may still pass it.
+
+- **`vtscore.timing.profile_covers` keeps its export; its docstring no longer
+  claims callers it does not have** (issue #3395). It named the tuning script's
+  coverage report and the dataset-load path, neither of which calls it. It is
+  public API with no in-repo caller, and is documented as such.
+
+- **`update_progress()` reports into the calling thread's tracker instead of a
+  global one** (issue #3376). It stays public and stays the documented way for
+  an importer to report progress without accepting an `on_progress` argument —
+  it is now the free-function spelling of `resolve_progress_callback()`.
+
+  This **fixes** out-of-tree importers that followed
+  `docs/extending/dataset-importers.md`. Writing straight to the global meant
+  their ticks landed on a channel the dashboard does not render, so the row for
+  their import never moved, and the `"embedding"` status that swaps the
+  download concurrency-gate for the embed gate never reached the pipeline.
+  Both work now with no change to the calling code. Two in-tree importers
+  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
+
+  Two narrower changes to its signature: the `staging_result=` parameter is
+  gone (that field belongs to the staging task's own tracker, declared via
+  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
+  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
+  sink's signature accepts them — the four-argument callbacks the load pipeline
+  installs get the four positional arguments alone. Acceptance is decided by
+  inspecting the signature, not by catching `TypeError` from the call, so a
+  `TypeError` raised *inside* a sink still propagates.
+
+- **`description_wrappers` is now a per-embedder, measured choice, and four
+  built-in embedders return `[]`** (issue #3341, following #3127). Issue
+  #3127 measured wrapper-averaged text embedding on/off across 22 eval
+  datasets and 560 paired queries (paired Δ in text-sort average precision,
+  SEs clustered on (corpus, category)). The result splits by *model*, not by
+  media type: `clap_general` +0.014 ± 0.009 and `xclip` +0.008 ± 0.014, but
+  `siglip` −0.001 ± 0.002, `clap` −0.010 ± 0.008, `e5` −0.057 ± 0.009 and
+  `bge` −0.059 ± 0.009 (the two text embedders lost on 45 of 45 categories,
+  and every individual template was negative on all four). Those four now
+  override `description_wrappers` to return `[]`, so `embed_text_enriched`
+  degrades to `embed_text` and the app's `enrich_descriptions` setting is a
+  no-op for them. `clap_general`, `xclip` and the unmeasured cross-modal
+  siblings are unchanged.
+
+  **For plugin authors:** the base-class default is still `[]` and nothing in
+  the ABC moved, so no out-of-tree embedder is affected. But the default is
+  now documented as a *measured answer* rather than an unfilled slot — do not
+  add wrappers to your own embedder without measuring that they beat the typed
+  query on your checkpoint, because a sibling model's templates are not
+  evidence (`clap` and `clap_general` disagree on the identical five).
+
+- **Voted media are excluded from the calibrated threshold's haystacks**
+  (issue #3308). The fold-anchored threshold estimator drops the voted
+  items from every population sample it touches - each calibration fold
+  model's corpus scores and the final model's realization sample - because
+  those models were trained on the votes, so the votes' own scores under
+  them are optimistically shifted (and the calibration votes previously sat
+  in the haystack twice: once as free points, once as anchors). All the
+  distributions in the quantile transfer now cover one identical
+  population, the unlabeled remainder. New optional `voted_ids` parameter
+  on `vtscore.detectors.training.train_and_threshold` (and the internal
+  `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
+  labelset/model-loading pipelines pass it automatically, and omitting it
+  keeps the historical include-everything behaviour. The exclusion switches
+  off entirely when it would leave fewer than
+  `vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` (60) scores - a
+  drained remainder is too coarse and too selection-biased to be a
+  population estimate. Thresholds move only where votes are a nontrivial
+  share of the corpus (small datasets); on large corpora the change is
+  bounded by the votes' share of the ≤50k haystack sample.
+
+- **`calibration_fraction` defaults are now per-embedder, and `None` means
+  "resolve it".** The shipped Train/Calibrate split of each calibration fold
+  is keyed on the space the detector learns in (issue #3287):
+  `PRODUCTION_SPLIT_BY_SPACE` in `vtscore.training.thresholds` maps
+  `single_vector` → 0.3 and `patch` → 0.5, with `PRODUCTION_SPLIT = 0.5` as
+  the unknown-space fallback, resolved by `production_split_for(patch_space=…)`
+  (a three-state contract mirroring `production_schedule_for`) and, with the
+  explicit-setting precedence, by
+  `vtscore.detectors.training.resolve_calibration_fraction`. Accordingly the
+  `calibration_fraction` parameters of `train_and_score`,
+  `labelset_train_and_score`, `train_detector_from_origins`,
+  `simulate_voting_iterations`, `run_voting_iterations_eval[_from_pickles]`,
+  `eval_learned_sort`, and `run_eval` changed from `float = 0.5` to
+  `float | None = None`, where `None` resolves to the per-space production
+  default (the eval keys it on `patch_grid` presence, matching the app).
+  `CoreConfig.calibration_fraction` is now `float | None` (`None` = no
+  explicit user setting), and `vtscore.state.get_calibration_fraction()` /
+  `set_calibration_fraction()` pass that tri-state through. Callers that
+  passed an explicit fraction are unaffected; callers that *relied* on the
+  implicit 0.5 default and want it back should pass `0.5` explicitly.
+
+- **Train/Calibrate split sizes are dithered rather than rounded.**
+  `calibration_folds` / `calibration_folds_cached` (and the grouped,
+  bag-aware path behind them) now round a fractional split size up with
+  probability equal to its fractional part, instead of calling `round`.
+  The count is unbiased either way; what changes is that a *tie* no longer
+  resolves the same way for every labelset of a given size. `round` is
+  round-half-to-even, so at the default `calibration_fraction=0.5` the odd
+  label's destination alternated with the label count - Train at
+  `n % 4 == 1`, Calibrate at `n % 4 == 3` - and every threshold read off
+  the fold models inherited that period-4 seesaw. Harmless for one
+  detector, but any study that advances one label at a time saw it
+  phase-locked across every run, where it survived averaging as a
+  spurious 4-label ripple (issue #3286). Thresholds remain a pure,
+  reproducible function of the labelset: the tie-break RNG is seeded from
+  a digest of the labels and training vectors, so the same votes still
+  give the same cut, and the calibration cache stays valid.
+
+- **Results exporters declare which payload kinds they handle, instead of
+  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
+  (the old name stays as a permanent module-level alias), and it exposes
+  `export_find_results()` and `export_labelset()` alongside the existing
+  `export_cli_detectors()`. `supported_payloads` is derived from which of
+  those a subclass overrides, so each picker offers an exporter only for the
+  kinds it can actually read and the export route answers 400 - rather than
+  letting an exporter be handed a shape it doesn't understand and deliver an
+  empty export while reporting success. `email_smtp` gained a labelset mode
+  it never had.
+
+  **Existing exporters keep working with no changes.** The default
+  `export_find_results()` / `export_labelset()` both delegate to `export()`,
+  so a plugin written against the single-method contract still runs and still
+  does its own `if "labels" in results` check; it is credited with both
+  payload kinds and logs one line at import pointing at the named methods.
+  Migrating is a mechanical split of that `if` into two methods, and buys
+  accurate picker filtering. See
+  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
+
+- **`RemoteUnreachableError` now also covers a retryable HTTP status that
+  outlives the retry budget.** `download_file_with_progress` and
+  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
+  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
+  naming whichever CDN node the redirect landed on. Both now raise
+  `RemoteUnreachableError` with a sentence naming the host and the status.
+  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
+  and gated 401/403 still raise `GatedResourceError`.
+- **A multi-file demo download tolerates individual files the host refuses.**
+  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
+  it once after the rest of the set, then skip it with a `notify()` warning,
+  failing the download only when more than a quarter of the set is missing.
+
+- **`LINEAR_SVM_HEAD` is the production detector head**, replacing
+  `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
+  fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
+  liblinear, `class_weight="balanced"`) rather than by `train_model`'s balanced
+  BCE loop. The fit delegates to `train_svm(kernel="linear")` — the very call
+  the eval harness scores as its `svm_linear` arm — so the shipped head and the
+  measured arm cannot drift apart, and `vtscore.eval.voting_iterations`'
+  `PRODUCTION_HEAD` moves to `"linear_svm"` with it. `head="linear"` and
+  `head="mlp"` remain as named eval arms. Callers that passed `LINEAR_HEAD` to
+  match production must now pass `LINEAR_SVM_HEAD`; scores from a detector
+  trained on the same labels will differ.
+- **`train_svm` accepts `sample_weight`** (`decision_sigmoid` calibration
+  only), mirroring `train_model`'s contract: per-row weights replace the
+  `class_weight` balance rather than stacking on it. This is how region
+  flooding weights a Bad image's many region rows down to one image's worth.
+
+- **`clap_general` is the default audio embedder**, replacing `clap`.
+  Measured on the full ESC-50 (2000 clips, all 50 categories),
+  `laion/larger_clap_general` wins every comparison against
+  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
+  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
+  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
+  that passes `embedder=""`/`None` now resolve to `clap_general`.
+  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
+  faster and ~20% smaller, and existing pickles and detector JSONs recording
+  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
+  are dimension-compatible but not interchangeable.
+- **The two general CLAP display names are now distinguishable.** `clap` reads
+  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
+  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
+  labels are "CLAP Fast" and "CLAP General".
+- **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
+  calibration fold, a semi-supervised 2-component mixture is fitted to that
+  fold model's scores over the whole collection with the fold's *held-out*
+  labels clamped to their component; each fold's cut is carried to the final
+  model as a quantile and the folds are combined in quantile space. Anchor mass
+  is 0.3 (each vote counts as three tenths of a haystack point) and the cut
+  rule is `mid_tilt`: at Inclusion 0 the midpoint between the fitted component
+  means — the interior optimum of a six-environment κ sweep — and away from 0
+  that midpoint's combined quantile shifted by the rate-optimal cut's own
+  displacement from its inclusion-0 position, so the fused threshold answers
+  the Inclusion knob monotonically while reproducing the measured midpoint arm
+  exactly where it was measured. The
+  label-count-scheduled blend (`calculate_safe_threshold`) is now only the
+  fallback for label sets too small to form calibration folds.
+- **`gmm_cut_from_fit(rule="rate")` continues past the component means instead
+  of falling back to the midpoint** when the density crossing has no root
+  between them. The cut is read as the highest score at which the low component
+  still out-densities the high one under the cost tilt, which makes it monotone
+  in the Inclusion knob (and so keeps the included sets nested); it equals the
+  old root wherever a crossing exists, including at every equal-weight cut.
+  Once the crossing runs off the inter-mean interval the cut keeps moving,
+  continuing past the edge by the log-cost excess times the mixture-weighted
+  variance over the mean gap - the equal-variance crossing's own slope, so for
+  equal-variance fits the continuation extends the interior crossing line
+  seamlessly. Returning the bare edge there (the first form of this change)
+  made the cut *constant* in the cost ratio, which flattened the composed
+  `mid_tilt` quantile over whole bands of the Inclusion knob and silently
+  collapsed the acquisition offset to a no-op inside them.
+- **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
+  is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
+  parameter entirely - they delegate to the production trainer, which has no
+  such mode.
+- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
+  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
+  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
+  so `bool(kind)` is the previous "no interior stationary point" boolean; the
+  non-empty values distinguish a cut *continued* past a component mean (still
+  moving with the cost tilt, still the rate rule) from a fit too degenerate to
+  express a boundary at all (a midpoint, constant in the tilt). Those two were
+  indistinguishable before, which made a fallback countable but not
+  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
+  should compare to `""` or wrap in `bool()`.
+
 ### Added
+
+- **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
+  whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
+  merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of
+  each (`source_box` overlap, else output index); the one cut from the kept copy leads its `dupe_set`. A
+  multi-dataset load (`vtscore.datasets.load_multi`) now finalizes every output whose converter rows read another
+  output after that output, and runs this on it. Additive.
+
+- **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
+  `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
+  `--on-dataset-imported` hooks, and still calls every hook: one that alerts the user should skip the alert when it
+  is `False`, and one that only records imports can ignore it. Additive; a hook that never reads it is unchanged.
+
+- **The detector registry records the datasets a detector holds labels from** (issue #5142). New
+  `vtscore.detectors.registry.record_detector_training(detector_id, num_training, *, dataset_id="",
+  labeled_in_dataset=True)` stamps `num_training` and `last_trained_at` as `update_detector` did, and keeps the entry's
+  `trained_on` list of dataset ids: a writer that composed its labels against one dataset adds it while the detector
+  still holds labels there and drops it once the last one is gone; a writer that names no dataset leaves the list
+  alone. The per-vote label sync calls it, and `VoteSnapshot` gains `dataset_id`, the dataset its `medias` belong to.
+  Additive.
+- **`LineTest.deal_ahead()` draws a test's next round before the vote that deals it** (issue #5116). Once a round has
+  one pick pending, it draws the next round for each way that pick can be voted, each on a copy of the test with the
+  generator copied at its current state, and returns a `RoundAhead` (`id`, `good`, `bad`; `()` where that vote ends
+  the test), which `LineTest.ahead` reads back and `as_dict()` carries as `ahead` until a label changes. `draw()`
+  installs the copy whose labels match the ones recorded instead of drawing again: the same picks from the same
+  generator state, so a seeded test deals the same rounds, and reads the same numbers, whether or not anything was
+  dealt ahead. `RoundAhead` is exported from `vtscore.training.thresholds`. Additive: a caller that never deals ahead
+  sees no change but `as_dict()["ahead"]`, always `None`.
+
+- **`vtscore.detectors.training.scoring_progress(callback)` reports a thread's scoring passes in media**
+  (issue #5101). Inside the block, every `score_rows_with_model` call fires `callback(media_done, media_total)` with
+  `(0, n)` as the pass starts and again after each `ROW_CHUNK` block, ending at `(n, n)`; `media_done` counts the
+  media whose rows have all been scored. A detector's train scores its haystack with its final head and each
+  calibration fold model before the detector's own pass, so this is how the app's Find bar counts all of them. The
+  hook is per thread, `None` reports nothing, and the outer callback comes back when the block exits.
+  `_forward_sigmoid_chunked` takes an optional `on_rows` (rows scored so far, per chunk). Additive.
+
+- **The eval harness Finds on a second corpus at every click, with the app's two domain-shift flags beside it**
+  (issue #4960). `simulate_voting_iterations(find_corpus=, find_corpus_scores=, find_mix=, find_flag_steps=)`:
+  another dataset's medias in the run's embedder, whose cell of the same name is scored at every click by the
+  detector the click's Test gives, its line's corpus side refitted there, into the new
+  `voting_columns.FIND_CORPUS_COLUMNS` (`find_fbeta` and its presets, `find_precision`, `find_recall`,
+  `find_n_flagged`, `find_average_precision`, `find_n_pos`, `find_n_neg`). `find_mix` (`"only"`, the default;
+  `"equal"`, `0` or a share) mixes it into the withheld half as extra haystack. At `find_flag_steps` the row also
+  carries `FIND_FLAG_COLUMNS`: `domain_shift_report` against the sim pool's coverage atlas (NaN on a patch
+  embedder) and `evidence_coverage_report` from the votes' vectors and the Find cut. New module
+  `vtscore.eval.find_corpus` (`build_find_corpus`, `parse_find_mix`, `find_cell`, the two flag readers). Both
+  frames gain the columns, NaN without the knob; every other column is unchanged.
+
+- **Video probing reports the sample aspect ratio, and a letterbox box its frame** (issue #5032).
+  `vtscore.media.video.decode.VideoInfo` gains `sar` (a stored pixel's width over its height; 1.0 for square
+  pixels and when unknown), parsed from the probe banner or OpenCV's `CAP_PROP_SAR_NUM` / `CAP_PROP_SAR_DEN`.
+  `frame_at` still returns stored pixels. `VideoLetterboxCropCleaner` now writes `clip_box_frame: [width,
+  height]`, the decoded frame size it measured `clip_box` on, beside the box, and
+  `vtscore.media.provenance.CLIP_WINDOW_FIELDS` carries it, so a saved dataset keeps it. The video thumbnailers
+  stretch the frame by the SAR, so an anamorphic video previews at its display aspect. Additive.
+
+- **Readers updates return a typed outcome** (issue #5000). New `vtscore.security.readers.ReadersUpdate`
+  (`UPDATED`, `NOT_FOUND`, `NOT_CREATOR`) is what the new `vtscore.datasets.registry.update_readers` and
+  `vtscore.detectors.registry.update_detector_readers` return, so a caller can tell an unknown id from a user
+  who did not create the entry without reading a message. `set_readers` and `set_detector_readers` keep their
+  `(ok, err)` return and their messages, and now delegate to these; `ReadersUpdate.message(kind)` is the `err`.
+  The app's readers routes pick 403 or 404 from the member, where they used to look for "creator" in the
+  message. Additive.
+
+- **`image2face` can find sideways faces** (issue #4788). A new `sideways` checkbox (default off)
+  looks for each face MTCNN finds again in the photo turned a quarter each way
+  (`SIDEWAYS_TURNS = (90, 270)`) and takes its landmarks from whichever turn MTCNN is most
+  confident of, so `roll` alignment can turn a face lying on its side upright. The faces kept, their
+  boxes, confidences and `source_box` are the plain pass's. `_resolve_params` now returns a
+  `FaceParams` named tuple (`threshold`, `padding`, `min_size`, `align`, `sideways`);
+  `to_stored_frame(points, turn, w, h)` maps a turned copy's points back. Off by default: on the FHIBE
+  face bench it fixed both sideways failures but moved the session mean about +0.004, for about 2.8x
+  MTCNN time (`docs/experiments/2026-10-11-face-sideways-4788`). Additive.
+
+- **The eval harness can record every calibration fold model's scores beside the final model's** (issue #4936).
+  `simulate_voting_iterations` takes `fold_scale_steps` (clicks; `None`, the default, is off): at the first
+  ordinary step at or past each, the `test_score_sink` entry also carries each live fold model's scores of the
+  withheld half (`fold_test_scores`, aligned with the snapshot's `ids`) and of the whole sim set
+  (`fold_sim_scores`, beside the final model's `sim_scores`, the items' `sim_labels` and `sim_vote`), whether the
+  step's haystacks dropped the voted items (`fold_sim_excluding`), and the vote behind each held-out score
+  (`fold_ids`). Every remainder-fitted map's haystacks replay from these, so the fold models' scale can be read
+  against the final model's on images no model has seen. Record only; the session is unchanged.
+
+- **The eval harness can carry the folds' held-out scores onto the final model's scale before the labels line**
+  (issue #4910). `simulate_voting_iterations` takes `labels_scale` (`None`, the default and the app: each fold
+  model's scores as it scored them; `"quantile"`: fold *k*'s scores carried onto the final model's scale by their
+  quantile in fold *k*'s haystack, as the fold-anchored cut carries its cut; `"quantile_tails"`: the same, keeping a
+  score's logit distance past either end of the haystack) and `labels_scale_shadow`, which fits the line on another
+  scale beside it on the same head and draws nothing. The calibration frame's base row gains `shadow_*` (the
+  shadow's Train cut, its Find line's threshold, set size and F-beta on the withheld half, and its d') and `xfer_*`
+  (how far the transfer moved the held-out logits and the class model, and the share of held-out Goods above their
+  fold's haystack). `vtscore.training.thresholds` gains `FOLD_SCALES`, `transfer_fold_orderings`,
+  `fold_transfer_shift` and `fold_transfer_clipped`. An experiment arm; the app is unchanged.
+
+- **Detector-to-labelset-source bindings and a deployment default** (issue #4913). New
+  `vtscore.labels.binding`: `resolve_labelset_source(entry)` resolves a detector's registry-entry
+  `labelset_source` binding, then a `DetectorContext.labelset_source`, then the new
+  `CoreConfig.default_labelset_source`, whose non-empty field values are fixed and overlay the detector's
+  own; the result reports `missing_fields`. Also `labelset_source_status`, `unfixed_fields`,
+  `fixed_field_values`, `deployment_default_labelset_source`, `stored_labelset_source` and `OPT_OUT`. In
+  `vtscore.labels.sync`: `schedule_labelset_push(name)`, `note_detector_written(data)` and
+  `reconcile_labelset_source(name)` (pull with the file winning, then push - run when a detector loads or
+  is linked). In `vtscore.detectors.labelset_ops`: `follow_rename_with_labelset_file(detector_id,
+  old_name=, new_name=)` moves a `{detector_name}`-templated server file to follow a rename.
+
+- **The eval harness can check every session at a fixed vote count** (issue #4664). `simulate_voting_iterations`
+  takes `early_check` (`None`, the default and the app; or N: every session is checked once at N votes, on top of
+  the app's own checks: at the first step from N votes past the opening, a prompted check already running, or one
+  whose rounds reached vote N, counts, and otherwise Autopilot prompts one, with no cooldown). Its picks are clicks
+  with phase `"prompt"`. The pick log (`PICK_COLUMNS`) gains `check_kind`: `weak`, `done` or `early` on a prompted
+  check's picks, `end` on the end-of-run check's, blank on every other. `AutopilotFlow.begin_spot_check` takes
+  `"early"`, which latches nothing. An experiment arm; the app is unchanged.
+
+- **`served_quota` says when the typed query's hold, not the quota, is why** (issue #4889). Its dict gains
+  `hold_labels` (`label_quota.QUERY_HOLD_LABELS`, 30) and `hold_owed`: on a typed query's head whose labels
+  meet the quota, the labels of either kind still owed before the hold (#4736) gives the trained head, and
+  `0` otherwise. `LabelQuota.as_dict()` is unchanged. The CLI's `detector_query` event carries both, and its
+  text names the hold rather than calling a held detector "under the quota".
+
+- **The typed query as a second prior for the head** (issue #4384). `centroid_prior_direction(query=(direction,
+  scale))` adds the typed query's unit direction, at its own scale, as a second cheap feature beside the
+  Goods' centroid, folded back into the one `Linear(D, 1)`; a centroid scale of 0 prices the query alone.
+  `simulate_voting_iterations(query_prior_sink=[...], query_vector=...)` records, at every click a trained
+  head is drawn on a single-vector typed-query run, one `vtscore.eval.arms_query_prior.QUERY_PRIOR_COLUMNS`
+  row: where the withheld positives sit under candidate heads refitted on the same votes. Recorded only;
+  the session is unchanged. (#4859 made the prior the app's; see Changed.)
+
+- **EmbeddingGemma 2 embedders** (issue #4837). `embeddinggemma2` (media type `image`, `eval_only`: too slow
+  for the app) and `embeddinggemma2_audio` (`audio`, selectable), both `google/embeddinggemma-2`, 768-d, with a
+  text side; registered once per media type and loading only that type's encoder.
+  - **Recipe:** each input runs through the model's text backbone (images as soft tokens, audio at 25 tokens a
+    second), and the vector is the masked mean of its last hidden state, L2-normalised. That is the checkpoint's
+    sentence-transformers recipe, on plain `transformers`.
+  - **Queries** carry `EMBEDDINGGEMMA2_QUERY_PREFIX` (`"task: search result | query: "`); media take none.
+  - **Precision:** the model never runs in fp16, which overflows; it runs in bf16 when `VTSEARCH_EMBED_PRECISION`
+    asks.
+  - **Batch:** the image embedder's default batch is 8.
+  - **Audio** is 16 kHz mono, its first 30 s (`EMBEDDINGGEMMA2_MAX_SAMPLES`), padded to 1 s
+    (`EMBEDDINGGEMMA2_MIN_SAMPLES`).
+  - **Needs transformers >= 5.18;** loading on an older one raises `ImportError` naming the version.
+  - **New config constants:** `EMBEDDINGGEMMA2_MODEL_ID`, `EMBEDDINGGEMMA2_QUERY_PREFIX`,
+    `EMBEDDINGGEMMA2_SAMPLE_RATE`, `EMBEDDINGGEMMA2_MAX_SAMPLES`, `EMBEDDINGGEMMA2_MIN_SAMPLES`.
+
+- **Set overlap for the harness** (issue #4816). On a typed-query run,
+  `simulate_voting_iterations(set_overlap_sink=[...])` records, at every click a trained head scored the
+  pool, one `vtscore.eval.arms_set_overlap.OVERLAP_COLUMNS` row: how the head's set and the typed query's
+  split the unvoted media (both, head only, query only, neither), the positives in each part, the head's
+  class model's expected positives there, and the voted Goods and Bads in each part. The pick log gains
+  `picked_in_head`, `picked_in_query`, `picked_head_rank`, `picked_part_rank` and `picked_head_posterior`
+  (where each pick sat at the click before it; NaN without the sink). Recorded only; the session is unchanged.
+
+- **Line counts for the harness** (issue #4786). `simulate_voting_iterations(line_count_sink=[...])`
+  records, at every click Test gives the trained head under a balance, one
+  `vtscore.eval.arms_line_counts.LINE_COUNT_COLUMNS` row: where the withheld half's positives sit in
+  the head's ranking, and what the labels line (each preset), the Goods' centroid's count line and the
+  count rule on the head's scores keep there. Recorded only; the session is unchanged.
+
+- **An eval head started from the Goods' centroid, and a hand-over shadow for the harness** (issue #4776).
+  `vtscore.training.svm_prior` (`centroid_prior_direction`, `fit_linear_svm_prior_head`) fits the
+  shipped linear SVM's objective with one extra feature, `CENTROID_PRIOR_SCALE` (10) times the dot
+  with the unit Goods' centroid, and folds it back into a `Linear(D, 1)`; `train_model` reaches it by
+  the new `LINEAR_SVM_PRIOR_HEAD` sentinel (`-3`), the harness by `head="linear_svm_prior"`. Eval
+  only: no production fit passes the sentinel. `simulate_voting_iterations(handover_shadow=True,
+  handover_sink=[...])` adds, past the label quota, the Goods' centroid's Test as rows tagged
+  `gmm_variant="handover:centroid"` and one `vtscore.eval.arms_handover.HANDOVER_COLUMNS` row per
+  click (held-out Goods' ranks in the unvoted pool under the centroid and under the head, and the
+  centroid-prior heads' AP). Additive; off by default.
+- **`image2face` aligns each crop by its landmarks** (issue #4777). A new `align` field
+  (`"none"`, `"roll"`, `"similarity"`; **default `"roll"`**) fits MTCNN's five landmarks to
+  `FACE_TEMPLATE` with `fit_similarity(src, dst) -> (a, b, tx, ty)` and crops through
+  `crop_face(img, detection, align, padding)`: `roll` turns the padded box upright about its
+  centre at the box's size, `similarity` also re-centres and re-scales it to the template on a
+  square. Detection, the kept faces and each crop's `source_box` do not depend on `align`; a
+  detection without landmarks is cropped plain. `FaceDetection` (`box`, `conf`, `raw`,
+  `landmarks`) is what `_detect_faces` / `_kept_faces` now return, and the stubbed MTCNN must
+  answer `detect(img, landmarks=True)` with `(boxes, probs, points)`. **Behaviour change:** a
+  conversion at the defaults now emits turned-upright crops, so its face vectors differ from a
+  conversion before this change; pass `align="none"` for the old crops. Priced on the FHIBE face
+  bench (`docs/experiments/2026-10-10-face-align-4777`): the face review's session mean rose in
+  every session set, and failed one-photo sessions fell from 12 to 7.
+- **`vtscore.datasets.source_groups`: group a ranking of converter outputs by source item** (issue #4751).
+  `group_by_source(results, medias, locate) -> list[SourceGroup]` turns a descending ranking of
+  outputs into one of their sources: each output whose source resolves (`locate` is
+  `SourceLocator.locate`) joins its source item's group, a group scores as its best member and keeps
+  that member's place, and an output whose source cannot be named is a group of its own, so every
+  output is in exactly one group. `SourceGroup` carries `source_dataset_id`, `source_media_id`,
+  `score` and `members` (`SourceGroupMember`: `media_id`, `score`, `box`). It raises
+  `SourceNotLoadedError` (with `dataset_id`) when any output's source dataset is registered but not
+  loaded. `SortResultsCache.derived(token, key, build, *, dataset_id=None) -> (found, view)` keeps a
+  view built once over a stored ranking, evicted with it, and `forget_derived(token, key)` drops one.
+  Additive.
+- **`vtscore.datasets.source_item`: find a converter output's source item in its sibling dataset**
+  (issue #4749). `resolve_source_item(media, sibling_medias, *, name_lookup=None) -> int | None`
+  joins the output's `origin.params.source_file` to the sibling's `origin_name`, settles a shared
+  name by `source_path` against `media_path` (else `None`, never a guess), and follows `dupe_set`
+  members on either side; `SourceResolver` is the same, built once for many outputs.
+  `find_source_sibling(dataset_id, source_type, *, readable_by=None, entries=None)` picks the other
+  registry entry of the dataset's `import_group` whose `output_category` is the converter's
+  `source_type` (the Image output for faces, not the Document output beside it).
+  `SourceLocator(dataset_id, *, user=None)` / `locate_source(media, dataset_id, *, user=None)`
+  do both against the live contexts and return a `SourceLocation` (`status`, `dataset_id`,
+  `media_id`, `box`). Additive.
+- **A text or example sort keeps its display line, to redraw it at another balance** (issue #4760).
+  `vtscore.training.query_sort.SortLine` holds the rule that drew a cosine sort's line (`"text"`,
+  `"centroid"` or `"structural"`) and the scores it was drawn on; `threshold_at(beta)` draws the
+  sort's own number at that balance. `TextSortCuts` gains an optional `line` field (default `None`,
+  left out of equality and `repr`), which `text_sort_active`, `cosine_sort_cuts` and
+  `example_sort_cuts_from_paths` fill. `SortResultsCache.store` takes `line=`, and
+  `SortResultsCache.redraw(token, beta, *, dataset_id=None)` returns
+  `{"threshold", "above_threshold", "total"}` for a stored sort with a line, else `None`.
+  Additive.
+- **The dataset registry links the datasets of one multi-dataset import** (issue #4747).
+  `vtscore.datasets.registry.register_dataset` takes `import_group: str | None = None` and
+  `output_category: str = ""` and stores both on the entry; the multi-dataset load
+  (`vtscore.datasets.load_multi`) mints one group id per run and stamps every output's entry with
+  it and with the output's `OutputSpec.category`. Entries saved earlier lack the keys; read them
+  as `None` / `""`. Additive.
+- **`vtscore.concurrency.stalls`: a startup bar for the watchdog.** `StallWatchdog.relaxed(threshold_ms)`
+  raises the heartbeat-miss bar for a block (never lowers it, re-arms the opt-in live dump at it, and a stall
+  reported under it carries `bar …ms`); `startup_threshold_ms()` reads `VTSEARCH_STALL_STARTUP_MS` (default
+  5000; `0` keeps the normal bar); `startup_grace()` applies it to the active watchdog for the app's ML imports
+  and embedder preload, where a cold page cache holds the GIL across a second-long `dlopen` with exactly a
+  stall's signature. Additive.
+- **The CLI entry points take an `outputs` list** (issue #4707). `vtscore.cli.autodetect_importer_main`
+  and `autodetect_importer_main_chunked` accept `outputs=` (a list of `OutputSpec`, as
+  `parse_output_specs` returns) and then run the importer once through `run_outputs` /
+  `run_outputs_chunked`, saving, scoring and exporting one dataset per entry; a pipeline file's
+  `importer.outputs` and the `--outputs` flag resolve to it. The streaming-exporter `header`
+  (`ResultsExporter.export_cli_streaming`) gains an optional `dataset` block naming the dataset
+  the records belong to; the bundled NDJSON exporter writes it into its `_meta` line. Additive.
+- **Multi-dataset imports: one importer run, several datasets** (issue #4703).
+  `vtscore.datasets.importers.base` gains `OutputSpec` (one dataset of a multi-dataset import: its
+  `media_type`, `source_specs`, `category`, and the per-dataset embedder / clipper / cleaners the
+  pipeline applies), `parse_output_specs(raw)` and `output_dataset_name(base, output)`.
+  `ImporterBase` gains the hooks `run_outputs(field_values, outputs, thin)` and
+  `run_outputs_chunked(field_values, outputs, chunk_size, thin)`, yielding `(output, medias)`
+  pairs; their defaults run `run()` / `run_chunked()` once per output on `output.narrow(field_values)`,
+  so every existing importer produces every dataset with no change, and an importer whose acquire
+  is expensive overrides them to acquire once (the URL-archive importer does). The class attribute
+  `multi_output` (default `True`) opts an importer out, reported by `to_dict()` as
+  `supports_multi_output`. The new `vtscore.datasets.load_multi` runs the fan-out: one loading task,
+  context, registry entry, `DatasetImported` event and post-load hook per output, under the same
+  download / embed gates as a single load. Additive: no existing member changes.
+- **A converter output can say where it sat in its source** (issue #4748). A dict `convert()`
+  returns may carry `source_box`, a normalised `[x0, y0, x1, y1]` box in `[0, 1]` of the upright
+  source image (`vtscore.media.provenance.SOURCE_BOX_FIELD`). It reaches the media on every ingest
+  path, survives the dataset pickle, and renders as one **Source Box** row
+  (`provenance.describe_source_box`). `image2face` sets it on every face crop. The folder and demo
+  conversion path (`vtscore.converters.runner`) also now keeps a converter's `custom_metadata`,
+  as the importer-hook and clipper-chain paths already did. Additive.
 
 - **A subset layout can be started ahead of the click, on an idle server** (issue #4683).
   `vtscore.projection.service.prep_subset_layout(ctx, ids)` starts the same fit
@@ -1842,245 +2284,120 @@ instead, since every commit on `dev` is effectively a new app release.)
   private name was never contract. If you were calling one anyway, call
   `loaded_backbone()` instead.
 
-### Changed
+- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
+  exported from `vtscore.concurrency.progress`** (issue #3392). The
+  `(status, message, current, total)` type alias had been redeclared in ten
+  modules and the "use the thread's callback, else a default" resolution copied
+  byte-identically into eight; both now have one definition.
+  `resolve_progress_callback()` returns the calling thread's progress callback,
+  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
+  alias and the no-op, so existing imports from there keep working.
 
-- **Autopilot's opening walks for more goods** (issue #4282, measured by #4222).
-  After the 3-good / 4-bad quorum a new phase, `more`, goes back to the top of
-  the seed sort until the labelset holds `MORE_TARGET` (20) positives or
-  `MORE_DRY_RUN` (16) walk picks in a row held none, then hands over to `hard`.
-  `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is now
-  `"g3@top,b4@mid,g20+dry1/16@top"` (was `"g3@top,b4@mid"`), and the harness's
-  default arm runs it natively: `vtscore.eval.autopilot_flow` gains the `more`
-  phase, `MORE_TARGET` / `MORE_DRY_RUN`, `next_phase(..., more_target=,
-  more_done=)` and `AutopilotFlow(more_target=, more_dry_run=)`, all keyword
-  arguments with defaults. `vtscore.datasets.vote_provenance.PHASES` accepts
-  `"more"`. A study's default arm now differs from runs before this change:
-  on COCO Better at vote 150, +0.051 AP at the 0.44% pool and +0.030 at 0.1%,
-  with −0.036 / −0.067 at vote 25 while the walk runs.
+- **The detector-JSON write lock and the cross-dataset labelset merge are now
+  public, and re-exported from the `labelset_ops` façade** (issue #3398).
+  `vtscore.detectors.label_sync._label_sync_write_lock` and
+  `_merge_labelsets_across_datasets` are now
+  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
+  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
+  surface. Neither is new behaviour — the lock's contract has always bound
+  out-of-module writers (any caller doing its own read-modify-write of a
+  detector JSON file must hold it for the whole pass, acquired *before*
+  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
+  writers all merge with the same function. The private names simply said
+  otherwise, which made the seam unenforceable and the symbols un-renameable.
+  Both old names are gone rather than aliased, per this repo's rule that
+  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
+  that was reaching for them should import from `labelset_ops`.
 
-- **`vtscore.state.core`'s floor helpers drop their Inclusion argument** (issue
-  #4269). `recompute_detector_thresholds(min_precision)` (was
-  `(inclusion_value, min_precision)`) and
-  `detector_line_inclusion(ctx, min_precision)` (was
-  `(ctx, inclusion_value, min_precision)`), both unreleased since #4245. A
-  detector with no floor is re-cut at Inclusion 0. `user_inclusion()` is gone,
-  as are `DetectorContext.inclusion` and the private `_get_inclusion` /
-  `_set_inclusion`: there is no per-detector Inclusion left to hold.
-  `is_status_cache_fresh(label_history, inclusion_value=0)` gains a default, as
-  its siblings have.
+- **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
+  sanitiser `build_media_hit` already applied is now a public export (issue
+  #3368). It returns a fresh copy of a media's importer metadata with the
+  `embedding` key stripped, and exists as a public name because every surface
+  that hands that dict to an outside caller — hits, the app's detector and
+  processor scoring routes, `POST /api/medias/batch`, the label-export blob —
+  has to agree on what it strips. A top-level key filter cannot: a
+  pre-computed vector shipped via `custom_metadata_map` rides *inside*
+  `custom_metadata`, where it would balloon the payload or fail JSON encoding
+  outright. Behaviour of `build_media_hit` is unchanged.
 
-- **Smart no longer prices at the caller's inclusion** (issue #4243).
-  `calculate_error_cost_over_time`, `compute_labeling_status`,
-  `analyze_labeling_progress` and `cached_indicator_history` still take
-  `inclusion_value`, which picks the progress cache to read, but every cost
-  they report is FPR + FNR at each model's `smart_threshold`. Before, it was
-  priced at `inclusion_value` at the served threshold. Identical at inclusion 0.
+- **`PluginBase.get_field_options(field_key, current_values)`** — the
+  dynamic-select hook now lives on the shared plugin base instead of on the
+  importer families alone, so every plugin family inherits it and a results
+  exporter can compute its options at runtime (issue #3360). The default
+  raises `NotImplementedError` naming the field, matching what the importer
+  bases already did; existing overrides are unaffected. A dynamic select's
+  declared `options` are also no longer used as the `choices` of its
+  auto-generated CLI flag — they are a seed for the first render, not the
+  allowed set, so pinning argparse to them rejected every value the plugin
+  resolved at runtime.
 
-- **`generate_image_dataset` draws a small world of cartoon smiley faces**
-  (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
-  256x256) become three kinds at 512x512: a `face` in one of seven colours
-  with one of seven expressions, `shapes` (stars added), and a `scene` of
-  several small faces and shapes; backgrounds gain polka dots, stripes, checks
-  and gradients. File names are `face_` / `shapes_` / `scene_` plus the index
-  (were `smiley_` / `shapes_`). Each picture is now seeded on `(seed, index)`
-  rather than `seed + index`, which had made two seeds share nearly every
-  picture - so a `(count, seed)` still always gives the same files, but not
-  the files it gave before. The signature is unchanged.
+- `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
+  (default `False`, matching the app's shipped `enrich_descriptions`
+  default), so a simulated-user study can open on the same sort a real user
+  sees instead of silently always embedding the query plainly (issue #3341).
 
-- **The `synthetic` importer takes a `seed`** (issue #4240): a third,
-  optional field (default `1`; the seed used to be a fixed `42`), recorded in
-  the origin. Its cache folder is now `<media_type>_<size>_seed<seed>`, plus a
-  `_v<n>` for a generator whose drawing has changed, so no cache written
-  before this is reused.
+- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
+  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
+  The progress trackers publish *state* and an exception ends the operation;
+  neither fits "we skipped 3 unreadable files but the other 900 imported
+  fine". `notify()` is the third option — keep going, and say so. Consumers
+  subscribe to the process-wide `notifications` broker (the app's SSE stream
+  and the CLI printer both do); with no subscriber the message is still
+  logged at a severity matching its level. `PluginBase.notify()` wraps it
+  with the plugin's `display_name` as the source. The call never raises: bad
+  levels degrade, long messages truncate, broken subscribers are swallowed.
 
-- **Context-registry lookups no longer take `_state_lock`** (issue #3869).
-  `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only
-  `_context_registry_lock` - a plain `Lock` guarding the two registry dicts'
-  membership, taken across a dict operation and nothing else. Membership is
-  the only thing they read, and taking the lock that a vote, a training pass
-  or a dataset load holds for seconds meant an app's per-request
-  `X-Dataset-Id` / `X-Detector-Id` resolution blocked for the whole of a long
-  operation - so the routes explicitly exempted from the state sync (the
-  spinner poll, the SSE reconnect) queued behind it anyway. Writers are
-  unchanged from the outside: they take `_state_lock` first and the registry
-  lock inside it, an ordering that is one-way. New alongside them:
-  `rekey_dataset_context(old_id, new_id)`, so a re-key goes through the
-  registry lock rather than mutating `_contexts` directly, and
-  `loaded_detector_contexts()`, a snapshot for callers that want to walk every
-  loaded detector without iterating the live dict.
+- **`vtscore.security.login`** - the `LoginProvider` ABC,
+  `DefaultLoginProvider`, the process-wide `set_login_provider` /
+  `get_login_provider` registry, `get_user_data_dir()` and
+  `is_safe_username()`, moved down from the `vtsearch` app tier. Path
+  confinement (`vtscore.security.path_validation`) asks the active provider
+  where the current user's data lives, so the abstraction had to be reachable
+  in a process with no Flask in it — previously `get_file_access_base_dir()`
+  raised `ImportError` there. An embedder can now opt into per-user
+  confinement by registering a provider whose `get_user_data_dir()` returns a
+  per-user subtree; the default stays single-user and unconfined.
 
-- **The threshold's mixture fit is `vtscore`'s own EM, not sklearn's** (issue
-  #3585). `fit_score_gmm` fitted two Gaussians over one dimension with
-  `GaussianMixture(n_components=2, random_state=42)` - full-covariance machinery
-  and a k-means init on a problem whose covariance is a scalar. It is now a
-  deterministic 2-means init (`_two_means_init`) plus the same EM loop the
-  anchored refit uses with no anchors (`_plain_em`), stopped where sklearn
-  stopped it: when an iteration improves the mean log-likelihood by less than
-  `_EM_LOGLIK_TOL` = 1e-3.
+- **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
+  self-supervised encoder, exposed as a 768-d audio-only embedder
+  (`supports_text=False`). There is no `transformers` implementation, so the
+  architecture is vendored in `vtscore.media.audio._beats_model` (DeepNorm
+  residuals, a shared gated relative position bias, a weight-normalised
+  convolutional position embedding) and the released MIT-licensed checkpoint
+  is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
+  torchaudio's pure-PyTorch implementation rather than taken as a dependency,
+  since torchaudio's wheels are built against a pinned torch.
 
-  **This moves the fit**, so it is licensed by measurement rather than by
-  argument: a different starting point lands EM elsewhere inside its tolerance
-  and sometimes in a different basin, and that reaches the green/red line
-  through the per-fold quantile and `snap_cut_to_sample`. Gated on 84 cells of
-  captured production inputs, it changes the admitted set on 7.0% of 2,258 fold
-  cases by a median of 2 medias - where keeping sklearn and changing only
-  `init_params="k-means++"` changes 16.1% by a median of 11.5, so the
-  replacement is *more* faithful to the incumbent than the smallest perturbation
-  of the incumbent. 7.3x cheaper per fit, 12.3x at `_GMM_MAX_SAMPLES`, and 1.7x
-  on a whole cosine/text sort.
+- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
+  work for": a pluggable request-user resolver
+  (`register_request_user_resolver`), the `thread_user` thread-local scope
+  background jobs use to inherit a requester's identity, and the `"default"`
+  fallback. Library code that needs a username now calls
+  `vtscore.state.current_user.get_current_user()` instead of importing
+  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
+  loading, exporters, plugin templating) hard-require Flask at call time.
+  `vtsearch.auth` re-exports every name, so there is still exactly one
+  thread-local behind the app.
+- **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
+  split from the cut so a new Inclusion value can be re-cut arithmetically
+  without refitting or re-scoring.
+- **`inclusion_cost_weights`** - the single definition of what an Inclusion
+  value costs in `(fpr_weight, fnr_weight)`, read by both the shipped threshold
+  rule and the eval harness.
 
-  The pre-#3585 fit stays in the module as **`fit_score_gmm_sklearn`**, unused
-  by production, so the equivalence can be re-measured rather than believed.
-  What was measured is in
-  `docs/experiments/2026-09-13-gmm-init-3585/REPORT.md`.
-
-- **The anchored refit stops on its own log-likelihood, not on a parameter
-  delta** (issue #3825). `fit_anchored_score_gmm` - the estimator behind the
-  shipped decision threshold - ran `_anchored_em` until no parameter moved by
-  more than 1e-8. On real fold haystacks that criterion is not slow but
-  **unreachable**: measured over 4,493 production refits it ran a median of 113
-  iterations, and **26.5% of them exited on `max_iter` rather than converging**
-  (given twice the budget, 10.7% still do). After #3585 made the initialiser 5x
-  cheaper, that loop was 92.9% of a fold's fit.
-
-  It now stops on `_ANCHORED_EM_LOGLIK_TOL` = **1e-8**, and on the likelihood of
-  *this* estimator - the weighted semi-supervised objective the anchored M-step
-  ascends, anchors included - rather than the free sample's alone, which under
-  that M-step is not monotone (it falls on 36.6% of iterations). The two are the
-  same arithmetic when there are no anchors, so `fit_score_gmm` is unaffected
-  bit for bit.
-
-  **The tolerance is deliberately not sklearn's 1e-3.** That value is correct
-  for `fit_score_gmm` and transferring it here is a regression worth +0.026 +/-
-  0.006 of cost over 114 paired trajectory cells, because at 1e-3 the refit
-  halts before the minority component has migrated to the high mode. At 1e-8 the
-  refit is 1.9x cheaper, the admitted set moves by a median of zero (p90 one
-  media in two thousand), and non-convergence falls to 7.4%. Measured in
-  `docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`.
-
-  `_anchored_em` and `fit_anchored_score_gmm` also take an optional `stats`
-  dict, filled with `n_iter` / `converged` / `loglik`.
-
-- **The voting simulation's app arm is now `trainer="app"`, not `trainer="mlp"`**
-  (issue #3764). `vtscore.eval.voting_iterations.simulate_voting_iterations`
-  takes two knobs that both read as "which model?", and they used to collide on
-  the string `"mlp"`. `trainer` picks the **pipeline** — `"app"` is VTSearch's
-  own (`train_model` plus production fold calibration), anything `svm_*` is a
-  standalone estimator that thresholds itself — while `head` picks **what that
-  pipeline fits**, defaulting to the shipped `linear_svm`. So the old
-  `trainer="mlp"` trained no MLP, and meant something different again from
-  `SWEEP_TRAINERS["mlp"]` in the label-curve sweep, which genuinely is one.
-
-  The retired spelling is still accepted on input and normalised to `"app"`, so
-  archived launch scripts keep running unchanged; the `trainer` **result column
-  now records `app`**, which is the one visible break. Frames written before
-  this change keep the old value, so read a mixed corpus through a normalising
-  load (`scripts/experiments/mlp_vs_svm/summarize.py` does exactly that).
-
-  The error raised for `head=` on a standalone estimator now says which knob
-  the caller wanted.
-
-- **`JOB_MANAGERS` is now the single registry of every module-level
-  `JobManager`, with visibility carried by the manager** (issue #3404). It
-  previously held only the managers surfaced by `/api/jobs/active`, which
-  forced `reset_all_async_jobs_for_tests()` to re-list the hidden ones by
-  hand — and that second list went stale, leaving `archive_thumbnail_jobs`
-  unreset between tests. `JobManager.__init__` gained a keyword-only
-  `user_visible: bool = True`, `list_active_pairs()` filters on it, and the
-  reset helper walks the whole registry. Registering a new manager is now one
-  edit in one place, and its visibility is declared at its own definition.
-
-  **For library consumers:** the `JobManager(...)` change is purely additive —
-  the default keeps existing constructions user-visible. `JOB_MANAGERS` itself
-  now enumerates the internal managers too (`labeling-status`,
-  `signpost-relabel`, `archive-thumbnail-warm`), so code that iterated it
-  expecting only user-facing work should read `list_active_pairs()` or filter
-  on `mgr.user_visible`. The keys of the visible entries are unchanged.
-
-- **`register_setting_persister` rejects an unrecognised key** (issue #3385).
-  It previously stored a persister under any key, but only `inclusion`,
-  `calibrate_count` and `calibration_fraction` are ever fired, so any other key
-  was a typo in the host's wiring that sat there silently never firing — the
-  failure mode `achievements_hooks.KNOWN_EVENTS` already existed to catch. The
-  key set is now public as `vtscore.state.KNOWN_SETTING_KEYS`, and an unknown
-  key raises `ValueError`. This is an extension-facing behaviour change, but no
-  working integration can be relying on it: a rejected key could never have
-  persisted anything.
-
-- **`vtscore.training.evt_mixture` moved to `vtscore.eval.evt_mixture`** (issue
-  #3396). The Gumbel/Normal score mixture is a research arm from the #2836 /
-  #2846 cut studies, not a shipped threshold rule: nothing in the app or the
-  library's production path fits a Gumbel, and its only consumers are the eval
-  harness's cut families and the calibration studies under
-  `scripts/experiments/calibration/`. Sitting in `vtscore/training/` put it
-  beside the `thresholds/` package that *is* offered to library consumers, with
-  nothing to tell the two apart.
-
-  **For library consumers:** this is a breaking move of a module path, taken
-  deliberately rather than shimmed. `GumbelNormalFit1D`,
-  `fit_gumbel_normal_mixture_state`, `gaussian_mixture_mean_loglik`,
-  `CROSSING_REASONS` and the rest are unchanged and keep their names; only the
-  module they live in changed, so an importer updates one line. There is no
-  re-export at the old path on purpose: `vtscore.training` importing from
-  `vtscore.eval` would invert the package layering and drag the eval package's
-  matplotlib import into the training tier. The Gaussian threshold rules that
-  production actually ships (`vtscore.training.thresholds`) are untouched.
-
-- **A broken `vtscore.datasets` install now fails loudly instead of silently
-  disabling origin resolution** (issue #3397).
-  `vtscore.detectors.resolver` used to defer its imports of
-  `vtscore.datasets.sources` / `vtscore.datasets.importers` into a first-use
-  auto-wire step wrapped in `except ImportError: pass`. Because both packages
-  ship in this same distribution, that `except` could only ever fire on a
-  genuinely broken install - and when it did, the module carried on with *no*
-  resolvers registered, so every label silently failed to resolve and the only
-  symptom was an "N of M labels resolved" warning. Both imports are now
-  module-level, and the defaults are bound at import time rather than on first
-  use, so the underlying `ImportError` reaches the caller with its real
-  traceback.
-
-  **For library consumers:** `register_source_resolver`,
-  `register_importer_resolver`, `SourceResolver` and `ImporterResolver` are
-  unchanged, and a registered resolver still replaces the default. The only
-  visible difference is *when* an already-fatal misconfiguration surfaces.
-
-- **`vtscore.config` is now a package, not a single module** (issue #3375). The
-  933-line file is split into `paths`, `runtime`, `models`, `device`,
-  `processor_backend` and `core_config`, layered so each reads only from the ones
-  before it. **Nothing about the import surface changes:** every public name is
-  re-exported from `vtscore/config/__init__.py` and listed in its `__all__`, so
-  `vtscore.config.X` and `from vtscore.config import X` resolve exactly as before,
-  and the old file path was never a documented import path anyway.
-
-  **For plugin authors:** the one behaviour that moved is *reloading*.
-  `importlib.reload(vtscore.config)` now only re-runs the re-exports - the
-  submodules are already in `sys.modules`, so the environment variables are not
-  re-read. Call `vtscore.config._reload_all()` for the old whole-module reload.
-  Likewise, stubbing a name on the package reaches callers outside the package
-  but not the package's own functions, which resolve their module globals: patch
-  `vtscore.config.device` / `vtscore.config.runtime` for those. Private names are
-  deliberately not re-exported, so an attempt to stub one on the package raises
-  instead of being silently ignored.
-
-- **`MediaClipper.resolve_for_durations` is documented as reserved and inert**
-  (issue #3395). The method is unchanged and still part of the ABC - removing
-  it would turn a third-party clipper's silently-inert override into a hard
-  error - but the docstring and all three clipper guides claimed it was "called
-  once per dataset at load time", which stopped being true when auto-routing
-  moved to the per-item `resolve_for_media`. Nothing invokes it. **If you
-  override it, your override never runs**; move the logic to
-  `resolve_for_media`.
-
-- **`apply_converter_to_demo`'s `embedder_name` is documented as accepted and
-  ignored** (issue #3395). Conversion changes the media type, so an embedder
-  chosen for the source type does not apply to the outputs - the framework
-  embed stage resolves the target type's embedder itself. The parameter is
-  kept, since out-of-tree callers may still pass it.
-
-- **`vtscore.timing.profile_covers` keeps its export; its docstring no longer
-  claims callers it does not have** (issue #3395). It named the tuning script's
-  coverage report and the dataset-load path, neither of which calls it. It is
-  public API with no in-repo caller, and is documented as such.
+- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
+  exporter can return an `http(s)` URL for the frontend to open in a new
+  browser tab, which is how a third-party site with no ingest API receives a
+  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
+  can label the button before the export runs.
+- **`vtscore.security.url_validation.validate_browser_url`** - scheme
+  allowlist for URLs the *user's browser* opens. Deliberately not the
+  `validate_url` SSRF guard: no server-side request is made, so private hosts
+  are legitimate targets and only the scheme is dangerous.
+- **`open_url` exporter** - formats the labelset into a user-supplied URL
+  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
+  truncating to `max_items`, and refusing a URL past the ~2000-character
+  practical limit.
 
 ### Deprecated
 
@@ -2307,6 +2624,42 @@ instead, since every commit on `dev` is effectively a new app release.)
   operation owns; reporting progress through the thread's sink usually does it
   for you, since the callbacks the load pipeline binds check cancellation
   before recording each tick.
+
+- **The four never-implemented integration plugins** (issue #3451): the
+  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
+  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
+  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
+  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
+  four raised `NotImplementedError("TODO: implement ...")`, so no code path
+  through them had ever executed; they were registered but
+  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
+  `get_label_importer("holder")` and `get_importer("recaller")` now return
+  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
+  `None`, and the modules no longer import. Their API routes
+  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
+  `/api/label-importers/import/holder`,
+  `/api/detectors/{name}/import-labels/holder`,
+  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
+  copied one as a starting point, the shapes they demonstrated are now
+  documented directly: service-style dataset importers and the bulk-fetch
+  hook in `docs/EXTENDING-plugins.md` and
+  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
+  labelset-only exporters in
+  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
+
+- **`CoreConfig.safe_thresholds`**, `vtscore.state.get_safe_thresholds` /
+  `set_safe_thresholds`, and the `safe_thresholds` parameter of
+  `train_and_score`, `labelset_train_and_score`, and `run_learned_sort`. The
+  fused threshold measured better than the alternative at every label count, so
+  the switch was deleted rather than kept as a way to opt into a worse cut.
+  **Breaking:** construct `CoreConfig` without the field, and drop the keyword
+  from any `train_and_score` call.
+- **`vtscore.training.thresholds.xcal_is_discarded`** - it existed to skip the
+  fold training where the blend schedule zeroed the cross-cal cut, and the
+  fold-anchored estimator needs those fold models at every label count.
+- **`cross_calibration_threshold_cached`** - superseded by
+  `calibration_folds_cached`, which returns the fold models alongside the
+  orderings (plus `threshold_from_folds` for the cross-calibration cut).
 
 ### Fixed
 
@@ -2558,272 +2911,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   *should* leave out the media that live in another - but a silently short
   haystack is what hid this.
 
-### Added
-
-- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
-  exported from `vtscore.concurrency.progress`** (issue #3392). The
-  `(status, message, current, total)` type alias had been redeclared in ten
-  modules and the "use the thread's callback, else a default" resolution copied
-  byte-identically into eight; both now have one definition.
-  `resolve_progress_callback()` returns the calling thread's progress callback,
-  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
-  alias and the no-op, so existing imports from there keep working.
-
-### Changed
-
-- **`update_progress()` reports into the calling thread's tracker instead of a
-  global one** (issue #3376). It stays public and stays the documented way for
-  an importer to report progress without accepting an `on_progress` argument —
-  it is now the free-function spelling of `resolve_progress_callback()`.
-
-  This **fixes** out-of-tree importers that followed
-  `docs/extending/dataset-importers.md`. Writing straight to the global meant
-  their ticks landed on a channel the dashboard does not render, so the row for
-  their import never moved, and the `"embedding"` status that swaps the
-  download concurrency-gate for the embed gate never reached the pipeline.
-  Both work now with no change to the calling code. Two in-tree importers
-  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
-
-  Two narrower changes to its signature: the `staging_result=` parameter is
-  gone (that field belongs to the staging task's own tracker, declared via
-  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
-  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
-  sink's signature accepts them — the four-argument callbacks the load pipeline
-  installs get the four positional arguments alone. Acceptance is decided by
-  inspecting the signature, not by catching `TypeError` from the call, so a
-  `TypeError` raised *inside* a sink still propagates.
-
-- **`description_wrappers` is now a per-embedder, measured choice, and four
-  built-in embedders return `[]`** (issue #3341, following #3127). Issue
-  #3127 measured wrapper-averaged text embedding on/off across 22 eval
-  datasets and 560 paired queries (paired Δ in text-sort average precision,
-  SEs clustered on (corpus, category)). The result splits by *model*, not by
-  media type: `clap_general` +0.014 ± 0.009 and `xclip` +0.008 ± 0.014, but
-  `siglip` −0.001 ± 0.002, `clap` −0.010 ± 0.008, `e5` −0.057 ± 0.009 and
-  `bge` −0.059 ± 0.009 (the two text embedders lost on 45 of 45 categories,
-  and every individual template was negative on all four). Those four now
-  override `description_wrappers` to return `[]`, so `embed_text_enriched`
-  degrades to `embed_text` and the app's `enrich_descriptions` setting is a
-  no-op for them. `clap_general`, `xclip` and the unmeasured cross-modal
-  siblings are unchanged.
-
-  **For plugin authors:** the base-class default is still `[]` and nothing in
-  the ABC moved, so no out-of-tree embedder is affected. But the default is
-  now documented as a *measured answer* rather than an unfilled slot — do not
-  add wrappers to your own embedder without measuring that they beat the typed
-  query on your checkpoint, because a sibling model's templates are not
-  evidence (`clap` and `clap_general` disagree on the identical five).
-
-- **Voted media are excluded from the calibrated threshold's haystacks**
-  (issue #3308). The fold-anchored threshold estimator drops the voted
-  items from every population sample it touches - each calibration fold
-  model's corpus scores and the final model's realization sample - because
-  those models were trained on the votes, so the votes' own scores under
-  them are optimistically shifted (and the calibration votes previously sat
-  in the haystack twice: once as free points, once as anchors). All the
-  distributions in the quantile transfer now cover one identical
-  population, the unlabeled remainder. New optional `voted_ids` parameter
-  on `vtscore.detectors.training.train_and_threshold` (and the internal
-  `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
-  labelset/model-loading pipelines pass it automatically, and omitting it
-  keeps the historical include-everything behaviour. The exclusion switches
-  off entirely when it would leave fewer than
-  `vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` (60) scores - a
-  drained remainder is too coarse and too selection-biased to be a
-  population estimate. Thresholds move only where votes are a nontrivial
-  share of the corpus (small datasets); on large corpora the change is
-  bounded by the votes' share of the ≤50k haystack sample.
-
-- **`calibration_fraction` defaults are now per-embedder, and `None` means
-  "resolve it".** The shipped Train/Calibrate split of each calibration fold
-  is keyed on the space the detector learns in (issue #3287):
-  `PRODUCTION_SPLIT_BY_SPACE` in `vtscore.training.thresholds` maps
-  `single_vector` → 0.3 and `patch` → 0.5, with `PRODUCTION_SPLIT = 0.5` as
-  the unknown-space fallback, resolved by `production_split_for(patch_space=…)`
-  (a three-state contract mirroring `production_schedule_for`) and, with the
-  explicit-setting precedence, by
-  `vtscore.detectors.training.resolve_calibration_fraction`. Accordingly the
-  `calibration_fraction` parameters of `train_and_score`,
-  `labelset_train_and_score`, `train_detector_from_origins`,
-  `simulate_voting_iterations`, `run_voting_iterations_eval[_from_pickles]`,
-  `eval_learned_sort`, and `run_eval` changed from `float = 0.5` to
-  `float | None = None`, where `None` resolves to the per-space production
-  default (the eval keys it on `patch_grid` presence, matching the app).
-  `CoreConfig.calibration_fraction` is now `float | None` (`None` = no
-  explicit user setting), and `vtscore.state.get_calibration_fraction()` /
-  `set_calibration_fraction()` pass that tri-state through. Callers that
-  passed an explicit fraction are unaffected; callers that *relied* on the
-  implicit 0.5 default and want it back should pass `0.5` explicitly.
-
-- **Train/Calibrate split sizes are dithered rather than rounded.**
-  `calibration_folds` / `calibration_folds_cached` (and the grouped,
-  bag-aware path behind them) now round a fractional split size up with
-  probability equal to its fractional part, instead of calling `round`.
-  The count is unbiased either way; what changes is that a *tie* no longer
-  resolves the same way for every labelset of a given size. `round` is
-  round-half-to-even, so at the default `calibration_fraction=0.5` the odd
-  label's destination alternated with the label count - Train at
-  `n % 4 == 1`, Calibrate at `n % 4 == 3` - and every threshold read off
-  the fold models inherited that period-4 seesaw. Harmless for one
-  detector, but any study that advances one label at a time saw it
-  phase-locked across every run, where it survived averaging as a
-  spurious 4-label ripple (issue #3286). Thresholds remain a pure,
-  reproducible function of the labelset: the tie-break RNG is seeded from
-  a digest of the labels and training vectors, so the same votes still
-  give the same cut, and the calibration cache stays valid.
-
-- **Results exporters declare which payload kinds they handle, instead of
-  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
-  (the old name stays as a permanent module-level alias), and it exposes
-  `export_find_results()` and `export_labelset()` alongside the existing
-  `export_cli_detectors()`. `supported_payloads` is derived from which of
-  those a subclass overrides, so each picker offers an exporter only for the
-  kinds it can actually read and the export route answers 400 - rather than
-  letting an exporter be handed a shape it doesn't understand and deliver an
-  empty export while reporting success. `email_smtp` gained a labelset mode
-  it never had.
-
-  **Existing exporters keep working with no changes.** The default
-  `export_find_results()` / `export_labelset()` both delegate to `export()`,
-  so a plugin written against the single-method contract still runs and still
-  does its own `if "labels" in results` check; it is credited with both
-  payload kinds and logs one line at import pointing at the named methods.
-  Migrating is a mechanical split of that `if` into two methods, and buys
-  accurate picker filtering. See
-  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
-
-- **`RemoteUnreachableError` now also covers a retryable HTTP status that
-  outlives the retry budget.** `download_file_with_progress` and
-  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
-  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
-  naming whichever CDN node the redirect landed on. Both now raise
-  `RemoteUnreachableError` with a sentence naming the host and the status.
-  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
-  and gated 401/403 still raise `GatedResourceError`.
-- **A multi-file demo download tolerates individual files the host refuses.**
-  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
-  it once after the rest of the set, then skip it with a `notify()` warning,
-  failing the download only when more than a quarter of the set is missing.
-
-- **`LINEAR_SVM_HEAD` is the production detector head**, replacing
-  `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
-  fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
-  liblinear, `class_weight="balanced"`) rather than by `train_model`'s balanced
-  BCE loop. The fit delegates to `train_svm(kernel="linear")` — the very call
-  the eval harness scores as its `svm_linear` arm — so the shipped head and the
-  measured arm cannot drift apart, and `vtscore.eval.voting_iterations`'
-  `PRODUCTION_HEAD` moves to `"linear_svm"` with it. `head="linear"` and
-  `head="mlp"` remain as named eval arms. Callers that passed `LINEAR_HEAD` to
-  match production must now pass `LINEAR_SVM_HEAD`; scores from a detector
-  trained on the same labels will differ.
-- **`train_svm` accepts `sample_weight`** (`decision_sigmoid` calibration
-  only), mirroring `train_model`'s contract: per-row weights replace the
-  `class_weight` balance rather than stacking on it. This is how region
-  flooding weights a Bad image's many region rows down to one image's worth.
-
-### Added
-
-- **The detector-JSON write lock and the cross-dataset labelset merge are now
-  public, and re-exported from the `labelset_ops` façade** (issue #3398).
-  `vtscore.detectors.label_sync._label_sync_write_lock` and
-  `_merge_labelsets_across_datasets` are now
-  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
-  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
-  surface. Neither is new behaviour — the lock's contract has always bound
-  out-of-module writers (any caller doing its own read-modify-write of a
-  detector JSON file must hold it for the whole pass, acquired *before*
-  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
-  writers all merge with the same function. The private names simply said
-  otherwise, which made the seam unenforceable and the symbols un-renameable.
-  Both old names are gone rather than aliased, per this repo's rule that
-  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
-  that was reaching for them should import from `labelset_ops`.
-
-- **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
-  sanitiser `build_media_hit` already applied is now a public export (issue
-  #3368). It returns a fresh copy of a media's importer metadata with the
-  `embedding` key stripped, and exists as a public name because every surface
-  that hands that dict to an outside caller — hits, the app's detector and
-  processor scoring routes, `POST /api/medias/batch`, the label-export blob —
-  has to agree on what it strips. A top-level key filter cannot: a
-  pre-computed vector shipped via `custom_metadata_map` rides *inside*
-  `custom_metadata`, where it would balloon the payload or fail JSON encoding
-  outright. Behaviour of `build_media_hit` is unchanged.
-
-- **`PluginBase.get_field_options(field_key, current_values)`** — the
-  dynamic-select hook now lives on the shared plugin base instead of on the
-  importer families alone, so every plugin family inherits it and a results
-  exporter can compute its options at runtime (issue #3360). The default
-  raises `NotImplementedError` naming the field, matching what the importer
-  bases already did; existing overrides are unaffected. A dynamic select's
-  declared `options` are also no longer used as the `choices` of its
-  auto-generated CLI flag — they are a seed for the first render, not the
-  allowed set, so pinning argparse to them rejected every value the plugin
-  resolved at runtime.
-
-- `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
-  (default `False`, matching the app's shipped `enrich_descriptions`
-  default), so a simulated-user study can open on the same sort a real user
-  sees instead of silently always embedding the query plainly (issue #3341).
-
-- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
-  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
-  The progress trackers publish *state* and an exception ends the operation;
-  neither fits "we skipped 3 unreadable files but the other 900 imported
-  fine". `notify()` is the third option — keep going, and say so. Consumers
-  subscribe to the process-wide `notifications` broker (the app's SSE stream
-  and the CLI printer both do); with no subscriber the message is still
-  logged at a severity matching its level. `PluginBase.notify()` wraps it
-  with the plugin's `display_name` as the source. The call never raises: bad
-  levels degrade, long messages truncate, broken subscribers are swallowed.
-
-- **`vtscore.security.login`** - the `LoginProvider` ABC,
-  `DefaultLoginProvider`, the process-wide `set_login_provider` /
-  `get_login_provider` registry, `get_user_data_dir()` and
-  `is_safe_username()`, moved down from the `vtsearch` app tier. Path
-  confinement (`vtscore.security.path_validation`) asks the active provider
-  where the current user's data lives, so the abstraction had to be reachable
-  in a process with no Flask in it — previously `get_file_access_base_dir()`
-  raised `ImportError` there. An embedder can now opt into per-user
-  confinement by registering a provider whose `get_user_data_dir()` returns a
-  per-user subtree; the default stays single-user and unconfined.
-
-- **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
-  self-supervised encoder, exposed as a 768-d audio-only embedder
-  (`supports_text=False`). There is no `transformers` implementation, so the
-  architecture is vendored in `vtscore.media.audio._beats_model` (DeepNorm
-  residuals, a shared gated relative position bias, a weight-normalised
-  convolutional position embedding) and the released MIT-licensed checkpoint
-  is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
-  torchaudio's pure-PyTorch implementation rather than taken as a dependency,
-  since torchaudio's wheels are built against a pinned torch.
-
-### Removed
-
-- **The four never-implemented integration plugins** (issue #3451): the
-  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
-  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
-  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
-  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
-  four raised `NotImplementedError("TODO: implement ...")`, so no code path
-  through them had ever executed; they were registered but
-  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
-  `get_label_importer("holder")` and `get_importer("recaller")` now return
-  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
-  `None`, and the modules no longer import. Their API routes
-  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
-  `/api/label-importers/import/holder`,
-  `/api/detectors/{name}/import-labels/holder`,
-  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
-  copied one as a starting point, the shapes they demonstrated are now
-  documented directly: service-style dataset importers and the bulk-fetch
-  hook in `docs/EXTENDING-plugins.md` and
-  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
-  labelset-only exporters in
-  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
-
-### Fixed
-
 - **A pre-computed vector nested in `custom_metadata` no longer reaches a
   labelset** (issue #3368). `LabelSet.from_clips_and_votes` copied a media's
   `custom_metadata` onto every `LabeledElement` verbatim, so a dataset
@@ -2832,115 +2919,6 @@ instead, since every commit on `dev` is effectively a new app release.)
   persistence the no-persisted-vectors rule forbids. The dict now goes through
   `hit_custom_metadata` (see Added above); `LabeledElement.metadata` is `None` when
   the vector was its only key. No other importer metadata is affected.
-
-### Changed
-
-- **`clap_general` is the default audio embedder**, replacing `clap`.
-  Measured on the full ESC-50 (2000 clips, all 50 categories),
-  `laion/larger_clap_general` wins every comparison against
-  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
-  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
-  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
-  that passes `embedder=""`/`None` now resolve to `clap_general`.
-  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
-  faster and ~20% smaller, and existing pickles and detector JSONs recording
-  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
-  are dimension-compatible but not interchangeable.
-- **The two general CLAP display names are now distinguishable.** `clap` reads
-  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
-  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
-  labels are "CLAP Fast" and "CLAP General".
-- **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
-  calibration fold, a semi-supervised 2-component mixture is fitted to that
-  fold model's scores over the whole collection with the fold's *held-out*
-  labels clamped to their component; each fold's cut is carried to the final
-  model as a quantile and the folds are combined in quantile space. Anchor mass
-  is 0.3 (each vote counts as three tenths of a haystack point) and the cut
-  rule is `mid_tilt`: at Inclusion 0 the midpoint between the fitted component
-  means — the interior optimum of a six-environment κ sweep — and away from 0
-  that midpoint's combined quantile shifted by the rate-optimal cut's own
-  displacement from its inclusion-0 position, so the fused threshold answers
-  the Inclusion knob monotonically while reproducing the measured midpoint arm
-  exactly where it was measured. The
-  label-count-scheduled blend (`calculate_safe_threshold`) is now only the
-  fallback for label sets too small to form calibration folds.
-- **`gmm_cut_from_fit(rule="rate")` continues past the component means instead
-  of falling back to the midpoint** when the density crossing has no root
-  between them. The cut is read as the highest score at which the low component
-  still out-densities the high one under the cost tilt, which makes it monotone
-  in the Inclusion knob (and so keeps the included sets nested); it equals the
-  old root wherever a crossing exists, including at every equal-weight cut.
-  Once the crossing runs off the inter-mean interval the cut keeps moving,
-  continuing past the edge by the log-cost excess times the mixture-weighted
-  variance over the mean gap - the equal-variance crossing's own slope, so for
-  equal-variance fits the continuation extends the interior crossing line
-  seamlessly. Returning the bare edge there (the first form of this change)
-  made the cut *constant* in the cost ratio, which flattened the composed
-  `mid_tilt` quantile over whole bands of the Inclusion knob and silently
-  collapsed the acquisition offset to a no-op inside them.
-- **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
-  is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
-  parameter entirely - they delegate to the production trainer, which has no
-  such mode.
-- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
-  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
-  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
-  so `bool(kind)` is the previous "no interior stationary point" boolean; the
-  non-empty values distinguish a cut *continued* past a component mean (still
-  moving with the cost tilt, still the rate rule) from a fit too degenerate to
-  express a boundary at all (a midpoint, constant in the tilt). Those two were
-  indistinguishable before, which made a fallback countable but not
-  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
-  should compare to `""` or wrap in `bool()`.
-
-### Removed
-
-- **`CoreConfig.safe_thresholds`**, `vtscore.state.get_safe_thresholds` /
-  `set_safe_thresholds`, and the `safe_thresholds` parameter of
-  `train_and_score`, `labelset_train_and_score`, and `run_learned_sort`. The
-  fused threshold measured better than the alternative at every label count, so
-  the switch was deleted rather than kept as a way to opt into a worse cut.
-  **Breaking:** construct `CoreConfig` without the field, and drop the keyword
-  from any `train_and_score` call.
-- **`vtscore.training.thresholds.xcal_is_discarded`** - it existed to skip the
-  fold training where the blend schedule zeroed the cross-cal cut, and the
-  fold-anchored estimator needs those fold models at every label count.
-- **`cross_calibration_threshold_cached`** - superseded by
-  `calibration_folds_cached`, which returns the fold models alongside the
-  orderings (plus `threshold_from_folds` for the cross-calibration cut).
-
-### Added
-
-- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
-  work for": a pluggable request-user resolver
-  (`register_request_user_resolver`), the `thread_user` thread-local scope
-  background jobs use to inherit a requester's identity, and the `"default"`
-  fallback. Library code that needs a username now calls
-  `vtscore.state.current_user.get_current_user()` instead of importing
-  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
-  loading, exporters, plugin templating) hard-require Flask at call time.
-  `vtsearch.auth` re-exports every name, so there is still exactly one
-  thread-local behind the app.
-- **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
-  split from the cut so a new Inclusion value can be re-cut arithmetically
-  without refitting or re-scoring.
-- **`inclusion_cost_weights`** - the single definition of what an Inclusion
-  value costs in `(fpr_weight, fnr_weight)`, read by both the shipped threshold
-  rule and the eval harness.
-
-- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
-  exporter can return an `http(s)` URL for the frontend to open in a new
-  browser tab, which is how a third-party site with no ingest API receives a
-  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
-  can label the button before the export runs.
-- **`vtscore.security.url_validation.validate_browser_url`** - scheme
-  allowlist for URLs the *user's browser* opens. Deliberately not the
-  `validate_url` SSRF guard: no server-side request is made, so private hosts
-  are legitimate targets and only the scheme is dangerous.
-- **`open_url` exporter** - formats the labelset into a user-supplied URL
-  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
-  truncating to `max_items`, and refusing a URL past the ~2000-character
-  practical limit.
 
 ## [0.1.0] - Initial release
 
