@@ -18,7 +18,7 @@ override each one:**
   fails on an otherwise-idle thread. Instruct threads to stop watching after opening
   the PR.
 - **A new project runs every thread on Opus at high effort.** Size it to the work
-  instead, per CLAUDE.md's *Recommend a Claude model in every issue you file* — the same ladder
+  instead, per CLAUDE.md's *Issue lifecycle › A recommended model* — the same ladder
   applies.
 
 **These are settings outside this repository, so paste the override text.** Nothing in

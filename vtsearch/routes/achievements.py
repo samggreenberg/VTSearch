@@ -87,11 +87,12 @@ def check_phrase(body: dict):
 
 
 @achievements_bp.route("/api/achievements/docs/<doc_id>/raw", methods=["GET"])
+@achievements_bp.alt_response(404, description="Unknown doc id.")
+@achievements_bp.alt_response(500, description="The doc's file is missing, or resolves outside the repository.")
 def get_doc_raw(doc_id: str):
     """Return the raw markdown for a Readme Reader doc.
 
-    Plain-text response, intentionally undecorated so it stays out of
-    the OpenAPI spec (the spec is for JSON APIs).
+    Plain-text response, so the spec gives it no response schema.
     """
     doc = next((d for d in achievements.DOCS if d["id"] == doc_id), None)
     if doc is None:
