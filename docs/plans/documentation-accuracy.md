@@ -53,13 +53,6 @@ separately.
 
 <!-- item-sep -->
 
-- **CHANGELOG.md has readers but no release step.** It is maintained (29 commits since
-  2026-07-20) and linked from `CLAUDE.md`, but `docs/RELEASE.md` never mentions it, so nothing
-  closes an `Unreleased` section at a release: everything since the library extraction sits under
-  one `## Unreleased`, which repeats `### Fixed` / `### Changed` / `### Added` several times over
-  (merge residue from parallel PRs appending their own subsections). Decide whether the release
-  runbook cuts a dated section; if so, add the step and fold the repeated subsections then.
-
 <!-- item-sep -->
 
 <!-- item-sep -->
