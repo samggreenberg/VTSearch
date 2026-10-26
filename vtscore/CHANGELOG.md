@@ -1390,6 +1390,7 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+<<<<<<< HEAD
 - **`ResultsExporter.export_labelset_streaming(header, elements, field_values)`** (issue #5285): the labelset twin
   of `export_cli_streaming`, for the CLI's new `--stream-results --as-labelset` (pipeline YAML `as_labelset:`;
   `as_labelset=` on the four `autodetect_*_main` entry points). A run larger than RAM streams its hits as label
@@ -1402,6 +1403,18 @@ instead, since every commit on `dev` is effectively a new app release.)
   `vtscore.datasets.labelset.elements_for_media` / `label_entry_for_export`, the hit-to-entry conversion and the
   per-entry half of `labelset_for_export`. Additive: an exporter that overrides nothing is refused by
   `--as-labelset` with the list of those that can.
+=======
+- **`override_clipper=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5282), the library form
+  of the new `--override-clipper` flag: an `input_spec`, `{"clipper": name, "clipper_params": {...}}`, that every
+  detector is scored at in place of its own. The dataset is re-clipped to it unless already clipped to match (a
+  `*_default` clipper scores each media as loaded), and a clipper for another media type than a detector scores
+  raises. Its `detector_reclip` event adds `override_input_spec`, and the `dry_run_plan` event gains
+  `override_clipper`. `vtscore.cli_pipeline` reads the same from a pipeline file's `override_clipper: {name,
+  params}`. The new `vtscore.detectors.input_spec.resolve_clipper_spec(name, params=None)` validates such a choice
+  (an unknown clipper, an undeclared parameter, a value `with_params` refuses) and returns the spec with every
+  effective parameter as a string, the shape a clipped dataset reads back as. Additive: the keyword defaults to
+  `None`.
+>>>>>>> origin/dev
 
 - **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
   whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
@@ -2675,6 +2688,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   orderings (plus `threshold_from_folds` for the cross-calibration cut).
 
 ### Fixed
+
+- **A chain-clipped dataset matches the detector trained at its granularity** (issue #5282).
+  `vtscore.detectors.input_spec.extract_input_spec_from_medias` read every `clipper_<key>` origin param as a clipper
+  parameter, including the `clipper_chain` trail, so every spec it returned for a dataset clipped through the chain
+  runner (every load today) carried a `chain` parameter holding its first clip's bounds and content hash. No two
+  such specs were ever equal, so `clipper_matches` never matched a dataset to the detector trained on it, and a CLI
+  run re-clipped a dataset already at the detector's granularity. The trail is no longer read as a parameter.
+  A detector saved before this keeps the stray `chain` in its stored `input_spec`, and still re-clips (as it
+  always did) until its labels are next saved, which captures the spec again.
 
 - **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.lazy_clip` read the recipe of a
   reference-mode clip or converter output from `origin.params`, which a duplicate collapse replaces with the

@@ -59,9 +59,11 @@ builds - i.e. in how it produces media chunks:
 
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`,
-`stream_results=False`, `keep_negatives=False`, `save_dataset=False` and
-`override_detectors=None`; the two importer variants also take
-`outputs=None` (several datasets from one import; see [Behaviour](#behaviour)).
+`stream_results=False`, `keep_negatives=False`, `save_dataset=False`,
+`override_detectors=None` and `override_clipper=None` (an `input_spec`,
+`{"clipper": name, "clipper_params": {...}}`, that every detector is scored
+at in place of its own; see [Behaviour](#behaviour)); the two importer
+variants also take `outputs=None` (several datasets from one import).
 They catch every
 exception, report it via `cli_progress.emit_error()`, and
 `sys.exit(1)` - i.e. they're meant to be called from a
@@ -82,6 +84,7 @@ def autodetect_main(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
@@ -96,6 +99,7 @@ def autodetect_main_chunked(
     keep_negatives: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
@@ -111,6 +115,7 @@ def autodetect_importer_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -127,6 +132,7 @@ def autodetect_importer_main_chunked(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
@@ -285,7 +291,14 @@ interesting steps:
    direct or one-hop converter route from the dataset's types is
    *skipped* with a `detector_skipped` event; one whose
    `input_spec.clipper` doesn't match the dataset is *re-clipped* at
-   scoring time (a `detector_reclip` event), not skipped. Nobody can
+   scoring time (a `detector_reclip` event), not skipped. An
+   `override_clipper` takes the place of every detector's `input_spec`
+   (#5282): it is validated with
+   `vtscore.detectors.input_spec.resolve_clipper_spec` before anything is
+   loaded, re-clips unless the dataset already matches it (a `*_default`
+   clipper never does), and raises `ValueError` for a detector whose media
+   type it does not clip; its `detector_reclip` event adds
+   `override_input_spec`. Nobody can
    vote in a headless run, so a detector's line is never spot-checked:
    it exports the set its line keeps, unchecked, and is announced with a
    `detector_unchecked` event; every result it produces carries the
@@ -444,7 +457,7 @@ lists the extra fields.
 | `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
-| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
+| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`, plus `override_input_spec` when the clipper override did it | `_input_spec_reclip` / `_override_reclip` in `cli.py` |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
 | `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643), `hold_labels`, `hold_owed` (`0`) | `_report_centroid` in `cli.py` |
 | `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758), `hold_labels`, `hold_owed` (past the quota, held on the query, #4889) | `_report_centroid` in `cli.py` |
@@ -457,7 +470,7 @@ lists the extra fields.
 | `dataset_deleted`  | `dataset_id`, `name`                                              | `_delete_after_detection` in `cli.py` |
 | `labels_imported`  | `detector`, `applied`, `skipped`, `created`                       | `_import_labels` in `cli_pipeline.py` |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
-| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
+| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `override_clipper` (the clipper override's `input_spec`, or `null`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`; `dataset` while a multi-dataset run imports | `progress_callback`, `_relay_import_progress` |
 | `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
