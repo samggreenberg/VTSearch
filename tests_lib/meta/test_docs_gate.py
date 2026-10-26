@@ -180,8 +180,12 @@ class TestPathCheck:
         assert run("Sources live under `vtscore/datasets/sources/`.") == []
 
     def test_line_number_suffix_is_stripped(self):
-        assert run("See `vtscore/state/core.py:42`.") == []
-        assert checks("See `vtscore/state/gone.py:42`.") == ["PATH"]
+        # Only an experiment report may carry a line suffix at all (LINENO
+        # refuses one everywhere else), so that is where the PATH check still
+        # has to see through it to the file.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        assert run("See `vtscore/state/core.py:42`.", doc) == []
+        assert checks("See `vtscore/state/gone.py:42`.", doc) == ["PATH"]
 
     def test_glob_reference_resolves(self):
         assert run("Embedders are `vtscore/media/*/embedder_*.py`.") == []
@@ -262,6 +266,60 @@ class TestFenceCheck:
         assert run("```python\nx = 1\n```\n") == []
 
 
+class TestLineAnchorCheck:
+    """A line number is wrong by the next edit to the file it points into (#5290)."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Scored in `vtscore/state/core.py:42`.",
+            "Scored in vtscore/state/core.py:42, unquoted.",
+            "The guard lives in `browse-canvas.component.ts:120`.",
+            "A range: `vtscore/state/core.py:42-60`.",
+            "See the guard (line 42).",
+            "See the guard (lines 42-60).",
+            "See the guard (Line 42 of `vtscore/state/core.py`).",
+            "pyproject.toml (~line 127) pins it.",
+        ],
+    )
+    def test_both_spellings_fire(self, text):
+        assert checks(text) == ["LINENO"]
+
+    def test_message_names_the_anchor(self):
+        assert run("See `vtscore/state/core.py:42`.") == [
+            "LINENO:line-number anchor 'vtscore/state/core.py:42'; cite the module and symbol instead, "
+            "since a line number rots on the next edit"
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Cite `vtscore/state/core.py::DatasetContext` by symbol.",
+            "Run `pytest tests_lib/meta/test_docs_gate.py::TestLineAnchorCheck`.",
+            "The app listens on `localhost:5000`; the job starts at 10:30.",
+            "Write `file.py:NNN` and `(line NNN)` when describing the rule itself.",
+            "A one-line 2x speedup, on line two (of three).",
+        ],
+    )
+    def test_legitimate_shapes_are_quiet(self, text):
+        assert run(text) == []
+
+    def test_fenced_tool_output_is_ignored(self):
+        # Quoted output carries line numbers of its own; it is not a pointer.
+        text = '```text\ntests/test_x.py:42: AssertionError\n  File "x.py", line 199 in f (line 199)\n```\n'
+        assert run(text) == []
+
+    def test_plans_and_readmes_are_held_to_it(self):
+        # The old check only looked under vtscore/docs/; these are the docs it missed.
+        for rel in ("docs/plans/__synthetic__.md", "README.md", "scripts/screenshots/__synthetic__.md"):
+            assert checks("See `vtscore/state/core.py:42`.", REPO_ROOT / rel) == ["LINENO"], rel
+
+    def test_experiment_reports_are_exempt(self):
+        # A study record describes the code at the commit it ran on.
+        doc = REPO_ROOT / "docs" / "experiments" / "2026-01-01-x" / "REPORT.md"
+        assert run("Scored in `vtscore/state/core.py:42` (line 42).", doc) == []
+
+
 class TestPlanRefCheck:
     def test_repo_has_no_dangling_plan_citations(self):
         assert gate.check_plan_refs(FILES) == []
@@ -327,6 +385,10 @@ class TestAllowlistsStayHonest:
     def test_leak_allowlist_entries_point_at_real_files(self):
         for rel in gate.ALLOWED_LEAKS:
             assert (REPO_ROOT / rel).exists(), f"{rel} is allowlisted for path leaks but no longer exists"
+
+    def test_line_anchor_allowlist_entries_point_at_real_paths(self):
+        for rel in gate.ALLOWED_LINE_ANCHORS:
+            assert (REPO_ROOT / rel).exists(), f"{rel} may cite line numbers but no longer exists"
 
     def test_plan_self_reference_entries_point_at_real_files(self):
         for rel in gate.PLAN_SELF_REFERENCE:

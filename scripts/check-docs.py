@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Documentation drift gate — links, anchors, code-path references, path leaks.
 
-Seven invariants over the docs. All of them are *pure*: they compare the docs
+Eight invariants over the docs. All of them are *pure*: they compare the docs
 against the repo as it exists right now, so there is nothing to re-pin and no
 maintenance beyond the allowlists at the top of this file.
 
@@ -23,7 +23,11 @@ maintenance beyond the allowlists at the top of this file.
   7. STUDY   every ``docs/experiments/`` study directory is named
              ``YYYY-MM-DD-<slug>``, so ``ls`` alone sorts the archive
              chronologically. There is deliberately no index file to keep in
-             step (#4138).
+             step (#4138);
+  8. LINENO  no doc cites code by line number, in either spelling: a file name
+             with a ``:NNN`` suffix, or a parenthesised ``(line NNN)``. A line
+             number is wrong by the next edit to the file it points into, so
+             cite the module and the symbol instead (#5290).
 
 Dependency-free, imports nothing from the app, and reads each file once, so it
 costs well under a second and can sit early in ``run-tests.sh``.
@@ -128,6 +132,16 @@ PLAN_SELF_REFERENCE = frozenset(
     }
 )
 
+# Documents allowed to cite code by line number (only LINENO; every other check
+# still applies). Matching is on the document's repo-relative path; a trailing
+# `/` exempts the whole subtree.
+ALLOWED_LINE_ANCHORS: dict[str, str] = {
+    "docs/experiments/": (
+        "a study record describes the code as it was at the commit it ran on, so its "
+        "line numbers are pinned to that commit, not to the moving tree"
+    ),
+}
+
 # Absolute-path leaks that are legitimate: experiment reports record the cluster
 # directory a run actually lived in, which is provenance, not a leaked checkout.
 ALLOWED_LEAKS: dict[str, str] = {
@@ -185,6 +199,13 @@ PLAN_REF_RE = re.compile(r"docs/plans/[A-Za-z0-9_.-]+\.md")
 LEAK_RE = re.compile(r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+)/\S*")
 # A `:NNN` or `:NNN-MMM` (or comma-separated) line-number suffix on a path.
 LINE_SUFFIX_RE = re.compile(r":\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
+# A line-number anchor, in either spelling. The first is a repo file name with a
+# `:NNN` suffix; the second a parenthesised `(line NNN)`, `(lines NNN-MMM)` or
+# `(~line NNN)`, which the old vtscore-only check let through.
+LINE_ANCHOR_RES = (
+    re.compile(r"[\w./-]*\.(?:" + "|".join(re.escape(s[1:]) for s in PATH_SUFFIXES) + r"):\d+"),
+    re.compile(r"\(\s*~?\s*lines?\s+\d+", re.IGNORECASE),
+)
 # Markdown emphasis/links inside heading text, stripped before slugging.
 HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
@@ -348,10 +369,15 @@ def is_external(target: str) -> bool:
     return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target)) or target.startswith("//")
 
 
-def allowed_path(token: str) -> bool:
-    if token in ALLOWED_PATHS:
+def allowlisted(key: str, table: dict[str, str]) -> bool:
+    """True if `key` is in `table`, or falls under one of its `/`-ending prefixes."""
+    if key in table:
         return True
-    return any(prefix.endswith("/") and token.startswith(prefix) for prefix in ALLOWED_PATHS)
+    return any(prefix.endswith("/") and key.startswith(prefix) for prefix in table)
+
+
+def allowed_path(token: str) -> bool:
+    return allowlisted(token, ALLOWED_PATHS)
 
 
 def link_base(rel: str, doc: Path) -> Path:
@@ -466,6 +492,24 @@ def check_markdown(
                     "FENCE", doc, lineno, f"code fence preceded by text ({line.strip()!r}); the block will not render"
                 )
             )
+
+    # (8) LINENO — a citation by line number. Fenced blocks are skipped like
+    # every prose check: quoted tool output (a pytest failure line, a
+    # traceback) carries line numbers of its own and is not a pointer to follow.
+    if not allowlisted(rel, ALLOWED_LINE_ANCHORS):
+        for lineno, line in prose:
+            for pattern in LINE_ANCHOR_RES:
+                anchor = pattern.search(line)
+                if anchor:
+                    failures.append(
+                        Failure(
+                            "LINENO",
+                            doc,
+                            lineno,
+                            f"line-number anchor '{anchor.group(0)}'; cite the module and symbol instead, "
+                            "since a line number rots on the next edit",
+                        )
+                    )
 
     return failures
 
@@ -596,7 +640,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.verbose:
         print(f"check-docs: scanned {len(docs)} markdown files, {len(files)} tracked paths")
-    print(f"check-docs OK: {len(docs)} markdown files, 7 invariants, no drift.")
+    print(f"check-docs OK: {len(docs)} markdown files, 8 invariants, no drift.")
     return 0
 
 

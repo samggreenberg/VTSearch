@@ -748,9 +748,9 @@ _gate_ruff_format() {
 }
 _gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # Documentation drift: relative links, in-page anchors, backticked repo paths,
-# leaked absolute machine paths, plan-file citations anywhere in the tree, and
-# broken code fences. Pure invariants against the current tree — nothing to
-# re-pin.
+# leaked absolute machine paths, plan-file citations anywhere in the tree,
+# broken code fences, undated study directories and line-number anchors. Pure
+# invariants against the current tree — nothing to re-pin.
 _gate_check_docs() { python scripts/check-docs.py ; }
 _gate_deptry() { python -m deptry . ; }
 # OpenAPI snapshot drift: regenerate the flask-smorest spec from the live app
@@ -790,7 +790,7 @@ _gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
 # (check.sh) needs chromium and stays a manual chore.
 _gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
 # vtscore package docs: every top-level module / sub-package of vtscore/ is
-# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor.
+# covered by a packages/ doc. (Line-number anchors are check-docs.py's, repo-wide.)
 _gate_vtscore_docs() { python scripts/check-vtscore-docs.py ; }
 # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
 # contract for the same plugin ABCs in their own words; this holds both to the

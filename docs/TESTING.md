@@ -42,7 +42,7 @@ Both let a later run skip work an earlier run on the *same inputs* already did, 
 | Lint | `ruff check .` | |
 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | Spelling | `codespell --toml pyproject.toml` | The slowest of the stage (~9s warm, ~18s on a cold page cache). |
-| Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, broken code fences, and `docs/experiments/` study directories named `YYYY-MM-DD-<slug>`. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
+| Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, broken code fences, `docs/experiments/` study directories named `YYYY-MM-DD-<slug>`, and line-number anchors in either spelling (`file.py:NNN` or `(line NNN)`; experiment reports are exempt). Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
 | Dependencies | `python -m deptry .` | |
 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
 | Doc inventories | `scripts/gen-docs-inventories.py --check` | Regenerate with `python scripts/gen-docs-inventories.py` and commit the result. |

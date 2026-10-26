@@ -181,4 +181,4 @@ The lock lives in `VTSEARCH_RUNDIR` if set, else the system temp dir, as
 - [`detectors.md`](detectors.md#registry) and [`datasets.md`](datasets.md#on-disk-dataset-registry) - the two registries whose index files are written with `atomic_write_json` under `file_lock`.
 - [`projection.md`](projection.md) and [`coverage.md`](coverage.md) - the UMAP and k-means fits that `vtscore.gpu_backends` routes to cuML.
 - [`config.md`](config.md#resolve_device) - `resolve_device()`, which `cuml_enabled()` consults before choosing the GPU path.
-- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#environment-variables) - `VTSEARCH_DISABLE_CUML` and `VTSEARCH_RUNDIR`; its [cuML troubleshooting entry](../../../docs/DEPLOYMENT.md#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors) covers the fit-time failures described above.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#environment-variables) - `VTSEARCH_DISABLE_CUML` and `VTSEARCH_RUNDIR`. The [cuML troubleshooting entry](../../../docs/TROUBLESHOOTING.md#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors) in `docs/TROUBLESHOOTING.md` covers the fit-time failures described above.
