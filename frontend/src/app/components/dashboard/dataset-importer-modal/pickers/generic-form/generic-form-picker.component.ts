@@ -39,6 +39,7 @@ import {
 import { OutputDraft, buildOutputDrafts, checkedKindsSummary, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../../../plugin-combobox/plugin-combobox.component';
 
 /** How long the form settles before asking the importer to name the dataset.
  *  ``default_display_name`` may resolve a label from a remote service, so
@@ -59,7 +60,7 @@ const SUGGESTED_NAME_DEBOUNCE_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-generic-form-picker',
   standalone: true,
-  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, MultiOutputConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, MultiOutputConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './generic-form-picker.component.html',
   styleUrl: './generic-form-picker.component.scss',
 })

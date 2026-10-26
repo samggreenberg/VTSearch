@@ -12,6 +12,7 @@ import type { SettingsImporterEntry } from '../../../generated/api-client/models
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 
 type ModalView = 'picker' | 'form';
 
@@ -19,7 +20,7 @@ type ModalView = 'picker' | 'form';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-importer-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './settings-importer-modal.component.html',
   styleUrl: './settings-importer-modal.component.scss',
 })
