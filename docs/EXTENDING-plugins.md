@@ -41,7 +41,7 @@ extractors).
 - [Adding a Settings Importer](#adding-a-settings-importer) (app tier)
 - [Adding a Settings Exporter](#adding-a-settings-exporter) (app tier)
 - [Adding a Settings Source](#adding-a-settings-source) (app tier), with
-  [How the sync engine works](#how-the-sync-engine-works)
+  [what the sync engine expects of a source](#what-the-sync-engine-expects-of-a-source)
 - [Adding a Labelset Source](#adding-a-labelset-source)
 
 ---
@@ -2170,7 +2170,7 @@ stripping, no template substitution, no URL / path validation).
 `_do_peek_version` is optional — the
 default returns `None` — but without it the source is imported once per
 process and never auto-refreshed; see [the freshness
-probe](#the-freshness-probe-and-its-cost).
+probe](#what-the-sync-engine-expects-of-a-source).
 
 ### Template variables
 
@@ -2193,7 +2193,7 @@ consulted on an ongoing basis from three places:
 1. **On every settings read**, through `_ensure_user_loaded`
    (`vtsearch/settings.py`) and the `UserSettingsStore.ensure_user_loaded`
    it delegates to (`vtsearch/settings_store.py`) — rate-limited, see [the freshness
-   probe](#the-freshness-probe-and-its-cost) below. This is what makes a
+   probe](#what-the-sync-engine-expects-of-a-source) below. This is what makes a
    source pick up an out-of-band edit without a restart, and it is also
    what performs the *first* import: the first settings access after a
    process starts pulls from the source, so the source's values take
@@ -2202,7 +2202,7 @@ consulted on an ongoing basis from three places:
    settings dict (minus the excluded keys below) is pushed to `save()`
    after the local file is written.
 3. **On demand**, via `POST /api/settings-sources/sync` — see
-   [the dirty-key contract](#the-dirty-key-contract) for how this differs
+   [the dirty-key contract](ARCHITECTURE.md#the-dirty-key-contract) for how this differs
    from an automatic pull.
 
 **There is no boot-time sync**, and that is deliberate: a settings source
@@ -2215,155 +2215,44 @@ touches settings, not before.
 The endpoints that manage the binding itself are listed under
 [the REST surface](#the-settings-source-rest-surface).
 
-### How the sync engine works
+### What the sync engine expects of a source
 
-The engine lives in `UserSettingsStore` (`vtsearch/settings_store.py`).
-Everything below is contract a new source binds to, not implementation
-detail you may ignore: a source that violates it will appear to work and
-then lose a user's edits under load.
+The engine that drives a settings source is app-internal (`UserSettingsStore`
+in `vtsearch/settings_store.py`), and its internals — binding precedence, the
+freshness tiers, dirty keys, the `.syncmark` marker, lock ordering — are
+documented in [ARCHITECTURE.md § The settings sync engine](ARCHITECTURE.md#the-settings-sync-engine).
+What a source must honor, because one that violates it will appear to work
+and then lose a user's edits under load:
 
-#### Which source a user is bound to
-
-`resolve_settings_source` is the single precedence resolver — every sync
-path (initial load, freshness check, pull, push, and the active-source
-route) reads it, so they cannot disagree about which source a user is on:
-
-1. the user's own `settings_source` key, when it names a source;
-   `{"source_name": "none"}` is an explicit opt-out that wins even over a
-   deployment default;
-2. otherwise the deployment-wide `default_settings_source` server setting,
-   which the user *inherits* (the `inherited` flag on
-   `GET /api/settings-sources/active` reports this);
-3. otherwise no source.
-
-Two keys are never exported to a source: `settings_source` and
-`default_settings_source` (`_EXCLUDE_FROM_SOURCE_EXPORT` in
-`vtsearch/settings.py`). Pushing the binding through the binding would
-let a source rewrite which source is active.
-
-#### The freshness probe and its cost
-
-Sync-from-source sits on the hot path of *every* settings read, so the
-engine is built around making the common case not touch your source at
-all. A read walks three tiers:
-
-| Tier | When | Cost |
-|---|---|---|
-| Fast path | A sync succeeded within the freshness window (`_FRESHNESS_CHECK_INTERVAL`, **1.0 s**) | No probe, no per-user lock — an in-memory dict read |
-| Probe | Window elapsed | One `peek_version()` call; on an unchanged token, refresh the timestamp and return |
-| Full sync | `peek_version()` reports a *different* token, or this process has never synced this user | `load()` + `_apply_settings` |
-
-This is why **`peek_version()` must be cheap and must not raise for
-transient reasons.** It is the only thing standing between a busy read
-path and a full `load()`. The built-in `server_json_file` source returns
-`st_mtime_ns` from a single `stat()`. A network-backed source should use
-an ETag, a `Last-Modified` header, or a HEAD request — never a full GET.
-
-Three `peek_version()` return values have distinct meanings:
-
-- **A token that differs from the last one** — the source changed; a full
-  re-sync is due.
-- **The same token** — unchanged; skip the load.
-- **`None`** — "I cannot cheaply tell." The engine treats this as *no
-  re-sync* and keeps serving the local cache. A source that returns
-  `None` unconditionally is therefore imported once per process and then
-  never auto-refreshed. That is a legitimate choice for a write-mostly
-  target, but it must be a deliberate one.
-
-A `peek_version()` that *raises* is treated as unchanged and backs off
-until the next window, so a source outage degrades to "serve local" rather
-than hammering a dead endpoint.
-
-#### The dirty-key contract
-
-The engine has to reconcile two writers: the user clicking a toggle, and
-an upstream value arriving from `load()`. `dirty_keys` on `UserSyncState`
-is what arbitrates.
-
-**What marks a key dirty:** any local write through `mutate_user_locked`
-registers the keys it touched (minus the excluded ones above) as dirty —
-*inside the cross-process file lock*, before it is released. That
-ordering is the point: a syncing thread can never observe a key as
-"written but not yet dirty" and clobber it.
-
-**What a source may overwrite** depends on which pull it is:
-
-| Pull | Honors `dirty_keys`? | Rationale |
-|---|---|---|
-| Automatic re-sync (version bump on the source) | **Yes** — dirty keys are skipped | A freshly clicked local toggle must not be silently reverted by an upstream value |
-| Explicit `POST /api/settings-sources/sync` | **No** — everything is overwritten and the dirty set is cleared | The user pressed "Sync now" precisely to take the source's values |
-
-**When dirty keys clear:** on a successful `sync_to_source` push (the
-source now matches local, so there is nothing left to protect) or on an
-explicit manual pull. They deliberately survive an automatic re-sync.
-
-The skip set handed to `_apply_settings` is a **live view**
-(`_LiveDirtyKeys`), not a snapshot taken before `load()` — because
-`load()` may be a slow network round-trip, and a user write landing
-mid-flight must still be honored. `mutate_user_locked` re-checks it under
-the file lock, which is where the decision actually becomes atomic against
-the racing write.
-
-#### The cross-process dedup marker
-
-After any successful sync the engine stamps a `<user_settings>.syncmark`
-sibling file recording the `peek_version` token it applied. A later
-process whose first read finds the source unchanged at that token adopts
-it and skips the load entirely — the values are already on disk.
-
-Because `_sync_state` is in-memory but the marker is not, this is what
-makes a **container restart** cheap: the data directory is a persistent
-volume, so a restart against an unchanged source costs one `peek_version`
-instead of a full `load()`. It dedups a second process sharing the data
-directory (a `python app.py --autodetect` CLI run, a dev server) the same
-way. It is *not* primarily about concurrent gunicorn workers —
-`gunicorn.conf.py` pins `workers = 1` — and it should not be read as dead
-code on that basis; see the comment above `_sync_marker_path`.
-
-The marker is best-effort: every read, write, and serialisation failure is
-swallowed and the caller falls back to the full load. It is a performance
-hint, never a correctness input. It is deleted when the user's source is
-cleared, so a later re-configure cannot consult a stale token.
-
-#### Lock ordering a new source must respect
-
-The store has three locks, and the canonical order is
-**cross-process `file_lock` → in-process `settings_lock`**, with the
-per-user sync `RLock` taken outside both:
-
-| Lock | Guards |
-|---|---|
-| `file_lock(path)` | Cross-process (`flock`) exclusion on one settings file; also serialises threads in this process |
-| `settings_lock` | The in-memory caches (`_user_caches`, `_sync_state`, `_syncing`) — held briefly, never across I/O |
-| `per_user_sync_lock(username)` | Serialises the whole probe + `load()` + apply sequence for one user |
-
-What this means for a source author:
-
-- **Your `load()` / `save()` / `peek_version()` are called with no settings
-  file lock held.** `sync_to_source` runs *outside* the file lock on
-  purpose, so a slow target (NFS, a webhook, a cold S3 bucket) cannot block
-  unrelated settings writes. Do not assume you are in a critical section.
+- **`_do_peek_version()` is on the hot path of every settings read**, once
+  per freshness window (1.0 s), and it is all that stands between that read
+  and a full `_do_load()`. Make it cheap and do not raise for transient
+  reasons: return an ETag, a `Last-Modified` header or a HEAD request's
+  answer, never a full GET (the built-in `server_json_file` source returns
+  `st_mtime_ns` from one `stat()`). A token that differs from the last one
+  means a full re-sync is due; the same token means unchanged. `None` means
+  "I cannot cheaply tell" and is treated as unchanged, so a source that
+  always returns `None` is imported once per process and never
+  auto-refreshed — a legitimate choice for a write-mostly target, if a
+  deliberate one. A raise is treated as unchanged and backs off until the
+  next window.
+- **Your methods run with no settings file lock held**, on an arbitrary
+  thread, concurrently for different users; calls for one user are
+  serialised. Do not assume you are in a critical section, and a slow target
+  blocks no other settings write.
 - **Never call back into `vtsearch.settings` from a source method.** A
-  setter re-enters `_ensure_user_loaded`, which re-enters the sync path.
-  The `_syncing` set is a re-entrancy guard for the engine's own
-  `_apply_settings` pass, not a general licence to recurse.
-- **`settings_lock` is reentrant**, so an ordering inversion will *not*
-  fail locally — it deadlocks later against a concurrent writer. This is
-  why `resolve_settings_source` is documented as "must not be called while
-  holding `settings_lock`": the deployment-default read may take the
-  server file lock.
-- **Assume you are on an arbitrary thread**, called concurrently for
-  different users. Per-user serialisation is guaranteed; cross-user is not.
-
-#### Failure semantics
-
-A source that raises is never fatal. `load()` failures log and leave
-`last_sync_succeeded` untouched, so a transient outage after a previous
-success does not erase the success flag or invalidate the local cache; the
-slow path retries once the rate-limit window elapses. `save()` failures
-log and return, leaving the keys dirty so the next successful push carries
-them. This is deliberate: settings sync is an availability-sensitive side
-channel, and the local file is always the fallback.
+  setter re-enters the sync path.
+- **A local edit outranks an automatic pull.** Keys the user wrote since the
+  last successful push are skipped when a version bump re-syncs, even when
+  they land while a slow `_do_load()` is in flight; only an explicit
+  `POST /api/settings-sources/sync` overwrites them
+  ([the dirty-key contract](ARCHITECTURE.md#the-dirty-key-contract)).
+- **Raising is never fatal.** A failed load leaves the local cache serving
+  and is retried after the window; a failed save leaves the keys dirty for
+  the next push. The local file is always the fallback.
+- **Two keys never reach your source:** `settings_source` and
+  `default_settings_source`, so a source cannot rewrite which source is
+  active.
 
 ### The settings-source REST surface
 
@@ -2407,7 +2296,7 @@ schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
 
 To bind every user who has not chosen otherwise, put the same object under
 `default_settings_source` in the server file `data/settings.json` instead
-(see [Which source a user is bound to](#which-source-a-user-is-bound-to)).
+(see [ARCHITECTURE.md § Which source a user is bound to](ARCHITECTURE.md#which-source-a-user-is-bound-to)).
 
 Or set the current user's binding via the API:
 
@@ -2430,7 +2319,7 @@ per-user tier, so a source that round-trips what it was given never meets one.
 
 If the source is unavailable (file missing, network error) the import is
 logged and skipped, and the local settings file is used as the fallback —
-see [Failure semantics](#failure-semantics).
+see [what the sync engine expects of a source](#what-the-sync-engine-expects-of-a-source).
 
 ---
 
@@ -2559,7 +2448,7 @@ run](../vtscore/docs/extending/labelset-sources.md#when-your-_do_save-and-_do_lo
 has the details a source author needs.
 
 The same "a sync target is a side channel" stance as
-[settings sources](#failure-semantics) holds: a source that raises is
+[settings sources](ARCHITECTURE.md#failure-semantics) holds: a source that raises is
 logged and retried on the next change, and the detector file stays the
 record.
 
