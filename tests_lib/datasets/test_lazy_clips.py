@@ -183,6 +183,32 @@ class TestLazyClipBytes:
         second = lazy_clip_bytes(media)
         assert first is second  # served from the process-scoped cache
 
+    def test_a_merged_crop_keeps_its_recipe(self, tmp_path):
+        """Duplicate collapse rewrites the origin to a ``dupe_set``; the crop must still resolve."""
+        from vtscore.state import collapse_duplicates
+
+        src = tmp_path / "src.png"
+        src.write_bytes(make_png_bytes(width=32, height=32, color=(10, 20, 30)))
+
+        def crop(mid: int) -> dict[str, Any]:
+            return {
+                "id": mid,
+                "media_type": "image",
+                "md5": "same-crop",
+                "media_path": str(src),
+                "filename": f"src.png#{mid}",
+                "origin_name": f"src.png#{mid}",
+                "origin": {"importer": "server_folder", "params": {"clip_box": "0,0,16,16"}},
+            }
+
+        medias = {1: crop(1), 2: crop(2)}
+        expected = lazy_clip_bytes(medias[1])
+        collapse_duplicates(medias)
+
+        assert medias[1]["origin"]["importer"] == "dupe_set"
+        assert clip_recipe(medias[1]) == ("image", (0, 0, 16, 16))
+        assert lazy_clip_bytes(medias[1]) == expected
+
 
 # ---------------------------------------------------------------------------
 # _resolve_media_bytes integration (serve path)
@@ -470,6 +496,27 @@ class TestLazyConverterBytes:
         ch = _content_hash({"media_bytes": _page_bytes(b"PDFBYTES", 1)})
         media = _converter_media(src, out_index=1, n_out=3, content_hash=ch, params={"pages": 3})
         assert lazy_clip_bytes(media) == _page_bytes(b"PDFBYTES", 1)
+
+    def test_a_merged_output_resolves_from_its_own_recipe(self, tmp_path, _fake_converter):
+        """A ``dupe_set`` representative replays the recipe of its first member, itself."""
+        from vtscore.media.near_dupes import _fold_group
+
+        src, copy = tmp_path / "doc.pdf", tmp_path / "copy.pdf"
+        src.write_bytes(b"PDFBYTES")
+        copy.write_bytes(b"COPYBYTES")
+        medias = {}
+        for mid, path in ((1, src), (2, copy)):
+            payload = path.read_bytes()
+            ch = _content_hash({"media_bytes": _page_bytes(payload, 1)})
+            medias[mid] = {
+                "id": mid,
+                "md5": f"md5-{mid}",
+                **_converter_media(path, out_index=1, n_out=3, content_hash=ch, params={"pages": 3}),
+            }
+        _fold_group(medias, 1, [2])
+
+        assert list(medias) == [1] and medias[1]["origin"]["importer"] == "dupe_set"
+        assert lazy_clip_bytes(medias[1]) == _page_bytes(b"PDFBYTES", 1)
 
     def test_resolve_via_media_type(self, tmp_path, _fake_converter):
         import vtscore.media as media_registry

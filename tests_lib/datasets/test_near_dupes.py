@@ -3,9 +3,10 @@
 Covers the pure library-tier logic in :mod:`vtscore.media.near_dupes`:
 pHash / SimHash, connected-components grouping over a tight Hamming
 threshold, representative selection (file_size -> centroid -> id), the
-``dupe_set`` collapse (including merging pre-existing exact dupe_sets), and
-that label export fans a near-dup representative out to its full membership
-with each member's own md5 (the bug the feature also fixes).
+``dupe_set`` collapse (including merging pre-existing exact dupe_sets), that
+label export fans a near-dup representative out to its full membership
+with each member's own md5 (the bug the feature also fixes), and that
+converter outputs (faces) follow the merges of the photos they were cut from.
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ from vtscore.state import (
     phash_image,
     simhash_text,
 )
-from vtscore.media.near_dupes import _hamming
+from vtscore.datasets.source_item import SourceResolver
+from vtscore.media.near_dupes import _hamming, follow_source_merges
 
 # A realistic document-length paragraph.  Near-dup text detection (tight
 # SimHash threshold) is meant to catch reformatted/re-encoded copies of a
@@ -312,3 +314,148 @@ class TestNearDupeExportExpansion:
         assert len(ls.elements) == 2
         assert {e.md5 for e in ls.elements} == {"AAA", "BBB"}
         assert all(e.label == "good" for e in ls.elements)
+
+
+# --- following a source dataset's merges ----------------------------------
+_LEFT = [0.10, 0.20, 0.30, 0.50]
+_LEFT_IN_COPY = [0.11, 0.21, 0.31, 0.51]  # the same face, a resize's jitter away
+_RIGHT = [0.60, 0.20, 0.80, 0.50]
+
+
+def _face(cid, photo, box, *, file_size=50, out_index=0, converter="image2face", media_type="face"):
+    """A converter output cut from *photo*, as the converter runner emits it."""
+    media = {
+        "id": cid,
+        "media_type": media_type,
+        "file_size": file_size,
+        "md5": f"face_md5_{cid}",
+        "filename": f"{photo}\u2192face_{out_index}.jpg",
+        "category": "cat",
+        "origin": {
+            "importer": "converter",
+            "params": {
+                "converter": converter,
+                "source_file": photo,
+                "source_path": f"/data/{photo}",
+                "converter_out_index": str(out_index),
+            },
+        },
+        "origin_name": f"{photo}\u2192face_{out_index}.jpg",
+        "media_path": f"/data/{photo}",
+    }
+    if box is not None:
+        media["source_box"] = box
+    return media
+
+
+def _merged_photos():
+    """Three photos, the second a smaller recompressed copy of the first, near-dup collapsed."""
+    arr = _photo_arr(30)
+    photos = {
+        1: _make_image_media(1, _img_bytes(arr), file_size=500),
+        2: _make_image_media(2, _recompress(arr, 75), file_size=200),
+        3: _make_image_media(3, _photo(31)),
+    }
+    collapse_near_duplicates(photos)
+    assert set(photos) == {1, 3}, "the fixture needs photo 2 merged into photo 1"
+    return photos
+
+
+def _member_md5s(media):
+    return [m["md5"] for m in media["origin"]["members"]]
+
+
+class TestFollowSourceMerges:
+    def test_the_face_of_a_merged_copy_folds_into_the_kept_photos_face(self):
+        photos = _merged_photos()
+        faces = {
+            11: _face(11, "img_1.png", _LEFT),
+            12: _face(12, "img_2.png", _LEFT_IN_COPY, file_size=900),
+            13: _face(13, "img_3.png", _LEFT),
+        }
+
+        assert follow_source_merges(faces, photos) == 1
+
+        # The face from the photo the image dataset kept stays, larger crop or not.
+        assert set(faces) == {11, 13}
+        assert faces[11]["origin"]["importer"] == "dupe_set"
+        assert _member_md5s(faces[11]) == ["face_md5_11", "face_md5_12"]
+        assert faces[11]["origin"]["members"][0]["origin"]["params"]["source_file"] == "img_1.png"
+        # ...and still finds the photo it was cut from.
+        assert SourceResolver(photos).resolve(faces[11]) == 1
+
+    def test_each_face_folds_into_its_counterpart(self):
+        photos = _merged_photos()
+        faces = {
+            11: _face(11, "img_1.png", _LEFT, out_index=0),
+            12: _face(12, "img_1.png", _RIGHT, out_index=1),
+            21: _face(21, "img_2.png", [0.61, 0.21, 0.81, 0.51], out_index=0),
+            22: _face(22, "img_2.png", _LEFT_IN_COPY, out_index=1),
+        }
+
+        assert follow_source_merges(faces, photos) == 2
+
+        assert set(faces) == {11, 12}
+        assert _member_md5s(faces[11]) == ["face_md5_11", "face_md5_22"], "matched by place, not by index"
+        assert _member_md5s(faces[12]) == ["face_md5_12", "face_md5_21"]
+
+    def test_two_faces_of_one_photo_never_fold_together(self):
+        photos = _merged_photos()
+        faces = {
+            11: _face(11, "img_1.png", _LEFT, out_index=0),
+            12: _face(12, "img_1.png", _LEFT_IN_COPY, out_index=1),  # overlaps 11 as much as a copy would
+            21: _face(21, "img_2.png", _LEFT),
+        }
+
+        assert follow_source_merges(faces, photos) == 1
+
+        assert set(faces) == {11, 12}
+        assert _member_md5s(faces[11]) == ["face_md5_11", "face_md5_21"], "the best overlap wins"
+        assert faces[12]["origin"]["importer"] == "converter"
+
+    def test_a_face_found_in_one_copy_only_stays(self):
+        photos = _merged_photos()
+        faces = {
+            11: _face(11, "img_1.png", _LEFT),
+            21: _face(21, "img_2.png", _LEFT_IN_COPY, out_index=0),
+            22: _face(22, "img_2.png", _RIGHT, out_index=1),
+        }
+
+        assert follow_source_merges(faces, photos) == 1
+
+        assert set(faces) == {11, 22}
+
+    def test_nothing_merged_leaves_the_faces_alone(self):
+        photos = {1: _make_image_media(1, _photo(40)), 2: _make_image_media(2, _photo(41))}
+        collapse_near_duplicates(photos)
+        assert set(photos) == {1, 2}
+        faces = {11: _face(11, "img_1.png", _LEFT), 21: _face(21, "img_2.png", _LEFT)}
+        before = {cid: dict(m) for cid, m in faces.items()}
+
+        assert follow_source_merges(faces, photos) == 0
+        assert faces == before
+
+    def test_follows_an_exact_duplicate_merge_too(self):
+        """Byte-identical photos collapse on every import; faces that differ by a byte still follow."""
+        thumb = _photo(42)
+        photos = {
+            1: _make_image_media(1, thumb, md5="same"),
+            2: _make_image_media(2, thumb, md5="same"),
+        }
+        collapse_duplicates(photos)
+        assert set(photos) == {1}
+        faces = {11: _face(11, "img_1.png", _LEFT), 21: _face(21, "img_2.png", _LEFT)}
+
+        assert follow_source_merges(faces, photos) == 1
+        assert set(faces) == {11}
+
+    def test_outputs_without_a_place_match_by_position(self):
+        """A converter that records no ``source_box`` (one caption per photo) matches by output index."""
+        photos = _merged_photos()
+        captions = {
+            11: _face(11, "img_1.png", None, converter="image2text", media_type="text"),
+            21: _face(21, "img_2.png", None, converter="image2text", media_type="text"),
+        }
+
+        assert follow_source_merges(captions, photos) == 1
+        assert set(captions) == {11}

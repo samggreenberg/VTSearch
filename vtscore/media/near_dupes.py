@@ -27,6 +27,11 @@ over the closeness graph as if it were an equivalence relation.
 Collapsing reuses the exact-duplicate ``dupe_set`` origin structure so that
 label export (which already expands ``dupe_set`` representatives into one
 element per member) fans a near-dup group out to its full membership for free.
+
+Converter outputs follow their sources rather than being hashed themselves:
+:func:`follow_source_merges` collapses the faces of a multi-dataset import's
+face dataset exactly where its image dataset merged the photos they were cut
+from, so the two datasets agree on which photos are one.
 """
 
 from __future__ import annotations
@@ -37,6 +42,8 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+
+from vtscore.media.provenance import SOURCE_BOX_FIELD
 
 # Per-modality Hamming thresholds (out of 64 bits).  Deliberately tight: a
 # positive should be a near-certain near-duplicate, so missed links fail
@@ -355,19 +362,23 @@ def _find_near_dup_groups(
     return groups
 
 
-def _collapse_group(media_dict: dict[int, dict[str, Any]], comp: list[int]) -> None:
-    """Collapse one near-dup group into a ``dupe_set`` representative."""
-    rep_id = _choose_representative(media_dict, comp)
+def _fold_group(media_dict: dict[int, dict[str, Any]], rep_id: int, others: list[int]) -> None:
+    """Fold *others* into *rep_id* as one ``dupe_set`` representative, and remove them."""
     members: list[dict[str, Any]] = []
-    for cid in [rep_id, *(c for c in comp if c != rep_id)]:
+    for cid in [rep_id, *others]:
         members.extend(_members_of(media_dict[cid]))
     rep = media_dict[rep_id]
     first_name = rep.get("origin_name", rep.get("filename", ""))
     rep["origin"] = {"importer": "dupe_set", "params": {"name": first_name}, "members": members}
     rep["origin_name"] = first_name
-    for cid in comp:
-        if cid != rep_id:
-            del media_dict[cid]
+    for cid in others:
+        del media_dict[cid]
+
+
+def _collapse_group(media_dict: dict[int, dict[str, Any]], comp: list[int]) -> None:
+    """Collapse one near-dup group into a ``dupe_set`` representative."""
+    rep_id = _choose_representative(media_dict, comp)
+    _fold_group(media_dict, rep_id, [c for c in comp if c != rep_id])
 
 
 def collapse_near_duplicates(
@@ -396,3 +407,114 @@ def collapse_near_duplicates(
     if on_progress:
         on_progress(1, 1)
     return len(groups)
+
+
+# --- Following a source dataset's merges ---------------------------------
+#: How much two converter outputs' ``source_box`` es must overlap (IoU) to be
+#: the same thing cut from two copies of one source: a face sits at nearly the
+#: same place in a photo and in its resized copy, and two faces side by side
+#: overlap far less than this.
+_SOURCE_BOX_IOU = 0.5
+
+
+def _box_iou(a: Any, b: Any) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _same_output_score(a: dict[str, Any], b: dict[str, Any], ref_a: dict[str, Any], ref_b: dict[str, Any]) -> float:
+    """How surely *a* and *b* are one output of two copies of a source; ``0.0`` when they are not.
+
+    Outputs that record where in the source they sat (a face's ``source_box``)
+    match by overlap; outputs that record no place match by their position in
+    the converter's output list (the one caption of each photo).
+    """
+    if ref_a.get("converter") != ref_b.get("converter"):
+        return 0.0
+    box_a, box_b = a.get(SOURCE_BOX_FIELD), b.get(SOURCE_BOX_FIELD)
+    if box_a is not None and box_b is not None:
+        iou = _box_iou(box_a, box_b)
+        return iou if iou >= _SOURCE_BOX_IOU else 0.0
+    if box_a is None and box_b is None and ref_a.get("converter_out_index") == ref_b.get("converter_out_index"):
+        return 1.0
+    return 0.0
+
+
+def follow_source_merges(
+    media_dict: dict[int, dict[str, Any]],
+    source_medias: dict[int, dict[str, Any]],
+) -> int:
+    """Collapse converter outputs whose sources were merged in *source_medias*.
+
+    The datasets of one multi-dataset import are built from one scan, so a
+    face dataset holds the faces cut from every photo the image dataset beside
+    it holds.  When that image dataset merged two copies of a photo
+    (:func:`collapse_near_duplicates`, or the exact-duplicate pass), the faces
+    must merge with them: otherwise each copy leaves its own crop of the same
+    face behind.
+
+    Each output of *media_dict* is resolved to the item of *source_medias* it
+    was cut from (:class:`~vtscore.datasets.source_item.SourceResolver`, which
+    finds a merged copy through its representative's ``dupe_set`` members).
+    Under one source item, outputs cut from different copies collapse when
+    they are the same output of each (:func:`_same_output_score`), never two
+    of one copy.  The output cut from the copy the source dataset kept leads
+    its group, so the kept face is the one from the photo still shown; the
+    rest are folded into its ``dupe_set`` origin, so exporting it exports every
+    copy, as for the photo.  An output with no counterpart (a face found in one
+    copy only) stays.  Returns the number of groups collapsed.
+    """
+    from vtscore.datasets.source_item import SourceResolver, converter_refs  # noqa: PLC0415
+
+    resolver = SourceResolver(source_medias)
+    by_source: dict[int, list[int]] = {}
+    for cid, media in media_dict.items():
+        source_id = resolver.resolve(media)
+        if source_id is not None:
+            by_source.setdefault(source_id, []).append(cid)
+
+    collapsed = 0
+    for source_id, cids in by_source.items():
+        refs = {cid: converter_refs(media_dict[cid])[0] for cid in cids}
+        kept_file = source_medias[source_id].get("origin_name") or ""
+        for group in _copy_groups(media_dict, cids, refs, kept_file):
+            if len(group) > 1:
+                _fold_group(media_dict, group[0], group[1:])
+                collapsed += 1
+    return collapsed
+
+
+def _copy_groups(
+    media_dict: dict[int, dict[str, Any]],
+    cids: list[int],
+    refs: dict[int, dict[str, Any]],
+    kept_file: str,
+) -> list[list[int]]:
+    """Group the outputs *cids* of one source item, each group one output of every copy.
+
+    *refs* holds each output's converter params; *kept_file* names the copy the
+    source dataset kept.  Its outputs come first, so each leads its group; the
+    rest join the group they best match, largest first.
+    """
+    files = {cid: refs[cid].get("source_file") or "" for cid in cids}
+    if len(set(files.values())) < 2:
+        return []  # every output came from one copy: nothing was merged here
+    order = sorted(cids, key=lambda c: (files[c] != kept_file, -(media_dict[c].get("file_size") or 0), c))
+    groups: list[list[int]] = []
+    for cid in order:
+        best: list[int] | None = None
+        best_score = 0.0
+        for group in groups:
+            if any(files[m] == files[cid] for m in group):
+                continue  # never two outputs of one copy
+            score = _same_output_score(media_dict[cid], media_dict[group[0]], refs[cid], refs[group[0]])
+            if score > best_score:
+                best, best_score = group, score
+        if best is None:
+            groups.append([cid])
+        else:
+            best.append(cid)
+    return groups
