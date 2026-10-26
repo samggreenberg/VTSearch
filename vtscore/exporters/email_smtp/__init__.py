@@ -15,9 +15,9 @@ import smtplib
 from collections import defaultdict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
-from vtscore.exporters.base import PluginField, ResultsExporter, resolve_stream_batch_size
+from vtscore.exporters.base import PluginField, ResultsExporter, iter_stream_batches, resolve_stream_batch_size
 
 # Pragmatic address check: a non-empty local part, a single ``@``, and a
 # dotted domain, none of which may contain whitespace.  Not full RFC 5322
@@ -226,6 +226,70 @@ def _build_batch_html(media_type: str, batch: list[tuple[str, dict[str, Any]]], 
     )
 
 
+def _group_labels_by_detector(batch: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Group a streamed batch of label entries into ``{detector: [entries]}``."""
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for entry in batch:
+        grouped[str(entry.get("detector", ""))].append(entry)
+    return grouped
+
+
+def _labelset_batch_subject(media_type: str, batch: list[dict[str, Any]], part: int) -> str:
+    """Auto-generated subject for one part of a streamed labelset."""
+    good, bad = _labelset_counts(batch)
+    return f"VTSearch Labels: {len(batch)} label(s) ({good} good, {bad} bad) on {media_type} dataset (part {part})"
+
+
+def _build_labelset_batch_plain(media_type: str, batch: list[dict[str, Any]], part: int) -> str:
+    """Render a streamed batch of label entries as a plain-text listing, per detector."""
+    good, bad = _labelset_counts(batch)
+    lines: list[str] = [
+        f"VTSearch Labels (streamed, part {part})",
+        "======================================",
+        f"Media Type: {media_type}",
+        f"Labels in this part: {len(batch)}  ({good} good, {bad} bad)",
+        "",
+    ]
+    for detector_name, entries in _group_labels_by_detector(batch).items():
+        lines.append(f"--- {detector_name} ---")
+        for entry in entries:
+            label, name, origin_str = _label_row_values(entry)
+            lines.append(f"  [{label or '?'}] {name}" + (f"  ({origin_str})" if origin_str else ""))
+        lines.append("")
+    if not batch:
+        lines.append("  No labels in this part.")
+    return "\n".join(lines)
+
+
+def _build_labelset_batch_html(media_type: str, batch: list[dict[str, Any]], part: int) -> str:
+    """Render a streamed batch of label entries as a minimal HTML table per detector."""
+    from html import escape
+
+    good, bad = _labelset_counts(batch)
+    tables = ""
+    for detector_name, entries in _group_labels_by_detector(batch).items():
+        rows = ""
+        for entry in entries:
+            label, name, origin_str = _label_row_values(entry)
+            rows += f"<tr><td>{escape(label)}</td><td>{escape(name)}</td><td>{escape(origin_str)}</td></tr>"
+        tables += (
+            f"<h3>{escape(detector_name)}</h3>"
+            f"<table border='1' cellpadding='4' cellspacing='0'>"
+            f"<tr><th>Label</th><th>Name</th><th>Origin</th></tr>"
+            f"{rows}</table>"
+        )
+    if not batch:
+        tables = "<p><em>No labels in this part.</em></p>"
+    return (
+        f"<html><body>"
+        f"<h2>VTSearch Labels (streamed, part {part})</h2>"
+        f"<p><strong>Media Type:</strong> {escape(str(media_type))}<br>"
+        f"<strong>Labels in this part:</strong> {len(batch)} ({good} good, {bad} bad)</p>"
+        f"{tables}"
+        f"</body></html>"
+    )
+
+
 def _resolve_mx(domain: str) -> str:
     """Return the highest-priority MX host for *domain*."""
     import dns.resolver  # lazy import – dnspython is optional
@@ -291,6 +355,41 @@ class EmailResultsExporter(ResultsExporter):
         ),
     ]
 
+    @staticmethod
+    def _addresses(field_values: dict[str, Any]) -> tuple[str, str]:
+        """Return the validated ``(from, to)`` pair, or raise before anything is sent."""
+        from_addr = field_values["from"]
+        to_addr = field_values["to"]
+
+        if not _is_valid_email(from_addr):
+            raise ValueError("Sender email address is invalid.")
+        if not _is_valid_email(to_addr):
+            raise ValueError("Recipient email address is invalid.")
+        return from_addr, to_addr
+
+    @staticmethod
+    def _deliver(from_addr: str, to_addr: str, subject: str, plain: str, html: str) -> str:
+        """Resolve the recipient's MX host, deliver one message, and return the host.
+
+        Each message resolves MX afresh and opens its own SMTP connection, so a
+        slow scoring run between streamed parts can't leave a connection idle
+        long enough to be dropped.
+        """
+        domain = to_addr.rsplit("@", 1)[1]
+        mx_host = _resolve_mx(domain)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to_addr
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP(mx_host, 25, timeout=30) as server:
+            server.ehlo()
+            server.sendmail(from_addr, [to_addr], msg.as_string())
+        return mx_host
+
     def _send(
         self,
         field_values: dict[str, Any],
@@ -305,35 +404,47 @@ class EmailResultsExporter(ResultsExporter):
         labelset is only the rendering and the fallback subject, never the
         delivery.
         """
-        from_addr = field_values["from"]
-        to_addr = field_values["to"]
-
-        if not _is_valid_email(from_addr):
-            raise ValueError("Sender email address is invalid.")
-        if not _is_valid_email(to_addr):
-            raise ValueError("Recipient email address is invalid.")
-
-        domain = to_addr.rsplit("@", 1)[1]
-        mx_host = _resolve_mx(domain)
-
+        from_addr, to_addr = self._addresses(field_values)
         # The framework substitutes any {template} vars into ``subject`` at
         # ingress (see vtscore.plugins.normalize); a blank field falls back to
         # the auto-generated summary so existing behaviour is preserved.
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = field_values.get("subject") or default_subject
-        msg["From"] = from_addr
-        msg["To"] = to_addr
-        msg.attach(MIMEText(plain, "plain", "utf-8"))
-        msg.attach(MIMEText(html, "html", "utf-8"))
-
-        with smtplib.SMTP(mx_host, 25, timeout=30) as server:
-            server.ehlo()
-            server.sendmail(from_addr, [to_addr], msg.as_string())
+        mx_host = self._deliver(from_addr, to_addr, field_values.get("subject") or default_subject, plain, html)
 
         return {
             "message": f"Email with {sent_detail} sent to {to_addr} via {mx_host}.",
             "to": to_addr,
         }
+
+    def _send_batches(
+        self,
+        field_values: dict[str, Any],
+        items: Iterator[Any],
+        render: Callable[[list[Any], int], tuple[str, str, str]],
+    ) -> tuple[int, int, str]:
+        """Email *items* one ``batch_size`` part at a time; return ``(items sent, parts, to)``.
+
+        *render* maps ``(batch, part)`` to that part's ``(default_subject, plain,
+        html)``.  Shared by both streams: a part fills, is emailed, and is dropped
+        before the next item arrives, so peak memory stays bounded by
+        ``batch_size``.  One email is always sent, even for an empty run, so the
+        recipient learns the run finished.
+        """
+        from_addr, to_addr = self._addresses(field_values)
+        batch_size = resolve_stream_batch_size(field_values.get("batch_size"))
+        # The framework substitutes any {template} vars into ``subject`` at
+        # ingress; a blank field falls back to an auto-generated per-part line.
+        subject_base = field_values.get("subject") or ""
+
+        total = 0
+        parts = 0
+        for batch in iter_stream_batches(items, batch_size):
+            part = parts + 1
+            default_subject, plain, html = render(batch, part)
+            subject = f"{subject_base} (part {part})" if subject_base else default_subject
+            self._deliver(from_addr, to_addr, subject, plain, html)
+            total += len(batch)
+            parts += 1
+        return total, parts, to_addr
 
     def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Email a per-detector summary of the scored run."""
@@ -375,69 +486,44 @@ class EmailResultsExporter(ResultsExporter):
         """Send one email per fixed-size batch of hits as chunks stream in.
 
         A single email cannot hold a result set larger than RAM, so streaming
-        delivery sends the hits in ``batch_size``-sized parts: hits accumulate
-        until a batch fills, that batch is emailed, and the buffer is dropped
-        before the next hit arrives. Peak memory stays bounded by
-        ``batch_size``. Each message resolves the recipient's MX host afresh
-        and opens its own SMTP connection, so a slow scoring run between
-        batches can't leave a connection idle long enough to be dropped. One
-        email is always sent even for an empty run, so the recipient learns the
-        run finished.
+        delivery sends the hits in ``batch_size``-sized parts (see
+        :meth:`_send_batches`).
         """
-        from_addr = field_values["from"]
-        to_addr = field_values["to"]
-
-        if not _is_valid_email(from_addr):
-            raise ValueError("Sender email address is invalid.")
-        if not _is_valid_email(to_addr):
-            raise ValueError("Recipient email address is invalid.")
-
-        batch_size = resolve_stream_batch_size(field_values.get("batch_size"))
         media_type = header.get("media_type", "unknown")
-        # The framework substitutes any {template} vars into ``subject`` at
-        # ingress; a blank field falls back to an auto-generated per-part line.
-        subject_base = field_values.get("subject") or ""
 
-        total_hits = 0
-        parts = 0
+        def _render(batch: list[tuple[str, dict[str, Any]]], part: int) -> tuple[str, str, str]:
+            subject = f"VTSearch Auto-Detect: {len(batch)} hit(s) on {media_type} dataset (part {part})"
+            return subject, _build_batch_plain(media_type, batch, part), _build_batch_html(media_type, batch, part)
 
-        def _send(batch: list[tuple[str, dict[str, Any]]]) -> None:
-            nonlocal parts
-            part = parts + 1
-            if subject_base:
-                subject = f"{subject_base} (part {part})"
-            else:
-                subject = f"VTSearch Auto-Detect: {len(batch)} hit(s) on {media_type} dataset (part {part})"
-
-            domain = to_addr.rsplit("@", 1)[1]
-            mx_host = _resolve_mx(domain)
-
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = from_addr
-            msg["To"] = to_addr
-            msg.attach(MIMEText(_build_batch_plain(media_type, batch, part), "plain", "utf-8"))
-            msg.attach(MIMEText(_build_batch_html(media_type, batch, part), "html", "utf-8"))
-
-            with smtplib.SMTP(mx_host, 25, timeout=30) as server:
-                server.ehlo()
-                server.sendmail(from_addr, [to_addr], msg.as_string())
-            parts += 1
-
-        batch: list[tuple[str, dict[str, Any]]] = []
-        for detector_name, hit in records:
-            batch.append((detector_name, hit))
-            total_hits += 1
-            if len(batch) >= batch_size:
-                _send(batch)
-                batch = []
-        # Flush the trailing partial batch; also fire once for an empty run so
-        # the recipient always gets at least one email.
-        if batch or parts == 0:
-            _send(batch)
-
+        total_hits, parts, to_addr = self._send_batches(field_values, records, _render)
         return {
             "message": (f"Streamed {total_hits} hit(s) to {to_addr} in {parts} email(s)."),
+            "to": to_addr,
+        }
+
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Send one email per fixed-size batch of label entries, listed per detector.
+
+        The labelset twin of :meth:`export_cli_streaming`, batched the same way
+        by ``batch_size``.
+        """
+        media_type = header.get("media_type", "unknown")
+
+        def _render(batch: list[dict[str, Any]], part: int) -> tuple[str, str, str]:
+            return (
+                _labelset_batch_subject(media_type, batch, part),
+                _build_labelset_batch_plain(media_type, batch, part),
+                _build_labelset_batch_html(media_type, batch, part),
+            )
+
+        total, parts, to_addr = self._send_batches(field_values, elements, _render)
+        return {
+            "message": f"Streamed {total} label(s) to {to_addr} in {parts} email(s).",
             "to": to_addr,
         }
 

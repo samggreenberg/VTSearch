@@ -144,7 +144,9 @@ def labelset_for_export(payload: dict[str, Any]) -> dict[str, Any]:
 
     Every labelset export passes through here: a
     :class:`~vtscore.labels.sources.base.LabelsetSource` push and the payload
-    handed to an exporter's ``export_labelset``.  Everything else passes
+    handed to an exporter's ``export_labelset``.  A streamed labelset has no
+    whole payload, so it takes the per-entry half,
+    :func:`label_entry_for_export`, one entry at a time.  Everything else passes
     through untouched, keys this function does not know included (the Export
     modal's ``selected_columns``, an entry's ``custom_metadata``).  Copies
     rather than mutating, since *payload* may be the detector's own record.
@@ -152,7 +154,7 @@ def labelset_for_export(payload: dict[str, Any]) -> dict[str, Any]:
     out = dict(payload)
     labels = payload.get("labels")
     if isinstance(labels, list):
-        out["labels"] = [_portable_entry(entry) for entry in labels]
+        out["labels"] = [label_entry_for_export(entry) for entry in labels]
     meta = payload.get("detector_meta")
     if isinstance(meta, dict) and "threshold" in meta:
         kept = {k: v for k, v in meta.items() if k != "threshold"}
@@ -163,8 +165,13 @@ def labelset_for_export(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _portable_entry(entry: Any) -> Any:
-    """One serialised :class:`LabeledElement` as :func:`labelset_for_export` sends it."""
+def label_entry_for_export(entry: Any) -> Any:
+    """One serialised :class:`LabeledElement` as :func:`labelset_for_export` sends it.
+
+    The per-entry half of that function, for an export that never holds the
+    whole labelset: ``ResultsExporter.export_labelset_streaming`` receives
+    entries that have each been through here.
+    """
     if not isinstance(entry, dict) or "metadata" not in entry:
         return entry
     metadata = portable_metadata(entry["metadata"])
@@ -527,6 +534,20 @@ def media_element_key(media: dict[str, Any]) -> Any:
     md5 = media.get("md5", "")
     fake = LabeledElement(md5=md5, label="", origin=origin, origin_name=origin_name)
     return element_key(fake)
+
+
+def elements_for_media(media: dict[str, Any], label: str) -> list[LabeledElement]:
+    """The :class:`LabeledElement` s an exported labelset records for *media* labelled *label*.
+
+    The conversion the label export uses for a voted media, dupe sets expanded
+    to one element per member, so a labelset built anywhere else carries the
+    same fields.  A hit from :func:`vtscore.utils.hits.build_media_hit` works
+    as *media* too: it copies every key this reads (``md5``, ``origin``,
+    ``origin_name``, ``filename``, ``category``, ``custom_metadata``), which is
+    how the CLI's ``--stream-results --as-labelset`` turns hits into labels
+    without holding their medias.
+    """
+    return _clip_to_elements(media, label)
 
 
 def _clip_to_elements(

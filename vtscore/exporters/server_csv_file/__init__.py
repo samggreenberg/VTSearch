@@ -37,6 +37,18 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     atomic_write_text(path, buf.getvalue())
 
 
+def _label_cell(val: Any) -> str:
+    """One label entry's value as a CSV cell that survives the round-trip.
+
+    Dicts (``origin``) and lists (``region_box``) are written as JSON, which is
+    what the CSV label importer parses them back from; anything else is text,
+    guarded against formula injection.
+    """
+    if isinstance(val, (dict, list)):
+        return json.dumps(val, sort_keys=True)
+    return _sanitize_csv_cell(str(val if val is not None else ""))
+
+
 class ServerCsvResultsExporter(ResultsExporter):
     """Save auto-detect results as a CSV file on the server filesystem.
 
@@ -158,6 +170,44 @@ class ServerCsvResultsExporter(ResultsExporter):
             "filepath": str(filepath.resolve()),
         }
 
+    #: Fixed column order for a streamed labelset: the label export's base
+    #: columns, led by the detector that labelled each row and ending in
+    #: ``origin`` (JSON) as every label CSV does, so the CSV label importer
+    #: reads the file back.  No ``region_box``: a scored run draws no regions.
+    _LABEL_STREAM_COLUMNS = ["detector", "label", "md5", "origin_name", "filename", "category", "origin"]
+
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write one CSV row per label entry, flushed as they stream.
+
+        The columns are fixed (:attr:`_LABEL_STREAM_COLUMNS`) because a
+        streaming writer cannot look ahead, and they are the ones the
+        ``server_csv_file`` label importer reads, which ignores the extra
+        ``detector`` column.  Written through
+        :func:`~vtscore.io.atomic_write_stream`, as the hit stream is.
+        """
+        filepath = Path(field_values["filepath"])
+
+        total = 0
+        with atomic_write_stream(filepath) as f:
+            writer = csv.writer(f)
+            writer.writerow(self._LABEL_STREAM_COLUMNS)
+            for entry in elements:
+                writer.writerow([_label_cell(entry.get(col, "")) for col in self._LABEL_STREAM_COLUMNS])
+                total += 1
+
+        return {
+            "message": (
+                f"Streamed {total} label(s) from {len(header.get('detectors', []))} detector(s) "
+                f"to {filepath.resolve()}."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
     def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
         """Export labels with user-selected columns.
 
@@ -186,14 +236,7 @@ class ServerCsvResultsExporter(ResultsExporter):
                 row = []
                 for col in columns:
                     if col in entry:
-                        val = entry[col]
-                        # Serialize dicts (origin) and lists (region_box) as
-                        # JSON so they survive the CSV round-trip.
-                        if isinstance(val, (dict, list)):
-                            row.append(json.dumps(val, sort_keys=True))
-                        else:
-                            cell = str(val if val is not None else "")
-                            row.append(_sanitize_csv_cell(cell))
+                        row.append(_label_cell(entry[col]))
                     elif col in meta:
                         cell = str(meta[col] if meta[col] is not None else "")
                         row.append(_sanitize_csv_cell(cell))
