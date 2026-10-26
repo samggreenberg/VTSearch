@@ -147,8 +147,8 @@ for your first search.
 ## Step by step: your first search
 
 This walkthrough assumes VTSearch is already running and open in your
-browser; if it isn't, see [SETUP.md](../SETUP.md) (or ask whoever runs
-your server for its address).
+browser; if it isn't, see the setup guide, `docs/SETUP.md` (or ask
+whoever runs your server for its address).
 
 Four steps take you from a folder of pictures to a detector that finds what
 you are looking for in pictures it has never seen. The red numbers in each
@@ -387,9 +387,9 @@ VTSearch ships two populated categories, which boil down to two choices:
     **per-media-type dropdown** so you can filter to just audio, just
     images, and so on. Each demo downloads on first use (from a few MB
     to over 10 GB depending on the dataset and size; see
-    [the demo catalogue](../demos.md)) and is cached, so subsequent loads
+    the demo catalogue, `docs/demos.md`) and is cached, so subsequent loads
     are instant.
-  - **🏭 Synthetic Media** - fabricates images, audio, or video on the
+  - **Synthetic Media** - fabricates images, audio, or video on the
     fly. This is the quickest way to try VTSearch, since nothing is
     downloaded at all. Its images are the cartoon faces, shapes and scenes
     this guide's screenshots are taken on. **Seed** picks which set it
@@ -413,8 +413,8 @@ There is also a **Services** tab, which is an extension point rather than a
 feature: it is where an installed plugin's service importers appear (a
 corporate media archive, a third-party search API). Nothing in the stock
 install registers one, so on a default deployment the tab reads *"No
-importers in this category."* See `docs/EXTENDING-plugins.md` if you want to
-add one.
+importers in this category."* Developers adding one should see the
+plugin guide, `docs/EXTENDING-plugins.md`.
 
 The **Downloaded Media** catalogue is a table: pick a media type from the
 dropdown, click the dataset you want to choose it, then click **Import**.
@@ -461,10 +461,11 @@ a fork on a dining table, a distant chair.
 - **What it gains.** Its typed-query search and its detectors are better at
   every object size. It also cut by about two thirds how often a search for a
   small object turned up fewer than three examples in its first 150 votes
-  ([the measurements](../experiments/2026-10-14-siglip2l-4874/REPORT.md)).
+  (the measurements are in
+  `docs/experiments/2026-10-14-siglip2l-4874/REPORT.md`).
 - **What it costs on a GPU.** Analysis takes about 10× as long as SigLIP's, or
-  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see
-  [Deployment](../DEPLOYMENT.md)).
+  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see the
+  deployment guide, `docs/DEPLOYMENT.md`).
 - **Not on a CPU-only machine.** There it is about 19× slower, so keep SigLIP.
 
 The choice is made once, at import: a dataset's detectors are trained in its
@@ -1054,7 +1055,7 @@ and **Browse** all act on the items above it. An AutoFind or command-line run
 has nobody to vote, so it can't be checked: it exports the line your labels
 draw for that collection and records it as unchecked, with a line in the run's log and a
 `balance` entry beside the threshold in exports that carry the full results
-(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+(see "Auto-detect" in the command-line guide, `docs/CLI.md`).
 
 ---
 
@@ -1579,11 +1580,12 @@ items to verify by hand, each reported as a percentage chip with a one-line
 verdict and a line of supporting numbers:
 
 - **Training-domain overlap** - how much of *this* dataset looks unlike
-  the dataset the detector was trained on. VTSearch can't infer which
-  dataset that was (a detector handed to you may not travel with its
-  haystack), so you pick it from the **Compare against** dropdown, which
-  lists every *other* loaded dataset sharing this one's embedder - the
-  section is hidden entirely when there is no such candidate. A high
+  the dataset the detector was trained on. VTSearch compares against the
+  loaded dataset holding most of the detector's labelled examples (else the
+  first candidate); if that is the wrong one, pick another from the
+  **Compare against** dropdown, which lists every *other* loaded dataset
+  sharing this one's embedder - the section is hidden entirely when there
+  is no such candidate. A high
   atypical share means domain shift: the detector is scoring media unlike
   anything it ever saw, and that share is the part to check yourself.
 - **Evidence coverage** - how much of the dataset sits farther from the
@@ -1653,10 +1655,9 @@ Settings modal's **Server** tab. Once set:
 - The chosen type's default embedder is warmed at startup so the
   first detector run is fast.
 
-Operators set it by passing `--solo-media-type image` (or any type id)
-on the command line, or by writing `"solo_media_type": "image"` into
-`data/settings.json`. It applies to every user, and there is no
-per-user override.
+Operators set it when starting the server (see `solo_media_type` in the
+deployment guide, `docs/DEPLOYMENT.md`). It
+applies to every user, and there is no per-user override.
 
 ---
 
@@ -1687,9 +1688,8 @@ server's own values:
   untick it to ask the server not to.
 - **Browse Map** - per-media-type look of the spatial Browse view
   (signposts, signpost text, colormap, cell size, thumbnail border,
-  popup thumbnail size, mouse-zooms per level; the tile shape is chosen
-  automatically from the media type — squares for browsable thumbnails,
-  audio's waveform included, hexagons for text — and is not a setting), plus a
+  popup thumbnail size, mouse-zooms per level; the tile shape is not a
+  setting, see [Navigating](#navigating)), plus a
   **Graphics** control that applies to every media type. Leave Graphics
   on **Auto** and VTSearch picks for you: browsers without hardware
   acceleration get the cheaper
@@ -1976,7 +1976,8 @@ install without the optional naming dependency.
 The control cluster at the top right of the canvas gives you:
 
 - **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
-  zoom directly on the canvas.
+  zoom directly on the canvas. The arrow keys pan and `+` / `-` zoom too,
+  and `Ctrl`+`A` selects every tile fully in view.
 - **Thumbnail size** - smaller or bigger tiles.
 - **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
   you drag a box to select every item inside it.
@@ -1984,9 +1985,9 @@ The control cluster at the top right of the canvas gives you:
   map has no names.
 
 The tiles are **squares** for media with browsable thumbnails (images,
-video, documents) so the thumbnails pack edge-to-edge, and **hexagons**
-for audio and text, where the tile is a density cell rather than a
-picture. The shape is chosen automatically from the dataset's media type -
+video, documents, faces, and audio by its waveform) so the thumbnails pack
+edge-to-edge, and **hexagons** for text, where the tile is a density cell
+rather than a picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
 Top-left, **Rebuild Map** shuffles the items into a fresh layout
@@ -2141,12 +2142,11 @@ two ways:
 
 - **From the API**, against a loaded dataset:
   `POST /api/detectors/{detector_id}/portable-bundle` (see
-  [`docs/api/detectors.md`](../api/detectors.md#export-portable-bundle)),
+  "Export portable bundle" in `docs/api/detectors.md`),
   which streams the zip back.
 - **From the CLI**, as part of an autodetect run: the
   `portable_detector` exporter, which writes one bundle per detector the
-  run trained (see
-  [`docs/CLI.md`](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+  run trained (see "Auto-detect" in `docs/CLI.md`).
 
 Both paths behave the same way. This is the one place VTSearch writes a
 trained ranker to disk - it normally keeps them in memory only. The

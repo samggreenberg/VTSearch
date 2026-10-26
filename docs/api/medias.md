@@ -489,13 +489,13 @@ POST /api/sort
 **Body:** `{"text": "dog barking"}`
 
 Embeds the text query with the dataset's text embedder, then sorts all
-medias by cosine similarity, and draws two lines over the ranking (issue
-#4136). `threshold` is the **display** line the green region ends at, drawn
-at the balance now set: at a balance of 1 or below it is the **count line**
-(#4603), which keeps a balance-scaled multiple of the estimated number of
-matches; above 1 (or with fewer than 50 media) it is the guarded rule of
-#3826 (the mixture midpoint only when the two fitted components are
-separated, else the bulk's median + 3 robust sigmas). The
+medias by cosine similarity, and draws two lines over the ranking
+(issue #4136). `threshold` is the **display** line the green region ends
+at, drawn at the balance now set: at a balance of 1 or below it is the
+**count line** (#4603), which keeps a balance-scaled multiple of the
+estimated number of matches; above 1 (or with fewer than 50 media) it is
+the guarded rule of #3826 (the mixture midpoint only when the two fitted
+components are separated, else the bulk's median + 3 robust sigmas). The
 `VTSEARCH_TEXT_SORT_CUT=gmm_midpoint` environment variable restores the plain
 midpoint at every balance. `acq_threshold`, the **acquisition** cut
 Autopilot's Bad phase samples around, is always the mixture midpoint and does

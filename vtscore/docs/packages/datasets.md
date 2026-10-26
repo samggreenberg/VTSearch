@@ -491,7 +491,7 @@ each `get_source_for_origin` call returns a fresh instance; call
 `vtscore/datasets/registry.py` maintains a JSON manifest at
 `<DATA_DIR>/dataset_registry.json` listing every dataset the user has
 *saved* to disk (one `.pkl` per dataset, in `get_saved_datasets_dir()`,
-which reads `CoreConfig.from_settings().saved_datasets_dir`).
+which reads `get_setting("saved_datasets_dir")`).
 
 ```python
 from vtscore.datasets.registry import (

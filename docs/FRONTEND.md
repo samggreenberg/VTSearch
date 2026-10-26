@@ -92,9 +92,10 @@ active context in the URL:
 | `/tune/:datasetId/:detectorId` | `activeContextGuard` | Tune (`FindViewComponent`) |
 | `/browse/:datasetId` | `browseContextGuard` | VTSBrowse projection canvas |
 
-Bare `/label`, `/test`, `/browse` (and anything unmatched) redirect to
+Bare `/label`, `/tune`, `/browse` (and anything unmatched) redirect to
 `/dashboard`: a half-specified pair is not a representable state, so there is
-nothing to render.
+nothing to render. The legacy `/find/…` and `/test/…` pair paths redirect to
+`/tune/…`.
 
 ---
 
@@ -243,9 +244,9 @@ The Dashboard's **Tune** button opens it at `/tune/:datasetId/:detectorId`.
 Its code keeps an older name, as the Train view's keeps `label`: it was Find
 until #4525 and Test until #5098, hence `FindViewComponent`,
 `panelMode: 'find'`, `VoteStateService.findMode`, and on the API side
-`/api/find-label`, `find_mode` and the `find` SSE channel. The old `/find/…`
-and `/test/…` paths redirect to `/tune/…`. **Find** is now the Dashboard's
-third button, which opens no view: it starts a background AutoFind run
+`/api/find-label`, `find_mode` and the `find` SSE channel (the legacy paths
+redirect, [§1](#1-shape-of-the-app)). **Find** is now the Dashboard's third
+button, which opens no view: it starts a background AutoFind run
 (`AutoFindService.find`), and its Find Results dialog hands items to Browse
 through the same `BrowseSubsetPrepService` Tune's Browse uses.
 

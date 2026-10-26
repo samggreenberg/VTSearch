@@ -4,6 +4,8 @@
 
 ---
 
+## App Settings
+
 The settings model is defined once, in `vtsearch/settings_models.py`
 (`ServerSettings` / `UserSettings`: types, defaults, clamps), and exposed
 through the marshmallow schemas in `vtsearch/schemas/settings.py`. The

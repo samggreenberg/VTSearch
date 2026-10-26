@@ -61,6 +61,15 @@ def list_seed_importers_route():
 
 
 @seed_importers_bp.route("/api/seed-import/<importer_name>", methods=["POST"])
+@seed_importers_bp.alt_response(
+    400, description="Invalid request body or field value, or the importer rejected the run."
+)
+@seed_importers_bp.alt_response(404, description="Unknown seed importer name.")
+@seed_importers_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
+@seed_importers_bp.alt_response(501, description="Importer does not implement run.")
+@seed_importers_bp.alt_response(
+    502, description="The source behind the importer failed, or the run did not return a list."
+)
 def run_seed_import(importer_name: str):
     """Fetch a batch of unlabeled seed media via the named seed importer.
 
