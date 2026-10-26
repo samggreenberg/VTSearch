@@ -41,9 +41,11 @@ __all__ = [
     "atomic_write_json",
     "atomic_write_stream",
     "atomic_write_text",
+    "commit_write_stream",
     "desanitize_csv_cell",
     "file_lock",
     "read_server_json",
+    "resumable_write_stream",
     "sanitize_csv_cell",
 ]
 
@@ -270,6 +272,67 @@ def atomic_write_stream(
         if not committed:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
+
+
+@contextlib.contextmanager
+def resumable_write_stream(
+    path: Path | str,
+    position: int | None,
+    *,
+    encoding: str = "utf-8",
+    newline: str = "",
+) -> Iterator[IO[str]]:
+    """Open *path* for incremental text writes that a later run can pick up.
+
+    The resumable twin of :func:`atomic_write_stream`, for a streamed export
+    that must survive its process dying (``--resume``).  An atomic stream
+    shows nothing at *path* until it completes, so a run killed after hours of
+    work leaves nothing to continue from; this one writes in place instead,
+    and the writer marks durable points with :func:`commit_write_stream`,
+    whose return value it records somewhere that outlives the process.
+
+    *position* ``None`` starts the file afresh: parents are created and any
+    existing file is truncated.  An ``int`` is a byte offset an earlier
+    :func:`commit_write_stream` returned: the file is cut back to it - a
+    partial write past the last commit is discarded, so it is never
+    duplicated or left torn - and writing resumes at its end.
+
+    Raises :class:`ValueError` when *position* is given but the file is
+    missing or shorter than it, since the content an earlier run committed is
+    then gone and appending would build on something else.
+
+    Unlike :func:`atomic_write_stream`, a reader of *path* can see the file
+    mid-run, and a run that raises leaves what it committed in place: that is
+    the point.
+    """
+    p = Path(path)
+    if position is None:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        mode = "w"
+    else:
+        try:
+            size = p.stat().st_size
+        except FileNotFoundError:
+            raise ValueError(f"{p} is missing, so there is nothing to resume.") from None
+        if size < position:
+            raise ValueError(f"{p} holds {size} bytes, fewer than the {position} already written to it.")
+        if size > position:
+            os.truncate(p, position)
+        mode = "a"
+    with open(p, mode, encoding=encoding, newline=newline) as f:
+        yield f
+
+
+def commit_write_stream(f: IO[str]) -> int:
+    """Make everything written to *f* durable and return its byte length.
+
+    Flushes and ``fsync``\\ s *f*, a handle from :func:`resumable_write_stream`,
+    and returns the offset to hand back to that function as ``position`` to
+    resume after this point.
+    """
+    f.flush()
+    os.fsync(f.fileno())
+    return os.fstat(f.fileno()).st_size
 
 
 # ---------------------------------------------------------------------------

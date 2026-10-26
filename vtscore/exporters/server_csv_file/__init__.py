@@ -17,8 +17,14 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_stream, atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
+from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
+from vtscore.io import (
+    atomic_write_stream,
+    atomic_write_text,
+    commit_write_stream,
+    resumable_write_stream,
+    sanitize_csv_cell as _sanitize_csv_cell,
+)
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -47,6 +53,33 @@ def _label_cell(val: Any) -> str:
     if isinstance(val, (dict, list)):
         return json.dumps(val, sort_keys=True)
     return _sanitize_csv_cell(str(val if val is not None else ""))
+
+
+def _stream_thresholds(header: dict[str, Any]) -> dict[str, Any]:
+    """Each streamed detector's threshold, by name, for the ``threshold`` column."""
+    return {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
+
+
+def _stream_hit_row(detector_name: str, hit: dict[str, Any], thresholds: dict[str, Any]) -> list[Any]:
+    """One streamed hit as a row in :attr:`ServerCsvResultsExporter._STREAM_COLUMNS` order."""
+    from vtscore.datasets.origin import Origin  # noqa: PLC0415
+
+    origin = hit.get("origin")
+    origin_str = Origin.from_dict(origin).display() if origin else ""
+    clip_box = hit.get("clip_box")
+    return [
+        _sanitize_csv_cell(str(detector_name)),
+        thresholds.get(detector_name, ""),
+        _sanitize_csv_cell(hit.get("filename", "")),
+        _sanitize_csv_cell(hit.get("category", "")),
+        hit.get("score", ""),
+        _sanitize_csv_cell(hit.get("label", "")),
+        hit.get("clip_start", ""),
+        hit.get("clip_end", ""),
+        ",".join(str(v) for v in clip_box) if clip_box else "",
+        _sanitize_csv_cell(origin_str),
+        _sanitize_csv_cell(hit.get("origin_name", "")),
+    ]
 
 
 class ServerCsvResultsExporter(ResultsExporter):
@@ -131,40 +164,60 @@ class ServerCsvResultsExporter(ResultsExporter):
         no half-written export and two concurrent exports to the same path
         can't clobber each other's temp file.
         """
-        from vtscore.datasets.origin import Origin  # noqa: PLC0415
-
         filepath = Path(field_values["filepath"])
-
-        thresholds = {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
+        thresholds = _stream_thresholds(header)
 
         total_hits = 0
         with atomic_write_stream(filepath) as f:
             writer = csv.writer(f)
             writer.writerow(self._STREAM_COLUMNS)
             for detector_name, hit in records:
-                origin = hit.get("origin")
-                origin_str = Origin.from_dict(origin).display() if origin else ""
-                clip_box = hit.get("clip_box")
-                writer.writerow(
-                    [
-                        _sanitize_csv_cell(str(detector_name)),
-                        thresholds.get(detector_name, ""),
-                        _sanitize_csv_cell(hit.get("filename", "")),
-                        _sanitize_csv_cell(hit.get("category", "")),
-                        hit.get("score", ""),
-                        _sanitize_csv_cell(hit.get("label", "")),
-                        hit.get("clip_start", ""),
-                        hit.get("clip_end", ""),
-                        ",".join(str(v) for v in clip_box) if clip_box else "",
-                        _sanitize_csv_cell(origin_str),
-                        _sanitize_csv_cell(hit.get("origin_name", "")),
-                    ]
-                )
+                writer.writerow(_stream_hit_row(detector_name, hit, thresholds))
                 total_hits += 1
 
         return {
             "message": (
                 f"Streamed {total_hits} hit(s) across "
+                f"{len(header.get('detectors', []))} detector(s) to {filepath.resolve()}."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
+    def resumable_stream_path(self, field_values: dict[str, Any]) -> str:
+        return str(field_values["filepath"])
+
+    def export_cli_streaming_resumable(
+        self,
+        header: dict[str, Any],
+        chunks: Iterator[list[tuple[str, dict[str, Any]]]],
+        field_values: dict[str, Any],
+        resume: StreamResume,
+    ) -> dict[str, Any]:
+        """Write the same CSV as :meth:`export_cli_streaming`, in place, a chunk at a time.
+
+        The header row is written once, by the run that starts the file; each
+        chunk's rows are ``fsync``\\ ed before the chunk is committed, so a
+        resumed run cuts the file back to the last whole chunk and appends.
+        """
+        filepath = Path(field_values["filepath"])
+        thresholds = _stream_thresholds(header)
+
+        total_hits = 0
+        with resumable_write_stream(filepath, resume.position) as f:
+            writer = csv.writer(f)
+            if resume.position is None:
+                writer.writerow(self._STREAM_COLUMNS)
+                resume.commit(commit_write_stream(f))
+            for chunk in chunks:
+                for detector_name, hit in chunk:
+                    writer.writerow(_stream_hit_row(detector_name, hit, thresholds))
+                    total_hits += 1
+                resume.commit(commit_write_stream(f))
+
+        verb = "Streamed" if resume.position is None else "Appended"
+        return {
+            "message": (
+                f"{verb} {total_hits} hit(s) across "
                 f"{len(header.get('detectors', []))} detector(s) to {filepath.resolve()}."
             ),
             "filepath": str(filepath.resolve()),

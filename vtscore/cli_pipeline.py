@@ -1,10 +1,10 @@
 """YAML pipeline-file runner for ``python app.py --pipeline pipeline.yaml``.
 
 A pipeline file declares the same options as the ``--autodetect`` flag set
-(importer + fields, settings file, detector list, chunk size, optional
-one-shot label import, exporter + fields, an optional clipper override, and
-``tempimport`` - whether the imported dataset is discarded rather than saved to
-the dashboard).  This module loads the YAML,
+(importer + fields, settings file, detector list, chunk size, streaming and
+whether a stream is resumable, optional one-shot label import, exporter +
+fields, an optional clipper override, and ``tempimport`` - whether the
+imported dataset is discarded rather than saved to the dashboard).  This module loads the YAML,
 validates the shape against the active plugin registries, and dispatches
 to the shared ``_run_pipeline`` in :mod:`vtscore.cli`.
 
@@ -35,6 +35,7 @@ _TOP_LEVEL_KEYS = {
     "stream_results",
     "keep_negatives",
     "as_labelset",
+    "resume",
     "import_labels",
     "exporter",
     "tempimport",
@@ -142,6 +143,13 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'as_labelset:' must be a boolean.")
     if as_labelset and not stream_results:
         raise ValueError("'as_labelset:' only applies with 'stream_results:'.")
+    resume = raw.get("resume", False)
+    if not isinstance(resume, bool):
+        raise ValueError("'resume:' must be a boolean.")
+    if resume and not stream_results:
+        raise ValueError("'resume:' only applies with 'stream_results:' (it checkpoints the stream after each chunk).")
+    if resume and as_labelset:
+        raise ValueError("'resume:' cannot resume a labelset stream ('as_labelset:'); it resumes hit streams only.")
     tempimport = raw.get("tempimport", False)
     if not isinstance(tempimport, bool):
         raise ValueError("'tempimport:' must be a boolean.")
@@ -177,6 +185,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "stream_results": stream_results,
         "keep_negatives": keep_negatives,
         "as_labelset": as_labelset,
+        "resume": resume,
         "tempimport": tempimport,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
@@ -534,4 +543,5 @@ def _dispatch(config: dict[str, Any]) -> None:
         keep_negatives=config.get("keep_negatives", False),
         as_labelset=config.get("as_labelset", False),
         override_clipper=config.get("override_clipper"),
+        resume=config.get("resume", False),
     )
