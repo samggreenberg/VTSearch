@@ -1,6 +1,6 @@
 """Tests for the .claude/hooks/require-issue-labels.py PreToolUse gate.
 
-The hook enforces CLAUDE.md's "Label every issue you file" rule at tool-call
+The hook enforces CLAUDE.md's "Issue lifecycle" filing rule at tool-call
 time. It is the only mechanical check on that rule -- nothing tests in CI, and
 `run-tests.sh` never sees a GitHub issue -- so its two failure directions both
 matter and are tested here:
