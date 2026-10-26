@@ -48,6 +48,10 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A clipper picked for a server folder import keeps the options you set** (issue #5300). In Add Dataset ›
+  Files › Folder, picking a clipper under Advanced (the **Details** button) and setting its options sent only the
+  clipper's name whenever the media type's default clipper takes no options, as Image's **None** does, so the
+  import ran the picked clipper on its own defaults. The options you set now go with it.
 - **A CLI run no longer re-clips a dataset already clipped the way its detector was trained** (issue #5282). The
   comparison read a per-clip record of each clip's place in the import as one of the clipper's settings, so a
   dataset never matched its detector's clipper and every run re-cut and re-embedded clips that were already right.

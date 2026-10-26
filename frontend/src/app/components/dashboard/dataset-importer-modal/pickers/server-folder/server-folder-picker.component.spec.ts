@@ -66,7 +66,7 @@ describe('ServerFolderPickerComponent', () => {
     ]);
     fixture.componentRef.setInput('guessedMediaType', 'face');
     openAndFlush();
-    expect(component.mediaTypeOptions).toEqual(['audio', 'image']);
+    expect(component.mediaTypeOptions()).toEqual(['audio', 'image']);
     // Nor does a guess of Face (every dataset so far a Face one) pick it.
     expect(component.mediaType()).toBe('audio');
   });
@@ -77,7 +77,7 @@ describe('ServerFolderPickerComponent', () => {
     component.applyPathInput();
 
     expect(component.folderPath()).toBe('/data/my-photos');
-    expect(component.datasetName).toBe('my-photos');
+    expect(component.datasetName()).toBe('my-photos');
 
     const req = httpMock.expectOne(r => r.url === '/api/dataset/detect-media-type');
     req.flush({ sample_size: 3, counts_by_type: { image: 3 }, extensions: {}, dominant: 'image' });
@@ -206,6 +206,87 @@ describe('ServerFolderPickerComponent', () => {
 
     expect(component.submitting()).toBe(false);
     expect(started).toBe(true);
+  });
+
+  it('sends the params of a clipper picked in the chooser', () => {
+    component.open(serverFolderImporter);
+    httpMock.expectOne((req) => req.url === '/api/embedders').flush({ embedders: [] });
+    // The type's default clipper takes no parameters; the one picked does.
+    httpMock.expectOne((req) => req.url === '/api/clippers').flush({
+      clippers: [
+        { name: 'audio_default', parameters: [] },
+        { name: 'windows', parameters: [{ key: 'seconds', default: 5 }] },
+      ],
+    });
+    httpMock.expectOne((req) => req.url === '/api/cleaners').flush({ cleaners: [] });
+    component.folderPath.set('/data/sounds');
+
+    component.openClipperChooser();
+    component.onClipperChooserSelected({ name: 'windows', params: { seconds: 2 } });
+    component.submit();
+
+    const req = httpMock.expectOne('/api/dataset/import/server_folder');
+    expect(req.request.body).toEqual(expect.objectContaining({ clipper: 'windows', clipper_params: { seconds: 2 } }));
+    req.flush({});
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): these call the picker the
+  // way the parent modal does, with no forced render, so a write that
+  // notifies nothing shows up as stale DOM (#5300).
+  describe('repaints without a forced render', () => {
+    const el = () => fixture.nativeElement as HTMLElement;
+    const input = (id: string) => el().querySelector(`#${id}`) as HTMLInputElement;
+
+    it('paints the name derived from a typed path, and open() resetting it', async () => {
+      openAndFlush();
+      await settleZoneless(fixture);
+      expect(input('sf-recursive').checked).toBe(true);
+
+      component.onPathInput('/data/my-photos');
+      await settleZoneless(fixture);
+      expect(input('sf-dataset-name').value).toBe('my-photos');
+
+      // Re-opened on an importer whose subfolders default off.
+      component.open({
+        ...serverFolderImporter,
+        fields: [...serverFolderImporter.fields, { key: 'recursive', field_type: 'checkbox', default: 'false' }],
+      });
+      httpMock.expectOne((req) => req.url === '/api/embedders').flush({ embedders: [] });
+      httpMock.expectOne((req) => req.url === '/api/clippers').flush({ clippers: [] });
+      httpMock.expectOne((req) => req.url === '/api/cleaners').flush({ cleaners: [] });
+      await settleZoneless(fixture);
+      expect(input('sf-path-input').value).toBe('');
+      expect(input('sf-dataset-name').value).toBe('');
+      expect(input('sf-recursive').checked).toBe(false);
+    });
+
+    it('sends the archive and reference boxes as ticked', async () => {
+      openAndFlush();
+      await settleZoneless(fixture);
+      input('sf-dig-archives').click();
+      input('sf-reference-files').click();
+      await settleZoneless(fixture);
+      component.folderPath.set('/data/sounds');
+      component.submit();
+
+      const req = httpMock.expectOne('/api/dataset/import/server_folder');
+      expect(req.request.body).toEqual(expect.objectContaining({ dig_archives: true, reference_files: true }));
+      req.flush({});
+    });
+
+    it('opens and closes the clipper chooser', async () => {
+      openAndFlush();
+      await settleZoneless(fixture);
+      expect(el().textContent).not.toContain('Choose MediaClipper');
+
+      component.openClipperChooser();
+      await settleZoneless(fixture);
+      expect(el().textContent).toContain('Choose MediaClipper');
+
+      component.onClipperChooserCancelled();
+      await settleZoneless(fixture);
+      expect(el().textContent).not.toContain('Choose MediaClipper');
+    });
   });
 
   describe('Multi-Dataset mode (#4703)', () => {

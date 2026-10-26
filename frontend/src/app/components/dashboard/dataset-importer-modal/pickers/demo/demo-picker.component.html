@@ -5,12 +5,12 @@
       id="demo-dataset-name"
       type="text"
       class="form-input"
-      [ngModel]="demoDatasetName"
+      [ngModel]="demoDatasetName()"
       (ngModelChange)="onDemoDatasetNameInput($event)"
       placeholder="Leave blank to use the demo's name"
     />
     @if (multiDataset()) {
-      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ demoDatasetName || 'demo' }} – Face”.</p>
+      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ demoDatasetName() || 'demo' }} – Face”.</p>
     }
   </div>
 
@@ -64,8 +64,8 @@
 </div>
 
 <vt-clipper-chooser
-  [open]="clipperChooserOpen"
-  [clippers]="clipperChooserClippers"
+  [open]="clipperChooserOpen()"
+  [clippers]="clipperChooserClippers()"
   (selected)="onClipperChooserSelected($event)"
   (cancelled)="onClipperChooserCancelled()"
 />

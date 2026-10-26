@@ -514,7 +514,7 @@ describe('DatasetImporterModalComponent', () => {
     const file = new File(['contents'], 'a.wav');
     Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
     component.localFolderPicker().files.set([file]);
-    component.localFolderPicker().mediaType = 'audio';
+    component.localFolderPicker().mediaType.set('audio');
     component.localFolderPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import-local-folder');
@@ -540,7 +540,7 @@ describe('DatasetImporterModalComponent', () => {
 
     const pathsFile = new File(['/a.wav\n/b.wav\n'], 'list.txt');
     component.localFolderPicker().files.set([pathsFile]);
-    component.localFolderPicker().mediaType = 'audio';
+    component.localFolderPicker().mediaType.set('audio');
     component.localFolderPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import-local-files');
@@ -570,7 +570,7 @@ describe('DatasetImporterModalComponent', () => {
   it('should pre-populate default values', () => {
     flushImporters();
     component.selectImporter(genericForm());
-    expect(component.genericFormPicker().formValues['media_type']).toBe('audio');
+    expect(component.genericFormPicker().formValues()['media_type']).toBe('audio');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
@@ -600,7 +600,7 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
-    component.genericFormPicker().formValues['path'] = '/data/sounds';
+    component.genericFormPicker().setFormValue('path', '/data/sounds');
     component.genericFormPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import/generic_form');
@@ -610,6 +610,94 @@ describe('DatasetImporterModalComponent', () => {
 
     expect(component.genericFormPicker().submitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): a picker is opened, and fed
+  // rows and dropped files, from listeners on the sibling <vt-source-picker>,
+  // so nothing marks the picker's own view dirty but its signal writes. No
+  // forced render here, so a write that notifies nothing is stale DOM (#5300).
+  describe('picker forms repaint without a forced render', () => {
+    const el = () => fixture.nativeElement as HTMLElement;
+    const input = (id: string) => el().querySelector(`#${id}`) as HTMLInputElement;
+
+    function clickSubtab(label: string): void {
+      const tabs = Array.from(el().querySelectorAll('.importer-subtab')) as HTMLButtonElement[];
+      tabs.find((b) => (b.textContent || '').includes(label))!.click();
+    }
+
+    function flushTypeLists(): void {
+      httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+      httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+      httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
+    }
+
+    it('resets the server-folder form when the user switches importers and back', async () => {
+      flushImporters();
+      await settleZoneless(fixture);
+      expect(component.activeImporterTab()).toBe('server');
+
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      const path = input('sf-path-input');
+      path.value = '/data/my-photos';
+      path.dispatchEvent(new Event('input'));
+      await settleZoneless(fixture);
+      expect(input('sf-dataset-name').value).toBe('my-photos');
+
+      clickSubtab('Files');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      expect(input('sf-path-input').value).toBe('');
+      expect(input('sf-dataset-name').value).toBe('');
+    });
+
+    it("enables the generic form's Import button once its required field is typed", async () => {
+      flushImporters();
+      component.selectImporter(genericForm());
+      flushTypeLists();
+      await settleZoneless(fixture);
+      const importButton = () =>
+        (Array.from(el().querySelectorAll('.form-actions .btn--primary')) as HTMLButtonElement[]).find((b) =>
+          (b.textContent || '').includes('Import'),
+        )!;
+      expect(importButton().disabled).toBe(true);
+
+      const path = input('field-path');
+      path.value = '/data/sounds';
+      path.dispatchEvent(new Event('input'));
+      await settleZoneless(fixture);
+      expect(importButton().disabled).toBe(false);
+    });
+
+    it("paints a clicked demo row's name into the demo form", async () => {
+      flushImporters();
+      openAndFlushDemoPicker();
+      await settleZoneless(fixture);
+      expect(input('demo-dataset-name').value).toBe('');
+
+      (el().querySelector('.demo-row') as HTMLElement).click();
+      await settleZoneless(fixture);
+      expect(input('demo-dataset-name').value).toBe('GTZAN');
+    });
+
+    it("paints a dropped folder's name into the local-folder form", async () => {
+      flushImporters();
+      component.selectImporterTab('local');
+      await settleZoneless(fixture);
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+
+      const file = new File(['contents'], 'a.wav');
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
+      component.localFolderPicker().onFilesDropped([file]);
+      await settleZoneless(fixture);
+      expect(input('lf-dataset-name').value).toBe('mydir');
+    });
   });
 
   describe('Advanced toggle in the footer row (#4305)', () => {
@@ -777,7 +865,7 @@ describe('DatasetImporterModalComponent', () => {
 
     component.selectImporter(pickleImp());
     const mockFile = new File(['data'], 'test.pkl');
-    component.genericFormPicker().selectedFile = mockFile;
+    component.genericFormPicker().selectedFile.set(mockFile);
     component.genericFormPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/load-file');
@@ -884,7 +972,7 @@ describe('DatasetImporterModalComponent', () => {
     component.demoPicker().selectDemo(mockDemos[0] as any);
     expect(component.demoPicker().selectedDemo()).toBe(mockDemos[0] as any);
     // Auto-populates the Dataset Name from the chosen demo's label.
-    expect(component.demoPicker().demoDatasetName).toBe(mockDemos[0].label);
+    expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
     // No emit/close until the Import footer button is clicked.
     expect(component.demoSelected.emit).not.toHaveBeenCalled();
     expect(component.closed.emit).not.toHaveBeenCalled();
@@ -931,11 +1019,11 @@ describe('DatasetImporterModalComponent', () => {
 
     component.demoPicker().selectDemo(mockDemos[0] as any);
     expect(component.demoPicker().selectedDemo()).not.toBeNull();
-    expect(component.demoPicker().demoDatasetName).toBe(mockDemos[0].label);
+    expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
 
     selectDemoTabAndFlush('image', mockImageEmbedders);
     expect(component.demoPicker().selectedDemo()).toBeNull();
-    expect(component.demoPicker().demoDatasetName).toBe('');
+    expect(component.demoPicker().demoDatasetName()).toBe('');
   });
 
   it('should get correct tab label from media types', () => {
