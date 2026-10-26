@@ -1,0 +1,66 @@
+<div class="plugin-combobox-field">
+  <input
+    #field
+    type="text"
+    class="form-input plugin-combobox-input"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    [id]="id()"
+    [value]="text()"
+    [required]="required()"
+    [disabled]="disabled()"
+    [placeholder]="placeholder()"
+    [title]="title()"
+    [attr.aria-label]="ariaLabel() || null"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="expanded() ? listboxId() : null"
+    [attr.aria-activedescendant]="activeDescendant()"
+    (input)="onInput($event)"
+    (keydown)="onKeydown($event)"
+    (click)="openList(false)"
+    (blur)="onBlur()"
+  />
+  <button
+    type="button"
+    class="plugin-combobox-toggle"
+    tabindex="-1"
+    aria-label="Show options"
+    [disabled]="disabled()"
+    (mousedown)="onToggleMousedown($event)"
+  >▾</button>
+</div>
+@if (detail()) {
+  <span class="plugin-combobox-detail">{{ detail() }}</span>
+}
+@if (expanded()) {
+  <!-- mousedown is cancelled so a click on a row never blurs the box,
+       which would close the list before the click lands. -->
+  <ul
+    #listbox
+    class="plugin-combobox-options"
+    role="listbox"
+    popover="manual"
+    [id]="listboxId()"
+    [attr.aria-label]="ariaLabel() || title() || null"
+    (mousedown)="$event.preventDefault()"
+  >
+    @for (opt of shown(); track $index; let i = $index) {
+      <li
+        class="plugin-combobox-option"
+        role="option"
+        [id]="optionId(i)"
+        [class.active]="i === activeIndex()"
+        [class.selected]="opt.value === valueText()"
+        [attr.aria-selected]="opt.value === valueText()"
+        (click)="pick(opt)"
+        (mouseenter)="activeIndex.set(i)"
+      >
+        <span class="plugin-combobox-option-label">{{ opt.label }}</span>
+        @if (opt.value !== opt.label) {
+          <span class="plugin-combobox-option-value">{{ opt.value }}</span>
+        }
+      </li>
+    }
+  </ul>
+}

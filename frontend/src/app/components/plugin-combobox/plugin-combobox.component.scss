@@ -1,0 +1,99 @@
+// The free-text combobox for a plugin field: a `.form-input` with a chevron
+// at its right edge, the current pick's value in small print under it, and a
+// list of options that leads each row with the label (#5265).
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.plugin-combobox-field {
+  position: relative;
+}
+
+// Room for the chevron, which sits over the input's right padding.
+.plugin-combobox-input {
+  padding-right: var(--space-2xl);
+}
+
+.plugin-combobox-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--space-2xl);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-xs);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: var(--opacity-disabled);
+  }
+}
+
+// The value behind the label the box shows, so two options of one name stay
+// distinguishable once one is picked.
+.plugin-combobox-detail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+// Fixed to the window and, where the browser has popovers, raised into the
+// top layer, so a dialog body that clips its overflow cannot cut it off.
+// `place()` sets `left` / `top` / `width`; the inset and margin reset undo the
+// popover's own centring.
+.plugin-combobox-options {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: var(--z-burger-menu);
+}
+
+.plugin-combobox-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-subtle);
+  }
+
+  // Keyboard highlight (the `aria-activedescendant` target), as in the
+  // media-type dropdown: an inset ring that reads over the hover fill.
+  &.active {
+    background: var(--bg-subtle);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  &.selected .plugin-combobox-option-label {
+    font-weight: var(--weight-medium);
+  }
+}
+
+.plugin-combobox-option-label {
+  font-size: var(--font-md);
+}
+
+.plugin-combobox-option-value {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

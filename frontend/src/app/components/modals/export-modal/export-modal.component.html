@@ -252,22 +252,15 @@
                     [attr.step]="field.step || null"
                   />
                 } @else if (field.field_type === 'select' && field.allow_free_text) {
-                  <input
-                    [id]="'field-' + field.key"
-                    type="text"
-                    class="form-input"
+                  <vt-plugin-combobox
+                    [inputId]="'field-' + field.key"
+                    [options]="fieldOptions.optionsFor(field)"
+                    [value]="formValues[field.key]"
+                    (valueChange)="formValues[field.key] = $event; onFieldChanged(field.key)"
                     [required]="!!field.required"
-                    [attr.list]="'field-' + field.key + '-list'"
-                    [(ngModel)]="formValues[field.key]"
                     [disabled]="!!fieldOptions.loading()[field.key]"
                     [placeholder]="fieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
-                    (ngModelChange)="onFieldChanged(field.key)"
-                  />
-                  <datalist [id]="'field-' + field.key + '-list'">
-                    @for (opt of fieldOptions.optionsFor(field); track opt.value) {
-                      <option [value]="opt.value">{{ opt.label }}</option>
-                    }
-                  </datalist>
+                  ></vt-plugin-combobox>
                   @if (field.dynamic_options && fieldOptions.error()[field.key]) {
                     <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
                   }

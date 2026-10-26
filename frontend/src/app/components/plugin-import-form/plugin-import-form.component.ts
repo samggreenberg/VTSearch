@@ -11,6 +11,7 @@ import { visibleFields } from '../../utils/plugin-fields';
 import { FieldHintIconComponent } from '../field-hint-icon/field-hint-icon.component';
 import { FileBrowserComponent } from '../file-browser/file-browser.component';
 import { PluginCheckboxComponent } from '../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../plugin-combobox/plugin-combobox.component';
 
 /** The two calls this form makes against whichever plugin family backs it.
  *
@@ -51,7 +52,7 @@ export interface PluginImportApi {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-plugin-import-form',
   standalone: true,
-  imports: [FormsModule, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
+  imports: [FormsModule, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './plugin-import-form.component.html',
   styleUrl: './plugin-import-form.component.scss',
 })

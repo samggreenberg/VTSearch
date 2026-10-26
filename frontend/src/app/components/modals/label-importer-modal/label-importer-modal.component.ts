@@ -29,6 +29,7 @@ import { visibleFields } from '../../../utils/plugin-fields';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 
 type ModalView = 'picker' | 'form';
 
@@ -45,7 +46,7 @@ interface IngestResult {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
