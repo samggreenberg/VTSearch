@@ -4,76 +4,25 @@
   } @else {
     <div class="settings-layout">
       <nav class="side-tab-bar">
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'appearance'"
-          (click)="activeSettingsTab.set('appearance')"
-          title="Theme, animations, and view layout options">
-          <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'appearance'"></vt-icon>
-          Appearance
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'autofind'"
-          (click)="activeSettingsTab.set('autofind')"
-          title="Detectors that auto-run on import, and what to do with their results">
-          <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
-          AutoFind
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'autopilot'"
-          (click)="activeSettingsTab.set('autopilot')"
-          title="Configure the guided autopilot labeling workflow">
-          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
-          Autopilot
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'browser'"
-          (click)="activeSettingsTab.set('browser')"
-          title="Browse map look per media type: bin shape, density colormap, and cell size">
-          <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'browser'"></vt-icon>
-          Browser
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'imports'"
-          (click)="activeSettingsTab.set('imports')"
-          title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
-          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
-          Import Defaults
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'server'"
-          (click)="activeSettingsTab.set('server')"
-          title="Settings fixed when the server started; shared by everyone and read-only here">
-          <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'server'"></vt-icon>
-          Server
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'sorting'"
-          (click)="activeSettingsTab.set('sorting')"
-          title="Options that control how sorting and detector tuning behave">
-          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
-          Sorting
-        </button>
-        <button
-          class="side-tab"
-          [class.side-tab--active]="activeSettingsTab() === 'huggingface'"
-          (click)="activeSettingsTab.set('huggingface')"
-          title="Sign in with HuggingFace to download gated demo datasets and gated AI models">
-          <vt-icon type="globe" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'huggingface'"></vt-icon>
-          HuggingFace
-        </button>
+        @for (tab of tabs; track tab.id) {
+          @if (tab.dividerBefore) {
+            <hr class="side-tab-bar__divider" />
+          }
+          <button
+            class="side-tab"
+            [class.side-tab--active]="activeSettingsTab() === tab.id"
+            (click)="activeSettingsTab.set(tab.id)"
+            [title]="tab.title">
+            <vt-icon [type]="tab.icon" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === tab.id"></vt-icon>
+            {{ tab.label }}
+          </button>
+        }
       </nav>
 
       <div class="settings-panel">
-        <!-- Appearance -->
-        @if (activeSettingsTab() === 'appearance') {
-          <h3>Appearance</h3>
+        <!-- General -->
+        @if (activeSettingsTab() === 'general') {
+          <h3>General</h3>
           <div class="form-group">
             <label class="form-label" for="setting-theme" title="Color theme for the application interface">Theme:</label>
             <select id="setting-theme" class="form-select" [ngModel]="settings().theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme">
@@ -114,6 +63,22 @@
               <option value="view">View</option>
             </select>
           </div>
+          <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
+            <input type="checkbox" [ngModel]="settings().enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
+            Enable achievements
+          </label>
+          <div class="form-group" role="group" aria-labelledby="setting-hints-label">
+            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints:<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
+            <div class="hint-buttons">
+              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
+              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
+            </div>
+          </div>
+        }
+
+        <!-- Panels: the layout of Train, Tune and Find -->
+        @if (activeSettingsTab() === 'panels') {
+          <h3>Panels</h3>
           <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
             <input type="checkbox" [ngModel]="settings().show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
@@ -126,18 +91,6 @@
             <input type="checkbox" [ngModel]="settings().hide_right_panel" (ngModelChange)="onToggle('hide_right_panel', $event)" />
             Hide right panel in Train and Tune
           </label>
-          <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
-            <input type="checkbox" [ngModel]="settings().enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
-            Enable achievements
-          </label>
-          <div class="form-group" role="group" aria-labelledby="setting-hints-label">
-            <span id="setting-hints-label" class="form-label" title="King Toasty's hints beside the next thing to click">Toasty's hints:<vt-field-hint-icon hint="While you're getting started, King Toasty stands beside the next thing to click and says what it does. Each hint has its own “Hide this hint” and “Hide all hints” boxes. Show All brings back every hint, including ones you hid one at a time."></vt-field-hint-icon></span>
-            <div class="hint-buttons">
-              <button class="btn btn--secondary btn--sm" (click)="onHideAllHints()" [disabled]="allHintsHidden()" title="Hide every one of Toasty's hints">Hide All</button>
-              <button class="btn btn--secondary btn--sm" (click)="onShowAllHints()" [disabled]="noHintsHidden()" title="Show all of Toasty's hints again, including ones you hid one at a time">Show All</button>
-            </div>
-          </div>
-
           @if (tabMediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <!-- A lone media type needs no tab bar (nothing to switch to); the
@@ -210,26 +163,10 @@
           }
         }
 
-        <!-- Sorting & Calibration -->
-        @if (activeSettingsTab() === 'sorting') {
-          <h3>Sorting &amp; Tuning</h3>
-          <label class="checkbox-row" title="Average the text-sort query over the model's phrasing templates (e.g. &quot;a photo of …&quot;, &quot;the sound of …&quot;) instead of embedding it as typed. Only the models measured to benefit carry templates (CLAP General audio, X-CLIP video); on every other model this has no effect (issues #3127, #3341)">
-            <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
-            Enrich descriptions
-          </label>
-          <div class="form-group">
-            <label class="form-label" for="setting-calibrate-count" title="Number of items to check when tuning the detector's cutoff after training">Tuning count:</label>
-            <input id="setting-calibrate-count" type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="setting-calibration-fraction" title="Fraction of labeled items to set aside for checking (0 = none, 1 = all). Leave empty for automatic: 0.3 for single-vector models, 0.5 for patch models.">Tuning fraction:</label>
-            <input id="setting-calibration-fraction" type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" placeholder="auto" title="Fraction of labeled items to set aside for checking (0.0 to 1.0); empty = automatic per-model default" />
-          </div>
-        }
-
-        <!-- Import Defaults -->
-        @if (activeSettingsTab() === 'imports') {
-          <h3>Import Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h3>
+        <!-- Import -->
+        @if (activeSettingsTab() === 'import') {
+          <h3>Import</h3>
+          <h4 class="subhead">Defaults<vt-field-hint-icon hint="Per-media-type defaults that auto-fill the Add Dataset modal when you start a matching import."></vt-field-hint-icon></h4>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes()"
             [defaults]="importDefaults"
@@ -248,56 +185,9 @@
           }
         }
 
-        <!-- AutoFind -->
-        @if (activeSettingsTab() === 'autofind') {
-          <h3>AutoFind</h3>
-          <vt-auto-find-settings
-            [autofindExporter]="autofindExporter"
-            [autofindExporterFieldValues]="autofindExporterFieldValues"
-            (exporterChange)="onAutofindExporterChange($event)"
-          ></vt-auto-find-settings>
-          <!-- Pauses the exporter above without forgetting it (#5170); with
-               None picked there is nothing to pause. -->
-          @if (autofindExporter) {
-            <label class="checkbox-row" title="Send each AutoFind run's results to the exporter above">
-              <input type="checkbox" [ngModel]="settings().autofind_export_enabled" (ngModelChange)="onToggle('autofind_export_enabled', $event)" />
-              Export results when AutoFind finishes
-              <vt-field-hint-icon hint="Untick to pause the exporter above without losing its settings: AutoFind results then stay in the app until you tick this again. A command-line AutoFind (python app.py --autodetect) still exports."></vt-field-hint-icon>
-            </label>
-          }
-          <h4 class="subhead">Command Line</h4>
-          <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
-            <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />
-            Delete the dataset after AutoFind
-            <vt-field-hint-icon hint="When on, an AutoFind run from the command line (python app.py --autodetect) deletes the dataset it imported once its AutoFind detectors have run and the results are exported. A run with no AutoFind detector to run keeps its dataset, and AutoFind run from the dashboard never deletes anything."></vt-field-hint-icon>
-          </label>
-        }
-
-        <!-- Autopilot & Actions -->
-        @if (activeSettingsTab() === 'autopilot') {
-          <h3>Autopilot &amp; Actions</h3>
-          <div class="form-group">
-            <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start:</label>
-            <input id="setting-autopilot-greens" type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="setting-autopilot-reds" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start:</label>
-            <input id="setting-autopilot-reds" type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="setting-autopilot-resort" title="How many votes autopilot's good-examples phase collects before it asks whether to update the sort example (each Keep waits 1.5× as long before asking again)"># Start to re-sort:</label>
-            <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes in the good-examples phase before autopilot offers to update the sort example" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity:</label>
-            <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
-          </div>
-
-        }
-
-        <!-- Browser (VTSBrowse projection browser) -->
-        @if (activeSettingsTab() === 'browser') {
-          <h3>Browser<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
+        <!-- Browse Map (VTSBrowse projection browser) -->
+        @if (activeSettingsTab() === 'browse') {
+          <h3>Browse Map<vt-field-hint-icon hint="How the Browse map looks, per media type. The same controls live on the map; changes here are remembered."></vt-field-hint-icon></h3>
           <!-- Applies to every media type: this describes your browser's
                rendering capability, not the data. -->
           <div class="form-group">
@@ -318,7 +208,7 @@
                     class="view-tab"
                     [class.view-tab--active]="activeBrowseTab() === mt.type_id"
                     (click)="activeBrowseTab.set(mt.type_id)"
-                    [title]="'Browser settings for ' + mt.name + ' datasets'">
+                    [title]="'Browse map settings for ' + mt.name + ' datasets'">
                     @if (mt.icon) {
                       <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
                     }
@@ -327,7 +217,7 @@
                 }
               </div>
             }
-            <div class="view-tab-content browser-tab-content">
+            <div class="view-tab-content browse-tab-content">
               <label class="checkbox-row" title="Letter named region signposts over the map when the dataset has them">
                 <input type="checkbox" [ngModel]="getBrowseSignposts(activeBrowseTab())" (ngModelChange)="onBrowseSignpostsChange(activeBrowseTab(), $event)" aria-label="Signposts" />
                 <span>Signposts<vt-field-hint-icon hint="Names the map's regions like street signs: broad names when zoomed out, finer names as you zoom in. Only shows when the dataset's map has computed labels."></vt-field-hint-icon></span>
@@ -417,9 +307,106 @@
           }
         }
 
-        <!-- Server Settings (read-only) -->
+        <!-- Training: Autopilot, text sort, and placing the line -->
+        @if (activeSettingsTab() === 'training') {
+          <h3>Training</h3>
+          <h4 class="subhead" title="The guided labeling workflow on Train's Autopilot tab">Autopilot</h4>
+          <div class="form-group">
+            <label class="form-label" for="setting-autopilot-greens" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start:</label>
+            <input id="setting-autopilot-greens" type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-autopilot-reds" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start:</label>
+            <input id="setting-autopilot-reds" type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-autopilot-resort" title="How many votes autopilot's good-examples phase collects before it asks whether to update the sort example (each Keep waits 1.5× as long before asking again)"># Start to re-sort:</label>
+            <input id="setting-autopilot-resort" type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes in the good-examples phase before autopilot offers to update the sort example" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-autopilot-diversity" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal diversity:</label>
+            <input id="setting-autopilot-diversity" type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
+          </div>
+          <h4 class="subhead" title="Sorting by a description you type">Text sort</h4>
+          <label class="checkbox-row" title="Average the text-sort query over the model's phrasing templates (e.g. &quot;a photo of …&quot;, &quot;the sound of …&quot;) instead of embedding it as typed. Only the models measured to benefit carry templates (CLAP General audio, X-CLIP video); on every other model this has no effect (issues #3127, #3341)">
+            <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
+            Enrich descriptions
+          </label>
+          <h4 class="subhead" title="How training finds where to draw the Good/Bad line from your votes">Placing the line</h4>
+          <div class="form-group">
+            <label class="form-label" for="setting-calibrate-count" title="How many times training holds out part of your votes, trains a detector on the rest, and scores the held-out ones, to learn where to draw the line. More rounds give a steadier line; each adds a pass over the dataset.">Rounds:</label>
+            <input id="setting-calibrate-count" type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="1" max="100" title="Hold-out rounds per training (1 to 100)" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-calibration-fraction" title="Share of your votes held out in each round (0 = none, 1 = all). Leave empty for automatic: 0.3 for single-vector models, 0.5 for patch models.">Held-out fraction:</label>
+            <input id="setting-calibration-fraction" type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" placeholder="auto" title="Share of your votes held out in each round (0.0 to 1.0); empty = automatic per-model default" />
+          </div>
+        }
+
+        <!-- AutoFind -->
+        @if (activeSettingsTab() === 'autofind') {
+          <h3>AutoFind</h3>
+          <vt-auto-find-settings
+            [autofindExporter]="autofindExporter"
+            [autofindExporterFieldValues]="autofindExporterFieldValues"
+            (exporterChange)="onAutofindExporterChange($event)"
+          ></vt-auto-find-settings>
+          <!-- Pauses the exporter above without forgetting it (#5170); with
+               None picked there is nothing to pause. -->
+          @if (autofindExporter) {
+            <label class="checkbox-row" title="Send each AutoFind run's results to the exporter above">
+              <input type="checkbox" [ngModel]="settings().autofind_export_enabled" (ngModelChange)="onToggle('autofind_export_enabled', $event)" />
+              Export results when AutoFind finishes
+              <vt-field-hint-icon hint="Untick to pause the exporter above without losing its settings: AutoFind results then stay in the app until you tick this again. A command-line AutoFind (python app.py --autodetect) still exports."></vt-field-hint-icon>
+            </label>
+          }
+          <h4 class="subhead">Command Line</h4>
+          <label class="checkbox-row" title="Delete the dataset a command-line AutoFind imported, once its detectors have run">
+            <input type="checkbox" [ngModel]="settings().autofind_cli_delete_dataset" (ngModelChange)="onToggle('autofind_cli_delete_dataset', $event)" />
+            Delete the dataset after AutoFind
+            <vt-field-hint-icon hint="When on, an AutoFind run from the command line (python app.py --autodetect) deletes the dataset it imported once its AutoFind detectors have run and the results are exported. A run with no AutoFind detector to run keeps its dataset, and AutoFind run from the dashboard never deletes anything."></vt-field-hint-icon>
+          </label>
+        }
+
+        <!-- HuggingFace account -->
+        @if (activeSettingsTab() === 'huggingface') {
+          <h3>HuggingFace<vt-field-hint-icon hint="Sign in to fetch gated demo datasets and AI models your account can access. Your token is held in memory only, never written to disk."></vt-field-hint-icon></h3>
+
+          @let hf = hfStatus();
+          @if (hf === null) {
+            <div class="server-value server-value--empty">Checking sign-in status…</div>
+          } @else if (!hf.configured) {
+            <p class="hf-help">
+              "Sign in with HuggingFace" isn't configured on this server. To enable it, register an
+              OAuth app at
+              <a href="https://huggingface.co/settings/applications/new" target="_blank" rel="noopener noreferrer">huggingface.co</a>
+              and set the <code>HF_OAUTH_CLIENT_ID</code> (and <code>HF_OAUTH_CLIENT_SECRET</code>) environment variables.
+              Alternatively, set the <code>HF_TOKEN</code> environment variable to a token with access.
+            </p>
+          } @else if (hf.authenticated) {
+            <div class="hf-account">
+              <vt-icon type="check" [size]="16" class="hf-account__icon"></vt-icon>
+              <span class="hf-account__label">
+                Signed in to HuggingFace@if (hf.username) { as <strong>{{ hf.username }}</strong> }.
+              </span>
+            </div>
+            <p class="hf-help">Gated datasets and models your account can access will now download.</p>
+            <button class="btn btn--secondary" (click)="hfLogout()" title="Sign out of HuggingFace">Sign out</button>
+          } @else {
+            <p class="hf-help">
+              Sign in to download gated demo datasets (and gated AI models) that your HuggingFace
+              account has access to.
+            </p>
+            <button class="btn btn--primary" (click)="hfLogin()" title="Sign in with HuggingFace">
+              <vt-icon type="globe" [size]="14"></vt-icon>
+              Sign in with HuggingFace
+            </button>
+          }
+        }
+
+        <!-- Server (read-only) -->
         @if (activeSettingsTab() === 'server') {
-          <h3>Server Settings<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
+          <h3>Server<vt-field-hint-icon hint="Fixed when the server starts and shared by everyone. Shown for reference; can’t be changed here."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory:</label>
@@ -474,42 +461,6 @@
             }
           </div>
         }
-
-        @if (activeSettingsTab() === 'huggingface') {
-          <h3>HuggingFace<vt-field-hint-icon hint="Sign in to fetch gated demo datasets and AI models your account can access. Your token is held in memory only, never written to disk."></vt-field-hint-icon></h3>
-
-          @let hf = hfStatus();
-          @if (hf === null) {
-            <div class="server-value server-value--empty">Checking sign-in status…</div>
-          } @else if (!hf.configured) {
-            <p class="hf-help">
-              "Sign in with HuggingFace" isn't configured on this server. To enable it, register an
-              OAuth app at
-              <a href="https://huggingface.co/settings/applications/new" target="_blank" rel="noopener noreferrer">huggingface.co</a>
-              and set the <code>HF_OAUTH_CLIENT_ID</code> (and <code>HF_OAUTH_CLIENT_SECRET</code>) environment variables.
-              Alternatively, set the <code>HF_TOKEN</code> environment variable to a token with access.
-            </p>
-          } @else if (hf.authenticated) {
-            <div class="hf-account">
-              <vt-icon type="check" [size]="16" class="hf-account__icon"></vt-icon>
-              <span class="hf-account__label">
-                Signed in to HuggingFace@if (hf.username) { as <strong>{{ hf.username }}</strong> }.
-              </span>
-            </div>
-            <p class="hf-help">Gated datasets and models your account can access will now download.</p>
-            <button class="btn btn--secondary" (click)="hfLogout()" title="Sign out of HuggingFace">Sign out</button>
-          } @else {
-            <p class="hf-help">
-              Sign in to download gated demo datasets (and gated AI models) that your HuggingFace
-              account has access to.
-            </p>
-            <button class="btn btn--primary" (click)="hfLogin()" title="Sign in with HuggingFace">
-              <vt-icon type="globe" [size]="14"></vt-icon>
-              Sign in with HuggingFace
-            </button>
-          }
-        }
-
       </div>
     </div>
 

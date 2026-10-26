@@ -194,7 +194,7 @@ export interface SavedCleanerChoice {
 /** Saved per-mediaType defaults for the Add Dataset advanced panel:
  *  the embedder, clipper (+ params), converter rows and cleanup gates the
  *  user wants applied automatically every time they import a dataset whose
- *  output is the matching mediaType. Edited from Settings > Import Defaults
+ *  output is the matching mediaType. Edited from Settings > Import
  *  (all but the cleanup gates, which only the post-import "Save as default"
  *  offer writes); silently auto-filled into the importer form on importer
  *  selection. */

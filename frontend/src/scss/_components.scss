@@ -300,6 +300,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   width: 140px;
   border-right: 1px solid var(--border);
   padding: var(--space-xs) 0;
+
+  // Sets a trailing group of tabs apart (Settings: the account and the
+  // read-only server values, below the preferences).
+  &__divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: var(--space-xs) var(--space-md);
+  }
 }
 
 .side-tab {

@@ -189,7 +189,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   readonly zoomsPerLevel = input(2);
   /**
    * Canvas rendering effort — the ``browse_graphics`` setting, surfaced as the
-   * "Graphics" pulldown at the top of Settings → Browser. ``auto`` (the
+   * "Graphics" pulldown at the top of Settings → Browse Map. ``auto`` (the
    * default) lets {@link perf} decide per client; ``full`` and ``reduced`` pin
    * the pipeline. See {@link lowFx} and `render-perf.ts`.
    */

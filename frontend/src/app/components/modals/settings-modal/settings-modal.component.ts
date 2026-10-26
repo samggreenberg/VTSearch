@@ -19,7 +19,7 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { HuggingFaceAuthService } from '../../../services/huggingface-auth.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
-import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
+import { MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { BuildSkewService } from '../../../services/build-skew.service';
@@ -32,6 +32,43 @@ import {
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
 } from '../../browse-canvas/hex-render.util';
+
+/** The Settings rail's panes. */
+export type SettingsTabId =
+  | 'general'
+  | 'panels'
+  | 'import'
+  | 'browse'
+  | 'training'
+  | 'autofind'
+  | 'huggingface'
+  | 'server';
+
+interface SettingsTab {
+  id: SettingsTabId;
+  label: string;
+  icon: string;
+  title: string;
+  /** Draw the rail's divider above this tab. */
+  dividerBefore?: boolean;
+}
+
+/**
+ * The rail, in the order a user meets the work: the app as a whole, the panels
+ * of Train, Tune and Find, then importing, browsing, training and AutoFind.
+ * Below the divider sit the panes that are not preferences: the HuggingFace
+ * account and the server's read-only values (#5246).
+ */
+const SETTINGS_TABS: readonly SettingsTab[] = [
+  { id: 'general', label: 'General', icon: 'palette', title: "Theme, animations, the Dashboard's usage bars, achievements, and Toasty's hints" },
+  { id: 'panels', label: 'Panels', icon: 'dock-left', title: 'Which panels Train, Tune and Find open with, and how their item lists show and select items' },
+  { id: 'import', label: 'Import', icon: 'import', title: 'Default embedder, clipper, and converters to apply when importing each kind of dataset' },
+  { id: 'browse', label: 'Browse Map', icon: 'eye', title: 'How the Browse map looks per media type: signposts, colormap, cell size, and zoom' },
+  { id: 'training', label: 'Training', icon: 'graduation', title: "Autopilot's thresholds, text-sort phrasing, and how training places the line" },
+  { id: 'autofind', label: 'AutoFind', icon: 'auto-find', title: 'Detectors that auto-run on import, and what to do with their results' },
+  { id: 'huggingface', label: 'HuggingFace', icon: 'globe', title: 'Sign in with HuggingFace to download gated demo datasets and gated AI models', dividerBefore: true },
+  { id: 'server', label: 'Server', icon: 'server', title: 'Settings fixed when the server started; shared by everyone and read-only here' },
+];
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,7 +94,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   readonly settings = signal<AppSettings>({ volume: 50 });
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
-  /** The media types the per-type tab bars (Scroll Style, Browser) offer: just
+  /** The media types the per-type tab bars (Scroll Style, Browse Map) offer: just
    *  the server's one type when it is locked to one (#5106), so a bar with
    *  nothing to switch to drops out, as it does for a lone registered type. */
   readonly tabMediaTypes = computed(() => {
@@ -66,12 +103,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const only = solo ? all.filter((mt) => mt.type_id === solo) : [];
     return only.length ? only : all;
   });
-  /** All registered embedders, keyed by media-type id, used to populate
-   *  the per-mediaType "Solo embedder" dropdowns under Appearance. */
-  readonly embeddersByType = signal<Record<string, EmbedderInfo[]>>({});
-  readonly activeSettingsTab = signal('appearance');
+  readonly tabs = SETTINGS_TABS;
+  readonly activeSettingsTab = signal<SettingsTabId>('general');
   readonly activeViewTab = signal('');
-  /** Active media-type tab within the Browser settings tab. */
+  /** Active media-type tab within the Browse Map pane. */
   readonly activeBrowseTab = signal('');
   /** Upper bound for the pile-thumbnail border number input (template-bound). */
   readonly maxThumbnailBorder = MAX_THUMBNAIL_BORDER;
@@ -123,7 +158,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     forkJoin({
       settings: this.settingsApi.getSettings(),
       mediaTypes: this.datasetsListingsApi.getMediaTypes(),
-      embedders: this.datasetsListingsApi.getEmbedders(),
       version: this.settingsApi.getVersion(),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -135,25 +169,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
         // is correct even if the startup check hasn't landed (or failed).
         this.buildSkew.serverVersion.set((res.version.version || '').trim());
         this.mediaTypes.set(res.mediaTypes.media_types || []);
-        const allEmbedders = res.embedders || [];
-        // Group embedders by media_type_id with defaults first, matching
-        // the order ``embedders_for_type`` returns from the API.
-        const byType: Record<string, EmbedderInfo[]> = {};
-        for (const emb of allEmbedders) {
-          const tid = emb.media_type_id || '';
-          if (!tid) continue;
-          (byType[tid] ||= []).push(emb);
-        }
-        for (const list of Object.values(byType)) {
-          list.sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default));
-        }
-        this.embeddersByType.set(byType);
         const mediaTypes = this.tabMediaTypes();
         if (mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab();
           if (preselected && mediaTypes.some((mt) => mt.type_id === preselected)) {
             this.activeViewTab.set(preselected);
-            this.activeSettingsTab.set('appearance');
           } else {
             this.activeViewTab.set(mediaTypes[0].type_id);
           }
@@ -214,73 +234,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const value = this.effectiveSoloMediaType;
     if (!value) return 'Show everything';
     return this.mediaTypes().find((mt) => mt.type_id === value)?.name || value;
-  }
-
-  /** Embedder options for a given media type, used by the per-type
-   *  "Solo embedder" dropdowns. Returns an empty list when the registry
-   *  hasn't loaded yet or the type has no embedders. */
-  embeddersForType(typeId: string): EmbedderInfo[] {
-    return this.embeddersByType()[typeId] || [];
-  }
-
-  /** Currently selected solo embedder name for *typeId*. Reads from the
-   *  effective map (user explicit overlaid on the CLI fallback) so the
-   *  picker shows what the user will actually get when they open the
-   *  importer (including a CLI-only lock that has not been overridden). */
-  soloEmbedderSelectValue(typeId: string): string {
-    const map = this.settings().effective_solo_embedder_per_media_type || {};
-    const value = map[typeId];
-    if (!value) return '';
-    // If the stored embedder no longer exists for this type, surface
-    // "Ask each time" rather than a broken-looking option.
-    const valid = this.embeddersByType()[typeId] || [];
-    return valid.find((e) => e.name === value) ? value : '';
-  }
-
-  /** Hint text under a solo-embedder dropdown: explains a CLI override
-   *  ("from --solo-embedder") or a stale embedder reference so the user
-   *  understands why the dropdown shows what it does. Returns ``''`` for
-   *  the normal case (no lock, or a user-explicit pick). */
-  soloEmbedderNote(typeId: string): string {
-    const settings = this.settings();
-    const userMap = settings.solo_embedder_per_media_type || {};
-    const effectiveMap = settings.effective_solo_embedder_per_media_type || {};
-    const userVal = userMap[typeId];
-    const effective = effectiveMap[typeId];
-    if (!effective && !userVal) return '';
-    const valid = this.embeddersByType()[typeId] || [];
-    if (effective && !valid.find((e) => e.name === effective)) {
-      return `Locked embedder "${effective}" is no longer registered for this type. ` +
-        'Pick a different embedder to update the lock.';
-    }
-    if (effective && !userVal) {
-      return `Currently set to ${effective} by --solo-embedder. Pick any value here to override it.`;
-    }
-    return '';
-  }
-
-  onSoloEmbedderChange(typeId: string, value: string): void {
-    const settings = this.settings();
-    const userMap = { ...(settings.solo_embedder_per_media_type || {}) };
-    // Empty value = "Ask each time". Persist it as the opt-out sentinel
-    // (an empty-string entry) so it overrides any ``--solo-embedder``
-    // CLI fallback for this type.
-    userMap[typeId] = value || '';
-    // Optimistically update the effective map so the dropdown reflects
-    // the new choice immediately; the PUT response will replace it with
-    // the authoritative server view including any CLI fallback.
-    const effective = { ...(settings.effective_solo_embedder_per_media_type || {}) };
-    if (value) {
-      effective[typeId] = value;
-    } else {
-      delete effective[typeId];
-    }
-    this.settings.update((s) => ({
-      ...(s as Record<string, unknown>),
-      solo_embedder_per_media_type: userMap,
-      effective_solo_embedder_per_media_type: effective,
-    }) as AppSettings);
-    this.save();
   }
 
   /** Toasty's hints (#4680): Hide All has nothing to do once "Hide all
@@ -350,7 +303,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return dict[typeId] ?? 'click';
   }
 
-  // --- Browser tab: per-media-type projection-browser preferences ---
+  // --- Browse Map pane: per-media-type projection-browser preferences ---
 
   /** Read a per-media-type browser setting for *typeId*, or *fallback*. */
   private getBrowsePref(
@@ -514,7 +467,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  // --- Browser tab: right-click bin-popup thumbnail size ---
+  // --- Browse Map pane: right-click bin-popup thumbnail size ---
   // The bin popup keeps its own per-media-type thumbnail size
   // (``grid_icon_size_popup``), independent of the left/right panels. The
   // popup's in-header size buttons write the same map, so this widget and the
@@ -533,14 +486,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   // ``null`` is a legal value for nullable numeric settings: clearing the
-  // Tuning-fraction input writes null, which the server stores as "no
+  // Held-out fraction input writes null, which the server stores as "no
   // explicit split" (the per-embedder automatic default applies).
   onNumberChange(key: string, value: number | null): void {
-    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
-    this.save();
-  }
-
-  onStringChange(key: string, value: string): void {
     this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
     this.save();
   }
@@ -558,7 +506,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   /** The admin-set solo mediaType in force, or ``null`` when the server
-   *  isn't restricting one. The import-defaults tab uses it to collapse
+   *  isn't restricting one. The Import pane uses it to collapse
    *  the per-mediaType picker to a single tab (so the user only configures
    *  what they can actually import). */
   get effectiveSoloMediaType(): string | null {
@@ -636,7 +584,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   async resetDefaults(): Promise<void> {
     const choice = await this.dialog.confirmDestructiveWithEscape(
       'Reset all settings to factory defaults?',
-      'Your current preferences (appearance, view modes, autopilot, sorting, and other per-user settings) will be overwritten and cannot be recovered.',
+      'Your current preferences (theme, panels, Autopilot, training, and other per-user settings) will be overwritten and cannot be recovered.',
       'Reset',
       'Export first…',
     );

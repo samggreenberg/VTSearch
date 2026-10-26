@@ -87,7 +87,7 @@ export interface Helpers {
   openImporter(): Promise<void>;
   /** Open the importer modal on the Demo tab. */
   openImporterDemo(): Promise<void>;
-  /** Open the Settings modal (defaults to the Appearance pane). */
+  /** Open the Settings modal (defaults to the General pane). */
   openSettings(): Promise<void>;
   /** Open the "Create a new detector" modal. */
   openNewDetector(): Promise<void>;
@@ -524,16 +524,16 @@ const MANUAL_WIDEN = 140;
  */
 let savedLeftWidths: unknown = null;
 
-/** The app's Show Animations setting from before `openAppearance` posed it. */
+/** The app's Show Animations setting from before `openGeneral` posed it. */
 let savedAnimations: string | null = null;
 
 /**
- * Open Settings on its Appearance pane with the Show Animations pulldown at the
+ * Open Settings on its General pane with the Show Animations pulldown at the
  * app's default, as a user first meets it. The app refresh.sh starts runs on
  * "OS Setting", so the pages' reduced motion holds (#4339); a shot that frames
  * this pane poses the default back and calls `restoreAnimations` in `after`.
  */
-async function openAppearance(h: Helpers): Promise<void> {
+async function openGeneral(h: Helpers): Promise<void> {
   savedAnimations = (await h.app.api('/api/settings')).show_animations;
   const { show_animations } = await h.app.api('/api/settings/defaults');
   await h.app.api('/api/settings', { method: 'PUT', body: { show_animations } });
@@ -541,7 +541,7 @@ async function openAppearance(h: Helpers): Promise<void> {
   await h.openSettings();
 }
 
-/** Put back the Show Animations setting `openAppearance` posed. */
+/** Put back the Show Animations setting `openGeneral` posed. */
 async function restoreAnimations(h: Helpers): Promise<void> {
   if (savedAnimations) {
     await h.app.api('/api/settings', { method: 'PUT', body: { show_animations: savedAnimations } });
@@ -1143,12 +1143,12 @@ export const SHOTS: Shot[] = [
     },
   },
   {
-    id: 'settings-appearance',
+    id: 'settings-general',
     embeddedIn: `${GUIDE}#settings-tabs`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, the Hide All / Show All buttons for Toasty\'s hints, and the per-media-type Scroll Style controls',
+    caption: 'The Settings → General pane beside the tab rail (HuggingFace and Server below its divider): theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the achievements toggle, and the Hide All / Show All buttons for Toasty\'s hints',
     themes: BOTH,
     async recipe(_page, h) {
-      await openAppearance(h);
+      await openGeneral(h);
     },
     after: async (_page, h) => restoreAnimations(h),
   },
@@ -2233,7 +2233,7 @@ export const SHOTS: Shot[] = [
       { target: '.settings-actions button[aria-label="Export"]', kind: 'step', step: 2, at: 'bottom' },
     ],
     async recipe(_page, h) {
-      await openAppearance(h);
+      await openGeneral(h);
     },
     after: async (_page, h) => restoreAnimations(h),
   },

@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Settings is grouped by what you're doing** (issue #5246). The tabs ran alphabetically, and **Appearance**, the
+  one Settings opens on, held a dozen unrelated controls whose Scroll Style ran off the bottom of the window. The
+  rail now reads **General** (theme, animations, RAM / Disk bars, achievements, Toasty's hints), **Panels** (the
+  metadata panel, the Train and Tune side panels, Scroll Style), **Import** (was Import Defaults), **Browse Map**
+  (was Browser), **Training** (Autopilot's numbers, **Enrich descriptions**, and the two that place the line, which
+  were on Sorting) and **AutoFind**, with **HuggingFace** and the read-only **Server** below a divider. Each pane's
+  heading now matches its tab. **Tuning count** is now **Rounds**: it was described as a number of items to check,
+  but it is how many times training holds out part of your votes to place the line (default 2), and it no longer
+  offers 0, which the server never accepted. **Tuning fraction** is now **Held-out fraction**.
+
 - **Multi-Dataset sits under Advanced, with its list** (issue #5230). Add Dataset's **Multi-Dataset** box used to
   sit above the *Dataset media type* dropdown while the **Datasets to make** list it opened landed at the foot of
   the form, and the **Advanced ▾** toggle disappeared. The box now heads the Advanced section, and ticking it swaps

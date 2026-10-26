@@ -200,7 +200,7 @@ Fields may be added; none will be removed or change meaning without a
 `vtscore/CHANGELOG.md` entry.
 
 **Respect `notify` in a hook that alerts the user.** Each user has an
-**Alert me when an import finishes** setting (Settings › Import Defaults),
+**Alert me when an import finishes** setting (Settings › Import),
 which the Settings modal offers only on a server with hooks configured.
 Every hook is still called for every import whatever the user picked,
 because VTSearch cannot tell a hook that alerts the user from one that

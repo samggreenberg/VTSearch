@@ -568,7 +568,7 @@ class UserSettings(BaseModel):
     # shadow blurs cost tens of ms per frame and make pan/zoom lag. ``reduced``
     # keeps every animation but strips those effects; ``full`` always runs the
     # rich pipeline; ``auto`` (the default) detects per client. Surfaced as the
-    # "Graphics" pulldown at the top of the Settings -> Browser tab.
+    # "Graphics" pulldown at the top of the Settings -> Browse Map tab.
     browse_graphics: BrowseGraphics = "auto"
 
     # VTSBrowse per-media-type display preferences. Each is a
@@ -576,7 +576,7 @@ class UserSettings(BaseModel):
     # browser independently for, say, audio vs. image datasets. Empty
     # entries fall back to the per-type default on the frontend
     # (``auto`` colormap, ``M`` size). Driven by the toolbar toggles on the
-    # browse canvas AND the Settings → Browser tab; both write the same
+    # browse canvas AND the Settings → Browse Map tab; both write the same
     # maps keyed by the active dataset's media type.
     #
     # (The bin shape — hexagons vs squares — is *not* a stored preference: it
@@ -626,7 +626,7 @@ class UserSettings(BaseModel):
     # no list mode) beside a large hover-preview pane, with its own size control
     # independent of the left/right panels. Empty entries fall back on the
     # frontend to ``M``. Driven by the popup's own size buttons AND the
-    # Settings → Browser tab; both write the same map keyed by the active
+    # Settings → Browse Map tab; both write the same map keyed by the active
     # dataset's media type, so tuning the popup while browsing one bin becomes
     # the default for every future popup of that media type. Unlike
     # ``grid_icon_size_{left,right}`` this is a plain per-media-type dict (no

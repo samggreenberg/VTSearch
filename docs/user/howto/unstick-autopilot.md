@@ -61,7 +61,7 @@ own way, and step back in:
    the phase they have earned.
 
 The number of answers before the prompt appears is **# Start to re-sort**,
-under **Autopilot** in Settings <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-settings.dark.webp" /><img src="../assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture>. The prompt only appears for a new
+under **Training** › **Autopilot** in Settings <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-settings.dark.webp" /><img src="../assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture>. The prompt only appears for a new
 detector: one that already has both **Good** and **Bad** answers is being
 refined, not started.
 

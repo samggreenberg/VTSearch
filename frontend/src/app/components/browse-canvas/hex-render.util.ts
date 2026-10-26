@@ -25,7 +25,7 @@ export interface ResolvedColormap {
   ramp: RGB[];
 }
 
-/** The colormap presets the user can pick per media type in Settings → Browser. */
+/** The colormap presets the user can pick per media type in Settings → Browse Map. */
 export type BrowseColormapId = 'auto' | 'heat' | 'ocean' | 'gray';
 
 /** All selectable colormap ids, in pulldown order (``auto`` first). */

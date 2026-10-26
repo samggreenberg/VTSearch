@@ -26,7 +26,7 @@ can see.  Hooks run in the order they were named.  One that raises is logged
 and the next still runs; the dataset is saved either way.
 
 **Users can ask not to be alerted.**  Each user's ``import_alerts_enabled``
-setting (Settings > Import Defaults, offered only when hooks are configured)
+setting (Settings > Import, offered only when hooks are configured)
 reaches every hook as :attr:`DatasetImported.notify`.  The hooks are still all
 called: one that emails should skip a user who said no, and one that only
 records imports can ignore it.  The server cannot tell which is which, so it

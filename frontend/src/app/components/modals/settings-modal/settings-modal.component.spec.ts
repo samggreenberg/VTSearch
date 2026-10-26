@@ -84,7 +84,7 @@ describe('SettingsModalComponent', () => {
       originalMatchMedia;
   });
 
-  // Settle runs ngOnInit, whose forkJoin issues the four parallel GETs (plain
+  // Settle runs ngOnInit, whose forkJoin issues the three parallel GETs (plain
   // HTTP subscribes don't hold the app unstable, so whenStable resolves before
   // the flush). Settle again afterwards so the resolved signals repaint.
   // `extraSettings` layers server-tier keys (e.g. `solo_media_type`) on top.
@@ -94,17 +94,15 @@ describe('SettingsModalComponent', () => {
     httpMock
       .expectOne('/api/auth/huggingface/status')
       .flush({ configured: false, authenticated: false, username: '', scopes: '' });
-    // forkJoin makes all requests in parallel: settings, media types,
-    // embedders, and version.
+    // forkJoin makes all requests in parallel: settings, media types, and
+    // version.
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
-    const embeddersReq = httpMock.expectOne('/api/embedders');
     const versionReq = httpMock.expectOne('/api/version');
     // Deep-clone so per-test component mutations (onGridIconSizeChange, etc.)
     // never leak back into the shared mockSettings constant.
     settingsReq.flush({ ...structuredClone(mockSettings), ...extraSettings });
     mediaTypesReq.flush(mockMediaTypes);
-    embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     await settleZoneless(fixture);
   }
@@ -126,24 +124,73 @@ describe('SettingsModalComponent', () => {
     expect(component.activeViewTab()).toBe('audio');
   });
 
+  describe('the rail (#5246)', () => {
+    const rail = () => (fixture.nativeElement as HTMLElement).querySelector('.side-tab-bar') as HTMLElement;
+
+    it('opens on General and lists the panes in workflow order', async () => {
+      await flushInit();
+      expect(component.activeSettingsTab()).toBe('general');
+      expect([...rail().querySelectorAll('.side-tab')].map((el) => el.textContent?.trim())).toEqual([
+        'General',
+        'Panels',
+        'Import',
+        'Browse Map',
+        'Training',
+        'AutoFind',
+        'HuggingFace',
+        'Server',
+      ]);
+    });
+
+    it('sets the account and the read-only server values apart below a divider', async () => {
+      await flushInit();
+      const children = [...rail().children];
+      const divider = children.findIndex((el) => el.classList.contains('side-tab-bar__divider'));
+      expect(children.slice(divider + 1).map((el) => el.textContent?.trim())).toEqual(['HuggingFace', 'Server']);
+    });
+
+    it('titles each pane with its rail label', async () => {
+      await flushInit();
+      for (const tab of component.tabs) {
+        component.activeSettingsTab.set(tab.id);
+        await settleZoneless(fixture);
+        // The panes' child components load their picker lists; their contents do not matter here.
+        httpMock.match(() => true).forEach((req) => req.flush('', { status: 500, statusText: 'unused' }));
+        await settleZoneless(fixture);
+        // Its own text only: a trailing hint icon draws a "?" of its own.
+        const heading = (fixture.nativeElement as HTMLElement).querySelector('.settings-panel h3');
+        expect(heading?.firstChild?.textContent?.trim()).toBe(tab.label);
+      }
+    });
+  });
+
   describe('the per-type tab bars (#5106)', () => {
     const tabNames = () =>
       Array.from(fixture.nativeElement.querySelectorAll('.view-tab') as NodeListOf<HTMLElement>).map((el) =>
         el.textContent?.trim(),
       );
+    // Scroll Style's bar, on the Panels pane.
+    async function openPanels(): Promise<void> {
+      component.activeSettingsTab.set('panels');
+      await settleZoneless(fixture);
+    }
 
     it('offers a tab per registered type on a server open to every type', async () => {
       await flushInit();
+      await openPanels();
       expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['audio', 'image']);
       expect(tabNames()).toEqual(['Sound', 'Image']);
     });
 
     it('drops the bar on a server locked to one type, and settles on that type', async () => {
       await flushInit({ solo_media_type: 'image' });
+      await openPanels();
       expect(component.tabMediaTypes().map((mt) => mt.type_id)).toEqual(['image']);
       expect(component.activeViewTab()).toBe('image');
       expect(component.activeBrowseTab()).toBe('image');
       expect(tabNames()).toEqual([]);
+      // The bar goes; the lone type's Left Side / Right Side controls stay.
+      expect(fixture.nativeElement.querySelectorAll('.view-side-section').length).toBe(2);
     });
 
     it('keeps every tab when the lock names a type the registry lacks', async () => {
@@ -209,7 +256,7 @@ describe('SettingsModalComponent', () => {
 
   it("disables Show All while no hint is hidden and Hide All once they all are (#4680)", async () => {
     await flushInit();
-    component.activeSettingsTab.set('appearance');
+    component.activeSettingsTab.set('general');
     await settleZoneless(fixture);
     const buttons = () =>
       [...(fixture.nativeElement as HTMLElement).querySelectorAll('.hint-buttons button')] as HTMLButtonElement[];
@@ -226,7 +273,7 @@ describe('SettingsModalComponent', () => {
 
   it('should show "Default" in the RAM / Disk bars pulldown when the setting is unset', async () => {
     await flushInit();
-    component.activeSettingsTab.set('appearance');
+    component.activeSettingsTab.set('general');
     await settleZoneless(fixture);
     const select = (fixture.nativeElement as HTMLElement).querySelector('#setting-usage-bars') as HTMLSelectElement;
     expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Hide', 'Default', 'View']);
@@ -260,7 +307,7 @@ describe('SettingsModalComponent', () => {
         ?.querySelector('input[type="checkbox"]') as HTMLInputElement | undefined;
     }
 
-    async function openTab(tab: 'imports' | 'autofind', extraSettings: Record<string, unknown>): Promise<void> {
+    async function openTab(tab: 'import' | 'autofind', extraSettings: Record<string, unknown>): Promise<void> {
       await flushInit(extraSettings);
       component.activeSettingsTab.set(tab);
       await settleZoneless(fixture);
@@ -270,12 +317,12 @@ describe('SettingsModalComponent', () => {
     }
 
     it('offers import alerts only on a server with import hooks', async () => {
-      await openTab('imports', { import_hooks_configured: false, import_alerts_enabled: true });
+      await openTab('import', { import_hooks_configured: false, import_alerts_enabled: true });
       expect(checkbox('Alert me when an import finishes')).toBeUndefined();
     });
 
     it('saves the import-alerts checkbox', async () => {
-      await openTab('imports', { import_hooks_configured: true, import_alerts_enabled: true });
+      await openTab('import', { import_hooks_configured: true, import_alerts_enabled: true });
       const box = checkbox('Alert me when an import finishes') as HTMLInputElement;
       expect(box.checked).toBe(true);
       box.click();
@@ -334,6 +381,16 @@ describe('SettingsModalComponent', () => {
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
+  it('bounds Rounds to what the server accepts (#5246)', async () => {
+    await flushInit();
+    component.activeSettingsTab.set('training');
+    await settleZoneless(fixture);
+    // calibrate_count is the number of hold-out rounds, clamped to 1..100 by
+    // the server; it was once offered from 0 as an item count.
+    const input = (fixture.nativeElement as HTMLElement).querySelector('#setting-calibrate-count') as HTMLInputElement;
+    expect([input.min, input.max]).toEqual(['1', '100']);
+  });
+
   it('should reset to defaults after confirmation', async () => {
     await flushInit();
     vi.spyOn(component['dialog'], 'confirmDestructiveWithEscape').mockReturnValue(Promise.resolve('confirm'));
@@ -371,7 +428,7 @@ describe('SettingsModalComponent', () => {
     fixture.componentRef.setInput('preselectedViewTab', 'image');
     await flushInit();
     expect(component.activeViewTab()).toBe('image');
-    expect(component.activeSettingsTab()).toBe('appearance');
+    expect(component.activeSettingsTab()).toBe('general');
   });
 
   it('should ignore preselectedViewTab when not in mediaTypes', async () => {
@@ -432,12 +489,10 @@ describe('SettingsModalComponent', () => {
       .flush({ configured: false, authenticated: false, username: '', scopes: '' });
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
-    const embeddersReq = httpMock.expectOne('/api/embedders');
     const versionReq = httpMock.expectOne('/api/version');
     // Flush the successful siblings first; erroring settings last avoids
     // forkJoin cancelling the in-flight siblings before they're flushed.
     mediaTypesReq.flush({ media_types: [] });
-    embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
     expect(component.loading()).toBe(false);
