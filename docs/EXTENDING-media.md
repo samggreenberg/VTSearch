@@ -199,104 +199,14 @@ EMBEDDER = CodeBertEmbedder()
 The auto-discovery system finds these sentinels at import time. No
 changes to `vtscore/media/__init__.py` are needed.
 
-### MediaType abstract interface reference
+### MediaType reference
 
-**Required abstract properties:**
-
-| Property          | Returns     | Example                              |
-|-------------------|-------------|--------------------------------------|
-| `type_id`         | `str`       | `"audio"`, `"image"`, `"code"`       |
-| `name`            | `str`       | `"Audio"`, `"Source Code"`           |
-| `icon`            | `str`       | `"audio"`, `"code"` (SVG icon type name) |
-| `file_extensions` | `list[str]` | `["*.wav", "*.mp3"]`                 |
-| `loops`           | `bool`      | `True` for audio/video, else `False` |
-| `demo_datasets`   | `list[DemoDataset]` | See example above              |
-
-**Required abstract methods:**
-
-| Method                      | Signature                      | Description                              |
-|-----------------------------|--------------------------------|------------------------------------------|
-| `load_media_data(file_path, media_bytes=None)`| `(Path, bytes \| None) -> dict` | Must include `"duration"` key. The optional `media_bytes` lets callers (e.g. the folder loader) pass already-read bytes to avoid a second disk read. |
-| `media_response(media)`     | `(dict) -> MediaResponse`      | HTTP response for a media item           |
-
-> **Pixel-media types: report *displayed* dimensions.** A media's stored
-> `width`/`height` are the coordinate space every box in the system is expressed
-> against — clip boxes, extractor and localizer output, the region a user drags
-> on the canvas. For images that space is the picture *as displayed*, i.e. after
-> EXIF orientation: a phone photo shot sideways stores a landscape bitmap plus a
-> "rotate me" tag, and browsers honour the tag, so the user is looking at a
-> portrait image. `vtscore.media.image.decode` applies the tag on every decode
-> (`decode_bounded`, `decode_bounded_rgb`, `open_upright`) and exposes
-> `upright_size()` for the header-only read `load_media_data` wants. Reach for
-> `open_image()` only when you genuinely want the untransposed original — it is
-> the lazy, metadata-only escape hatch, not the default.
-
-**Optional overridable properties (with defaults):**
-
-| Property             | Returns     | Default            | Purpose                                   |
-|----------------------|-------------|--------------------|-------------------------------------------|
-| `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
-| `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
-| `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
-| `importable`         | `bool`      | `True`             | Whether the user imports this type natively (folder scan). Set `False` for a *convert-in* half type produced only by a converter (e.g. `face`) |
-| `converts_to`        | `list[str]` | `[]`               | For a non-embeddable *convert-out* half type (e.g. `document`), the embeddable targets it converts into (first = default), e.g. `["image", "text"]` |
-
-> **Half media types.** `MediaType` separates two orthogonal capabilities:
-> `importable` (a native ingestion category) and `embeddable` (has a registered
-> embedder — derived automatically). A *convert-out* half type is importable
-> but not embeddable and declares `converts_to` (`document`); a *convert-in*
-> half type is embeddable but sets `importable = False` and has empty
-> `file_extensions` (`face`, produced by the `image2face` converter). Full
-> types are both.
-
-**Optional overridable methods:**
-
-| Method                        | Signature                          | Description                        |
-|-------------------------------|------------------------------------|------------------------------------|
-| `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
-| `image_response(media)`       | `(dict) -> MediaResponse \| None`  | A *paintable image* for the media (waveform, frame, first page, crop) for every surface that shows a picture rather than plays the media. Defaults to `None` — "this type has no visual form" |
-| `ensure_thumbnail_bytes(media)` | `(dict) -> bytes \| None`        | Generate + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that had no file at ingest. Defaults to a plain read of what's cached (no generation) |
-| `load_thin_media_data(file_path)` | `(Path) -> dict`               | Display fields for a thin (reference) load. Default calls `load_media_data` and strips the payload keys; override only if that read is expensive |
-| `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
-| `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
-| `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
-
-> **Always merge the base `display_metadata`.** Override it to *prepend* your
-> type-specific fields, then fold in whatever the base produced that you did
-> not already set — every shipped override ends with
-> `result.update({k: v for k, v in super().display_metadata(media).items() if k not in result})`.
-> The base contributes the shared fields (Category, File Size, the `Clip *`
-> provenance) plus the **"AI Caption" / "AI Tags"** row, which surfaces the
-> per-media signpost text a Browse-prepped dataset already carries (see
-> `vtscore/projection/signpost_texts.py`). A type that returns its own dict
-> without merging silently drops all of them.
-
-> **Override `image_response` if your type has a picture but is not one.**
-> `media_response` serves your media's *own* bytes, and for most types those
-> are not an image: audio is a WAV, video an MP4, a document an
-> `application/pdf`. Every surface that shows a **picture** of a media — the
-> grid tile, the VTSBrowse bin popup, the labeling thumbnail,
-> `GET /api/medias/<id>/image` and `/api/medias/<id>/thumbnail` — calls
-> `image_response` instead, and paints a placeholder when it returns `None`.
-> Audio returns its waveform PNG, video its mid-frame, `document` its first
-> page rasterised, `face` the crop; `text` has no visual form and keeps the
-> `None` default, and so does `image`, whose source bytes the routes stream
-> directly without consulting the hook. Generate through
-> `ensure_thumbnail_bytes` (below) rather than inline, so the bytes you serve
-> match the ones the warm-up pass produces.
-
-> **Override `ensure_thumbnail_bytes` if your type has a browsable thumbnail.**
-> The path-based hooks above only fire for media the loader can read at ingest.
-> An **archive-member** media (`local_archive_member`) has no file at all — only
-> `{archive path, member}` — so it leaves import with no thumbnail, and every
-> browse tile would stream a tar member and decode it on the request thread.
-> `ensure_thumbnail_bytes` is the type-agnostic way to build one from
-> `_resolve_media_bytes(media)`; the background pass in
-> `vtscore/datasets/thumbnail_warm.py` calls it per media after a load, and the
-> serving path calls it too, so a warmed thumbnail is byte-identical to a lazily
-> generated one. Generate through the same helper your `image_response` fallback
-> uses, memoise onto `media["thumbnail_bytes"]`, and never retain the resolved
-> payload on the media.
+The `MediaType` member tables (required and optional properties and methods,
+with their defaults) and the notes that go with them — half types,
+`display_metadata`, `image_response`, `ensure_thumbnail_bytes`, and the
+displayed-dimensions rule for pixel media — live in one place, the library
+guide: [`vtscore/docs/extending/media-types.md` § The `MediaType`
+contract](../vtscore/docs/extending/media-types.md#the-mediatype-contract).
 
 ### What happens automatically after registration
 
@@ -520,29 +430,11 @@ text search it cannot serve.
 
 ### Decoding audio: use `decode_audio`, never `librosa.load`
 
-Any plugin that turns audio into samples — an embedder, a clipper, a
-converter, a captioner — must go through
-`vtscore.media.audio.decode.decode_audio`:
-
-```python
-from vtscore.media.audio.decode import decode_audio
-
-samples, sr = decode_audio(source, sr=MY_SAMPLE_RATE, mono=True)
-```
-
-*source* may be a path, raw `bytes`, or a file-like object; the return is a
-C-contiguous `float32` array in [-1, 1], mono-downmixed by channel mean, at
-`sr` (or the native rate when `sr=None`). `offset` / `duration` (seconds)
-select a window before any resampling. Failure raises `AudioDecodeError`.
-
-Do **not** call `librosa.load`. It falls back to `audioread` for every
-container `libsndfile` can't parse — which is all of AAC/M4A/MP4 — and that
-fallback is removed in librosa 1.0, so those codecs would break silently.
-`decode_audio` uses `soundfile` for the native formats and pipes everything
-else through the bundled ffmpeg over `stdin`, with no temp-file spill.
-librosa is still the right tool for *analysis* (`librosa.effects.split`,
-`librosa.feature.melspectrogram`, `librosa.cqt`); it is only `load` that is
-off-limits.
+Any plugin that turns audio into samples must call
+`vtscore.media.audio.decode.decode_audio`, never `librosa.load` (whose
+`audioread` fallback is removed in librosa 1.0 and silently breaks
+AAC/M4A/MP4). The call shape and the full rule are in the library guide:
+[Decoding audio](../vtscore/docs/extending/embedders.md#decoding-audio-use-decode_audio-never-librosaload).
 
 ### Service-based embedders
 
