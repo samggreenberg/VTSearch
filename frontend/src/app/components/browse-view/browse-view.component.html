@@ -326,3 +326,7 @@
     }
   }
 </div>
+
+@if (sourcePhoto.request(); as request) {
+  <vt-source-photo-modal [request]="request" (closed)="sourcePhoto.close()" />
+}

@@ -1,13 +1,15 @@
-import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { BrowseBinMemberGridComponent } from '../browse-bin-member-grid/browse-bin-member-grid.component';
+import { topOpenModal } from '../modal/modal.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { coerceNonEmptyString, coercePx } from '../../utils/settings-coerce';
 import {
@@ -191,6 +193,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private sourcePhoto = inject(SourcePhotoService);
   private injector = inject(Injector);
 
   /** Member media ids of the bin the popup was summoned over. */
@@ -356,6 +359,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this._previewId();
   }
 
+  /** The member last clicked in this bin, which the pane rests on once the
+   *  cursor leaves the grid (else the representative). Without it, reaching for
+   *  the header's Show in photo would snap the pane, and so the button, back to
+   *  the representative. A fresh bin clears it. */
+  private pinnedId: number | null = null;
+
   /** The audition state machine shared with the canvas hover preview and the
    *  selection panel, so every Browse surface drives the one now-playing
    *  indicator identically.
@@ -409,6 +418,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         }
         this._ids.set(next);
         this.audition.stop();
+        this.pinnedId = null;
         // Open on the bin's representative (the centroid whose thumbnail the user
         // right-clicked) so the pane is never blank and the detail view starts on
         // the same image — not the 1-D list's first item, which differs.
@@ -691,6 +701,28 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  same categories read identically here; see {@link formatMetadataValue}. */
   formatMetadataValue(label: string, value: unknown): string {
     return formatMetadataValueUtil(label, value);
+  }
+
+  // --- Show in photo ---------------------------------------------------------
+
+  /** Offer Show in photo (#4750) in the header: the active dataset is a face
+   *  dataset whose import also made an Image dataset. Whether this particular
+   *  face has a photo is the overlay's to say, as in Train's right-click menu;
+   *  asking per item would mean a request for every hovered thumbnail. */
+  readonly showInPhotoOffered = computed(() => this.sourcePhoto.offered());
+
+  /** Open the photo the item shown large was cut from. `vt-browse-view`
+   *  renders the overlay. */
+  openSourcePhoto(): void {
+    const id = this.displayedId;
+    if (id != null) this.sourcePhoto.open(id);
+  }
+
+  /** Floating, the popup sits above the dialog layer (`--z-burger-menu`), so a
+   *  dialog opened from it (Show in photo) would open underneath. It steps out
+   *  of sight while one is up and comes back where it was when it closes. */
+  get hiddenBehindDialog(): boolean {
+    return !this.docked() && topOpenModal() !== null;
   }
 
   /** Pull the remembered thumbnail size for the active media type, rechunk the
@@ -1056,9 +1088,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.dismissed.emit();
   }
 
+  // A click or Escape inside a dialog opened over the popup is the dialog's: it
+  // must not also dismiss the popup the dialog returns to.
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
-    if (this.docked()) return;
+    if (this.docked() || topOpenModal()) return;
     if (!this.host.nativeElement.contains(event.target as Node)) {
       this.dismissed.emit();
     }
@@ -1066,7 +1100,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.docked()) return;
+    if (this.docked() || topOpenModal()) return;
     this.dismissed.emit();
   }
 
@@ -1184,6 +1218,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   // --- Selection (click stays open so the user can scroll + multi-select) ---
 
   onEntryClick(id: number): void {
+    this.pinnedId = id;
     if (this.selection.has(id)) {
       this.selection.remove(id);
     } else {
@@ -1254,12 +1289,15 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
-   *  bin's representative so the pane stays populated. */
+   *  member last clicked, else the bin's representative, so the pane stays
+   *  populated. */
   onGridLeave(): void {
     this.audition.stop();
-    // Fall the focus back to the bin's representative so the pane and metadata
-    // column stay populated (every media type, matching the hover-follow above).
-    this._previewId.set(this.representativeId());
+    // Fall the focus back so the pane and metadata column stay populated (every
+    // media type, matching the hover-follow above). A cull may have taken the
+    // clicked member out of the bin.
+    const pinned = this.pinnedId;
+    this._previewId.set(pinned != null && this.ids.includes(pinned) ? pinned : this.representativeId());
   }
 
 

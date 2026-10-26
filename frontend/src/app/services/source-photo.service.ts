@@ -47,7 +47,9 @@ export interface SourcePhotoRequest {
  * the active detector's.
  *
  * Holds which overlay is open, so the centre pane's button and the list's
- * right-click menu open the same one; `vt-center-panel` renders it.
+ * right-click menu open the same one; `vt-center-panel` renders it. Browse
+ * offers it too, from the bin details and the selection panel, and
+ * `vt-browse-view` renders it there.
  */
 @Injectable({ providedIn: 'root' })
 export class SourcePhotoService {
