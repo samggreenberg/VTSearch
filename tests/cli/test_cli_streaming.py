@@ -378,3 +378,171 @@ class TestStreamingWholeDatasetVariants:
         out = capsys.readouterr().out
         assert "Chunk size: whole dataset" in out
         assert "Streaming: yes" in out
+
+
+def _settings_file_with_detectors(tmp_path: Path, detector_names: list[str]) -> Path:
+    settings = {"autofind_detectors": detector_names, "detectors_dir": str(get_detectors_dir())}
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps(settings))
+    return p
+
+
+class TestStreamingAsLabelset:
+    """``--stream-results --as-labelset`` streams the hits as label entries (#5285).
+
+    The export is a labelset: it reads back in through a label importer, every
+    detector's labels ride in one export with each entry naming its detector,
+    and nothing the head measured (a score, a threshold, a balance) leaves.
+    """
+
+    def _run(self, tmp_path, detector_names, exporter_name, out, **kwargs):
+        for name in detector_names:
+            _write_pretrained_detector(name)
+        settings_path = _settings_file_with_detectors(tmp_path, detector_names)
+        ds_path = tmp_path / "ds.pkl"
+        medias = {i: _make_audio_media(i) for i in range(1, 6)}
+        _write_pickle_dataset(ds_path, medias)
+
+        from vtscore.cli import autodetect_main_chunked
+
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            exporter_name=exporter_name,
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+            as_labelset=True,
+            **kwargs,
+        )
+        return medias
+
+    def test_json_export_is_a_labels_file(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.json"
+        medias = self._run(tmp_path, ["stream-ls"], "server_json_file", out)
+
+        data = json.loads(out.read_text())
+        assert data["format"] == "vtsearch-labelset-stream/v1"
+        assert data["detector_meta"] == {"media_type": "audio"}
+        assert data["detectors"] == ["stream-ls"]
+        assert data["keep_negatives"] is False
+        assert "threshold" not in data and "balance" not in data
+        labels = data["labels"]
+        # ids 1,2,3 are above threshold; negatives dropped by default.
+        assert sorted(e["md5"] for e in labels) == sorted(medias[i]["md5"] for i in (1, 2, 3))
+        assert all(e["label"] == "good" and e["detector"] == "stream-ls" for e in labels)
+        assert all(e["origin"] == {"importer": "stub_ds", "params": {}} for e in labels)
+        # No score the head measured and no id this run numbered (#5131).
+        assert all("score" not in e and "id" not in e for e in labels)
+        assert not out.with_name(out.name + ".tmp").exists()
+
+    def test_json_export_re_imports_as_a_detector(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.json"
+        self._run(tmp_path, ["stream-ls-src"], "server_json_file", out, keep_negatives=True)
+
+        from vtscore.cli import import_labels_into_detector
+
+        applied, skipped = import_labels_into_detector(
+            "stream-ls-copy", "server_json_file", {"filepath": str(out)}, create_media_type="audio"
+        )
+        assert (applied, skipped) == (5, 0)
+
+    def test_keep_negatives_streams_bad_labels(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.json"
+        medias = self._run(tmp_path, ["stream-ls-neg"], "server_json_file", out, keep_negatives=True)
+
+        data = json.loads(out.read_text())
+        assert data["keep_negatives"] is True
+        by_label = {lab: sorted(e["md5"] for e in data["labels"] if e["label"] == lab) for lab in ("good", "bad")}
+        assert by_label["good"] == sorted(medias[i]["md5"] for i in (1, 2, 3))
+        assert by_label["bad"] == sorted(medias[i]["md5"] for i in (4, 5))
+
+    def test_every_detector_streams_into_one_export_each_entry_tagged(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.json"
+        self._run(tmp_path, ["stream-ls-a", "stream-ls-b"], "server_json_file", out)
+
+        data = json.loads(out.read_text())
+        assert sorted(data["detectors"]) == ["stream-ls-a", "stream-ls-b"]
+        per_detector = {d: [e["origin_name"] for e in data["labels"] if e["detector"] == d] for d in data["detectors"]}
+        expected = ["clip_001.wav", "clip_002.wav", "clip_003.wav"]
+        assert {d: sorted(names) for d, names in per_detector.items()} == {
+            "stream-ls-a": expected,
+            "stream-ls-b": expected,
+        }
+
+    def test_csv_export_re_imports_through_the_csv_label_importer(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.csv"
+        medias = self._run(tmp_path, ["stream-ls-csv"], "server_csv_file", out, keep_negatives=True)
+
+        from vtscore.labels.importers import get_label_importer
+
+        entries = get_label_importer("server_csv_file").run_cli({"filepath": str(out)})
+        assert sorted((e["md5"], e["label"]) for e in entries) == sorted(
+            (medias[i]["md5"], "good" if i <= 3 else "bad") for i in range(1, 6)
+        )
+        assert all(e["origin"] == {"importer": "stub_ds", "params": {}} for e in entries)
+
+    def test_exporter_that_cannot_stream_a_labelset_is_refused(self):
+        from vtscore.cli import _run_streaming_pipeline
+
+        with pytest.raises(ValueError, match="cannot stream a labelset") as exc:
+            _run_streaming_pipeline(
+                iter([{1: _make_audio_media(1)}]),
+                exporter_name="open_url",
+                exporter_field_values={},
+                override_detectors=None,
+                autofind_detectors=[],
+                keep_negatives=False,
+                empty_error="none",
+                as_labelset=True,
+            )
+        assert "server_json_file" in str(exc.value)
+
+    def test_as_labelset_without_stream_results_is_refused(self, tmp_path):
+        from vtscore.cli import _run_source, _SourceSpec
+
+        spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"))
+        with pytest.raises(ValueError, match="requires stream_results"):
+            _run_source(spec, save_dataset=False, dry_run=True, as_labelset=True)
+
+    def test_dry_run_reports_labelset_streaming(self, client, tmp_path, capsys):
+        _write_pretrained_detector("stream-ls-dry")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-ls-dry")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+
+        from vtscore.cli import autodetect_main_chunked
+
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            exporter_name="server_csv_file",
+            exporter_field_values={"filepath": str(tmp_path / "labels.csv")},
+            dry_run=True,
+            stream_results=True,
+            as_labelset=True,
+        )
+
+        assert "Streaming: yes, as a labelset" in capsys.readouterr().out
+
+    def test_dry_run_refuses_an_exporter_that_cannot_stream_a_labelset(self, client, tmp_path):
+        _write_pretrained_detector("stream-ls-dry-bad")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-ls-dry-bad")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+
+        from vtscore.cli import _run_source, _SourceSpec
+
+        spec = _SourceSpec(kind="pickle", dataset_path=str(ds_path), chunk_size=2)
+        with pytest.raises(ValueError, match="cannot stream a labelset"):
+            _run_source(
+                spec,
+                save_dataset=False,
+                settings_path=str(settings_path),
+                exporter_name="open_url",
+                exporter_field_values={"url_template": "https://example.com/{md5}"},
+                dry_run=True,
+                stream_results=True,
+                as_labelset=True,
+            )

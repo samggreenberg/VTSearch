@@ -234,6 +234,26 @@ class TestLoadPipelineFile:
         with pytest.raises(ValueError, match="only applies with 'stream_results:'"):
             load_pipeline_file(p)
 
+    def test_as_labelset_requires_stream_results(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "as_labelset": True}))
+        with pytest.raises(ValueError, match="'as_labelset:' only applies with 'stream_results:'"):
+            load_pipeline_file(p)
+
+    def test_as_labelset_must_be_bool(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "tempimport": True, "as_labelset": 1}
+            )
+        )
+        with pytest.raises(ValueError, match="'as_labelset:' must be a boolean"):
+            load_pipeline_file(p)
+
     def test_stream_results_must_be_bool(self, tmp_path):
         from vtscore.cli_pipeline import load_pipeline_file
 
@@ -253,6 +273,7 @@ class TestLoadPipelineFile:
                     "chunk_size": 10,
                     "stream_results": True,
                     "keep_negatives": True,
+                    "as_labelset": True,
                     "tempimport": True,
                 }
             )
@@ -260,6 +281,7 @@ class TestLoadPipelineFile:
         cfg = load_pipeline_file(p)
         assert cfg["stream_results"] is True
         assert cfg["keep_negatives"] is True
+        assert cfg["as_labelset"] is True
         assert cfg["tempimport"] is True
 
     def test_stream_results_requires_tempimport(self, tmp_path):
@@ -818,6 +840,35 @@ class TestDispatchDetectorSelection:
     def test_explicit_detectors_list_wins(self, monkeypatch):
         seen = self._dispatch_capturing(monkeypatch, ["Cats", "Dogs"])
         assert seen["override_detectors"] == ["Cats", "Dogs"]
+
+
+class TestDispatchStreamingFlags:
+    def test_as_labelset_reaches_the_run(self, monkeypatch):
+        """``as_labelset:`` is handed to the run, not dropped between parse and dispatch."""
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        seen = {}
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": ["Dogs"],
+                "chunk_size": 10,
+                "stream_results": True,
+                "keep_negatives": False,
+                "as_labelset": True,
+                "import_labels": None,
+                "exporter": "server_json_file",
+                "exporter_fields": {"filepath": "labels.json"},
+                "tempimport": True,
+            }
+        )
+        assert seen["stream_results"] is True
+        assert seen["as_labelset"] is True
 
 
 class TestImportLabelsCreate:

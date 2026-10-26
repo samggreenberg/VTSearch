@@ -250,6 +250,7 @@ class TestPipeline:
         [
             (["--stream-results"], "--stream-results"),
             (["--keep-negatives"], "--keep-negatives"),
+            (["--as-labelset"], "--as-labelset"),
             (["--label-importer", "server_csv_file"], "--label-importer"),
         ],
     )
@@ -477,6 +478,12 @@ class TestAutodetectValidation:
             _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--keep-negatives"])
         assert exc.value.code == 2
         assert "--keep-negatives only applies with --stream-results" in capsys.readouterr().err
+
+    def test_as_labelset_requires_stream_results(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--as-labelset"])
+        assert exc.value.code == 2
+        assert "--as-labelset only applies with --stream-results" in capsys.readouterr().err
 
     def test_unknown_importer_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
