@@ -130,7 +130,7 @@ def _stub_split_training(monkeypatch):
 
     import vtscore.cli as cli_mod
 
-    def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None):
+    def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None, override_clipper=None):
         linear = nn.Linear(2, 1)
         with torch.no_grad():
             linear.weight.data = torch.tensor([[100.0, 0.0]])
