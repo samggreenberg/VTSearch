@@ -18,7 +18,7 @@ The largest package in the library. Every module, grouped by role.
 | Module | Concern |
 |--------|---------|
 | `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
-| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export` |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export`, `label_entry_for_export`, `elements_for_media` |
 | `vtscore/datasets/metadata.py` | Per-media metadata extraction |
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
@@ -192,6 +192,14 @@ means nothing to a receiver that trains its own (#5131): `threshold` from
 `detector_meta`, and `rank_at_vote` / `score_at_vote` from each element's
 `vt:provenance` (`vote_provenance.NON_PORTABLE_FIELDS`). The rest of the
 payload passes through, and the detector's own JSON keeps every field.
+`label_entry_for_export(entry)` is its per-entry half, for an export that never
+holds the whole labelset (`ResultsExporter.export_labelset_streaming`).
+
+`elements_for_media(media, label)` (same module) is the conversion the label
+export applies to a voted media: the `LabeledElement` s it records, a dupe
+set expanded to one per member. A `build_media_hit` hit works as *media* too,
+which is how the CLI's `--stream-results --as-labelset` labels hits without
+their medias.
 
 ```python
 from vtscore.datasets import LabelSet, LabeledElement

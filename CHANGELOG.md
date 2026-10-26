@@ -27,6 +27,16 @@ what is on `dev` but not yet on `main`; each release dates that section
   field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
   now reads **Server path**.
 
+### Added
+
+- **`--stream-results --as-labelset` streams a headless run's hits as a labelset** (issue #5285). A run over a
+  source larger than RAM can now write its predictions as label entries rather than hits: each carries the item's
+  md5, label, origin and name plus the detector that labelled it, and no score. The file reads back in through
+  Import Labels or `--import-labels-into`: `server_json_file` writes a labels JSON file and `server_csv_file` a
+  labels CSV. `gui`, `webhook` and `email_smtp` stream it too. Every detector the run scores goes into the one
+  export; `--keep-negatives` adds the below-threshold items as `bad` labels. The pipeline-YAML key is
+  `as_labelset:`. A dry run with `--stream-results` now also fails when the exporter cannot stream that way.
+
 ### Fixed
 
 - **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers

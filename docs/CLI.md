@@ -239,6 +239,38 @@ sends one email per `--batch-size` hits. Both default to 500 hits per batch and
 always deliver at least once (even for a zero-hit run), so the receiver learns
 the run happened.
 
+**Streaming as a labelset** (`--as-labelset`, with `--stream-results`): stream the
+hits as label entries instead, so the export reads back in through a label
+importer (`--import-labels-into`, or a label import in the app):
+
+```bash
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --as-labelset --exporter server_csv_file --filepath labels.csv
+```
+
+Each entry is what a labelset export records for the item (`md5`, `label`,
+`origin`, `origin_name`, `filename`, `category`, and the importer's metadata),
+plus a `detector` field naming the detector that labelled it. Every detector the
+run scores streams into the one export, so an item two detectors score appears
+twice, once per detector. No score, threshold or balance leaves, since those
+were measured by this run's head (#5131). `--keep-negatives` adds the
+below-threshold items as `bad` labels. The same five exporters support it:
+
+- `server_json_file` writes a labels JSON file (`{"labels": [...]}`, with
+  `detector_meta`, `detectors`, `keep_negatives` and `format:
+  "vtsearch-labelset-stream/v1"` beside it), not NDJSON. The `server_json_file`
+  label importer reads it as it stands.
+- `server_csv_file` writes `detector,label,md5,origin_name,filename,category,origin`
+  rows, which the `server_csv_file` label importer reads (it ignores `detector`).
+- `gui` prints each entry with its label and detector; `webhook` POSTs
+  `labels` batches (`format: "vtsearch-labelset-batch/v1"`); `email_smtp` sends
+  one email per batch, listed per detector.
+
+Reading the file back in is not streamed: a label importer returns the whole
+list, and training on it needs every label's embedding. Use it to get a huge
+set of predictions out of the CLI, not to train on millions of labels.
+
 ### Exporting results
 
 By default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
@@ -452,8 +484,10 @@ options), under `Datasets (2; one importer run, one dataset per entry):`; the
 JSON `dry_run_plan` event's `source` carries them as `outputs`.
 
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
-under the source (noting whether negatives are dropped or included), so a
-streaming run can be sanity-checked before it starts. The `Save to dashboard`
+under the source (noting whether negatives are dropped or included; `yes, as a
+labelset (...)` with `--as-labelset`), so a streaming run can be sanity-checked
+before it starts. The dry run also fails, as the run would, when the exporter
+cannot stream that way. The `Save to dashboard`
 line says whether the run would keep the dataset; a dry run never saves it.
 With the `autofind_cli_delete_dataset` setting on, it reads `Save to dashboard:
 until detection has run (…)`, and the JSON `dry_run_plan` event's `source`
@@ -724,6 +758,11 @@ stream_results: false
 # Optional. With stream_results, also emit below-threshold hits (label=bad).
 # Same as --keep-negatives. Off by default.
 keep_negatives: false
+
+# Optional. With stream_results, stream the hits as re-importable label
+# entries, each naming its detector, through the exporter's labelset
+# streaming mode (same as --as-labelset). Off by default.
+as_labelset: false
 
 # Optional. One-shot merge of external labels into a detector before
 # scoring (same as --import-labels-into / --label-importer /

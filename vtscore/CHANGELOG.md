@@ -1390,6 +1390,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`ResultsExporter.export_labelset_streaming(header, elements, field_values)`** (issue #5285): the labelset twin
+  of `export_cli_streaming`, for the CLI's new `--stream-results --as-labelset` (pipeline YAML `as_labelset:`;
+  `as_labelset=` on the four `autodetect_*_main` entry points). A run larger than RAM streams its hits as label
+  entries, each naming its `detector`, with no score, threshold or balance (#5131), so the export reads back in
+  through a label importer. `supports_labelset_streaming` is derived from overriding it; neither is a payload kind,
+  so `supported_payloads` and the GUI pickers are unchanged. All five built-in streamers implement it:
+  `server_json_file` writes a labels JSON file and `server_csv_file` a labels CSV, each re-importable by the label
+  importer of the same name; `gui` prints, `webhook` POSTs `labels` batches, `email_smtp` emails them. Also new:
+  `vtscore.exporters.base.iter_stream_batches(items, batch_size)`, the batching the delivery streamers share, and
+  `vtscore.datasets.labelset.elements_for_media` / `label_entry_for_export`, the hit-to-entry conversion and the
+  per-entry half of `labelset_for_export`. Additive: an exporter that overrides nothing is refused by
+  `--as-labelset` with the list of those that can.
+
 - **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
   whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
   merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of
