@@ -44,7 +44,7 @@ re-creates small-object dilution on inflated union boxes.
 
 The engine history that constrains the design: the MLP was dethroned not on
 ranking but on **retrain-to-retrain threshold stability** with sparse
-positives (#2790; see [`docs/ML.md`](../ML.md#the-three-heads-which-one-is-shipped-and-why)).
+positives (#2790; see [`docs/ML.md`](../ML.md#the-heads-which-one-is-shipped-and-why)).
 Any set engine adds parameters back, so it must be judged on regret and
 wobble, not AP.
 

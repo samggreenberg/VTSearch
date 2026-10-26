@@ -318,7 +318,7 @@ fits the same loss to convergence); and any `hidden_dim > 0` builds the older
 MLP (`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
 `_auto_hidden_dim`). They survive only for the eval harness's head-sweep arms
 and unit tests. See
-[`docs/ML.md`](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
+[`docs/ML.md`](../../docs/ML.md#the-heads-which-one-is-shipped-and-why)
 for why the head is a linear SVM.
 
 Training (`vtscore.training.train_model`):

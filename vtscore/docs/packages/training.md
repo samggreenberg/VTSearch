@@ -116,7 +116,7 @@ nn.Sequential(
 With only a handful of labelled positives the MLP is under-determined and its
 retrains wobble, so it is an eval arm (see [eval.md](eval.md)), not a
 production path. See
-[`docs/ML.md`](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
+[`docs/ML.md`](../../../docs/ML.md#the-heads-which-one-is-shipped-and-why)
 for why the SVM head ships.
 
 All five are built by

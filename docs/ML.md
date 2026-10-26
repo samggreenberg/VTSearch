@@ -20,7 +20,7 @@ The head is fitted by liblinear (scikit-learn's `LinearSVC`, `C=1.0`, `class_wei
 
 **The sigmoid is not a calibrated probability**, and never was under the logistic head either: the decision point is the separately calibrated threshold below, not 0.5. The sigmoid is a monotone squash that keeps every downstream consumer (sorting, the score column, the quantile rules) working in [0, 1].
 
-### The three heads: which one is shipped, and why
+### The heads: which one is shipped, and why
 
 | Sentinel | Architecture | Fitted by | Status |
 |---|---|---|---|
@@ -348,7 +348,7 @@ Both arms reach ≈1.0 training AUC. That is the whole point: perfect training s
 
 A high held-out AUC on the NOISE arm would be the real alarm: that is label leakage or a broken split, not over-training.
 
-The same control answers the neighbouring question — "is the capacity right?" — by sweeping the hidden width (or the head sentinel) with the split, votes and seeds held fixed, and reading held-out AUC per width. Note that production ships the **linear SVM head**, which has no width to sweep: capacity questions apply to the BCE eval arms in [The three heads](#the-three-heads-which-one-is-shipped-and-why) above.
+The same control answers the neighbouring question — "is the capacity right?" — by sweeping the hidden width (or the head sentinel) with the split, votes and seeds held fixed, and reading held-out AUC per width. Note that production ships the **linear SVM head**, which has no width to sweep: capacity questions apply to the BCE eval arms in [The heads](#the-heads-which-one-is-shipped-and-why) above.
 
 
 ## PyTorch Environment Settings
