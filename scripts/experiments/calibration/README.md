@@ -253,8 +253,9 @@ alongside them), and writes all study output under
 prefix.
 
 #2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
-head. Both now follow the app instead: the head is the shipped linear SVM
-(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+head. Both now follow the app instead: the head is the shipped centroid-started
+linear SVM (`linear_svm_prior`, #4785; `CALIB_HEAD` unset, `CALIB_HEAD=linear_svm`
+the plain SVM before it, `CALIB_HEAD=mlp` the historical arm), and the
 fraction resolves per space through `production_split_for` (0.3 single-vector,
 0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it. The line follows the app
 too: an unset `CALIB_BETA` draws it at the app's default balance (beta 1), so

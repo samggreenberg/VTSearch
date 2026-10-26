@@ -22,12 +22,16 @@ Two consequences shape anything that revisits this:
   categories where the two diverge.
 
 The styles themselves live in `vtscore/eval/patch_styles.py` (`whole_image`,
-`max_patch`, `max_patch_hac`), and `style=None` resolves to the app's own geometry
+`max_patch`, `max_patch_hac`, `max_patch_pca_hac`), and `style=None` resolves to the app's own geometry
 rather than being a third thing — a patch dataset on the app's trainer (`APP_TRAINER`) gets
 `max_patch`, whose methods delegate to `pool_box_from_media` / `bad_negative_vecs`
 / `media_score_rows`. The runner is `scripts/experiments/max_patch/`.
 
 ## Open work
+
+The raw-patch trees were re-measured against `max_patch` on today's line by
+#4711 ([report](../experiments/2026-10-25-region-styles-4711/REPORT.md)); read
+that before reopening any arm here.
 
 <!-- item-sep -->
 

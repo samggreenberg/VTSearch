@@ -116,7 +116,7 @@ the rework below exists.
 | `min_dist` | per-embedder: 0.05 image, 0.10 audio; global fallback `0.1` | A `ServerSettings` (`projection_min_dist`) still overrides. |
 | `compact` | `False` (`PROJECTION_COMPACT_DEFAULT`), including `fit_projection`'s own signature default | Post-fit `compact_layout` rigid-body packing; off since the Part 1 sweep. Stamped on the `Projection`, so a layout packed under the old default fails the freshness check and is refit. |
 | `min_n_for_umap` | `10` | Below this → PCA-2 fallback. Constant for now. |
-| `random_state` | `None` (unseeded) | Keep unseeded in prod. Seed only inside a sweep harness. |
+| `random_state` | `None` (unseeded), or `VTSEARCH_PROJECTION_SEED` when set | Keep unseeded in prod. The env var (`PROJECTION_SEED` in `vtscore/config/runtime.py`) seeds a single-threaded fit for the screenshot harness and sweeps. |
 | `metric` | `"euclidean"` | Settled (ingest-normalized vectors); not a tuning target. |
 
 ### Pyramid (Stage 2) — `vtscore/projection/pyramid.py:build_pyramid`

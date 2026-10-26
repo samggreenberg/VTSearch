@@ -16,11 +16,6 @@
 
 <!-- item-sep -->
 
-- **`autopilot-progress` phase.** Captured with phase 4 (Refine Boundary) active
-  thanks to the 30-vote `Yellow Smileys` fixture (`VOTES` in `smiley-example.mjs`);
-  if the fixture vote count changes, the active phase in this shot moves with
-  it.
-
 <!-- item-sep -->
 
 <!-- item-sep -->
@@ -75,10 +70,10 @@ Book example on the same app, so each harness clears the other's datasets and
 detectors before it shoots. Shots that must show the *demo picker itself*
 screenshot the picker UI, not a downloaded dataset.
 
-**Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, or a
-numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
+**Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, a `ring`,
+or a numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
 click-by-click pictures in the guide's *Step by step* section are made of the
-last. `scripts/screenshots/callouts.mjs` draws all three, and the slide shooter
+last. `scripts/screenshots/callouts.mjs` draws them all, and the slide shooter
 uses the same drawer. A shot's `clip` can also frame a single control with a
 little padding — the guide's **inline crops**, embedded mid-sentence with a
 `height` and no `width` so the in-app Help panel keeps them in the line of
@@ -92,26 +87,8 @@ Output path is derived (`docs/user/assets/<id>.<theme>.webp`), not stored, so th
 manifest can't drift from the filesystem. `embeddedIn` records the doc + anchor
 each shot belongs to, so the wiring check can prove docs and manifest agree.
 
-```ts
-interface Shot {
-  id: string;                  // stable, kebab-case, unique
-  embeddedIn: string;          // "docs/user/USER_GUIDE.md#autopilot"
-  caption: string;             // alt text + (optional) figure caption
-  themes: ("light"|"dark")[];  // each yields a separate file
-  recipe: (page, helpers) => Promise<void>;  // steps to reach the frame
-  after?: (page, helpers) => Promise<void>;  // undo what the recipe changed
-  clip?: { target: Target; pad?: number };   // what to frame; omit for full viewport
-  annotations?: Annotation[];  // declarative callouts, drawn pre-capture
-}
-
-interface Annotation {
-  target: Target;              // selector, {selector, hasText|name}, or a box
-  kind: "box" | "highlight" | "step";
-  step?: number;               // the number on a `step` marker
-  at?: "left" | "right" | "top" | "bottom" | "corner";  // where it sits
-  label?: string;
-}
-```
+The `Shot`, `Annotation`, `Target` and `Helpers` interfaces at the top of the
+manifest are the schema; read them there rather than from a copy here.
 
 ### 2. The harness — `scripts/screenshots/capture.ts`
 
@@ -160,7 +137,9 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
 drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
-with a seeded Browse map (#4296);
+with a seeded Browse map (#4296) — so the `autopilot-progress` shot's active
+phase (Refine Boundary, from the 30-vote `VOTES` in `smiley-example.mjs`) moves
+if that vote count does;
 viewport **1440 × 900**, `deviceScaleFactor: 2`, written at most 1440 px wide
 (`MAX_WIDTH` in `capture.ts`: 2× the guide's 720 px embed); animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`), and timed

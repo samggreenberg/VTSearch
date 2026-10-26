@@ -341,8 +341,9 @@ Four behaviours of this layer are worth knowing before you debug it:
 - **Instances are per-request, and nothing calls `load_model()` for you.**
   The routes build a fresh processor and call `extract()` / `localize()`
   directly. Every in-tree processor calls `self.load_model()` at the top of
-  `extract()` / `localize()`, behind an `if self._model is not None: return`
-  guard; do the same, and expect the load cost once per request.
+  `extract()` / `localize()`, behind an idempotence guard
+  (`if self._model is not None: return`); do the same, and expect the load
+  cost once per request.
 - **The stored `media_type` is what routes it.** `POST /api/autorun-*` takes
   `media_type` from the request body and never cross-checks it against your
   class's `media_type` property; `/api/auto-extract` selects processors by that

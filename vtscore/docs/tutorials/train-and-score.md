@@ -195,7 +195,7 @@ the centroid. `LINEAR_SVM_HEAD` (`-1`) is the plain SVM without that start,
 convergence, and a positive `hidden_dim` builds an MLP
 (`Linear(512, H) → ReLU → Dropout → Linear(H, 1)`, `H` auto-sized by
 `_auto_hidden_dim`); those are eval arms and test fixtures.
-See [docs/ML.md](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
+See [docs/ML.md](../../../docs/ML.md#the-heads-which-one-is-shipped-and-why).
 The default seed makes training deterministic.
 
 ## Step 4: Score all loaded items
@@ -392,9 +392,7 @@ This is what an autodetect job does - the CLI wraps the same calls in
 ## Step 8: Evaluate the detector
 
 If you have ground-truth labels for the held-out set, run the eval
-runner to get precision / recall / F1:
-
-Ground truth lives **on the medias**, not in a separate dict: the harness
+runner to get precision / recall / F1. Ground truth lives **on the medias**, not in a separate dict: the harness
 reads `media["category"]` (or `media["categories"]` for multi-label data)
 and each `EvalQuery` names the category that should score positive.
 

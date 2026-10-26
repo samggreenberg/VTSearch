@@ -227,8 +227,8 @@ skipped with a note rather than aborting the export, because their
 stage-2 RANSAC verification isn't representable as a scoring-only ONNX
 graph; **patch** (DINOv2/v3, EUPE) detectors export normally but in a
 degraded whole-item-only scoring mode. The exporter substitutes
-`{detector_name}` per detector itself (it is deliberately not a declared
-`template_var`); a path without it gets the detector name inserted
+`{detector_name}` per detector itself (it is deliberately not declared in
+the field's `template_vars`); a path without it gets the detector name inserted
 before the extension on a multi-detector run.
 
 ### File-format notes

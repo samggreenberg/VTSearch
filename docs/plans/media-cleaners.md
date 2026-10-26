@@ -58,21 +58,6 @@ Deliberately deferred (revisit only with evidence): saliency-based image
 cropping (can eat context the detector needs), audio noise reduction
 (artifact risk).
 
-## Open work beyond the roster
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
 ## Open questions
 
 - **Query-side consistency** — labeled-example replay applies cleaners via
