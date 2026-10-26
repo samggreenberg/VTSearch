@@ -35,6 +35,15 @@ share of the best cut, per preset:
 and #4937 owns the shortfall they found early in a session. What only this plan
 asks is the raw-patch tree, on the study's own Visual Genome and Caltech cells.
 
+**The raw-patch tree on today's line has since been measured (#4711).** On
+Region Photo over `coco_better` (beta 1, seed 0;
+[report](../experiments/2026-10-25-region-styles-4711/REPORT.md)) both trees
+beat `max_patch` on F1, each tree's line sits slightly *closer* to its own
+oracle than MaxPatch's does, and `max_patch_pca_hac` minus `max_patch_hac` is
+within noise. That answers the calibration-bottleneck question on the shipped
+benchmark; what is left below is only the study's own VG / Caltech cells
+(VG is unrebuildable since #4038, though its pickles still load).
+
 ## Open follow-ups
 
 <!-- item-sep -->
@@ -71,8 +80,5 @@ asks is the raw-patch tree, on the study's own Visual Genome and Caltech cells.
   the re-run above.
 
 <!-- item-sep -->
-
-- **Plain `max_patch_hac` arm.** Isolates PCA merge-ordering from node-count
-  effects, if a verdict from the re-run hinges on something PCA-specific.
 
 <!-- item-sep -->

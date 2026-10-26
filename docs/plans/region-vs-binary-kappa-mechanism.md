@@ -188,8 +188,9 @@ bench checkpoints per configuration, so a rerun resumes.
   mechanism is *sufficient* in a model. To show it operates in production,
   vary `m` while holding the dataset, embedder and votes fixed: re-pool an
   existing patch-embedder region environment at `m` ∈ {1, 4, 24} (top-1 vs
-  top-k vs all regions — the harness already has `segment_topk_mean_pool` and
-  the `repool_variants` machinery in `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
+  top-k vs all regions — the harness already has `segment_topk_mean_pool` in
+  `vtscore.eval.calibration_metrics` and the `repool_variants` machinery in
+  `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
   A real-data κ\* that falls with `m` on the *same* images is the causal claim;
   #2864's cross-dataset comparison cannot make it. This is the expensive one
   (GPU prepare + a full cell array). It waits on run 2, and runs only if the
@@ -204,6 +205,8 @@ bench checkpoints per configuration, so a rerun resumes.
   under hard acquisition while `mid` improves, and the κ\* crossover should
   move with it. Cheap — it is a re-analysis of run 2's existing rows, since
   both rules are already emitted per cell.
+
+<!-- item-sep -->
 
 ## Reproduction
 

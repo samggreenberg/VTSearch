@@ -236,9 +236,10 @@ origin). Serialisation is dict-shaped, not string-shaped: `to_dict` /
 labelset-source / labelset-exporter plugin contracts, and JSON encoding is
 the caller's business. `LabeledElement.metadata` is the recommended escape
 hatch for per-label data that doesn't fit the core fields - it survives
-every serialisation boundary. The one thing an export leaves behind is the
-rank and score in VTSearch's own `"vt:provenance"` record, which were
-measured by this server's embedder and head (`labelset_for_export`, #5131).
+every serialisation boundary. An export leaves behind only the numbers
+measured in this server's embedding space: the `rank_at_vote` /
+`score_at_vote` fields of the `"vt:provenance"` metadata record, and
+`detector_meta["threshold"]` (`labelset_for_export`, #5131).
 
 ## 5. Embedder
 

@@ -141,7 +141,7 @@ def autodetect_importer_main_chunked(
 - **`save_dataset=True`** first imports the source through the GUI's load
   pipeline and registers it, then scores the saved pickle; having no
   applicable detector ends the run with a `detection_skipped` event instead of
-  an error. When the run's `CoreConfig.autofind_cli_delete_dataset` is on, the
+  an error. When the `autofind_cli_delete_dataset` setting is on, the
   dataset it imported is unregistered (pickle included) once its detectors have
   scored it and the exporter has run, with a `dataset_deleted` event. A run
   that detected nothing or failed keeps it, and so does a pickle that already
@@ -295,8 +295,9 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
 `save_dataset` is set; a multi-dataset source runs it once per dataset). The
 interesting steps:
 
-1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`
-   and resolve the exporter (explicit name, else `autofind_exporter`).
+1. Apply `settings_path` with `redirect_settings_path()`, read the
+   AutoFind list with `get_setting()`, and resolve the exporter (explicit
+   name, else `autofind_exporter`).
 2. If `dry_run`, validate + emit the plan and return without consuming
    the source.
 3. If `stream_results`, hand off to the streaming path
@@ -537,8 +538,8 @@ events on stdout.
   [`docs/CLI.md`](../../../docs/CLI.md). The
   functions documented here are the underlying primitives those
   flags call.
-- [`config.md`](config.md) explains `CoreConfig.from_settings()`,
-  which the pipeline builds once per invocation.
+- [`config.md`](config.md) explains `get_setting()` and
+  `redirect_settings_path()`, which the pipeline reads its knobs through.
 - [`utils.md`](utils.md) documents `build_media_hit`, the helper
   every detector-score row goes through before the exporter sees
   it.

@@ -872,31 +872,10 @@ are in [TESTING.md § Test Groups](TESTING.md#test-groups). A bare
 `./run-tests.sh` on a branch that changes only markdown narrows itself to the
 `docs` gate automatically.
 
-You can also run pytest directly:
-
-```bash
-python -m pytest tests/ tests_lib/ -v
-```
-
-This runs fast CPU tests only. Additional test modes:
-
-**Full CPU tests** (adds the `slow`-marked tests: a CLI subprocess run and the toponymy fit tests):
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m 'not gpu'
-```
-
-**GPU tests** (requires CUDA):
-
-```bash
-python -m pytest tests_lib/gpu/test_gpu.py -v -m gpu
-```
-
-**All tests**:
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m ''
-```
+You can also run pytest directly: `python -m pytest tests/ tests_lib/` runs the
+fast CPU tests (the `pyproject.toml` default deselects the `slow` and `gpu`
+markers). How to add those back, and what each marker covers, is in
+[TESTING.md § Test Markers](TESTING.md#test-markers).
 
 ## Environment variables
 

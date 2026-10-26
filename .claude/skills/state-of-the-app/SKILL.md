@@ -12,15 +12,14 @@ studies that the review points at.
 
 ## The owner's standing decisions (#4159, 2026-09-23)
 
+Keep these unless the owner changes them, and record any change here in the
+same edit.
+
 - **The objective (owner, 2026-10-01, #4427):** the F-beta, at the session's beta, of the set the line keeps,
   scored on the WITHHELD test half. Found positives (Goods), the user's own unvoted corpus ("positives in
   hand", the `Diagnostic` section, `pools.csv` / `pool_steps.csv` / `in_hand.png`) and the share of the best
   cut explain a line's position; they are never the goal, and a ship decision cites the withheld F-beta at the
   line first.
-
-Keep these unless the owner changes them, and record any change here in the
-same edit.
-
 - **The eval's horizon is not the user's (owner, 2026-10-04, #4482):** the
   review runs 150 clicks as a computational compromise. Users stop when they
   are bored or the app stops them, before 150 or after it. Never frame a
@@ -62,8 +61,9 @@ same edit.
   headline is, per beta at the app's presets (1/4 precision-leaning, 1
   balanced, 4 recall-leaning: the owner's pick of 2026-10-03 on #4448; they
   were 0.5 / 1 / 2) over clicks, the returned set's **F-beta as a share of
-  the best F-beta any cut of the same ranking reaches** (`returned_at_beta.png`,
-  the "returned set at each balance" table), with its precision and recall
+  the best F-beta any cut of the same ranking reaches** (`perp.py --kind
+  balance`'s `returned_at_own_beta.png`, the "returned set at each balance"
+  table), with its precision and recall
   beside it, and the share of runs whose line keeps nothing (`empty`).
   Sessions run at `SOTA_BETA=0.25|1|4` (the eval's `CALIB_BETA` arm): this is
   the standing recipe. The analyzer's betas follow the app's presets
@@ -518,8 +518,8 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
 1. **Headline: the returned set at each balance, from its own sessions**
    (#4413): per beta at the app's presets (1/4 / 1 / 4, #4448) over clicks, the returned set's F-beta as
    a share of the best F-beta any cut of the same ranking reaches
-   (`returned_at_beta.png`, the "returned set at each balance" table), with
-   its precision and recall beside it, text → 25 → 50 → final → ceiling. A
+   (`perp.py --kind balance`'s `returned_at_own_beta.png`, the "returned set
+   at each balance" table), with its precision and recall beside it, text → 25 → 50 → final → ceiling. A
    report from before #4421 also carried the floor-era control (#4408): precision against P and recall
    against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
    `perp_summary.md`; per run, `returned_at_p.png`), with the share of

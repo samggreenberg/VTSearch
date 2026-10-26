@@ -30,7 +30,7 @@ Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="..
   embedder you have chosen before it can be searched.
 - **Needs Download**: it has to be downloaded first, from a few MB to many
   GB depending on the collection (the full list, with sizes, is in
-  `docs/demos.md`).
+  [the demo catalogue](../../demos.md)).
 
 Several collections come in more than one size: **(S)**, **(M)** and **(L)**
 are separate rows. Start small.

@@ -1,6 +1,6 @@
 # Set-input scorer experiment — learned pooling vs linear+max for region voting
 
-**Status:** proposed (investigation of #2890; no code yet). This designs the
+**Status:** proposed (investigation of #2890; no code yet); motivation in doubt since #4711 (see the caveat below). This designs the
 experiment that answers the issue's question empirically at eval-harness tier.
 Nothing here changes production, and nothing here blocks or changes the verdict
 of #2886 (adopt MaxPatch, drop the HAC tree from ingest).
@@ -21,13 +21,17 @@ Two studies pin down why the HAC tree lost and where the remaining headroom is:
   regret (p = 0.013). Both pre-registered fixed re-pools failed: `topk` made it
   worse; sign-corrected `pnorm` closed only ~21% of the gap.
 
-So ~0.1 ErrorCost of measured headroom is locked behind the *pooling /
-threshold*, not behind node vectorization. **Caveat:** both studies (Jul
-29–31) predate the rebuilt threshold stack (fold-anchored cross-LabeledGMM
-fused threshold, blend schedules, conformal inclusion, acquisition at
-inclusion −3, all Aug 1–7); #2895 reruns the region-style comparison on
-today's stack and re-prices this headroom. Run it first — the residual regret
-it measures is this experiment's motivation. #2890 asks whether ROI Align can
+So ~0.1 ErrorCost of measured headroom was locked behind the *pooling /
+threshold*, not behind node vectorization. **Caveat — the motivation may be
+gone.** Both studies predate the rebuilt threshold stack. #2895's rerun was
+superseded by #4711, which re-measured the raw-patch trees against `max_patch`
+on today's line (Region Photo, `coco_better`;
+[report](../experiments/2026-10-25-region-styles-4711/REPORT.md)) and found the
+July operating-point loss gone: each tree's line sits slightly *closer* to its
+own oracle than MaxPatch's does, and both trees beat MaxPatch on F1. Re-derive
+the question against that result before building anything below.
+
+#2890 asks whether ROI Align can
 convert a node (set of patches) into something scoreable, and whether the
 scorer engine could accept sets directly. The investigation's conclusion: the
 promising half is the **engine** — a learned set-pooling (attention-MIL)
@@ -112,10 +116,6 @@ doesn't matter at the operating point.
 ## Open work
 
 <!-- item-sep -->
-
-- [ ] #2895 — Rerun the region-style study on today's threshold stack (Opus;
-  prerequisite — its residual-regret measurement is this experiment's
-  motivation)
 
 <!-- item-sep -->
 

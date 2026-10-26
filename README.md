@@ -17,7 +17,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 ## Quick start
 
-You need **Python 3.11+**, **Node.js 20.19+** with npm, and Git. Then, from the repository root:
+You need **Python 3.11+**, **Node.js 20.19+, 22.12+ or 24+** with npm, and Git. Then, from the repository root:
 
 ```bash
 bash scripts/install.sh                            # install Python deps (auto-detects CPU vs GPU)
@@ -42,6 +42,21 @@ When the app is running, click the **+** button on the **Datasets** card to open
 See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
 To load your own media, use the **Files** tab of the same dialog: point it at a folder (or a manifest of file paths) on the server.
+
+## Where to read next
+
+| You want to… | Start with |
+|---|---|
+| Use the app: load media, train and tune a detector, export matches | [User Guide](docs/user/USER_GUIDE.md), then [demo datasets](docs/demos.md) |
+| Run detectors from scripts or cron, without the web UI | [CLI.md](docs/CLI.md) |
+| Install on a new machine, a GPU box, Docker, or a SLURM cluster | [SETUP.md](docs/SETUP.md) |
+| Run it as a service: security, gunicorn, reverse proxy, offline hosts, environment variables, troubleshooting | [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| Work on the code | [SETUP.md](docs/SETUP.md), then [ARCHITECTURE.md](docs/ARCHITECTURE.md#key-concepts), [FRONTEND.md](docs/FRONTEND.md) and [TESTING.md](docs/TESTING.md) |
+| Add an importer, exporter, media type, embedder or detector | [EXTENDING.md](docs/EXTENDING.md) (see [Extending with plugins](#extending-with-plugins) below) |
+| Use the ML core as a Python library, without Flask | [`vtscore` docs](vtscore/docs/README.md) |
+| Call the HTTP API, or understand the model and its evaluation | [API.md](docs/API.md), [ML.md](docs/ML.md), [EVAL.md](docs/EVAL.md) |
+
+What changed between versions is in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -79,15 +94,9 @@ The remaining top level:
 
 For the package-level directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. For the Angular SPA — feature areas, service layer, zoneless change detection, and the generated API client — see **[docs/FRONTEND.md](docs/FRONTEND.md)**.
 
-New to the codebase? Get it running with [docs/SETUP.md](docs/SETUP.md), then read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#key-concepts) for the vocabulary (media items, votes, media types, processors, origins) and the package map.
-
 ## HTTP API
 
 VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector CRUD and scoring, exporter and importer operations, and settings.
-
-## Deployment
-
-For production deployment, offline/air-gapped operation, Docker hardening, environment variables, network dependency details, and data directory management, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Machine learning
 
