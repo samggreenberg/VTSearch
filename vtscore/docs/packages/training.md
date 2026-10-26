@@ -1,9 +1,12 @@
 # `vtscore.training` - Learned-sort training primitives
 
 Generic neural-net training and decision-threshold helpers extracted from
-the detector pipeline. Everything in this package operates on raw numpy
-arrays and PyTorch tensors - there are no media-type, embedder, vote,
-or context dependencies. Library consumers can use it as a stand-alone
+the detector pipeline. The head (`mlp`, `svm`, `logreg`) and threshold
+modules operate on raw numpy arrays and PyTorch tensors, with no
+media-type, embedder, vote, or context dependencies. The exceptions are
+`query_sort.py` (which sorts the active dataset through `vtscore.state`)
+and the structural re-rank modules (which read `vtscore.media`).
+Library consumers can use the array-level core as a stand-alone
 learned-sort toolkit: feed in `(N, D)` feature matrices and binary
 labels, get back a trained classifier head, a calibrated threshold, and
 (optionally) patch-level cosine scoring against a query vector.
