@@ -38,7 +38,7 @@ class ServerCsvLabelImporter(LabelImporter):
     fields = [
         PluginField(
             key="filepath",
-            label="Path or URL",
+            label="Server path",
             field_type="server_path",
             description="A CSV file on the server holding the labels to import.",
             placeholder=f"{DATA_DIR}/labels/my_labels.csv",
