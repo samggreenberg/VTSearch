@@ -640,6 +640,11 @@ fi
 #   free    a heavy check pytest need not wait for; collected after pytest
 # -- so that one pass of the box reports everything that is broken, and a run
 # that dies takes its children with it.
+#
+# A lane's name is what the run prints for it, and docs/TESTING.md's stage
+# tables list every lane by that name, in its stage and kind. Adding, removing,
+# renaming or re-kinding a lane fails scripts/check-docs.py until the table
+# says the same.
 # ---------------------------------------------------------------------------
 _lane_log_dir=$(mktemp -d)
 _ln_kind=(); _ln_name=(); _ln_pid=(); _ln_log=(); _ln_start=()
@@ -749,7 +754,8 @@ _gate_ruff_format() {
 _gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # Documentation drift: relative links, in-page anchors, backticked repo paths,
 # leaked absolute machine paths, plan-file citations anywhere in the tree,
-# broken code fences, undated study directories and line-number anchors. Pure
+# broken code fences, undated study directories, docs/TESTING.md's stage
+# tables against the gates this script runs, and line-number anchors. Pure
 # invariants against the current tree — nothing to re-pin.
 _gate_check_docs() { python scripts/check-docs.py ; }
 _gate_deptry() { python -m deptry . ; }
