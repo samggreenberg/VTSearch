@@ -7,7 +7,6 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { SourcePhotoService } from '../../services/source-photo.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { IconComponent } from '../icon/icon.component';
@@ -54,7 +53,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
-  private sourcePhoto = inject(SourcePhotoService);
   private destroyRef = inject(DestroyRef);
 
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
@@ -74,6 +72,14 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Emitted when the user marks the selection Verified Bad. */
   readonly verifyBad = output<void>();
+
+  /** Offer Show in photo (#4750): the browse view's dataset is a face dataset
+   *  whose import also made an Image dataset. It acts on a selection of exactly
+   *  one item. */
+  readonly showInPhotoOffered = input(false);
+
+  /** Emitted with the one selected item's id, whose photo the browse view opens. */
+  readonly showInPhoto = output<number>();
 
   /**
    * Emitted when the header checkbox asks for a select-all-in-view (the [ ]/[-]
@@ -214,15 +220,10 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.verifyBad.emit();
   }
 
-  /** Offer Show in photo (#4750) on a face dataset whose import also made an
-   *  Image dataset. It acts on a selection of exactly one item. */
-  readonly showInPhotoOffered = computed(() => this.sourcePhoto.offered());
-
-  /** Open the photo the one selected item was cut from. `vt-browse-view`
-   *  renders the overlay. */
+  /** Ask for the photo the one selected item was cut from. */
   onShowInPhoto(): void {
     if (this.count() !== 1) return;
-    this.sourcePhoto.open(this.ids[0]);
+    this.showInPhoto.emit(this.ids[0]);
   }
 
   /** Clicking a selected item drops it from the selection. */

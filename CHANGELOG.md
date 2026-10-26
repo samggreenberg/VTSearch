@@ -556,6 +556,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Show in photo in Browse.** On a Face dataset whose import also made an Image dataset, Browse's bin details
+  header gains **Show in photo** for the face shown large, and the Selection panel gains it for a selection of one
+  face. Either opens the same window as in Train: the photo the face was cut from, with the face outlined, over the
+  map. A floating bin details window steps aside while it is open and comes back on **← Back** or Esc. The bin
+  details' large preview now rests on the face last clicked once the pointer leaves the grid, rather than snapping
+  back to the tile's representative, so the button names the face you picked.
+
 - **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
   and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~86 / ~259 MB), taken from the
   Celebrity Together dataset's red-carpet, event and press photos. Unlike the VGGFace2 Faces demo, whose photos are

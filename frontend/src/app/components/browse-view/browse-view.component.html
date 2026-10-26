@@ -64,8 +64,10 @@
               [hoverThumbRadius]="thumbnailRadius"
               [nowPlayingExt]="nowPlaying()"
               [rowDividerDragging]="draggingDetailsRow()"
+              [showInPhotoOffered]="sourcePhoto.offered()"
               (dismissed)="onDetailsDismiss()"
               (popOutRequested)="onPopOutRequested()"
+              (showInPhotoRequested)="sourcePhoto.open($event)"
               (rowDividerMouseDown)="onDetailsRowDividerMouseDown($event)"
               (nowPlaying)="onNowPlaying($event)"
             />
@@ -195,8 +197,10 @@
               [mediaType]="mediaType()"
               [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
+              [showInPhotoOffered]="sourcePhoto.offered()"
               (dismissed)="dismissContextMenu()"
               (dockRequested)="onDockRequested()"
+              (showInPhotoRequested)="sourcePhoto.open($event)"
               (nowPlaying)="onNowPlaying($event)"
             />
           }
@@ -290,8 +294,10 @@
             [mediaType]="mediaType()"
             [canVerify]="canVerify"
             [volume]="volume()"
+            [showInPhotoOffered]="sourcePhoto.offered()"
             (verifyGood)="onVerify('good')"
             (verifyBad)="onVerify('bad')"
+            (showInPhoto)="sourcePhoto.open($event)"
             (selectAllInView)="onSelectAllInView()"
             (nowPlaying)="onNowPlaying($event)"
           />

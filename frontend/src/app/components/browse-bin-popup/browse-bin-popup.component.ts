@@ -1,11 +1,10 @@
-import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { SourcePhotoService } from '../../services/source-photo.service';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { BrowseBinMemberGridComponent } from '../browse-bin-member-grid/browse-bin-member-grid.component';
@@ -193,7 +192,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
-  private sourcePhoto = inject(SourcePhotoService);
   private injector = inject(Injector);
 
   /** Member media ids of the bin the popup was summoned over. */
@@ -235,6 +233,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  divider (see {@link rowDividerMouseDown}). Reflected as the divider's drag
    *  cue so it stays lit while the cursor is off it mid-drag. */
   readonly rowDividerDragging = input(false);
+  /** Offer Show in photo (#4750) in the header, for the item shown large: the
+   *  browse view's dataset is a face dataset whose import also made an Image
+   *  dataset. Whether this particular face has a photo is the overlay's to say,
+   *  as in Train's right-click menu; asking per item would mean a request for
+   *  every hovered thumbnail. */
+  readonly showInPhotoOffered = input(false);
 
   /** Emitted when the popup should close (outside click, Escape, or the X);
    *  in docked mode, when the X asks to clear the shown bin. */
@@ -248,6 +252,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   readonly dockRequested = output<void>();
   /** Docked header's pop-out button: the user wants the floating window. */
   readonly popOutRequested = output<void>();
+  /** Header's Show in photo: the id of the item shown large, whose photo the
+   *  browse view opens over the map. */
+  readonly showInPhotoRequested = output<number>();
   /** The clip now auditioning from a grid-row hover (for the top-left
    *  now-playing indicator, shared with the canvas hover), or ``null`` once
    *  the hover clears. */
@@ -705,17 +712,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   // --- Show in photo ---------------------------------------------------------
 
-  /** Offer Show in photo (#4750) in the header: the active dataset is a face
-   *  dataset whose import also made an Image dataset. Whether this particular
-   *  face has a photo is the overlay's to say, as in Train's right-click menu;
-   *  asking per item would mean a request for every hovered thumbnail. */
-  readonly showInPhotoOffered = computed(() => this.sourcePhoto.offered());
-
-  /** Open the photo the item shown large was cut from. `vt-browse-view`
-   *  renders the overlay. */
+  /** Ask for the photo the item shown large was cut from. */
   openSourcePhoto(): void {
     const id = this.displayedId;
-    if (id != null) this.sourcePhoto.open(id);
+    if (id != null) this.showInPhotoRequested.emit(id);
   }
 
   /** Floating, the popup sits above the dialog layer (`--z-burger-menu`), so a
