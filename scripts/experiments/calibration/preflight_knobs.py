@@ -309,6 +309,13 @@ def probe(C: Any) -> list[str]:
         rows.append(("seed_examples", str(C.SEED_EXAMPLES), "<unset> = the text or known-good opening"))
     if C.STRATIFY_TARGET:
         rows.append(("stratify_target", "1", "<unset> = the plain random split"))
+    # #5241's SAM3 opening and its eval-only line and hold: declared, so no study takes them silently.
+    if C.SEED_SAM3 is not None:
+        rows.append(("seed_sam3", f"{C.SEED_SAM3_PROMPTS}:{C.SEED_SAM3}", "<unset> = the typed query's cosine"))
+    if C.QUERY_LINE is not None:
+        rows.append(("query_line", C.QUERY_LINE, "<unset> = the text rule's display line"))
+    if C.QUERY_HOLD_PATCH:
+        rows.append(("query_hold_patch", "1", "<unset> = no hold on a patch space"))
     # #4731's Good-walk dry run and the quota's second tier: unset is the app's, ``off`` the
     # pre-#4731 arm, another count an arm.
     from vtscore.detectors.label_quota import DRY_BAD_QUOTA  # noqa: PLC0415
