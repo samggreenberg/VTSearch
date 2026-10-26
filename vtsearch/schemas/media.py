@@ -221,8 +221,8 @@ class VoteProvenanceSchema(Schema):
     """How the item being voted on came to be in front of the user.
 
     Optional on every vote request.  Recording only - nothing reads these
-    values back to change behaviour yet; consuming them is gated on the
-    experiment in ``docs/plans/provenance-partitioned-calibration.md``.  The
+    values back to change behaviour, and no reader is planned (see
+    :mod:`vtscore.datasets.vote_provenance` for why the record is kept).  The
     context is recorded at click time because it is *not re-derivable*: the
     ranking is client-side state and the model that produced the score is
     overwritten by the next retrain.

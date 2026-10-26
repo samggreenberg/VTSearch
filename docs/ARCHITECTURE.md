@@ -1414,12 +1414,13 @@ exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
 top-of-list draw.
 
 Recording only — nothing reads these values back to change behaviour. The
-consumer (partitioning the conformal calibration set by trustworthy surfacing
-context) is gated on the experiment pre-registered in
-[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
-Two rules keep the record honest: it is written **only on a vote-state change**
-(an idempotent re-apply keeps what the original click recorded, so a stale tab
-cannot rewrite it), and `restore_labels_from_detector` carries it back into
+consumer it was recorded for, partitioning the conformal calibration set by
+trustworthy surfacing context, was retired before it ran once the precision-floor
+ruling chose random verification (#4267, #5260); the record stays as the only
+measure of real, not simulated, vote-order bias. Two rules keep the record
+honest: it is written **only on a vote-state change** (an idempotent
+re-apply keeps what the original click recorded, so a stale tab cannot rewrite
+it), and `restore_labels_from_detector` carries it back into
 vote state on load — without that, the next vote's labelset resync would erase
 every recorded vote's provenance.
 

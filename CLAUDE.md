@@ -396,7 +396,7 @@ The user docs (`docs/user/assets/`) and the slide deck's UI figures (`slides/fig
 - **Dev2Main drains the queue** at every release ([`docs/RELEASE.md`](docs/RELEASE.md#4b-drain-the-screenshot-reshoot-queue)), before the release PR opens, so `main` never ships a stale screenshot. `dev`'s screenshots may lag its GUI in between; that is the trade.
 - **A brand-new shot is the exception.** A change that adds a shot to the manifest captures it in the same session with `scripts/screenshots/refresh.sh <new-id>`, because a doc cannot embed an image that doesn't exist and the wiring check requires both theme files on disk. Only *re*shoots are deferred.
 
-The wiring check (`scripts/screenshots/wiring-check.py`, a `run-tests.sh` gate) fails on a queued id that names no manifest shot and no slide group, so the queue can't rot. The full screenshot system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
+The wiring check (`scripts/screenshots/wiring-check.py`, a `run-tests.sh` gate) fails on a queued id that names no manifest shot and no slide group, so the queue can't rot. The full screenshot system (manifest, harness, determinism knobs, embedding convention) is documented in [`scripts/screenshots/README.md`](scripts/screenshots/README.md).
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 

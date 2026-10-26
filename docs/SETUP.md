@@ -17,6 +17,7 @@ frontend build) Node.js 20.19+, 22.12+ or 24+.
   - [How auto-detection decides](#how-auto-detection-decides)
   - [Picking the CUDA tag](#picking-the-cuda-tag)
   - [What gets installed](#what-gets-installed)
+  - [Packages installed without their dependency pins](#packages-installed-without-their-dependency-pins)
 - [Building the frontend](#building-the-frontend)
 - [Running the app](#running-the-app)
 - [Docker](#docker)
@@ -230,7 +231,8 @@ Both paths install every runtime and dev dependency from `pyproject.toml`
 `-e .[dev,agpl]`), editable-install the `vtsearch` package itself, and add a few
 packages that need special handling: `toponymy` (names regions on the Browse
 map) and `facenet-pytorch` (the face embedder), both installed without their
-over-strict dependency pins. In a git checkout they also install the
+over-strict dependency pins (see
+[below](#packages-installed-without-their-dependency-pins)). In a git checkout they also install the
 `pre-commit` git hook.
 
 The **GPU** path additionally:
@@ -257,6 +259,47 @@ install `requirements/base-no-agpl.txt` directly); the YOLO clipper,
 PDF import, and the document converters then report themselves as unavailable
 and everything else works unchanged. See
 [DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
+
+### Packages installed without their dependency pins
+
+Two packages pin old versions of the libraries every embedder sits on, and a
+plain `pip install` would honour those pins by downgrading the app's stack. The
+pins are empirically unnecessary for the parts VTSearch uses, so both packages
+go in with `--no-deps`, in a dedicated step of each install path.
+
+**`toponymy`** (VTSBrowse signpost naming, `vtscore.projection.signpost_build`)
+pins `transformers<5.0.0`. VTSearch runs it on transformers 5.x, validated end
+to end. So:
+
+- `toponymy==0.5.2` is installed `--no-deps` by `scripts/install.sh`
+  (`vts_install_toponymy`), `.claude/hooks/ensure-test-deps.sh`, and every
+  Dockerfile under `docker/`. It cannot live in a requirements file, because
+  pip rejects `--no-deps` there. It cannot be declared in `pyproject.toml`
+  either, because that would put its pins back in the resolver.
+- Its real dependencies (`fast_hdbscan`, `vectorizers`, `apricot-select`,
+  `tenacity`, `jinja2`) are declared in `pyproject.toml` on its behalf. The
+  slim images install the package itself `--no-deps -e .`, so
+  pyproject's declarations never reach them; their requirements files list the
+  dependencies that nothing else already pulls in.
+- `apricot-select` ships a legacy `setup.py` sdist and is installed in the same
+  dedicated step, before the main requirements pass. Do **not** wrap it in
+  `SETUPTOOLS_USE_DISTUTILS=stdlib`: pip's isolated build env gets the latest
+  setuptools, setuptools >= 74 refuses to import with that value set, and
+  Python >= 3.12 has no stdlib distutils for the shim to point at.
+- Nothing in the resolver checks the bypass any more, so two tests do:
+  `tests_lib/projection/test_toponymy_smoke.py` (marked `slow`) runs the real
+  library end to end, and `tests_lib/meta/test_dockerfile_toponymy.py` checks
+  that every install path uses `--no-deps` and pins the same version.
+
+**`facenet-pytorch`** (the `face` embedder) pins `torch<2.3`,
+`torchvision<0.18`, `numpy<2.0` and `Pillow<10.3`. The model builds and runs a
+correct forward pass on the app's current stack, so it gets the same treatment:
+`--no-deps`, with the app's own torch, torchvision, numpy and Pillow satisfying
+it at run time.
+
+An environment that skipped the toponymy step still draws the Browse map but
+names no region; see
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md#browse-maps-render-unlettered-vtsbrowse-signposts-are-disabled).
 
 ## Building the frontend
 

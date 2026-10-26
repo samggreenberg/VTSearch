@@ -151,8 +151,9 @@ the reports, starting from
 [its class list](../../../docs/experiments/2026-09-03-vg-scale-classes/REPORT.md),
 [the name audit](../../../docs/experiments/2026-09-04-vg-name-coverage/REPORT.md)
 and [the corrections log](../../../docs/experiments/2026-09-17-vg-scale-corrections/REPORT.md).
-The demo `visual_genome_m` is a different dataset and is still built; its plan is
-[`docs/plans/visual-genome-dataset.md`](../../../docs/plans/visual-genome-dataset.md).
+The demo `visual_genome_m` is a different dataset and is still built; how its
+ground truth works is in
+[`docs/EVAL.md`](../../../docs/EVAL.md#region-voting) ("Visual Genome's ground truth").
 
 ## A class's review rule lives in `SCALE_CLASS_RULES`
 

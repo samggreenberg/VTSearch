@@ -216,7 +216,8 @@ reorders what was previously planned here.
 
 Kept below the open work because most of it now describes shipped mechanics;
 retained as the spec a contributor needs for the open follow-ups (audio/learned
-backends, codebook growth, v3 trio).
+backends, codebook growth, v3 trio). When those ship, this section moves to
+`docs/ARCHITECTURE.md` (or `vtscore/docs/`) and the plan is deleted.
 
 ### The core mismatch (why a new *type*, not a new embedder)
 
