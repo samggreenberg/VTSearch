@@ -37,6 +37,7 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "as_labelset": False,
             "save_dataset": False,
         }
 
@@ -48,6 +49,7 @@ class TestDescribe:
             "chunk_size": 250,
             "stream_results": True,
             "keep_negatives": True,
+            "as_labelset": False,
             "save_dataset": False,
         }
 
@@ -61,8 +63,14 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "as_labelset": False,
             "save_dataset": False,
         }
+
+    def test_as_labelset_is_reported(self):
+        """``--dry-run`` says a streamed run writes label entries, not hits."""
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl", chunk_size=250)
+        assert spec.describe(stream_results=True, keep_negatives=False, as_labelset=True)["as_labelset"] is True
 
     def test_save_dataset_is_reported(self):
         """``--dry-run`` reads whether the import would be kept from here (#4226)."""

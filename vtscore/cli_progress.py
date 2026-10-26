@@ -26,9 +26,11 @@ app's ``vtsearch/cli_main.py``:
   fields: ``detector`` (str), ``detector_media_type`` (str),
   ``dataset_media_type`` (str)
 - ``detector_reclip`` - the dataset is re-clipped to a detector's
-  ``input_spec`` clipper at scoring time
+  ``input_spec`` clipper at scoring time, or to the clipper override
+  (``--override-clipper``) in its place
   fields: ``detector`` (str), ``detector_input_spec`` (dict),
-  ``dataset_input_spec`` (dict)
+  ``dataset_input_spec`` (dict), ``override_input_spec`` (dict? - only when
+  the override did it)
 - ``detector_centroid`` / ``detector_query`` - a detector's labels give no
   trained head, so it scores as the Goods' centroid or as its typed query's
   own set
@@ -87,7 +89,8 @@ app's ``vtsearch/cli_main.py``:
   fields: ``source`` (dict), ``settings_path`` (str?),
   ``autofind_detectors`` (list[dict] - one summary per detector the run
   would train), ``detectors_source`` (str - ``"autofind"`` or
-  ``"override"``), ``exporter`` (str?), ``exporter_field_values`` (dict)
+  ``"override"``), ``override_clipper`` (dict? - the clipper override's
+  ``input_spec``), ``exporter`` (str?), ``exporter_field_values`` (dict)
 - ``authenticated_user`` - ``--user`` with ``--api-key`` authenticated; the
   run executes as that user
   fields: ``user`` (str)

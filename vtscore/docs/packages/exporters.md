@@ -28,7 +28,7 @@ external source) are not here; they live in
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/exporters/base.py` | The `ResultsExporter` ABC, `PAYLOAD_KINDS`, `UnsupportedPayloadError`, `resolve_stream_batch_size`, the `LabelsetExporter` alias |
+| `vtscore/exporters/base.py` | The `ResultsExporter` ABC, `PAYLOAD_KINDS`, `UnsupportedPayloadError`, `resolve_stream_batch_size`, `iter_stream_batches`, the `LabelsetExporter` alias |
 | `vtscore/exporters/__init__.py` | The auto-discovering registry and its accessors |
 | `vtscore/exporters/server_json_file/` | Write results to a `.json` file on the server |
 | `vtscore/exporters/server_csv_file/` | Write results to a `.csv` file on the server |
@@ -157,14 +157,20 @@ explain that hits are the wrong input for it.
 The CLI `--stream-results` path (scoring a media source larger than RAM)
 asks an exporter to write hits incrementally instead of buffering the
 whole run. An exporter opts in with `supports_streaming` and
-`export_cli_streaming()`; it is a `find_results` mode only, with no
-labelset equivalent. Every built-in that delivers a scored run streams,
+`export_cli_streaming()`. With `--as-labelset` the same run streams its hits
+as label entries to `export_labelset_streaming()` instead, each naming its
+detector and carrying no score, so the export reads back in through a label
+importer; `supports_labelset_streaming` is derived from overriding it.
+Neither is a payload kind. Every built-in that delivers a scored run streams
+both ways,
 except `open_url` - which returns a URL rather than writing anything, so
 it has nothing to write incrementally. `portable_detector` is outside
 the question entirely: it consumes detectors, not hits. The
 delivery-style streamers (`webhook`, `email_smtp`) batch hits by a
 `batch_size` field (default 500), coerced by
-`resolve_stream_batch_size(value, default=500)`.
+`resolve_stream_batch_size(value, default=500)` and grouped by
+`iter_stream_batches(items, batch_size)`, which always yields at least one
+batch so an empty run still delivers once.
 
 ## `PluginField`
 

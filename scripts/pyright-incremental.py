@@ -2,8 +2,9 @@
 """Run pyright on the files whose diagnostics could have changed since the last green run.
 
 A full ``pyright`` over this repository is the longest serial gate in
-``run-tests.sh``: ~135s on two threads of a 4-vCPU box (2026-10-26), against
-~410s for the whole of pytest. Pyright's own statistics say where that goes.
+``run-tests.sh``: ~85s on four threads of a 4-vCPU box (2026-10-26; ~125s
+with the frontend lanes beside it), against ~410s for the whole of pytest.
+Pyright's own statistics say where that goes.
 Of a 283s single-thread run, before the local ``transformers`` stub (#5077)
 shrank the import closure, ~65s parsed and bound the 6,400-file import closure
 (transformers and torch included) and ~215s *checked* the 1,208 files that

@@ -150,5 +150,49 @@ class ServerJsonResultsExporter(ResultsExporter):
             "filepath": str(filepath.resolve()),
         }
 
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write a labels JSON file one entry at a time, re-importable as it stands.
+
+        Not NDJSON, unlike the hit stream: the file is the ``{"labels": [...]}``
+        object :meth:`export_labelset` writes and the ``server_json_file`` label
+        importer reads, with the run's metadata as sibling keys.  The metadata
+        goes first and ``labels`` last, so each entry can be appended to the
+        open list as it arrives; ``detector_meta`` carries the media type the
+        way a detector's own labelset does.
+        """
+        filepath = Path(field_values["filepath"])
+
+        meta: dict[str, Any] = {
+            "format": "vtsearch-labelset-stream/v1",
+            "detector_meta": {"media_type": header.get("media_type", "unknown")},
+            "detectors": list(header.get("detectors", [])),
+            "keep_negatives": bool(header.get("keep_negatives", False)),
+        }
+        if header.get("dataset"):
+            meta["dataset"] = header["dataset"]
+
+        total = 0
+        with atomic_write_stream(filepath) as f:
+            # Everything but the closing "}" of the metadata object, then the
+            # open labels list.
+            f.write(json.dumps(meta)[:-1] + ', "labels": [')
+            for entry in elements:
+                f.write(("\n" if total == 0 else ",\n") + json.dumps(entry))
+                total += 1
+            f.write("\n]}\n")
+
+        return {
+            "message": (
+                f"Streamed {total} label(s) from {len(meta['detectors'])} detector(s) "
+                f"to {filepath.resolve()} (labels JSON)."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
 
 EXPORTER = ServerJsonResultsExporter()

@@ -844,6 +844,7 @@ def extract_input_spec_from_medias(medias) -> dict | None: ...
 def build_detector_meta(detector_data, *, threshold=None) -> dict: ...  # threshold: deprecated, ignored
 def apply_detector_meta(detector_data, detector_meta) -> bool: ...
 def clipper_matches(detector_spec, dataset_spec) -> bool: ...
+def resolve_clipper_spec(name, params=None) -> dict: ...
 ```
 
 An `input_spec` is `{"clipper": "sound_tiling", "clipper_params": {"duration": "2.0"}}`
@@ -857,6 +858,14 @@ embedder's space and one trained head that means nothing to a receiver,
 which trains its own; `build_detector_meta`'s `threshold` keyword is
 accepted with a `DeprecationWarning` and ignored. `apply_detector_meta`
 still ignores a `threshold` arriving from an older server.
+
+`resolve_clipper_spec` turns a clipper choice into an input spec, the way the
+CLI's clipper override (`--override-clipper`, #5282) takes one. It refuses an
+unknown clipper, a parameter the clipper does not declare, and a value its
+`with_params` rejects, each with a `ValueError` naming the problem. The spec it
+returns carries every effective parameter as a string, the shape
+`extract_input_spec_from_medias` reads off a dataset clipped with the same
+settings, so `clipper_matches` compares the two exactly.
 
 ---
 

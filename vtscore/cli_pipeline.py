@@ -2,8 +2,9 @@
 
 A pipeline file declares the same options as the ``--autodetect`` flag set
 (importer + fields, settings file, detector list, chunk size, optional
-one-shot label import, exporter + fields, and ``tempimport`` - whether the
-imported dataset is discarded rather than saved to the dashboard).  This module loads the YAML,
+one-shot label import, exporter + fields, an optional clipper override, and
+``tempimport`` - whether the imported dataset is discarded rather than saved to
+the dashboard).  This module loads the YAML,
 validates the shape against the active plugin registries, and dispatches
 to the shared ``_run_pipeline`` in :mod:`vtscore.cli`.
 
@@ -33,12 +34,16 @@ _TOP_LEVEL_KEYS = {
     "chunk_size",
     "stream_results",
     "keep_negatives",
+    "as_labelset",
     "import_labels",
     "exporter",
     "tempimport",
+    "override_clipper",
 }
 
 _IMPORT_LABELS_KEYS = {"detector", "importer", "file", "create", "media_type"}
+
+_OVERRIDE_CLIPPER_KEYS = {"name", "params"}
 
 #: Keys an entry of ``importer.outputs`` may carry: the two the importer reads
 #: (``media_type``, ``source_specs``), the category that names the dataset,
@@ -132,6 +137,11 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'stream_results:' requires 'chunk_size:' (it streams chunk by chunk).")
     if keep_negatives and not stream_results:
         raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
+    as_labelset = raw.get("as_labelset", False)
+    if not isinstance(as_labelset, bool):
+        raise ValueError("'as_labelset:' must be a boolean.")
+    if as_labelset and not stream_results:
+        raise ValueError("'as_labelset:' only applies with 'stream_results:'.")
     tempimport = raw.get("tempimport", False)
     if not isinstance(tempimport, bool):
         raise ValueError("'tempimport:' must be a boolean.")
@@ -153,6 +163,9 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         _validate_exporter_name(exporter_name)
         _validate_field_keys(exporter_name, exporter_fields, "exporter", _list_exporter_field_keys)
 
+    override_clipper = raw.get("override_clipper")
+    parsed_override_clipper = _parse_override_clipper(override_clipper) if override_clipper is not None else None
+
     return {
         "dataset": dataset,
         "importer": importer_name,
@@ -163,10 +176,12 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "chunk_size": chunk_size,
         "stream_results": stream_results,
         "keep_negatives": keep_negatives,
+        "as_labelset": as_labelset,
         "tempimport": tempimport,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
         "exporter_fields": exporter_fields,
+        "override_clipper": parsed_override_clipper,
     }
 
 
@@ -297,6 +312,35 @@ def _parse_import_labels(value: Any) -> dict[str, Any]:
         "create": create,
         "media_type": media_type,
     }
+
+
+def _parse_override_clipper(value: Any) -> dict[str, Any]:
+    """Parse ``override_clipper: {name, params}`` into the ``input_spec`` the run takes.
+
+    The pipeline-file form of ``--override-clipper`` / ``--override-clipper-param``:
+    ``name`` is the clipper and ``params`` the parameters it should take, and
+    both go through the flags' own resolver
+    (:func:`~vtscore.detectors.input_spec.resolve_clipper_spec`), so an unknown
+    clipper or parameter fails at parse time, before any media is loaded.
+    """
+    from vtscore.detectors.input_spec import resolve_clipper_spec  # noqa: PLC0415
+
+    if not isinstance(value, dict):
+        raise ValueError("'override_clipper:' must be a mapping with a 'name:' key.")
+    unknown = set(value.keys()) - _OVERRIDE_CLIPPER_KEYS
+    if unknown:
+        allowed = ", ".join(sorted(_OVERRIDE_CLIPPER_KEYS))
+        raise ValueError(f"'override_clipper' has unknown key(s): {', '.join(sorted(unknown))}. Allowed: {allowed}.")
+    name = value.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError("'override_clipper.name' is required and must be a clipper name.")
+    params = value.get("params") or {}
+    if not isinstance(params, dict):
+        raise ValueError("'override_clipper.params' must be a mapping of parameter → value.")
+    try:
+        return resolve_clipper_spec(name, params)
+    except ValueError as exc:
+        raise ValueError(f"'override_clipper': {exc}") from exc
 
 
 def _parse_import_labels_create(value: dict[str, Any]) -> tuple[bool, str]:
@@ -488,4 +532,6 @@ def _dispatch(config: dict[str, Any]) -> None:
         override_detectors=detectors,
         stream_results=config.get("stream_results", False),
         keep_negatives=config.get("keep_negatives", False),
+        as_labelset=config.get("as_labelset", False),
+        override_clipper=config.get("override_clipper"),
     )

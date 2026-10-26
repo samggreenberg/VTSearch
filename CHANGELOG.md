@@ -20,6 +20,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the
+  dataset to the clipper it was trained on; `--override-clipper NAME`, with `--override-clipper-param KEY=VALUE` for
+  its parameters, scores at another one instead, say 5-second tiles for a detector trained on 2-second ones. An
+  unknown clipper or parameter, or a clipper for another media type than a detector scores, stops the run with a
+  message naming the problem. A pipeline file sets it as `override_clipper:`. See
+  [`docs/CLI.md`](docs/CLI.md#how-the-run-scores).
+
 ### Changed
 
 - **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
@@ -29,6 +38,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **`--stream-results --as-labelset` streams a headless run's hits as a labelset** (issue #5285). A run over a
+  source larger than RAM can now write its predictions as label entries rather than hits: each carries the item's
+  md5, label, origin and name plus the detector that labelled it, and no score. The file reads back in through
+  Import Labels or `--import-labels-into`: `server_json_file` writes a labels JSON file and `server_csv_file` a
+  labels CSV. `gui`, `webhook` and `email_smtp` stream it too. Every detector the run scores goes into the one
+  export; `--keep-negatives` adds the below-threshold items as `bad` labels. The pipeline-YAML key is
+  `as_labelset:`. A dry run with `--stream-results` now also fails when the exporter cannot stream that way.
+
 - **Audio imports can even out loudness** (issue #5286). Add Dataset › Advanced › Cleanup lists **Loudness
   Normalize** for audio, off by default. Ticked, it scales each clip so the loudness of its audible part sits at
   -20 dBFS RMS, never pushing a sample past -1 dBFS, so a quietly recorded sound is analysed like the same sound
@@ -36,6 +53,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   normalized clip keeps its Original, like any other cleanup.
 
 ### Fixed
+
+- **A clipper picked for a server folder import keeps the options you set** (issue #5300). In Add Dataset ›
+  Files › Folder, picking a clipper under Advanced (the **Details** button) and setting its options sent only the
+  clipper's name whenever the media type's default clipper takes no options, as Image's **None** does, so the
+  import ran the picked clipper on its own defaults. The options you set now go with it.
+- **A CLI run no longer re-clips a dataset already clipped the way its detector was trained** (issue #5282). The
+  comparison read a per-clip record of each clip's place in the import as one of the clipper's settings, so a
+  dataset never matched its detector's clipper and every run re-cut and re-embedded clips that were already right.
+  A detector saved before this matches again once you next label with it in the app.
 
 - **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers
   options as `(id, name)` pairs and accepts typed values (`allow_free_text`) used the browser's own suggestion
