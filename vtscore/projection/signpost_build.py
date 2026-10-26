@@ -25,7 +25,7 @@ clusterable UMAP are dropped on the floor; only derived text + 2-D anchors +
 scalar scores leave this module (the No-Persisted-Vectors rule).
 
 ``toponymy`` is an optional dependency (installed ``--no-deps``; see
-``docs/plans/vtsbrowse-toponymy.md`` for why) and is imported lazily —
+``docs/SETUP.md`` for why) and is imported lazily —
 :func:`signposting_available` is the cheap probe callers gate on.
 """
 

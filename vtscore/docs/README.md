@@ -41,7 +41,7 @@ whose `__init__.py` re-exports nothing.
 | Package | Purpose | Doc |
 |---------|---------|-----|
 | `vtscore.config` | `CoreConfig` dataclass + environment-driven constants | [packages/config.md](packages/config.md) |
-| `vtscore.media` | `MediaType`, embedder + clipper ABCs, processor ABCs | [packages/media.md](packages/media.md) |
+| `vtscore.media` | `MediaType`, embedder, clipper + cleaner ABCs | [packages/media.md](packages/media.md) |
 | `vtscore.embedding` | Embedder loaders, torch runtime, cached `(N, D)` matrix | [packages/embedding.md](packages/embedding.md) |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources | [packages/datasets.md](packages/datasets.md) |
 | `vtscore.datasource_importers` | Single-item importers for exemplar media | [packages/datasource-importers.md](packages/datasource-importers.md) |

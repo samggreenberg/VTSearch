@@ -1321,7 +1321,7 @@ class TestEmbedderSentinelDiscovery:
     """Verify built-in embedder modules expose the ``EMBEDDER`` sentinel
     so that auto-discovery picks them up with no edits to any
     ``__init__.py``; the same pattern used by exporters, dataset
-    importers, label importers, processor importers, settings importers /
+    importers, label importers, settings importers /
     exporters, and sync sources.
     """
 

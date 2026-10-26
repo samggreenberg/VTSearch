@@ -114,7 +114,7 @@ Two rules bind overrides:
   the `Clip *` provenance and the "AI Caption" / "AI Tags" signpost row; a
   type that returns its own dict silently drops them.
 - **Pixel types report *displayed* `width` / `height`.** Every box in the
-  system (clip boxes, extractor output, a user-drawn region) is expressed
+  system (clip boxes, face boxes, a user-drawn region) is expressed
   against the picture as displayed, i.e. after EXIF orientation. Decode
   through `vtscore.media.image.decode` (`decode_bounded`,
   `decode_bounded_rgb`, `open_upright`; `upright_size()` for a

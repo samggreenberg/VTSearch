@@ -369,7 +369,7 @@ is the authority on where to import it from.
 | `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. Media sources: `vtscore.datasets.sources` (`MediaSource`, `MediaItem`, `get_source_for_origin`, `list_media_sources`; `FetchedItem` is in `vtscore.datasets.sources.base`). |
 | `vtscore.datasource_importers` | `DataSourceImporter`, `FetchedMediaItem`, `get_datasource_importer`, `list_datasource_importers`. |
 | `vtscore.seed_importers` | `SeedImporter`, `SeedMediaItem`, `get_seed_importer`, `list_seed_importers`. |
-| `vtscore.media` | Re-exports the ABCs (`MediaType`, `MediaEmbedder`, `MediaClipper`, the processor ABCs) and the registry helpers (`get`, `get_embedder`, `get_clipper`, `set_progress_callback`, …). |
+| `vtscore.media` | Re-exports the ABCs (`MediaType`, `MediaEmbedder`, `MediaClipper`, `MediaCleaner`) and the registry helpers (`get`, `get_embedder`, `get_clipper`, `set_progress_callback`, …). |
 | `vtscore.embedding` | Re-exports the embed / loader / matrix helpers. |
 | `vtscore.training` | Re-exports `build_model` / `train_model` and the threshold helpers. `SVMClassifier` is at `vtscore.training.svm`; region helpers at `vtscore.training.region_similarity`. |
 | `vtscore.detectors` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.detectors.registry.list_detectors`, `vtscore.detectors.workflow.apply_and_retrain`, `vtscore.detectors.store`, … |

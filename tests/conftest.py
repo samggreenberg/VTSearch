@@ -53,7 +53,7 @@ from tests_shared.state_reset import (
 # fixture, the bulk of the reset fixture and the end-of-run summary printer —
 # lives in ``tests_shared``.
 # What stays here is app-tier only: the Flask ``client``, settings isolation,
-# the Angular bundle fixture and the autorun-processor reset.
+# the Angular bundle fixture and the app-tier run/hook registry resets.
 
 
 def pytest_configure(config):
@@ -193,10 +193,8 @@ def reset_state():
     suite calls too.  Only the app-tier extras are spelled out here.
     """
     from vtsearch.autofind import clear_autofind_runs
-    from vtsearch.autorun_processors import clear_all_autorun
     from vtsearch.import_hooks import clear_import_hooks
 
-    clear_all_autorun()
     clear_autofind_runs()
     clear_import_hooks()
 

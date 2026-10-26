@@ -69,13 +69,13 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # rejects the flag inside a requirements file): toponymy 0.5.2 pins
 # `transformers<5.0.0`, which a plain install would honour by downgrading the
 # image's transformers stack. That pin is empirically unnecessary for our
-# usage -- see docs/plans/vtsbrowse-toponymy.md -- so the package goes in bare
+# usage -- see docs/SETUP.md -- so the package goes in bare
 # and its real dependencies (fast_hdbscan, vectorizers, apricot-select,
 # tenacity, jinja2) come from `requirements/$REQUIREMENTS`, which declares
 # them on toponymy's behalf through pyproject.toml.
 RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
 
-# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
+# ---------- FaceNet (image2face, the face embedder) ----------
 # Docker builds never run scripts/install.sh, so this step mirrors its
 # `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
 # numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically

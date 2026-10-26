@@ -7,7 +7,7 @@
 # `agpl` extra, so `ultralytics` (YOLO) and `PyMuPDF` are never installed.
 # Use this when AGPL-3.0-or-later code cannot ship in your deployment: the
 # resulting install is permissively licensed, and the features that need
-# those packages -- the YOLO image extractor and clipper, the PDF importer,
+# those packages -- the YOLO image clipper, the PDF importer,
 # and the document converters -- fail with an actionable message instead of
 # working. Everything else is unaffected.
 #

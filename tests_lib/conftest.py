@@ -9,7 +9,7 @@ and the end-of-run summary printer — lives in ``tests_shared`` and is imported
 by both conftests, so the two can no longer drift (issue #3424).  What stays
 here is library-tier only: the Flask blocker, the native-thread caps, and the
 library-only ``CoreConfig`` builder.  The app-tier fixtures (``client``,
-``isolated_settings``, ``_set_login_provider``, autorun-processor reset) are
+``isolated_settings``, ``_set_login_provider``, app-tier registry resets) are
 deliberately absent.
 
 Seam 7 ("Test suite") of ``../vtscore/docs/architecture.md``.
@@ -237,7 +237,7 @@ def reset_contexts(tmp_path, monkeypatch):
 
     The bulk of it lives in :func:`tests_shared.state_reset.reset_shared_state`,
     which the app-tier ``reset_state`` calls too.  Only the library-tier extras
-    are spelled out here: no login provider, no autorun processors, no settings
+    are spelled out here: no login provider, no app-tier registries, no settings
     file isolation (the library default ``CoreConfig`` builder above is stable
     for every test), and registry storage redirected to ``tmp_path`` so tests
     can't pollute the repo's ``data/`` tree.

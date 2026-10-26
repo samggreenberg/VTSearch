@@ -57,9 +57,9 @@ inclusions = 7,392 rows; run 2026-07-30.
 > writes `autopilot_prod_*.csv` and leaves the files above untouched. The
 > numbers in this report stand as the record of the 2026-07-30 run under the
 > then-shipped detector. The plan that owed a re-measurement under the current
-> one was retired when a precision floor replaced the miss budget (#4223); what
-> survives of it is in
-> [`docs/plans/provenance-partitioned-calibration.md`](../../plans/provenance-partitioned-calibration.md).
+> one was retired when a precision floor replaced the miss budget (#4223). Its
+> successor, the provenance-partitioned calibration plan, was retired in turn
+> once #4267 ruled for random verification (#5260).
 
 ## Method
 
@@ -189,5 +189,6 @@ policy get", not as a production estimate.
 5. **If anything is worth building, it is cold-start calibration** (finding 5),
    not bias correction.
 
-The plan that tracked these follow-ups was retired by the #4223 ruling; what
-survives of it is in [`docs/plans/provenance-partitioned-calibration.md`](../../plans/provenance-partitioned-calibration.md).
+The plan that tracked these follow-ups was retired by the #4223 ruling. Its
+successor, the provenance-partitioned calibration plan, was retired in turn once
+#4267 ruled for random verification (#5260).

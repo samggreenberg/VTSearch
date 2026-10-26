@@ -624,6 +624,18 @@ image's score rows) in both runs, so the comparison isolates region voting's
 effect. Region voting is a no-op on single-vector datasets (no `patch_grid` to
 sample a patch from).
 
+**Visual Genome's ground truth.** It is the one multi-label demo. Its vocabulary
+is a fixed list of the 100 most frequent VG object names
+(`VISUAL_GENOME_CATEGORIES`), the same for every slice. Membership is
+closed-world: an image is positive for a category when that name is in its
+annotated object set, negative otherwise, so VG's incomplete annotations leave a
+few accepted false negatives. Object names reach a category through a case- and
+plural-folding heuristic; a spelling it does not fold is lost, and VG's own
+`names` lists hold one name per object, so they offer no aliases (#3618). The
+boxes ride on each media as `media["regions"]`, a list of
+`{"box": [x0, y0, x1, y1], "label": category}` in normalised `[0, 1]`
+coordinates.
+
 ### Example: voting iterations from pickle files
 
 If you have pre-exported dataset pickle files, load them directly:
