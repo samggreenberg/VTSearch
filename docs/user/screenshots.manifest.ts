@@ -415,7 +415,7 @@ async function dropExample(page: Page, h: Helpers): Promise<void> {
   examplesBefore = exampleMediaFiles();
   await newDetectorImageTab(page, h);
   await page.locator('.example-panel .drop-zone-input').setInputFiles(trainingPicture('yellow-smiley').path);
-  await page.waitForSelector('[role=dialog][aria-label="Use This Example?"]', { timeout: 20000 });
+  await page.waitForSelector('dialog[aria-label="Use This Example?"]', { timeout: 20000 });
   await h.wait(800);
 }
 
@@ -1672,7 +1672,7 @@ export const SHOTS: Shot[] = [
       const byName: Record<string, Drawing> = Object.fromEntries(
         corpus(TRAIN_DATASET).pictures.map((p: Drawing & { filename: string }) => [p.filename, p]),
       );
-      const prompt = page.locator('[role=dialog][aria-label="Update Sort Example?"]');
+      const prompt = page.locator('dialog[aria-label="Update Sort Example?"]');
       let name = await servedPicture(page, h, null);
       for (let i = 0; i < 30 && !(await prompt.count()); i++) {
         const good = name !== null && !!byName[name] && isRosySmiley(byName[name]);
