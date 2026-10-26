@@ -280,7 +280,7 @@ class TestResumeContinuesTheRun:
 
         assert head.trained == 1
 
-    def test_the_checkpoint_is_removed_when_the_run_completes(self, run_setup, head, scorer):
+    def test_the_checkpoint_and_lock_are_removed_when_the_run_completes(self, run_setup, head, scorer):
         tmp_path = run_setup
         out = tmp_path / "hits.ndjson"
         _interrupted(tmp_path, out, scorer, at=3)
@@ -288,7 +288,7 @@ class TestResumeContinuesTheRun:
 
         _run(tmp_path, out)
 
-        assert not _checkpoint(out).exists()
+        assert sorted(p.name for p in tmp_path.glob("hits.ndjson*")) == ["hits.ndjson"]
 
     def test_a_fresh_resumable_run_matches_a_plain_streamed_run(self, run_setup, head):
         tmp_path = run_setup
@@ -314,6 +314,35 @@ class TestResumeContinuesTheRun:
         _interrupted(tmp_path, out, scorer, at=3)
         _write_pickle_dataset(tmp_path / "ds.pkl", {i: _make_audio_media(i) for i in range(1, 12)})
         expected = _reference(tmp_path, "grown.ndjson")
+
+        _run(tmp_path, out)
+
+        assert out.read_bytes() == expected
+
+    def test_an_exporter_that_commits_before_any_chunk_keeps_the_checkpoint_whole(
+        self, run_setup, head, scorer, monkeypatch
+    ):
+        """A commit made before the completed chunks are re-read still records all their fingerprints."""
+        from vtscore.exporters import get_exporter
+
+        real = get_exporter("server_json_file")
+
+        class _Eager(type(real)):
+            def export_cli_streaming_resumable(self, header, chunks, field_values, resume):
+                if resume.position is not None:
+                    resume.commit(resume.position)
+                return super().export_cli_streaming_resumable(header, chunks, field_values, resume)
+
+        eager = _Eager()
+        monkeypatch.setattr("vtscore.exporters.get_exporter", lambda name: eager if name == real.name else None)
+        tmp_path = run_setup
+        expected = _reference(tmp_path)
+        out = tmp_path / "hits.ndjson"
+        _interrupted(tmp_path, out, scorer, at=4)
+        _interrupted(tmp_path, out, scorer, at=1)
+
+        checkpoint = json.loads(_checkpoint(out).read_text())
+        assert checkpoint["chunks_done"] == len(checkpoint["chunk_digests"]) == 3
 
         _run(tmp_path, out)
 
@@ -428,10 +457,13 @@ class TestResumeRefuses:
         _interrupted(tmp_path, out, scorer, at=3)
         out.unlink()
 
+        head.trained = 0
+
         with pytest.raises(SystemExit):
             _run(tmp_path, out)
 
-        assert "is missing" in _error(capsys)
+        assert f"its output {out} is missing" in _error(capsys)
+        assert head.trained == 0
 
     def test_an_output_shorter_than_the_checkpoint(self, run_setup, head, scorer, capsys):
         tmp_path = run_setup
@@ -443,6 +475,16 @@ class TestResumeRefuses:
             _run(tmp_path, out)
 
         assert "fewer than the" in _error(capsys)
+
+    def test_a_second_run_on_the_same_output_at_once(self, run_setup, head, capsys):
+        from vtscore.cli_resume import exclusive_run
+
+        out = run_setup / "hits.ndjson"
+        with exclusive_run(out), pytest.raises(SystemExit):
+            _run(run_setup, out)
+
+        assert "Another --resume run is writing" in _error(capsys)
+        assert not out.exists()
 
     def test_an_unreadable_checkpoint(self, run_setup, head, capsys):
         tmp_path = run_setup
@@ -573,9 +615,17 @@ class _StubImporter:
         pass
 
     def run_chunked_cli(self, field_values: dict, chunk_size: int, thin: bool = False):
+        import numpy as np
+
+        from vtscore.embedding.media_vectors import set_media_embedding
+
         for start in range(0, len(self.medias), chunk_size):
-            batch = self.medias[start : start + chunk_size]
-            yield {i: dict(m, id=i) for i, m in enumerate(batch, 1)}
+            chunk = {}
+            for i, media in enumerate(self.medias[start : start + chunk_size], 1):
+                fresh = {k: v for k, v in media.items() if k not in ("embedding", "embedder")}
+                set_media_embedding(fresh, "clap", np.asarray(media["embedding"], dtype=np.float32))
+                chunk[i] = dict(fresh, id=i)
+            yield chunk
 
 
 class TestResumeFromAnImporter:
@@ -588,7 +638,9 @@ class TestResumeFromAnImporter:
         monkeypatch.setattr("vtscore.datasets.importers.get_importer", lambda _name: importer)
         embedded: list[int] = []
         monkeypatch.setattr(
-            cli_mod, "_embed_loaded_medias", lambda chunk: embedded.append(min(m["id"] for m in chunk.values())) or chunk
+            cli_mod,
+            "_embed_loaded_medias",
+            lambda chunk: embedded.append(min(m["id"] for m in chunk.values())) or chunk,
         )
 
         def run(out: Path) -> None:
@@ -605,8 +657,9 @@ class TestResumeFromAnImporter:
             )
 
         run(tmp_path / "reference.ndjson")
+        assert len((tmp_path / "reference.ndjson").read_text().splitlines()) == 10
         out = tmp_path / "hits.ndjson"
-        scorer.at = 3
+        scorer.calls, scorer.at = 0, 3
         with pytest.raises(KeyboardInterrupt):
             run(out)
         scorer.at = None

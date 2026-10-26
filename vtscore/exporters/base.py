@@ -112,6 +112,7 @@ class StreamResume:
     #: before it would survive the process being killed.
     commit: Callable[[Any], None]
 
+
 #: Every payload kind an exporter can be handed, in the order they are
 #: documented.  ``find_results`` is a scored run (hit lists); ``labelset`` is a
 #: detector's labels (origins and vote provenance); ``detector_bundles`` is the

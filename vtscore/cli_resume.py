@@ -41,9 +41,11 @@ completes.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -55,6 +57,9 @@ CHECKPOINT_FORMAT = "vtsearch-stream-checkpoint/v1"
 
 #: Appended to the output path to name its checkpoint.
 CHECKPOINT_SUFFIX = ".resume.json"
+
+#: Appended to the output path to name the lock a running resumable run holds.
+LOCK_SUFFIX = ".resume.lock"
 
 #: The media fields a chunk fingerprint is taken over, in this order.  Enough
 #: to tell the same files in the same order from anything else: the ``id``
@@ -83,6 +88,41 @@ def checkpoint_path_for(output_path: str | Path) -> Path:
     """The checkpoint that sits beside *output_path*."""
     p = Path(output_path)
     return p.with_name(p.name + CHECKPOINT_SUFFIX)
+
+
+@contextlib.contextmanager
+def exclusive_run(output_path: str | Path) -> Iterator[None]:
+    """Hold *output_path* for one resumable run, refusing a second at the same time.
+
+    Two runs appending to one file in place would interleave their chunks, a
+    failure an atomic export never had.  So the run takes a non-blocking
+    ``flock`` on a sibling ``<output>.resume.lock`` for its whole length, and a
+    second run on the same output is refused at once rather than left to wait
+    and then start over on a finished file.  The kernel drops the lock when the
+    process dies, so a killed run never blocks the next; the file is removed
+    when the run completes.  Without ``fcntl`` (Windows) there is no guard.
+    """
+    try:
+        import fcntl  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - Windows
+        yield
+        return
+    p = Path(output_path)
+    lock_path = p.with_name(p.name + LOCK_SUFFIX)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ResumeRefusedError(
+                f"Another --resume run is writing {p} (it holds {lock_path}). Let it finish, or stop it first."
+            ) from None
+        yield
+        with contextlib.suppress(OSError):
+            os.unlink(lock_path)
+    finally:
+        os.close(fd)
 
 
 def digest(obj: Any) -> str:
@@ -187,7 +227,7 @@ class StreamCheckpoint:
             data = json.loads(text)
             if data.get("format") != CHECKPOINT_FORMAT:
                 raise ValueError(f"unknown format {data.get('format')!r}")
-            return cls(
+            checkpoint = cls(
                 path=path,
                 identity=dict(data["identity"]),
                 chunks_done=int(data["chunks_done"]),
@@ -195,6 +235,11 @@ class StreamCheckpoint:
                 thresholds={str(k): float(v) for k, v in data["thresholds"].items()},
                 position=data["position"],
             )
+            if len(checkpoint.chunk_digests) != checkpoint.chunks_done:
+                raise ValueError(
+                    f"{checkpoint.chunks_done} chunk(s) done but {len(checkpoint.chunk_digests)} fingerprinted"
+                )
+            return checkpoint
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise ResumeRefusedError(
                 f"The resume checkpoint {path} cannot be read ({exc}). Delete it to start the run over."

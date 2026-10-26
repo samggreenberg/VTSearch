@@ -25,6 +25,7 @@ from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from
 from vtscore.utils.hits import build_media_hit
 
 if TYPE_CHECKING:
+    from vtscore.cli_resume import StreamCheckpoint
     from vtscore.datasets.importers.base import OutputSpec
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.training import ScoringRows
@@ -91,15 +92,7 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
                 print(f"    - {_describe_output(output)}", flush=True)
     chunk_size = source_description.get("chunk_size")
     print(f"  Chunk size: {chunk_size if chunk_size else 'whole dataset'}", flush=True)
-    if source_description.get("stream_results"):
-        neg = "included" if source_description.get("keep_negatives") else "dropped"
-        mode = "yes, as a labelset (label entries" if source_description.get("as_labelset") else "yes (hits"
-        print(f"  Streaming: {mode} written to the exporter per chunk; negatives {neg})", flush=True)
-    if source_description.get("resume"):
-        checkpoint = source_description.get("resume_checkpoint", "")
-        done = source_description.get("resume_chunks_done")
-        state = f"{done} chunk(s) already written" if done is not None else "none yet, so the run starts fresh"
-        print(f"  Resume: yes (checkpoint {checkpoint}: {state})", flush=True)
+    _print_dry_run_streaming(source_description)
     if source_description.get("delete_after_detection"):
         print(
             "  Save to dashboard: until detection has run (the autofind_cli_delete_dataset setting then deletes it;"
@@ -110,6 +103,19 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
         print("  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)", flush=True)
     else:
         print("  Save to dashboard: no (--tempimport: the dataset is discarded after detection)", flush=True)
+
+
+def _print_dry_run_streaming(source_description: dict[str, Any]) -> None:
+    """Print the dry-run plan's ``Streaming:`` and ``Resume:`` lines, when they apply."""
+    if source_description.get("stream_results"):
+        neg = "included" if source_description.get("keep_negatives") else "dropped"
+        mode = "yes, as a labelset (label entries" if source_description.get("as_labelset") else "yes (hits"
+        print(f"  Streaming: {mode} written to the exporter per chunk; negatives {neg})", flush=True)
+    if source_description.get("resume"):
+        checkpoint = source_description.get("resume_checkpoint", "")
+        done = source_description.get("resume_chunks_done")
+        state = f"{done} chunk(s) already written" if done is not None else "none yet, so the run starts fresh"
+        print(f"  Resume: yes (checkpoint {checkpoint}: {state})", flush=True)
 
 
 def _describe_output(output: dict[str, Any]) -> str:
@@ -1371,9 +1377,7 @@ def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> It
         yield _embed_loaded_medias(medias)
 
 
-def _load_importer_whole_raw(
-    importer_name: str, field_values: dict[str, Any]
-) -> Iterator[dict[int, dict[str, Any]]]:
+def _load_importer_whole_raw(importer_name: str, field_values: dict[str, Any]) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield a single medias dict loaded via a named importer, not yet embedded."""
     from vtscore.datasets.importers import get_importer
 
@@ -2113,6 +2117,7 @@ def _run_streaming_pipeline(
     dataset: "_RunDataset | None" = None,
     as_labelset: bool = False,
     override_clipper: dict[str, Any] | None = None,
+    resumable_source: _SourceSpec | None = None,
 ) -> None:
     """Stream scored hits straight to a streaming-capable exporter.
 
@@ -2127,7 +2132,24 @@ def _run_streaming_pipeline(
     ``export_labelset_streaming``: every detector's labels in one export, each
     entry naming its detector, and a header carrying no threshold or balance
     state (see :func:`_stream_label_records`).
+
+    With *resumable_source* the run is resumable instead (``--resume``) and
+    reads that source rather than *media_source*: see
+    :func:`_run_resumable_streaming_pipeline`.  It is never a labelset or one
+    dataset of several (:func:`_check_resumable`).
     """
+    if resumable_source is not None:
+        _run_resumable_streaming_pipeline(
+            resumable_source,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
+            autofind_detectors=autofind_detectors,
+            keep_negatives=keep_negatives,
+            empty_error=empty_error,
+            override_clipper=override_clipper,
+        )
+        return
     exporter = _streaming_exporter(exporter_name, as_labelset=as_labelset)
     exporter.validate_cli_field_values(exporter_field_values or {})
 
@@ -2283,24 +2305,13 @@ def _run_resumable_streaming_pipeline(
     the run's identity, each completed chunk's fingerprint, the detectors'
     thresholds and the exporter's position after the last chunk it made
     durable.  With no checkpoint the run starts fresh and writes one; with a
-    matching checkpoint it continues:
-
-    - The source is read from the start, raw (:meth:`_SourceSpec.load_raw`),
-      and each completed chunk is checked against its fingerprint, then
-      dropped without being embedded or scored.
-    - The detectors are retrained on the same first chunk, which is embedded
-      even when it was completed, so the head is the one the written chunks
-      came from; the checkpoint's thresholds are kept
-      (:meth:`~vtscore.cli_resume.StreamCheckpoint.pin_thresholds`).
-    - The exporter cuts its output back to the recorded position and appends
-      the remaining chunks, without a second header.
-
-    Chunks are numbered by their position in the raw stream, empty ones
-    included, so a chunk that scored to nothing still advances the
-    checkpoint.  The checkpoint is removed once the exporter completes.
+    matching checkpoint it continues (:func:`_write_resumable_stream`).
+    Everything that can refuse the resume without loading media - the
+    exporter, the output path, the identity, a missing output - is checked
+    here first, and the run holds its output for its whole length
+    (:func:`~vtscore.cli_resume.exclusive_run`).
     """
-    from vtscore.cli_resume import StreamCheckpoint, checkpoint_path_for, chunk_digest  # noqa: PLC0415
-    from vtscore.exporters.base import StreamResume  # noqa: PLC0415
+    from vtscore.cli_resume import StreamCheckpoint, checkpoint_path_for, exclusive_run  # noqa: PLC0415
 
     exporter = _resumable_exporter(exporter_name)
     _refuse_dated_destination(exporter, exporter_field_values or {})
@@ -2320,54 +2331,188 @@ def _run_resumable_streaming_pipeline(
         exporter_field_values=field_values,
     )
     checkpoint_path = checkpoint_path_for(output)
-    previous = StreamCheckpoint.load(checkpoint_path)
-    if previous is not None:
-        previous.check_identity(identity)
-    done = previous.chunks_done if previous is not None else 0
-    if previous is not None:
-        cli_progress.emit(
-            "resume_start",
-            text=(
-                f"Resuming from {checkpoint_path}: {done} chunk(s) already written; "
-                "re-reading them to check the source, without scoring them again."
-            ),
-            checkpoint=str(checkpoint_path),
-            chunks_done=done,
-            resumed=True,
+    with exclusive_run(output):
+        previous = StreamCheckpoint.load(checkpoint_path)
+        if previous is not None:
+            previous.check_identity(identity)
+            if not Path(output).exists():
+                raise previous.refuse(f"its output {output} is missing.")
+            cli_progress.emit(
+                "resume_start",
+                text=(
+                    f"Resuming from {checkpoint_path}: {previous.chunks_done} chunk(s) already written; "
+                    "re-reading them to check the source, without scoring them again."
+                ),
+                checkpoint=str(checkpoint_path),
+                chunks_done=previous.chunks_done,
+                resumed=True,
+            )
+        else:
+            cli_progress.emit(
+                "resume_start",
+                text=f"Resumable run: checkpointing to {checkpoint_path} after each chunk.",
+                checkpoint=str(checkpoint_path),
+                chunks_done=0,
+                resumed=False,
+            )
+        chunks = _write_resumable_stream(
+            spec,
+            exporter,
+            field_values,
+            StreamCheckpoint(path=checkpoint_path, identity=identity),
+            previous,
+            override_detectors=override_detectors,
+            autofind_detectors=autofind_detectors,
+            keep_negatives=keep_negatives,
+            empty_error=empty_error,
+            override_clipper=override_clipper,
         )
-    else:
-        cli_progress.emit(
-            "resume_start",
-            text=f"Resumable run: checkpointing to {checkpoint_path} after each chunk.",
-            checkpoint=str(checkpoint_path),
-            chunks_done=0,
-            resumed=False,
-        )
+    cli_progress.emit(
+        "resume_complete",
+        text=f"Run complete after {chunks} chunk(s); removed the checkpoint {checkpoint_path}.",
+        checkpoint=str(checkpoint_path),
+        chunks=chunks,
+    )
 
-    raw_chunks = iter(spec.load_raw())
-    digests: list[str] = []
 
-    def pull() -> dict[int, dict[str, Any]] | None:
-        """The next raw chunk, fingerprinted and checked against the checkpoint; ``None`` at the end."""
-        raw = next(raw_chunks, None)
+class _ResumableChunks:
+    """A resumable run's chunk stream: each raw chunk fingerprinted, the completed ones checked and skipped.
+
+    Chunks are numbered by their position in the raw stream
+    (:meth:`_SourceSpec.load_raw`), empty ones included, so a chunk that
+    scored to nothing still advances the checkpoint.  *previous* is the
+    checkpoint of the run this one continues, ``None`` for a fresh run; its
+    completed chunks are re-read and checked against their fingerprints, but
+    never embedded or scored.
+    """
+
+    def __init__(self, spec: _SourceSpec, previous: "StreamCheckpoint | None") -> None:
+        self._spec = spec
+        self._raw = iter(spec.load_raw())
+        self._previous = previous
+        #: How many chunks the earlier run completed.
+        self.done = previous.chunks_done if previous is not None else 0
+        #: How many raw chunks have been pulled so far.
+        self.seen = 0
+        #: The position of the last chunk handed to the exporter; every chunk
+        #: before it was either handed over too or had nothing to write.
+        self.handed = self.done
+        # The completed chunks' fingerprints are the recorded ones (each is
+        # checked as it is re-read); the chunks after them are fingerprinted afresh.
+        self._completed = list(previous.chunk_digests) if previous is not None else []
+        self._new: list[str] = []
+
+    def pull(self) -> dict[int, dict[str, Any]] | None:
+        """The next raw chunk, fingerprinted and checked; ``None`` at the end of the source."""
+        from vtscore.cli_resume import chunk_digest  # noqa: PLC0415
+
+        raw = next(self._raw, None)
         if raw is None:
-            if previous is not None:
-                previous.check_reached(len(digests))
+            if self._previous is not None:
+                self._previous.check_reached(self.seen)
             return None
-        digests.append(chunk_digest(raw))
-        if len(digests) <= done and previous is not None:
-            previous.check_chunk(len(digests), digests[-1])
+        self.seen += 1
+        if self._previous is not None and self.seen <= self.done:
+            self._previous.check_chunk(self.seen, chunk_digest(raw))
+        else:
+            self._new.append(chunk_digest(raw))
         return raw
 
-    # The first non-empty chunk trains the detectors, as in the plain streaming
-    # run, so a resumed run embeds it whether or not it was written already.
-    first_chunk: dict[int, dict[str, Any]] = {}
-    while not first_chunk:
-        raw = pull()
-        if raw is None:
-            raise ValueError(empty_error)
-        first_chunk = spec.prepare(raw) if raw else raw
-    first_position = len(digests)
+    def first(self, empty_error: str) -> dict[int, dict[str, Any]]:
+        """The first non-empty chunk, prepared: the one the detectors train on.
+
+        Embedded whether or not it was completed, so a resumed run's head is
+        the one the written chunks came from.
+        """
+        while True:
+            raw = self.pull()
+            if raw is None:
+                raise ValueError(empty_error)
+            if raw and (chunk := self._spec.prepare(raw)):
+                return chunk
+
+    def records(
+        self,
+        first_chunk: dict[int, dict[str, Any]],
+        first_position: int,
+        detector_mlps: dict[str, dict[str, Any]],
+        routed: "_RoutedSnapshots | None",
+        keep_negatives: bool,
+    ) -> Iterator[list[tuple[str, dict[str, Any]]]]:
+        """Yield each chunk's hit records after the completed ones, the first chunk included unless it was."""
+        if first_position > self.done:
+            results = _score_medias_with_detectors(first_chunk, detector_mlps, routed)
+            self.handed = first_position
+            yield list(_chunk_hit_records(results, keep_negatives))
+        # Only the first chunk's prepared snapshots are reused (see _stream_hit_records).
+        routed = None
+        while (raw := self.pull()) is not None:
+            if self.seen <= self.done:
+                cli_progress.emit(
+                    "chunk_skipped",
+                    text=f"Skipping chunk {self.seen} ({len(raw)} medias): already written.",
+                    chunk_num=self.seen,
+                    chunk_size=len(raw),
+                )
+                continue
+            records = self._score(raw, detector_mlps, keep_negatives)
+            # Before the yield: the exporter commits this chunk before it asks for the next.
+            self.handed = self.seen
+            yield records
+
+    def _score(
+        self, raw: dict[int, dict[str, Any]], detector_mlps: dict[str, dict[str, Any]], keep_negatives: bool
+    ) -> list[tuple[str, dict[str, Any]]]:
+        """Prepare and score one new chunk; its hit records."""
+        chunk = self._spec.prepare(raw) if raw else raw
+        if not chunk:
+            return []
+        apply_custom_metadata_md5(chunk)
+        cli_progress.emit(
+            "chunk_start",
+            text=f"Processing chunk {self.seen} ({len(chunk)} medias)...",
+            chunk_num=self.seen,
+            chunk_size=len(chunk),
+        )
+        return list(_chunk_hit_records(_score_medias_with_detectors(chunk, detector_mlps), keep_negatives))
+
+    def save(self, checkpoint: "StreamCheckpoint", position: Any) -> None:
+        """Record in *checkpoint* that every chunk handed over is durable at the exporter's *position*."""
+        checkpoint.chunks_done = self.handed
+        checkpoint.chunk_digests = (self._completed[: self.done] + self._new)[: self.handed]
+        checkpoint.position = position
+        checkpoint.save()
+
+
+def _write_resumable_stream(
+    spec: _SourceSpec,
+    exporter: Any,
+    field_values: dict[str, Any],
+    checkpoint: "StreamCheckpoint",
+    previous: "StreamCheckpoint | None",
+    *,
+    override_detectors: list[str] | None,
+    autofind_detectors: list[str],
+    keep_negatives: bool,
+    empty_error: str,
+    override_clipper: dict[str, Any] | None,
+) -> int:
+    """Score *spec* chunk by chunk into *exporter*, saving *checkpoint* at every commit; the chunks seen.
+
+    *previous* is the checkpoint of the run this one continues, ``None`` for
+    a fresh run.  When it is set, the completed chunks are re-read and
+    checked but not scored (:class:`_ResumableChunks`); the detectors are
+    retrained on the same first chunk and keep the recorded thresholds
+    (:meth:`~vtscore.cli_resume.StreamCheckpoint.pin_thresholds`); and the
+    exporter cuts its output back to the recorded position and appends the
+    remaining chunks, without a second header.  *checkpoint* is removed once
+    the exporter completes.
+    """
+    from vtscore.exporters.base import StreamResume  # noqa: PLC0415
+
+    stream = _ResumableChunks(spec, previous)
+    first_chunk = stream.first(empty_error)
+    first_position = stream.seen
 
     apply_custom_metadata_md5(first_chunk)
     media_type = _detect_media_type(first_chunk)
@@ -2386,66 +2531,22 @@ def _run_resumable_streaming_pipeline(
                 retrained=retrained,
                 recorded=recorded,
             )
-    thresholds = {name: float(info["threshold"]) for name, info in detector_mlps.items()}
-    header = _stream_header(media_type, detector_mlps, keep_negatives)
+    checkpoint.thresholds = {name: float(info["threshold"]) for name, info in detector_mlps.items()}
 
-    # The position of the last chunk handed to the exporter; every chunk before
-    # it was either handed over too or had nothing to write.
-    handed = done
-
-    def chunks() -> Iterator[list[tuple[str, dict[str, Any]]]]:
-        nonlocal handed, routed
-        if first_position > done:
-            results = _score_medias_with_detectors(first_chunk, detector_mlps, routed)
-            handed = first_position
-            yield list(_chunk_hit_records(results, keep_negatives))
-        # Only the first chunk's prepared snapshots are reused (see _stream_hit_records).
-        routed = None
-        while (raw := pull()) is not None:
-            position = len(digests)
-            if position <= done:
-                cli_progress.emit(
-                    "chunk_skipped",
-                    text=f"Skipping chunk {position} ({len(raw)} medias): already written.",
-                    chunk_num=position,
-                    chunk_size=len(raw),
-                )
-                continue
-            chunk = spec.prepare(raw) if raw else raw
-            records: list[tuple[str, dict[str, Any]]] = []
-            if chunk:
-                apply_custom_metadata_md5(chunk)
-                cli_progress.emit(
-                    "chunk_start",
-                    text=f"Processing chunk {position} ({len(chunk)} medias)...",
-                    chunk_num=position,
-                    chunk_size=len(chunk),
-                )
-                records = list(_chunk_hit_records(_score_medias_with_detectors(chunk, detector_mlps), keep_negatives))
-            handed = position
-            yield records
-
-    def commit(position: Any) -> None:
-        StreamCheckpoint(
-            path=checkpoint_path,
-            identity=identity,
-            chunks_done=handed,
-            chunk_digests=digests[:handed],
-            thresholds=thresholds,
-            position=position,
-        ).save()
-
-    resume = StreamResume(position=previous.position if previous is not None else None, commit=commit)
-    result = exporter.export_cli_streaming_resumable(header, chunks(), field_values, resume)
-    StreamCheckpoint(path=checkpoint_path, identity=identity).clear()
+    resume = StreamResume(
+        position=previous.position if previous is not None else None,
+        commit=lambda position: stream.save(checkpoint, position),
+    )
+    result = exporter.export_cli_streaming_resumable(
+        _stream_header(media_type, detector_mlps, keep_negatives),
+        stream.records(first_chunk, first_position, detector_mlps, routed, keep_negatives),
+        field_values,
+        resume,
+    )
+    checkpoint.clear()
     message = result.get("message", "Export complete.")
     cli_progress.emit("export_complete", text=message, message=message)
-    cli_progress.emit(
-        "resume_complete",
-        text=f"Run complete after {len(digests)} chunk(s); removed the checkpoint {checkpoint_path}.",
-        checkpoint=str(checkpoint_path),
-        chunks=len(digests),
-    )
+    return stream.seen
 
 
 def _run_pipeline(
@@ -2547,18 +2648,7 @@ def _run_pipeline(
         return False
 
     try:
-        if stream_results and resumable_source is not None:
-            _run_resumable_streaming_pipeline(
-                resumable_source,
-                exporter_name=exporter_name,
-                exporter_field_values=exporter_field_values,
-                override_detectors=override_detectors,
-                autofind_detectors=autofind_detectors,
-                keep_negatives=keep_negatives,
-                empty_error=empty_error,
-                override_clipper=override_clipper,
-            )
-        elif stream_results:
+        if stream_results:
             _run_streaming_pipeline(
                 media_source,
                 exporter_name=exporter_name,
@@ -2570,6 +2660,7 @@ def _run_pipeline(
                 empty_error=empty_error,
                 dataset=dataset,
                 override_clipper=override_clipper,
+                resumable_source=resumable_source,
             )
         else:
             _run_live_pipeline(
@@ -3114,7 +3205,6 @@ def _run_multi_source(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         as_labelset=as_labelset,
-        resume=resume,
     )
     if dry_run:
         _run_pipeline(
