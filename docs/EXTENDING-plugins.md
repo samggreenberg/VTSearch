@@ -2359,8 +2359,8 @@ without a product reason.
 
 `settings_source` is a per-user key, so a user is bound to your source in
 their own `user_settings.json` (`data/user_settings.json` for the
-single-user default; see [DEPLOYMENT.md § Settings file
-schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
+single-user default; see [SETTINGS.md](SETTINGS.md)), not in the server
+file:
 
 ```json
 {
@@ -2411,7 +2411,7 @@ plugin. Each detector can link to a source that auto-exports its labels
 as they change and imports them back on load or on sync. A deployment
 can link every detector to one source at once (the
 `default_labelset_source` server setting; see
-[DEPLOYMENT.md](DEPLOYMENT.md)), so a copy of every detector's labels
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)), so a copy of every detector's labels
 stays current outside the server.
 
 Use a **Label Importer** (above) for one-shot label import. Use a
