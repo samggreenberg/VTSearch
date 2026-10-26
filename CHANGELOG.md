@@ -20,6 +20,24 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Changed
+
+- **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
+  under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
+  field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
+  now reads **Server path**.
+
+### Fixed
+
+- **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers
+  options as `(id, name)` pairs and accepts typed values (`allow_free_text`) used the browser's own suggestion
+  list, which put each option's id (a dataset's UUID, say) in large type with its name in small print beneath, and
+  wrote the id into the box on a pick. The list now leads each row with the name, with the id beneath; the box
+  shows the picked name, with its id under the box; and the form still sends the id. Two options that share a
+  name stay distinct, so picking the second "my-cool-dataset" imports that one. Typing a name exactly one option
+  has picks that option; anything else typed is sent as typed. This applies to every form that renders plugin
+  fields: Add Dataset, Export, Import Labels, New Detector, AutoFind, and the settings importers and exporters.
+
 ## 2026-10-26
 
 ### Changed

@@ -64,6 +64,13 @@ def list_datasource_importers_route():
 
 
 @datasource_importers_bp.route("/api/datasource-import/<importer_name>", methods=["POST"])
+@datasource_importers_bp.alt_response(
+    400, description="Invalid request body or field value, or the importer rejected the fetch."
+)
+@datasource_importers_bp.alt_response(404, description="Unknown datasource importer name.")
+@datasource_importers_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
+@datasource_importers_bp.alt_response(501, description="Importer does not implement fetch.")
+@datasource_importers_bp.alt_response(502, description="The source behind the importer failed, or returned no data.")
 def run_datasource_import(importer_name: str):
     """Fetch one media item via the named datasource importer.
 

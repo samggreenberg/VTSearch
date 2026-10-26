@@ -73,6 +73,7 @@ def favicon() -> tuple[str, int] | Response:
 
 
 @main_bp.route("/favicon-<variant>.ico")
+@main_bp.alt_response(404, description="Unknown favicon variant.")
 def favicon_variant(variant: str) -> tuple[str, int] | Response:
     """Serve a favicon variant (frown, surprised) from the static directory.
 
@@ -104,6 +105,7 @@ def logo() -> tuple[str, int] | Response:
 
 
 @main_bp.route("/<path:path>")
+@main_bp.alt_response(404, description="An ``/api/`` path no route matches.")
 def catch_all(path: str) -> Response:
     """Serve static files at root paths and fall back to Angular SPA.
 

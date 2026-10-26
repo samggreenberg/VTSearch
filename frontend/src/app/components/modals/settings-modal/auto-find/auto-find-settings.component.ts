@@ -10,6 +10,7 @@ import { ExportersApiService } from '../../../../services/exporters-api.service'
 import { DynamicFieldOptions } from '../../../../utils/dynamic-field-options';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
 import { PluginCheckboxComponent } from '../../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../../plugin-combobox/plugin-combobox.component';
 
 /** The selected exporter + its per-exporter field-value map, emitted to the
  *  parent so it can persist both onto the settings object. */
@@ -37,7 +38,7 @@ export interface AutoFindExporterChange {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [FormsModule, IconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })

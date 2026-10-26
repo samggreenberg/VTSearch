@@ -890,7 +890,7 @@ The GPU **type** is not pinned. `launch_pile.sh` calls
 measured before a blocking queue wait is stale) and requests the fastest type
 with enough free GPUs for the jobs it is about to submit. Set `VTS_GPU` to pin a
 type anyway, or `VTS_GPU_NODE` to pin the node a rebuild must reproduce; see
-[`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested). Cells
+[`scripts/slurm/README.md`](../../slurm/README.md#which-gpu-type-gets-requested). Cells
 built before 2026-08-17 were embedded on a hardcoded `v100` (see
 [the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md) for
 how the picker itself once misread the cluster).

@@ -29,10 +29,6 @@ frontend build) Node.js 20.19+, 22.12+ or 24+.
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
 - [Running on a SLURM GPU cluster](#running-on-a-slurm-gpu-cluster)
-  - [One-time setup on the cluster](#one-time-setup-on-the-cluster)
-  - [One-time setup on your local machine](#one-time-setup-on-your-local-machine)
-  - [Daily workflow](#daily-workflow)
-  - [Tuning the allocation](#tuning-the-allocation)
 - [Running the tests](#running-the-tests)
 - [Environment variables](#environment-variables)
 - [Next steps](#next-steps)
@@ -195,7 +191,7 @@ explicitly, which skips the check entirely. The installer's other switches
 (DKMS conversion, a pinned driver `.run` file, verbose output) are listed under
 [DEPLOYMENT.md § Install-time](DEPLOYMENT.md#install-time-scriptsinstallsh),
 and install problems on GPU boxes are covered in
-[DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#troubleshooting).
+[TROUBLESHOOTING.md § GPU installs](TROUBLESHOOTING.md#gpu-installs-driver-cuda-and-cuml).
 
 ### Picking the CUDA tag
 
@@ -221,7 +217,7 @@ later, and it is the **only tag that gets cuML** (GPU UMAP / k-means). A
 Volta card, or an older driver, steps down to `cu126` (or older), where the
 installer skips cuML and the app runs UMAP / k-means on the CPU; why, and the
 by-hand escape hatch, are in
-[DEPLOYMENT.md § GPU install's cuML step](DEPLOYMENT.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
+[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
@@ -548,267 +544,11 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
 ## Running on a SLURM GPU cluster
 
-VTSearch is happiest with a GPU (for embedding and detector training). On a
-shared SLURM cluster — like the JHU HLTCOE "Grid" — you don't run heavy work on
-the login nodes; you ask SLURM for a GPU compute node and run the app there,
-then forward its port back to your local machine so you can use the browser UI.
-
-Two helper scripts in [`scripts/slurm/`](../scripts/slurm/) automate the loop:
-
-- **`vtsearch-slurm.sh`** runs *on the cluster*. It allocates a GPU node with
-  `srun`, activates the virtualenv, and runs `app.py` on the node — printing
-  which node and port it landed on. It holds the allocation until you quit.
-- **`vtsearch-tunnel.sh`** runs *on your local machine*. It finds your running
-  VTSearch job, SSH-forwards your local port to that compute node, and drops
-  you into the project directory for git/edits.
-
-Both scripts are parameterized entirely by environment variables (no hard-coded
-usernames, hostnames, or paths), so they should adapt to most SLURM clusters
-with a shared filesystem.
-
-> **Why a per-user port?** GPU nodes usually hold several GPUs, so SLURM can
-> pack multiple users' single-GPU jobs onto one physical node — where a single
-> shared `:5000` would collide (the second app can't bind it, and a naive
-> tunnel would forward you into someone else's session). So the scripts derive
-> a port from your UID (`10000 + UID % 20000`); both compute the same value, so
-> the tunnel finds your app with no extra coordination. `app.py` honors this
-> via `VTSEARCH_PORT` (or `--port`). Override with `VTS_PORT` on *both* scripts
-> if you ever need to.
-
-### One-time setup on the cluster
-
-1. **SSH in** to a login node and clone VTSearch onto the cluster's shared
-   filesystem. Many clusters give each user a large scratch/experiment area
-   (the HLTCOE Grid uses `/exp/$USER`); the helper scripts default to
-   `/exp/$USER/projects/VTSearch`, but you can put it anywhere and set
-   `VTS_DIR` (see [Tuning](#tuning-the-allocation)).
-
-   ```bash
-   mkdir -p /exp/$USER/projects && cd /exp/$USER/projects
-   git clone git@github.com:samggreenberg/VTSearch.git
-   cd VTSearch
-   ```
-
-2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
-   wheel to your cluster's drivers and cards (a node whose driver reports CUDA
-   12.6 takes `cu126`; a Turing-or-newer card on a driver at CUDA 12.9 or
-   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu126`
-   on any driver from CUDA 12.6 up):
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   bash scripts/install.sh cu129         # or cu118 / cu126 / cu128 to match your node's GPU and driver
-   ```
-
-   The scripts default to a venv named `.venv` in the project dir; override with
-   `VTS_VENV` if yours differs.
-
-   > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
-   > only via environment modules, and the system `python3` may be too old
-   > (VTSearch needs 3.11+). Load a recent one first, and build the venv with
-   > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
-   > shadow it:
-   >
-   > ```bash
-   > module avail python                 # find an available 3.11+ module
-   > module load python/3.12.3
-   > which python3.12                     # should be the module's, not a pyenv shim
-   > python3.12 -m venv .venv
-   > source .venv/bin/activate
-   > python --version                     # confirm 3.12.x before installing
-   > bash scripts/install.sh cu126
-   > ```
-   >
-   > A venv built this way is **not** self-contained — its `python` needs the
-   > module's `libpython` at runtime — so the launcher must load the module
-   > before activating the venv. Set `VTS_MODULE` (see
-   > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
-   > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
-
-3. **Build the frontend** (needs Node.js 20.19+, 22.12+ or 24+; see [Building the
-   frontend](#building-the-frontend)):
-
-   ```bash
-   cd frontend && npm install && npm run build:prod && cd ..
-   ```
-
-4. **Install the launcher on your PATH** so you can just type `vtsearch`:
-
-   ```bash
-   mkdir -p ~/.local/bin
-   cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch
-   chmod +x ~/.local/bin/vtsearch
-   ```
-
-   > **Tip:** caches (HuggingFace, pip, etc.) can be large; on clusters where
-   > `/home` is small, redirect them onto your scratch area in `~/.bashrc`
-   > (e.g. `export HF_HOME=/exp/$USER/.cache/huggingface`). Setting `HF_TOKEN`
-   > there too avoids anonymous Hugging Face rate limits on a shared egress IP.
-
-### One-time setup on your local machine
-
-1. **Add an SSH host entry** for the cluster login node so the tunnel script
-   can reach it by a short name. In `~/.ssh/config`:
-
-   ```sshconfig
-   Host cluster
-       HostName login.your-cluster.edu     # e.g. login1.hltcoe.jhu.edu
-       User your-cluster-username
-       IdentityFile ~/.ssh/id_ed25519
-   ```
-
-   Verify it works: `ssh cluster true` should connect without prompting. If your
-   cluster is only reachable through a VPN or campus network, connect to that
-   first.
-
-2. **Install the tunnel script** on your PATH:
-
-   ```bash
-   mkdir -p ~/.local/bin
-   cp scripts/slurm/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
-   chmod +x ~/.local/bin/vtsearch-tunnel
-   ```
-
-   (Clone VTSearch on your local machine too, or just copy the one script — it only
-   needs SSH access to the cluster.) If you named your SSH host something other
-   than `cluster`, point the script at it with `CLUSTER_HOST=mycluster vtsearch-tunnel`.
-
-### Daily workflow
-
-1. **On the cluster**, start VTSearch and leave the terminal running:
-
-   ```bash
-   ssh cluster
-   vtsearch
-   ```
-
-   This queues a GPU allocation; once it lands, the app starts and the terminal
-   prints the compute node it got. Keep this terminal open — closing it releases
-   the node.
-
-2. **On your local machine**, in a second terminal, open the tunnel:
-
-   ```bash
-   vtsearch-tunnel
-   ```
-
-   It finds the running job automatically (no need to know the node name or
-   port), forwards your local port to it, and drops you into the project
-   directory on the login node for git pulls / edits. It prints the URL to
-   browse — **http://localhost:&lt;port&gt;** (the per-user port, see above).
-
-3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
-   terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
-   press **Enter** to restart the app. Type **i** then Enter first to rerun
-   `scripts/install.sh` when dependencies changed; **q** then Enter releases
-   the node and quits.
-
-> Interactive SLURM jobs don't persist — you re-allocate each session. Only run
-> **one** `app.py` per allocation; VTSearch keeps all model/dataset state in one
-> process, and a second copy would double the memory and can OOM the job.
-
-### Tuning the allocation
-
-`vtsearch-slurm.sh` reads these environment variables (defaults shown). Set them
-inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Path to the VTSearch checkout on the cluster |
-| `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
-| `VTS_MODULE` | (none) | Environment module(s) to `module load` before activating the venv (space-separated). Needed when your venv is built from a module-provided Python, e.g. `VTS_MODULE="python/3.12.3"` |
-| `VTS_PART` | `gpu` | SLURM partition |
-| `VTS_GPU` | (auto-picked) | GPU type requested via `--gres=gpu:<type>:1`. Unset, the type is chosen from what is free (see below); set it to pin one |
-| `VTS_GPU_TYPES` | `a100 l40s v100` | Candidate types for the auto-pick, **fastest first** |
-| `VTS_GPU_FALLBACK` | `l40s` | Type to request when the scheduler can't be queried |
-| `VTS_CPUS` | `8` | CPU cores |
-| `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
-| `VTS_TIME` | `8:00:00` | Walltime |
-| `VTS_PORT` | `10000 + UID % 20000` | Port the app binds (passed as `VTSEARCH_PORT`); per-user by default so co-located jobs don't collide |
-
-`vtsearch-tunnel.sh` reads:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `CLUSTER_HOST` | `cluster` | SSH host alias for the cluster login node |
-| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
-| `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
-| `VTS_BIND` | (unset — loopback only) | Address the forwarded port is bound to *locally*. Unset, only this machine can reach it. Set it to serve the app to another device through this one — see below |
-
-It also takes one flag, `--no-shell`, which holds the forward open and nothing
-else (`ssh -N`, no TTY, no login shell) instead of dropping you into the login
-node. That is the mode a service unit wants; the interactive default is the mode
-a human wants.
-
-#### Relaying the app to another device
-
-If the machine running the tunnel is a always-on box that holds the VPN — and
-the device you actually browse from is a different one — the two knobs above are
-what bridge them. `VTS_BIND` binds the forwarded port to an address that other
-device can reach:
-
-```bash
-VTS_BIND=$(tailscale ip -4) vtsearch-tunnel
-# → ssh -L 100.x.y.z:PORT:NODE:PORT cluster
-# → browse http://100.x.y.z:PORT from any device on the same private mesh
-```
-
-**Bind to that specific address, not `0.0.0.0`.** The wildcard also serves the
-app to everything else on the local network, which on a home or campus Wi-Fi is
-a larger audience than intended.
-
-To keep the tunnel up without a terminal, install
-[`scripts/slurm/vtsearch-tunnel.service`](../scripts/slurm/vtsearch-tunnel.service)
-as a systemd **user** unit — it runs the script with `--no-shell` under
-`Restart=always`:
-
-```bash
-mkdir -p ~/.config/systemd/user
-cp scripts/slurm/vtsearch-tunnel.service ~/.config/systemd/user/
-# set Environment=VTS_BIND=... in the copy, then:
-systemctl --user daemon-reload
-systemctl --user enable --now vtsearch-tunnel
-loginctl enable-linger "$USER"   # keeps it running with nobody logged in
-```
-
-That last line is the one that gets missed: without lingering, a user unit stops
-when your last session ends — precisely when an unattended box needed it to keep
-going.
-
-The unit supervises the **script**, not a bare `ssh`, and that distinction
-matters. SLURM re-picks the GPU node on every allocation, so a reconnect aimed
-at the previous node forwards to nothing while still looking healthy. Re-running
-the script re-queries `squeue` and rediscovers node and port, which is also why
-no `autossh` is needed here.
-
-#### Which GPU type gets requested
-
-Many clusters (HLTCOE's included) reject an untyped `--gres=gpu:1`, so a type
-has to be named — and any single name is a pin that goes stale. Pinning the slow
-type costs a multiple on every embed (a V100 embeds `siglip2_l` **2.3×** slower
-than an L40S on identical fp32 code); pinning a scarce fast type has meant
-multi-day queue waits. So the launcher doesn't pin: it runs
-[`scripts/slurm/pick_gpu.py`](../scripts/slurm/pick_gpu.py), which reads
-`scontrol show node` and requests the **fastest type in `VTS_GPU_TYPES` that has
-a free GPU right now**, falling back to whatever is most available, then to the
-largest pool, then to `VTS_GPU_FALLBACK`. Run it by hand to see the reasoning:
-
-```bash
-python3 scripts/slurm/pick_gpu.py --explain
-```
-
-Set `VTS_GPU` to override it outright (nothing is queried then). Set
-`VTS_GPU_TYPES` to match your own hardware and QOS — the default omits
-`h100`/`h200` because the HLTCOE `4gpu_tier` QOS caps them at 0, and a job
-requesting a type your QOS forbids pends forever.
-
-Adjust `VTS_GPU_TYPES`, `VTS_PART`, and the CUDA wheel passed to `install.sh` to
-match your cluster's hardware. To find the exact GPU type strings, check a node's
-gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8` → use
-`v100`) or list partition gres with `sinfo -o '%P %G'`. Note these variables take
-just the type (`v100`), not the full `gpu:v100:8` spec — the launcher adds the
-`gpu:` prefix and `:1` count itself.
+On a shared SLURM cluster (like the JHU HLTCOE "Grid"), run the app on a GPU
+compute node and forward its port back to your local machine.
+[`scripts/slurm/README.md`](../scripts/slurm/README.md) is the walkthrough:
+the one-time setup on the cluster and on your local machine, the daily
+workflow, and the launcher's tuning knobs.
 
 ## Running the tests
 
@@ -867,6 +607,8 @@ The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_
 - **Evaluate sorting quality**: `python -m vtscore.eval --plot-dir eval_output`
   runs the evaluation suite over the demo datasets; see [EVAL.md](EVAL.md).
 - **Deploy**: See [DEPLOYMENT.md](DEPLOYMENT.md) for production, offline /
-  air-gapped, and GPU deployments.
+  air-gapped, and GPU deployments, [SETTINGS.md](SETTINGS.md) for the
+  settings files, and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) when something
+  goes wrong.
 - **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media
   types, importers, or exporters.
