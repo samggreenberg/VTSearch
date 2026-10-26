@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -35,7 +35,6 @@ import { demoSortValue } from '../shared/demo-sort';
 export class DemoPickerComponent {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
-  private cdr = inject(ChangeDetectorRef);
 
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
@@ -104,8 +103,9 @@ export class DemoPickerComponent {
    *  queries and the load payload. */
   readonly selectedDemoConverter = signal('');
   /** Optional user-supplied dataset name.  Empty means "use the demo
-   *  entry's label". */
-  demoDatasetName = '';
+   *  entry's label".  Follows the selected row's label until the user types
+   *  a name of their own (``demoDatasetNameDirty``). */
+  readonly demoDatasetName = signal('');
   private demoDatasetNameDirty = false;
   /** Currently-selected demo row.  Bound (via the parent) onto the
    *  sibling ``<vt-source-picker>``'s row-highlight input and read by
@@ -131,24 +131,24 @@ export class DemoPickerComponent {
   static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'description', 'status'];
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
-  clipperChooserOpen = false;
-  clipperChooserClippers: ClipperInfo[] = [];
+  readonly clipperChooserOpen = signal(false);
+  readonly clipperChooserClippers = signal<ClipperInfo[]>([]);
 
   openClipperChooser(): void {
     this.clipperChooserCategory = null;
-    this.clipperChooserClippers = this.demoClippers();
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(this.demoClippers());
+    this.clipperChooserOpen.set(true);
   }
 
   /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
   openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
     this.clipperChooserCategory = request.category;
-    this.clipperChooserClippers = request.clippers;
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(request.clippers);
+    this.clipperChooserOpen.set(true);
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
       this.clipperChooserCategory = null;
@@ -161,13 +161,13 @@ export class DemoPickerComponent {
   }
 
   onClipperChooserCancelled(): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       // The row keeps the clipper it had.
       this.clipperChooserCategory = null;
       return;
     }
-    const clippers = this.clipperChooserClippers;
+    const clippers = this.clipperChooserClippers();
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedDemoClipper.set(defaultClipper?.name || '');
     this.demoClipperParamValues.set({});
@@ -217,7 +217,7 @@ export class DemoPickerComponent {
     this.demos.set([]);
     this.demoTabs.set([]);
     this.activeTab.set('');
-    this.demoDatasetName = '';
+    this.demoDatasetName.set('');
     this.demoDatasetNameDirty = false;
     this.selectedDemo.set(null);
     this.multiDataset.set(false);
@@ -232,12 +232,6 @@ export class DemoPickerComponent {
         this.fetchDemos();
       },
     });
-
-    // `open()` is invoked imperatively from the parent's importer-selection
-    // handler (a listener bound on a sibling `<vt-source-picker>`), so this
-    // component's own OnPush view is not on the ancestor-marked dirty path
-    // that call produces; force a check so the reset picker actually paints.
-    this.cdr.markForCheck();
   }
 
   private fetchDemos(embedder?: string): void {
@@ -363,7 +357,6 @@ export class DemoPickerComponent {
   /** Handler for the "Convert to" selector on a non-embeddable tab. */
   onConverterTargetChange(target: string): void {
     this.applyConverterTarget(this.activeTab(), target);
-    this.cdr.markForCheck();
   }
 
   /** The demo clipper the user actually chose, or ``''`` when it is a
@@ -458,7 +451,6 @@ export class DemoPickerComponent {
         demoOutputDrafts(this.mediaTypes(), this.activeTab(), this.activeTabConvertsTo(), this.selectedConverterTarget()),
       );
     }
-    this.cdr.markForCheck();
   }
 
   onOutputDraftsChange(drafts: OutputDraft[]): void {
@@ -480,19 +472,18 @@ export class DemoPickerComponent {
 
   /** Invoked via a listener bound on the sibling `<vt-source-picker>`
    *  in the parent's template, so this component isn't on the
-   *  ancestor-marked dirty path; `markForCheck()` covers the plain
-   *  `demoDatasetName` field. */
+   *  ancestor-marked dirty path; every field it resets is a signal, which
+   *  repaints this view on its own. */
   selectDemoTabWithEmbedder(tab: string): void {
     this.selectDemoTab(tab);
     this.selectedDemo.set(null);
     if (!this.demoDatasetNameDirty) {
-      this.demoDatasetName = '';
+      this.demoDatasetName.set('');
     }
-    this.cdr.markForCheck();
   }
 
   onDemoDatasetNameInput(value: string): void {
-    this.demoDatasetName = value;
+    this.demoDatasetName.set(value);
     this.demoDatasetNameDirty = true;
   }
 
@@ -504,9 +495,8 @@ export class DemoPickerComponent {
   selectDemo(demo: DemoDatasetEntry): void {
     this.selectedDemo.set(demo);
     if (!this.demoDatasetNameDirty) {
-      this.demoDatasetName = demo.label || '';
+      this.demoDatasetName.set(demo.label || '');
     }
-    this.cdr.markForCheck();
   }
 
   /** Commit the currently-selected demo.  Bound to the Import footer
@@ -515,7 +505,7 @@ export class DemoPickerComponent {
   submit(): void {
     const demo = this.selectedDemo();
     if (!demo) return;
-    const userName = (this.demoDatasetName || '').trim();
+    const userName = this.demoDatasetName().trim();
     if (this.multiDataset()) {
       // One dataset per ticked row, each with its own settings; the
       // single-dataset embedder / clipper / cleanup / Convert to stay home.

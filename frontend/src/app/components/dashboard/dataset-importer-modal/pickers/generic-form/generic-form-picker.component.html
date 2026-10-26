@@ -6,9 +6,9 @@
           @if (!effectiveSoloMediaType) {
             <vt-import-config
               [mediaTypeFieldId]="'field-' + field.key"
-              [mediaType]="formValues[field.key] || ''"
+              [mediaType]="formValues()[field.key] || ''"
               (mediaTypeChange)="onMediaTypeChange($event)"
-              [mediaTypeOptions]="mediaTypeOptions"
+              [mediaTypeOptions]="mediaTypeOptions()"
               [mediaTypeOptionLabels]="mediaTypeOptionLabels"
               [mediaTypeOptionIcons]="mediaTypeOptionIcons"
               [multiDataset]="multiDataset()"
@@ -24,8 +24,8 @@
             [title]="field.description || field.label || field.key">
             <vt-plugin-checkbox
               [inputId]="'field-' + field.key"
-              [value]="formValues[field.key]"
-              (valueChange)="formValues[field.key] = $event"
+              [value]="formValues()[field.key]"
+              (valueChange)="setFormValue(field.key, $event)"
               [title]="field.description || field.label || field.key"
             ></vt-plugin-checkbox>
             {{ field.label || field.key }}
@@ -49,7 +49,7 @@
 
           @if (field.field_type === 'server_path') {
             <vt-file-browser
-              [value]="formValues[field.key] || ''"
+              [value]="formValues()[field.key] || ''"
               [extensions]="field.accept || ''"
               [placeholder]="field.placeholder || field.description || field.label || field.key"
               [required]="!!field.required"
@@ -68,8 +68,8 @@
             <vt-plugin-combobox
               [inputId]="'field-' + field.key"
               [options]="fieldOptions.optionsFor(field)"
-              [value]="formValues[field.key]"
-              (valueChange)="formValues[field.key] = $event; onFieldChanged(field.key)"
+              [value]="formValues()[field.key]"
+              (valueChange)="setFormValue(field.key, $event); onFieldChanged(field.key)"
               [required]="!!field.required"
               [disabled]="!!fieldOptions.loading()[field.key]"
               [placeholder]="fieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
@@ -82,9 +82,9 @@
               [id]="'field-' + field.key"
               class="form-select"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
               [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
-              (ngModelChange)="onFieldChanged(field.key)"
+              (ngModelChange)="setFormValue(field.key, $event); onFieldChanged(field.key)"
             >
               @if (field.dynamic_options && fieldOptions.loading()[field.key]) {
                 <option [value]="''" disabled>Loading…</option>
@@ -104,7 +104,7 @@
               type="text"
               class="form-input"
               [required]="!!field.required"
-              [ngModel]="formValues['dataset_name'] || ''"
+              [ngModel]="formValues()['dataset_name'] || ''"
               (ngModelChange)="onDatasetNameInput($event)"
               [placeholder]="field.description || field.label || field.key"
             />
@@ -114,7 +114,8 @@
               type="number"
               class="form-input"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
+              (ngModelChange)="setFormValue(field.key, $event)"
               [placeholder]="field.placeholder || field.description || field.label || field.key"
               [attr.min]="field.min || null"
               [attr.max]="field.max || null"
@@ -127,7 +128,8 @@
               type="password"
               class="form-input"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
+              (ngModelChange)="setFormValue(field.key, $event)"
               [placeholder]="field.placeholder || field.description || field.label || field.key"
               (change)="onFieldChanged(field.key)"
             />
@@ -137,7 +139,8 @@
               type="email"
               class="form-input"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
+              (ngModelChange)="setFormValue(field.key, $event)"
               [placeholder]="field.placeholder || field.description || field.label || field.key"
               (change)="onFieldChanged(field.key)"
             />
@@ -147,7 +150,8 @@
               type="url"
               class="form-input"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
+              (ngModelChange)="setFormValue(field.key, $event)"
               [placeholder]="field.placeholder || field.description || field.label || field.key"
               (change)="onFieldChanged(field.key)"
             />
@@ -157,7 +161,8 @@
               type="text"
               class="form-input"
               [required]="!!field.required"
-              [(ngModel)]="formValues[field.key]"
+              [ngModel]="formValues()[field.key]"
+              (ngModelChange)="setFormValue(field.key, $event)"
               [placeholder]="field.description || field.label || field.key"
               (change)="onFieldChanged(field.key)"
             />
@@ -179,7 +184,7 @@
       [selectedCleaners]="selectedCleaners()"
       (selectedCleanersChange)="selectedCleaners.set($event)"
       [showSourceSpecs]="true"
-      [sourceSpecs]="sourceSpecs"
+      [sourceSpecs]="sourceSpecs()"
       (sourceSpecsChange)="onSpecsChange($event)"
       [selectedEmbedder]="selectedEmbedder()"
       (selectedEmbedderChange)="selectedEmbedder.set($event)"
@@ -221,8 +226,8 @@
 }
 
 <vt-clipper-chooser
-  [open]="clipperChooserOpen"
-  [clippers]="clipperChooserClippers"
+  [open]="clipperChooserOpen()"
+  [clippers]="clipperChooserClippers()"
   (selected)="onClipperChooserSelected($event)"
   (cancelled)="onClipperChooserCancelled()"
 />

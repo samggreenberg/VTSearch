@@ -64,7 +64,7 @@
           mediaTypeFieldId="sf-media-type"
           [mediaType]="serverFolderPicker().mediaType()"
           (mediaTypeChange)="serverFolderPicker().onMediaTypeChange($event)"
-          [mediaTypeOptions]="serverFolderPicker().mediaTypeOptions"
+          [mediaTypeOptions]="serverFolderPicker().mediaTypeOptions()"
           [mediaTypeOptionLabels]="serverFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="serverFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="serverFolderPicker().detectionHint()"
@@ -103,9 +103,9 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="lf-media-type"
-          [mediaType]="localFolderPicker().mediaType"
+          [mediaType]="localFolderPicker().mediaType()"
           (mediaTypeChange)="localFolderPicker().onMediaTypeChange($event)"
-          [mediaTypeOptions]="localFolderPicker().mediaTypeOptions"
+          [mediaTypeOptions]="localFolderPicker().mediaTypeOptions()"
           [mediaTypeOptionLabels]="localFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="localFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="localFolderPicker().detectionHint()"
@@ -185,7 +185,7 @@
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit">
+      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit()">
         @if (genericFormPicker().submitting()) {
           Importing…
         } @else {

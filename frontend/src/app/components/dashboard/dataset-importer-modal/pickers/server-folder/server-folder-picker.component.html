@@ -16,11 +16,11 @@
       <button
         type="button"
         class="btn btn--secondary"
-        (click)="browserOpen = !browserOpen"
+        (click)="browserOpen.set(!browserOpen())"
         title="Browse the server's filesystem and pick a folder"
-      >{{ browserOpen ? 'Hide Browser' : 'Browse' }}</button>
+      >{{ browserOpen() ? 'Hide Browser' : 'Browse' }}</button>
     </div>
-    @if (browserOpen) {
+    @if (browserOpen()) {
       <div class="browse-panel">
         <vt-folder-browser
           [browse]="folderBrowseFn"
@@ -43,7 +43,7 @@
       <input
         id="sf-recursive"
         type="checkbox"
-        [ngModel]="recursive"
+        [ngModel]="recursive()"
         (ngModelChange)="onRecursiveChange($event)"
       />
       Include subfolders
@@ -55,8 +55,8 @@
       <input
         id="sf-dig-archives"
         type="checkbox"
-        [ngModel]="digArchives"
-        (ngModelChange)="digArchives = $event"
+        [ngModel]="digArchives()"
+        (ngModelChange)="digArchives.set($event)"
       />
       Include archives' contents
     </label>
@@ -67,8 +67,8 @@
       <input
         id="sf-reference-files"
         type="checkbox"
-        [ngModel]="referenceFiles"
-        (ngModelChange)="referenceFiles = $event"
+        [ngModel]="referenceFiles()"
+        (ngModelChange)="referenceFiles.set($event)"
       />
       Reference files in place (don't copy)
     </label>
@@ -80,12 +80,12 @@
       id="sf-dataset-name"
       type="text"
       class="form-input"
-      [ngModel]="datasetName"
+      [ngModel]="datasetName()"
       (ngModelChange)="onDatasetNameInput($event)"
       placeholder="Leave blank to use a default name"
     />
     @if (multiDataset()) {
-      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ datasetName || 'folder' }} – Image”.</p>
+      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ datasetName() || 'folder' }} – Image”.</p>
     }
   </div>
 
@@ -137,8 +137,8 @@
 </div>
 
 <vt-clipper-chooser
-  [open]="clipperChooserOpen"
-  [clippers]="clipperChooserClippers"
+  [open]="clipperChooserOpen()"
+  [clippers]="clipperChooserClippers()"
   (selected)="onClipperChooserSelected($event)"
   (cancelled)="onClipperChooserCancelled()"
 />
