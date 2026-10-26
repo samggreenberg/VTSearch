@@ -29,6 +29,10 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **A clipper picked for a server folder import keeps the options you set** (issue #5300). In Add Dataset ›
+  Files › Folder, picking a clipper under Advanced (the **Details** button) and setting its options sent only the
+  clipper's name whenever the media type's default clipper takes no options, as Image's **None** does, so the
+  import ran the picked clipper on its own defaults. The options you set now go with it.
 - **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers
   options as `(id, name)` pairs and accepts typed values (`allow_free_text`) used the browser's own suggestion
   list, which put each option's id (a dataset's UUID, say) in large type with its name in small print beneath, and
