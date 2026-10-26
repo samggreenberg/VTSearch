@@ -844,9 +844,8 @@ The wrapper hashes the spec, the generator config, and the generator's own
 version, and skips regeneration when nothing moved (`--force`, or
 `npm run generate-api-client`, regenerates unconditionally).
 `build-stamp.mjs` writes the bundle's version into
-`generated/build-stamp.ts`; `BuildSkewService` compares it with
-`GET /api/version` at startup and raises a toast when a new server is serving
-a stale SPA (the mechanism is described under "Versioning" in `CLAUDE.md`).
+`generated/build-stamp.ts`; see
+[the build stamp and the skew check](#the-build-stamp-and-the-skew-check) below.
 
 The snapshot itself is gated: `./run-tests.sh` re-dumps the spec from the
 running Flask app and **fails if `frontend/openapi.json` is stale**. When you
@@ -857,6 +856,25 @@ TypeScript compile error instead of a runtime surprise.
 The client is configured with `apiService: false` — there is no generated
 god-service. Hand-written `*-api.service.ts` files call the generated
 functions, which is what lets them stay thin while keeping the typed contract.
+
+### The build stamp and the skew check
+
+`static/` is a gitignored build artifact, so `git pull && python app.py` can
+leave a new server serving an old SPA, with nothing to say so (#2898). To catch
+that, the bundle carries the same version stamp as the server.
+`frontend/scripts/build-stamp.mjs` runs from the `prebuild` / `pretest` hooks
+above. It writes `src/app/generated/build-stamp.ts` (gitignored, beside the
+generated client) with the value of `vtsearch.__version__`, which is the UTC
+timestamp of `HEAD`'s commit. It reads that value from `VTSEARCH_VERSION` when
+the variable is set, and from git otherwise.
+
+At startup `BuildSkewService` compares the stamp with `GET /api/version`. On a
+mismatch it raises a toast that does not dismiss, and the Settings footer adds
+a `⚠ bundle v …` chip beside the server version.
+
+Nothing here is edited by hand. If you change how the Python version is
+derived (`vtsearch/__init__.py`), change `build-stamp.mjs` to match.
+CLAUDE.md's "Versioning" section carries that rule.
 
 ### `models/api.models.ts` — what stays hand-written
 

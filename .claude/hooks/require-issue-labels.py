@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse gate: no Claude-filed GitHub issue lands without its labels.
 
-CLAUDE.md ("Label every issue you file") requires `claude` on every issue
+CLAUDE.md ("Issue lifecycle", the filing row) requires `claude` on every issue
 Claude creates, and `experiment` on any issue that cannot be closed without a
 measurement (a GRID/SLURM sweep, an eval arm, a calibration run).
 
@@ -74,7 +74,7 @@ contract, and it is MCP-only because `gh issue edit`'s `--add-label` /
 `_experiment_drop_problems`.
 
 A fourth job, added by #4144: the write that adds `solved` must also clear the
-assignee (CLAUDE.md, "Assign the owner while you are working an issue").
+assignee (CLAUDE.md, "Issue lifecycle").
 `solved` means nobody is working the issue any more, so an assignee left on it
 makes solved work look taken in the `no:assignee` view -- and until this guard
 the unassign half of the rule was prose only, which is how it went unfollowed.
@@ -914,12 +914,12 @@ MCP_SOLVED_KEEPS_ASSIGNEE = (
 ).format(solved=SOLVED_LABEL)
 
 SOLVED_ASSIGNEE_FOOTER = (
-    "\nSee CLAUDE.md, 'Assign the owner while you are working an issue': the assignee goes on\n"
+    "\nSee CLAUDE.md, 'Issue lifecycle': the assignee goes on\n"
     f"  when work starts and comes off in the write that adds `{SOLVED_LABEL}`."
 )
 
 EXPERIMENT_DROP_FOOTER = (
-    f"\nSee CLAUDE.md, '`{EXPERIMENT_LABEL}` — does closing it require a run?'.\n"
+    "\nSee CLAUDE.md, 'Issue lifecycle' > 'The filing labels'.\n"
     f"  `label:{EXPERIMENT_LABEL}` is the queue of work that needs machine time booked;\n"
     f"  `-label:{EXPERIMENT_LABEL}` is what can be picked up right now."
 )
@@ -949,7 +949,7 @@ def _bash_verdict(command: str) -> int:
     found = _gh_create_problems(command)
     if found:
         return _deny(
-            "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Label every issue you file').",
+            "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Issue lifecycle').",
             found,
             GH_CREATE_FOOTER,
         )
@@ -984,7 +984,7 @@ def main() -> int:
     method = str(args.get("method") or "").strip().lower()
     if method == "create":
         found, footer = _create_problems(args), CREATE_FOOTER
-        headline = "BLOCKED: this issue is missing a required label (CLAUDE.md, 'Label every issue you file')."
+        headline = "BLOCKED: this issue is missing a required label (CLAUDE.md, 'Issue lifecycle')."
     elif method == "update":
         close_found = _close_problems(args)
         # A close that keeps `solved` is already wrong for a bigger reason; the
