@@ -30,7 +30,7 @@ set -euo pipefail
 # reports whether the result is kernel-update-proof or still kernel-pinned. If the
 # driver is already up but NOT DKMS-managed, the installer OFFERS to convert it in
 # place (reinstall via .run --dkms); VTSEARCH_AUTO_DKMS=1 converts unattended and
-# VTSEARCH_SKIP_DKMS=1 skips the offer. See docs/DEPLOYMENT.md, "Making the GPU
+# VTSEARCH_SKIP_DKMS=1 skips the offer. See docs/TROUBLESHOOTING.md, "Making the GPU
 # driver survive reboots and kernel updates".
 #
 # Override the auto-detection by passing an argument:
@@ -461,8 +461,8 @@ vts_report_driver_persistence() {
   loading, and nvidia-smi will go dark until you re-run this installer. To make it
   set-and-forget: install `dkms` and re-run this script (so the module auto-rebuilds
   for new kernels), pin the kernel so it stops changing, or bake a custom AMI / use
-  the AWS Deep Learning AMI. See docs/DEPLOYMENT.md, "Making the GPU driver survive
-  reboots and kernel updates".
+  the AWS Deep Learning AMI. See docs/TROUBLESHOOTING.md, "Making the GPU driver
+  survive reboots and kernel updates".
 EOF
     return 0
 }
@@ -550,7 +550,7 @@ vts_convert_driver_to_dkms() {
         echo "  Could not install dkms on this host (e.g. an unregistered RHEL box" >&2
         echo "  where EPEL is unreachable), so a DKMS conversion isn't possible. The" >&2
         echo "  current driver is untouched; pin the kernel instead so it keeps" >&2
-        echo "  matching. See docs/DEPLOYMENT.md, \"Making the GPU driver survive...\"." >&2
+        echo "  matching. See docs/TROUBLESHOOTING.md, \"Making the GPU driver survive...\"." >&2
         return 1
     fi
 
@@ -610,12 +610,12 @@ vts_maybe_convert_driver_to_dkms() {
             else
                 echo "warning: DKMS conversion did not complete; the driver still works but" >&2
                 echo "         stays kernel-pinned. See the output above, retry later, or use" >&2
-                echo "         the manual steps in docs/DEPLOYMENT.md." >&2
+                echo "         the manual steps in docs/TROUBLESHOOTING.md." >&2
             fi
             ;;
         *)
             echo "  Leaving the driver kernel-pinned. Set VTSEARCH_AUTO_DKMS=1 on a later" >&2
-            echo "  run to convert it, or see docs/DEPLOYMENT.md for the manual steps." >&2
+            echo "  run to convert it, or see docs/TROUBLESHOOTING.md for the manual steps." >&2
             ;;
     esac
 }
@@ -974,7 +974,7 @@ vts_install_cpu() {
 #     kernels against mismatched headers ("cuda_fp8.hpp: this declaration has no
 #     storage class" at fit time). So cuML is installed on cu129 (and cu13x)
 #     only; on cu118..cu128 this step is SKIPPED with a message and the app
-#     uses the CPU fallback. See docs/DEPLOYMENT.md "cuML crashes compiling a
+#     uses the CPU fallback. See docs/TROUBLESHOOTING.md "cuML crashes compiling a
 #     kernel".
 #   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
 #     platform/Python this step just warns and the app uses the CPU fallback.

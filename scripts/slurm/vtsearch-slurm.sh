@@ -109,7 +109,7 @@ cat > "$RUNNER" <<'REMOTE'
             # (issue #3853) left no trace once the pane scrolled. One file per
             # start, so a restart never appends to a previous run's log.
             # VTSEARCH_LOG_FILE is also where the stall watchdog's thread dump
-            # lands (see docs/DEPLOYMENT.md, "Diagnosing a stall").
+            # lands (see docs/TROUBLESHOOTING.md, "Diagnosing a stall").
             mkdir -p "$VTS_DIR/data/logs"
             log_file="$VTS_DIR/data/logs/app-$(hostname -s)-$(date +%Y%m%d-%H%M%S).log"
             echo ">>> App log: $log_file"

@@ -59,7 +59,9 @@ PACKAGES = ("vtscore", "vtsearch")
 #: need only exist on one of them.
 SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     # --- app tier -------------------------------------------------------
-    ("docs/EXTENDING-media.md", "MediaType abstract interface reference", ("MediaType",)),
+    # No ``MediaType`` entry here: the member tables live only in the library
+    # guide (``media-types.md``, registered below); ``EXTENDING-media.md`` links
+    # to them rather than restating them (#5263).
     ("docs/EXTENDING-media.md", "MediaEmbedder abstract interface reference", ("MediaEmbedder",)),
     ("docs/EXTENDING-media.md", "Embedder capability flags", ("MediaEmbedder",)),
     ("docs/EXTENDING-media.md", "MediaClipper abstract interface reference", ("MediaClipper",)),
@@ -72,9 +74,11 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ),
     # Not an ABC contract: this section spells out how ``dirty_keys`` on
     # ``UserSyncState`` arbitrates between a local write and an upstream pull.
-    # It is registered because invariant 2 (rightly) flags any "The ... contract"
-    # heading, and the names it does cite are members worth checking.
-    ("docs/EXTENDING-plugins.md", "The dirty-key contract", ("UserSyncState",)),
+    # It moved with the rest of the settings sync engine's internals to
+    # ARCHITECTURE.md (#5258), outside ``DOC_GLOBS``, so invariant 2 no longer
+    # requires it; it stays registered because the names it cites are members
+    # worth checking.
+    ("docs/ARCHITECTURE.md", "The dirty-key contract", ("UserSyncState",)),
     # --- library tier ---------------------------------------------------
     ("vtscore/docs/extending/clippers.md", "The contract", ("MediaClipper",)),
     ("vtscore/docs/extending/converters.md", "The contract", ("MediaConverter",)),

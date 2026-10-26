@@ -47,8 +47,6 @@ line.
 
 <!-- item-sep -->
 
-- [ ] #5252 — CHANGELOG.md has readers but no release step (one ever-growing `Unreleased`)
-
 <!-- item-sep -->
 
 <!-- item-sep -->

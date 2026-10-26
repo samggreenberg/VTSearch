@@ -13,9 +13,6 @@ This package is where those vectors come from: each task declares its
 ordered steps and shipped default terms once, and asks for its vector at
 its entry point instead of carrying a literal one.
 
-Related docs: [`concurrency.md`](concurrency.md) for `ProgressTracker`
-and the bar these weights drive.
-
 ## Contents
 
 | Module | Concern |
@@ -155,3 +152,11 @@ keeps importing them:
 The studies that measured the profile are written up under
 [`docs/experiments/`](../../../docs/experiments/), for example
 [the r² study](../../../docs/experiments/2026-09-02-timing-r2-3345/REPORT.md).
+
+---
+
+## Cross-references
+
+- [`concurrency.md`](concurrency.md#progresstracker) - `ProgressTracker`, and the bar these weights drive through `set_step_weights`.
+- [`datasets.md`](datasets.md#vtscoredatasetsstages) - the import stages, whose `_load_cost_model.py` supplies the `dataset_load` weights in place of flat terms.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#progress-bar-estimates) - what an operator sees: why a bar can race one phase on unfamiliar hardware, and why imports publish no remaining-time estimate.

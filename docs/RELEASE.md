@@ -72,6 +72,16 @@ GUI-changing sessions don't re-render the app's screenshots; they queue the shot
 
 A harness that won't run at all doesn't block the release: stale screenshots are a docs defect, not a reason to hold shipped fixes back. Leave the queue as it is, file an issue for the harness failure, and carry on with step 5.
 
+## 4c. Date the changelog
+
+`CHANGELOG.md` keeps what is on `dev` but not yet on `main` under `## Unreleased`, and this release ships it. Rename that heading to `## YYYY-MM-DD`, the date step 5 puts in the release PR's title, and put a new, empty `## Unreleased` above it. If `## Unreleased` holds no entries, skip this step.
+
+- **Merge repeated subsection headings.** Parallel PRs each add their own `### Changed` or `### Fixed`, so one section can carry the same heading twice. Fold each repeat into a single heading, in the order Changed, Added, Deprecated, Removed, Fixed, and keep every entry in its existing order. Do the same inside `vtscore/CHANGELOG.md`'s `[Unreleased]`.
+- **Leave `vtscore/CHANGELOG.md`'s `[Unreleased]` heading alone.** The library uses semver, and that section closes only when a `vtscore` version is cut (CLAUDE.md, "Versioning"), which this runbook does not do.
+- **A second release on the same date** folds its entries into the existing `## YYYY-MM-DD` section rather than adding a second one.
+
+Commit it alongside step 4's punch card.
+
 ## 5. Open the release PR
 
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.
@@ -213,8 +223,8 @@ reached `main`.
 
 1. **Land everything first.** This step comes last so that every commit this run
    made reaches `dev` before the merge: step 2's triage, step 4's punch card,
-   step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
-   commit left on a branch misses this release.
+   step 4b's screenshots, step 4c's changelog date and step 7's prunes, each
+   through a PR into `dev`. A commit left on a branch misses this release.
 2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
    full `VTSEARCH_FRESH=1 ./run-tests.sh` on it, unless this run already ran one on
    exactly that SHA. `VTSEARCH_FRESH=1` makes the run stand on its own — the full
@@ -226,8 +236,9 @@ reached `main`.
 3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A
    PR it lists that step 6 never saw landed on `dev` during this run, and this
    merge would ship it with its issue still open, after which no release window
-   would ever contain it again. Take any such PR through steps 4, 6 and 7, then
-   repeat this step.
+   would ever contain it again. Take any such PR through steps 4, 4c, 6 and 7
+   (for 4c, move its entries out of `## Unreleased` into this release's
+   section), then repeat this step.
 4. **Merge it** with `merge_pull_request`, `merge_method: "merge"`, and
    `expectedHeadSha` set to the SHA you gated. **Never squash or rebase.** `dev`'s commits
    must stay ancestors of `main`, or the next release's `origin/main..origin/dev`

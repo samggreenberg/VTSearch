@@ -27,7 +27,8 @@ LOGS="/expscratch/$USER/max-patch/logs"
 mkdir -p "$LOGS"
 
 GRES="${MAXPATCH_GRES:-gpu:a100:1}"
-MEM="${MAXPATCH_MEM:-64G}"
+# 24G: max_patch cells peak at ~9-14 GB (GRID-PLAYBOOK.md, "Measured peaks").
+MEM="${MAXPATCH_MEM:-24G}"
 CPUS="${MAXPATCH_CPUS:-8}"
 TIME="${MAXPATCH_TIME:-8:00:00}"
 NCELLS="${1:-$(cd "$HERE" && python3 -c 'import experiment_config as c; print(c.max_array_cells())')}"

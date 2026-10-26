@@ -11,11 +11,6 @@ process-wide registries that map IDs to contexts. Everything is
 protected by a single re-entrant lock; there is no implicit global
 "active" pointer.
 
-Related docs: [architecture.md](../architecture.md#resolution-chain-for-active-context)
-for the resolution chain in context; [`concurrency.md`](concurrency.md)
-for the job/progress infrastructure that drives long-running operations
-on these contexts.
-
 ## Contents
 
 | Module | Concern |
@@ -52,6 +47,7 @@ line and balance helpers in `core` (`recut_detector_threshold`,
 - [Current user](#current-user)
 - [Setting-persistence hooks](#setting-persistence-hooks)
 - [Thread-safety invariants](#thread-safety-invariants)
+- [Cross-references](#cross-references)
 
 ---
 
@@ -703,3 +699,13 @@ Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 
 For the long-running-operation progress trackers used while these
 contexts are being mutated, see [`concurrency.md`](concurrency.md).
+
+---
+
+## Cross-references
+
+- [`architecture.md`](../architecture.md#resolution-chain-for-active-context) - the resolution chain in context.
+- [`concurrency.md`](concurrency.md) - the job and progress infrastructure that drives long-running operations on these contexts.
+- [`detectors.md`](detectors.md#training) - `train_and_threshold`, which caches fold orderings, the fitted estimator and the labels line on a `DetectorContext`.
+- [`../integration.md`](../integration.md#the-three-integration-hooks) - installing the context resolvers and setting persisters from a host app.
+- [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md#state-management) - the app-tier proxy objects, settings tiers and `X-Dataset-Id` / `X-Detector-Id` routing layered over these contexts.
