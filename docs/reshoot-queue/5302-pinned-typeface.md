@@ -1,0 +1,89 @@
+# #5302: every shot is drawn in the harness's own typeface
+
+`capture.ts` draws every shot in the faces under `scripts/screenshots/fonts/`
+rather than the machine's. Body text stays Inter, but the release's variable web
+font rather than the container's static OTFs, and some line boxes land a pixel
+off; buttons, pulldowns, inputs and the charts' canvas text move from
+Liberation Sans to Inter. So every shot with text moves.
+
+- `step-import-train`
+- `step-new-detector`
+- `step-train`
+- `step-vote`
+- `step-import-test`
+- `step-find`
+- `step-find-results`
+- `icon-add-dataset`
+- `icon-new-detector`
+- `icon-train`
+- `icon-find`
+- `icon-good`
+- `icon-bad`
+- `icon-overflow`
+- `icon-settings`
+- `icon-help`
+- `icon-achievements`
+- `icon-export`
+- `dashboard-loaded`
+- `dataset-panel`
+- `importer-picker`
+- `importer-form`
+- `three-panel`
+- `autopilot-vote`
+- `autopilot-progress`
+- `manual-controls`
+- `region-voting`
+- `view-options`
+- `results-grid`
+- `settings-general`
+- `dashboard-manage`
+- `browse-view`
+- `export-picker`
+- `import-detector`
+- `new-detector`
+- `find-view`
+- `find-stats`
+- `test-verdict`
+- `achievements`
+- `correct-verify`
+- `correct-add`
+- `borderline-floor`
+- `borderline-chart`
+- `trust-stats`
+- `icon-to-dataset`
+- `export-choose`
+- `export-server-csv`
+- `export-to-dataset`
+- `example-image-tab`
+- `example-confirm`
+- `example-stack`
+- `example-seed-menu`
+- `region-import`
+- `region-new-detector`
+- `region-draw`
+- `unstick-prompt`
+- `manual-text-sort`
+- `manual-load-sort`
+- `move-export-menu`
+- `move-export-save`
+- `move-trained-tab`
+- `labels-menu`
+- `labels-import-form`
+- `autofind-menu`
+- `autofind-tab`
+- `autofind-settings`
+- `combine-datasets-tick`
+- `combine-datasets-dialog`
+- `combine-detectors-dialog`
+- `icon-combine-datasets`
+- `browse-menu`
+- `browse-toolbar`
+- `browse-bin`
+- `browse-find`
+- `dataset-stats`
+- `detector-stats`
+- `import-advanced`
+- `import-progress`
+- `demo-catalogue`
+- `settings-footer`
+- `settings-export`

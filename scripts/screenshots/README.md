@@ -109,13 +109,35 @@ quality 90 was 0.35–0.5 MB, and stays well under PNG for the drawings too.
 Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 (deterministic, so `check.sh` can still compare bytes).
 
+**One typeface on every machine** (#5302). The app ships no webfont, so its
+font stack draws whatever the machine has: Inter in the cloud container that
+renders the committed shots, San Francisco on a Mac, Segoe UI on Windows. A
+different face moves every line of text, so a render from anywhere else could
+never be compared with the baselines. `capture.ts` therefore draws every shot in
+faces it carries in `scripts/screenshots/fonts/`: Inter 4.0 for the app's text,
+DejaVu Sans Mono 2.37 for monospace, and DejaVu Sans 2.37 behind both for the
+symbols Inter lacks (the pulldowns' ▾). Those are the faces the container drew,
+so the look holds, and they now reach what used to fall to the browser's own
+fonts too: form controls and canvas text (Liberation Sans in the container).
+Inter is the release's `web/` WOFF2; the DejaVu TTFs are re-wrapped as WOFF2 by
+fontTools, outlines untouched (`TTFont(ttf, recalcTimestamp=False)`, `flavor =
+'woff2'`, with `brotli` installed, which reproduces the committed bytes); each
+licence sits beside its fonts. The faces are
+built into the page from their bytes before its scripts run, and a shot fails if
+they are not loaded. Monospace is pinned through `--font-mono`, so a component
+that names a bare `monospace` (which the style guide already forbids) escapes
+it. What stays machine-specific is the rasteriser, which `check.sh` must
+tolerate, and emoji, which every platform draws from its own emoji font. Spell
+checking is off as well, so no path typed into a form carries a squiggle.
+
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
 drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
 with a seeded Browse map (#4296) — so the `autopilot-progress` shot's active
 phase (Refine Boundary, from the 30-vote `VOTES` in `smiley-example.mjs`) moves
 if that vote count does;
 viewport **1440 × 900**, `deviceScaleFactor: 2`, written at most 1440 px wide
-(`MAX_WIDTH` in `capture.ts`: 2× the guide's 720 px embed); animations/transitions disabled
+(`MAX_WIDTH` in `capture.ts`: 2× the guide's 720 px embed); the bundled
+typeface (above); animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`), and timed
 flashes (Settings' "✓ saved") hidden; mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
@@ -142,9 +164,9 @@ stub randomness the UI exposes (never rely on unseeded draws).
   may still differ (default 150).
   It lists every shot with pixels still differing, passes included as `near`,
   so a near miss stays visible. Without ImageMagick it compares bytes. The
-  tolerance covers rasterisation, not typefaces: the app's font stack ends in
-  the system sans-serif (Inter in the cloud container), so a render on a
-  machine that resolves it to another face (macOS, Windows) drifts everywhere.
+  tolerance covers rasterisation, not typefaces, which `capture.ts` pins
+  (above). Its defaults were measured between two Linux Chromiums, not yet
+  against a Mac's rasteriser.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the user-facing
   docs (the guide, its how-to pages, README.md and demos.md) has a matching

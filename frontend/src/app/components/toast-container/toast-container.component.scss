@@ -219,7 +219,7 @@
   }
 
   code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: var(--font-xs);
   }
 }

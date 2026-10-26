@@ -27,6 +27,7 @@ import { drawCallouts, resolveBox } from './callouts.mjs';
 import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { execFile, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
@@ -116,6 +117,96 @@ const STILL_CSS =
   `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot,vt-toasty-hint{display:none!important}` +
   `.settings-saved{opacity:0!important}` +
   `vt-usage-bar .progress-fill{width:50%!important;background:var(--text-warning)!important}`;
+
+/**
+ * The typeface every shot is drawn in, carried under `fonts/` (#5302). The app
+ * has no webfont: its stack (`styles.scss`) draws San Francisco on a Mac, Segoe
+ * UI on Windows and whatever fontconfig offers elsewhere, and a different face
+ * moves every line of text far past what `check.sh` tolerates. So the harness
+ * brings its own, chosen to keep the look of the cloud container that renders
+ * the committed shots:
+ *
+ * - Sans: Inter 4.0, the release's `web/InterVariable*.woff2`. The container
+ *   draws the app's stack in Inter.
+ * - Mono: DejaVu Sans Mono 2.37, the container's `monospace`.
+ * - Symbols: DejaVu Sans 2.37, behind both, for the glyphs Inter lacks (the
+ *   pulldowns' ▾, ⋯, ⟳), which the container drew from it as well.
+ *
+ * The DejaVu files are the release's TTFs re-wrapped as WOFF2 by fontTools,
+ * outlines untouched. Emoji are left to the platform's emoji font, which no two
+ * machines share and which is too large to carry.
+ */
+const FONT_DIR = resolve(HERE, 'fonts');
+const SANS = '"VTS Shot Sans","VTS Shot Symbols"';
+const MONO = '"VTS Shot Mono","VTS Shot Symbols"';
+const FONTS = [
+  { family: 'VTS Shot Sans', file: 'InterVariable.woff2', descriptors: { weight: '100 900' } },
+  { family: 'VTS Shot Sans', file: 'InterVariable-Italic.woff2', descriptors: { weight: '100 900', style: 'italic' } },
+  { family: 'VTS Shot Mono', file: 'DejaVuSansMono.woff2', descriptors: { weight: '400' } },
+  { family: 'VTS Shot Mono', file: 'DejaVuSansMono-Bold.woff2', descriptors: { weight: '700' } },
+  { family: 'VTS Shot Symbols', file: 'DejaVuSans.woff2', descriptors: {} },
+].map(({ family, file, descriptors }) => ({
+  family,
+  descriptors,
+  data: readFileSync(resolve(FONT_DIR, file)).toString('base64'),
+}));
+
+/**
+ * Where the pinned faces apply. The app's stack is set on `html, body` and
+ * inherited, so it is replaced there. Form controls do not inherit it: the
+ * browser draws them in its own control font (Liberation Sans in the
+ * container, the system face on a Mac), so they are given the pinned face
+ * directly, at element specificity, under any component rule that names a
+ * family. An icon's letter glyph is SVG `<text>` naming `system-ui`, which any
+ * CSS rule outranks. Monospace text all goes through `--font-mono`, the style
+ * guide's one monospace stack. Canvas text is `pinTypeface`'s to reach.
+ */
+const TYPEFACE_CSS =
+  `html,body{font-family:${SANS}!important}` +
+  `button,input,select,textarea,svg text{font-family:${SANS}}` +
+  `:root{--font-mono:${MONO}!important}`;
+
+/**
+ * Runs in the page before any of its scripts, on every navigation. Adds the
+ * pinned faces to `document.fonts`, built from their bytes rather than fetched,
+ * so they are loaded before the app draws anything: a canvas that writes text
+ * as it starts writes it in the pinned face. Then points the canvas's generic
+ * families at them, since CSS cannot reach a canvas font: the app sets it as a
+ * string (`12px sans-serif`, the Browse map's `system-ui, sans-serif`), so the
+ * `font` setter swaps each generic family for the pinned stack. The faces are
+ * left on `__shotFonts` for `assertTypefacePinned`.
+ */
+function pinTypeface({ fonts, sans, mono }: { fonts: typeof FONTS; sans: string; mono: string }) {
+  (globalThis as any).__shotFonts = fonts.map(({ family, data, descriptors }) => {
+    const raw = atob(data);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const face = new FontFace(family, bytes, descriptors);
+    document.fonts.add(face);
+    return face;
+  });
+  const generic = /(^|[\s,])(sans-serif|system-ui|monospace)(?=$|[\s,])/g;
+  const font = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font')!;
+  Object.defineProperty(CanvasRenderingContext2D.prototype, 'font', {
+    ...font,
+    set(this: CanvasRenderingContext2D, value: string) {
+      font.set!.call(this, String(value).replace(generic, (_m, lead, family) => lead + (family === 'monospace' ? mono : sans)));
+    },
+  });
+}
+
+/**
+ * Fail the shot if the pinned faces are not in the page: it would be drawn in
+ * the machine's own, and say nothing.
+ */
+async function assertTypefacePinned(page: Page): Promise<void> {
+  const unloaded = await page.evaluate(() => {
+    const faces: FontFace[] | undefined = (globalThis as any).__shotFonts;
+    return faces ? faces.filter((f) => f.status !== 'loaded').map((f) => `${f.family} ${f.style}`) : null;
+  });
+  if (!unloaded) throw new Error('the pinned typeface was never installed in the page');
+  if (unloaded.length) throw new Error(`pinned faces did not load: ${unloaded.join(', ')}`);
+}
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
@@ -597,22 +688,30 @@ async function captureShot(
     // tsx/esbuild rewrites named functions with a `__name(fn,"name")` helper;
     // when Playwright serialises an evaluate callback into the page that helper
     // is undefined. Shim it (as a raw string so it isn't itself rewritten),
-    // and inject the still-frame CSS, on every navigation.
+    // then pin the typeface and inject the still-frame CSS, on every
+    // navigation. One script, because Playwright does not promise to run
+    // several in order, and `pinTypeface` is serialised with any `__name` call
+    // tsx put in it.
     //
     // An init script runs before the parser has built anything, when there is
     // no <head> and no documentElement to append to — so the style goes in at
     // DOMContentLoaded. (Appending straight away threw on the null and was
     // swallowed, which is how the still-frame CSS went unapplied unnoticed.)
+    // Spell checking goes off there too: an older Chromium drew its squiggle
+    // under a path typed into a form, and a desktop Chrome with a dictionary
+    // may again. Inputs inherit `spellcheck` from the root.
     await page.addInitScript({
       content:
         `globalThis.__name = globalThis.__name || function (f) { return f; };` +
-        `(function(){var add=function(){var s=document.createElement('style');s.textContent=${JSON.stringify(STILL_CSS)};` +
-        `(document.head||document.documentElement).appendChild(s);};` +
+        `(${pinTypeface})(${JSON.stringify({ fonts: FONTS, sans: SANS, mono: MONO })});` +
+        `(function(){var add=function(){var s=document.createElement('style');s.textContent=${JSON.stringify(STILL_CSS + TYPEFACE_CSS)};` +
+        `(document.head||document.documentElement).appendChild(s);document.documentElement.spellcheck=false;};` +
         `if(document.head){add();}else{document.addEventListener('DOMContentLoaded',add,{once:true});}})();`,
     });
     const t0 = Date.now();
     await shot.recipe(page, h);
     timing.recipe = (Date.now() - t0) / 1000;
+    await assertTypefacePinned(page);
     const t1 = Date.now();
     for (const theme of themes) {
       await applyTheme(page, theme);

@@ -166,7 +166,7 @@
     flex: 0 0 1.1rem;
     text-align: center;
     color: var(--text-muted);
-    font-family: monospace;
+    font-family: var(--font-mono);
   }
 
   &.is-active .row-glyph {
@@ -191,7 +191,7 @@
   .row-spinner {
     flex: 0 0 auto;
     color: var(--accent);
-    font-family: monospace;
+    font-family: var(--font-mono);
     line-height: 1;
     // Inline-block keeps the glyph rotating about its own centre rather
     // than the text baseline.
