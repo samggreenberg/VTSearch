@@ -2292,6 +2292,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A merged archive-member item keeps its archive pointer across a reload** (issue #5238).
+  `vtscore.datasets.archive_stream.archive_member_ref` found a `local_archive_member` item's shard and member in
+  the top-level `archive_member` field, which the dataset pickle does not save, or in `origin.params`, which a
+  duplicate collapse replaces with a `dupe_set` origin. A merged item reopened from disk had neither, so it
+  served no bytes and a full-mode reload dropped it. A `dupe_set` representative now reads through to its own
+  origin, which every collapse records as the group's first member. The importer keys `md5` on
+  `archive::member`, so the merge happens when a manifest lists one member (or one window) twice.
+
 - **A Good's `region_box` survives the CSV labelset round trip** (issue #5130). The `server_csv_file`
   label importer ignored a `region_box` column, so a boxed Good came back image-level. The exporter now writes
   `region_box` as a JSON list, includes it in its default label columns, and leaves the column out when no label
