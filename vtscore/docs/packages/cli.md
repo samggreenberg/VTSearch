@@ -16,6 +16,7 @@ both modules use for status output (human prose or NDJSON).
 | `vtscore/cli.py` | The imperative autodetect pipeline - four entry points plus helpers |
 | `vtscore/cli_pipeline.py` | Parse a YAML pipeline file into the same call shape |
 | `vtscore/cli_progress.py` | Format-aware status emitter (human prose or NDJSON) |
+| `vtscore/cli_resume.py` | The checkpoint a resumable streamed run (`resume=True`) keeps beside its output |
 
 **See also:** [`docs/CLI.md`](../../../docs/CLI.md) for the user-facing
 `python app.py --autodetect` reference; the functions documented here
@@ -401,6 +402,51 @@ a detector list inline without mutating `settings.json`. A
 `sys.exit(1)`. Its output follows the `cli_progress` format, so call
 `cli_progress.set_format("json")` first for an NDJSON stream; the label
 import is a `labels_imported` event, as it is for `--import-labels-into`.
+
+## `vtscore.cli_resume` - resume checkpoints
+
+Source: `vtscore/cli_resume.py`. The checkpoint a `resume=True` run (CLI
+`--resume`) saves beside its output, `<path>.resume.json`, after every chunk
+the exporter commits, and the checks a later run makes before it continues:
+
+```python
+class StreamCheckpoint:                    # path, identity, chunks_done, chunk_digests, thresholds, position
+    @classmethod
+    def load(cls, path: Path) -> StreamCheckpoint | None: ...
+    def save(self) -> None: ...
+    def clear(self) -> None: ...
+    def check_identity(self, identity: dict) -> None: ...
+    def check_chunk(self, position: int, fingerprint: str) -> None: ...
+    def check_reached(self, chunks_seen: int) -> None: ...
+    def pin_thresholds(self, detector_mlps: dict) -> dict[str, tuple[float, float]]: ...
+
+class ResumeRefusedError(ValueError): ...
+
+def run_identity(*, source, chunk_size, detectors, settings, scoring, output) -> dict: ...
+def detector_identity(det: dict | None) -> dict: ...
+def chunk_digest(chunk: dict[int, dict]) -> str: ...
+def checkpoint_path_for(output_path) -> Path: ...
+def exclusive_run(output_path): ...        # context manager
+```
+
+- **Identity** is a SHA-256 digest per section (source and its parameters,
+  detectors' labels, settings, what is scored, exporter fields) plus the chunk
+  size as it stands, so an importer's field values never land in the file.
+  `check_identity` names every section that differs.
+- **Fingerprints** (`chunk_digest`) are 64 bits over each media's `id`,
+  `filename`, `origin_name`, `md5` and clip bounds, taken before embedding.
+  A resumed run re-reads its completed chunks and `check_chunk`s each one,
+  so a file added, removed or rewritten in the part already done is refused
+  at the first chunk it moved.
+- **Thresholds**: `pin_thresholds` sets each retrained detector's cut back to
+  the recorded one and refuses a move past `THRESHOLD_DRIFT_LIMIT` (`1e-3`).
+- **The lock**: `exclusive_run` takes a non-blocking `flock` on
+  `<path>.resume.lock` for the run's length, so a second run on the same
+  output raises `ResumeRefusedError` instead of interleaving with the first.
+
+Every refusal is a `ResumeRefusedError`, a `ValueError`, whose message names
+the checkpoint to delete to start over. Only digests, byte offsets and
+thresholds are stored: no embedding and no model weight.
 
 ## `vtscore.cli_progress` - format-aware output
 
