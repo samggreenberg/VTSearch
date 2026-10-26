@@ -870,7 +870,8 @@ vts_install_precommit() {
 # `--extra-index-url <cpu wheel index>` + `-e .[dev,agpl]` (or the
 # `base-no-agpl.txt` mirror under VTSEARCH_NO_AGPL=1).
 # --- toponymy (VTSBrowse signpost naming) ------------------------------------
-# Two quirks force a dedicated step (see docs/plans/vtsbrowse-toponymy.md):
+# Two quirks force a dedicated step (see docs/SETUP.md, "Packages installed
+# without their dependency pins"):
 #   - apricot-select (a real toponymy dep, declared in pyproject.toml) ships a
 #     legacy setup.py sdist. It must be installed BEFORE the main requirements
 #     pass so its build quirks stay contained to this step. Do NOT wrap it in

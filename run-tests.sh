@@ -785,7 +785,7 @@ _gate_doc_inventories() {
 _gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
 # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
 # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
-# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+# browser-free (see scripts/screenshots/README.md); the pixel-diff
 # (check.sh) needs chromium and stays a manual chore.
 _gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
 # vtscore package docs: every top-level module / sub-package of vtscore/ is

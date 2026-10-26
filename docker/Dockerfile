@@ -69,7 +69,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # rejects the flag inside a requirements file): toponymy 0.5.2 pins
 # `transformers<5.0.0`, which a plain install would honour by downgrading the
 # image's transformers stack. That pin is empirically unnecessary for our
-# usage -- see docs/plans/vtsbrowse-toponymy.md -- so the package goes in bare
+# usage -- see docs/SETUP.md -- so the package goes in bare
 # and its real dependencies (fast_hdbscan, vectorizers, apricot-select,
 # tenacity, jinja2) come from `requirements/$REQUIREMENTS`, which declares
 # them on toponymy's behalf through pyproject.toml.
