@@ -12,14 +12,16 @@ These drive a real load on the calling thread, the way
 
 from __future__ import annotations
 
+import io
 from unittest import mock
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from vtscore.concurrency.progress import loading_tasks
 from vtscore.datasets.import_event import FAILED, SUCCEEDED, DatasetImported
-from vtscore.datasets.importers.base import ImporterBase, OutputSpec, PluginField
+from vtscore.datasets.importers.base import ImporterBase, OutputSpec, PluginField, SourceSpec
 from vtscore.embedding.binding import expected_dim_for_embedder
 
 
@@ -395,3 +397,76 @@ class TestCleanupAndOriginHooks:
             "params": {"path": "<browser_upload>", "media_type": "audio"},
         }
         assert registered["holiday – Image"]["source"]["params"]["media_type"] == "image"
+
+
+def _thumb(seed: int, *, size: int = 128, quality: int | None = None) -> bytes:
+    """A photo-like thumbnail; *quality* re-encodes it as a lossy JPEG copy."""
+    rng = np.random.default_rng(seed)
+    small = rng.integers(0, 256, (8, 8), dtype=np.uint8)
+    img = Image.fromarray(small).resize((size, size), Image.Resampling.BICUBIC).convert("RGB")
+    buf = io.BytesIO()
+    if quality is None:
+        img.save(buf, format="PNG")
+    else:
+        img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+class _PhotosAndFaces(_MultiImporter):
+    """An Image output of three photos, the second a smaller copy of the first, and a Face output of one face each."""
+
+    name = "test_multi_faces"
+
+    #: ``(file name, thumbnail, file size)`` per photo.
+    PHOTOS = (("a.jpg", _thumb(7), 900), ("a_small.jpg", _thumb(7, quality=70), 300), ("b.jpg", _thumb(8), 900))
+
+    def run(self, field_values, medias, thin=False):
+        media_type = field_values["media_type"]
+        self.run_calls.append(media_type)
+        embedder = field_values.get("embedder") or _default_embedder(media_type)
+        for i, (name, thumb, size) in enumerate(self.PHOTOS, start=1):
+            media = _media(i, media_type, embedder)
+            if media_type == "image":
+                media.update(filename=name, origin_name=name, file_size=size, thumbnail_bytes=thumb)
+            else:
+                face = f"{name}\u2192face_0.jpg"
+                params = {"converter": "image2face", "source_file": name, "converter_out_index": "0"}
+                media.update(
+                    filename=face,
+                    origin_name=face,
+                    origin={"importer": "converter", "params": params},
+                    source_box=[0.2, 0.2, 0.4, 0.5],
+                )
+            medias[i] = media
+
+
+class TestDerivedOutputsFollowTheirSource:
+    """A Face output keeps one face per photo the Image output kept, not one per copy."""
+
+    _OUTPUTS = (
+        # Face first: the pipeline must still finish the Image dataset before it.
+        OutputSpec("face", [SourceSpec("image", "image2face")]),
+        OutputSpec("image", [SourceSpec("image")]),
+    )
+
+    def test_faces_of_merged_photos_merge(self, isolated_settings):
+        importer = _PhotosAndFaces()
+        events: list[DatasetImported] = []
+        _run(
+            importer,
+            list(self._OUTPUTS),
+            {"url": "http://example.com/holiday.zip", "dataset_name": "holiday", "merge_near_duplicates": "true"},
+            on_finished=events.append,
+        )
+
+        registered = _registered()
+        assert registered["holiday – Image"]["num_items"] == 2, "a.jpg and its smaller copy are one photo"
+        assert registered["holiday – Face"]["num_items"] == 2, "so their faces are one face"
+        assert [e.name for e in events] == ["holiday – Face", "holiday – Image"], "events keep the user's order"
+
+    def test_unmerged_photos_keep_every_face(self, isolated_settings):
+        _run(_PhotosAndFaces(), list(self._OUTPUTS))
+
+        registered = _registered()
+        assert registered["holiday – Image"]["num_items"] == 3
+        assert registered["holiday – Face"]["num_items"] == 3

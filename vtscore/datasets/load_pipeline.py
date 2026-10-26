@@ -19,7 +19,7 @@ import time
 import traceback
 import threading
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -56,6 +56,7 @@ from vtscore.datasets.stages.finalize import (
     _collapse_duplicates_stage,
     _collapse_near_duplicates_stage,
     _drop_none_embeddings_stage,
+    _follow_source_merges_stage,
 )
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
@@ -635,6 +636,11 @@ class _DatasetLoadSpec:
     #: single-dataset load.  Recorded on the registry entry.
     import_group: str | None = None
     output_category: str = ""
+    #: The finished medias of the sibling datasets this one's converter rows
+    #: read from (the Image dataset, for a Face dataset), so the outputs follow
+    #: the merges made there.  Filled in by the multi-dataset load just before
+    #: it finalizes this dataset; empty for a single-dataset load.
+    source_siblings: list[dict[int, dict[str, Any]]] = field(default_factory=list)
 
 
 @dataclass
@@ -683,6 +689,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     fin.begin("dedup")
     _collapse_duplicates_stage(ctx, fin)
     _collapse_near_duplicates_stage(ctx, fin)
+    _follow_source_merges_stage(ctx, spec.source_siblings)
     fin.begin("coverage")
     _build_coverage_atlas_stage(ctx, fin)
     tracker.check_cancelled()

@@ -350,6 +350,11 @@ def archive_member_ref(media: dict[str, Any]) -> tuple[str, str] | None:
     import and on re-derivation) and falls back to ``origin.params`` (the
     channel that survives the pickle round-trip), so a freshly imported media
     and one reopened from disk resolve identically.
+
+    A ``dupe_set`` representative reads through to its own origin, which every
+    collapse records as the group's first member: the merge rewrote the origin
+    but not the item, so a merged media reopened from disk (no top-level field)
+    still names the member it was imported from.
     """
     ref = media.get("archive_member")
     if isinstance(ref, dict):
@@ -359,6 +364,10 @@ def archive_member_ref(media: dict[str, Any]) -> tuple[str, str] | None:
             return str(path), str(member)
 
     origin = media.get("origin")
+    if isinstance(origin, dict) and origin.get("importer") == "dupe_set":
+        members = origin.get("members") or []
+        first = members[0] if members and isinstance(members[0], dict) else {}
+        origin = first.get("origin")
     if not isinstance(origin, dict) or origin.get("importer") != LOCAL_ARCHIVE_MEMBER_IMPORTER:
         return None
     params = origin.get("params", {})
