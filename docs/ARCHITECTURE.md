@@ -1022,7 +1022,7 @@ sync-source exports — land in the right file. A single-file
 `data/settings.json` that pre-dates the split is **not** migrated: its
 per-user keys simply have no effect where they sit, and the file is left as
 written (the one exception is the AutoFind keys the built-in `default` user
-reads through to, above — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
+reads through to, above — see [Settings files](SETTINGS.md)).
 
 ---
 
