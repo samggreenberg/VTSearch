@@ -898,3 +898,13 @@ top_ten = results[:10]
 - **No settings lookups in the math.** Threshold/training inputs are
   function arguments. (`query_sort.py` is the exception by design: it reads
   the active dataset through `vtscore.state`.)
+
+---
+
+## Cross-references
+
+- [`detectors.md`](detectors.md#training) - the vote, origin and embedding glue that calls `train_model` and the threshold estimators.
+- [`config.md`](config.md#runtime-tunables) - `TRAIN_EPOCHS`, `SVM_HEAD_C` and the other tunables `train_model` reads at call time.
+- [`eval.md`](eval.md#trainer-vs-head-two-knobs-two-registries) - which head each eval arm fits; `head=None` resolves to the shipped one, the SVM started from the Goods' centroid.
+- [`../tutorials/train-and-score.md`](../tutorials/train-and-score.md) - training, thresholding and scoring end to end.
+- [`docs/ML.md`](../../../docs/ML.md#threshold-calibration) - the app-side account of the heads and of what draws the line a user sees.

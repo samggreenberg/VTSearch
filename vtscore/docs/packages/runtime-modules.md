@@ -172,3 +172,13 @@ there is no "delete the pidfile and try again" recovery step.
 
 The lock lives in `VTSEARCH_RUNDIR` if set, else the system temp dir, as
 `vtsearch-<port>.lock` (`lock_path_for(port)`). POSIX only (`fcntl`).
+
+---
+
+## Cross-references
+
+- [`exporters.md`](exporters.md#writing-a-custom-exporter) and [`labels.md`](labels.md#built-in-label-importers) - the file exporters, label importers and JSON source that read and write through `vtscore.io`.
+- [`detectors.md`](detectors.md#registry) and [`datasets.md`](datasets.md#on-disk-dataset-registry) - the two registries whose index files are written with `atomic_write_json` under `file_lock`.
+- [`projection.md`](projection.md) and [`coverage.md`](coverage.md) - the UMAP and k-means fits that `vtscore.gpu_backends` routes to cuML.
+- [`config.md`](config.md#resolve_device) - `resolve_device()`, which `cuml_enabled()` consults before choosing the GPU path.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#environment-variables) - `VTSEARCH_DISABLE_CUML` and `VTSEARCH_RUNDIR`; its [cuML troubleshooting entry](../../../docs/DEPLOYMENT.md#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors) covers the fit-time failures described above.
