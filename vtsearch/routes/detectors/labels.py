@@ -307,6 +307,12 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
     "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
 )
+@detectors_labels_bp.alt_response(
+    400, description="Invalid request body or field value, or the importer rejected the run."
+)
+@detectors_labels_bp.alt_response(404, description="Detector not found, or unknown label importer name.")
+@detectors_labels_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
+@detectors_labels_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
 def import_labels_into_detector(name: str, importer_name: str):
     """Run a label importer and merge results into this detector's labelset.
 

@@ -40,6 +40,7 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 
 export interface ColumnDef {
   key: string;
@@ -52,7 +53,7 @@ export interface ColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })

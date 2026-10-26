@@ -26,7 +26,12 @@ from vtscore.detectors.training import (
     score_rows_with_model,
     scoring_rows_for_snap,
 )
-from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._context import (
+    MISSING_CONTEXT_HEADERS,
+    MISSING_DETECTOR_HEADER,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     FindBoundaryNextQuerySchema,
@@ -865,6 +870,7 @@ def cancel_find():
 
 @detector_find_bp.route("/api/find/end-session", methods=["POST"])
 @detector_find_bp.response(200, FindEndSessionResponseSchema)
+@detector_find_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
 @require_dataset_header
 @require_detector_header
 def end_find_session_route():
@@ -888,6 +894,7 @@ def end_find_session_route():
 @detector_find_bp.route("/api/find/queue-ids", methods=["GET"])
 @detector_find_bp.arguments(FindQueueIdsQuerySchema, location="query")
 @detector_find_bp.response(200, FindQueueIdsResponseSchema)
+@detector_find_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @require_detector_header
 def find_queue_ids_route(query: dict):
     """Return the Find work-queue media ids the bulk actions operate over.
@@ -915,6 +922,7 @@ def find_queue_ids_route(query: dict):
 @detector_find_bp.route("/api/find/boundary-next", methods=["GET"])
 @detector_find_bp.arguments(FindBoundaryNextQuerySchema, location="query")
 @detector_find_bp.response(200, FindBoundaryNextResponseSchema)
+@detector_find_bp.alt_response(400, description=MISSING_DETECTOR_HEADER)
 @require_detector_header
 def find_boundary_next_route(query: dict):
     """Return the next unverified item on the Find boundary walk.

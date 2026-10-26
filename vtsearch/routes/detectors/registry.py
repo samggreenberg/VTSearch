@@ -403,6 +403,19 @@ def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str
     "/api/detectors/registry/from-labelset/<importer_name>",
     methods=["POST"],
 )
+@detectors_registry_bp.alt_response(
+    400,
+    description=(
+        "Invalid request body, field value, ``beta`` or ``embedder_type``; an embedder type the Semantic-only "
+        "lock forbids; the importer rejected the run; or the labels carry no media type, or more than one."
+    ),
+)
+@detectors_registry_bp.alt_response(404, description="Unknown label importer name.")
+@detectors_registry_bp.alt_response(409, description="A detector with this name already exists.")
+@detectors_registry_bp.alt_response(
+    422, description="``name`` or a required field is missing, or a field value is invalid."
+)
+@detectors_registry_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
 def register_detector_from_labelset(importer_name: str):  # noqa: C901
     """Create a detector seeded with labels from a label importer.
 

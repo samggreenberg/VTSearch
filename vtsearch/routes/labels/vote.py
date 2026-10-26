@@ -19,7 +19,7 @@ from vtsearch.schemas.labels import (
     LabelsImportResponseSchema,
 )
 from vtscore.detectors.dataset_sync import validated_vote_snapshot
-from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
@@ -557,6 +557,7 @@ def _stream_labels_ndjson(
 @labels_bp.route("/api/labels/import", methods=["POST"])
 @labels_bp.arguments(LabelsImportRequestSchema)
 @labels_bp.response(200, LabelsImportResponseSchema)
+@labels_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
 @require_dataset_header
 @require_detector_header
 def import_labels(body: dict):
@@ -646,6 +647,8 @@ def _partition_candidates(
 @labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
 @labels_bp.arguments(FillFromSortRequestSchema)
 @labels_bp.response(200, FillFromSortResponseSchema)
+@labels_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
+@labels_bp.alt_response(500, description="The labels could not be written to the detector store.")
 @require_dataset_header
 @require_detector_header
 def fill_labels_from_sort(body: dict):

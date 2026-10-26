@@ -8400,9 +8400,15 @@
     },
     "/api/achievements/docs/{doc_id}/raw": {
       "get": {
-        "description": "Plain-text response, intentionally undecorated so it stays out of\nthe OpenAPI spec (the spec is for JSON APIs).",
+        "description": "Plain-text response, so the spec gives it no response schema.",
         "operationId": "get_doc_raw",
         "responses": {
+          "404": {
+            "description": "Unknown doc id."
+          },
+          "500": {
+            "description": "The doc's file is missing, or resolves outside the repository."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -8782,6 +8788,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "``beta`` is rejected by the balance setting's validator."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -9701,6 +9710,15 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.\n\nAn ``outputs`` list (one ``{media_type, source_specs, embedder, clipper,\n\u2026}`` object per dataset) turns the request into a **multi-dataset**\nimport (#4703): the importer runs once and every output lands as its own\ndataset, each with its own task id in ``task_ids``.  Without it the body's\n``media_type`` / ``source_specs`` describe the one dataset to build and\n``task_ids`` holds that single task.",
         "operationId": "import_dataset",
         "responses": {
+          "400": {
+            "description": "Invalid request body, field value, ``outputs`` or ``clipper_params``; ``outputs`` sent to an importer that makes one dataset; or an embedder the Semantic-only lock forbids."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -10103,6 +10121,15 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "stage_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body, or a field value fails validation."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -10455,6 +10482,9 @@
           "404": {
             "description": "Dataset not found, or saved pkl file is missing."
           },
+          "410": {
+            "description": "The dataset has expired and been removed."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -10718,6 +10748,21 @@
         "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
         "operationId": "run_datasource_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the fetch."
+          },
+          "404": {
+            "description": "Unknown datasource importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "501": {
+            "description": "Importer does not implement fetch."
+          },
+          "502": {
+            "description": "The source behind the importer failed, or returned no data."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -11050,6 +11095,21 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "register_detector_from_labelset",
         "responses": {
+          "400": {
+            "description": "Invalid request body, field value, ``beta`` or ``embedder_type``; an embedder type the Semantic-only lock forbids; the importer rejected the run; or the labels carry no media type, or more than one."
+          },
+          "404": {
+            "description": "Unknown label importer name."
+          },
+          "409": {
+            "description": "A detector with this name already exists."
+          },
+          "422": {
+            "description": "``name`` or a required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -11787,6 +11847,18 @@
         "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh head is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "import_labels_into_detector",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Detector not found, or unknown label importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12059,6 +12131,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "Empty name after stripping."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -12082,6 +12157,15 @@
       "post": {
         "operationId": "embed",
         "responses": {
+          "400": {
+            "description": "Missing ``embedder``, ``text`` or ``file``; text for an embedder without text support; or a file of another media type, or one the embedder could not embed."
+          },
+          "404": {
+            "description": "Unknown embedder name."
+          },
+          "500": {
+            "description": "The embedder raised, or returned no vector for the text."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12703,6 +12787,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12828,6 +12915,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12893,6 +12983,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13166,6 +13259,18 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_label_import",
         "responses": {
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header, an invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown label importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -13199,6 +13304,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13395,8 +13503,14 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "The labels could not be written to the detector store."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13431,6 +13545,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13662,6 +13779,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -13686,6 +13806,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "500": {
             "description": "The detector file could not be rewritten."
@@ -13714,6 +13837,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "409": {
             "description": "No Find pass to test: score the dataset first."
@@ -13974,6 +14100,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
           "409": {
             "description": "A requested id's source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it."
           },
@@ -14020,6 +14149,9 @@
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "The votes could not be written to the detector store."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -14256,6 +14388,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
           },
           "404": {
             "description": "Media not found; or it is no converter output (``error_code: not_derived``); or no readable dataset of its import holds its source type (``no_source_dataset``); or the source dataset has no matching item (``source_not_found``)."
@@ -14495,6 +14630,9 @@
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
+          "500": {
+            "description": "The vote could not be written to the detector store."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -14543,6 +14681,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -14567,6 +14708,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "409": {
             "description": "No ranking to draw from, nothing unvoted in it, or the same list as the last check."
@@ -14614,6 +14758,9 @@
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "The votes could not be written to the detector store."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -14884,6 +15031,21 @@
         "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  Every returned item's bytes are saved into\nthe per-user ``example_media/`` directory; the response lists one\n``{filename, original_name, origin}`` entry per saved seed.\n\nA run that returns more than the importer's ``max_items`` is truncated\nto that cap rather than filling the directory, and the response says\nso via ``truncated``.  An empty batch is a valid answer (``count: 0``),\nnot an error: \"nothing matched\" is something the user should see rather\nthan a failure that hides which field was too narrow.",
         "operationId": "run_seed_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown seed importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "501": {
+            "description": "Importer does not implement run."
+          },
+          "502": {
+            "description": "The source behind the importer failed, or the run did not return a list."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -15482,6 +15644,18 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/settings-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_settings_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown settings importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a settings dict."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -15719,6 +15893,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
           },
           "404": {
             "description": "Unknown or expired sort token; re-run the sort."
@@ -15986,6 +16163,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16016,6 +16196,9 @@
         "description": "The plain favicon is Toasty's resting smile, so there is no separate\n``smile`` variant.",
         "operationId": "favicon_variant",
         "responses": {
+          "404": {
+            "description": "Unknown favicon variant."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16147,6 +16330,9 @@
         "description": "The Angular build output (main.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded; unmatched API routes should\nreturn 404, not the SPA page.",
         "operationId": "catch_all",
         "responses": {
+          "404": {
+            "description": "An ``/api/`` path no route matches."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }

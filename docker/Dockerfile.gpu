@@ -140,7 +140,7 @@ RUN pip install --no-cache-dir --no-deps facenet-pytorch
 # downgrade pandas here, #4390), and it requires nvidia-nvjitlink-cu12>=12.9,
 # which the cu129 torch pinned above satisfies with the same 12.9.x libraries
 # RAPIDS is built on. `pandas>=3` is repeated so a RAPIDS that could not take it
-# fails this layer instead of quietly moving pandas. See docs/DEPLOYMENT.md
+# fails this layer instead of quietly moving pandas. See docs/TROUBLESHOOTING.md
 # "cuML crashes compiling a kernel".
 RUN pip install --no-cache-dir \
         --extra-index-url https://pypi.nvidia.com \

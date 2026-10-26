@@ -563,6 +563,9 @@ def stage_file():
 
 
 @datasets_staging_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
+@datasets_staging_bp.alt_response(400, description="Invalid request body, or a field value fails validation.")
+@datasets_staging_bp.alt_response(404, description="Unknown importer name.")
+@datasets_staging_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 def stage_import(importer_name: str):
     """Run a registered importer in staging mode.
 
@@ -700,6 +703,15 @@ def importer_suggested_name(body: dict, importer_name: str):
 
 
 @datasets_staging_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
+@datasets_staging_bp.alt_response(
+    400,
+    description=(
+        "Invalid request body, field value, ``outputs`` or ``clipper_params``; ``outputs`` sent to an importer "
+        "that makes one dataset; or an embedder the Semantic-only lock forbids."
+    ),
+)
+@datasets_staging_bp.alt_response(404, description="Unknown importer name.")
+@datasets_staging_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
 def import_dataset(importer_name: str):
     """Run a registered importer by name in a background thread.
 

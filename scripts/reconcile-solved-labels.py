@@ -45,7 +45,7 @@ Encoding it here makes it testable; see tests_lib/meta/test_reconcile_solved_lab
 
 Assignment carries a second status alongside the label: a session assigns the
 owner when it *starts* work on an issue, and takes them back off once the issue
-is solved (CLAUDE.md, "Assign the owner while you are working an issue"). So the
+is solved (CLAUDE.md, "Issue lifecycle"). So the
 open-issue queue reads:
 
     is:issue is:open -label:solved             # nobody has solved this

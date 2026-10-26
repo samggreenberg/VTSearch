@@ -211,7 +211,6 @@ _pool_connections  # noqa: F821 - the three attributes that make a requests adap
 _pool_maxsize  # noqa: F821
 _pool_block  # noqa: F821
 __getattr__  # noqa: F821 - PEP 562 module-level hook in ``vtsearch/settings.py``
-__wrapped__  # noqa: F821 - functools convention, read by ``inspect.unwrap``
 create_module  # noqa: F821 - importlib Loader protocol, called by the import machinery
 trust_env  # noqa: F821 - requests.Session attribute, read by requests when sending
 

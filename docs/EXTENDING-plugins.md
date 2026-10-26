@@ -911,7 +911,12 @@ submit an opaque id while displaying a friendly name:
 Pair `dynamic_options` (or a plain static `"select"`) with
 `allow_free_text=True` to let the user type an arbitrary value the option
 list doesn't include; the field renders as a combobox instead of a strict
-dropdown.
+dropdown. Either way the user sees labels and your plugin receives values:
+each row of the list leads with the label, with the value beneath it when
+the two differ, and picking a row puts the label in the box and submits the
+value, so two options sharing a label stay distinct. Typed text is
+submitted as typed, except that a label exactly one option carries submits
+that option's value.
 
 The frontend wiring is fully automatic:
 
@@ -2348,8 +2353,8 @@ without a product reason.
 
 `settings_source` is a per-user key, so a user is bound to your source in
 their own `user_settings.json` (`data/user_settings.json` for the
-single-user default; see [DEPLOYMENT.md § Settings file
-schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
+single-user default; see [SETTINGS.md](SETTINGS.md)), not in the server
+file:
 
 ```json
 {
@@ -2400,7 +2405,7 @@ plugin. Each detector can link to a source that auto-exports its labels
 as they change and imports them back on load or on sync. A deployment
 can link every detector to one source at once (the
 `default_labelset_source` server setting; see
-[DEPLOYMENT.md](DEPLOYMENT.md)), so a copy of every detector's labels
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)), so a copy of every detector's labels
 stays current outside the server.
 
 Use a **Label Importer** (above) for one-shot label import. Use a
