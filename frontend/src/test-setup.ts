@@ -115,6 +115,40 @@ if (typeof (globalThis as { CSS?: unknown }).CSS === 'undefined') {
   };
 }
 
+// --- HTMLDialogElement showModal/show/close ---------------------------------
+// vt-modal opens a <dialog> with showModal() (#5297). jsdom has the element but
+// none of its methods. These stand-ins only toggle the `open` attribute, and
+// close() fires `close` as the platform does; jsdom has no top layer, inertness
+// or focus steps, so what showModal() does for focus is checked in chromium,
+// not here.
+if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: {
+      configurable: true,
+      writable: true,
+      value(this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+      },
+    },
+    show: {
+      configurable: true,
+      writable: true,
+      value(this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+      },
+    },
+    close: {
+      configurable: true,
+      writable: true,
+      value(this: HTMLDialogElement) {
+        if (!this.hasAttribute('open')) return;
+        this.removeAttribute('open');
+        this.dispatchEvent(new Event('close'));
+      },
+    },
+  });
+}
+
 // --- HTMLMediaElement play/pause/load --------------------------------------
 // The audio/video players call these; jsdom throws "Not implemented".
 Object.defineProperties(HTMLMediaElement.prototype, {

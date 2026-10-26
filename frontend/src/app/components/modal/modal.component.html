@@ -1,27 +1,32 @@
 @if (open()) {
 <!--
-  cdkTrapFocus + auto-capture gives the dialog full keyboard/screen-reader focus
-  management app-wide: on open it saves the triggering element and moves focus to
-  the first tabbable control inside the dialog; Tab/Shift+Tab then cycle within
-  the dialog instead of escaping to the page behind it; and on close (the `@if`
-  destroys this subtree) focus is restored to the trigger. With initialFocus
-  'dialog', the box itself is the initial element (cdkFocusInitial) instead.
+  A modal <dialog>, opened with showModal() as soon as it renders (#5297). The
+  platform then manages focus for every dialog in the app: focus moves to the
+  first focusable control (or, with initialFocus 'dialog', to the box, which
+  carries `autofocus`); the rest of the page is inert, so neither Tab nor a
+  click nor a screen reader reaches it; and the dialog draws in the top layer,
+  over every z-index, stacked in the order the dialogs opened. The element is
+  itself the full-window backdrop, so a click outside the box lands on it.
+
+  closedby="none": Escape is ours, not the browser's. `(closed)` is a request
+  to the parent, which owns `[open]`; a natively closed element would disagree
+  with it. The (cancel) and (close) bindings are the backstop for browsers
+  without `closedby`.
 -->
-<div
+<dialog
+  #dialog
   class="modal-backdrop"
-  (click)="onBackdropClick($event)"
-  role="dialog"
-  aria-modal="true"
+  closedby="none"
   [attr.aria-label]="title()"
-  tabindex="-1"
-  cdkTrapFocus
-  [cdkTrapFocusAutoCapture]="true"
+  (click)="onBackdropClick($event)"
+  (cancel)="$event.preventDefault()"
+  (close)="onNativeClose()"
 >
   <div
     #box
     class="modal-content"
     [attr.tabindex]="initialFocus() === 'dialog' ? -1 : null"
-    [attr.cdkFocusInitial]="initialFocus() === 'dialog' ? '' : null"
+    [attr.autofocus]="initialFocus() === 'dialog' ? '' : null"
   >
     <div class="modal-header">
       <h2>{{ title() }}</h2>
@@ -40,5 +45,5 @@
       <ng-content select="[modal-footer]" />
     </div>
   </div>
-</div>
+</dialog>
 }

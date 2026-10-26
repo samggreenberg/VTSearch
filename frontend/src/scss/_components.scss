@@ -517,6 +517,11 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // fade + origin-scale motion read as jittery rather than polished, so it was
 // removed rather than tuned.
 
+// The backdrop is `vt-modal`'s modal `<dialog>` (#5297), drawn in the top layer
+// over every z-index and stretched over the whole window, so a click outside
+// the box lands on it. The rules after `padding` undo the UA sheet's dialog: a
+// centred, bordered, padded box with its own colours, scrolling, and a
+// `::backdrop` of its own.
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -524,8 +529,35 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 8vh;
+  padding: 8vh 0 0;
   z-index: var(--z-modal-backdrop);
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
+  // Visible, like the plain element it replaced: a Toasty hint about the box
+  // stands below or beside it, and must not give the window a scrollbar.
+  overflow: visible;
+
+  // `display: flex` above would beat the UA's `display: none` for a closed
+  // dialog, and the element exists for a moment before `showModal()`.
+  &:not([open]) {
+    display: none;
+  }
+
+  &::backdrop {
+    background: transparent;
+  }
+
+  // Focus is on the window-sized backdrop only when nothing inside can take it
+  // (or after a click on the box's padding); the box frame already shows
+  // where focus is, as for `initialFocus="dialog"` below.
+  &:focus-visible {
+    outline: none;
+  }
 }
 
 .modal-content {

@@ -1,5 +1,7 @@
-<vt-toast-container />
-<vt-offline-banner />
+<!-- Both float over every view and every dialog: vtAboveDialogs moves them
+     into the topmost open <dialog>, outside of which the page is inert. -->
+<vt-toast-container vtAboveDialogs />
+<vt-offline-banner vtAboveDialogs />
 @if (auth.needsLogin) {
   <vt-login (loggedIn)="auth.checkStatus()" />
 } @else {

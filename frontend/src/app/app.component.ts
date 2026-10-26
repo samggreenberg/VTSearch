@@ -44,6 +44,7 @@ import { TrainingDomainAlertService } from './services/training-domain-alert.ser
 import { AutoFindService } from './services/autofind.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
 import { ToastyHintComponent } from './components/toasty-hint/toasty-hint.component';
+import { AboveDialogsDirective } from './directives/above-dialogs.directive';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -73,6 +74,7 @@ import { isPairCompatible } from './utils/context-compat';
     NewDetectorModalComponent,
     AutoDetectResultsModalComponent,
     ToastyHintComponent,
+    AboveDialogsDirective,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',

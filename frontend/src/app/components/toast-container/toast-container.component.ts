@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, OnDestroy, signal } from '@angular/core';
 
 import { AsyncPipe } from '@angular/common';
 import { Toast, ToastLevel, ToastService } from '../../services/toast.service';
@@ -21,6 +21,7 @@ import { TOASTY_FACES } from '../../utils/toasty-faces';
 })
 export class ToastContainerComponent implements OnDestroy {
   protected toastService = inject(ToastService);
+  private readonly host: HTMLElement = inject(ElementRef).nativeElement;
 
   expandedId: number | null = null;
   /** Signal so the ``setTimeout`` reset in {@link markCopied} repaints the
@@ -90,7 +91,10 @@ export class ToastContainerComponent implements OnDestroy {
       ta.value = text;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
-      document.body.appendChild(ta);
+      // Inside our own host, not <body>: while a dialog is open the host is in
+      // it (vtAboveDialogs) and <body> is inert, where the textarea cannot take
+      // the selection and execCommand copies nothing while reporting success.
+      this.host.appendChild(ta);
       ta.select();
       try {
         document.execCommand('copy');
@@ -98,7 +102,7 @@ export class ToastContainerComponent implements OnDestroy {
       } catch {
         // give up silently; details still visible in the toast
       }
-      document.body.removeChild(ta);
+      ta.remove();
     }
   }
 

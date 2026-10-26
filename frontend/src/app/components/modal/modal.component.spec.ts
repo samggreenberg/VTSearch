@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
-import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { ModalComponent, topOpenModal } from './modal.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -10,6 +9,7 @@ import { settleZoneless } from '../../testing/settle-resource';
   standalone: true,
   imports: [ModalComponent],
   template: `
+    <button class="trigger">Trigger</button>
     <vt-modal
       [title]="'Test Modal'"
       [open]="isOpen()"
@@ -40,6 +40,7 @@ class TestHostComponent {
   template: `
     <vt-modal [title]="'Outer'" [open]="true" (closed)="outerClosed = true">
       <p>Outer body</p>
+      <button class="outer-trigger">Open inner</button>
     </vt-modal>
     @if (innerVisible()) {
       <vt-modal [title]="'Inner'" [open]="true" (closed)="innerClosed = true">
@@ -140,16 +141,16 @@ describe('ModalComponent', () => {
   });
 });
 
-describe('ModalComponent focus management', () => {
-  // We assert the CdkTrapFocus wiring rather than live focus movement: the
-  // directive's auto-capture (initial focus in, Tab trap, restore-to-trigger on
-  // close) is exercised by CDK's own tests, and its InteractivityChecker treats
-  // every element as invisible under jsdom (no layout engine), so it refuses to
-  // move focus headlessly. Verifying the trap is attached and auto-capturing
-  // guards against the wiring being dropped; the real behavior only surfaces in
-  // a browser.
+describe('ModalComponent as a native <dialog>', () => {
+  // jsdom has <dialog> but none of its methods; src/test-setup.ts stands in
+  // showModal()/close() as attribute toggles. So these specs pin the wiring
+  // (a modal <dialog>, opened modally, focus handed back), and chromium is the
+  // check for what the platform does with it: initial focus, inertness, the
+  // top layer.
   let fixture: ComponentFixture<TestHostComponent>;
   let host: TestHostComponent;
+
+  const dialogEl = () => fixture.nativeElement.querySelector('dialog') as HTMLDialogElement | null;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -160,17 +161,105 @@ describe('ModalComponent focus management', () => {
     host = fixture.componentInstance;
   });
 
-  it('attaches an auto-capturing focus trap to the open dialog', async () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('renders the dialog as a <dialog> opened with showModal()', async () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
     host.isOpen.set(true);
     await settleZoneless(fixture);
 
-    const trapEl = fixture.debugElement.query(By.directive(CdkTrapFocus));
-    expect(trapEl).toBeTruthy();
-    // The trap wraps the whole dialog so Tab cannot escape to the page behind it.
-    expect((trapEl.nativeElement as HTMLElement).classList.contains('modal-backdrop')).toBe(true);
-    // Auto-capture is what pulls focus in on open and restores it to the trigger
-    // on close.
-    expect(trapEl.injector.get(CdkTrapFocus).autoCapture).toBe(true);
+    const dialog = dialogEl();
+    expect(dialog?.classList.contains('modal-backdrop')).toBe(true);
+    expect(dialog?.open).toBe(true);
+    // Modally, not show(): that is what makes the page behind inert.
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect(showModal.mock.contexts[0]).toBe(dialog);
+    expect(dialog?.getAttribute('aria-label')).toBe('Test Modal');
+  });
+
+  it('leaves Escape to vt-modal (closedby="none") and refuses a native cancel', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const dialog = dialogEl()!;
+    expect(dialog.getAttribute('closedby')).toBe('none');
+    const cancel = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(host.closeCalled).toBe(false);
+  });
+
+  it('claims the Escape keypress it acts on, so the browser does not close the element too', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    document.dispatchEvent(esc);
+    expect(host.closeCalled).toBe(true);
+    expect(esc.defaultPrevented).toBe(true);
+  });
+
+  it('does not claim Escape while closed', async () => {
+    await settleZoneless(fixture);
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    document.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+  });
+
+  it('when the browser closes the element anyway, keeps it modal and asks the parent to close', async () => {
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+
+    const dialog = dialogEl()!;
+    dialog.close();
+    // Still showing until the parent, which owns [open], takes it away.
+    expect(dialog.open).toBe(true);
+    expect(host.closeCalled).toBe(true);
+  });
+
+  it('hands focus back to the trigger when the dialog closes', async () => {
+    const trigger = fixture.nativeElement.querySelector('.trigger') as HTMLButtonElement;
+    trigger.focus();
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+    // The platform moves focus in on showModal(); jsdom does not, so do it here.
+    (fixture.nativeElement.querySelector('.modal-close') as HTMLButtonElement).focus();
+    expect(document.activeElement).not.toBe(trigger);
+
+    host.isOpen.set(false);
+    await settleZoneless(fixture);
+    expect(dialogEl()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('hands focus back when the parent takes the whole modal away', async () => {
+    const trigger = fixture.nativeElement.querySelector('.trigger') as HTMLButtonElement;
+    trigger.focus();
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+    (fixture.nativeElement.querySelector('.modal-close') as HTMLButtonElement).focus();
+
+    // Removing the element drops focus to <body>; ngOnDestroy runs after.
+    dialogEl()!.remove();
+    fixture.debugElement.query(By.directive(ModalComponent)).injector.get(ModalComponent).ngOnDestroy();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('leaves focus alone when something else took it before the dialog closed', async () => {
+    const trigger = fixture.nativeElement.querySelector('.trigger') as HTMLButtonElement;
+    trigger.focus();
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+    const elsewhere = document.createElement('button');
+    document.body.appendChild(elsewhere);
+    try {
+      elsewhere.focus();
+      host.isOpen.set(false);
+      await settleZoneless(fixture);
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
   });
 
   it('leaves initial focus to the first control by default', async () => {
@@ -178,7 +267,7 @@ describe('ModalComponent focus management', () => {
     await settleZoneless(fixture);
 
     const box = fixture.nativeElement.querySelector('.modal-content') as HTMLElement;
-    expect(box.hasAttribute('cdkFocusInitial')).toBe(false);
+    expect(box.hasAttribute('autofocus')).toBe(false);
     expect(box.hasAttribute('tabindex')).toBe(false);
   });
 
@@ -188,24 +277,25 @@ describe('ModalComponent focus management', () => {
     await settleZoneless(fixture);
 
     const box = fixture.nativeElement.querySelector('.modal-content') as HTMLElement;
-    // The trap's initial-element marker, on an element that can take focus but
-    // is not in the Tab order.
-    expect(box.hasAttribute('cdkFocusInitial')).toBe(true);
+    // showModal() focuses the first `autofocus` element inside the dialog, here
+    // one that can take focus but is not in the Tab order.
+    expect(box.hasAttribute('autofocus')).toBe(true);
     expect(box.getAttribute('tabindex')).toBe('-1');
   });
 
-  it('exposes the dialog box for content placed against it', async () => {
+  it('exposes the dialog box and the <dialog> element', async () => {
     host.isOpen.set(true);
     await settleZoneless(fixture);
 
     const modal = fixture.debugElement.query(By.directive(ModalComponent)).componentInstance as ModalComponent;
     expect(modal.box()?.nativeElement).toBe(fixture.nativeElement.querySelector('.modal-content'));
+    expect(modal.dialog()?.nativeElement).toBe(dialogEl());
   });
 
-  it('does not render a focus trap while the dialog is closed', async () => {
+  it('renders no <dialog> while closed', async () => {
     host.isOpen.set(false);
     await settleZoneless(fixture);
-    expect(fixture.debugElement.query(By.directive(CdkTrapFocus))).toBeNull();
+    expect(dialogEl()).toBeNull();
   });
 });
 
@@ -246,6 +336,22 @@ describe('ModalComponent stacking', () => {
     expect(topOpenModal()).toBe(modals()[0]);
     fixture.destroy();
     expect(topOpenModal()).toBeNull();
+  });
+
+  it('hands focus back into the outer dialog when the inner one goes', async () => {
+    await settleZoneless(fixture);
+    const outerTrigger = fixture.nativeElement.querySelector('.outer-trigger') as HTMLButtonElement;
+    outerTrigger.focus();
+    host.innerVisible.set(true);
+    await settleZoneless(fixture);
+    const dialogs = fixture.nativeElement.querySelectorAll('dialog') as NodeListOf<HTMLDialogElement>;
+    expect(dialogs.length).toBe(2);
+    expect([...dialogs].every((d) => d.open)).toBe(true);
+    (dialogs[1].querySelector('.modal-close') as HTMLButtonElement).focus();
+
+    host.innerVisible.set(false);
+    await settleZoneless(fixture);
+    expect(document.activeElement).toBe(outerTrigger);
   });
 
   it('after the inner modal is destroyed, Escape reaches the outer modal', async () => {
