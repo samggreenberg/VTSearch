@@ -52,6 +52,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   export; `--keep-negatives` adds the below-threshold items as `bad` labels. The pipeline-YAML key is
   `as_labelset:`. A dry run with `--stream-results` now also fails when the exporter cannot stream that way.
 
+- **Audio imports can even out loudness** (issue #5286). Add Dataset › Advanced › Cleanup lists **Loudness
+  Normalize** for audio, off by default. Ticked, it scales each clip so the loudness of its audible part sits at
+  -20 dBFS RMS, never pushing a sample past -1 dBFS, so a quietly recorded sound is analysed like the same sound
+  recorded loud. Set its mode to `peak` to bring each clip's loudest sample to the peak level instead. A
+  normalized clip keeps its Original, like any other cleanup.
+
 ### Fixed
 
 - **A clipper picked for a server folder import keeps the options you set** (issue #5300). In Add Dataset ›

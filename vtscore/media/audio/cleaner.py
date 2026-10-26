@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vtscore.media.cleaner import MediaCleaner
+
+if TYPE_CHECKING:
+    from vtscore.media.audio.loudness import PcmAudio
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +16,18 @@ log = logging.getLogger(__name__)
 #: ends).  Re-encoding a clip to shave a few milliseconds costs a second copy of
 #: its bytes (the ``original_*`` snapshot) and buys the embedder nothing.
 _MIN_TRIM_SECONDS = 0.1
+
+#: Don't rewrite the payload for a gain this small (dB): about the smallest
+#: loudness step a listener can hear, and for the same reason as
+#: :data:`_MIN_TRIM_SECONDS` not worth a second copy of the clip.
+_MIN_GAIN_DB = 1.0
+
+#: A clip whose loudest sample is below this (dBFS) is treated as silence and
+#: left alone.  Boosting it would only turn its noise floor into loud hiss.
+_SILENCE_FLOOR_DBFS = -60.0
+
+#: The two ``mode`` values :class:`AudioLoudnessNormalizeCleaner` accepts.
+_LOUDNESS_MODES = ("rms", "peak")
 
 
 class AudioSilenceTrimCleaner(MediaCleaner):
@@ -160,4 +175,210 @@ class AudioSilenceTrimCleaner(MediaCleaner):
         cleaned["media_bytes"] = trimmed
         cleaned["file_size"] = len(trimmed)
         cleaned["duration"] = round(t1 - t0, 6)
+        return cleaned
+
+
+class AudioLoudnessNormalizeCleaner(MediaCleaner):
+    """Scale every clip to one loudness, so a quiet recording embeds like a loud one.
+
+    CLAP, like every log-mel audio embedder, is not level-invariant.  A gain
+    shifts every bin of the log-mel spectrogram by the same number of dB, the
+    model's input batch-norm passes that shift straight through, and so a
+    recording made 20 dB quieter embeds somewhere else than the same sound at a
+    typical level.  This gate applies one gain per clip so every clip arrives at
+    the same level.  It is a gain and nothing else: no compression, no limiting,
+    no EQ, and never a clipped sample.
+
+    ``mode`` says what "the same level" means:
+
+    ``"rms"`` (the default)
+        Scale so the clip's gated RMS is ``rms_db``, but never so far that its
+        loudest sample would pass ``peak_db``.
+    ``"peak"``
+        Scale so the clip's loudest sample sits at ``peak_db``.
+
+    **Why RMS is the default.**  RMS measures what the embedder sees.  A log-mel
+    spectrogram is a map of energy, and RMS is energy; the peak is a single
+    sample.  Two clips peaking at the same level can differ by 15-20 dB in
+    energy (a steady drone against a lone drum hit), so peak normalization
+    leaves exactly the spread this gate exists to remove, while gated-RMS
+    clips land at one energy whatever their shape.  ``peak_db`` doubles as RMS
+    mode's ceiling, so the choice costs no safety: a spiky clip that would clip
+    before reaching ``rms_db`` stops at ``peak_db``, which is what peak mode
+    would have done with it.  The -20 dBFS target leaves 19 dB under that
+    ceiling, enough for the crest factor of speech and most music, so the
+    ceiling binds only on genuinely spiky clips.
+
+    The RMS is *gated*
+    (:meth:`~vtscore.media.audio.loudness.PcmAudio.gated_rms_dbfs`): windows
+    more than :data:`~vtscore.media.audio.loudness.GATE_DB` below the loudest
+    are left out, so a short sound is measured at its own level rather than
+    diluted by the quiet around it.
+
+    **Order.**  The result does not depend on whether
+    :class:`AudioSilenceTrimCleaner` runs before or after this gate.  The trim
+    only removes audio far below the clip's loudest frame, which holds neither
+    the peak nor any window the gated RMS counts, so it never changes the gain
+    chosen here; and its threshold is relative to that loudest frame, so a gain
+    never changes what it cuts.
+
+    A clip is left unchanged when it can't be decoded as WAV (the silence trim's
+    own limit, via :func:`~vtscore.media.audio.wav.open_wav`), when its peak is
+    below :data:`_SILENCE_FLOOR_DBFS` (silence, including all-zero audio), or
+    when the gain would move its level by at most :data:`_MIN_GAIN_DB`.  A rewritten clip is
+    PCM WAV in the source's channel count, sample rate and sample width; an MP3
+    or FLAC payload comes out as 16-bit WAV, as it does from the silence trim.
+
+    Parameters:
+
+    mode:
+        ``"rms"`` (default) or ``"peak"``, case-insensitive.
+    rms_db:
+        RMS mode's target level, in dBFS.  Defaults to -20.0.
+    peak_db:
+        Peak mode's target for the loudest sample, and RMS mode's ceiling, in
+        dBFS.  Defaults to -1.0.
+    """
+
+    def __init__(self, mode: str = "rms", rms_db: float = -20.0, peak_db: float = -1.0) -> None:
+        mode = mode.strip().lower()
+        if mode not in _LOUDNESS_MODES:
+            raise ValueError(f"mode must be one of {', '.join(_LOUDNESS_MODES)}, not {mode!r}")
+        if rms_db > 0:
+            raise ValueError("rms_db must be at most 0 dBFS")
+        if peak_db > 0:
+            raise ValueError("peak_db must be at most 0 dBFS")
+        self._mode = mode
+        self._rms_db = rms_db
+        self._peak_db = peak_db
+
+    @property
+    def name(self) -> str:
+        return "audio_loudness_normalize"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    @property
+    def display_name(self) -> str:
+        return "Loudness Normalize"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Scale each clip to one loudness so quiet recordings embed like loud ones. A gain only: nothing is "
+            "compressed, and nothing clips."
+        )
+
+    @property
+    def summary_template(self) -> str:
+        return "Scale each clip to one loudness ({mode}): RMS {rms_db} dBFS, peaks at most {peak_db} dBFS."
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
+    def rms_db(self) -> float:
+        return self._rms_db
+
+    @property
+    def peak_db(self) -> float:
+        return self._peak_db
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "mode",
+                "label": "Mode (rms or peak)",
+                "description": (
+                    "rms brings each clip's loudness to the target RMS, never letting a peak pass the peak level; "
+                    "peak brings each clip's loudest sample to the peak level."
+                ),
+                "type": "string",
+                "default": self._mode,
+            },
+            {
+                "key": "rms_db",
+                "label": "Target RMS (dBFS)",
+                "description": "The loudness every clip is scaled to in rms mode.",
+                "type": "number",
+                "default": self._rms_db,
+                "min": -60,
+                "max": 0,
+                "step": 1,
+            },
+            {
+                "key": "peak_db",
+                "label": "Peak level (dBFS)",
+                "description": (
+                    "In peak mode, where each clip's loudest sample ends up. In rms mode, a ceiling: no clip is "
+                    "boosted so far that a sample passes it."
+                ),
+                "type": "number",
+                "default": self._peak_db,
+                "min": -60,
+                "max": 0,
+                "step": 0.5,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "AudioLoudnessNormalizeCleaner":
+        return AudioLoudnessNormalizeCleaner(
+            mode=str(params.get("mode", self._mode)),
+            rms_db=float(params.get("rms_db", self._rms_db)),
+            peak_db=float(params.get("peak_db", self._peak_db)),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["mode"] = self._mode
+        d["rms_db"] = self._rms_db
+        d["peak_db"] = self._peak_db
+        return d
+
+    def _gain_db(self, audio: PcmAudio) -> float | None:
+        """Return the gain (dB) this gate would apply to *audio*, or ``None`` to leave it.
+
+        Rounded to 0.01 dB, so float noise in the measurement can't change the
+        output bytes from one run to the next.
+        """
+        peak = audio.peak_dbfs
+        if peak < _SILENCE_FLOOR_DBFS:
+            return None
+        if self._mode == "peak":
+            gain = self._peak_db - peak
+        else:
+            gain = self._rms_db - audio.gated_rms_dbfs()
+            if gain > 0:
+                # Boost only as far as the ceiling allows; a clip already past
+                # it is not boosted, but never attenuated on its account either.
+                gain = min(gain, max(self._peak_db - peak, 0.0))
+        gain = round(gain, 2)
+        return None if abs(gain) <= _MIN_GAIN_DB else gain
+
+    def clean(self, media: dict[str, Any]) -> dict[str, Any]:
+        """Return *media* scaled to the target level, or unchanged (see the class docstring)."""
+        from vtscore.media.audio.loudness import PcmAudio  # noqa: PLC0415
+
+        payload = media.get("media_bytes")
+        if not isinstance(payload, (bytes, bytearray)) or not payload:
+            return media
+
+        try:
+            audio = PcmAudio.from_wav(bytes(payload))
+        except Exception:
+            log.debug("audio_loudness_normalize: undecodable payload, leaving unchanged", exc_info=True)
+            return media
+
+        gain = self._gain_db(audio)
+        if gain is None:
+            return media
+
+        normalized = audio.with_gain(gain).to_wav()
+        cleaned = dict(media)
+        cleaned["media_bytes"] = normalized
+        cleaned["file_size"] = len(normalized)
         return cleaned

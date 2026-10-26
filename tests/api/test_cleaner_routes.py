@@ -119,12 +119,28 @@ class TestCleanersApiEndpoint:
         assert resp.status_code == 200
         assert resp.get_json()["cleaners"] == []
 
-    def test_filter_by_audio_lists_the_silence_trim_gate(self, client):
+    def test_filter_by_audio_lists_both_audio_gates(self, client):
         resp = client.get("/api/cleaners?media_type=audio")
         assert resp.status_code == 200
         cleaners = resp.get_json()["cleaners"]
-        assert [c["name"] for c in cleaners] == ["audio_silence_trim"]
+        assert [c["name"] for c in cleaners] == ["audio_silence_trim", "audio_loudness_normalize"]
         assert all(c["media_type"] == "audio" for c in cleaners)
+        assert all(c["default_enabled"] is False for c in cleaners)
+
+    def test_loudness_gate_carries_what_the_cleanup_list_renders(self, client):
+        """The import form's Cleanup list is built from this payload alone: one
+        checkbox per entry, and once ticked a number box per ``number``
+        parameter and a text box per ``string`` one.  No per-cleaner wiring."""
+        resp = client.get("/api/cleaners?media_type=audio")
+        loudness = next(c for c in resp.get_json()["cleaners"] if c["name"] == "audio_loudness_normalize")
+        assert loudness["display_name"] == "Loudness Normalize"
+        assert loudness["description"]
+        params = {p["key"]: p for p in loudness["parameters"]}
+        assert list(params) == ["mode", "rms_db", "peak_db"]
+        assert {k: p["type"] for k, p in params.items()} == {"mode": "string", "rms_db": "number", "peak_db": "number"}
+        assert {k: p["default"] for k, p in params.items()} == {"mode": "rms", "rms_db": -20.0, "peak_db": -1.0}
+        # The current values ride along too, which is what a chain step records.
+        assert (loudness["mode"], loudness["rms_db"], loudness["peak_db"]) == ("rms", -20.0, -1.0)
 
     def test_filter_by_video_lists_both_metadata_gates(self, client):
         resp = client.get("/api/cleaners?media_type=video")

@@ -831,6 +831,7 @@ otherwise hide it. Do not add a cleaner affordance outside that block.
 | `ImageExifOrientCleaner` | `image_exif_orient` | `image` | off | Bake a photo's EXIF display orientation into its stored bytes (VTSearch already *reads* every image upright; this is for tools that ignore EXIF) |
 | `ImageEdgeTrimCleaner` | `image_edge_trim` | `image` | off | Crop near-solid white/black margins (letterbox, pillarbox, whitespace around a logo) |
 | `AudioSilenceTrimCleaner` | `audio_silence_trim` | `audio` | off | Drop the silence at the head and tail of a clip, keeping internal pauses |
+| `AudioLoudnessNormalizeCleaner` | `audio_loudness_normalize` | `audio` | off | Scale a clip to one loudness (gated RMS by default, or peak), never past a peak ceiling |
 | `TextMarkupStripCleaner` | `text_markup_strip` | `text` | off | Remove HTML tags and Markdown syntax, keeping the text inside |
 | `TextWhitespaceCleaner` | `text_whitespace` | `text` | off | Collapse whitespace runs, drop control characters, rejoin hyphen-broken words |
 | `VideoLetterboxCropCleaner` | `video_letterbox_crop` | `video` | off | Record the letterbox / pillarbox crop every sampled frame agrees on as the unit's `clip_box` |

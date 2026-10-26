@@ -29,8 +29,6 @@ points that still bear on the open work:
 
 <!-- item-sep -->
 
-- [ ] #5286 — Audio: loudness normalization
-
 <!-- item-sep -->
 
 - [ ] #5287 — Document: blank-page drop (blocked on a pre-convert stage)

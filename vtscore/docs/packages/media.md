@@ -297,7 +297,7 @@ startup.
 
 | Type | Default embedder | Other embedders | Clippers | Cleaners |
 |------|------------------|-----------------|----------|----------|
-| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder`, `embeddinggemma2_audio` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim` |
+| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder`, `embeddinggemma2_audio` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim`, `audio_loudness_normalize` |
 | `image` | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip_l`, `siglip2`, `siglip2_l`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `sift_vlad`, `sift_vlad_doc`; `clip_l` and `embeddinggemma2` are `eval_only` | `image_default`, `image_tiling`, `image_object` | `image_exif_orient`, `image_edge_trim` |
 | `text` | `e5` (`intfloat/e5-base-v2`) | `bge` | `text_default`, `text_paragraph`, `text_sentence` | `text_markup_strip`, `text_whitespace` |
 | `video` | `xclip` (`microsoft/xclip-base-patch32`) | `languagebind`, `videomae` | `video_auto`, `video_default`, `video_tiling`, `video_scene` | `video_letterbox_crop`, `video_blank_trim` |
@@ -324,7 +324,7 @@ CLIPPERS = [
     SoundSilenceClipper(),
     SoundSpeechActivityClipper(),
 ]
-CLEANERS = [AudioSilenceTrimCleaner()]
+CLEANERS = [AudioSilenceTrimCleaner(), AudioLoudnessNormalizeCleaner()]
 ```
 
 ---

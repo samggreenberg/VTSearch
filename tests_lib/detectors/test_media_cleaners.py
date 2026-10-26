@@ -761,6 +761,7 @@ class TestCleanerReplay:
 #: differs from its default.  At the defaults the round trip below would pass
 #: even if the params were dropped, so only off-default values prove anything.
 _NON_DEFAULT_CLEANER_PARAMS: dict[str, dict[str, Any]] = {
+    "audio_loudness_normalize": {"mode": "peak", "rms_db": -16.0, "peak_db": -3.0},
     "audio_silence_trim": {"top_db": 25.0, "pad": 0.2},
     "image_edge_trim": {"edge_tol": 24.0, "max_edge_trim": 0.3, "min_edge_trim": 0.05},
     "video_blank_trim": {"blank_ratio": 0.95, "max_trim": 0.1, "step": 0.5},
