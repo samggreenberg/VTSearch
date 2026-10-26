@@ -932,7 +932,7 @@ These are read by the installer, not the running app.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu129` (and `cu13x`): RAPIDS ≥ 26.8, the first whose cudf takes the pandas 3 pinned in `pyproject.toml`, needs the CUDA 12.9 libraries only the `cu129` torch wheel pins. See [cuML crashes compiling a kernel](#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors). |
+| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. The step also skips itself, with a message, on every CUDA tag but `cu129` (and `cu13x`); see [GPU install's cuML step](#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129). |
 | `VTS_CUML_CU12_SPEC` | unset | Replace the pip requirement the cuML step installs (`cuml-cu12>=26.8` on `cu129`, `cuml-cu13>=26.8` on `cu13x`), and run the step on a tag it would otherwise skip. For assembling a different RAPIDS on your own terms, e.g. `VTS_CUML_CU12_SPEC='cuml-cu12<26'` on a Volta card, which costs pandas dropping to 2.x. |
 | `VTSEARCH_NO_AGPL` | `0` | Set to `1` to install the `*-no-agpl.txt` requirement set, omitting the AGPL-licensed dependencies. See [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies). |
 | `VTSEARCH_AUTO_DRIVER` | `0` | On a box with NVIDIA hardware but no working driver, `1` installs the driver unattended instead of prompting. |

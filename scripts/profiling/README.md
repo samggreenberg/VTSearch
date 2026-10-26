@@ -25,7 +25,10 @@ CUDA_VISIBLE_DEVICES=  python scripts/profiling/calibrate_load_weights.py --out 
 python scripts/profiling/fit_load_weights.py gpu.jsonl gpu-cumloff.jsonl cpu.jsonl   # prints the coefficient table
 ```
 
-Point `VTSEARCH_MODELS_DIR` at a warm model cache so the model phase measures a
+The driver arms the load profiler itself: it sets `VTSEARCH_PROFILE_LOAD` to
+the `--out` path (see
+[DEPLOYMENT.md § Progress-bar timing](../../docs/DEPLOYMENT.md#progress-bar-timing))
+and `VTSEARCH_PROFILE_DATASET_ID` per dataset it loads. Point `VTSEARCH_MODELS_DIR` at a warm model cache so the model phase measures a
 load rather than a cold HuggingFace download. Paste the fitted rows into
 `vtscore/datasets/stages/_load_cost_model.py`.
 

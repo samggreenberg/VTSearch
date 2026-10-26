@@ -100,7 +100,7 @@ VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the f
 
 ## Machine learning
 
-VTSearch trains a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the class-balanced maximum-margin boundary, started from the Goods' centroid — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is a linear SVM and where the older logistic and MLP paths survive), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
+A detector is a **linear SVM head** trained on your votes over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is a linear SVM and where the older logistic and MLP paths survive), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 

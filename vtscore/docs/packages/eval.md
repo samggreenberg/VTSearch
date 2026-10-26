@@ -62,6 +62,7 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/arms_anchored.py`, `arms_cut_total.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_line_counts.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
 | `vtscore/eval/arms_query_prior.py`, `arms_set_overlap.py`, `arms_split_rounding.py` | Per-study arms beside the threshold: the typed-query prior's scale (#4384), where the typed query's set and the head's disagree (#4816), the calibration split before #4864 |
 | `vtscore/eval/arms_handover.py` | #4776's hand-over shadow: past the label quota, the Goods' centroid's Test as tagged rows (`handover:centroid`) and `HandoverJudge`, the evidence a centroid-to-head hand-over rule may read (held-out Goods' ranks in the unvoted pool under each detector) |
+| `vtscore/eval/find_corpus.py`           | Find on a second corpus at every click, with the app's two domain-shift flags beside the objective (#4960) |
 | `vtscore/eval/fit_quality.py`           | Goodness-of-fit diagnostics for the score-mixture fits    |
 | `vtscore/eval/live_threshold_rules.py`  | Retired app threshold rules, kept as live arms            |
 | `vtscore/eval/scale_bands.py`           | Scale-banded cells: test across sizes, train on a size mix |

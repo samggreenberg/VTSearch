@@ -675,7 +675,7 @@ def supports_text(self) -> bool:
 | `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]` (it skips media your `embed_media_bulk` already stored them on, which is how the shipped SIFT/VLAD embedders detect once per image), enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
-All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
+All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`. Two further properties also change framework behaviour but stay out of that payload: `eval_only` (above) and `supports_tiled_stage1`, which only document structural embedders turn on (see [`vtscore/docs/packages/media.md`](../vtscore/docs/packages/media.md)).
 
 ---
 

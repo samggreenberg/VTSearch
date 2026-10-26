@@ -392,9 +392,7 @@ This is what an autodetect job does - the CLI wraps the same calls in
 ## Step 8: Evaluate the detector
 
 If you have ground-truth labels for the held-out set, run the eval
-runner to get precision / recall / F1:
-
-Ground truth lives **on the medias**, not in a separate dict: the harness
+runner to get precision / recall / F1. Ground truth lives **on the medias**, not in a separate dict: the harness
 reads `media["category"]` (or `media["categories"]` for multi-label data)
 and each `EvalQuery` names the category that should score positive.
 

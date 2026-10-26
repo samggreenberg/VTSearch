@@ -434,7 +434,7 @@ the GUI this is the Dashboard's Drafts ↔ AutoFind detector-tab move:
 Drafts. 403 if the caller cannot access the detector; 404 if it does not
 exist.
 
-### Load / unload detector
+### Load (or unload) the active detector
 
 ```
 POST /api/detectors/registry/load
@@ -457,7 +457,7 @@ Loading is async; subscribe to the `detector-loading-tasks` channel
 on [`/api/events`](events.md) (SSE) for progress. 403 if access is denied; 404
 if the detector is not in the registry.
 
-### Unload detector
+### Unload a registered detector
 
 ```
 POST /api/detectors/registry/{detector_id}/unload

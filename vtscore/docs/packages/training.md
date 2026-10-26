@@ -681,7 +681,7 @@ range comes only from those picks, never from a model.
 - `likely_range(right, labelled, candidate, tail)` is the exact bound for a
   set of known size (`hypergeometric_lower` / `hypergeometric_upper`, each tail
   at *tail*; #4483), exact once the labels cover the band and 0-100% with no
-  labels. `range_tail(bands)` is `CHECK_ALPHA` whatever the bands (no
+  labels. `range_tail(rounds)` is `CHECK_ALPHA` whatever the bands (no
   union-bound split since #4483); `clopper_pearson_lower` / `_upper` remain
   exported.
 - `balance_count(beta, result, proposal, shape)`, `balance_line(ranking,

@@ -77,7 +77,7 @@ is imported from the submodule it lives in.
 ## What a detector is
 
 A detector on disk is a JSON file at
-`<CoreConfig.from_settings().detectors_dir>/<slug>.json` containing:
+`<get_setting("detectors_dir")>/<slug>.json` containing:
 
 ```json
 {
@@ -176,7 +176,7 @@ and request-missing sentinel contexts have no labelset to protect.
 ## Store
 
 `vtscore/detectors/store.py` is the on-disk detector layer.
-`get_detectors_dir()` reads `CoreConfig.from_settings().detectors_dir`.
+`get_detectors_dir()` reads `get_setting("detectors_dir")`.
 
 The public pair is `save_detector` / `load_detector`:
 
@@ -817,7 +817,7 @@ Every entry point resolves its cache through the active
   in `vtscore.detectors.stability`, which the eval harness calls too.
 - **Span** - coverage-atlas coverage: the number of consecutive
   evidence-bearing nodes in BFS order. Green at
-  `CoreConfig.from_settings().autopilot_goal_diversity` nodes (capped at
+  `get_setting("autopilot_goal_diversity")` nodes (capped at
   the atlas's total node count; the app's default setting is 40), yellow
   at 10, red below. Computed from the `span_info` the caller passes in
   rather than from the per-step model cache, so it stays cheap.
