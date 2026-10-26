@@ -212,8 +212,8 @@ class AudioLoudnessNormalizeCleaner(MediaCleaner):
     The RMS is *gated*
     (:meth:`~vtscore.media.audio.loudness.PcmAudio.gated_rms_dbfs`): windows
     more than :data:`~vtscore.media.audio.loudness.GATE_DB` below the loudest
-    are left out, so a short sound is measured at its own level rather than diluted
-    by the quiet around it.
+    are left out, so a short sound is measured at its own level rather than
+    diluted by the quiet around it.
 
     **Order.**  The result does not depend on whether
     :class:`AudioSilenceTrimCleaner` runs before or after this gate.  The trim
@@ -225,7 +225,7 @@ class AudioLoudnessNormalizeCleaner(MediaCleaner):
     A clip is left unchanged when it can't be decoded as WAV (the silence trim's
     own limit, via :func:`~vtscore.media.audio.wav.open_wav`), when its peak is
     below :data:`_SILENCE_FLOOR_DBFS` (silence, including all-zero audio), or
-    when the gain would be at most :data:`_MIN_GAIN_DB`.  A rewritten clip is
+    when the gain would move its level by at most :data:`_MIN_GAIN_DB`.  A rewritten clip is
     PCM WAV in the source's channel count, sample rate and sample width; an MP3
     or FLAC payload comes out as 16-bit WAV, as it does from the silence trim.
 

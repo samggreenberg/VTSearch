@@ -1390,6 +1390,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`AudioLoudnessNormalizeCleaner` (`audio_loudness_normalize`)** (issue #5286): an audio `MediaCleaner` that
+  applies one gain per clip, bringing its gated RMS to `rms_db` (default -20 dBFS) without letting any sample pass
+  `peak_db` (default -1 dBFS), or with `mode="peak"` bringing its loudest sample to `peak_db`. Off by default, and
+  registered after `audio_silence_trim`; the two commute. It rewrites the payload (the runner keeps the Original)
+  as PCM WAV in the source's channel count, rate and sample width, and leaves alone a clip within 1 dB of its
+  target, one whose peak is below -60 dBFS, and any payload `open_wav` can't read. The measurement and the gain
+  live in the new `vtscore.media.audio.loudness`: `PcmAudio` (`from_wav`, `to_wav`, `peak_dbfs`,
+  `gated_rms_dbfs`, `with_gain`), `GATE_DB` and `WINDOW_SECONDS`. Additive.
+
 - **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
   whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
   merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of

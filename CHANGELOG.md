@@ -27,6 +27,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
   now reads **Server path**.
 
+### Added
+
+- **Audio imports can even out loudness** (issue #5286). Add Dataset › Advanced › Cleanup lists **Loudness
+  Normalize** for audio, off by default. Ticked, it scales each clip so the loudness of its audible part sits at
+  -20 dBFS RMS, never pushing a sample past -1 dBFS, so a quietly recorded sound is analysed like the same sound
+  recorded loud. Set its mode to `peak` to bring each clip's loudest sample to the peak level instead. A
+  normalized clip keeps its Original, like any other cleanup.
+
 ### Fixed
 
 - **A plugin dropdown you can also type into shows names, not ids** (issue #5265). A plugin field that offers

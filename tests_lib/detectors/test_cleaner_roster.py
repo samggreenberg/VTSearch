@@ -401,7 +401,7 @@ def _levels(wav: bytes) -> tuple[float, float]:
 
 
 def _bursts_in_silence(seed: int = 42, sr: int = 16000) -> np.ndarray:
-    """A second of silence, six quiet speech-like bursts with gaps, a second of silence."""
+    """A second of silence, six quiet speech-like bursts with gaps, a second of silence: 4.25 s."""
     rng = np.random.default_rng(seed)
     burst = sr // 4
     pieces = [np.zeros(sr)]
@@ -442,14 +442,21 @@ class TestPcmAudio:
         assert audio.gated_rms_dbfs() == pytest.approx(-9.03, abs=0.01)
 
     def test_gated_rms_ignores_the_quiet_around_a_sound(self):
-        """Two seconds of silence around a sound would pull a plain RMS down ~7 dB."""
+        """However much silence surrounds a sound, it reads the same; a plain RMS would not."""
         from vtscore.media.audio.loudness import PcmAudio
 
         sound = _noise(0.5, -30.0)
-        padded = np.concatenate([np.zeros(16000), sound, np.zeros(16000)])
-        alone = PcmAudio.from_wav(_pcm_wav(sound)).gated_rms_dbfs()
-        assert PcmAudio.from_wav(_pcm_wav(padded)).gated_rms_dbfs() == pytest.approx(alone, abs=0.05)
-        assert alone == pytest.approx(-30.0, abs=0.2)
+
+        def padded(seconds: float) -> PcmAudio:
+            silence = np.zeros(int(16000 * seconds))
+            return PcmAudio.from_wav(_pcm_wav(np.concatenate([silence, sound, silence])))
+
+        tight, roomy = padded(0.1), padded(2.0)
+        assert roomy.gated_rms_dbfs() == pytest.approx(tight.gated_rms_dbfs(), abs=0.01)
+        # Only the windows straddling the sound's two edges read a little quieter.
+        assert roomy.gated_rms_dbfs() == pytest.approx(-30.0, abs=0.5)
+        plain = 10 * np.log10(np.mean(np.square(roomy.samples / roomy.full_scale)))
+        assert plain < -36.0  # 0.5 s of sound in 4.5 s of clip
 
     def test_digital_silence_measures_minus_infinity(self):
         from vtscore.media.audio.loudness import PcmAudio
@@ -584,19 +591,19 @@ class TestAudioLoudnessNormalizeCleaner:
     def test_is_deterministic(self):
         cleaner = get_cleaner("audio_loudness_normalize")
         wav = _pcm_wav(_bursts_in_silence())
-        first = cleaner.clean(_audio_media(wav, 3.5))["media_bytes"]
-        assert cleaner.clean(_audio_media(wav, 3.5))["media_bytes"] == first
+        first = cleaner.clean(_audio_media(wav, 4.25))["media_bytes"]
+        assert cleaner.clean(_audio_media(wav, 4.25))["media_bytes"] == first
 
     def test_commutes_with_the_silence_trim(self):
         """Cleaners run in registration order, so neither audio gate may care which ran first."""
         trim = get_cleaner("audio_silence_trim")
         normalize = get_cleaner("audio_loudness_normalize")
-        media = _audio_media(_pcm_wav(_bursts_in_silence()), 3.5)
+        media = _audio_media(_pcm_wav(_bursts_in_silence()), 4.25)
 
         trimmed_first = normalize.clean(trim.clean(media))
         normalized_first = trim.clean(normalize.clean(media))
         assert trimmed_first["duration"] == pytest.approx(normalized_first["duration"], abs=0.01)
-        assert trimmed_first["duration"] < 2.0  # the trim did fire
+        assert trimmed_first["duration"] < 2.5  # the trim did fire
 
         a, b = _levels(trimmed_first["media_bytes"]), _levels(normalized_first["media_bytes"])
         assert a[1] == pytest.approx(-20.0, abs=0.05)

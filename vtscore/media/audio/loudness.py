@@ -123,9 +123,10 @@ class PcmAudio:
 
         Gating relative to the loudest window, rather than to an absolute level
         or to the clip's ungated mean, keeps the measure about the sound itself:
-        the same bark reads the same whether it fills its clip or sits in a few
-        seconds of quiet, and a gain moves every window by the same amount, so
-        it never changes which windows are kept.
+        a bark reads the same however many seconds of quiet surround it (only
+        the windows straddling its edges read a little lower than the bark
+        alone), and a gain moves every window by the same amount, so it never
+        changes which windows are kept.
         """
         if self.samples.size == 0:
             return -math.inf
