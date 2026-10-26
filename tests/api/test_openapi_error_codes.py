@@ -44,6 +44,7 @@ import textwrap
 import types
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, TypeGuard
 
 import app as app_module
 import vtsearch
@@ -64,7 +65,7 @@ def _source_path(code: types.CodeType) -> Path:
     return Path(code.co_filename).resolve()
 
 
-def _is_app_function(obj) -> bool:
+def _is_app_function(obj) -> TypeGuard[types.FunctionType]:
     """True for a plain function defined in ``vtsearch/``, outside the global modules."""
     if not inspect.isfunction(obj):
         return False
@@ -240,27 +241,27 @@ class _Scanner:
         return codes, forwarded
 
 
-def _operations():
+def _operations(client):
     """Yield ``(method, openapi path, view, declared codes or None)`` for every URL rule.
 
     ``declared`` is ``None`` for a rule the spec does not describe (a plain
     Flask blueprint); those are still walked, for the reach check.
     """
     app = app_module.app
-    paths = app_module.api.spec.to_dict()["paths"]
+    paths: dict[str, dict[str, Any]] = client.get("/api/openapi.json").get_json()["paths"]
     for rule in app.url_map.iter_rules():
         view = app.view_functions[rule.endpoint]
         path = _flask_to_openapi_path(rule.rule)
         for method in sorted((rule.methods or set()) - {"HEAD", "OPTIONS"}):
-            operation = paths.get(path, {}).get(method.lower())
+            operation = paths[path].get(method.lower()) if path in paths else None
             declared = None if operation is None else {int(c) for c in operation["responses"] if c.isdigit()}
             yield method, path, view, declared
 
 
-def test_every_error_code_a_route_emits_is_declared():
+def test_every_error_code_a_route_emits_is_declared(client):
     scanner = _Scanner()
     missing = []
-    for method, path, view, declared in _operations():
+    for method, path, view, declared in _operations(client):
         if declared is None:
             continue
         for code, origins in sorted(scanner.codes_of(view).items()):
@@ -273,9 +274,9 @@ def test_every_error_code_a_route_emits_is_declared():
     )
 
 
-def test_scanner_reaches_every_error_site():
+def test_scanner_reaches_every_error_site(client):
     scanner = _Scanner()
-    for _method, _path, view, _declared in _operations():
+    for _method, _path, view, _declared in _operations(client):
         scanner.codes_of(view)
 
     unreached = []
