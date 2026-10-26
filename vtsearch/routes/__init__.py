@@ -35,7 +35,6 @@ from vtsearch.routes.media import (
 )
 from vtsearch.routes.line_test import line_test_bp
 from vtsearch.routes.precision_check import precision_check_bp
-from vtsearch.routes.processors import processors_crud_bp, processors_scoring_bp
 from vtsearch.routes.projection import projection_bp
 from vtsearch.routes.sessions import sessions_bp
 from vtsearch.routes.settings import settings_bp, settings_io_bp, sync_sources_bp
@@ -72,9 +71,7 @@ __all__ = [
     "media_server_bp",
     "medias_bp",
     "precision_check_bp",
-    "processors_crud_bp",
     "projection_bp",
-    "processors_scoring_bp",
     "seed_importers_bp",
     "sessions_bp",
     "settings_bp",

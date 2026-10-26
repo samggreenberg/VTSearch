@@ -14,9 +14,11 @@ is overwritten by the next retrain.  So it is recorded at click time, here.
 This module owns the vocabulary and the validation.  No reader changes a
 threshold today.  The one that did - the #4220 precision estimate, which
 calibrated only on votes the learned sort chose (:func:`calibrates_precision`,
-#4245) - retired with the estimate's parking (#4362).  Every other use -
-partitioning the conformal calibration, for one - is gated on the experiment
-pre-registered in ``docs/plans/provenance-partitioned-calibration.md``.
+#4245) - retired with the estimate's parking (#4362).  None is planned:
+partitioning the conformal calibration by provenance was pre-registered, then
+retired before it ran once #4267 ruled for random verification (#5260).  The
+record stays because it is the only measure of real, not simulated, vote-order
+bias, and any later repair would start from it.
 
 Storage
 -------

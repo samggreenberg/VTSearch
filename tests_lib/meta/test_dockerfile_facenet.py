@@ -1,15 +1,14 @@
 """Every Docker image must install ``facenet-pytorch``, and always ``--no-deps``.
 
-``facenet-pytorch`` is the whole face path: the ``image2face`` converter's and
-the face localizer's MTCNN detector, and the ``face`` media type's FaceNet
-embedder. It cannot be declared in ``pyproject.toml``: its ``torch<2.3`` /
+``facenet-pytorch`` is the whole face path: the ``image2face`` converter's
+MTCNN detector, and the ``face`` media type's FaceNet embedder. It cannot be declared in ``pyproject.toml``: its ``torch<2.3`` /
 ``numpy<2`` / ``Pillow<10.3`` pins would downgrade the app's stack. So every
 install path spells the bypass out by hand: ``scripts/install.sh``,
 ``.claude/hooks/ensure-test-deps.sh``, and one ``RUN`` per Dockerfile.
 
 Until issue #4886 none of the Dockerfiles had it. Every container offered
 ``image2face``, which logged a warning and produced no faces, and the face
-localizer and the face embedder raised ``ImportError``. The failure is silent at
+embedder raised ``ImportError``. The failure is silent at
 build time, the same shape as toponymy's #3852, so a static check is the only
 thing that catches it. Pure text over the repo: no Docker daemon, no network.
 """
@@ -54,7 +53,7 @@ def test_dockerfile_installs_facenet(dockerfile: Path) -> None:
     """A Docker build never runs install.sh, so each image installs it itself."""
     assert _facenet_installs(dockerfile), (
         f"{dockerfile} never installs facenet-pytorch, so the image it builds offers image2face "
-        "but produces no faces, and cannot load the face localizer or the face embedder "
+        "but produces no faces, and cannot load the face embedder "
         "(issue #4886). Add the step that mirrors scripts/install.sh's vts_install_face_deps:\n"
         "    RUN pip install --no-cache-dir --no-deps facenet-pytorch"
     )

@@ -106,10 +106,10 @@ def _extract_text_lines(results: list, threshold: float) -> list[str]:
 class Image2TextMediaConverter(MediaConverter):
     """Run OCR over an image and emit the detected text as a single text media.
 
-    Uses PaddleOCR (the same backend as the built-in OCR extractor processor),
-    but flattens its per-region output into a single newline-joined string so
-    the result composes cleanly with text embedders (E5, BGE, etc.) - letting
-    you treat scanned pages, screenshots, infographics, and comics as text.
+    Uses PaddleOCR, flattening its per-region output into a single
+    newline-joined string so the result composes cleanly with text embedders
+    (E5, BGE, etc.) - letting you treat scanned pages, screenshots,
+    infographics, and comics as text.
 
     User-configurable parameters
     ----------------------------

@@ -5,7 +5,8 @@ Measures **calibration regret** — the extra `FPR + FNR` cost the trained
 same ranking — across the region-voting and binary-voting arms, decomposes it
 into rule inefficiency vs calibration→test shift, hunts the runaway-threshold
 bug, tests whether re-pooling can save the raw-patch tree, and checks the
-Inclusion budget under grouped calibration. Design: `docs/plans/calibration-experiment.md`.
+Inclusion budget under grouped calibration. Design and results:
+[`docs/experiments/2026-07-31-calibration/REPORT.md`](../../../docs/experiments/2026-07-31-calibration/REPORT.md).
 
 ## Which file belongs to which study
 
@@ -163,7 +164,7 @@ study that wants either adds it back explicitly (and declares the divergence to
 - `topk` / `pnorm` (`CALIB_REPOOL_VARIANTS`) — the **remedial re-pools** of that
   arm's own per-node scores (`topk` k=4, `pnorm` extreme-value normalisation),
   each with its own recalibrated threshold, tagged in the `pool_variant` column.
-  Both failed (`docs/plans/set-scorer-experiment.md`), and every analyzer filters
+  Both failed (the study's Finding 3), and every analyzer filters
   `pool_variant` back down to the base rows, so the arms produced rows nothing
   reads.
 

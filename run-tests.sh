@@ -77,7 +77,8 @@
 #      file's diagnostics depend on its text, its transitive imports, the
 #      installed packages and the config, and nothing else). A fresh clone, a
 #      changed config or environment, or VTSEARCH_FRESH=1 gets the full check.
-#      Measured: 239s full, ~3s for one changed test file.
+#      Measured: ~135s full on two threads (2026-10-26), ~3s for one
+#      changed test file.
 #   4. pytest, alone on the box. Tests that already passed on this identical
 #      working tree -- in a group run a minute ago, or in a full run nothing
 #      has changed since -- are not re-run (tests_shared/pass_cache.py keys
@@ -155,7 +156,7 @@ _self="$(pwd)/$(basename "$0")"
 # Memory headroom check.
 #
 # The gates in this script are the memory-hungry part of the repo, not pytest:
-# `pyright` runs under node and peaks around 5.4G RSS on one thread (it takes
+# `pyright` runs under node and peaks around 3.5G RSS on one thread (it takes
 # a second thread only when 12G is free; see stage 3), and the Angular
 # `build:prod` is node too and also memory-hungry. On a small machine the run does not
 # fail cleanly — node aborts with "Ineffective mark-compacts near heap limit",
@@ -173,7 +174,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
         echo "============================================================"
         echo "LOW MEMORY: ${_mem_avail_gb}G available; a full run wants ~6G"
         echo ""
-        echo "pyright (node, ~5.4G peak) and the Angular build are what need"
+        echo "pyright (node, ~3.5G peak) and the Angular build are what need"
         echo "it. Below this they tend to die as an OOM kill rather than a"
         echo "test failure, and can take the session with them."
         echo ""
@@ -639,6 +640,11 @@ fi
 #   free    a heavy check pytest need not wait for; collected after pytest
 # -- so that one pass of the box reports everything that is broken, and a run
 # that dies takes its children with it.
+#
+# A lane's name is what the run prints for it, and docs/TESTING.md's stage
+# tables list every lane by that name, in its stage and kind. Adding, removing,
+# renaming or re-kinding a lane fails scripts/check-docs.py until the table
+# says the same.
 # ---------------------------------------------------------------------------
 _lane_log_dir=$(mktemp -d)
 _ln_kind=(); _ln_name=(); _ln_pid=(); _ln_log=(); _ln_start=()
@@ -747,9 +753,10 @@ _gate_ruff_format() {
 }
 _gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # Documentation drift: relative links, in-page anchors, backticked repo paths,
-# leaked absolute machine paths, plan-file citations anywhere in the tree, and
-# broken code fences. Pure invariants against the current tree — nothing to
-# re-pin.
+# leaked absolute machine paths, plan-file citations anywhere in the tree,
+# broken code fences, undated study directories, and docs/TESTING.md's stage
+# tables against the gates this script runs. Pure invariants against the
+# current tree — nothing to re-pin.
 _gate_check_docs() { python scripts/check-docs.py ; }
 _gate_deptry() { python -m deptry . ; }
 # OpenAPI snapshot drift: regenerate the flask-smorest spec from the live app
@@ -785,7 +792,7 @@ _gate_doc_inventories() {
 _gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
 # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
 # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
-# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+# browser-free (see scripts/screenshots/README.md); the pixel-diff
 # (check.sh) needs chromium and stays a manual chore.
 _gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
 # vtscore package docs: every top-level module / sub-package of vtscore/ is
@@ -954,13 +961,18 @@ _lane_frontend_build() {
 # clone), when pyrightconfig.json, pyproject.toml or the installed packages
 # changed, or when VTSEARCH_FRESH=1 asks for it. Scope is `pyrightconfig.json`.
 #
-# Two threads when there is memory for them, one otherwise. On a 4-vCPU box a
-# full check took ~283s on one thread, ~239s on two and ~340s on four (each
-# thread holds its own copy of the program, so more threads re-parse more), so
-# two is the most worth having. Peak RSS was ~5.4G on one thread and ~9.6G on
-# two. Below 12G available a second thread risks an OOM kill (see the memory
-# check at the top), and a slow pass beats a dead one. Measured, not derived;
-# re-measure before changing either number.
+# Two threads when there is memory for them, one otherwise. The policy was set
+# when, on a 4-vCPU box, a full check took ~283s on one thread, ~239s on two
+# and ~340s on four (each thread holds its own copy of the program, so more
+# threads re-parse more), with a peak RSS of ~5.4G on one thread and ~9.6G on
+# two. The local transformers stub (#5077) moved all of that: standalone on a
+# warm 4-vCPU box (2026-10-26) it is ~200s / 3.5G on one thread, ~135s / 5.6G
+# on two and ~105s / 7.8G on four. Whether four still wins once pyright shares
+# the box with the other lanes, and where the memory gate belongs now, is
+# #5266. The 12G gate below was sized to keep the old ~9.6G two-thread peak
+# clear of an OOM kill (see the memory check at the top), on the rule that a
+# slow pass beats a dead one. Measured, not derived; re-measure before
+# changing either number.
 #
 # The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
 # pyright binary regardless of what the `pyright` PyPI wrapper would otherwise

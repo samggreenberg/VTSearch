@@ -248,7 +248,7 @@ CELEBRITY_TOGETHER_PHOTO_KB = 72
 # photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
 # object annotations (per-object name + pixel bounding box) ship as a separate
 # JSON zip.  Unlike the other image demos this is multi-label ground truth — see
-# docs/plans/visual-genome-dataset.md.
+# docs/EVAL.md ("Visual Genome's ground truth").
 # Enrico (Enhanced Rico): 1,460 Android mobile-UI screenshots (a curated,
 # de-duplicated Rico subset), each labeled with one of 20 "design topic"
 # categories (screen function: Login, Chat, Maps, Settings, Gallery, …).  MIT

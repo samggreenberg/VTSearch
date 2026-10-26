@@ -1,5 +1,9 @@
 # GP head pilot (issue #3954) — runner
 
+> **Concluded; a re-run measures today's app, not the report.**
+> The numbers and the verdict are in
+> [`docs/experiments/2026-09-17-gp-head-3954/REPORT.md`](../../../docs/experiments/2026-09-17-gp-head-3954/REPORT.md).
+
 CPU-box study: does a Gaussian process conditioned on the votes rank, cut and
 calibrate better than the shipped linear-SVM head — and does its posterior give
 a better *next question* than the app's rank-nearest-cut Hard pick? The design,

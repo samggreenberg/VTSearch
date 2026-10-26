@@ -1,5 +1,10 @@
 # Toponymy image-signpost experiments
 
+> **Concluded; a re-run measures today's app, not the report.**
+> The grid usage below records how it ran, not how to run now: it parks an a100 on
+> `sleep 43200` and points `PYTHONPATH` at the shared `/exp` checkout, which the
+> `grid-experiments` skill's worktree rule forbids.
+
 Experimental framework for `docs/plans/vtsbrowse-toponymy.md` (Phase 3:
 image datasets): can the [Tutte Institute `toponymy`](https://github.com/TutteInstitute/toponymy)
 library produce useful browse-map "street signs" for **image** datasets, and

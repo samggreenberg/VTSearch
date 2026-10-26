@@ -37,7 +37,7 @@ MIT, Apache-2.0, ISC). Two are copyleft and are worth calling out for
 anyone redistributing VTSearch or building a product on top of `vtscore`:
 
   * ultralytics (YOLO object detection) - AGPL-3.0-or-later.
-    Used by the image extractor and the image clipper.
+    Used by the image object clipper.
   * PyMuPDF - AGPL-3.0-or-later (or a commercial license from Artifex).
     Used by the PDF importer and the document converters.
 
@@ -56,7 +56,7 @@ without them:
 Both packages sit in the `agpl` extra in pyproject.toml, which every
 default install path requests; the files and flags above are the same
 install with that extra dropped. The result is a permissively licensed
-install in which the YOLO image extractor and clipper, the PDF importer,
+install in which the YOLO image clipper, the PDF importer,
 and the document converters are unavailable and report themselves as such
 (vtscore/utils/optional_deps.py); everything else is unaffected. Obtaining
 commercial terms for these packages is the other option if you need the

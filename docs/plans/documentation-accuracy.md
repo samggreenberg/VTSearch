@@ -5,9 +5,8 @@
 A full audit of every documentation surface in the repo (134 markdown files across
 `docs/`, `vtscore/docs/`, `README`/`CLAUDE`, the plan and experiment archives, plus
 mechanical sweeps for links, anchors, code-path references and orphans) produced 324
-evidence-backed findings. This file tracks what is still owed. The issues listed below
-own the concrete fixes; everything under "Open findings not yet promoted" is recorded
-here because it has no issue yet.
+evidence-backed findings. This file tracks what is still owed; the issues listed below
+own the concrete fixes.
 
 **The systemic cause is measurable, and it is not carelessness.** Most of the doc set was
 written in one batch on 2026-07-20 (the vtscore-extraction docs drop). Since then 557
@@ -32,33 +31,15 @@ Three things follow from that, and they shape how this work should be done:
 
 Fixing individual docs without the first two bullets buys about six weeks.
 
-## Open findings not yet promoted
+## Open findings
 
-Grouped by document. Each bullet is a defect with no issue of its own yet; promote one to
-an issue (and replace the body here with a pointer line) when it becomes worth shipping
-separately.
-
-<!-- item-sep -->
-
-- **The `run-tests.sh` gate list is still hand-maintained in two places.** The "What
-  `run-tests.sh` gates" table (now in `docs/TESTING.md`) and the script's own usage header each
-  restate the chain by hand; the table's stage-2 row had drifted again (it predated
-  `scripts/check-frontend-gate.py`) when the 2026-09-28 audit caught it. An invariant check —
-  the set of stage banners in `run-tests.sh` must match the table's rows — is a few lines inside
-  `scripts/check-docs.py` and cheaper than generating the table.
+Each finding below has its own issue. A new finding with no issue yet goes here as a bullet
+until it is worth shipping separately; promote it then, and replace its body with a pointer
+line.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-- **CHANGELOG.md has readers but no release step.** It is maintained (29 commits since
-  2026-07-20) and linked from `CLAUDE.md`, but `docs/RELEASE.md` never mentions it, so nothing
-  closes an `Unreleased` section at a release: everything since the library extraction sits under
-  one `## Unreleased`, which repeats `### Fixed` / `### Changed` / `### Added` several times over
-  (merge residue from parallel PRs appending their own subsections). Decide whether the release
-  runbook cuts a dated section; if so, add the step and fold the repeated subsections then.
+- [ ] #5289 — check-docs: `run-tests.sh`'s stage banners must match `docs/TESTING.md`'s gate table
 
 <!-- item-sep -->
 
@@ -76,12 +57,13 @@ separately.
 
 <!-- item-sep -->
 
-- **Line-number anchors are gated only in `vtscore/docs/`, and only in one spelling.** The
-  2026-09-28 audit converted every remaining `file.py:NNN` and `(line NNN)` reference in the
-  tracked docs (experiment reports aside) to module-and-symbol form. `scripts/check-vtscore-docs.py`
-  refuses new ones, but only under `vtscore/docs/` and only the `.py:NNN` spelling (`(line NNN)`
-  slipped past it). Moving the invariant into `scripts/check-docs.py`, with both spellings, would
-  hold `docs/`, the plans and the READMEs to the same rule.
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+- [ ] #5290 — check-docs: ban line-number anchors repo-wide, in both spellings
 
 <!-- item-sep -->
 
@@ -92,11 +74,6 @@ separately.
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- **Two plans double as specs.** `structural-embedder.md`'s design spec (two-stage VLAD +
-  RANSAC, the match-statistics classifier, why 4-DoF) belongs in the permanent docs once its open
-  work ships, the way `patch-embedder.md`'s went into `docs/ARCHITECTURE.md`; and
-  `user-docs-screenshots.md` is the de-facto reference for the screenshot system.
 
 <!-- item-sep -->
 

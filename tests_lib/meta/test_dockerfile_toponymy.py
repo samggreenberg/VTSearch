@@ -93,7 +93,7 @@ def test_toponymy_is_installed_without_deps(path: Path) -> None:
             f"{path} installs toponymy=={version} WITHOUT --no-deps. Its "
             "transformers<5.0.0 pin would then be honoured, downgrading the "
             "transformers stack every embedder sits on. See "
-            "docs/plans/vtsbrowse-toponymy.md."
+            "docs/SETUP.md."
         )
 
 
