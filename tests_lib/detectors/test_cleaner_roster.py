@@ -14,8 +14,8 @@ The two *video* gates add a fourth thing to check: they clean by narrowing
 metadata (the unit's time window and pixel box) rather than by rewriting a
 payload, so every test also asserts the payload came through untouched.
 
-Covered: ``image_edge_trim``, ``audio_silence_trim``, ``text_whitespace``,
-``text_markup_strip``, ``video_letterbox_crop``, ``video_blank_trim``.
+Covered: ``image_edge_trim``, ``audio_silence_trim``, ``audio_loudness_normalize``,
+``text_whitespace``, ``text_markup_strip``, ``video_letterbox_crop``, ``video_blank_trim``.
 """
 
 from __future__ import annotations
@@ -371,6 +371,271 @@ class TestCleanedAudioWaveform:
         bare = {k: v for k, v in trimmed.items() if k not in ("clip_start", "clip_end")}
         assert windowed is not None
         assert windowed == audio_type.ensure_thumbnail_bytes(bare)
+
+
+# ---------------------------------------------------------------------------
+# audio_loudness_normalize
+# ---------------------------------------------------------------------------
+
+
+def _pcm_wav(x: np.ndarray, sr: int = 16000, sampwidth: int = 2) -> bytes:
+    """Encode a float waveform (1.0 = full scale), mono or ``(frames, channels)``, as PCM WAV."""
+    from vtscore.media.audio.loudness import PcmAudio
+
+    full_scale = 1 << (8 * sampwidth - 1)
+    ints = np.clip(np.rint(x.reshape(len(x), -1) * full_scale), -full_scale, full_scale - 1).astype(np.int64)
+    return PcmAudio(ints, sr, sampwidth).to_wav()
+
+
+def _noise(seconds: float, rms_dbfs: float, *, sr: int = 16000, seed: int = 42) -> np.ndarray:
+    """Seeded white noise at *rms_dbfs*."""
+    return np.random.default_rng(seed).standard_normal(int(sr * seconds)) * 10 ** (rms_dbfs / 20)
+
+
+def _levels(wav: bytes) -> tuple[float, float]:
+    """``(peak, gated RMS)`` of *wav*, in dBFS."""
+    from vtscore.media.audio.loudness import PcmAudio
+
+    audio = PcmAudio.from_wav(wav)
+    return audio.peak_dbfs, audio.gated_rms_dbfs()
+
+
+def _bursts_in_silence(seed: int = 42, sr: int = 16000) -> np.ndarray:
+    """A second of silence, six quiet speech-like bursts with gaps, a second of silence."""
+    rng = np.random.default_rng(seed)
+    burst = sr // 4
+    pieces = [np.zeros(sr)]
+    for _ in range(6):
+        pieces += [rng.standard_normal(burst) * np.hanning(burst) * 0.02, np.zeros(sr // 8)]
+    pieces.append(np.zeros(sr))
+    return np.concatenate(pieces)
+
+
+class TestPcmAudio:
+    @pytest.mark.parametrize("sampwidth", [1, 2, 3, 4])
+    def test_round_trips_every_pcm_width(self, sampwidth):
+        """Arbitrary sample bytes in stdlib-written stereo WAV come back byte for byte."""
+        from vtscore.media.audio.loudness import PcmAudio
+
+        frames = np.random.default_rng(42).integers(0, 256, size=500 * 2 * sampwidth, dtype=np.uint8).tobytes()
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(sampwidth)
+            wf.setframerate(22050)
+            wf.writeframes(frames)
+        wav = buf.getvalue()
+
+        audio = PcmAudio.from_wav(wav)
+        assert audio.samples.shape == (500, 2)
+        assert (audio.sample_rate, audio.sampwidth) == (22050, sampwidth)
+        assert -audio.full_scale <= audio.samples.min() and audio.samples.max() < audio.full_scale
+        assert audio.to_wav() == wav
+
+    def test_levels_of_a_known_tone(self):
+        from vtscore.media.audio.loudness import PcmAudio
+
+        sr = 16000
+        tone = 0.5 * np.sin(2 * np.pi * 440 * np.arange(sr) / sr)  # -6.02 dBFS peak, -9.03 dBFS RMS
+        audio = PcmAudio.from_wav(_pcm_wav(tone, sr))
+        assert audio.peak_dbfs == pytest.approx(-6.02, abs=0.01)
+        assert audio.gated_rms_dbfs() == pytest.approx(-9.03, abs=0.01)
+
+    def test_gated_rms_ignores_the_quiet_around_a_sound(self):
+        """Two seconds of silence around a sound would pull a plain RMS down ~7 dB."""
+        from vtscore.media.audio.loudness import PcmAudio
+
+        sound = _noise(0.5, -30.0)
+        padded = np.concatenate([np.zeros(16000), sound, np.zeros(16000)])
+        alone = PcmAudio.from_wav(_pcm_wav(sound)).gated_rms_dbfs()
+        assert PcmAudio.from_wav(_pcm_wav(padded)).gated_rms_dbfs() == pytest.approx(alone, abs=0.05)
+        assert alone == pytest.approx(-30.0, abs=0.2)
+
+    def test_digital_silence_measures_minus_infinity(self):
+        from vtscore.media.audio.loudness import PcmAudio
+
+        with np.errstate(all="raise"):
+            audio = PcmAudio.from_wav(_pcm_wav(np.zeros(16000)))
+            assert audio.peak_dbfs == -np.inf
+            assert audio.gated_rms_dbfs() == -np.inf
+
+    def test_gain_clamps_to_the_sample_range(self):
+        from vtscore.media.audio.loudness import PcmAudio
+
+        sr = 16000
+        audio = PcmAudio.from_wav(_pcm_wav(0.5 * np.sin(2 * np.pi * 440 * np.arange(sr) / sr), sr))
+        loud = audio.with_gain(20.0)
+        assert (loud.samples.min(), loud.samples.max()) == (-audio.full_scale, audio.full_scale - 1)
+
+
+class TestAudioLoudnessNormalizeCleaner:
+    def test_identity(self):
+        from vtscore.media.audio.cleaner import AudioLoudnessNormalizeCleaner
+
+        cleaner = get_cleaner("audio_loudness_normalize")
+        assert isinstance(cleaner, AudioLoudnessNormalizeCleaner)
+        assert cleaner.media_type == "audio"
+        assert cleaner.display_name == "Loudness Normalize"
+        assert cleaner.default_enabled is False
+        assert (cleaner.mode, cleaner.rms_db, cleaner.peak_db) == ("rms", -20.0, -1.0)
+
+    def test_rejects_invalid_construction(self):
+        from vtscore.media.audio.cleaner import AudioLoudnessNormalizeCleaner
+
+        with pytest.raises(ValueError, match="mode"):
+            AudioLoudnessNormalizeCleaner(mode="loudest")
+        with pytest.raises(ValueError):
+            AudioLoudnessNormalizeCleaner(rms_db=1.0)
+        with pytest.raises(ValueError):
+            AudioLoudnessNormalizeCleaner(peak_db=0.5)
+
+    def test_quiet_clip_comes_out_at_the_target_rms(self):
+        media = _audio_media(_pcm_wav(_noise(2.0, -45.0)), 2.0)
+        out = get_cleaner("audio_loudness_normalize").clean(media)
+
+        assert out is not media
+        peak, rms = _levels(out["media_bytes"])
+        assert rms == pytest.approx(-20.0, abs=0.05)
+        assert peak < -1.0  # noise's crest factor fits under the ceiling
+        assert out["file_size"] == len(out["media_bytes"])
+        assert out["duration"] == media["duration"]  # a gain changes no timing
+
+    def test_quiet_clip_comes_out_at_the_target_peak_in_peak_mode(self):
+        cleaner = get_cleaner("audio_loudness_normalize").with_params({"mode": "peak"})
+        out = cleaner.clean(_audio_media(_pcm_wav(_noise(2.0, -45.0)), 2.0))
+        peak, _rms = _levels(out["media_bytes"])
+        assert peak == pytest.approx(-1.0, abs=0.01)
+
+    def test_loud_clip_is_brought_down(self):
+        sr = 16000
+        tone = 0.7 * np.sin(2 * np.pi * 440 * np.arange(sr) / sr)  # -6 dBFS RMS
+        out = get_cleaner("audio_loudness_normalize").clean(_audio_media(_pcm_wav(tone, sr), 1.0))
+        _peak, rms = _levels(out["media_bytes"])
+        assert rms == pytest.approx(-20.0, abs=0.05)
+
+    def test_ceiling_stops_a_spiky_clip_short_of_the_target(self):
+        """One click pins the peak: rms mode boosts only as far as ``peak_db`` allows,
+        which is exactly what peak mode does with the same clip."""
+        x = _noise(2.0, -50.0)
+        x[8000] = 0.1  # a -20 dBFS click, 30 dB above the noise's RMS
+        media = _audio_media(_pcm_wav(x), 2.0)
+
+        cleaner = get_cleaner("audio_loudness_normalize")
+        out = cleaner.clean(media)
+        peak, rms = _levels(out["media_bytes"])
+        assert peak == pytest.approx(-1.0, abs=0.01)
+        assert rms < -25.0  # well short of -20: closing the gap would clip the click
+        assert out["media_bytes"] == cleaner.with_params({"mode": "peak"}).clean(media)["media_bytes"]
+
+    def test_a_clip_already_past_the_ceiling_is_not_pulled_down_by_it(self):
+        """The ceiling limits a boost; it is no reason to attenuate a clip that is quiet overall."""
+        x = _noise(2.0, -22.0)
+        x[8000] = 1.0  # a full-scale click
+        media = _audio_media(_pcm_wav(x), 2.0)
+        # Without the guard the gain would be min(+2, -3 - 0) = -3 dB.
+        assert get_cleaner("audio_loudness_normalize").with_params({"peak_db": -3.0}).clean(media) is media
+
+    def test_clip_at_target_is_a_no_op(self):
+        cleaner = get_cleaner("audio_loudness_normalize")
+        once = cleaner.clean(_audio_media(_pcm_wav(_noise(2.0, -45.0)), 2.0))
+        assert cleaner.clean(once) is once  # running it again changes nothing
+
+        near = _audio_media(_pcm_wav(_noise(2.0, -20.6)), 2.0)
+        assert cleaner.clean(near) is near  # within the 1 dB floor: not worth a second copy
+
+        peak_mode = cleaner.with_params({"mode": "peak"})
+        once = peak_mode.clean(_audio_media(_pcm_wav(_noise(2.0, -45.0)), 2.0))
+        assert peak_mode.clean(once) is once
+
+    def test_silence_is_a_no_op(self):
+        cleaner = get_cleaner("audio_loudness_normalize")
+        for mode in ("rms", "peak"):
+            gate = cleaner.with_params({"mode": mode})
+            with np.errstate(all="raise"):  # no division by zero, no log of zero
+                silence = _audio_media(_pcm_wav(np.zeros(16000)), 1.0)
+                assert gate.clean(silence) is silence
+            # A noise floor alone (peak ~ -62 dBFS) is silence too: boosting it
+            # would only make loud hiss.
+            hiss = _audio_media(_pcm_wav(_noise(1.0, -75.0)), 1.0)
+            assert gate.clean(hiss) is hiss
+
+    def test_undecodable_and_empty_payloads_are_no_ops(self):
+        cleaner = get_cleaner("audio_loudness_normalize")
+        for media in (
+            {"media_type": "audio", "media_bytes": b"not a wav"},
+            {"media_type": "audio", "media_bytes": b""},
+            {"media_type": "audio", "duration": 3.0},
+        ):
+            assert cleaner.clean(media) is media
+
+    def test_is_a_pure_gain_that_keeps_the_format(self):
+        from vtscore.media.audio.loudness import PcmAudio
+
+        stereo = np.stack([_noise(1.0, -40.0, sr=22050), _noise(1.0, -46.0, sr=22050, seed=7)], axis=1)
+        before = _pcm_wav(stereo, sr=22050, sampwidth=3)
+        out = get_cleaner("audio_loudness_normalize").clean(_audio_media(before, 1.0))
+
+        a, b = PcmAudio.from_wav(before), PcmAudio.from_wav(out["media_bytes"])
+        assert (b.samples.shape, b.sample_rate, b.sampwidth) == ((22050, 2), 22050, 3)
+        factor = float(np.sum(a.samples * b.samples) / np.sum(a.samples * a.samples))
+        assert factor > 1.0
+        assert np.abs(b.samples - a.samples * factor).max() <= 1.0  # one gain, rounded per sample
+
+    def test_is_deterministic(self):
+        cleaner = get_cleaner("audio_loudness_normalize")
+        wav = _pcm_wav(_bursts_in_silence())
+        first = cleaner.clean(_audio_media(wav, 3.5))["media_bytes"]
+        assert cleaner.clean(_audio_media(wav, 3.5))["media_bytes"] == first
+
+    def test_commutes_with_the_silence_trim(self):
+        """Cleaners run in registration order, so neither audio gate may care which ran first."""
+        trim = get_cleaner("audio_silence_trim")
+        normalize = get_cleaner("audio_loudness_normalize")
+        media = _audio_media(_pcm_wav(_bursts_in_silence()), 3.5)
+
+        trimmed_first = normalize.clean(trim.clean(media))
+        normalized_first = trim.clean(normalize.clean(media))
+        assert trimmed_first["duration"] == pytest.approx(normalized_first["duration"], abs=0.01)
+        assert trimmed_first["duration"] < 2.0  # the trim did fire
+
+        a, b = _levels(trimmed_first["media_bytes"]), _levels(normalized_first["media_bytes"])
+        assert a[1] == pytest.approx(-20.0, abs=0.05)
+        assert a == pytest.approx(b, abs=0.01)
+
+    def test_flac_payload_comes_out_as_16_bit_wav(self):
+        import soundfile as sf
+
+        from vtscore.media.audio.loudness import PcmAudio
+
+        buf = io.BytesIO()
+        sf.write(buf, _noise(1.0, -45.0), 16000, format="FLAC", subtype="PCM_24")
+        out = get_cleaner("audio_loudness_normalize").clean(_audio_media(buf.getvalue(), 1.0))
+
+        audio = PcmAudio.from_wav(out["media_bytes"])
+        assert out["media_bytes"][:4] == b"RIFF"
+        assert (audio.sample_rate, audio.sampwidth) == (16000, 2)
+        assert audio.gated_rms_dbfs() == pytest.approx(-20.0, abs=0.05)
+
+    def test_params_override_the_targets(self):
+        from vtscore.media.audio.cleaner import AudioLoudnessNormalizeCleaner
+
+        cleaner = get_cleaner("audio_loudness_normalize")
+        assert isinstance(cleaner, AudioLoudnessNormalizeCleaner)
+        assert [p["key"] for p in cleaner.parameters] == ["mode", "rms_db", "peak_db"]
+
+        # Typed into a text box, so whitespace and case are forgiven.
+        peak = cleaner.with_params({"mode": " Peak ", "peak_db": "-3"})
+        assert peak is not cleaner
+        assert (peak.mode, peak.rms_db, peak.peak_db) == ("peak", -20.0, -3.0)
+        assert {k: peak.to_dict()[k] for k in ("mode", "rms_db", "peak_db")} == {
+            "mode": "peak",
+            "rms_db": -20.0,
+            "peak_db": -3.0,
+        }
+
+        quieter = cleaner.with_params({"rms_db": -30})
+        _peak, rms = _levels(quieter.clean(_audio_media(_pcm_wav(_noise(2.0, -45.0)), 2.0))["media_bytes"])
+        assert rms == pytest.approx(-30.0, abs=0.05)
 
 
 # ---------------------------------------------------------------------------
