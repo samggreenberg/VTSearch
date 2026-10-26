@@ -1,5 +1,9 @@
 # Inclusion-knob experiment (issue #2693)
 
+> **Concluded; a re-run measures today's app, not the report.**
+> The Inclusion knob it measures was retired as a user preference in #4269; the
+> precision floor draws the line now.
+
 Measures why the Inclusion slider fails to move the decision threshold and
 compares candidate knob designs. Findings + recommendation:
 [`docs/experiments/2026-07-27-inclusion-knob/REPORT.md`](../../../docs/experiments/2026-07-27-inclusion-knob/REPORT.md).
