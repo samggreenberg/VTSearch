@@ -31,6 +31,11 @@ pool (10,161 of 24,507). Graded apart, SAM3 does no better on the images it trai
 the rest (noun prompts), and its lead over SigLIP is +0.30 on the images it never had labels for. See
 [Training overlap](#training-overlap-5240).
 
+**SAM3 as the opening: measured (#5241), as an opt-in path beside SigLIP's (SigLIP stays the default: it is fast).**
+A session that opens on SAM3's set at 0.5 and hands Test to the detector at the 20th Good shows F1 +0.12 (± 0.015)
+over votes 1-150 on Binary and +0.07 (± 0.016) on Region, against today. Handing over at the label quota, as SigLIP's
+opening does, keeps only +0.02-0.03. See [SAM3 as the opening](#sam3-as-the-opening-5241).
+
 | seed 0, mean over cells (± SE over classes) | all (144) | small (46) | medium (49) | large (49) |
 |---|---|---|---|---|
 | **AP**, SigLIP typed sort (vote 0) | 0.42 (± 0.04) | 0.17 | 0.38 | 0.70 |
@@ -185,10 +190,115 @@ Tables: `tables/sam3_5240_summary.csv` (every metric x band x arm x slice, with 
 `tables/sam3_5240_per_class.csv`, `tables/sam3_5240_counts.json`.
 Reproduce: `sam3_5213.sh overlap DIR` (one CPU job, ~15 min).
 
+## SAM3 as the opening (#5241)
+
+**Status (2026-10-26): measured on seed 0, beta 1, both paths. SAM3 is an opt-in alternative to SigLIP's typed
+sort, not a replacement: SigLIP stays the default because it is fast (see [Cost](#cost)). Nothing ships from this
+PR. The run adds the knobs that open a session on SAM3, and prices takeover rules on the sessions it ran.**
+
+**Question.** SAM3's set at its own 0.5 cut shows F1 0.57, against 0.37 for SigLIP's typed set. If a session opens on
+SAM3, what does the user see over votes 1-150? When does the detector beat SAM3's set? And which rule should decide
+when the detector takes over Test, now that the bar is 0.57 and not 0.37?
+
+**Design.** Three arms on #4711's grid (COCO Better, 144 cells a path, seed 0, beta 1, 150 votes, trajectory pass):
+
+- **`sig`:** today's app. SigLIP's typed sort opens; its set is shown until the label quota (Binary: the query hold
+  and the hand-over), and then the head.
+- **`sam3`:** SAM3's typed-prompt scores order the opening's picks (`CALIB_SEED_SAM3`). Its set at 0.5 is what Test
+  shows at every vote on both paths (`CALIB_QUERY_LINE=fixed:0.5`, `CALIB_QUERY_HOLD` past any session,
+  `CALIB_QUERY_HOLD_PATCH=1`, no query miss). The head still trains on every vote and is scored on the same withheld
+  half, in rows tagged `hold:head`. Picks never depend on what Test shows, so **every takeover rule is a choice,
+  vote by vote, between two rows of the same session.** Rules are priced afterwards; nothing is re-run.
+- **`sam3gmm`:** SAM3's set at the GMM midpoint of its scores instead of 0.5 (one vote per Binary cell: the set
+  does not change with the votes).
+
+The query row of the `sam3` arm reproduces #5213's `text_native` row exactly (for example dining table@large: P 0.112,
+R 0.889, F1 0.199). Means are over the 144 cells, ± SE over the 49 classes.
+
+| F1 shown, mean over votes (± SE) | Binary 1-50 | Binary 1-150 | vs today, 1-150 | Region 1-50 | Region 1-150 | vs today, 1-150 |
+|---|---|---|---|---|---|---|
+| SigLIP opening (today) | 0.40 | 0.49 | | 0.46 | 0.55 | |
+| SAM3's set at 0.5, never handed over | 0.57 | 0.57 | +0.085 (± 0.023) | 0.57 | 0.57 | +0.024 (± 0.025) |
+| SAM3, head from the quota (today's hand-over) | 0.45 | 0.51 | +0.024 (± 0.005) | 0.52 | 0.58 | +0.032 (± 0.008) |
+| **SAM3, head from the 20th Good** | **0.58** | **0.61** | **+0.122 (± 0.015)** | **0.59** | **0.62** | **+0.072 (± 0.016)** |
+| SAM3, head once held-out Goods rank better under it (#4776 judge, log rank, sticky) | 0.58 | 0.60 | +0.114 (± 0.017) | | | |
+| The better of the two at each vote (a bound, not a rule) | 0.62 | 0.64 | +0.158 (± 0.015) | 0.64 | 0.67 | +0.120 (± 0.015) |
+| SAM3's set at its GMM line | 0.18 | 0.18 | -0.30 | 0.18 | 0.18 | -0.36 |
+
+![F1 shown over the votes on each path: today, SAM3's set held, SAM3 handed over at the quota and at the 20th Good, and the per-vote bound](figures/sam3_5241_gate.png)
+
+**1. Opening on SAM3 pays, on both paths, if the hand-over waits.** With the head taking over at the 20th Good,
+F1 shown over votes 1-150 is +0.12 on Binary and +0.07 on Region. Over votes 1-50 it is +0.18 and +0.13. Handing over
+at the quota, as today, throws most of that away: about vote 7, the head is far below 0.57 (Binary +0.024, Region
++0.032).
+
+**2. When the detector beats SAM3's set.**
+
+- **Binary: on average, never within 150 votes.** The head's mean F1 is 0.56 at vote 150, against SAM3's 0.57. Per
+  cell, the head is ahead in 25% of cells at vote 25, 36% at 50, 39% at 100 and 44% at 150.
+- **Region: at vote 43 on average.** Per cell, 44% at vote 25, 48% at 50, 57% at 100 and 55% at 150.
+- **It depends on object size, as #5213 found for AP.** Small objects: the head never catches SAM3 (Binary's bound
+  is only +0.011 over holding SAM3). Large objects: the head wins early and by a lot (holding SAM3 costs -0.13
+  Binary, -0.14 Region against today).
+
+**3. Gating: hand over at the 20th Good.** The rule may only use the labels. Two families were priced:
+
+- **A Goods count** (`goods>=N`, check votes included). Against holding SAM3, over votes 1-150:
+
+  | N | 4 | 8 | 12 | 16 | **20** | 24 | 32 |
+  |---|---|---|---|---|---|---|---|
+  | Binary | -0.046 | -0.006 | +0.019 | +0.030 | **+0.037** (± 0.012) | +0.035 | +0.016 |
+  | Region | +0.018 | +0.028 | +0.040 | +0.045 | **+0.047** (± 0.011) | +0.035 | +0.013 |
+
+  Both paths peak at 16-24, and the top is flat. A session has 29 Goods at vote 150 (median). The count works as a
+  stand-in for object size and prevalence: a class whose Goods arrive fast is one the head learns fast.
+- **#4776's judge, with SAM3 in the centroid's place.** Each labelled Good is held out, the head is refitted on the
+  rest, and the Good's rank in the unvoted pool under the head is set beside its rank under SAM3 (SAM3 is not fitted
+  on the labels, so its rank is read straight off the pool). Binary only: the judge's rows exist on single-vector
+  cells. The best variant (mean log rank, once it prefers the head it keeps it) gives +0.028 (± 0.010) against
+  holding SAM3, level with the count. The plain variants give -0.002 to +0.011. **It buys nothing over the count and
+  needs a refit per Good, so the count is the rule.**
+
+By band, the 20th-Good rule against today (votes 1-150):
+
+| | small | medium | large |
+|---|---|---|---|
+| Binary | +0.26 (± 0.03) | +0.11 (± 0.02) | +0.002 (± 0.010) |
+| Region | +0.19 (± 0.03) | +0.05 (± 0.02) | -0.016 (± 0.027) |
+
+The gain is all on small and medium objects. On large objects the rule ends level with today, within 1 SE on both
+paths: those sessions reach 20 Goods early, so they spend most votes on the same head as today.
+
+**4. The head itself is better after a SAM3 opening, early on.** At the same vote, the head trained after SAM3's
+picks against the head after SigLIP's: Binary +0.020 (± 0.009) at vote 50, +0.012 (± 0.007) at 100, +0.003 (± 0.005)
+at 150; Region +0.038 (± 0.012), +0.020 (± 0.009), +0.003 (± 0.009). SAM3's picks find more Goods early, and the
+difference washes out by vote 150.
+
+**5. SAM3 needs its own line, and 0.5 is it.** At the GMM midpoint of its scores, SAM3's set is F1 0.18: the scores
+pile up near 0, the midpoint falls inside that pile, and the set keeps most of the pool.
+
+**Caveats.**
+
+- **The count of 20 is chosen on the data it is scored on.** The top is flat from 16 to 24 on both paths, so the
+  choice is not a fine-tuned point, but it needs a fresh seed to confirm (#5311).
+- **Seed 0 and beta 1 only.** The other presets move the head's line, and with it where the hand-over pays.
+- **Cost is #5213's.** SAM3 scores a new query in ~2 min on one L40S with cached backbone features (~65 GB for this
+  pool), or ~33 min without. That is why this is an opt-in path and SigLIP stays the default.
+
+Tables: `tables/sam3_5241_summary.csv` (every shown rule x path x band: areas, gaps to today, F1 at votes 10, 50, 100,
+150), `tables/sam3_5241_gate.csv` (every takeover rule x path x band, against holding SAM3 and against today),
+`tables/sam3_5241_per_click.csv`, `tables/sam3_5241_gate_per_click.csv`, `tables/sam3_5241_cells.csv` (per cell:
+SAM3's F1, the head's, and the first vote the head beats SAM3), `tables/sam3_5241_info.json`.
+Reproduce: `sam3_opening_5241.sh launch {sig,sam3,sam3gmm}` from a frozen worktree (288 cells a path; Binary ~10 min
+a cell, Region ~1 h), then `sam3_opening_5241.py --out DIR` and `sam3_gate_5241.py {collect,price} --out DIR`.
+
 ## Follow-ups (filed)
 
-- **SAM3 as the opening (#5241):** replace SigLIP's typed sort, and its line, with SAM3's for the cells' first votes. The
-  detector then has to beat F1 0.57, not 0.37, before it takes over. The cheapest way to put this result on screen.
+- **SAM3 as the opening (#5241), done:** see [SAM3 as the opening](#sam3-as-the-opening-5241). As an opt-in path,
+  with the head taking over at the 20th Good: +0.12 F1 shown over votes 1-150 on Binary, +0.07 on Region.
+- **Confirm the 20th-Good hand-over out of sample (#5311):** fresh seeds and beta 0.5 / 2, with N fixed beforehand.
+- **SAM3 as an opt-in opening in the app (#5312):** the route, the feature cache, the 0.5 line and the hand-over.
+  SigLIP stays the default.
 - **A light head on SAM3's object queries (#5242):** each image's 200 decoder queries are region embeddings that come with
   boxes. A Good box picks its query, a Bad floods them, and the SVM trains on them: #4711's Region loop with SAM3's
   regions in place of DINOv3 patches. This is the "learnable head" question, and it would keep SAM3's prior.
@@ -207,5 +317,9 @@ Reproduce: `sam3_5213.sh overlap DIR` (one CPU job, ~15 min).
 - `scripts/experiments/state_of_app/sam3_analyze_5213.py`: tables and figures here.
 - `scripts/experiments/state_of_app/sam3_overlap_5240.py`: #5240's id split (`ids`) and analysis (`analyze`);
   `text_baseline.py --keep-ids`; `sam3_5213.sh overlap DIR` runs both.
+- `scripts/experiments/state_of_app/sam3_opening_5241.sh` (#5241's three arms), `sam3_opening_5241.py` (F1 shown
+  by rule, path and band), `sam3_gate_5241.py` (takeover rules: `collect` the judge's evidence, `price` the rules).
+  Knobs: `CALIB_SEED_SAM3`, `CALIB_SEED_SAM3_PROMPTS`, `CALIB_QUERY_LINE`, `CALIB_QUERY_HOLD_PATCH`;
+  `calibration/sam3_scores.py` reads the shards for both `text_baseline.py` and `run_cells.py`.
 - Raw scores (12 `.npz` shards, 24,507 x 102 x {top1, top2, n>0.5}) and the three `text_baseline` CSVs live in the
   study's results directory on the GRID, `sam3-5213/` under the owner's `/expscratch`.

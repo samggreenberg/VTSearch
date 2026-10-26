@@ -655,6 +655,7 @@ def _query_step(
     corpus_ids: Sequence[int],
     *,
     line_beta: float | None,
+    line: str | None = None,
 ) -> StepModel:
     """A typed-query detector's head under the label quota (#4758), as a step: the typed query's own set.
 
@@ -668,6 +669,13 @@ def _query_step(
     corpus a Test searches: the withheld half here), centred in its gap.  The
     scores are looked up by id (:attr:`StepModel.id_scores`): on a paired arm the
     text space is not the space of the vectors the run learns on.
+
+    *line* draws the cut another way, for an opening sort that is not a cosine
+    (#5241, SAM3's detection scores): ``"fixed:X"`` keeps the media scoring ``X`` or
+    more (0.5 is SAM3's own operating point), ``"gmm"`` the media at or above the
+    GMM midpoint of the corpus's scores (the sort's acquisition cut); either cut
+    is centred in its gap, as the text rule's is.  ``None`` - the
+    default - is the app's text rule.
     """
     from vtscore.detectors.centroid_head import (  # noqa: PLC0415
         CENTROID_LOGIT_SCALE,
@@ -676,7 +684,16 @@ def _query_step(
     )
 
     corpus = np.asarray([seed_scores[cid] for cid in corpus_ids], dtype=np.float64)
-    cut = _gap_centre(corpus, centroid_cut(corpus, rule="text", beta=line_beta))
+    if line is None:
+        cut = _gap_centre(corpus, centroid_cut(corpus, rule="text", beta=line_beta))
+    elif line == "gmm":
+        from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+
+        cut = _gap_centre(corpus, float(calculate_gmm_threshold([float(v) for v in corpus])))
+    elif line.startswith("fixed:"):
+        cut = _gap_centre(corpus, float(line.partition(":")[2]))
+    else:
+        raise ValueError(f"unknown query line {line!r}: expected None, 'gmm' or 'fixed:X'")
     ids = list(seed_scores)
     cos = np.asarray([seed_scores[cid] for cid in ids], dtype=np.float64)
     scores = 1.0 / (1.0 + np.exp(-CENTROID_LOGIT_SCALE * (cos - cut)))

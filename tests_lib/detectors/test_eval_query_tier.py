@@ -395,3 +395,48 @@ class TestTheQueryMiss:
             for col in ("precision", "recall", "fbeta", "n_flagged"):
                 o = old_by_t[r["t"]][col]
                 assert r[col] == o or (math.isnan(r[col]) and math.isnan(o)), (r["t"], col)
+
+
+class TestAnOpeningThatIsNotACosine:
+    """#5241: SAM3's detection scores open a run; its set is cut at a fixed score or the GMM midpoint, and can hold
+    on a patch space through the run while the head trains, tagged, as on a single-vector space."""
+
+    @pytest.mark.parametrize("line", ["fixed:0.5", "fixed:0.8", "gmm"])
+    def test_the_line_keeps_the_scores_at_or_above_its_cut(self, line):
+        from vtscore.eval.labels import media_is_positive
+        from vtscore.eval.voting_iterations import _query_test
+        from vtscore.training.thresholds import calculate_gmm_threshold
+
+        clips, cosines = _world()
+        scores = {c: 1.0 / (1.0 + math.exp(-12.0 * v)) for c, v in cosines.items()}  # a detector's [0, 1] scores
+        test_ids = list(range(2, 81, 2))
+        _step, rows = _query_test(scores, clips, test_ids, "alpha", 0, beta=1.0, calibration_rows=False, line=line)
+        s = np.asarray([scores[c] for c in test_ids])
+        cut = float(calculate_gmm_threshold(list(s))) if line == "gmm" else float(line.partition(":")[2])
+        kept = s >= cut
+        pos = np.asarray([media_is_positive(clips[c], "alpha") for c in test_ids], dtype=bool)
+        assert rows[0]["n_flagged"] == int(kept.sum())
+        assert rows[0]["recall"] == pytest.approx(float((kept & pos).sum() / pos.sum()))
+
+    def test_an_unknown_line_is_refused(self):
+        from vtscore.eval.voting_iterations import _query_test
+
+        clips, scores = _world()
+        with pytest.raises(ValueError, match="unknown query line"):
+            _query_test(scores, clips, [2, 4, 6], "alpha", 0, beta=1.0, calibration_rows=False, line="median")
+
+    def test_a_patch_space_holds_only_when_asked(self):
+        rows, picks = _missing_run(query_miss=False, query_hold=100)
+        held, held_picks = _missing_run(query_miss=False, query_hold=100, query_hold_patch=True)
+        assert [(p["t"], p["picked_id"]) for p in picks] == [(p["t"], p["picked_id"]) for p in held_picks]
+        assert TIER_TRAINED in {r["detector_tier"] for r in _base(rows)}
+        assert {r["detector_tier"] for r in _base(held)} == {TIER_QUERY}
+        from vtscore.eval.voting_iterations import QUERY_HOLD_HEAD_TAG
+
+        heads = [r for r in held if r.get("gmm_variant") == QUERY_HOLD_HEAD_TAG]
+        trained = {r["t"]: r for r in _base(rows) if r["detector_tier"] == TIER_TRAINED}
+        assert heads and {r["t"] for r in heads} == set(trained)
+        for r in heads:
+            assert r["fbeta"] == trained[r["t"]]["fbeta"] or (
+                math.isnan(r["fbeta"]) and math.isnan(trained[r["t"]]["fbeta"])
+            )
