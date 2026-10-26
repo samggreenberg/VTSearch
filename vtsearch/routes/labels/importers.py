@@ -69,7 +69,7 @@ from vtscore.datasets.labelset import imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.errors import error_response
-from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._context import MISSING_CONTEXT_HEADERS, require_dataset_header, require_detector_header
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, run_plugin_or_error, validate_plugin_args
 from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
@@ -263,6 +263,16 @@ def label_importer_field_options(body: dict, importer_name: str):
 
 
 @label_importers_bp.route("/api/label-importers/import/<importer_name>", methods=["POST"])
+@label_importers_bp.alt_response(
+    400,
+    description=(
+        "No ``X-Dataset-Id`` or ``X-Detector-Id`` header, an invalid request body or field value, "
+        "or the importer rejected the run."
+    ),
+)
+@label_importers_bp.alt_response(404, description="Unknown label importer name.")
+@label_importers_bp.alt_response(422, description="A required field is missing, or a field value is invalid.")
+@label_importers_bp.alt_response(500, description="The importer failed, or did not return a list of label dicts.")
 @require_dataset_header
 @require_detector_header
 def run_label_import(importer_name: str):  # noqa: C901
@@ -341,6 +351,7 @@ def run_label_import(importer_name: str):  # noqa: C901
 @label_importers_bp.route("/api/label-importers/ingest-missing", methods=["POST"])
 @label_importers_bp.arguments(IngestMissingRequestSchema)
 @label_importers_bp.response(200, IngestMissingResponseSchema)
+@label_importers_bp.alt_response(400, description=MISSING_CONTEXT_HEADERS)
 @require_dataset_header
 @require_detector_header
 def ingest_missing(body: dict):

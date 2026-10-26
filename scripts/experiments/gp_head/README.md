@@ -28,7 +28,7 @@ grid and the arm table.
 
 | Arm | Trainer | Hard pick | Threshold |
 |---|---|---|---|
-| `app` | the shipped pipeline (linear-SVM head) | rank-nearest-cut | fold-anchored fusion (shipped) |
+| `app` | the shipped pipeline (the plain linear-SVM head when the study ran; a re-run gets today's `linear_svm_prior`) | rank-nearest-cut | fold-anchored fusion (shipped) |
 | `app_xcal` | the shipped pipeline | rank-nearest-cut | plain cross-calibration, raw score — the parity control |
 | `gp_rbf` | `GaussianProcessClassifier`, RBF kernel, ML-II | rank-nearest-cut | plain cross-calibration, raw score |
 | `gp_rbf_rank` | RBF GP | rank-nearest-cut | cross-calibration carried by rank (`standalone_cut="rank"`) |

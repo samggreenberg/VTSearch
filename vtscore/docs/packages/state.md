@@ -623,7 +623,8 @@ user-pref values that a **host** owns. The library exposes the hook
 surface; the host installs the persistence callbacks. With none installed,
 `set_beta` moves only the in-memory balance (and a registered detector's
 JSON, below), and `set_calibrate_count` / `set_calibration_fraction` change
-nothing their getters read, since those read `CoreConfig.from_settings()`.
+nothing their getters (`get_calibrate_count()`, `get_calibration_fraction()`)
+read, since those read `get_setting()`.
 
 ```python
 # vtscore/state/__init__.py
@@ -647,7 +648,7 @@ register_setting_persister("beta", my_settings.save_beta)
 `[0.25, 4]` (#4413), and `detector_beta(ctx)` any context's. Each seeds its
 first read from the balance the detector keeps on its JSON (#4665;
 [`vtscore.detectors.balance`](detectors.md): `stored_beta(data)`, top-level
-`beta`), else from `CoreConfig.from_settings()` (see [config.md](config.md)),
+`beta`), else from `get_setting("beta")` (see [config.md](config.md)),
 the user's balance. A context the registry cannot name (a throwaway that
 trains a cold detector, the CLI's name-keyed one) is seeded by its caller
 from the JSON it holds, `seed_detector_beta(ctx, data)`, and
@@ -670,7 +671,7 @@ deprecated and always returns `0`; `set_inclusion()` accepts only `0`, with a
 `DeprecationWarning`, and raises `ValueError` for anything else, as does
 `recompute_detector_thresholds_for_inclusion()`. Registering an `"inclusion"`
 persister warns and never fires. Inclusion survives as the internal unit the
-threshold machinery measures cuts in (`recut_detector_threshold(ctx, k)`).
+threshold machinery measures cuts in (`recut_detector_threshold(ctx, inclusion_value)`).
 
 Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 (shallow copy under the lock), `get_media(cid)`, `clear_medias()`,

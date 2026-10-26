@@ -37,7 +37,7 @@ class ServerJsonLabelImporter(LabelImporter):
     fields = [
         PluginField(
             key="filepath",
-            label="Path or URL",
+            label="Server path",
             field_type="server_path",
             description="A VTSearch labels JSON file on the server to import labels from.",
             placeholder=f"{DATA_DIR}/labels/my_labels.json",

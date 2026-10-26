@@ -813,8 +813,8 @@ def exclusion_arm_name() -> str:
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "1") == "1"
 MEDIA_TYPE = "image"
 
-#: The #2852 anchored-mixture study (design + pre-registered decision rules:
-#: ``docs/plans/population-anchored-calibration.md``) flips this on via
+#: The #2852 anchored-mixture study (results + decision rules:
+#: ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``) flips this on via
 #: ``CALIB_ANCHORED=1``; every step then additionally emits the label-anchored,
 #: fold-anchored ("cross-LabeledGMM"), and rank-transfer arm rows.  Requires
 #: ``CALIB_SAFE_THRESHOLDS=1`` (the anchored arms ride the variant-row path).
@@ -963,7 +963,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: head the app-pipeline trainer fits, not a choice of pipeline: these studies
 #: always run ``trainer="app"`` (issue #3764).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
-#: the head the live detector actually trains — ``linear_svm``.  That is the
+#: the head the live detector actually trains — ``linear_svm_prior``
+#: (``vtscore.eval.step_model.PRODUCTION_HEAD``).  That is the
 #: only setting a study's headline numbers can be read off, because questions
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``

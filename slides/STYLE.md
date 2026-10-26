@@ -473,7 +473,7 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `I … XII` all one weight — every section still ahead of them — and
+room reads the whole list at one weight — every section still ahead of them — and
 only then does section I go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
@@ -605,7 +605,7 @@ or a label that wants a colon. Reword it; do not swap in another dash.
   not "E (Expectation) — how much does each curve claim each score?".
 - **The presenter notes' letter marker is the exception**, because it is markup
   rather than prose: `**c** — ...` is how the speaker build knows which page a
-  note is for (see *Builds* below).
+  note is for (see *Builds* above).
 
 Checked twice: `slide_figure.save()` refuses a figure with one in a label, and
 `build.py --check` refuses one in a fragment's slide text or notes.

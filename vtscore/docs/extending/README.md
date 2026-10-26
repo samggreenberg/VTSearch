@@ -288,7 +288,9 @@ my_source = "my_pkg.sources.thing:LABELSET_SOURCE"
 After `pip install` of your distribution, the plugin appears in
 `list_importers()` (or the corresponding `list_*` function),
 `gather_plugins()`, and `python app.py --list-plugins` without any
-core-repo changes. Built-in plugins take precedence on name clashes (the
+core-repo changes. The registry key is the loaded object's `name`
+attribute, not the entry-point name; an object with no (or an empty)
+`name` is skipped with a warning. Built-in plugins take precedence on name clashes (the
 clashing entry point is skipped with a warning). An entry point whose own
 import raises is logged as a warning and kept as a *tombstone*: it is
 omitted from `list_*()`, while `get_*()` still returns it and re-raises the

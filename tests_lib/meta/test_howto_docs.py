@@ -11,12 +11,13 @@ works for what these tests pin:
 - every screenshot is written ``../assets/…``, the one spelling that resolves
   both on GitHub (relative to the page) and in the Help panel (relative to the
   page, then to the served docs folder);
-- every relative link to another doc stays inside ``docs/user/``: the Help
-  panel hands anything else to the browser, which has no route for it.
+- every relative link to another doc, in a how-to or in the guide itself,
+  stays inside ``docs/user/``: the Help panel hands anything else to the
+  browser, which has no route for it.
 
 Links, anchors and embedded screenshot ids are checked repo-wide by
 ``scripts/check-docs.py`` and ``scripts/screenshots/wiring-check.py``; this
-file covers only what is particular to the how-to folder.
+file covers only what is particular to the docs the Help panel serves.
 """
 
 from __future__ import annotations
@@ -85,7 +86,7 @@ def test_screenshots_are_written_relative_to_the_page():
 
 def test_doc_links_stay_inside_docs_user():
     bad = []
-    for page in _howtos():
+    for page in [GUIDE, *_howtos()]:
         rel = page.relative_to(USER_DOCS).as_posix()
         for href in _LINK_RE.findall(_prose(page)):
             if re.match(r"^[a-z]+:", href) or href.startswith(("#", "/")):
@@ -93,8 +94,8 @@ def test_doc_links_stay_inside_docs_user():
             if ".md" not in href.split("#", 1)[0]:
                 continue
             if _resolve(rel, href) is None:
-                bad.append(f"{page.name}: {href}")
+                bad.append(f"{rel}: {href}")
     assert not bad, (
-        "how-to links that leave docs/user/ are dead in the app's Help panel; "
+        "user-doc links that leave docs/user/ are dead in the app's Help panel; "
         "name the file in backticks instead: " + "; ".join(bad)
     )
