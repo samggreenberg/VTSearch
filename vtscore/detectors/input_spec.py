@@ -56,10 +56,13 @@ def extract_input_spec_from_medias(
         for key, value in params.items():
             if not isinstance(key, str) or not key.startswith("clipper_"):
                 continue
-            # Skip the bare ``clipper`` key itself (handled above) and
-            # per-clip boundary fields that are not clipper parameters.
+            # Skip the bare ``clipper`` key itself (handled above), per-clip
+            # boundary fields that are not clipper parameters, and the chain
+            # trail (``clipper_chain``): a per-clip JSON record whose bounds
+            # and content hash differ clip to clip, so read as a parameter it
+            # kept any two chain-clipped datasets from ever matching.
             inner = key[len("clipper_") :]
-            if inner in ("", "start", "end", "box", "index"):
+            if inner in ("", "start", "end", "box", "index", "chain"):
                 continue
             clipper_params[inner] = str(value)
         spec: dict[str, Any] = {"clipper": clipper_name}

@@ -324,6 +324,31 @@ media by the same **max** rule as converter fan-out. A dataset already loaded
 with the matching clipper is scored as-is (no redundant re-clip), and a detector
 with no `input_spec.clipper` scores whole media.
 
+**Scoring at another granularity (`--override-clipper`).** A niche escape
+hatch: the re-clip above is what a normal run wants, but a power user can score
+at a granularity the detector was not trained on, say 5-second tiles for a
+detector trained on 2-second ones. `--override-clipper NAME` takes the place of
+every detector's `input_spec` for the run, and `--override-clipper-param
+KEY=VALUE` (repeatable) sets the clipper's parameters; the rest keep its
+defaults:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+  --override-clipper sound_tiling --override-clipper-param duration=5
+```
+
+The dataset is re-clipped to that clipper unless it is already clipped to match,
+and the run prints a `detector_reclip` line naming the override (the JSON event
+carries it as `override_input_spec`). A `*_default` clipper (`sound_default`,
+`image_default`, …) scores each media as it was loaded. The clipper has to clip
+the media type each detector scores: an image clipper beside an audio detector
+stops the run with an error naming both types and the audio clippers there are,
+while a detector the run skips for its type is not held to it. An unknown
+clipper, a parameter it doesn't take (the error lists the ones it does) or a
+value it refuses is a usage error before anything is imported; `python app.py
+--list-clippers` lists the clippers. A pipeline file sets it as
+`override_clipper:` (see [Pipeline file](#pipeline-file)).
+
 **The line's prevalence is estimated on whatever the run ends up scoring.** The
 line itself comes from the labels: the class model the calibration folds'
 held-out scores of the votes imply. Only how common matches are is read off the
@@ -450,6 +475,12 @@ With `--outputs`, the source block lists the datasets the run would make, one
 line per entry (its category, media type, source rows and any per-dataset
 options), under `Datasets (2; one importer run, one dataset per entry):`; the
 JSON `dry_run_plan` event's `source` carries them as `outputs`.
+
+With `--override-clipper`, the plan adds a `Clipper override: 'sound_tiling'
+(duration=5.0, min_overlap=1.0) (in place of each detector's input_spec)` line
+under the detectors, showing every parameter the clipper will take; the JSON
+`dry_run_plan` event carries the same spec as `override_clipper` (`null`
+without one).
 
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included), so a
@@ -656,7 +687,7 @@ python app.py --pipeline pipeline.yaml
 ```
 
 The YAML covers the source, settings file, detectors, chunking, streaming,
-label import and exporter. The flags for those cannot be combined with
+label import, clipper override and exporter. The flags for those cannot be combined with
 `--pipeline`: the run is refused with an error naming the flag, so declare them
 in the file. `--dry-run` has no pipeline form and is refused too. Like the
 flags, a pipeline run saves its dataset to the dashboard unless the file sets
@@ -739,6 +770,14 @@ import_labels:
   create: false                    # true = create the detector if missing (--create-detector)
   # media_type: audio              # with create: the new detector's type (--detector-media-type)
 
+# Optional. Score every detector at this clipper's granularity in place of
+# its own input_spec (same as --override-clipper / --override-clipper-param;
+# see "Scoring at another granularity" above). `params` is optional.
+# override_clipper:
+#   name: sound_tiling
+#   params:
+#     duration: 5
+
 # Optional. Where results go. Defaults to the `gui` exporter (console).
 exporter:
   name: server_json_file
@@ -755,6 +794,9 @@ message, and the list is rejected for an importer that makes one dataset per
 run. The run then behaves as [`--outputs`](#sources) does: one dataset per
 entry, each exported to its own file (`{dataset_name}` in `exporter.fields`
 names it; a `filepath` without it gains the name before the extension).
+
+`override_clipper` is checked at load time too, by the same rules as the flags:
+an unknown clipper or parameter, or a value the clipper refuses, fails the file.
 
 The shorter `import_labels` form is still accepted: `importer: <name>` given as
 a plain string, with `file: <path>` as shorthand for the importer's `filepath`
