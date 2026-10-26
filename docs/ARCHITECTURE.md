@@ -103,13 +103,6 @@ in [ML.md § Embedding Models](ML.md#embedding-models); the converter roster is
 in [EXTENDING-media.md § Built-in
 converters](EXTENDING-media.md#built-in-converters).
 
-### Processors
-
-A **detector** scores every item by how well it matches; an **extractor**
-groups items into categories; a **localizer** finds regions of interest inside
-an item (e.g. faces).  All three are **processors** (ABCs in
-`vtscore/media/processors.py`) and can be exported and imported as JSON.
-
 ### Origin tracking
 
 Every item carries its own provenance, so datasets assembled from several
@@ -142,10 +135,10 @@ VTSearch/
 │   │                       cli_progress.py: text / NDJSON progress)
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
-│   ├── media/              MediaType, MediaEmbedder, MediaClipper, MediaCleaner and Processor
-│   │                       ABCs (base.py, embedder.py, clipper.py, cleaner.py, processors.py),
-│   │                       plus one subpackage per media type (audio/, image/, text/, video/,
-│   │                       document/, face/) holding its embedders, clippers and processors
+│   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs
+│   │                       (base.py, embedder.py, clipper.py, cleaner.py), plus one
+│   │                       subpackage per media type (audio/, image/, text/, video/,
+│   │                       document/, face/) holding its embedders and clippers
 │   ├── converters/         MediaConverter ABC (base.py) + one module per converter;
 │   │                       runner.py stamps converter provenance
 │   ├── embedding/          Embedder façades, per-media vectors, the cached embedding matrix
@@ -633,9 +626,7 @@ the line, #4413; kept on the detector JSON and asked for at creation, #4665,
 else seeded from the `beta` setting; `detector_beta(ctx)` reads any context's
 own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
-`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
-only truly global (cross-dataset) state is `autorun_extractors` /
-`autorun_localizers` in `vtsearch/autorun_processors.py`.
+`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).
 
 Persistent settings live in `vtsearch/settings.py`, split across two tiers.
 The two Pydantic models in `vtsearch/settings_models.py` are the authoritative

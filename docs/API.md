@@ -18,7 +18,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Labeling & Diversity](api/labeling.md) | The balance and its spot check, labeling status/progress, indicator history, train-and-score, coverage atlas |
 | [Detectors](api/detectors.md) | Detector CRUD, saved-label review, detector registry, AutoFind toggle, loading |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, cleaners, converters, media-file browsing, VTSBrowse projection |
-| [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers and running them, settings importers/exporters |
+| [Import & Export](api/io.md) | Result exporters, label importers, settings importers/exporters |
 | [Settings](api/settings.md) | App settings, settings sources, labelset sources |
 | [Dashboard](api/dashboard.md) | Dashboard disk/RAM usage probes |
 | [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect and background AutoFind results, the test of the line, find stats/corrections/queues/evidence coverage |
@@ -43,7 +43,7 @@ Every blueprint under `vtsearch/routes/` registers full paths (none sets a
 | `/api/balance`, `/api/precision-check*`, `/api/labeling-progress`, `/api/labeling-status`, `/api/indicator-score-history`, `/api/eval/*`, `/api/coverage-atlas/*` | [labeling.md](api/labeling.md) |
 | `/api/detectors*`, except `/api/detectors/{detector_name}/labelset-source*` | [detectors.md](api/detectors.md) |
 | `/api/dataset/*`, `/api/datasets/registry*`, `/api/media-types`, `/api/embed`, `/api/embedders`, `/api/clippers`, `/api/cleaners`, `/api/converters`, `/api/browse-media-files*`, `/api/projection/*` | [datasets.md](api/datasets.md) |
-| `/api/exporters*`, `/api/label-importers*`, `/api/pregen-processors*`, `/api/autorun-extractors*`, `/api/autorun-localizers*`, `/api/extract`, `/api/localize`, `/api/auto-extract`, `/api/auto-localize`, `/api/settings-importers*`, `/api/settings-exporters*` | [io.md](api/io.md) |
+| `/api/exporters*`, `/api/label-importers*`, `/api/settings-importers*`, `/api/settings-exporters*` | [io.md](api/io.md) |
 | `/api/settings`, `/api/settings/defaults`, `/api/settings-sources*`, `/api/labelset-sources*`, `/api/detectors/{detector_name}/labelset-source*` | [settings.md](api/settings.md) |
 | `/api/dashboard/*` | [dashboard.md](api/dashboard.md) |
 | `/api/find`, `/api/find/*`, `/api/find-label`, `/api/auto-detect`, `/api/autofind/runs/*`, `/api/line-test*` | [find.md](api/find.md) |

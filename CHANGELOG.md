@@ -807,6 +807,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Removed
 
+- **The autorun extractor / localizer API** (issues #3452, #5259). The routes under `/api/autorun-extractors`,
+  `/api/autorun-localizers` and `/api/pregen-processors`, plus `/api/extract`, `/api/localize`,
+  `/api/auto-extract` and `/api/auto-localize`, are removed. No screen ever called them, and nothing outside the
+  repo did either. They ran OCR, speech, YOLO-class and face processors over a loaded dataset; the
+  `image2text` and `image2face` converters still do the OCR and the face finding at import. AutoFind and
+  `/api/auto-detect` are unaffected.
+
 - **Imports no longer show a time-left estimate, and the switches around it are gone**
   (issue #4667). The estimate on dataset imports, staging imports and labelset
   missing-media fetches swung too wildly to trust, so it is gone for everyone; those bars

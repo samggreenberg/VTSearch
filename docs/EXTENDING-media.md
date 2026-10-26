@@ -9,9 +9,7 @@ groups).
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
-exporters, sources for datasets/labels/settings) ·
-[EXTENDING-processors.md](EXTENDING-processors.md) (detectors, localizers,
-extractors).
+exporters, sources for datasets/labels/settings).
 
 ## Contents
 
@@ -221,7 +219,7 @@ changes to `vtscore/media/__init__.py` are needed.
 
 > **Pixel-media types: report *displayed* dimensions.** A media's stored
 > `width`/`height` are the coordinate space every box in the system is expressed
-> against — clip boxes, extractor and localizer output, the region a user drags
+> against — clip boxes, face boxes, the region a user drags
 > on the canvas. For images that space is the picture *as displayed*, i.e. after
 > EXIF orientation: a phone photo shot sideways stores a landscape bitmap plus a
 > "rotate me" tag, and browsers honour the tag, so the user is looking at a
@@ -698,8 +696,8 @@ All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/emb
 ## Adding a Media Clipper
 
 Media clippers split a single media item into one or more items of the
-**same** type. Unlike processors which return metadata about media,
-clippers return **new media dicts** that can replace the original.
+**same** type. Clippers return **new media dicts** that can replace the
+original, not metadata about it.
 
 **Library contract:**
 [`vtscore/docs/extending/clippers.md`](../vtscore/docs/extending/clippers.md)

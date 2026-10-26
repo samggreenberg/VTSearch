@@ -10,9 +10,9 @@ They also pin the module's second job: **applying EXIF display orientation**.
 A phone photo is stored in sensor order with a tag saying how to rotate it, and
 browsers honour that tag — so the picture a user sees is the upright one.  Every
 decode here returns those upright pixels, and :func:`upright_size` reports the
-matching dimensions from the header alone, so the embedder, the thumbnailer, the
-extractors' boxes and a media's stored ``width``/``height`` all describe the
-same image.
+matching dimensions from the header alone, so the embedder, the thumbnailer, any
+box reported on the image and a media's stored ``width``/``height`` all describe
+the same image.
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ class TestDecodeBounded:
             assert scale < 1.0
 
     def test_scale_maps_coordinates_back_to_the_original(self):
-        """The contract extractors rely on: ``coord / scale`` is original space."""
+        """The contract a box-reporting caller relies on: ``coord / scale`` is original space."""
         blob = _encode(Image.new("RGB", (1000, 500), color=(70, 70, 70)))
         img, scale = decode_bounded(blob, max_pixels=10_000)
         with img:
@@ -291,7 +291,7 @@ class TestDecodeBoundedAppliesOrientation:
     def test_scale_survives_the_transpose(self):
         """``scale`` is a linear ratio, so a quarter turn must not disturb it.
 
-        Extractors divide reported coordinates by it to land in the media's
+        A caller divides reported coordinates by it to land in the media's
         stored (upright) space; if the transpose leaked into the ratio, every
         box on a rotated photo would be off by the aspect ratio.
         """

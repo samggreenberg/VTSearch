@@ -188,14 +188,6 @@ def test_document_converters_report_the_missing_package(
     assert any("PyMuPDF" in r.getMessage() for r in caplog.records)
 
 
-def test_yolo_extractor_reports_the_missing_package(without_module) -> None:
-    from vtscore.media.image.extractor import ImageClassExtractor
-
-    without_module("ultralytics")
-    with pytest.raises(ImportError, match="ultralytics"):
-        ImageClassExtractor("people", "person").load_model()
-
-
 def test_yolo_clipper_reports_the_missing_package(without_module) -> None:
     from vtscore.media.image.clipper import ImageObjectClipper
 

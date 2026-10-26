@@ -509,7 +509,7 @@ import of 64 files or more. Embedding itself is one bulk call per embedder,
 with forward passes serialised by the shared embed lock (see
 [Is the embedder cache thread-safe?](#is-the-embedder-cache-thread-safe)).
 `cap_workers_by_memory()` sizes the detector-scoring fan-out instead
-(auto-detect and processor scoring), where each worker holds a whole
+(auto-detect), where each worker holds a whole
 `(N, D)` embedding matrix.
 
 ## Threading and concurrency

@@ -140,8 +140,6 @@ from vtsearch.routes import (  # noqa: E402
     exporters_bp,
     label_importers_bp,
     main_bp,
-    processors_crud_bp,
-    processors_scoring_bp,
     projection_bp,
     sessions_bp,
     settings_bp,
@@ -273,8 +271,6 @@ api.register_blueprint(sorting_bp)
 api.register_blueprint(precision_check_bp)
 api.register_blueprint(line_test_bp)
 api.register_blueprint(sessions_bp)
-api.register_blueprint(processors_crud_bp)
-api.register_blueprint(processors_scoring_bp)
 api.register_blueprint(datasets_listings_bp)
 api.register_blueprint(datasets_status_bp)
 api.register_blueprint(datasets_staging_bp)

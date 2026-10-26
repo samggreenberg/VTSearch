@@ -65,11 +65,6 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ("docs/EXTENDING-media.md", "MediaClipper abstract interface reference", ("MediaClipper",)),
     ("docs/EXTENDING-media.md", "MediaConverter abstract interface reference", ("MediaConverter",)),
     ("docs/EXTENDING-media.md", "MediaSource abstract interface reference", ("MediaSource",)),
-    (
-        "docs/EXTENDING-processors.md",
-        "Processor abstract interface reference",
-        ("Processor", "Detector", "Localizer", "Extractor"),
-    ),
     # Not an ABC contract: this section spells out how ``dirty_keys`` on
     # ``UserSyncState`` arbitrates between a local write and an upstream pull.
     # It is registered because invariant 2 (rightly) flags any "The ... contract"
@@ -100,10 +95,6 @@ DOC_GLOBS = ("docs/EXTENDING-*.md", "vtscore/docs/extending/*.md")
 #: the prose explicitly marks as living off the ABC. Keyed by section so one
 #: family's vocabulary can never excuse a typo in another's.
 IGNORE: dict[tuple[str, str], frozenset[str]] = {
-    # The "Not on the ABC, but required by the app" table: `from_config` is an
-    # app-side factory convention implemented by concrete processors, and the
-    # section says so in as many words.
-    ("docs/EXTENDING-processors.md", "Processor abstract interface reference"): frozenset({"from_config"}),
     # Parameter-dict keys tabulated alongside the `parameters` member.
     ("docs/EXTENDING-media.md", "MediaClipper abstract interface reference"): frozenset(
         {"key", "label", "type", "default", "min", "max", "step"}

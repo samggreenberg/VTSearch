@@ -9,9 +9,7 @@ Architecture](#shared-plugin-architecture) below.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-media.md](EXTENDING-media.md) (media types,
-embedders, clippers, converters, sources) ·
-[EXTENDING-processors.md](EXTENDING-processors.md) (detectors, localizers,
-extractors).
+embedders, clippers, converters, sources).
 
 ## Contents
 
@@ -1902,10 +1900,6 @@ classifier:
    the CLI's `--autodetect` flow.
 3. The trained head itself lives only in RAM; it's trained on demand
    from the labelset's origins each time the model is loaded or scored.
-
-For ready-made classifiers without labels (e.g. an OCR or face-detector
-heuristic), build an Extractor or Localizer plugin instead; see
-[EXTENDING-processors.md](EXTENDING-processors.md).
 
 ---
 

@@ -231,8 +231,6 @@ _cache_tile  # noqa: F821
 # ---------------------------------------------------------------------------
 stub_run_eval  # noqa: F821
 stub_pipeline  # noqa: F821
-stub_extractor_factory  # noqa: F821
-stub_localizer_factory  # noqa: F821
 stubbed_resolver  # noqa: F821
 reset_state  # noqa: F821
 fake_caps  # noqa: F821 - monkeypatches the embedder capability table

@@ -181,10 +181,10 @@ class TestMemberInvariant:
         assert len(problems) == 1 and "NoSuchAbc" in problems[0]
 
     def test_multi_class_section_accepts_any_member(self, monkeypatch, tmp_path):
-        """`detect` is on `Detector`, not on the `Processor` base."""
-        body = "| `detect(media)` | `(dict) -> bool` | y |"
-        assert check(monkeypatch, tmp_path, body, ("Processor",)) != []
-        assert check(monkeypatch, tmp_path, body, ("Processor", "Detector")) == []
+        """`clip` is on `MediaClipper`, not on `MediaEmbedder`."""
+        body = "| `clip(media)` | `(dict) -> list[dict]` | y |"
+        assert check(monkeypatch, tmp_path, body, ("MediaEmbedder",)) != []
+        assert check(monkeypatch, tmp_path, body, ("MediaEmbedder", "MediaClipper")) == []
 
 
 class TestWrapperInvariant:
