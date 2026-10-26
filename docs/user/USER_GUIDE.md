@@ -414,7 +414,7 @@ feature: it is where an installed plugin's service importers appear (a
 corporate media archive, a third-party search API). Nothing in the stock
 install registers one, so on a default deployment the tab reads *"No
 importers in this category."* Developers adding one should see the
-[plugin guide](../EXTENDING-plugins.md).
+plugin guide, `docs/EXTENDING-plugins.md`.
 
 The **Downloaded Media** catalogue is a table: pick a media type from the
 dropdown, click the dataset you want to choose it, then click **Import**.
@@ -1655,7 +1655,7 @@ Settings modal's **Server** tab. Once set:
   first detector run is fast.
 
 Operators set it when starting the server (see `solo_media_type` in the
-[deployment guide](../DEPLOYMENT.md#server-tier--datasettingsjson)). It
+deployment guide, `docs/DEPLOYMENT.md`). It
 applies to every user, and there is no per-user override.
 
 ---

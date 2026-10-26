@@ -688,7 +688,8 @@ importer:
   # one mapping per dataset, in the shape the web API's `outputs` entries take
   # (media_type, source_specs, category, dataset_name, embedder, embedders,
   # clipper, clipper_params, clipper_chain, cleaners). Replaces
-  # `fields.media_type`; each dataset is saved, scored and exported on its own.
+  # `fields.media_type` and `fields.source_specs` (setting either is refused);
+  # each dataset is saved, scored and exported on its own.
   # outputs:
   #   - media_type: audio
   #   - media_type: image

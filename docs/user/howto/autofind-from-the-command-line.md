@@ -102,7 +102,7 @@ after AutoFind** under **Command Line** on the same **AutoFind** settings page
 as Step 2: the command then deletes the dataset once its detectors have run and
 the matches are saved. A run with no AutoFind detector to run keeps its
 dataset, and **Run AutoFind** inside VTSearch never deletes one. The rest of the
-command's options are in the [command-line reference](../../CLI.md).
+command's options are in the command-line reference, `docs/CLI.md`.
 
 ## Where next
 

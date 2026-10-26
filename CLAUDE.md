@@ -456,26 +456,9 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 
 - **Which decks:** every deck whose output the change affects. A fragment edit affects the decks whose manifests name it (grep `slides/decks/*.deck`); a theme, `build.py`, or `render.sh` change affects all decks. When in doubt, render more rather than fewer.
 - **How:** `cd slides && ./render.sh <deck> pdf` for each affected deck. The cloud container has a browser; if Marp can't find it, use `CHROME_PATH=/opt/pw-browsers/chromium`. When presenter notes or the speaker pipeline changed, also render `./render.sh <deck> pdf --speaker` and attach that variant's pages too.
-- **Attach only the pages the change touched — never the whole deck.** A full `hold-the-line.pdf` is ~75 MiB and the speaker cut ~36 MiB, against a 30 MiB attachment limit, so attaching the deck fails every time; and the user wants the slides that moved anyway. So cut an excerpt from each rendered PDF holding the affected section (or the affected slides plus one either side, when the change is narrower than a section), and attach *that* — around 3–5 MiB for both cuts. Extract it with PyMuPDF, already a project dependency (the `agpl` extra):
-
-  ```python
-  import pymupdf
-  doc = pymupdf.open("slides/_out/hold-the-line.pdf")
-  ex = pymupdf.open(); ex.insert_pdf(doc, from_page=first, to_page=last)   # 0-based, inclusive
-  ex.save("<scratchpad>/hold-the-line.section3.pdf", garbage=4, deflate=True)
-  ```
-
-  Find `first`/`last` from the assembled deck: `_build/<deck>.md` splits on `\n---\n` into chunks whose index is the PDF page **plus one** (chunk 0 is the front matter), so a page is located by grepping its chunk for the figure it names or its outline `+atN` class. The speaker PDF has one page per fragment; pick its pages by searching each page's text (`page.get_text()`) for a phrase from the section's notes. A theme or tooling change that reflows every deck is the case where "the affected pages" *is* the deck — attach an excerpt per deck anyway (the opening outline, one full-bleed figure, one build, one screenshot slide) and say the rest changed the same way.
+- **Attach only the pages the change touched — never the whole deck.** A full deck PDF is far over the 30 MiB attachment limit (~75 MiB audience, ~36 MiB speaker), and the user wants the slides that moved anyway: cut an excerpt holding the affected section (or the affected slides plus one either side) from each rendered PDF and attach that. The PyMuPDF recipe and how to find the page range are in [`slides/README.md`](slides/README.md#attaching-an-excerpt-claude-sessions).
 - **When:** at the end of the session, from the final state of the branch (after the last commit that touches `slides/`), so what the user sees is what the PR ships. Attach with a one-line caption naming the deck(s), the section or pages the excerpt holds, and which page numbers are new or moved.
-- Rendered PDFs and their excerpts stay out of git — `slides/_out/` is gitignored and
-  excerpts go in the session scratchpad. Never commit either, and do not publish
-  them: `.github/workflows/publish-slides.yml` re-renders every deck on each push to
-  `dev` that touches `slides/` and uploads the audience and speaker PDFs to the
-  rolling `slides-latest` release, where the always-current full deck lives
-  (`https://github.com/samggreenberg/VTSearch/releases/download/slides-latest/<deck>.pdf`).
-  Attach the excerpts here, merge to `dev`, and the release follows;
-  `scripts/publish-slides.sh` is the same path by hand, from a laptop with `gh`. See
-  `slides/README.md`.
+- Rendered PDFs and their excerpts stay out of git (`slides/_out/` is gitignored; excerpts go in the session scratchpad), and are never published by hand from a session: `.github/workflows/publish-slides.yml` re-renders every deck on each push to `dev` that touches `slides/` and uploads it to the rolling `slides-latest` release (see `slides/README.md` § Publishing).
 
 ## Screenshot reshoots: queue them, don't shoot them (when you change the GUI)
 

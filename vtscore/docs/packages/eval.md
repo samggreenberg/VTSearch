@@ -441,42 +441,12 @@ python -m vtscore.eval.label_curve_main \
 torch runtime, parses argparse args, runs `run_eval`, and optionally
 writes a JSON dump and matplotlib plots.
 
-```bash
-# Default: text-sort + learned-sort on every registered eval dataset
-python -m vtscore.eval
-
-# Subset
-python -m vtscore.eval --datasets esc50_s caltech101_s --mode both
-
-# Custom split + JSON output
-python -m vtscore.eval --mode learned --train-fraction 0.6 --output results.json
-
-# Generate visualisations
-python -m vtscore.eval --plot-dir eval_plots
-
-# List available eval datasets
-python -m vtscore.eval --list
-```
-
-Notable flags:
-
-| Flag                     | Meaning                                                      |
-|--------------------------|--------------------------------------------------------------|
-| `--datasets ID [ID ...]` | Restrict to these eval dataset ids                           |
-| `--mode {text,learned,both}` | Which evaluation to run                                  |
-| `--k K [K ...]`          | k values for P@k / R@k                                       |
-| `--train-fraction F`     | Fraction of learned-sort's simulation half that is voted     |
-| `--seed N`               | Random seed                                                  |
-| `--enrich-descriptions`  | Wrapper-averaged text embeddings                             |
-| `--calibrate-count K`    | Cross-cal folds                                              |
-| `--calibration-fraction F` | Cross-cal calibration split                                |
-| `--embedder NAME`        | Evaluate with this embedder                                  |
-| `--region-voting`        | Train on region votes                                        |
-| `--beta B`               | Learned-sort balance in `[0.25, 4]`, or `off` (default: the app's) |
-| `--output FILE`          | Write JSON results to `FILE`                                 |
-| `--plot-dir DIR`         | Generate visualisation PNGs in `DIR`                         |
-| `--no-plot`              | Disable plots even when `--plot-dir` is set                  |
-| `--list`                 | Print the eval-dataset registry and exit                     |
+The flags mirror `run_eval`'s arguments (above): `--datasets`, `--mode`,
+`--k`, `--train-fraction`, `--seed`, `--enrich-descriptions`,
+`--calibrate-count`, `--calibration-fraction`, `--embedder`,
+`--region-voting`, `--beta`, plus `--output`, `--plot-dir`, `--no-plot` and
+`--list`. The flag reference and examples are in
+[`docs/EVAL.md`](../../../docs/EVAL.md#cli-reference).
 
 The full user guide - including how the demo datasets are sourced,
 what each metric means in practice, and how to interpret the output -
@@ -553,8 +523,10 @@ from liblinear, scored and thresholded exactly as production does.
   after scoring; no detector files are written.
 - **Deterministic.** Every function that produces randomness takes a
   `seed` argument; `np.random.RandomState(seed)` controls splits and
-  vote order, `train_model` uses its own thread-safe RNG (see
-  [`training.md`](training.md)).
+  vote order. The shipped head's liblinear primal solve reads no seed at
+  all; the BCE / MLP eval heads draw from `train_model`'s own thread-safe
+  RNG (see [`training.md`](training.md#thread-safety-and-reproducibility)
+  and the pinned-seeds table in [`docs/ML.md`](../../../docs/ML.md)).
 - **Pure computation.** `eval_text_sort`, `eval_learned_sort` and the
   voting-iterations functions take pre-loaded medias dicts as input.
   Only `run_eval`, `run_voting_iterations_eval_from_pickles` and the

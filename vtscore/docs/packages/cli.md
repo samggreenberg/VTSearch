@@ -138,28 +138,16 @@ def autodetect_importer_main_chunked(
   importer's `validate_cli_field_values`, then call `run_cli(...)` or
   `run_chunked_cli(...)` (thin when the importer's `reference_files`
   field asks for it) and embed whatever the load left unembedded.
-- **`save_dataset=True`** first imports the source through the GUI's load
-  pipeline and registers it, then scores the saved pickle; having no
-  applicable detector ends the run with a `detection_skipped` event instead of
-  an error. When the `autofind_cli_delete_dataset` setting is on, the
-  dataset it imported is unregistered (pickle included) once its detectors have
-  scored it and the exporter has run, with a `dataset_deleted` event. A run
-  that detected nothing or failed keeps it, and so does a pickle that already
-  was a registered dataset, since the run did not import it.
-- **Several datasets from one import.** `outputs=[OutputSpec, ...]`
-  (`vtscore.datasets.importers.base`) makes the one importer run produce one
-  dataset per entry, the dashboard's multi-dataset import. Each dataset is
-  then its own pass of `_run_pipeline`: its own applicable AutoFind detectors,
-  its own results (carrying a `dataset` block) and its own exporter run. The
-  exporter's destination tells them apart: `{dataset_name}` in any field is
-  replaced by the dataset's name, and with no such placeholder a run of
-  several datasets inserts the name before a `filepath` field's extension. A
-  dataset whose import failed is reported (`dataset_failed`) and skipped, and
-  the run exits non-zero only once every other dataset is scored and
-  exported; a temporary run also fails when no detector applied to any
-  dataset. The importer must make several datasets per run (it declares a
-  `media_type` field and has not set `multi_output = False`). The pipeline
-  YAML's `importer.outputs:` list takes the same entries.
+- **`save_dataset=True`** imports the source through the GUI's load
+  pipeline, registers it, then scores the saved pickle (a `detection_skipped`
+  event when no detector applies; a `dataset_deleted` event when the
+  `autofind_cli_delete_dataset` setting removes it afterwards).
+  **`outputs=[OutputSpec, ...]`** (`vtscore.datasets.importers.base`) makes
+  one importer run produce one dataset per entry, each its own
+  `_run_pipeline` pass. The user-facing rules for both - what is kept, what
+  is deleted, how several datasets' exports are told apart, the exit code -
+  are in [`docs/CLI.md`](../../../docs/CLI.md#saving-the-dataset-to-the-dashboard---tempimport)
+  and its [Sources](../../../docs/CLI.md#sources) section.
 - **Chunked variants** stream the source in `chunk_size`-sized
   batches; peak RAM stays at roughly `chunk_size` medias regardless
   of total length. Detectors are trained **once** against the first
@@ -222,29 +210,9 @@ validation), so a typo fails fast. The `Save to dashboard:` line follows
 `save_dataset`, which defaults to `False` here; `python app.py` passes `True`
 unless `--tempimport` is set.
 
-In `text` format the plan is printed as labelled sections:
-
-```
-DRY RUN - no media will be loaded, embedded, scored, or exported.
-
-Source:
-  Importer: server_folder
-  Params:
-    path: /srv/sounds
-    media_type: audio
-  Chunk size: whole dataset
-  Save to dashboard: no (--tempimport: the dataset is discarded after detection)
-
-Settings: data/settings.json
-AutoFind detectors (1):
-  - my-detector  [media_type=audio, labels=42, file=data/detectors/my-detector.json]
-
-Exporter: server_json_file
-  filepath: results.json
-```
-
-In `json` format the same information is emitted as a single
-`dry_run_plan` NDJSON event.
+In `text` format the plan is printed as labelled sections (an example is
+in [`docs/CLI.md`](../../../docs/CLI.md#dry-run-mode)); in `json` format
+it is a single `dry_run_plan` NDJSON event.
 
 ### One-shot label-import helpers
 
@@ -354,43 +322,18 @@ def run_pipeline_file(path: str | Path) -> None:
 validates the shape, and returns a normalised config dict ready for
 `run_pipeline_file` to dispatch.
 
-**Top-level keys** (any combination, but exactly one of `dataset:` or
-`importer:` must be set):
-
-| Key             | Type                  | Meaning                                                                  |
-|-----------------|-----------------------|--------------------------------------------------------------------------|
-| `dataset`       | `str` path            | Path to a dataset pickle.                                                |
-| `importer`      | `{name, fields?, outputs?}` | Importer name + per-field values. Mutually exclusive with `dataset`. `outputs:` (one mapping per dataset, the keys an `OutputSpec` takes; each needs `media_type`) makes several datasets from one run, and excludes `fields.media_type` / `fields.source_specs`. |
-| `settings`      | `str` path            | Override settings file path.                                             |
-| `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only. Defaults to `[import_labels.detector]` when `import_labels` is set. |
-| `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
-| `tempimport`    | `bool`                | Discard the dataset after detection instead of saving it (`save_dataset=False`). Default `false`. |
-| `stream_results` | `bool`               | Stream hits to the exporter (see above). Requires `chunk_size` and `tempimport: true`. |
-| `keep_negatives` | `bool`               | Also stream below-threshold hits. Requires `stream_results`.             |
-| `import_labels` | `{detector, importer?, file?, create?, media_type?}` | Run a label importer + merge into a detector before scoring. `importer` is a `{name, fields?}` mapping or a bare name (default `server_json_file`); `file` is shorthand for its `filepath` field. `create: true` makes the detector if it is missing (`media_type` overrides the source's). |
-| `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
+The file's schema - exactly one of `dataset:` / `importer:`, plus
+`settings`, `detectors`, `chunk_size`, `tempimport`, `stream_results`,
+`keep_negatives`, `import_labels` and `exporter` - is documented with an
+annotated example in [`docs/CLI.md`](../../../docs/CLI.md#pipeline-file).
+An `importer.outputs:` list takes the keys an `OutputSpec` takes (each
+entry needs `media_type`) and is mutually exclusive with both
+`importer.fields.media_type` and `importer.fields.source_specs`.
 
 Unknown top-level keys raise `ValueError`; a missing file raises
 `FileNotFoundError`. Field-key validation happens against the live
 plugin registry - a typo in `importer.name` or any `fields.*` key
 fails at parse time before media touches RAM.
-
-```yaml
-# pipeline.yaml
-importer:
-  name: server_folder
-  fields:
-    path: /srv/sounds
-    media_type: audio
-settings: data/settings.json
-detectors:
-  - my-detector
-chunk_size: 256
-exporter:
-  name: server_csv_file
-  fields:
-    filepath: out.csv
-```
 
 ```python
 from vtscore.cli_pipeline import load_pipeline_file, run_pipeline_file
