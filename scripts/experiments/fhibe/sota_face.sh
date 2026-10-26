@@ -29,7 +29,8 @@
 # V100 ones, so the two never run the same cell).
 #
 # SOTA_FACE_ARM=<tag> runs the same review on another face arm, fhibe_faces_<tag>_{1024,640}
-# (#4777: roll, sim, the crops turned upright). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
+# (#4777: roll, sim, the crops turned upright; #5321: ik, the imagekit provider's own faces and
+# vectors, read under its `imagekit_face` embedder). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
 # its grids are prepared on its own cells (`prepare`, then `dirs`), and it keeps the review's
 # identity file, so every session pairs with the plain arm's by person, size, K and beta.
 #

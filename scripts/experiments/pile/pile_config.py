@@ -191,6 +191,23 @@ DATASETS: dict[str, dict] = {
         }
         for size in (1024, 640)
     },
+    # The face path through the `imagekit` provider (#5321): image2face's `provider`, the
+    # provider's detector, boxes, landmarks and vectors (each embedded from the full photo,
+    # so `align` turns only the stored crop). Built with `IMAGEKIT_FACE_PROVIDER` /
+    # `IMAGEKIT_FACE_CONFIG` set; its cell is `imagekit_face`'s, and FaceNet never embeds it.
+    # Only the subject crops pair with the MTCNN arms: the extra faces are the provider's own.
+    **{
+        f"fhibe_faces_ik_{size}": {
+            "boxed": False,
+            "kind": "fhibe",
+            "long_side": size,
+            "media_type": "face",
+            "align": "roll",
+            "provider": "imagekit",
+            "on_request": True,
+        }
+        for size in (1024, 640)
+    },
     # `coco_better`'s construction on a second source (#4815): the same *C*, the
     # same three bands and the same shared-pool rule, drawn from Objects365 v2's
     # validation split instead of COCO. It exists to CONFIRM method comparisons
@@ -3499,6 +3516,10 @@ EMBEDDERS: dict[str, dict] = {
     # FaceNet over `image2face` crops (#4699). The only embedder of `face` media,
     # so it pairs only with datasets whose `media_type` is "face" -- see `cells`.
     "face": {"patch": False, "batch": 128, "media_type": "face"},
+    # The `imagekit` face provider's vectors (#5321). The loader files them as image2face
+    # hands them over, so this embedder embeds nothing at build time; it pairs only with
+    # datasets built through that provider, and FaceNet only with the MTCNN ones.
+    "imagekit_face": {"patch": False, "batch": 128, "media_type": "face", "provider": "imagekit"},
 }
 
 
@@ -3514,7 +3535,11 @@ def embeds(embedder: str, dataset: str) -> bool:
     FaceNet embeds only face crops and SigLIP no face crops, so a pair whose
     media types differ is not a missing cell but no cell.
     """
-    return EMBEDDERS.get(embedder, {}).get("media_type", "image") == media_type_of(dataset)
+    spec = EMBEDDERS.get(embedder, {})
+    if spec.get("media_type", "image") != media_type_of(dataset):
+        return False
+    # A face cell's vectors come from the provider that found its faces (#5321).
+    return spec.get("provider") == DATASETS[dataset].get("provider")
 
 
 def embed_batch_size(embedder: str) -> int | None:

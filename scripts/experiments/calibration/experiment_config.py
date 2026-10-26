@@ -441,6 +441,11 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim", "side")
         for size in (1024, 640)
     },
+    # The face path through the `imagekit` provider (#5321): its own vectors, so its own roster.
+    **{
+        f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "imagekit_face").split(",")
+        for size in (1024, 640)
+    },
     # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
     "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
@@ -512,7 +517,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_640": True,
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
-    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side") for size in (1024, 640)},
+    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side", "ik") for size in (1024, 640)},
     # A screen's genre is the whole screen (#4356).
     "apptitude": False,
 }

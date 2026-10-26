@@ -178,6 +178,7 @@ ARMS = {
     ("siglip", "whole_image"): "SigLIP binary",
     ("siglip+dinov3_patch", "max_patch"): "DINOv3 region",
     ("face", "whole_image"): "FaceNet face crop",
+    ("imagekit_face", "whole_image"): "imagekit face crop",
     ("embeddinggemma2", "whole_image"): "EmbeddingGemma 2 binary",
     ("siglip2_l", "whole_image"): "SigLIP 2 L binary",
 }
@@ -189,6 +190,8 @@ PATHS = {
     "binary": ("siglip", "whole_image"),
     "region": ("siglip+dinov3_patch", "max_patch"),
     "face": ("face", "whole_image"),
+    # The face path through the `imagekit` provider (#5321), on its own FHIBE cells.
+    "face_ik": ("imagekit_face", "whole_image"),
     # Not a production path: the #4837 A/B's arm, the Binary path in EmbeddingGemma 2's space.
     "eg2": ("embeddinggemma2", "whole_image"),
     # Not a production path either: #4874's arm, the Binary path in SigLIP 2 L's space.

@@ -474,14 +474,17 @@ class Image2FaceMediaConverter(MediaConverter):
     # The imagekit provider seam
     # ------------------------------------------------------------------
 
-    def _imagekit_faces(self, img: Any, p: FaceParams, media_id: str) -> list[tuple[FaceDetection, dict[str, Any]]]:
+    def _imagekit_faces(
+        self, img: Any, p: FaceParams, media_id: str, strict: bool = False
+    ) -> list[tuple[FaceDetection, dict[str, Any]]]:
         """Detect **and embed** every face through the server's face provider (module docstring).
 
         Returns the kept detections, highest-confidence first, each with the
         extra output fields its crop leaves with: the vector filed under the
         ``imagekit_face`` embedder, and the quality and compat tag for its
         ``custom_metadata``.  An unconfigured or failing provider yields no
-        faces, with a warning, like a missing ``facenet-pytorch``.
+        faces, with a warning, like a missing ``facenet-pytorch``; with
+        *strict* it raises instead, for a caller that must fail loudly.
         """
         from vtscore.media.face import imagekit_bridge as bridge  # noqa: PLC0415
 
@@ -489,9 +492,13 @@ class Image2FaceMediaConverter(MediaConverter):
             pipeline = bridge.get_face_pipeline()
             records = pipeline.process(np.asarray(img), confidence_threshold=p.threshold, media_id=media_id)
         except bridge.FaceProviderUnconfigured as exc:
+            if strict:
+                raise
             logger.warning("image2face: %s; producing no faces", exc)
             return []
         except Exception:
+            if strict:
+                raise
             logger.warning(
                 "image2face: the %s face provider failed on %s", bridge.provider_name(), media_id, exc_info=True
             )
