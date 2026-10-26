@@ -1229,6 +1229,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A merged archive-member item still plays after its dataset is reopened** (issue #5238). When an
+  **Archive members (no extract)** manifest lists one member twice, the import merges the two items into one.
+  After the dataset was saved and reopened, that item had no bytes to serve, and reopening the dataset in full
+  could drop it. It now still finds the member it came from.
+
 - **A (?) hint's text is no longer cut off at a dialog's edge** (issue #5226). A **(?)** beside a field opens
   its explanation in a box centred over the icon. Near a dialog's edge (Add Dataset › Demo › Downloaded Media's
   **Multi-Dataset** box, the file-list hint under Files › Manifest, a Settings section heading) the box ran past
