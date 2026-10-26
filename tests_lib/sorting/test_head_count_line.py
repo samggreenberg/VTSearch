@@ -441,3 +441,53 @@ class TestThePrecisionKnob:
         with pytest.raises(ValueError):
             with head_count_precision(None, bad):
                 pass
+
+
+class TestThePrecisionTopGate:
+    """#5215: a head whose top stands under HEAD_COUNT_PRECISION_TOP_Z bulk spreads keeps #4603's count at beta <= 1."""
+
+    def test_the_app_ships_no_gate(self):
+        from vtscore.training.thresholds import labels_line
+
+        assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+
+    def test_a_top_under_the_gate_keeps_4603s_count(self):
+        s, _ = _heavy_head()  # its top stands ~10 bulk spreads up
+        for beta in (0.25, 1.0):
+            with head_count_precision("off", "off"):
+                before = head_count_cut(s, beta)
+            shipped = head_count_cut(s, beta)
+            assert shipped != before
+            with head_count_precision(None, None, 50.0):
+                assert head_count_cut(s, beta) == before
+            with head_count_precision(None, None, 6.1):
+                assert head_count_cut(s, beta) == shipped
+
+    def test_it_reads_the_top_in_bulk_spreads(self):
+        from vtscore.training.thresholds.labels_line import _top_under
+
+        x = np.r_[np.random.default_rng(0).normal(0, 1, 10_000), 7.0]
+        assert _top_under(x, 7.5) and not _top_under(x, 6.5)
+        assert not _top_under(x, None) and not _top_under(np.zeros(100), 7.5)
+
+    def test_a_recall_lean_is_untouched(self):
+        s, _ = _heavy_head()
+        deep = _logits(s)[300:301]
+        today = head_count_cut(s, 4.0, deep)
+        with head_count_precision(None, None, 50.0):
+            assert head_count_cut(s, 4.0, deep) == today
+
+    def test_the_swap_is_undone_and_off_never_gates(self):
+        from vtscore.training.thresholds import labels_line
+
+        with head_count_precision(None, None, 6.1):
+            assert labels_line.HEAD_COUNT_PRECISION_TOP_Z == 6.1
+        with head_count_precision(None, None, "off"):
+            assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+        assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+
+    @pytest.mark.parametrize("bad", ["deep", True, math.inf, 0.0])
+    def test_it_refuses_what_is_not_a_positive_number(self, bad):
+        with pytest.raises(ValueError):
+            with head_count_precision(None, None, bad):
+                pass

@@ -1392,6 +1392,9 @@ HEAD_COUNT_RECALL_Z = _number_or_off("CALIB_HEAD_COUNT_RECALL_Z")
 #: (scale 1, exponent 0.708).
 HEAD_COUNT_PRECISION_SCALE = _number_or_off("CALIB_HEAD_COUNT_PRECISION_SCALE")
 HEAD_COUNT_PRECISION_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_PRECISION_EXPONENT")
+#: Issue #5215's gate on it: a head whose top logit stands fewer than ``CALIB_HEAD_COUNT_PRECISION_TOP_Z`` bulk
+#: spreads up keeps #4603's count.  Unset is the app's; ``off`` never gates.
+HEAD_COUNT_PRECISION_TOP_Z = _number_or_off("CALIB_HEAD_COUNT_PRECISION_TOP_Z")
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

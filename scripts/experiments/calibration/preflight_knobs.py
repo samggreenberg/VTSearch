@@ -410,6 +410,7 @@ def probe(C: Any) -> list[str]:
             "CALIB_HEAD_COUNT_PRECISION_EXPONENT",
             "exponent",
         ),
+        ("HEAD_COUNT_PRECISION_TOP_Z", "head_count_precision_top_z", "CALIB_HEAD_COUNT_PRECISION_TOP_Z", "top gate"),
     ):
         got = getattr(C, attr, None)
         if got is None:
