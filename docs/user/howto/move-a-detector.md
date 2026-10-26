@@ -48,7 +48,7 @@ kind of media, then click the **+** <picture><source media="(prefers-color-schem
 
 1. Click the **Trained** tab, then **Server JSON File** under **Import labels
    from**.
-2. Under **Path or URL**, type the file's path on that server.
+2. Under **Server path**, type the file's path on that server.
 3. Name the detector (**Detector name**).
 4. Click **Create & Import**.
 
@@ -56,9 +56,6 @@ kind of media, then click the **+** <picture><source media="(prefers-color-schem
   <source media="(prefers-color-scheme: dark)" srcset="../assets/move-trained-tab.dark.webp" />
   <img src="../assets/move-trained-tab.light.webp" alt="Step 3: in New Detector, (1) the Trained tab (then Server JSON File), (2) the file's path, (3) the detector's name, then (4) Create & Import" width="720" />
 </picture>
-
-Despite its name, **Path or URL** takes a path on the server; a web address
-is not fetched.
 
 The new detector appears on the **Drafts** tab. Each answer in the file names
 the picture it is about, by where it came from and by its MD5 (a fingerprint

@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
+  under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
+  field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
+  now reads **Server path**.
+
 - **Settings is grouped by what you're doing** (issue #5246). The tabs ran alphabetically, and **Appearance**, the
   one Settings opens on, held a dozen unrelated controls whose Scroll Style ran off the bottom of the window. The
   rail now reads **General** (theme, animations, RAM / Disk bars, achievements, Toasty's hints), **Panels** (the
