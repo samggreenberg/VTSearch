@@ -408,6 +408,7 @@ describe('ContextPulldownComponent', () => {
         defaultMediaType: 'image',
         datasetEmbedder: 'siglip',
         datasetEmbedders: ['siglip', 'dinov2_patch'],
+        datasetId: 'd1',
       });
     });
 

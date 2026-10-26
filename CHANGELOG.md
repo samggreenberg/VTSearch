@@ -17,6 +17,45 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Settings is grouped by what you're doing** (issue #5246). The tabs ran alphabetically, and **Appearance**, the
+  one Settings opens on, held a dozen unrelated controls whose Scroll Style ran off the bottom of the window. The
+  rail now reads **General** (theme, animations, RAM / Disk bars, achievements, Toasty's hints), **Panels** (the
+  metadata panel, the Train and Tune side panels, Scroll Style), **Import** (was Import Defaults), **Browse Map**
+  (was Browser), **Training** (Autopilot's numbers, **Enrich descriptions**, and the two that place the line, which
+  were on Sorting) and **AutoFind**, with **HuggingFace** and the read-only **Server** below a divider. Each pane's
+  heading now matches its tab. **Tuning count** is now **Rounds**: it was described as a number of items to check,
+  but it is how many times training holds out part of your votes to place the line (default 2), and it no longer
+  offers 0, which the server never accepted. **Tuning fraction** is now **Held-out fraction**.
+
+- **Multi-Dataset sits under Advanced, with its list** (issue #5230). Add Dataset's **Multi-Dataset** box used to
+  sit above the *Dataset media type* dropdown while the **Datasets to make** list it opened landed at the foot of
+  the form, and the **Advanced ▾** toggle disappeared. The box now heads the Advanced section, and ticking it swaps
+  the single dataset's settings there for the list, each row with its own **Details ▾**; *Build Browse map now*
+  and *Merge near-duplicates* follow below, once for the whole import. With Advanced closed, a **Datasets to make**
+  line in the dropdown's place names the kinds ticked, or says none is (the reason **Import** is greyed out).
+
+- **Autopilot says Done on a detector made from an example** (issue #5229). A media example is a Good label from
+  the moment the detector exists, and Autopilot read any label at the start of a run as "this detector is already
+  trained", so a run that started from one never got Toasty's **Your detector is trained!** under **Dashboard**,
+  nor the hints along the way: the panel went from **Spot Check** to **Keep Improving** without a word. Every
+  Face detector starts this way, since a Face dataset can't search by text. A detector now counts as trained once
+  it holds a Good and a Bad, and the hints count the user's own votes, not the example.
+
+- **New Detector takes its example from the dataset's own items** (issue #5205). The media tab (**Face**,
+  **Image**, …) gains **Pick from Dataset…** beside **Browse …**: it shows the selected dataset's items as a grid,
+  and a click adds one as the example (**+ Pick from Dataset…** under the stack adds another). On a Face dataset,
+  which can't search by text, this was missing: the only way in was a picture of the face brought from outside
+  the app and cropped by hand, since a whole photo is not searched for its faces first.
+
+- **A demo loads as linked photo and face datasets.** Add Dataset › Demo › **Downloaded Media** gains the
+  **Multi-Dataset** box: tick it, then **Face** beside **Image**, and a demo such as Celebrities in Context loads as
+  two datasets of one import, the photos and the faces cut out of them, so a face's **Show in photo** and the
+  **Show: Faces | Photos** switch work as they do for a folder import. Its rows are the kinds a demo can be
+  loaded as (an Image demo: Image, Face, Text). **Face** leaves the single *Dataset media type* dropdown of the
+  other importers, where a Face dataset read no files and failed with *Import produced no medias*: it is
+  offered only under Multi-Dataset now. The user guide has a [Faces](docs/user/USER_GUIDE.md#faces-find-a-person-in-a-set-of-photos)
+  walkthrough.
+
 - **Exported labels no longer carry this server's scores or threshold** (issue #5131). An exported labelset says
   which items are Good and Bad and where each came from, so the labels can rebuild the detector under another
   embedder. A labelset-source push and Export labels (Webhook included) used to send the trained head's threshold
@@ -526,6 +565,13 @@ not list every commit. Use `git log` for the full history.
   indicators are green. What Autopilot picks is unchanged.
 
 ### Added
+
+- **Show in photo in Browse.** On a Face dataset whose import also made an Image dataset, Browse's bin details
+  header gains **Show in photo** for the face shown large, and the Selection panel gains it for a selection of one
+  face. Either opens the same window as in Train: the photo the face was cut from, with the face outlined, over the
+  map. A floating bin details window steps aside while it is open and comes back on **← Back** or Esc. The bin
+  details' large preview now rests on the face last clicked once the pointer leaves the grid, rather than snapping
+  back to the tile's representative, so the button names the face you picked.
 
 - **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
   and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~86 / ~259 MB), taken from the
@@ -1192,6 +1238,26 @@ not list every commit. Use `git log` for the full history.
   OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
+
+- **A Face dataset no longer keeps a face from each copy of a merged photo.** In a Multi-Dataset import with
+  **Image** and **Face** ticked, *Merge near-duplicates* merged two copies of a photo (a resize, a re-save) into
+  one in the Image dataset, but the Face dataset kept the face cut from each copy, so the same face appeared twice.
+  The Face dataset now merges wherever the Image dataset did: the face from the photo the Image dataset kept
+  stays, and exporting it exports the face from every copy, as for the photo. With *Reference files in place* on,
+  a merged item that is cut from a file (a face, a video frame, a tile) also lost the recipe its picture is re-made
+  from, and showed the whole file in its place (the whole photo for a face); it shows its own picture again.
+
+- **A merged archive-member item still plays after its dataset is reopened** (issue #5238). When an
+  **Archive members (no extract)** manifest lists one member twice, the import merges the two items into one.
+  After the dataset was saved and reopened, that item had no bytes to serve, and reopening the dataset in full
+  could drop it. It now still finds the member it came from.
+
+- **A (?) hint's text is no longer cut off at a dialog's edge** (issue #5226). A **(?)** beside a field opens
+  its explanation in a box centred over the icon. Near a dialog's edge (Add Dataset › Demo › Downloaded Media's
+  **Multi-Dataset** box, the file-list hint under Files › Manifest, a Settings section heading) the box ran past
+  the dialog, which hid the part outside it, so much of the text was unreadable. The box now floats above the
+  dialog, slides back inside the window when it would run off an edge, and opens below the icon when there is no
+  room above.
 
 - **Every media type gets its icon in the Dashboard's Type column** (issue #5178). The Datasets and
   Detectors tables drew icons for five built-in types only, so Face rows (and any plugin type) showed

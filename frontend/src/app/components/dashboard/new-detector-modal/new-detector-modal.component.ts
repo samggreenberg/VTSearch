@@ -38,6 +38,7 @@ import {
 import { MediaStateService } from '../../../services/media-state.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import {
+  DatasetRegistryEntry,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
@@ -55,6 +56,7 @@ import {
 } from '../../modals/media-crop-modal/media-crop-modal.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
+import { DatasetExamplePickerComponent } from './dataset-example-picker/dataset-example-picker.component';
 import { PluginImportFormComponent } from '../../plugin-import-form/plugin-import-form.component';
 import {
   DatasourceImportersApiService,
@@ -82,7 +84,7 @@ import type { DefaultLabelsetSource } from '../../../generated/api-client/models
 import { BalanceComponent } from '../../left-panel/balance/balance.component';
 import { DEFAULT_BETA, nearestBalancePreset } from '../../../utils/line-balance';
 
-type ModalView = 'main' | 'media-picker';
+type ModalView = 'main' | 'media-picker' | 'dataset-picker';
 
 /** What the Create button's tooltip and the error line say while an
  *  auto-export field still needs a value. */
@@ -122,7 +124,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent, LabelsetSourceFieldsComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent, LabelsetSourceFieldsComponent, DatasetExamplePickerComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -167,6 +169,10 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Optional crop bounds applied when materialising ``seedMediaId``. */
   readonly seedCropParams = input<Record<string, unknown> | null>(null);
+
+  /** Id of the loaded dataset the form was opened for, whose items the media
+   *  tab offers as examples (#5205). Empty when there is none. */
+  readonly datasetId = input('');
 
   readonly closed = output<void>();
   readonly created = output<string>();
@@ -255,6 +261,22 @@ export class NewDetectorModalComponent implements OnInit {
   // example). Each entry has its own Remove button; the Add button below
   // the stack reopens the picker to append another.
   readonly mediaExamples = signal<MediaExampleItem[]>([]);
+
+  /**
+   * The dataset whose items the media tab offers as examples (#5205): the one
+   * the form was opened for, while it is loaded and holds the detector's media
+   * type. Null otherwise, which hides **Pick from Dataset…**. On a Face
+   * dataset, which can't search by text, this is the only way to start from a
+   * face already in the app rather than a picture brought in from outside.
+   */
+  readonly exampleDataset = computed<DatasetRegistryEntry | null>(() => {
+    const id = this.datasetId();
+    const dataset = id ? this.datasetState.datasetById().get(id) : undefined;
+    return dataset?.loaded && dataset.media_type === this.mediaType() ? dataset : null;
+  });
+  /** True while a picked dataset item is being saved as an example. */
+  readonly datasetPickBusy = signal(false);
+  readonly datasetPickError = signal('');
 
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
@@ -618,6 +640,10 @@ export class NewDetectorModalComponent implements OnInit {
 
   get modalTitle(): string {
     if (this.view() === 'media-picker') return 'Select Media Example';
+    if (this.view() === 'dataset-picker') {
+      const dataset = this.exampleDataset();
+      return dataset ? `Pick an Example from ${dataset.name}` : 'Pick an Example';
+    }
     return 'New Detector';
   }
 
@@ -876,6 +902,42 @@ export class NewDetectorModalComponent implements OnInit {
   get exampleMediaTabLabel(): string {
     const mediaType = this.mediaType();
     return (mediaType ? this.getMediaTypeLabel(mediaType) : '') || 'Media';
+  }
+
+  // --- Dataset picker: an item of the dataset in context (#5205) ---
+
+  /** Tooltip of **Pick from Dataset…**, naming the dataset and its size. */
+  get pickFromDatasetTitle(): string {
+    const dataset = this.exampleDataset();
+    if (!dataset) return '';
+    const count = dataset.num_items ? `${dataset.num_items.toLocaleString()} ` : '';
+    return `Pick one of the ${count}items in ${dataset.name} as the example`;
+  }
+
+  openDatasetPicker(): void {
+    this.datasetPickError.set('');
+    this.view.set('dataset-picker');
+  }
+
+  /** Save the picked item of {@link exampleDataset} to example_media/, as
+   *  Use as detector seed does, and add it to the stack. One pick at a time:
+   *  a second click while the first is saving would add the item twice. */
+  onDatasetItemPicked(mediaId: number): void {
+    const dataset = this.exampleDataset();
+    if (!dataset || this.datasetPickBusy()) return;
+    this.datasetPickBusy.set(true);
+    this.datasetPickError.set('');
+    this.sortingApi.saveServerMediaFromMediaId({ media_id: mediaId }, dataset.id).subscribe({
+      next: (res) => {
+        this.datasetPickBusy.set(false);
+        this.addMediaExample(res.filename, res.original_name || res.filename, dataset.media_type);
+        this.view.set('main');
+      },
+      error: (err) => {
+        this.datasetPickBusy.set(false);
+        this.datasetPickError.set(apiErrorMessage(err, 'Could not use that item as the example'));
+      },
+    });
   }
 
   // --- Media picker (shared structure with Add Dataset) ---

@@ -395,6 +395,7 @@ purposes, and leaving both in inflates the dataset and wastes votes.
 | `phash_image(thumbnail_bytes)` | 64-bit DCT perceptual hash, or `None` for missing / undecodable bytes |
 | `simhash_text(text)` | 64-bit SimHash over word 4-shingles, or `None` for empty text |
 | `collapse_near_duplicates(media_dict, on_progress=None)` | Group by Hamming distance and collapse each group; returns the group count |
+| `follow_source_merges(media_dict, source_medias)` | Collapse converter outputs (faces) whose sources (photos) were merged in *source_medias*; returns the group count |
 
 Only `image` and `text` media are considered; every other type is left
 untouched, and any item whose hash comes back `None` is simply left
@@ -406,6 +407,19 @@ This runs *after* the exact-MD5 pass, so some group members are already
 group rather than nested. The representative keeps a `dupe_set` origin
 listing every member's provenance, exactly as in the exact case. It is
 opt-in per dataset via `DatasetContext.merge_near_duplicates`.
+
+Converter outputs are not hashed; they follow their sources.
+`follow_source_merges` resolves each output to the item it was cut from in
+the source dataset (`vtscore.datasets.source_item.SourceResolver`, which
+finds a merged copy through its representative's members). Under one
+source item, it folds the outputs of different copies that are the same
+output of each: matched by `source_box` overlap (IoU 0.5) where the
+converter records a place, else by output index. The output cut from the
+copy the source dataset kept leads its group, and an output with no
+counterpart stays. A multi-dataset import runs it on every output whose
+converter rows read another output (a Face dataset reads the Image
+dataset), after that output is saved and whether or not near-duplicate
+merging was asked for, so the two agree on exact duplicates too.
 
 ---
 

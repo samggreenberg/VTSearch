@@ -27,6 +27,11 @@ Detector** dialog:
   <img src="../assets/example-image-tab.light.webp" alt="Step 1: in New Detector, (1) the Image tab, (2) the box to drop a picture on, (3) Browse Images…" width="720" />
 </picture>
 
+To start from one of the dataset's own pictures instead, click **Pick from
+Dataset…**, beside **Browse Images…**. It shows the pictures of the dataset you
+ticked as a grid; click one and it is added, with no crop step. It is there
+while that dataset is loaded.
+
 ## Step 2: Confirm the picture
 
 VTSearch shows the picture and asks **Use This Example?**
@@ -60,7 +65,8 @@ around it.
 
 Only the first example can come from your own computer. **+ Add** offers the
 other places: a file on the server, an address on the web, or a file inside a
-demo dataset.
+demo dataset. **+ Pick from Dataset…** adds another of the dataset's own
+pictures.
 
 A detector starts from words *or* from pictures, not both: typing a
 description on the **Text** tab clears the pictures, and adding a picture
@@ -76,8 +82,9 @@ picture resembles your examples, and each example already counts as a
 
 ## Or: start from a picture already in the dataset
 
-While training any detector, you can turn a picture you are looking at into
-the seed of a new one:
+**Pick from Dataset…** (Step 1) takes one from the dataset's pictures. While
+training any detector, you can also turn a picture you are looking at into the
+seed of a new one:
 
 1. In the labeling view, click the **Manual** tab on the left.
 2. Right-click a picture in the list.

@@ -473,13 +473,19 @@ embedder's space, so switching later means analyzing the dataset again.
 The rest of the Advanced section, and one toggle on the importer's own
 form:
 
+- **Multi-Dataset** - first in the section, on importers that can make
+  several datasets from one import: one per kind of media you tick, in place
+  of the single dataset's settings below. See
+  [Multi-Dataset import](#multi-dataset-import-several-datasets-from-one-folder).
 - **Include media** - which source media types feed the dataset. The
   dataset's own type is included directly; other types are pulled in and
   converted (images out of videos, pages out of documents).
 - **Convert to** - on the **Demo** importer, whose dataset is fixed:
   which type to convert the demo's media into on load (scanned documents
   into page images, say). The equivalent choice on the other importers is
-  *Include media* above.
+  *Include media* above. To keep the demo's own media too, linked to what is
+  converted from it, use [Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder)
+  instead.
 - **Clipper** - a pre-processing pass applied before each item is
   analyzed, e.g. cutting long audio into shorter segments. On most importers
   it is the **Details ▸** button beside each media type under *Include
@@ -523,37 +529,87 @@ datasets of the same type reuse the downloaded model.
 
 A folder (or archive) often holds more than one kind of media: photos, the
 PDFs that go with them, a few recordings. Each kind needs its own dataset,
-and importing the folder once per kind means reading it once per kind. Tick
-**Multi-Dataset**, the box above the *Dataset media type* dropdown on the
+and importing the folder once per kind means reading it once per kind. Open
+**Advanced ▾** and tick **Multi-Dataset**, the first box in the section, on the
 **Folder** and **Manifest** importers (and on any Services importer that lists
-a media type), and the dropdown gives way
-to a **Datasets to make** list: one row per kind of media, each a dataset of
-its own. The folder is read once; every ticked row becomes a dataset named
-after the import and the kind (`holiday – Image`, `holiday – Document`), with
-its own row on the Dashboard while it loads, its own **Cancel**, and its own
-AutoFind run.
+a media type). The single dataset's settings give way to a **Datasets to
+make** list: one row per kind of media, each a dataset of its own. The folder
+is read once; every ticked row becomes a dataset named after the import and
+the kind (`holiday – Image`, `holiday – Document`), with its own row on the
+Dashboard while it loads, its own **Cancel**, and its own AutoFind run.
 
 - Rows are pre-ticked from what the folder scan finds; tick or untick as you
   like. **Document** makes an image dataset of the rendered pages (or, under
   its **Details ▾**, extracted text); **Face** makes a dataset of the faces
-  cropped out of the images, so it has no files of its own to find.
-- Each ticked row's **Details ▾** opens that dataset's own Advanced settings
-  (*Include media*, embedders, clipper, cleanup), in place of the dialog's
-  single **Advanced ▾** toggle. *Build Browse map now* and *Merge
-  near-duplicates* apply to every dataset of the import and sit once, under
-  the list.
+  cropped out of the images, so it has no files of its own to find. This list
+  is the only place Face is offered: the *Dataset media type* dropdown leaves
+  it out, because a Face dataset made on its own could not show the photo any
+  of its faces came from.
+- Each ticked row's **Details ▾** opens that dataset's own settings
+  (*Include media*, embedders, clipper, cleanup). *Build Browse map now* and
+  *Merge near-duplicates* apply to every dataset of the import and sit once,
+  under the list. The **Face** dataset merges with the **Image** dataset: when
+  two copies of a photo are merged into one, their faces are too, so a face
+  appears once rather than once per copy, cut from the photo the Image dataset
+  kept.
+- The *Dataset media type* dropdown gives way to a **Datasets to make** line
+  naming the ticked kinds, so what the import will make stays in sight with
+  **Advanced** closed (and an **Import** button greyed out for want of a ticked
+  row says why).
 - **Dataset name** becomes the shared base name; leave it blank for the
   folder's name.
 
 Cancelling one row while the folder is still being read stops that dataset
-alone; the others carry on. The **Downloaded Media** importer has no
-Multi-Dataset box: a demo is one dataset of one kind.
+alone; the others carry on.
+
+**Demos.** The **Downloaded Media** catalogue has the box too, under its
+**Advanced ▾**. Its media-type dropdown stays, with the **Datasets to make**
+line beneath it: there the dropdown picks which demos are listed. Its
+rows are the kinds the demo can be loaded as, its own and each it converts
+into, so an Image demo offers **Image**, **Face** and **Text**. Every row reads
+the demo's own files, so the datasets are linked just as a folder's are. A
+row's **Details ▾** has its embedder, clipper and cleanup; a conversion runs
+with its default settings.
+
+### Faces: find a person in a set of photos
+
+VTSearch can search the faces in photos rather than the photos themselves: it
+finds each face, cuts it out, and compares faces by who they are rather than
+by how the picture looks. A Face dataset is always made beside the photos it
+is cut from, so that every face can show you its photo.
+
+1. Click **+** on the **Datasets** card, then **Demo** and **Downloaded
+   Media**, and pick **Image** in the media-type dropdown.
+2. Click **Advanced ▾**, tick **Multi-Dataset**, then tick **Face** beside
+   the ticked **Image**.
+3. Pick **Celebrities in Context (S)**, 1,200 event photos of 60 well-known
+   people, and click **Import**. Two datasets load side by side,
+   `Celebrities in Context (S) – Image` and `Celebrities in Context (S) – Face`.
+   For photos of your own, use **Files** › **Folder** instead, with the same
+   two rows ticked.
+4. With the Face dataset selected, click **Train**. A face can't be
+   described in words, so **New Detector** asks for an example on its
+   **Face** tab: click **Pick from Dataset…**, click one of the person's
+   faces in the grid of the dataset's faces, and click **Create**. (A
+   picture of the face from your own computer works too, dropped on the box
+   below; crop it to the face, since an uncropped photo is not searched for
+   faces first.) Then vote as usual; every vote goes on a face, never a
+   photo.
+5. To see the whole photos, rank the faces (in Train's **Manual** tab,
+   **Sort: Learned**; or Tune's **Review** tab) and switch **Show: Faces |
+   Photos** to **Photos**: every photo with a matching face, the face
+   outlined. **Show in photo** under a face opens its photo.
 
 **Show in photo.** When an import made both a Face and an Image dataset, a
 face in Train or Tune is one click from the photo it was cut out of. Click
-**Show in photo** under the face, or, in Train, right-click it in the list. The photo
-opens over the ranking with the face outlined, and **← Back** (or Esc) returns
-you to the face you were on, with the ranking as you left it. If the Image
+**Show in photo** under the face, or, in Train, right-click it in the list. In
+[Browse](#browse-exploring-a-dataset-spatially) the button sits in the bin
+details header, for the face shown large, and in the Selection panel, for a
+selection of one face. The photo
+opens over the ranking with the face outlined, under the main viewer's rotate,
+zoom and reset controls (its keys work too: `+` / `-` zoom, `[` / `]` rotate).
+**← Back** (or Esc) returns you to the face you were on, with the ranking as
+you left it. If the Image
 dataset isn't loaded, the window offers to load it first. A face whose photo
 isn't in the Image dataset (you left that image out, say) has no button.
 
@@ -737,7 +793,7 @@ only (Manual and Review are driven from its list); the right one folds on
 every tab. Click a strip, or drag its divider out, to open the panel, and the
 small ◀ / ▶ at the top of an open panel folds it again. Each side remembers
 your choice; **Hide left panel in Train and Tune** and **Hide right panel in
-Train and Tune**, in the Settings modal's Appearance tab, set it too. A test
+Train and Tune**, in the Settings modal's **Panels** tab, set it too. A test
 that reaches **Done!** opens its result panel on its own.
 
 ---
@@ -879,8 +935,8 @@ full phase list, and its ◀ collapses it again.
 
 ### Configuring Autopilot
 
-Most people never touch these, but the **Autopilot** tab in the Settings
-modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes:
+Most people never touch these, but the **Training** tab in the Settings
+modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes, under **Autopilot**:
 
 - **# Good to start** - how many good votes phase 1 requires (default 3).
 - **# Bad to start** - how many bad votes phase 2 requires (default 4).
@@ -1254,7 +1310,10 @@ It has two tabs:
   quickest way to supply the first one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
   click it to browse; it asks **Use This Example?** and offers to crop it
-  first. For anything else, the **Browse Images…** button
+  first. To take an item the dataset already holds, **Pick from Dataset…**
+  shows the selected dataset's items as a grid; click one to add it. It is
+  there while that dataset is loaded and of the detector's media type. For
+  anything else, the **Browse Images…** button
   (it's named for the dataset's media type) opens a picker with the same
   two-row tab bar as the Add Dataset dialog, offering three sources out of
   the box: **Downloaded Media** (the path of a file inside a downloaded demo
@@ -1262,7 +1321,8 @@ It has two tabs:
   **URL** (VTSearch downloads the file for you); plugins can add more.
   Picked examples stack vertically, each with its own **Remove**
   button; use **+ Add** below the stack to append another (from the picker's
-  sources; only the first example can come from your own computer). An
+  sources; only the first example can come from your own computer), or
+  **+ Pick from Dataset…** for another of the dataset's items. An
   example picture also names the detector after its file until you type a
   name. With several
   examples, Autopilot's first sort ranks the dataset against their
@@ -1587,7 +1647,7 @@ Settings modal's **Server** tab. Once set:
   in Find Results and in the metadata panes, the Dashboard's **Type**
   columns, the type rows in the Stats windows and the combine dialogs, the
   type tags in the top-bar pulldowns, and the per-type tab bars under
-  Settings' Scroll Style and Browser. A dataset or detector of another
+  Settings' Scroll Style and Browse Map. A dataset or detector of another
   type, kept from before the restriction, still shows its type, and brings
   its table's Type column back.
 - The chosen type's default embedder is warmed at startup so the
@@ -1603,31 +1663,29 @@ per-user override.
 ## Settings tabs
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.webp" />
-  <img src="assets/settings-appearance.light.webp" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-general.dark.webp" />
+  <img src="assets/settings-general.light.webp" alt="The Settings, General pane: the tab rail, theme picker, animation and usage-bar pulldowns, and Toasty's hints" width="720" />
 </picture>
 
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
-eight tabs:
+eight tabs. The first six are your preferences, in the order you meet the
+work; below a divider, **HuggingFace** and **Server** are an account and the
+server's own values:
 
-- **Appearance** - theme, animations, the Dashboard's **RAM / Disk
+- **General** - theme, animations, the Dashboard's **RAM / Disk
   bars** (**Default** shows each one only when its free space is getting
   low, meaning it would hold fewer than three more datasets the size of your
-  largest; **View** and **Hide** show them always or never), the metadata
-  panel, the **Hide left panel** / **Hide right panel in Train and Tune**
-  toggles, the **Enable achievements** toggle, **Hide All** / **Show All** for
-  [Toasty's hints](#toastys-hints), and per-media-type Scroll Style (focus
-  mode and thumbnail size).
-- **AutoFind** - what exporter to send AutoFind results to, whether to
-  send them (untick **Export results when AutoFind finishes** to pause the
-  exporter without losing its settings), and whether
-  a command-line run deletes the dataset it imported once AutoFind has run
-  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
-  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
-  [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
-- **Autopilot** - the guided-workflow knobs described under
-  [Configuring Autopilot](#configuring-autopilot).
-- **Browser** - per-media-type look of the spatial Browse view
+  largest; **View** and **Hide** show them always or never), the **Enable
+  achievements** toggle, and **Hide All** / **Show All** for
+  [Toasty's hints](#toastys-hints).
+- **Panels** - the metadata panel, the **Hide left panel** / **Hide right
+  panel in Train and Tune** toggles, and per-media-type Scroll Style (focus
+  mode and thumbnail size for each side of Train, Tune and Find).
+- **Import** - default embedder, clipper, and converters per
+  media type. On a server set up to tell you when an import finishes
+  (often by email), **Alert me when an import finishes** is here too:
+  untick it to ask the server not to.
+- **Browse Map** - per-media-type look of the spatial Browse view
   (signposts, signpost text, colormap, cell size, thumbnail border,
   popup thumbnail size, mouse-zooms per level; the tile shape is chosen
   automatically from the media type — squares for browsable thumbnails,
@@ -1639,16 +1697,25 @@ eight tabs:
   map still feels laggy - every animation keeps playing, but the costly
   effects (image smoothing during motion, drop shadows) are dropped.
   **Full** always uses the richest animations.
+- **Training** - the knobs most people never touch: Autopilot's thresholds
+  (see [Configuring Autopilot](#configuring-autopilot)), **Enrich
+  descriptions** for text sorting, and how training places
+  [the line](#3-threshold): **Rounds** is how many times it holds out part of
+  your votes, trains on the rest and scores the held-out ones (default 2;
+  more rounds give a steadier line and take longer), and **Held-out
+  fraction** is the share held out each round (empty picks per model).
+- **AutoFind** - what exporter to send AutoFind results to, whether to
+  send them (untick **Export results when AutoFind finishes** to pause the
+  exporter without losing its settings), and whether
+  a command-line run deletes the dataset it imported once AutoFind has run
+  (see [Run your detectors from the command line](howto/autofind-from-the-command-line.md)).
+  (Which detectors run is chosen on the Dashboard's **AutoFind** tab; see
+  [Running AutoFind on a new dataset](#running-autofind-on-a-new-dataset).)
 - **HuggingFace** - sign in with HuggingFace to download gated demo
   datasets and gated AI models.
-- **Import Defaults** - default embedder, clipper, and converters per
-  media type. On a server set up to tell you when an import finishes
-  (often by email), **Alert me when an import finishes** is here too:
-  untick it to ask the server not to.
 - **Server** - read-only settings fixed when the server started and
   shared by everyone, including the **Solo media type** and **Autopilot
   only** restrictions.
-- **Sorting** - options that control how the trained ranking behaves.
 
 Settings save as you change them. The buttons at the bottom of the window
 export them to a file, import them again, or put everything back to
@@ -1808,7 +1875,7 @@ away.
 
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
-**Settings → Appearance → Toasty's hints** has **Hide All** and **Show All**,
+**Settings → General → Toasty's hints** has **Hide All** and **Show All**,
 which brings back every hint, including ones you hid one at a time. Toasty
 also turns up on the notifications at the top of the screen: happy on good
 news, surprised on a warning, sad on an error.
@@ -1885,7 +1952,7 @@ moment after it appears; if the naming settings change, VTSearch re-runs
 the naming in the background the next time you browse rather than making
 you rebuild.
 
-Settings → **Browser** controls them per media type:
+Settings → **Browse Map** controls them per media type:
 
 - **Signposts** - show or hide the lettering (the same thing the canvas
   toggle does, but remembered as your default).
@@ -1937,7 +2004,13 @@ of the map:
   own thumbnail smaller/larger buttons size the grid independently of the
   map.
 - A **large preview** of the item you're pointing at in that grid (a
-  waveform that plays for audio), with its own size buttons.
+  waveform that plays for audio), with its own size buttons. When the pointer
+  leaves the grid, it rests on the item you last clicked, else the tile's
+  representative.
+- On faces cut from photos, a **Show in photo** button in the header, which
+  opens the photo the face in the large preview was cut from, with the face
+  outlined (see [Faces](#faces-find-a-person-in-a-set-of-photos)). Click a face in
+  the grid, then the button.
 - An optional **metadata column** - name, media type, MD5, and whatever
   custom fields the dataset carries - toggled by the ⓘ button. Each value
   has a copy button next to it.
@@ -1958,7 +2031,9 @@ Click a tile to add its items to the **Selection** panel on the right, and
 click it again to take them out; dragging a region adds every tile inside it.
 The panel lists what you've picked - sortable by recency, name, or ID - and
 clicking any entry drops it from the selection. The checkbox at the top of
-the panel selects everything in view, or clears the whole selection. This is
+the panel selects everything in view, or clears the whole selection. On faces
+cut from photos, the panel's **Show in photo** opens the photo of the one face
+selected; with more than one selected it is greyed out. This is
 how you carve a region of interest out of a large collection by eye; on a
 whole dataset the selection is for looking, and is gone when you leave
 Browse.
@@ -2117,7 +2192,7 @@ Two ways to bring in existing work:
 ## Achievements
 
 VTSearch has an optional light gamification layer. When **Enable
-achievements** is on (Settings → Appearance; it is on unless you turn it off), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.webp" /><img src="assets/icon-achievements.light.webp" alt="The Achievements (trophy) button" height="24" /></picture>
+achievements** is on (Settings → General; it is on unless you turn it off), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.webp" /><img src="assets/icon-achievements.light.webp" alt="The Achievements (trophy) button" height="24" /></picture>
 appears in the top bar; click it to open the **Achievements** panel, which lists the
 achievements and your tier progress on each.
 

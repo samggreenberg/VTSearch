@@ -37,15 +37,17 @@ from matplotlib.patches import Circle, FancyArrowPatch, Polygon  # noqa: E402
 import numpy as np  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, INK, SOFT, save  # noqa: E402
+from slide_figure import BOUNDARY_DOTS, CUT_WASH, FULL_BLEED, INK, SOFT, save  # noqa: E402
 
 SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 
-#: Head Start's palette (`make-head-start-figs.py`): blue the detector's line, ghost a line as it was,
-#: green the Good side, red the Bad side.
-BLUE = "#0b5fa5"
-BAND = "#dce7f2"
+#: Head Start's palette (`make-head-start-figs.py`): the detector's line in round black dots over a
+#: neutral wash, as a plane draws a threshold (#5206); ghost a line as it was; green the Good side,
+#: red the Bad side.
+BAND = CUT_WASH
+#: Both panels' lines, the ghost and the detector's: one weight, so they compare as lines.
+LINE_LW = 4.0
 GHOST = "#aab3c0"
 GHOST_BAND = "#eef0f3"
 RED = "#b91c1c"
@@ -240,7 +242,7 @@ def _many_words(stage: int) -> Figure:
         u, c = BEFORE
         left.add_patch(Polygon(_kept_side(u, c), closed=True, facecolor=GHOST_BAND, edgecolor="none", zorder=0))
         a, b = _clip_line(u, c)
-        left.plot([a[0], b[0]], [a[1], b[1]], color=GHOST, lw=4.0, ls=(0, (6, 3)), zorder=2)
+        left.plot([a[0], b[0]], [a[1], b[1]], color=GHOST, lw=LINE_LW, ls=(0, (6, 3)), zorder=2)
         g = GOODS.mean(0)
         _mean_mark(left, g)
         _arrow(left, MIDDLE, g, SOFT)
@@ -250,7 +252,9 @@ def _many_words(stage: int) -> Figure:
         u, c = AFTER
         right.add_patch(Polygon(_kept_side(u, c), closed=True, facecolor=BAND, edgecolor="none", zorder=0))
         a, b = _clip_line(u, c)
-        right.plot([a[0], b[0]], [a[1], b[1]], color=BLUE, lw=4.0, zorder=2)
+        # At the ghost's weight, so neither panel's line outweighs the other's.
+        right.plot([a[0], b[0]], [a[1], b[1]], color=INK, lw=LINE_LW, ls=BOUNDARY_DOTS, dash_capstyle="round",
+                   zorder=2)  # fmt: skip
         _mean_mark(right, GOODS.mean(0))
         _arrow(right, MIDDLE, GOODS.mean(0), SOFT)
         _words(right)

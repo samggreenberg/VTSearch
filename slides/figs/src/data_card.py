@@ -42,12 +42,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
-from matplotlib import font_manager
-from slide_figure import INK, SOFT, TITLE_NOTCH_PX
-
-
-def _installed(face: str) -> bool:
-    return any(f.name == face for f in font_manager.fontManager.ttflist)
+from matplotlib.font_manager import FontProperties
+from slide_figure import DECK_SANS_BOLD, INK, SOFT, TITLE_NOTCH_PX
 
 
 FIG_W, FIG_H = 12.8, 7.2
@@ -75,18 +71,17 @@ DATA_SET_NOTCH_PX = (_nx, _ny, _nw, 80.0)
 
 #: The dataset's name, set as the slide's subtitle. The face, weight and size
 #: are the theme's `section.full h2` (`themes/vtsearch.css`): 40px, weight 600
-#: of the deck's sans stack — at the card's 100 dpi a pixel is 0.72pt, and
-#: matplotlib has no 600, so bold is the nearest it can draw. The first face of
-#: the stack that is installed is the one used, as a browser would. The
-#: baseline is 20px lower than the one that put the cap height just under
+#: of the deck's own face, the Liberation Sans committed under `themes/fonts/`
+#: (`slide_figure.DECK_SANS_BOLD`) — at the card's 100 dpi a pixel is 0.72pt,
+#: and the theme's 600 is the bold file, as the browser draws it too. It is
+#: named by file: picking the first installed face of a stack, as this once
+#: did, set the name in Liberation Sans where a container had it and in DejaVu
+#: Sans on the GRID (#5203). The baseline is 20px lower than the one that put the cap height just under
 #: `DATA_SET_NOTCH_PX` (#4443): set flush under the headline in the same face,
 #: the name read as the headline's second line — "Data, Set Caltech-101" —
 #: rather than as the line under it that names which set this is.
-NAME_FAMILY = next(
-    (face for face in ("Helvetica Neue", "Helvetica", "Arial", "Liberation Sans") if _installed(face)),
-    "DejaVu Sans",
-)
 NAME_PT = 40 * 0.72
+NAME_FONT = FontProperties(fname=DECK_SANS_BOLD, size=NAME_PT)
 NAME_BASELINE = 1.0 - 176 / 720
 NAME_LEADING = 44.8 / 720
 #: Where the counts start, whatever the name does above them: the column below
@@ -181,7 +176,7 @@ def fit_tile(image: Any, aspect: float = 4 / 3) -> tuple[Any, tuple[int, int]]:
 
 
 def _name_width(fig: plt.Figure, text: str) -> float:
-    probe = fig.text(0, 0, text, fontsize=NAME_PT, fontweight="bold", family=NAME_FAMILY)
+    probe = fig.text(0, 0, text, fontproperties=NAME_FONT)
     width = probe.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
     probe.remove()
     return width
@@ -215,10 +210,8 @@ def left_column(fig: plt.Figure, name: str, stats: list[tuple[str, str]], url: s
             LEFT_X,
             NAME_BASELINE - i * NAME_LEADING,
             line,
-            fontsize=NAME_PT,
+            fontproperties=NAME_FONT,
             color=INK,
-            fontweight="bold",
-            family=NAME_FAMILY,
             va="baseline",
         )
     y = STATS_TOP

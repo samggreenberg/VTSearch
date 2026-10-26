@@ -5,7 +5,7 @@
   [style.left.px]="docked() ? null : left"
   [style.top.px]="docked() ? null : top"
   [style.maxWidth.px]="docked() ? null : maxWidthPx"
-  [style.visibility]="docked() ? null : placed ? 'visible' : 'hidden'"
+  [style.visibility]="docked() ? null : placed && !hiddenBehindDialog ? 'visible' : 'hidden'"
   [attr.role]="docked() ? 'complementary' : 'dialog'"
   aria-label="Bin items">
   <div
@@ -50,6 +50,16 @@
          pop-out control (close on the far right). Docked, this puts the metadata
          toggle immediately left of the pop-out button. -->
     <div class="bin-popup-header-end">
+      @if (showInPhotoOffered()) {
+        <button
+          type="button"
+          class="btn btn--toolbar bin-popup-photo-btn"
+          [disabled]="displayedId == null"
+          (click)="openSourcePhoto()"
+          title="Open the photo the item shown large was cut from, with the item outlined">
+          Show in photo
+        </button>
+      }
       @if (canToggleMetadata) {
         <button
           type="button"

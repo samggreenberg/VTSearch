@@ -1768,6 +1768,22 @@ describe('DashboardComponent', () => {
       expect(component.newDetectorModalOpen).toBe(true);
       expect(component.trainAfterModelCreation).toBe(true);
     });
+
+    // The modal offers that dataset's items as examples: a Face dataset can't
+    // start a detector from text (#5205).
+    it('hands the new-detector modal the selected dataset', () => {
+      const datasets = [{ id: 'd1', name: 'Faces', media_type: 'face', embedder: 'face', loaded: true }];
+      flushInitialRequests(datasets, []);
+      selection.clear('detector');
+
+      component.onLabel();
+
+      expect(TestBed.inject(NewThingFlowsService).newDetector).toMatchObject({
+        open: true,
+        defaultMediaType: 'face',
+        datasetId: 'd1',
+      });
+    });
   });
 
   describe('onFind (the Tune button, #5098)', () => {

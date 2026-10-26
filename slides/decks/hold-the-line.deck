@@ -194,7 +194,7 @@ slides:
   # of signs (`shoot-ui-figs.mjs`'s `browse` group, `make-signpost-figs.py`).
   outline-hold-the-line +at7
   vision-umap
-  # Lost & Found again, Find's 19 as a list and then as a map, so the room
+  # Lost & Found again, Find's 24 as a list and then as a map, so the room
   # knows what it is about to look at (owner, #5171): one slide shown twice,
   # 6c and 6d here.
   vision-find
@@ -218,9 +218,9 @@ slides:
   data-set-coco-better
   # Up and Up: what the F-beta era bought at beta 1/4, the old mechanics
   # against the new (#4668, owner #5171): cross-calibration in red, today's app
-  # re-run on the same sessions (#4835) in green, then the text query's sort at
-  # an oracle's cut, unfair against us; then the same chart at beta 1 and 4, all
-  # frames of one slide (owner, #4884).
+  # re-run on the same sessions (#4835) in green; then the same chart at beta 1
+  # and 4, all frames of one slide (owner, #4884). The text query's sort at an
+  # oracle's cut was drawn too, until the owner cut it (#5203).
   up-and-up
   # Follow Suit, what the work since the first rule bought (#4548), is in the
   # appendix after Conclusion: only β ¼ pulls away from cross-calibration, so
@@ -279,6 +279,8 @@ slides:
   # How the app does on the region path today: the State of the App review
   # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
   sota-regions
+  # Photo Finish's final frame again, on the same axes, to compare with Patch Notes (owner, #5203).
+  sota-photos-replay
 
   # XI — Conversion: everything that is not a photo. The
   # deck had shown two of the app's six media types; this is the other four and

@@ -1386,6 +1386,15 @@ def _number_or_off(name: str) -> "float | str | None":
 
 HEAD_COUNT_RECALL_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_RECALL_EXPONENT")
 HEAD_COUNT_RECALL_Z = _number_or_off("CALIB_HEAD_COUNT_RECALL_Z")
+#: Issue #5084's head's count multiplier at a balance of 1 and below: ``CALIB_HEAD_COUNT_PRECISION_SCALE`` times
+#: ``beta ** CALIB_HEAD_COUNT_PRECISION_EXPONENT`` what stands out
+#: (``vtscore.eval.live_threshold_rules.head_count_precision``).  Unset is the app's; ``off`` is #4603's piece
+#: (scale 1, exponent 0.708).
+HEAD_COUNT_PRECISION_SCALE = _number_or_off("CALIB_HEAD_COUNT_PRECISION_SCALE")
+HEAD_COUNT_PRECISION_EXPONENT = _number_or_off("CALIB_HEAD_COUNT_PRECISION_EXPONENT")
+#: Issue #5215's gate on it: a head whose top logit stands fewer than ``CALIB_HEAD_COUNT_PRECISION_TOP_Z`` bulk
+#: spreads up keeps #4603's count.  Unset is the app's; ``off`` never gates.
+HEAD_COUNT_PRECISION_TOP_Z = _number_or_off("CALIB_HEAD_COUNT_PRECISION_TOP_Z")
 
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the

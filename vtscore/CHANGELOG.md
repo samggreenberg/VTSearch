@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The head's count line keeps 0.71·β times what stands out at a balance of 1 and below, not β^0.708** (issue
+  #5084). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods, `head_count_cut` now keeps
+  `HEAD_COUNT_PRECISION_SCALE * beta ** HEAD_COUNT_PRECISION_EXPONENT` (new constants in
+  `vtscore.training.thresholds.labels_line`, 0.71 and 1) times the larger of #4603's count and the top's widest
+  drop, never fewer than that drop: 0.18x at beta 1/4 (was 0.375x) and 0.71x at beta 1 (was 1x). Beta above 1 is
+  unchanged. A weak head's bulk is heavier than a Gaussian above 3 spreads, so the count read its tail as
+  positives. Measured (`docs/experiments/2026-10-24-head-bulk-5084/`): offline F-beta +0.007 to +0.084 on Region
+  Photo at every prevalence, +0.007 to +0.037 on Binary Photo at 0.44% and 0.1% and -0.014 / -0.004 at 1%, faces
+  within 0.008; closed loop, Find's mean F-beta over clicks 0-50 +0.0093 / +0.021 on Region Photo (beta 1 / 1/4)
+  and +0.0030 / +0.0014 on Binary Photo. Both constants at `None` (or
+  `vtscore.eval.live_threshold_rules.head_count_precision("off", "off")`) restore the old count.
 - **Domain shift is a split-conformal kNN against the reference dataset's vectors, not the Coverage Atlas's
   typicality** (issue #3348). The new `vtscore.coverage.domain_shift.domain_shift_report(reference, matrix,
   alpha=0.05)` (also exported as `vtscore.coverage.domain_shift_report`) splits the reference in half by a fixed
@@ -517,6 +528,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   module constant (2,000,000). Additive.
 
 ### Added
+
+- **`vtscore.media.near_dupes.follow_source_merges(media_dict, source_medias)`**: collapses converter outputs
+  whose sources were merged in *source_medias*, so a Face dataset merges wherever the Image dataset beside it
+  merged the photos its faces were cut from. Outputs of different copies fold when they are the same output of
+  each (`source_box` overlap, else output index); the one cut from the kept copy leads its `dupe_set`. A
+  multi-dataset load (`vtscore.datasets.load_multi`) now finalizes every output whose converter rows read another
+  output after that output, and runs this on it. Additive.
 
 - **`DatasetImported.notify`** (issue #5170): whether the user who started the import wants to be alerted about it,
   `True` by default. The app sets it from the user's `import_alerts_enabled` setting before calling the
@@ -2280,6 +2298,19 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A `dupe_set` representative replays its own lazy recipe.** `vtscore.media.lazy_clip` read the recipe of a
+  reference-mode clip or converter output from `origin.params`, which a duplicate collapse replaces with the
+  group's, so a merged item had no recipe and the resolvers served its whole source file instead (the photo a face
+  was cut from). It now reads the representative's own origin, the group's first member.
+
+- **A merged archive-member item keeps its archive pointer across a reload** (issue #5238).
+  `vtscore.datasets.archive_stream.archive_member_ref` found a `local_archive_member` item's shard and member in
+  the top-level `archive_member` field, which the dataset pickle does not save, or in `origin.params`, which a
+  duplicate collapse replaces with a `dupe_set` origin. A merged item reopened from disk had neither, so it
+  served no bytes and a full-mode reload dropped it. A `dupe_set` representative now reads through to its own
+  origin, which every collapse records as the group's first member. The importer keys `md5` on
+  `archive::member`, so the merge happens when a manifest lists one member (or one window) twice.
 
 - **A Good's `region_box` survives the CSV labelset round trip** (issue #5130). The `server_csv_file`
   label importer ignored a `region_box` column, so a boxed Good came back image-level. The exporter now writes

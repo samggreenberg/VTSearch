@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { CoverageAtlasNextResponse } from '../generated/api-client/models/coverage-atlas-next-response';
 import type { EvalTrainAndScoreCancelResponse } from '../generated/api-client/models/eval-train-and-score-cancel-response';
@@ -289,14 +290,23 @@ export class SortingApiService {
   }
 
   /** Save a loaded media's bytes to example_media/ so the new-detector
-   *  flow can reference it via ``media_example``. */
-  saveServerMediaFromMediaId(params: {
-    media_id: number;
-    crop_params?: Record<string, unknown>;
-  }): Observable<ServerMediaUploadResponse> {
-    return serverMediaFileFromMediaId(this.http, this.config.rootUrl, {
-      body: params,
-    }).pipe(map((r) => r.body));
+   *  flow can reference it via ``media_example``. ``datasetId`` reads the
+   *  media out of that dataset instead of the active one, with no detector
+   *  (`DATASET_OVERRIDE`): New Detector's dataset picker (#5205). */
+  saveServerMediaFromMediaId(
+    params: {
+      media_id: number;
+      crop_params?: Record<string, unknown>;
+    },
+    datasetId?: string,
+  ): Observable<ServerMediaUploadResponse> {
+    const context = datasetId ? new HttpContext().set(DATASET_OVERRIDE, datasetId) : undefined;
+    return serverMediaFileFromMediaId(
+      this.http,
+      this.config.rootUrl,
+      { body: params },
+      context,
+    ).pipe(map((r) => r.body));
   }
 
   /** Multipart upload; see {@link exampleSort}. */

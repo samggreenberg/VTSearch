@@ -2,6 +2,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject
 
 import { FormsModule } from '@angular/forms';
 
+import { FieldHintIconComponent } from '../../../field-hint-icon/field-hint-icon.component';
 import {
   CleanerInfo,
   CleanerSelection,
@@ -14,12 +15,20 @@ import {
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
 import { revealInScrollParent } from '../../../../utils/reveal-in-scroll-parent';
 
-/** "Advanced ▾" block of the Add Dataset modal: Include media (source
- *  specs), Convert to, Embedder, Clipper, Cleanup, and the two ingest
- *  toggles.  Pulled out of the parent component because the same block
- *  was inlined three times (server-folder, local-folder/files, generic
- *  form), with `sf*` / `lf*` / `form*` prefixed parallel state and a
+/** "Advanced ▾" block of the Add Dataset modal: the Multi-Dataset box,
+ *  Include media (source specs), Convert to, Embedder, Clipper, Cleanup,
+ *  and the two ingest toggles.  Pulled out of the parent component because
+ *  the same block was inlined three times (server-folder, local-folder/files,
+ *  generic form), with `sf*` / `lf*` / `form*` prefixed parallel state and a
  *  slew of context-dispatching helpers.
+ *
+ *  **Multi-Dataset lives here too** (#5230), at the top, because it decides
+ *  what the rest of the block is.  While it is on, the single dataset's
+ *  fields give way to whatever the picker projects (its
+ *  `<vt-multi-output-config>`, one row per dataset with its own nested copy
+ *  of this block), and the two ingest toggles stay below it, shared by every
+ *  dataset of the import.  So the box, the list it opens and the settings it
+ *  shares all sit in one place, behind the one footer toggle.
  *
  *  **Everything in the block is gated strictly by the toggle.**  Nothing
  *  here is on screen for a user who has not opened Advanced - not even a
@@ -47,10 +56,10 @@ import { revealInScrollParent } from '../../../../utils/reveal-in-scroll-parent'
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-advanced',
   standalone: true,
-  imports: [FormsModule, SourceSpecsPickerComponent],
+  imports: [FormsModule, FieldHintIconComponent, SourceSpecsPickerComponent],
   templateUrl: './import-advanced.component.html',
   styleUrl: './import-advanced.component.scss',
-  host: { '[class.is-open]': 'advancedOpen()' },
+  host: { '[class.is-open]': 'advancedOpen() && hasContent' },
 })
 export class ImportAdvancedComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -171,10 +180,25 @@ export class ImportAdvancedComponent {
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
 
-  /** Whether to render the two ingest toggles above. The Multi-Dataset
-   *  editor hosts one block per dataset but the toggles are shared across
-   *  the whole import, so it renders them once itself and turns these off. */
+  /** Whether to render the two ingest toggles above.  Off for the
+   *  Multi-Dataset editor's per-row blocks: the toggles are shared across the
+   *  whole import, so the picker's own block renders them once, below the
+   *  editor. */
   readonly showIngestToggles = input(true);
+
+  /** Whether to offer the **Multi-Dataset** box at the top of the block
+   *  (#4703, moved here from beside the media-type dropdown in #5230).  On for
+   *  a picker whose importer can make several datasets from one run; off for
+   *  the editor's per-row blocks, which are each one of those datasets. */
+  readonly showMultiToggle = input(false);
+  /** Two-way bound Multi-Dataset mode.  While on, the single dataset's fields
+   *  are replaced by the projected content: the picker's per-dataset editor. */
+  readonly multiDataset = input(false);
+  readonly multiDatasetChange = output<boolean>();
+
+  onMultiToggle(checked: boolean): void {
+    if (checked !== this.multiDataset()) this.multiDatasetChange.emit(checked);
+  }
 
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over
@@ -235,7 +259,13 @@ export class ImportAdvancedComponent {
    *  selection is disclosed: it gains one trailing line per knob the user
    *  (or the flow) has moved off its default. */
   get advancedToggleTitle(): string {
-    const base = 'Show advanced options: included media types, embedder, pre-processing clipper, and cleanup gates';
+    if (this.multiDataset()) {
+      // None of the single dataset's settings below apply; each row of the
+      // editor carries its own, too many to list here.
+      return 'Show advanced options: the datasets to make and each one\'s settings\nMulti-Dataset: on';
+    }
+    const offers = this.showMultiToggle() ? 'Multi-Dataset, included media types' : 'included media types';
+    const base = `Show advanced options: ${offers}, embedder, pre-processing clipper, and cleanup gates`;
     const lines: string[] = [];
     if (this.showEmbedderPicker && !this.isDefaultEmbedderSelected) {
       const embedder = this.embedders().find((e) => e.name === this.selectedEmbedder());
@@ -274,6 +304,29 @@ export class ImportAdvancedComponent {
   /** Cleanup block is offered whenever the media type registers gates. */
   get showCleanupSection(): boolean {
     return this.cleaners().length > 0;
+  }
+
+  /** Whether opening the block would show anything.  Every field in it is
+   *  offered only when it poses a real choice, so a type with one embedder,
+   *  one clipper and no cleanup gates leaves the block empty once the ingest
+   *  toggles are hosted elsewhere - a Face row in the Multi-Dataset editor
+   *  (#5225).  Each host hides its toggle when this is false, rather than
+   *  offer a "Details ▾" that opens onto nothing.  Lists every top-level
+   *  ``@if`` of the template; a new field must be added here too. */
+  get hasContent(): boolean {
+    return (
+      this.showMultiToggle() ||
+      // The picker's Multi-Dataset editor, projected in place of the fields below.
+      this.multiDataset() ||
+      this.hasSourceSpecsColumn ||
+      this.showConvertTargetPicker ||
+      this.showEmbedderPicker ||
+      this.patchEmbedderOptions.length > 0 ||
+      this.structuralEmbedderOptions.length > 0 ||
+      this.showStandaloneClipperButton ||
+      this.showCleanupSection ||
+      this.showIngestToggles()
+    );
   }
 
   /** Human label for a cleaner's checkbox row. */

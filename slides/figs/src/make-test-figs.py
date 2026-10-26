@@ -60,7 +60,7 @@ from matplotlib.figure import Figure  # noqa: E402
 from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, INK, SOFT, save  # noqa: E402
+from slide_figure import CUT_DOTS, CUT_LW, FULL_BLEED, INK, SOFT, save  # noqa: E402
 
 from vtscore.training.thresholds.line_test import JEFFREYS, TEST_ALPHA, LineTest  # noqa: E402
 
@@ -68,11 +68,11 @@ OUT = Path(__file__).resolve().parent.parent
 SUMMARY = _REPO_ROOT / "docs" / "experiments" / "2026-10-06-pooled-taper-4560" / "summary_shipped.csv"
 
 # The calibration figures' palette (`make-calib-figs.py`, `themes/vtsearch.css`):
-# blue is the line, red the losing arm and a Bad, green a Good and the arm that
-# wins against a red one (a red mark is the wrong one throughout the deck, so
-# its alternative is the positive side's colour, not the line's blue: #4563).
-# Everything else is ink and greys.
-BLUE = "#0b5fa5"
+# red the losing arm and a Bad, green a Good and the arm that wins against a red
+# one (a red mark is the wrong one throughout the deck, so its alternative is
+# the positive side's colour: #4563). The line is a thin dotted black one, as
+# every slide draws a threshold (`slide_figure.CUT_LW`, #5206). Everything else
+# is ink and greys.
 RED = "#b91c1c"
 GREEN = "#0d8a5f"
 RULE = "#d8dee6"
@@ -275,8 +275,8 @@ def _bracket(ax: plt.Axes, x0: float, x1: float, y: float, down: bool = False, l
 
 
 def _line(ax: plt.Axes, x: float, y0: float, y1: float, label: bool = True, label_y: float | None = None) -> None:
-    """The line, in the palette's blue: the one shipped decision on every drawing."""
-    ax.plot([x, x], [y0, y1], color=BLUE, linewidth=2.8, zorder=6, solid_capstyle="butt")
+    """The line, thin, dotted and black, as every slide draws a threshold (#5206)."""
+    ax.plot([x, x], [y0, y1], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=6)
     if label:
         ax.text(x - 0.12, y0 if label_y is None else label_y, "the line", ha="right", va="bottom", fontsize=16)
 
@@ -1132,7 +1132,7 @@ def _result_stage(stage: int) -> Figure:
     # ── stage 1: the headline, and the ranges at every band edge ─────────────
     ax.fill_between(counts, lo, hi, color=NEUTRAL_FILL, zorder=1, linewidth=0)
     ax.plot(counts, point, color=INK, linewidth=2.4, marker="o", markersize=7, zorder=4)
-    ax.axvline(test.line_count, color=BLUE, linewidth=2.6, zorder=3)
+    ax.axvline(test.line_count, color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=3)
     ax.text(test.line_count * 1.08, 0.04, "the line", ha="left", va="bottom", fontsize=16)
     _side_block(
         fig,
@@ -1151,10 +1151,11 @@ def _result_stage(stage: int) -> Figure:
         k = np.arange(6, CORPUS_N + 1)
         truth, _ = _corpus()
         true_p = np.cumsum(truth)[k - 1] / k
-        ax.plot(k, true_p, color=INK, linewidth=1.8, linestyle=(0, (2, 2)), zorder=3)
+        # Grey and dashed, not dotted black: dotted black is the line's (#5206), and the truth is not a cut.
+        ax.plot(k, true_p, color=SOFT, linewidth=1.8, linestyle=(0, (5, 3)), zorder=3)
         held = sum(e.precision.holds(_truth_at(e.count)[0]) for e in edges)
         assert held == len(edges), held
-        ax.text(1100, true_p[1100 - 6] + 0.06, "planted", ha="center", va="bottom", fontsize=16)
+        ax.text(1100, true_p[1100 - 6] + 0.06, "planted", ha="center", va="bottom", fontsize=16, color=SOFT)
     # ── stage 3: Lean the Threshold, the verdict's table ─────────────────────
     if stage >= 3:
         top = 0.305

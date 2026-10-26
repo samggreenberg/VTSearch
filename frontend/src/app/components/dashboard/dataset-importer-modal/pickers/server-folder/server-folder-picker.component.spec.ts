@@ -53,6 +53,24 @@ describe('ServerFolderPickerComponent', () => {
     expect(component.folderPath()).toBe('');
   });
 
+  it('leaves Face out of the dropdown: a Face dataset is made beside its images, in Multi-Dataset mode', () => {
+    const withFace = {
+      ...serverFolderImporter,
+      fields: [{ key: 'media_type', field_type: 'select', default: 'audio', options: ['audio', 'face', 'image'] }],
+    };
+    fixture.componentRef.setInput('importers', [withFace]);
+    fixture.componentRef.setInput('mediaTypes', [
+      { type_id: 'audio', name: 'Audio', folder_import_name: 'audio' } as any,
+      { type_id: 'face', name: 'Face', folder_import_name: 'face', importable: false } as any,
+      { type_id: 'image', name: 'Image', folder_import_name: 'image' } as any,
+    ]);
+    fixture.componentRef.setInput('guessedMediaType', 'face');
+    openAndFlush();
+    expect(component.mediaTypeOptions).toEqual(['audio', 'image']);
+    // Nor does a guess of Face (every dataset so far a Face one) pick it.
+    expect(component.mediaType()).toBe('audio');
+  });
+
   it('applyPathInput commits the path, derives a dataset name, and runs detection', () => {
     openAndFlush();
     component.onPathInput('/data/my-photos/');
@@ -214,9 +232,16 @@ describe('ServerFolderPickerComponent', () => {
         ['document', false],
       ]);
       expect(component.hasOutputs).toBe(true);
-      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).not.toBeNull();
-      // The single-dataset block is gone; the one Advanced block left is the ticked row's own.
-      expect(component.importAdvanced()).toBeUndefined();
+      // The editor is the picker's Advanced block's content (#5230): folded
+      // away with it, and in place of the single dataset's fields once open,
+      // the one Advanced block inside it being the ticked row's own.
+      const advanced = component.importAdvanced()!;
+      expect(advanced.multiDataset()).toBe(true);
+      expect(fixture.nativeElement.querySelector('vt-multi-output-config')).toBeNull();
+      advanced.toggleAdvanced();
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('vt-import-advanced > vt-multi-output-config')).not.toBeNull();
+      expect((fixture.nativeElement.querySelector('#import-advanced-multi') as HTMLInputElement).checked).toBe(true);
       expect(fixture.nativeElement.querySelectorAll('vt-multi-output-config vt-import-advanced').length).toBe(1);
     });
 
@@ -279,8 +304,10 @@ describe('ServerFolderPickerComponent', () => {
       component.setMultiDataset(true);
       await settleZoneless(fixture);
       flushTypeOptions('audio');
+      expect(component.multiDatasetSummary).toBe('Audio');
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
       expect(component.hasOutputs).toBe(false);
+      expect(component.multiDatasetSummary).toBe('');
     });
 
     it('open() leaves multi mode', async () => {

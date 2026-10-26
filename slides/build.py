@@ -417,7 +417,7 @@ NOTES_FONT_PX = 20
 NOTES_LINE_HEIGHT = 1.38
 NOTES_LINE_PX = NOTES_FONT_PX * NOTES_LINE_HEIGHT
 #: Average glyph width of the notes face. Measured against the theme: 20px
-#: Helvetica in a 636px column fits about 67 characters, i.e. 9.5px each, and
+#: Liberation Sans in a 636px column fits about 67 characters, i.e. 9.5px each, and
 #: the face scales linearly. Deliberately a touch wide — overestimating the
 #: width fails a deck that would in fact have fitted, which costs an edit,
 #: while underestimating it clips a sentence the presenter cannot read.
@@ -880,6 +880,28 @@ def check_outline_length(name: str, text: str, problems: list[str]) -> None:
         )
 
 
+#: A presenter note's letter marker, `**c** —` or `**a**, **b** —`. The speaker
+#: build reads it, so the dash in it is markup rather than prose, and it is the
+#: one em dash a fragment may hold.
+NOTE_MARKER_RE = re.compile(r"\*\*[a-z]\*\*(?:\s*,\s*\*\*[a-z]\*\*)*\s*—")
+
+
+def check_em_dash(name: str, text: str, problems: list[str]) -> None:
+    """Preflight STYLE.md's *Write it like a person*: no em dash on a slide or in its notes.
+
+    The slide's own text and the presenter notes alike: the notes are what the
+    speaker says, and a sentence that needs an em dash reads like a sentence
+    nobody said (owner, #5203). Figures are held to the same rule by
+    `slide_figure.save`.
+    """
+    for lineno, line in enumerate(NOTE_MARKER_RE.sub("", text).splitlines(), 1):
+        if "—" in line:
+            problems.append(
+                f"fragments/{name}.md:{lineno}: em dash in {line.strip()[:60]!r}; reword it "
+                f"(a colon, a comma, two sentences) rather than swapping in another dash"
+            )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -887,6 +909,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"fragments/{name}.md:{lineno}: bare `---` splits this fragment into two "
                 f"slides; use `***` for a horizontal rule"
             )
+    check_em_dash(name, text, problems)
     check_headline(name, text, problems)
     check_outline_length(name, text, problems)
     check_build_markers(name, text, problems)

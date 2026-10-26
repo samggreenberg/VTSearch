@@ -15,7 +15,9 @@
  *    slides/figs/src/make-calib-figs.py, so a colour means the same thing on a
  *    slide as it does in the chart beside it:
  *
- *      --hue-cut   blue   the threshold, and the shipped decision it makes
+ *      --hue-cut   blue   the shipped thing: today's app, and what it runs
+ *                         and decides. Never a threshold line, which is
+ *                         dotted black (STYLE.md)
  *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *      --hue-step  red    a numbered click marker, as the screenshot draws it
@@ -32,6 +34,47 @@
 
 @import "default";
 
+/*
+ * THE TYPEFACE IS IN THE REPO, not on the machine. The stack used to start
+ * "Helvetica Neue", Helvetica, Arial, which no Linux box has: Chromium took
+ * whatever fontconfig offered instead, Liberation Sans in a Claude Code
+ * container and DejaVu Sans on the GRID. DejaVu runs about 15% wider, so the
+ * same deck wrapped its headlines differently depending on where it was
+ * rendered (#5203). So the face is Liberation Sans, metric-compatible with
+ * Arial and Helvetica, committed under themes/fonts/ (SIL OFL 1.1, see its
+ * LICENSE) and loaded by its own family name, which no installed font can
+ * answer to.
+ *
+ * The url is relative to the markdown Marp renders, not to this file: every
+ * deck is assembled into slides/_build/ and every HTML export lands in
+ * slides/_out/, and both are one level below slides/. render.sh fails a render
+ * whose local files do not resolve, so a broken path cannot quietly fall back.
+ */
+@font-face {
+  font-family: "VTSearch Sans";
+  src: url("../themes/fonts/LiberationSans-Regular.ttf");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "VTSearch Sans";
+  src: url("../themes/fonts/LiberationSans-Bold.ttf");
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: "VTSearch Sans";
+  src: url("../themes/fonts/LiberationSans-Italic.ttf");
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: "VTSearch Sans";
+  src: url("../themes/fonts/LiberationSans-BoldItalic.ttf");
+  font-weight: 700;
+  font-style: italic;
+}
+
 :root {
   --ink: #14181f;
   --ink-soft: #5b6472;
@@ -47,7 +90,7 @@
      place to click), and it has to match the markers baked into the figure. */
   --hue-step: #e8453c;
 
-  font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+  font-family: "VTSearch Sans", sans-serif;
 }
 
 section {

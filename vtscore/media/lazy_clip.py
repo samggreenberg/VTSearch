@@ -206,8 +206,17 @@ def _converter_output_recipe(params: dict[str, Any], media_type: Any) -> tuple |
 
 
 def _origin_params(media: dict[str, Any]) -> dict[str, Any]:
-    """Return *media*'s ``origin.params`` (empty when it has none)."""
+    """Return *media*'s ``origin.params`` (empty when it has none).
+
+    A ``dupe_set`` representative reads through to its own origin, which every
+    collapse records as the group's first member: the merge rewrote the origin
+    but not the item, so its ``media_path`` and its recipe still go together.
+    """
     origin = media.get("origin")
+    if isinstance(origin, dict) and origin.get("importer") == "dupe_set":
+        members = origin.get("members") or []
+        first = members[0] if members and isinstance(members[0], dict) else {}
+        origin = first.get("origin")
     params = origin.get("params", {}) if isinstance(origin, dict) else {}
     return params if isinstance(params, dict) else {}
 

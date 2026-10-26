@@ -96,14 +96,16 @@ hints stand over the **Good** / **Bad** buttons, `fix-votes` beside the
 **Labels** panel, and the hand-offs under the top bar's **Dashboard** button
 once the run is over; none of the others shows while a hand-off is up. The
 phase hints, `fix-votes` and the hand-offs are for the run that trains the
-detector: one that began on a detector with no labels
-(`AutopilotStateService.startedUntrained`). Coming back to a trained detector
-raises none of them. `revote` answers an item the user picked, so it shows on
-any run.
+detector: one that began on a detector without both a Good and a Bad
+(`AutopilotStateService.startedUntrained`), such as one with no labels, or one
+holding only the Goods of the examples it was made from, which every Face
+detector is (#5229). Their votes are the run's own: an example's Good is not
+one. Coming back to a trained detector raises none of them. `revote` answers
+an item the user picked, so it shows on any run.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
-| `start-voting` | happy | Autopilot picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running on a detector with no labels, nothing has been voted, and an item is on screen. The first vote ends it. |
+| `start-voting` | happy | Autopilot picked this for you. Click **Good** if it's what you're looking for, or **Bad** if not. | Autopilot is running with an item on screen, on a detector with no labels and nothing voted, or on the run that trains the detector before it has cast a vote. The first vote ends it. |
 | `fix-votes` | happy | Your vote went to **Labels** on the right. Open here to change it, or keep clicking. | Autopilot is running with an item on screen, and the run that trains the detector has its first vote. Stands beside the **Labels** panel, folded or open. The next vote ends it, and `find-goods` takes over. |
 | `revote` | happy | You already labeled this **{label}**. Click **{other}** to change it, or Autopilot's step on the left to carry on. | Autopilot is running and the item on screen is one the user picked (from **Labels**, or with ↓) that was already labeled, and still is. Any run, not just the one that trains the detector; not while Autopilot has nothing left to pick, so its step has nowhere to go. A vote on the item ends it, and so does going back to Autopilot's pick. |
 | `find-goods` | happy | Autopilot is looking for Goods now. Keep clicking. | Autopilot is in **Find Initial Goods** on a run that trains the detector, with an item on screen and a vote cast. |

@@ -8,12 +8,11 @@
               [mediaTypeFieldId]="'field-' + field.key"
               [mediaType]="formValues[field.key] || ''"
               (mediaTypeChange)="onMediaTypeChange($event)"
-              [mediaTypeOptions]="field.options || []"
+              [mediaTypeOptions]="mediaTypeOptions"
               [mediaTypeOptionLabels]="mediaTypeOptionLabels"
               [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-              [showMultiToggle]="supportsMultiOutput"
               [multiDataset]="multiDataset()"
-              (multiDatasetChange)="setMultiDataset($event)"
+              [multiSummary]="multiDatasetSummary"
             ></vt-import-config>
             @if (field.hint && !multiDataset()) {
               <p class="form-hint">{{ field.hint }}</p>
@@ -177,21 +176,6 @@
       <p class="info-text">This importer requires no additional configuration.</p>
     }
 
-    @if (multiDataset()) {
-      <vt-multi-output-config
-        idPrefix="form"
-        [mediaTypes]="mediaTypes()"
-        [convertersByType]="convertersByType"
-        [drafts]="outputDrafts()"
-        (draftsChange)="onOutputDraftsChange($event)"
-        [guessedMediaEmbedder]="guessedMediaEmbedder()"
-        [buildProjection]="buildProjection()"
-        (buildProjectionChange)="buildProjectionChange.emit($event)"
-        [mergeNearDuplicates]="mergeNearDuplicates()"
-        (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-        (clipperChooserRequested)="openClipperChooserFor($event)"
-      ></vt-multi-output-config>
-    } @else {
     <vt-import-advanced
       [availableConverters]="availableConverters"
       [nativeType]="outputTypeId"
@@ -218,8 +202,24 @@
       (buildProjectionChange)="buildProjectionChange.emit($event)"
       [mergeNearDuplicates]="mergeNearDuplicates()"
       (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-    ></vt-import-advanced>
-    }
+      [showMultiToggle]="supportsMultiOutput && !effectiveSoloMediaType"
+      [multiDataset]="multiDataset()"
+      (multiDatasetChange)="setMultiDataset($event)"
+    >
+      <!-- Multi-Dataset: the list of datasets to make stands in for the
+           single dataset's fields, under the same Advanced toggle (#5230). -->
+      @if (multiDataset()) {
+        <vt-multi-output-config
+          idPrefix="form"
+          [mediaTypes]="mediaTypes()"
+          [convertersByType]="convertersByType"
+          [drafts]="outputDrafts()"
+          (draftsChange)="onOutputDraftsChange($event)"
+          [guessedMediaEmbedder]="guessedMediaEmbedder()"
+          (clipperChooserRequested)="openClipperChooserFor($event)"
+        ></vt-multi-output-config>
+      }
+    </vt-import-advanced>
 
     @if (error()) {
       <p class="error-text">{{ error() }}</p>

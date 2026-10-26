@@ -226,7 +226,7 @@ def analyse_beta(runs: dict[str, dict], beta: float) -> dict:
         r["stop_f_gain"], r["stop_f_se"] = float(np.nanmean(g)), se_over_classes(g, cls)
         g = col(arm, "stop_clicks") - col(CONTROL, "stop_clicks")
         r["stop_clicks_gain"], r["stop_clicks_se"] = float(np.nanmean(g)), se_over_classes(g, cls)
-        for c in (50, 100, 150, 200):
+        for c in (c for c in (50, 100, 150, 200) if c <= T):  # #5084 reads a 150-click horizon too
             r[f"goods_at_{c}"] = float(np.nanmean(G[arm][:, c]))
         r["ap200"] = float(np.nanmean(col(arm, "ap200")))
         r["ap200_gain"] = float(np.nanmean(col(arm, "ap200") - col(CONTROL, "ap200")))

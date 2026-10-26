@@ -183,9 +183,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * Toasty's one hint on the Train view's panes (#4680, #4807), or `null`.
    * While Autopilot runs with an item on screen: `revote` on an item the user
    * picked that is already labeled (#4824), on any run; otherwise
-   * `start-voting` on a detector that has no labels and nothing voted yet (the
-   * first vote ends it), then, on the run that trains the detector (as the
-   * hand-off, see `AutopilotStateService.startedUntrained`), `fix-votes` for
+   * `start-voting` on a detector that has no labels and nothing voted yet, or
+   * on the run that trains the detector before its first vote (the first vote
+   * ends it), then, on that run (as the hand-off, see
+   * `AutopilotStateService.startedUntrained`), `fix-votes` for
    * the run's first vote and one hint per phase after it, until the run
    * reaches Done, when the hand-off under the Dashboard button takes over. The
    * Spot Check step has none: its picks are just the next items, and there is
@@ -212,12 +213,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.centreExhausted()) return null;
     // The two vote tallies move at different times: the item's own state as
     // the click lands, the labelset's counts after a round-trip.
-    const cast = Math.max(
-      votes.labelsetGoodCount + votes.labelsetBadCount,
-      votes.goodVotes.size + votes.badVotes.size,
-    );
-    if (cast === 0) return 'start-voting';
+    const labelsetTotal = votes.labelsetGoodCount + votes.labelsetBadCount;
+    const votedHere = votes.goodVotes.size + votes.badVotes.size;
+    if (Math.max(labelsetTotal, votedHere) === 0) return 'start-voting';
     if (!this.autopilotStateService.startedUntrained() || run.doneReached) return null;
+    // Counted from where the run began: a detector made from a media example
+    // holds it as a Good, which is not a vote the user cast here (#5229).
+    const cast = this.autopilotStateService.runVotes(labelsetTotal, votedHere);
+    if (cast <= 0) return 'start-voting';
     if (cast === 1) return 'fix-votes';
     switch (run.phase) {
       case 'good':
@@ -1296,6 +1299,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       defaultMediaType: media?.media_type ?? '',
       datasetEmbedder: media?.embedder ?? '',
       datasetEmbedders: media?.embedders ?? [],
+      datasetId: this.activeContext.datasetId,
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });

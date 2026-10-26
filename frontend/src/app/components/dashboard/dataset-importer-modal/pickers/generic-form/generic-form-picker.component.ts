@@ -26,8 +26,17 @@ import {
   SourceSpec,
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
-import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
-import { OutputDraft, buildOutputDrafts, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
+import {
+  availableConvertersFor,
+  composeEmbedders,
+  mediaTypeLabels,
+  mediaTypeOptionIcons,
+  mediaTypeOptionLabels,
+  singleDatasetMediaTypes,
+  toFolderName,
+  toTypeId,
+} from '../shared/media-type.util';
+import { OutputDraft, buildOutputDrafts, checkedKindsSummary, convertersByTypeOf, isMultiOutputImporter, outputsFromDrafts, tickCategory } from '../shared/multi-output.util';
 import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
 
@@ -63,8 +72,9 @@ export class GenericFormPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
-  /** The Multi-Dataset editor, mounted in place of the Advanced block while
-   *  :prop:`multiDataset` is on (#4703). */
+  /** The Multi-Dataset editor, projected into the Advanced block in place of
+   *  the single dataset's fields while :prop:`multiDataset` is on (#4703,
+   *  #5230). */
   readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   /** Every registered importer (used to resolve the active importer's
@@ -90,6 +100,9 @@ export class GenericFormPickerComponent {
   readonly selectedImporter = signal<ImporterInfo | null>(null);
   formValues: Record<string, any> = {};
   selectedFile: File | null = null;
+  /** The media-type dropdown's options: the importer's own, less Face (see
+   *  ``singleDatasetMediaTypes``). */
+  mediaTypeOptions: string[] = [];
   readonly submitting = signal(false);
   readonly error = signal('');
   /** Whether the user has manually edited the generic-form dataset_name
@@ -239,16 +252,17 @@ export class GenericFormPickerComponent {
     }
 
     const mediaTypeField = importer.fields?.find((f) => f.key === 'media_type');
+    this.mediaTypeOptions = singleDatasetMediaTypes(this.mediaTypes(), mediaTypeField?.options || []);
     const guessedMediaType = this.guessedMediaType();
     if (mediaTypeField && guessedMediaType) {
       const folderName = toFolderName(this.mediaTypes(), guessedMediaType);
-      if (folderName && mediaTypeField.options?.includes(folderName)) {
+      if (folderName && this.mediaTypeOptions.includes(folderName)) {
         this.formValues['media_type'] = folderName;
       }
     }
 
     if (mediaTypeField && this.effectiveSoloFolderName) {
-      if (mediaTypeField.options?.includes(this.effectiveSoloFolderName)) {
+      if (this.mediaTypeOptions.includes(this.effectiveSoloFolderName)) {
         this.formValues['media_type'] = this.effectiveSoloFolderName;
       }
     }
@@ -436,6 +450,13 @@ export class GenericFormPickerComponent {
    *  least one ticked category in multi mode. */
   get hasOutputs(): boolean {
     return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
+  /** The ticked rows' kinds (``"Image, Document"``) for the line that stands
+   *  in for the media-type dropdown in multi mode, the list itself being
+   *  under Advanced (#5230). */
+  get multiDatasetSummary(): string {
+    return checkedKindsSummary(this.outputDrafts(), this.mediaTypes());
   }
 
   get availableConverters(): ConverterInfo[] {

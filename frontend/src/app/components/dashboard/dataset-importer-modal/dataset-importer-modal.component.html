@@ -38,6 +38,9 @@
           [mediaTypeOptions]="demoPicker().demoTabs()"
           [mediaTypeOptionLabels]="demoPicker().mediaTypeLabels"
           [mediaTypeOptionIcons]="demoPicker().demoMediaTypeIcons"
+          [multiDataset]="demoPicker().multiDataset()"
+          [multiSummary]="demoPicker().multiDatasetSummary"
+          [multiHidesMediaType]="false"
         ></vt-import-config>
       }
     </ng-container>
@@ -65,9 +68,8 @@
           [mediaTypeOptionLabels]="serverFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="serverFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="serverFolderPicker().detectionHint()"
-          [showMultiToggle]="serverFolderPicker().supportsMultiOutput"
           [multiDataset]="serverFolderPicker().multiDataset()"
-          (multiDatasetChange)="serverFolderPicker().setMultiDataset($event)"
+          [multiSummary]="serverFolderPicker().multiDatasetSummary"
         ></vt-import-config>
       }
     </ng-container>
@@ -107,9 +109,8 @@
           [mediaTypeOptionLabels]="localFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="localFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="localFolderPicker().detectionHint()"
-          [showMultiToggle]="localFolderPicker().supportsMultiOutput"
           [multiDataset]="localFolderPicker().multiDataset()"
-          (multiDatasetChange)="localFolderPicker().setMultiDataset($event)"
+          [multiSummary]="localFolderPicker().multiDatasetSummary"
         ></vt-import-config>
       }
     </ng-container>
@@ -223,7 +224,7 @@
   @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo()">Import</button>
+      <button class="btn btn--primary" (click)="demoPicker().submit()" [disabled]="!demoPicker().selectedDemo() || !demoPicker().hasOutputs">Import</button>
     </div>
   }
 </vt-modal>

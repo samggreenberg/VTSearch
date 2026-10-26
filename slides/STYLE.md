@@ -54,8 +54,8 @@ the literal name of a column, not a subscript, and code type says so.
 
 **Except the F-scores: F1, Fβ, F4, F¼, never subscripted** (owner, 2026-10-07:
 "we don't write F_1; we write F1"). The same goes for slide text, figure labels and
-notes. ¼ keeps its fraction glyph. The notes may still spell it "F-beta" where a
-speaker says it aloud.
+notes. ¼ keeps its fraction glyph. And it is Fβ with the real β, never "F-beta",
+in the notes too (owner, #5203).
 
 <!-- item-sep -->
 
@@ -74,7 +74,7 @@ beside it.** `themes/vtsearch.css` defines three hues, matching the palette in
 
 | class | hue | means |
 |---|---|---|
-| `.cut` | blue | the threshold, and the shipped decision it makes |
+| `.cut` | blue | the shipped thing: today's app, and what it runs and decides. Never a threshold *line*, which is dotted black (below) |
 | `.neg` | red | the negative side: the Bad component, the losing arm |
 | `.pos` | green | the positive side: the Good component, a measured win |
 | `.side.steps` list numbers | red disc | a numbered place to click, drawn on the screenshot beside it |
@@ -88,6 +88,47 @@ also draws in that colour:
 ```
 
 If the slide has no figure, it has no reason to colour a word.
+
+<!-- item-sep -->
+
+## A threshold is a dotted black line
+
+The line a ranking is cut at, drawn on a chart, is a **dotted black line**
+(owner, #5203: "we're using a dotted black line for the threshold everywhere
+else"). Beta Max's three cuts are the pattern: thin, `INK`, dashed `(0, (2, 3))`,
+which `slide_figure.CUT_LW` and `CUT_DOTS` hold for every generator.
+It used to be blue, and a blue line among black ones made the room ask what the
+colour meant, when all it meant was "this is the line", which being the line
+already says.
+
+- **Several lines on one chart take their curves' weights.** Twin Peaks draws a
+  cut for each radio, and each is as heavy as the Expected Fβ curve whose peak
+  it marks, so a cut pairs with its curve by weight alone. No cut is singled out
+  in a colour, and none carries a count of what it keeps.
+- **A line stops at the axis it cuts.** It runs from its own mark to that axis
+  and no further, rather than up through the panels stacked above it.
+- **A band around the line is a neutral wash**, not a tint of its colour
+  (`slide_figure.CUT_WASH`).
+- **A dotted line that is not a cut stays finer.** A Cut Above's question mark
+  hangs off its own fine dotted line, which is the question's, not a radio's.
+- **On a plane, the detector's boundary is the line.** The curve Pics on a Plane
+  draws through the photos is where the detector's score is cut, so it is
+  dotted black too, and so is every boundary drawn on that plane after it:
+  Marginal at Best's line, all five of Off With Their Heads' (the bold name
+  says which head ships), Head Start's and In So Many Words', and the atlas's.
+  There the line is the drawing's subject among items outlined in ink, so it
+  takes round dots at Twin Peaks' middle weight (`slide_figure.BOUNDARY_LW`,
+  `BOUNDARY_DOTS`), and the band's looser and tighter cuts take the thin line.
+- **What is not a cut is not dotted black.** A boundary the slide has moved
+  past (Pics on a Plane's before the retrain, Head Start's "Before") stays a grey
+  dash, and so do an SVM street's curbs. Report Card's planted truth was a dotted
+  black curve; it is a grey dash now, because on that chart dotted black means
+  the line.
+
+Blue is still the shipped thing where it is not a line: today's app on Follow
+Suit, the shipped rule on Raise the Bar, Speed Reading's timings, Weight and
+See's schedule, Running Start's head start, the cell Cover Story's walk stops
+at, Beta Max's chosen radio.
 
 <!-- item-sep -->
 
@@ -123,6 +164,27 @@ every generated figure; a hand-checked floor is a floor that drifts.
 Screenshots are exempt from the check and not from the rule: if the UI text in
 a screenshot is unreadable at slot size, crop it or zoom the app, do not shrink
 the caption to match.
+
+<!-- item-sep -->
+
+## The typeface ships with the deck
+
+A deck renders the same on every machine, so no glyph on a slide may come from
+the machine rendering it (#5203: the same deck rendered here and on the GRID
+wrapped its headlines differently, because each box filled "Helvetica" with
+whatever it had).
+
+- **The slide's own type is Liberation Sans**, committed under
+  `themes/fonts/` and loaded by the theme under a family name nothing installed
+  can answer to. It is metric-compatible with Arial and Helvetica, which is what
+  the headline breaks were measured in.
+- **A figure's type is DejaVu Sans**, the face matplotlib ships with, which is
+  what every generator names. A figure that wants the slide's face (a "Data,
+  Set" card's dataset name) names the committed file,
+  `slide_figure.DECK_SANS_BOLD`, never the family.
+- **Checked:** importing `slide_figure` resets matplotlib to its stock
+  defaults, so a machine's matplotlibrc cannot restyle a figure, and `save()`
+  refuses a label set in a font the machine supplied.
 
 <!-- item-sep -->
 
@@ -528,6 +590,34 @@ few minutes max; don't make the notes take 15min to read").
 
 The one-page fit check is a ceiling, not a target: a note that only just fits
 is already too long.
+
+<!-- item-sep -->
+
+## Write it like a person: no em dashes
+
+No em dash (—) on a slide, in a figure, or in a presenter note (owner, #5203:
+"reword EVERY slide that has an emdash so it doesn't read like an AI wrote it").
+A sentence that leans on one is two sentences, or a clause that wants a comma,
+or a label that wants a colon. Reword it; do not swap in another dash.
+
+- **A label leads with its name, then a colon, then a sentence.** Great
+  Expectations reads "Expectation: How much does each curve claim each score?",
+  not "E (Expectation) — how much does each curve claim each score?".
+- **The presenter notes' letter marker is the exception**, because it is markup
+  rather than prose: `**c** — ...` is how the speaker build knows which page a
+  note is for (see *Builds* below).
+
+Checked twice: `slide_figure.save()` refuses a figure with one in a label, and
+`build.py --check` refuses one in a fragment's slide text or notes.
+
+<!-- item-sep -->
+
+## A vote is a vote
+
+What a user does to teach a detector is a **vote**, on every slide, axis and
+note: "Votes, then the spot check", "127 of 150 votes" (owner, #5203: "Sucks
+that we call them 'Clicks' here, but 'Votes' on the slide before"). *Click* is
+only for pressing a control: "click the + button", "right-click a tile".
 
 <!-- item-sep -->
 

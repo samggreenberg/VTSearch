@@ -19,7 +19,7 @@ import {
   ClipperSelection,
 } from '../../../dashboard/clipper-chooser/clipper-chooser.component';
 
-/** Settings tab body for "Import Defaults": lets the user pick a
+/** The Settings › Import pane's defaults: lets the user pick a
  *  per-mediaType default embedder, clipper, and converter-row set.
  *  Mirrors the Add Dataset modal's "Advanced ▾" block but standalone,
  *  always expanded, and not tied to a specific importer.  Whatever the
@@ -170,6 +170,20 @@ export class ImportDefaultsSettingsComponent {
 
   get activeConverters(): ConverterInfo[] {
     return this.convertersByType[this.activeType] || [];
+  }
+
+  /** The include-media / clipper picker: offered when another type converts
+   *  into the active one or it has more than one clipper. */
+  get showSourceSpecsPicker(): boolean {
+    return this.activeConverters.length > 0 || this.activeClippers.length > 1;
+  }
+
+  /** The embedder select: offered when there is more than one to pick from.
+   *  With neither this nor the picker above (Document: no embedder of its
+   *  own, one clipper, nothing converts into it) the tab says it has nothing
+   *  to set rather than showing a blank body (#5225). */
+  get showEmbedderPicker(): boolean {
+    return this.activeEmbedders.length > 1;
   }
 
   get isLoading(): boolean {

@@ -337,7 +337,7 @@ def cell_progress(idx: int, n_launched: int, results: Path | None = None) -> str
 
 
 def _recall_knob(run: "float | str | None", app: "float | None") -> "float | str":
-    """A #5039 head-count knob as a row records it: the run's value, else the app's; ``off`` for the piece before #5039."""
+    """A #5039 / #5084 head-count knob as a row records it: the run's value, else the app's; ``off`` for the piece before."""
     v = app if run is None else run
     return "off" if v is None or v == "off" else float(v)
 
@@ -419,6 +419,9 @@ def main(argv: list[str] | None = None) -> int:
         f"head_count_bads={cfg.HEAD_COUNT_BADS if cfg.HEAD_COUNT_BADS is not None else 'app'} "
         f"head_count_recall_exponent={_recall_knob(cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT)} "
         f"head_count_recall_z={_recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)} "
+        f"head_count_precision_scale={_recall_knob(cfg.HEAD_COUNT_PRECISION_SCALE, _LL.HEAD_COUNT_PRECISION_SCALE)} "
+        f"head_count_precision_exponent={_recall_knob(cfg.HEAD_COUNT_PRECISION_EXPONENT, _LL.HEAD_COUNT_PRECISION_EXPONENT)} "
+        f"head_count_precision_top_z={_recall_knob(cfg.HEAD_COUNT_PRECISION_TOP_Z, _LL.HEAD_COUNT_PRECISION_TOP_Z)} "
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"query_miss={'on' if cfg.QUERY_MISS else 'off'} "
@@ -445,7 +448,13 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.arms_query_prior import QUERY_PRIOR_COLUMNS, query_prior_scale
     from vtscore.eval.arms_set_overlap import OVERLAP_COLUMNS
     from vtscore.eval.arms_split_rounding import split_rounding
-    from vtscore.eval.live_threshold_rules import head_count_bads, head_count_recall, labels_chances, sigma_floor
+    from vtscore.eval.live_threshold_rules import (
+        head_count_bads,
+        head_count_precision,
+        head_count_recall,
+        labels_chances,
+        sigma_floor,
+    )
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
@@ -533,6 +542,11 @@ def main(argv: list[str] | None = None) -> int:
             sigma_floor(cfg.SIGMA_FLOOR),
             head_count_bads(cfg.HEAD_COUNT_BADS),
             head_count_recall(cfg.HEAD_COUNT_RECALL_EXPONENT, cfg.HEAD_COUNT_RECALL_Z),  # type: ignore[arg-type]  # preflight refuses a bad value
+            head_count_precision(
+                cfg.HEAD_COUNT_PRECISION_SCALE,  # type: ignore[arg-type]
+                cfg.HEAD_COUNT_PRECISION_EXPONENT,  # type: ignore[arg-type]
+                cfg.HEAD_COUNT_PRECISION_TOP_Z,  # type: ignore[arg-type]
+            ),
             split_rounding(cfg.SPLIT_ROUNDING),
             query_prior_scale(cfg.QUERY_PRIOR),  # type: ignore[arg-type]  # a str was refused above
             labels_chances(cfg.LINE_BAD, cfg.LINE_BOUND_MARGIN),
@@ -700,6 +714,15 @@ def main(argv: list[str] | None = None) -> int:
                 cfg.HEAD_COUNT_RECALL_EXPONENT, _LL.HEAD_COUNT_RECALL_EXPONENT
             )
             r["head_count_recall_z"] = _recall_knob(cfg.HEAD_COUNT_RECALL_Z, _LL.HEAD_COUNT_RECALL_Z)
+            r["head_count_precision_scale"] = _recall_knob(
+                cfg.HEAD_COUNT_PRECISION_SCALE, _LL.HEAD_COUNT_PRECISION_SCALE
+            )
+            r["head_count_precision_exponent"] = _recall_knob(
+                cfg.HEAD_COUNT_PRECISION_EXPONENT, _LL.HEAD_COUNT_PRECISION_EXPONENT
+            )
+            r["head_count_precision_top_z"] = _recall_knob(
+                cfg.HEAD_COUNT_PRECISION_TOP_Z, _LL.HEAD_COUNT_PRECISION_TOP_Z
+            )
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["stratify_target"] = cfg.STRATIFY_TARGET
             r["good_dry_run"] = cfg.GOOD_DRY_RUN or ""

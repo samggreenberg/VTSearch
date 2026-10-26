@@ -31,6 +31,16 @@ export function getTabLabel(mediaTypes: MediaTypeInfo[], mediaType: string): str
   return mediaType;
 }
 
+/** The single-dataset media-type dropdown's options: *options* (an importer's
+ *  ``media_type`` field, which lists every registered type) less the
+ *  convert-in types (face).  A face has no file of its own, so a Face dataset
+ *  is made only in Multi-Dataset mode, beside the images it is cut from: on
+ *  its own it would read nothing, and no face could open its photo. */
+export function singleDatasetMediaTypes(mediaTypes: MediaTypeInfo[], options: string[]): string[] {
+  const derived = new Set(mediaTypes.filter((m) => m.importable === false).map((m) => m.folder_import_name || m.type_id));
+  return derived.size ? options.filter((o) => !derived.has(o)) : options;
+}
+
 /** Map of ``type_id`` → human label. */
 export function mediaTypeLabels(mediaTypes: MediaTypeInfo[]): Record<string, string> {
   const out: Record<string, string> = {};

@@ -6,7 +6,7 @@ import { provideZoneless } from '../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../testing/test-providers';
 import { settleZoneless } from '../../../../testing/settle-resource';
 import { ConverterInfo, MediaTypeInfo } from '../../../../models/api.models';
-import { OutputDraft, buildOutputDrafts, tickCategory } from '../pickers/shared/multi-output.util';
+import { OutputDraft, buildOutputDrafts, demoOutputDrafts, tickCategory } from '../pickers/shared/multi-output.util';
 
 describe('MultiOutputConfigComponent', () => {
   let component: MultiOutputConfigComponent;
@@ -50,14 +50,16 @@ describe('MultiOutputConfigComponent', () => {
   afterEach(() => httpMock.verify());
 
   /** Answer the three option fetches for *mediaType*. */
-  function flushOptions(mediaType: string, embedders: Array<Record<string, unknown>> = [{ name: 'e1', is_default: true }]): void {
+  function flushOptions(
+    mediaType: string,
+    embedders: Array<Record<string, unknown>> = [{ name: 'e1', is_default: true }],
+    cleaners: Array<Record<string, unknown>> = [{ name: 'tidy', default_enabled: true }],
+  ): void {
     httpMock.expectOne((r) => r.url === '/api/embedders' && r.params.get('media_type') === mediaType).flush({ embedders });
     httpMock
       .expectOne((r) => r.url === '/api/clippers' && r.params.get('media_type') === mediaType)
       .flush({ clippers: [{ name: `${mediaType}_default`, parameters: [{ key: 'n', default: 3 }] }] });
-    httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({
-      cleaners: [{ name: 'tidy', default_enabled: true }],
-    });
+    httpMock.expectOne((r) => r.url === '/api/cleaners' && r.params.get('media_type') === mediaType).flush({ cleaners });
   }
 
   function rows(): HTMLLIElement[] {
@@ -112,7 +114,6 @@ describe('MultiOutputConfigComponent', () => {
     expect(block.classList.contains('is-open')).toBe(true);
     // The two shared ingest toggles are not repeated inside the row's block.
     expect(block.querySelector('#import-advanced-projection')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#mo-projection')).not.toBeNull();
   });
 
   it('a convert-out row re-targets its dataset type and reseeds from the new type', async () => {
@@ -130,6 +131,45 @@ describe('MultiOutputConfigComponent', () => {
     expect(retargeted.convertTarget).toBe('text');
     expect(retargeted.sourceSpecs).toEqual([{ source_type: 'document', converter: 'document2text', params: {} }]);
     expect(retargeted.embedder).toBe('e5');
+  });
+
+  it('with fixed sources (a demo), a row keeps the source it was given and offers no include rows', async () => {
+    fixture.componentRef.setInput('fixedSources', true);
+    fixture.componentRef.setInput('drafts', demoOutputDrafts(mediaTypes, 'audio', ['image'], 'image'));
+    await settleZoneless(fixture);
+    flushOptions('audio');
+    flushOptions('image');
+    await settleZoneless(fixture);
+
+    // Seeded like any row, but the Import Defaults' include rows never replace
+    // the demo's own: an image dataset of this demo reads its audio.
+    const image = drafts.find((d) => d.category === 'image')!;
+    expect(image.embedder).toBe('e1');
+    expect(image.sourceSpecs).toEqual([{ source_type: 'audio', converter: 'audio2image', params: {} }]);
+    expect(component.rowTitle(image)).toContain('from the audio files (audio2image)');
+    expect(component.rowTitle(drafts.find((d) => d.category === 'audio')!)).toBe('Make a dataset of the audio files.');
+
+    const imageRow = rows().find((r) => r.querySelector('.mo-row-label')?.textContent?.trim() === 'Image')!;
+    (imageRow.querySelector('.mo-details-toggle') as HTMLButtonElement).click();
+    await settleZoneless(fixture);
+    expect(imageRow.querySelector('vt-source-specs-picker')).toBeNull();
+  });
+
+  // A demo's Face row: one embedder, one clipper, no cleanup gates, no
+  // include rows, and the ingest toggles live below the list, so its block
+  // has nothing to show and the row offers no Details link to open it (#5225).
+  it('offers no Details link on a row whose block would open onto nothing', async () => {
+    fixture.componentRef.setInput('fixedSources', true);
+    fixture.componentRef.setInput('drafts', demoOutputDrafts(mediaTypes, 'image', ['face'], 'face'));
+    await settleZoneless(fixture);
+    flushOptions('image');
+    flushOptions('face', [{ name: 'facenet', is_default: true }], []);
+    await settleZoneless(fixture);
+
+    const byLabel = (label: string) => rows().find((r) => r.querySelector('.mo-row-label')?.textContent?.trim() === label)!;
+    expect(byLabel('Image').querySelector('.mo-details-toggle')).not.toBeNull();
+    expect(byLabel('Face').querySelector('vt-import-advanced')).not.toBeNull();
+    expect(byLabel('Face').querySelector('.mo-details-toggle')).toBeNull();
   });
 
   it('a convert-out row offers Convert to but no include rows; a convert-in row the reverse', () => {
@@ -175,10 +215,8 @@ describe('MultiOutputConfigComponent', () => {
     expect(image.clipperParams).toEqual({ n: 9 });
   });
 
-  it('forwards the shared ingest toggles', () => {
-    let projection: boolean | undefined;
-    component.buildProjectionChange.subscribe((v) => (projection = v));
-    (fixture.nativeElement.querySelector('#mo-projection') as HTMLInputElement).click();
-    expect(projection).toBe(true);
+  it('leaves the shared ingest toggles to the Advanced block it sits in (#5230)', () => {
+    expect(fixture.nativeElement.querySelector('#mo-projection')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#mo-near-dupes')).toBeNull();
   });
 });

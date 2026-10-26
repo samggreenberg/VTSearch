@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """What's in a Name (#5097): how a region of the Browse map gets its signpost, drawn from the Vision pile.
 
-    MATPLOTLIBRC=/tmp/empty-matplotlibrc python slides/figs/src/make-signpost-figs.py <container.pkl>
+    python slides/figs/src/make-signpost-figs.py <container.pkl>
     python slides/figs/src/make-signpost-figs.py <container.pkl> --where
 
 `shoot-ui-figs.mjs`'s `browse` group runs it on the container the app saved `photos-all` into: first

@@ -213,4 +213,42 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     expect(selection.ids()).not.toContain(playingId);
     expect(selection.ids().length).toBe(1);
   });
+
+  describe('Show in photo (#4750)', () => {
+    function photoButton(): HTMLButtonElement | null {
+      return fixture.nativeElement.querySelector('.bsp-show-in-photo');
+    }
+
+    it('is offered only where the browse view says so', async () => {
+      await settleZoneless(fixture);
+      expect(photoButton()).toBeNull();
+
+      fixture.componentRef.setInput('showInPhotoOffered', true);
+      await settleZoneless(fixture);
+      expect(photoButton()?.textContent).toContain('Show in photo');
+    });
+
+    it('acts on a selection of exactly one item', async () => {
+      fixture.componentRef.setInput('mediaType', 'face');
+      fixture.componentRef.setInput('showInPhotoOffered', true);
+      const requested: number[] = [];
+      fixture.componentInstance.showInPhoto.subscribe((id) => requested.push(id));
+      await settleZoneless(fixture);
+
+      // Nothing selected: nothing to show.
+      expect(photoButton()!.disabled).toBe(true);
+
+      selection.addAll([5]);
+      await settleZoneless(fixture);
+      expect(photoButton()!.disabled).toBe(false);
+      photoButton()!.click();
+      expect(requested).toEqual([5]);
+
+      // Two selected: which photo would be ambiguous.
+      selection.addAll([6]);
+      await settleZoneless(fixture);
+      expect(photoButton()!.disabled).toBe(true);
+      expect(photoButton()!.title).toContain('exactly one');
+    });
+  });
 });

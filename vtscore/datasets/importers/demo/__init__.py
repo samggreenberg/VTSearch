@@ -8,15 +8,48 @@ discovered, loaded, and managed exactly like any other dataset source.
 The ``name`` field selects which demo dataset to load.  Optional
 ``embedder`` and ``converter`` fields allow overriding the default
 embedding model and applying a media-type converter respectively.
+
+A demo load can also make several linked datasets from one demo (the Add
+Dataset dialog's Multi-Dataset box on the Demo tab): ``/api/dataset/load-demo``
+hands the multi-dataset pipeline one output per dataset, each fed by the
+demo's own type, directly or through one converter (the photos, and the faces
+cut out of them).  Each output reaches :meth:`DemoDatasetImporter.run` with its
+converter in ``source_specs`` rather than in ``converter``; see
+:func:`_demo_converter`.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_demo_dataset
+
+
+def _demo_converter(field_values: dict[str, Any]) -> str:
+    """The converter a demo load applies, or ``""`` for the demo's own type.
+
+    The ``converter`` field when set (a single-dataset load).  Otherwise the
+    converter of the ``source_specs`` row, which is how one output of a
+    multi-dataset demo load names it: as a list of rows in the narrowed field
+    values, or as their JSON in the origin a reload reads back.
+    """
+    name = str(field_values.get("converter") or "")
+    if name:
+        return name
+    specs: Any = field_values.get("source_specs") or []
+    if isinstance(specs, str):
+        try:
+            specs = json.loads(specs)
+        except ValueError:
+            return ""
+    for spec in specs if isinstance(specs, list) else []:
+        converter = spec.get("converter") if isinstance(spec, dict) else getattr(spec, "converter", None)
+        if converter:
+            return str(converter)
+    return ""
 
 
 class DemoDatasetImporter(ImporterBase):
@@ -38,8 +71,9 @@ class DemoDatasetImporter(ImporterBase):
     # ``load_demo_dataset`` applies the clipper itself (and caches the
     # clipped + embedded result), so the shared pipeline must not clip again.
     handles_own_clipping = True
-    #: A demo is one named download of one media type; there is nothing to
-    #: multiply into several datasets (#4703).
+    #: Closed to the generic import route's ``outputs`` (#4703): a demo has no
+    #: ``media_type`` field to multiply.  ``/api/dataset/load-demo`` takes its
+    #: own ``outputs`` instead, one per type the demo can be loaded as.
     multi_output = False
 
     fields = [
@@ -94,7 +128,7 @@ class DemoDatasetImporter(ImporterBase):
             raise ValueError("Missing required field: name")
 
         embedder_name = field_values.get("embedder", "") or ""
-        converter_name = field_values.get("converter", "") or ""
+        converter_name = _demo_converter(field_values)
         clipper_name = field_values.get("clipper", "") or ""
         clipper_params = field_values.get("clipper_params") or None
 
@@ -123,7 +157,7 @@ class DemoDatasetImporter(ImporterBase):
         if not demo_name:
             return None
         field_values: dict[str, Any] = {"name": demo_name}
-        converter = params.get("converter", "")
+        converter = _demo_converter(params)
         if converter:
             field_values["converter"] = converter
         return field_values

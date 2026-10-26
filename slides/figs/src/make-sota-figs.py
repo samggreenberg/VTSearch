@@ -22,6 +22,10 @@ Both panels mark the same clicks with the same small hollow circle (`_mark`;
 owner, 2026-10-07): the text query, 25, 50, 100 and 150 clicks and after the
 check (∞) on photos, and `DOC_PR_CLICKS` on documents.
 
+Photo Finish and Patch Notes, the region slide, are drawn on identical axes, spanning both reviews
+(`photo_axes`), because the deck shows Photo Finish again straight after Patch Notes for the room to
+compare the two (owner, #5203).
+
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
 45 seeds, `docs/experiments/2026-10-16-state-of-the-app-binary-photo/`). Its
 per-run data lives on the GRID, so the slide reads what the report commits:
@@ -622,17 +626,38 @@ def _lowest_precision(data: dict[float, dict]) -> float:
 PHOTO_CHECK_X = 168
 
 
-def photo_figure(
-    data: dict[float, dict],
-    stage: int,
-    recall_lim: tuple[float, float] | None = None,
-) -> Figure:
-    """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
+#: A photo slide's axes: the recall span, then the y floor and top both panels share.
+PhotoAxes = tuple[tuple[float, float], float, float]
+
+
+def _photo_lines(data: dict[float, dict]) -> dict[float, tuple[list, list]]:
+    """The F panel's lines: every click, then the step to after the check."""
+    return {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
+
+
+def photo_axes(*reviews: dict[float, dict]) -> PhotoAxes:
+    """The axes that hold every one of *reviews*: the recall span, and the y floor and top.
+
+    Photo Finish and Patch Notes are drawn on the same axes, from both reviews, because the deck shows
+    Photo Finish again straight after Patch Notes so the room can compare the two (owner, #5203).
+    """
+    spans = [_recall_span(data) for data in reviews]
+    # A step under every review's lowest point is the step under the lowest of them, and likewise the top.
+    floor = min(_floor(_photo_lines(data), _lowest_precision(data)) for data in reviews)
+    top = max(_top(_photo_lines(data), data) for data in reviews)
+    return (min(lo for lo, _ in spans), max(hi for _, hi in spans)), floor, top
+
+
+def photo_figure(data: dict[float, dict], stage: int, axes: PhotoAxes | None = None) -> Figure:
+    """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them.
+
+    *axes* defaults to the ones that hold *data* alone (`photo_axes`).
+    """
     fig = plt.figure(figsize=FIG_SIZE)
     # Every click, not five checkpoints joined (owner, 2026-10-07: "why is the left curve so coarse?"):
     # flat on the text query through Autopilot's opening (#4605), then the climb as sessions hand over;
     # then the step to after the check.
-    lines = {b: (data[b]["curve_t"] + [PHOTO_CHECK_X], data[b]["curve_f"] + [data[b]["after"]]) for b in data}
+    lines = _photo_lines(data)
 
     def marks(ax: plt.Axes, _ends: dict) -> None:
         # The clicks the precision-recall path marks, at the same places: the text query, each of
@@ -641,13 +666,13 @@ def photo_figure(
             d = data[beta]
             _mark(ax, [0, *PHOTO_CLICKS, PHOTO_CHECK_X], [d["text"], *d["f"], d["after"]])
 
-    floor, top = _floor(lines, _lowest_precision(data)), _top(lines, data)
+    recall_lim, floor, top = axes or photo_axes(data)
     ax = _f_panel(
         fig,
         lines,
         (0, PHOTO_CHECK_X + 4),
         [0, 25, 50, 100, 150, PHOTO_CHECK_X],
-        "Clicks, then the spot check",
+        "Votes, then the spot check",
         floor,
         marks,
         PHOTO_GRID_STEP,
@@ -655,8 +680,7 @@ def photo_figure(
     )
     ax.set_xticklabels(["text\nquery", "25", "50", "100", "150", END_LABEL])
     if stage >= 2:
-        lim = recall_lim or _recall_span(data)
-        _pr_paths_panel(fig, data, lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
+        _pr_paths_panel(fig, data, recall_lim, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP, (floor, top))
     return fig
 
 
@@ -672,15 +696,11 @@ def doc_figure(data: dict[float, dict], stage: int) -> Figure:
             _mark(ax, list(DOC_PR_CLICKS), [data[beta]["f"][c] for c in DOC_PR_CLICKS])
 
     _f_panel(
-        fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", floor, marks, DOC_GRID_STEP, major=0.1, top=top
+        fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Votes", floor, marks, DOC_GRID_STEP, major=0.1, top=top
     )
     if stage >= 2:
         _pr_paths_panel(fig, data, ylim=(floor, top))
     return fig
-
-
-def region_figure(data: dict[float, dict], stage: int) -> Figure:
-    return photo_figure(data, stage)
 
 
 #: Face Value's one panel: Photo Finish's left panel at the same height, widened to the
@@ -703,7 +723,7 @@ def face_figure(data: dict[float, dict]) -> Figure:
         lines,
         (0, PHOTO_CHECK_X + 4),
         [0, 25, 50, 100, 150, PHOTO_CHECK_X],
-        "Clicks, then the spot check",
+        "Votes, then the spot check",
         _floor(lines),
         marks,
         PHOTO_GRID_STEP,
@@ -718,15 +738,18 @@ def main() -> int:
     photos, docs, regions, faces = photo_data(), doc_data(), photo_data(REGION_PATH), face_data()
     _check(photos, docs, regions, faces)
     save(face_figure(faces), OUT, "sota-faces.webp", column=FULL_BLEED, tight=False)
-    for stem, build, data in (
-        ("sota-photos", photo_figure, photos),
-        ("sota-documents", doc_figure, docs),
-        ("sota-regions", region_figure, regions),
+    # Photo Finish and Patch Notes on one set of axes, so the replay of Photo Finish after Patch Notes
+    # compares like with like (owner, #5203).
+    photo_shared = photo_axes(photos, regions)
+    for stem, build in (
+        ("sota-photos", lambda stage: photo_figure(photos, stage, photo_shared)),
+        ("sota-documents", lambda stage: doc_figure(docs, stage)),
+        ("sota-regions", lambda stage: photo_figure(regions, stage, photo_shared)),
     ):
         # Saved at the canvas's declared bounds, so both stages frame the
         # panels identically and the top margin keeps the title notch empty.
-        save(build(data, 2), OUT, f"{stem}.webp", column=FULL_BLEED, tight=False)
-        save(build(data, 1), OUT, f"{stem}.build1.webp", column=FULL_BLEED, tight=False)
+        save(build(2), OUT, f"{stem}.webp", column=FULL_BLEED, tight=False)
+        save(build(1), OUT, f"{stem}.build1.webp", column=FULL_BLEED, tight=False)
     return 0
 
 

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.centroid_head import centroid_cut
-from vtscore.eval.live_threshold_rules import head_count_bads, head_count_recall
+from vtscore.eval.live_threshold_rules import head_count_bads, head_count_precision, head_count_recall
 from vtscore.training.thresholds import (
     HEAD_COUNT_BADS,
     HEAD_COUNT_GOODS,
@@ -195,7 +195,7 @@ class TestAboveBetaOne:
         s, _ = _weak_head()
         x = _logits(s)
         deep = x[300:301]
-        with head_count_recall("off", "off"):
+        with head_count_recall("off", "off"), head_count_precision("off", "off"):
             for beta in (0.25, 1.0, 4.0):
                 assert _kept(s, head_count_cut(s, beta, deep)) == int(np.count_nonzero(x >= centroid_cut(x, beta=beta)))
 
@@ -348,4 +348,146 @@ class TestTheRecallKnob:
                 pass
         with pytest.raises(ValueError):
             with head_count_recall(None, bad):
+                pass
+
+
+def _heavy_head(seed: int = 0, n: int = 11_000, n_pos: int = 50):
+    """A Region-like head (#5084): a bulk with an exponential upper tail, and 50 positives a little above it."""
+    rng = np.random.default_rng(seed)
+    s = np.r_[_sig(rng.laplace(-3, 0.5, n)), _sig(rng.normal(0.5, 0.5, n_pos))]
+    y = np.r_[np.zeros(n), np.ones(n_pos)]
+    order = np.argsort(-s, kind="stable")
+    return s[order], y[order]
+
+
+def _f1(y, kept: int) -> float:
+    return 2 * float(y[:kept].sum()) / (float(y.sum()) + kept)
+
+
+class TestThePrecisionKnob:
+    """#5084: at beta 1 and below the count keeps ``scale * beta ** exponent`` times what stands out."""
+
+    def test_off_and_4603s_values_are_todays_count(self):
+        from vtscore.training.thresholds.gmm import TEXT_SORT_COUNT_EXPONENT
+
+        for seed in range(3):
+            for s in (_heavy_head(seed)[0], _weak_head(seed)[0], np.sort(_corpus(seed + 1))[::-1]):
+                for beta in (0.25, 0.5, 1.0):
+                    with head_count_precision("off", "off"):
+                        today = head_count_cut(s, beta)
+                    with head_count_precision(1.0, TEXT_SORT_COUNT_EXPONENT):
+                        assert head_count_cut(s, beta) == today
+
+    def test_a_smaller_scale_keeps_nearer_a_heavy_tails_positives(self):
+        """The count of what stands out reads the bulk's tail as positives; half of it keeps fewer and scores more."""
+        for seed in range(3):
+            s, y = _heavy_head(seed)
+            with head_count_precision("off", "off"):
+                today = _kept(s, head_count_cut(s, 1.0))
+            with head_count_precision(0.5, None):
+                halved = _kept(s, head_count_cut(s, 1.0))
+            assert halved < today
+            assert _f1(y, halved) > _f1(y, today)
+
+    def test_the_exponent_sets_how_fast_the_count_falls_below_beta_1(self):
+        s, _ = _heavy_head()
+        with head_count_precision(1.0, 0.708):
+            gentle = _kept(s, head_count_cut(s, 0.25))
+        with head_count_precision(1.0, 1.5):
+            steep = _kept(s, head_count_cut(s, 0.25))
+        assert steep < gentle
+
+    def test_it_never_keeps_fewer_than_the_tops_widest_drop(self):
+        """A person's faces stand out of the bulk by the widest drop: the smallest scale still keeps them."""
+        faces = np.sort(_corpus())[::-1]
+        with head_count_precision(0.05, 1.0):
+            for beta in (0.25, 1.0):
+                assert _kept(faces, head_count_cut(faces, beta)) >= 4
+
+    def test_the_app_keeps_071_beta(self):
+        """#5084 shipped 0.71 beta: 0.71x what stands out at beta 1, fewer than #4603's count on a heavy tail."""
+        from vtscore.training.thresholds import labels_line
+
+        assert (labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT) == (0.71, 1.0)
+        s, _ = _heavy_head()
+        with head_count_precision("off", "off"):
+            today = _kept(s, head_count_cut(s, 1.0))
+        assert _kept(s, head_count_cut(s, 1.0)) < today
+
+    def test_a_recall_lean_is_untouched(self):
+        s, _ = _heavy_head()
+        deep = _logits(s)[300:301]
+        today = head_count_cut(s, 4.0, deep)
+        with head_count_precision(0.3, 1.0):
+            assert head_count_cut(s, 4.0, deep) == today
+
+    def test_none_is_the_apps_and_the_swap_is_undone(self):
+        from vtscore.training.thresholds import labels_line
+
+        shipped = labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT
+        with head_count_precision(None, None):
+            assert (labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT) == shipped
+        with head_count_precision(0.7, 1.0):
+            assert (labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT) == (0.7, 1.0)
+        with head_count_precision("off", "off"):
+            assert labels_line.HEAD_COUNT_PRECISION_SCALE is None and labels_line.HEAD_COUNT_PRECISION_EXPONENT is None
+        assert (labels_line.HEAD_COUNT_PRECISION_SCALE, labels_line.HEAD_COUNT_PRECISION_EXPONENT) == shipped
+
+    @pytest.mark.parametrize("bad", ["deep", True, math.inf, math.nan, 0.0, -1.0])
+    def test_it_refuses_what_is_not_a_positive_number(self, bad):
+        with pytest.raises(ValueError):
+            with head_count_precision(bad, None):
+                pass
+        with pytest.raises(ValueError):
+            with head_count_precision(None, bad):
+                pass
+
+
+class TestThePrecisionTopGate:
+    """#5215: a head whose top stands under HEAD_COUNT_PRECISION_TOP_Z bulk spreads keeps #4603's count at beta <= 1."""
+
+    def test_the_app_ships_no_gate(self):
+        from vtscore.training.thresholds import labels_line
+
+        assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+
+    def test_a_top_under_the_gate_keeps_4603s_count(self):
+        s, _ = _heavy_head()  # its top stands ~10 bulk spreads up
+        for beta in (0.25, 1.0):
+            with head_count_precision("off", "off"):
+                before = head_count_cut(s, beta)
+            shipped = head_count_cut(s, beta)
+            assert shipped != before
+            with head_count_precision(None, None, 50.0):
+                assert head_count_cut(s, beta) == before
+            with head_count_precision(None, None, 6.1):
+                assert head_count_cut(s, beta) == shipped
+
+    def test_it_reads_the_top_in_bulk_spreads(self):
+        from vtscore.training.thresholds.labels_line import _top_under
+
+        x = np.r_[np.random.default_rng(0).normal(0, 1, 10_000), 7.0]
+        assert _top_under(x, 7.5) and not _top_under(x, 6.5)
+        assert not _top_under(x, None) and not _top_under(np.zeros(100), 7.5)
+
+    def test_a_recall_lean_is_untouched(self):
+        s, _ = _heavy_head()
+        deep = _logits(s)[300:301]
+        today = head_count_cut(s, 4.0, deep)
+        with head_count_precision(None, None, 50.0):
+            assert head_count_cut(s, 4.0, deep) == today
+
+    def test_the_swap_is_undone_and_off_never_gates(self):
+        from vtscore.training.thresholds import labels_line
+
+        with head_count_precision(None, None, 6.1):
+            assert labels_line.HEAD_COUNT_PRECISION_TOP_Z == 6.1
+        with head_count_precision(None, None, "off"):
+            assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+        assert labels_line.HEAD_COUNT_PRECISION_TOP_Z is None
+
+    @pytest.mark.parametrize("bad", ["deep", True, math.inf, 0.0])
+    def test_it_refuses_what_is_not_a_positive_number(self, bad):
+        with pytest.raises(ValueError):
+            with head_count_precision(None, None, bad):
                 pass

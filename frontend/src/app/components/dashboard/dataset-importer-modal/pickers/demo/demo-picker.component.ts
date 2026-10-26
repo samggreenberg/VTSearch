@@ -3,12 +3,14 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, in
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
 import { ImportAdvancedComponent } from '../../import-advanced/import-advanced.component';
+import { MultiOutputConfigComponent } from '../../multi-output-config/multi-output-config.component';
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { CleanerInfo, CleanerSelection, ClipperInfo, EmbedderInfo, ImporterInfo, MediaTypeInfo } from '../../../../../models/api.models';
 import { DemoDatasetEntry } from '../../../../../generated/api-client/models/demo-dataset-entry';
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { composeEmbedders, getTabLabel, mediaTypeIconsById, mediaTypeLabels } from '../shared/media-type.util';
+import { OutputDraft, checkedKindsSummary, demoOutputDrafts, outputsFromDrafts } from '../shared/multi-output.util';
 import { sortRowsByColumn } from '../../../../../utils/sort-rows';
 import { demoSortValue } from '../shared/demo-sort';
 
@@ -26,7 +28,7 @@ import { demoSortValue } from '../shared/demo-sort';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-demo-picker',
   standalone: true,
-  imports: [FormsModule, ImportAdvancedComponent, ClipperChooserComponent],
+  imports: [FormsModule, ImportAdvancedComponent, MultiOutputConfigComponent, ClipperChooserComponent],
   templateUrl: './demo-picker.component.html',
   styleUrl: './demo-picker.component.scss',
 })
@@ -38,6 +40,10 @@ export class DemoPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
+  /** The Multi-Dataset editor, projected into the Advanced block in place of
+   *  the single dataset's fields while :prop:`multiDataset` is on (#4703,
+   *  #5230). */
+  readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   readonly guessedMediaType = input('');
   readonly guessedMediaEmbedder = input('');
@@ -106,6 +112,16 @@ export class DemoPickerComponent {
    *  the parent's footer submit button, hence a signal. */
   readonly selectedDemo = signal<DemoDatasetEntry | null>(null);
 
+  /** Multi-Dataset mode: the selected demo becomes one linked dataset per
+   *  ticked row of :prop:`outputDrafts` (its photos, and the faces cut out of
+   *  them, say).  Read by the parent modal (the dropdown's summary line, the
+   *  footer toggle and the Import button), hence signals. */
+  readonly multiDataset = signal(false);
+  readonly outputDrafts = signal<OutputDraft[]>([]);
+  /** The row whose Details opened the clipper chooser, or ``null`` when the
+   *  single-dataset Advanced block did. */
+  private clipperChooserCategory: string | null = null;
+
   static readonly DEMO_COL_META: Record<string, ColMeta> = {
     label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
     num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
@@ -119,12 +135,25 @@ export class DemoPickerComponent {
   clipperChooserClippers: ClipperInfo[] = [];
 
   openClipperChooser(): void {
+    this.clipperChooserCategory = null;
     this.clipperChooserClippers = this.demoClippers();
+    this.clipperChooserOpen = true;
+  }
+
+  /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
+  openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
+    this.clipperChooserCategory = request.category;
+    this.clipperChooserClippers = request.clippers;
     this.clipperChooserOpen = true;
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
+      this.clipperChooserCategory = null;
+      return;
+    }
     this.selectedDemoClipper.set(selection.name);
     this.demoClipperParamValues.set({ ...selection.params });
     this.updateDemoStatuses();
@@ -133,6 +162,11 @@ export class DemoPickerComponent {
 
   onClipperChooserCancelled(): void {
     this.clipperChooserOpen = false;
+    if (this.clipperChooserCategory !== null) {
+      // The row keeps the clipper it had.
+      this.clipperChooserCategory = null;
+      return;
+    }
     const clippers = this.clipperChooserClippers;
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedDemoClipper.set(defaultClipper?.name || '');
@@ -186,6 +220,8 @@ export class DemoPickerComponent {
     this.demoDatasetName = '';
     this.demoDatasetNameDirty = false;
     this.selectedDemo.set(null);
+    this.multiDataset.set(false);
+    this.outputDrafts.set([]);
 
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -398,7 +434,48 @@ export class DemoPickerComponent {
 
   selectDemoTab(tab: string): void {
     this.activeTab.set(tab);
+    // The rows are the tab's types; a new tab starts from one dataset again.
+    this.multiDataset.set(false);
+    this.outputDrafts.set([]);
     this.loadDemoEmbedders(tab);
+  }
+
+  /** Whether the Multi-Dataset box is offered: the active tab's demos can be
+   *  loaded as at least two types (an image demo as its photos and the faces
+   *  in them). */
+  get supportsMultiOutput(): boolean {
+    const native = this.mediaTypeInfo(this.activeTab())?.embeddable !== false;
+    return (native ? 1 : 0) + this.activeTabConvertsTo().length >= 2;
+  }
+
+  /** Switch between the single-dataset form and the Multi-Dataset editor.
+   *  Entering it ticks the demo's own type and the type the single form was
+   *  converting to, if any. */
+  setMultiDataset(on: boolean): void {
+    this.multiDataset.set(on);
+    if (on && this.outputDrafts().length === 0) {
+      this.outputDrafts.set(
+        demoOutputDrafts(this.mediaTypes(), this.activeTab(), this.activeTabConvertsTo(), this.selectedConverterTarget()),
+      );
+    }
+    this.cdr.markForCheck();
+  }
+
+  onOutputDraftsChange(drafts: OutputDraft[]): void {
+    this.outputDrafts.set(drafts);
+  }
+
+  /** Whether the import has something to make: always in single mode, at
+   *  least one ticked row in multi mode. */
+  get hasOutputs(): boolean {
+    return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
+  /** The ticked rows' kinds (``"Image, Document"``) for the line that stands
+   *  in for the media-type dropdown in multi mode, the list itself being
+   *  under Advanced (#5230). */
+  get multiDatasetSummary(): string {
+    return checkedKindsSummary(this.outputDrafts(), this.mediaTypes());
   }
 
   /** Invoked via a listener bound on the sibling `<vt-source-picker>`
@@ -439,6 +516,19 @@ export class DemoPickerComponent {
     const demo = this.selectedDemo();
     if (!demo) return;
     const userName = (this.demoDatasetName || '').trim();
+    if (this.multiDataset()) {
+      // One dataset per ticked row, each with its own settings; the
+      // single-dataset embedder / clipper / cleanup / Convert to stay home.
+      this.demoDatasetSelected.emit({
+        ...demo,
+        outputs: outputsFromDrafts(this.outputDrafts()),
+        dataset_name: userName,
+        build_projection: this.buildProjection(),
+        merge_near_duplicates: this.mergeNearDuplicates(),
+        ...(this.autofind() !== null ? { autofind: this.autofind() } : {}),
+      } as any);
+      return;
+    }
     const embedders = composeEmbedders(this.selectedDemoEmbedder(), this.selectedDemoPatchEmbedder(), this.selectedDemoStructuralEmbedder());
     const effClipper = this.effectiveDemoClipper();
     const converter = this.selectedDemoConverter();

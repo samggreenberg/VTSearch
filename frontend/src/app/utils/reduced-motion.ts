@@ -22,7 +22,7 @@ export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
  * `prefers-reduced-motion: reduce` media query — independent of the app's
  * "Show Animations" setting. This is the gate that *overrides* the in-app
  * toggle: when it matches, motion stays off even with "Show Animations" on,
- * which is why the toggle appears to do nothing. The Settings → Appearance
+ * which is why the toggle appears to do nothing. The Settings → General
  * status line reports this so a user whose animations vanished can see the
  * block is coming from their browser/OS, not from VTSearch.
  * Falls back to false where matchMedia is unavailable (SSR, jsdom tests).

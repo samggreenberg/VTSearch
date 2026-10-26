@@ -9,6 +9,9 @@
       (ngModelChange)="onDemoDatasetNameInput($event)"
       placeholder="Leave blank to use the demo's name"
     />
+    @if (multiDataset()) {
+      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ demoDatasetName || 'demo' }} – Face”.</p>
+    }
   </div>
 
   <vt-import-advanced
@@ -40,7 +43,24 @@
     (buildProjectionChange)="buildProjectionChange.emit($event)"
     [mergeNearDuplicates]="mergeNearDuplicates()"
     (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-  ></vt-import-advanced>
+    [showMultiToggle]="supportsMultiOutput && !effectiveSoloMediaType"
+    [multiDataset]="multiDataset()"
+    (multiDatasetChange)="setMultiDataset($event)"
+  >
+    <!-- Multi-Dataset: the list of datasets to make stands in for the
+         single dataset's fields, under the same Advanced toggle (#5230). -->
+    @if (multiDataset()) {
+      <vt-multi-output-config
+        idPrefix="demo"
+        [fixedSources]="true"
+        [mediaTypes]="mediaTypes()"
+        [drafts]="outputDrafts()"
+        (draftsChange)="onOutputDraftsChange($event)"
+        [guessedMediaEmbedder]="guessedMediaEmbedder()"
+        (clipperChooserRequested)="openClipperChooserFor($event)"
+      ></vt-multi-output-config>
+    }
+  </vt-import-advanced>
 </div>
 
 <vt-clipper-chooser

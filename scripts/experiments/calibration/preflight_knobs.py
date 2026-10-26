@@ -401,6 +401,32 @@ def probe(C: Any) -> list[str]:
                     "<unset> = %s, the app's head-count %s (#5039)" % ("off" if app is None else "%g" % app, what),
                 )
             )
+    # #5084's head's count multiplier at beta 1 and below: unset is the app's, `off` #4603's piece.
+    for attr, knob, env_name, what in (
+        ("HEAD_COUNT_PRECISION_SCALE", "head_count_precision_scale", "CALIB_HEAD_COUNT_PRECISION_SCALE", "scale"),
+        (
+            "HEAD_COUNT_PRECISION_EXPONENT",
+            "head_count_precision_exponent",
+            "CALIB_HEAD_COUNT_PRECISION_EXPONENT",
+            "exponent",
+        ),
+        ("HEAD_COUNT_PRECISION_TOP_Z", "head_count_precision_top_z", "CALIB_HEAD_COUNT_PRECISION_TOP_Z", "top gate"),
+    ):
+        got = getattr(C, attr, None)
+        if got is None:
+            continue
+        app = getattr(LL, attr)
+        if got != "off" and not (isinstance(got, float) and math.isfinite(got) and got > 0):
+            refuse(knob, env_name, "must be a positive number or off")
+        elif (None if got == "off" else got) != app:
+            rows.append(
+                (
+                    knob,
+                    got if got == "off" else "%g" % got,
+                    "<unset> = %s, the app's head-count %s at beta <= 1 (#5084)"
+                    % ("off" if app is None else "%g" % app, what),
+                )
+            )
     # The typed query's prior (#4384, the app's since #4859): unset is the app's scale, 0 the head
     # before it (the Goods' centroid alone), another scale an arm.
     from vtscore.training.svm_prior import QUERY_PRIOR_SCALE  # noqa: PLC0415

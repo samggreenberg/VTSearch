@@ -41,6 +41,8 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
+import { SourcePhotoService } from '../../services/source-photo.service';
+import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import {
   BROWSE_COLORMAP_IDS,
   DEFAULT_THUMBNAIL_BORDER,
@@ -73,6 +75,7 @@ type BrowseIconSize = (typeof BrowseViewComponent.ICON_SIZES)[number];
     IconComponent,
     BrowseBinPopupComponent,
     NoFocusStealDirective,
+    SourcePhotoModalComponent,
   ],
   // Scoped per browse view so the canvas, its minimap, and the selection panel
   // share one viewport channel and one selection set without leaking across
@@ -100,6 +103,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private toast = inject(ToastService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private ngZone = inject(NgZone);
+  /** Show in photo (#4750), opened from the bin details or the selection panel
+   *  on a face dataset; the overlay renders here, over the map. */
+  readonly sourcePhoto = inject(SourcePhotoService);
 
   private readonly canvas = viewChild(BrowseCanvasComponent);
   /** The active bin-details popup — the docked panel or the floating window,
@@ -199,7 +205,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
    * applied to the canvas's default target bin radius. ``M`` (index 2, scale 1)
    * is the default. The bigger/smaller buttons step through these and the
-   * Settings → Browser tab picks one by name. Growing the size makes the *same
+   * Settings → Browse Map tab picks one by name. Growing the size makes the *same
    * bins* use more pixels (the view zooms in lock-step, so the binning — which
    * vectors land in a hex — is unchanged); it is not the "Zoom" control, which
    * instead re-bins a smaller region more finely. The persisted per-media value
@@ -705,6 +711,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // The overlay is rendered here; leaving the view must not leave it armed
+    // to reopen over the next one.
+    this.sourcePhoto.close();
     this.stopPoll();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);

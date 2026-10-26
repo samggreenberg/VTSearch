@@ -309,6 +309,82 @@ class TestArchiveMemberClipRecipe:
         assert clip_recipe(media) is None
 
 
+class TestMergedArchiveMember:
+    """A duplicate collapse keeps an archive member's byte source across a reload (#5238).
+
+    The importer keys ``md5`` on ``archive::member``, so a manifest that lists
+    one member twice imports two items that the exact-duplicate collapse
+    merges.  The merge rewrites the origin to a ``dupe_set``, and the pickle
+    does not persist the top-level ``archive_member`` field.
+    """
+
+    def _merged(self, manifest: Path, media_type: str) -> dict:
+        from vtscore.state.media_lookup import collapse_duplicates
+
+        medias: dict[int, dict] = {}
+        IMPORTER.run({"manifest": str(manifest), "media_type": media_type}, medias)
+        assert len(medias) == 2
+        assert collapse_duplicates(medias) == 1
+        (media,) = medias.values()
+        assert media["origin"]["importer"] == "dupe_set"
+        return media
+
+    def test_reloaded_shape_resolves_own_member(self, tmp_path):
+        from vtscore.datasets.loader_pickle import _has_external_byte_source
+        import vtscore.media as media_registry
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive, members=["chunk_a.mp4", "chunk_a.mp4"])
+        media = self._merged(manifest, "video")
+        del media["archive_member"]
+
+        ref = archive_member_ref(media)
+        assert ref is not None
+        assert Path(ref[0]).name == archive.name
+        assert ref[1] == "chunk_a.mp4"
+        assert _has_external_byte_source(media)
+        assert media_registry.get("video")._resolve_media_bytes(media) == MEMBERS["chunk_a.mp4"]
+
+    def test_survives_full_mode_reload(self, tmp_path):
+        from tests_lib.helpers import make_dataset_file
+        from vtscore.datasets.loader_pickle import load_dataset_from_pickle
+        import vtscore.media as media_registry
+
+        archive = _make_tar(tmp_path)
+        manifest = _make_manifest(tmp_path, archive, members=["chunk_a.mp4", "chunk_a.mp4"])
+        media = self._merged(manifest, "video")
+
+        reloaded: dict[int, dict] = {}
+        load_dataset_from_pickle(make_dataset_file(tmp_path, {media["id"]: media}), reloaded)
+        (back,) = reloaded.values()
+        assert "archive_member" not in back
+        assert back["origin"]["importer"] == "dupe_set"
+        assert media_registry.get("video")._resolve_media_bytes(back) == MEMBERS["chunk_a.mp4"]
+
+    def test_merged_window_never_lazy_slices(self, tmp_path):
+        from vtscore.media.lazy_clip import clip_recipe
+
+        archive = _make_audio_tar(tmp_path)
+        rng = np.random.default_rng(5)
+        manifest = tmp_path / "twice.npz"
+        np.savez(
+            manifest,
+            vectors=rng.standard_normal((2, DIM)).astype(np.float32),
+            members=np.array(["clip_a.wav", "clip_a.wav"]),
+            archives=np.array(str(archive)),
+            clip_start=np.array([1.0, 1.0], dtype=np.float32),
+            clip_end=np.array([2.0, 2.0], dtype=np.float32),
+        )
+        media = self._merged(manifest, "audio")
+        del media["archive_member"]
+
+        # The representative's own origin still carries its display-only window.
+        own = media["origin"]["members"][0]["origin"]["params"]
+        assert (own["clip_start"], own["clip_end"]) == (1.0, 2.0)
+        assert archive_member_ref(media) is not None
+        assert clip_recipe(media) is None
+
+
 class TestLocalArchiveMemberSource:
     def test_factory_resolves_origin(self, tmp_path):
         from vtscore.datasets.sources import get_source_for_origin

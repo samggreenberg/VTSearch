@@ -1,0 +1,49 @@
+@if (loading()) {
+  <p class="empty-state">Loading items…</p>
+} @else if (error()) {
+  <p class="error-text">{{ error() }}</p>
+} @else if (ids().length === 0) {
+  <p class="empty-state">This dataset has no items.</p>
+} @else {
+  <p class="info-text">
+    Click one of its {{ ids().length | number }} items to use it as the example.
+  </p>
+  <div class="pick-scroll" (scroll)="onScroll($event)">
+    <div class="pick-grid">
+      @for (id of shown(); track id) {
+        <button
+          type="button"
+          class="pick-tile"
+          [class.pick-tile--named]="!showsThumbnail(id)"
+          [disabled]="busy()"
+          [title]="name(id)"
+          [attr.aria-label]="'Use ' + name(id) + ' as the example'"
+          (click)="pick(id)">
+          @if (showsThumbnail(id)) {
+            @if (isAudioWaveform()) {
+              <span
+                class="pick-thumb-wave waveform-mask"
+                [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
+                [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
+            } @else {
+              <img
+                class="pick-thumb"
+                [src]="thumbnailUrl(id)"
+                alt=""
+                loading="lazy"
+                (error)="onThumbnailError(id)" />
+            }
+          } @else {
+            <span class="pick-name">{{ name(id) }}</span>
+          }
+        </button>
+      }
+    </div>
+    @if (hasMore()) {
+      <div class="pick-more">
+        <span class="pick-count">Showing {{ shown().length | number }} of {{ ids().length | number }}</span>
+        <button type="button" class="btn btn--secondary btn--sm" (click)="showMore()" title="Show the next items (scrolling down does this too)">Show More</button>
+      </div>
+    }
+  </div>
+}

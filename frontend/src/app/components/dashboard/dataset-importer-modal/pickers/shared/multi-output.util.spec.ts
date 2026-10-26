@@ -1,6 +1,9 @@
 import { ConverterInfo, DetectMediaTypeResponse, MediaTypeInfo } from '../../../../../models/api.models';
 import {
   buildOutputDrafts,
+  categoryLabel,
+  checkedKindsSummary,
+  demoOutputDrafts,
   detectedCount,
   draftToOutputRequest,
   isMultiOutputImporter,
@@ -106,6 +109,35 @@ describe('multi-output.util', () => {
     expect(detectedCount(null, 'image')).toBe(0);
   });
 
+  describe('demoOutputDrafts', () => {
+    const rows = (drafts: ReturnType<typeof demoOutputDrafts>) =>
+      drafts.map((d) => [d.category, d.mediaType, d.checked, d.sourceSpecs[0].converter]);
+
+    it('an image demo: its photos ticked, then each type a converter makes from them', () => {
+      expect(rows(demoOutputDrafts(mediaTypes, 'image', ['face']))).toEqual([
+        ['image', 'image', true, null],
+        ['face', 'face', false, 'image2face'],
+      ]);
+    });
+
+    it('every row reads the demo own files', () => {
+      const drafts = demoOutputDrafts(mediaTypes, 'image', ['face', 'text']);
+      expect(drafts.every((d) => d.sourceSpecs.length === 1 && d.sourceSpecs[0].source_type === 'image')).toBe(true);
+    });
+
+    it('ticks what the single form was converting to', () => {
+      expect(demoOutputDrafts(mediaTypes, 'image', ['face'], 'face').map((d) => d.checked)).toEqual([true, true]);
+    });
+
+    it('a demo with no type of its own to keep offers only its conversions', () => {
+      expect(rows(demoOutputDrafts(mediaTypes, 'document', ['image', 'text'], 'text'))).toEqual([
+        ['image', 'image', false, 'document2image'],
+        ['text', 'text', true, 'document2text'],
+      ]);
+      expect(demoOutputDrafts(mediaTypes, 'document', ['image', 'text']).map((d) => d.checked)).toEqual([true, false]);
+    });
+  });
+
   describe('draftToOutputRequest', () => {
     const base = buildOutputDrafts(mediaTypes, convertersByType);
 
@@ -145,5 +177,17 @@ describe('multi-output.util', () => {
       const drafts = tickCategory(tickCategory(base, 'image'), 'audio');
       expect(outputsFromDrafts(drafts).map((o) => o.category)).toEqual(['audio', 'image']);
     });
+  });
+
+  it('categoryLabel names the media type, or falls back to its id', () => {
+    expect(categoryLabel(mediaTypes, 'document')).toBe('Document');
+    expect(categoryLabel([], 'document')).toBe('document');
+  });
+
+  it('checkedKindsSummary joins the ticked rows in category order, or is empty', () => {
+    const base = buildOutputDrafts(mediaTypes, convertersByType);
+    expect(checkedKindsSummary(base, mediaTypes)).toBe('');
+    const drafts = tickCategory(tickCategory(base, 'image'), 'audio');
+    expect(checkedKindsSummary(drafts, mediaTypes)).toBe('Audio, Image');
   });
 });

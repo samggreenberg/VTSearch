@@ -9,10 +9,10 @@
 <!-- build: figs/test-result.build2.webp -->
 
 <!-- **a** — The headline and the chart are the result pane. Headline's
-     F-beta at your radio. Found leads with words, because below the line it
+     Fβ at your radio. Found leads with words, because below the line it
      leans on the detector. -->
 
-<!-- **b** — Dotted is the planted truth, which you'd never have for real. Every
+<!-- **b** — Dashed is the planted truth, which you'd never have for real. Every
      range holds it. -->
 
 <!-- **c** — The verdict sits in the middle pane, where you voted. Its Lean the

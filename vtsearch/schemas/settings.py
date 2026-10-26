@@ -119,7 +119,7 @@ class AppSettingsSchema(Schema):
 
     # VTSBrowse per-media-type display prefs (density colormap, on-screen cell
     # size). ``{media_type_id: value}`` dicts driven by the browse-canvas
-    # toolbar and the Settings → Browser tab. (Bin shape is not stored — it is
+    # toolbar and the Settings → Browse Map tab. (Bin shape is not stored — it is
     # fixed by media type; see ``vtscore.projection.bin_shape_for_media_type``.)
     browse_colormap = _PerMediaTypeStringDict()
     browse_icon_size = _PerMediaTypeStringDict()
@@ -142,7 +142,7 @@ class AppSettingsSchema(Schema):
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
     # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
-    # own size buttons and the Settings → Browser tab. (The popup is grid-only.)
+    # own size buttons and the Settings → Browse Map tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
     # VTSBrowse bin-popup detail-canvas (large single-item preview) size in CSS
     # px, per media type. Driven by the popup's own top-left size buttons.

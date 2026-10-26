@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { FieldHintIconComponent } from '../../../field-hint-icon/field-hint-icon.component';
 import { IconComponent } from '../../../icon/icon.component';
 
 /** Output-media-type select + auto-detection hint chip shared by the
@@ -27,7 +26,7 @@ import { IconComponent } from '../../../icon/icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-config',
   standalone: true,
-  imports: [FormsModule, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, IconComponent],
   templateUrl: './import-config.component.html',
   styleUrl: './import-config.component.scss',
 })
@@ -63,25 +62,20 @@ export class ImportConfigComponent {
    *  the chip entirely. */
   readonly detectionHint = input('');
 
-  /** Whether to offer the **Multi-Dataset** box above the dropdown (#4703).
-   *  On for the importers that can make several datasets from one run
-   *  (``supports_multi_output``); off for the demo flow, whose dataset is a
-   *  named download. */
-  readonly showMultiToggle = input(false);
-  /** Two-way bound Multi-Dataset mode.  While on, the single media-type
-   *  dropdown gives way to the picker's per-category editor
-   *  (``<vt-multi-output-config>``), so this component shows only the box. */
+  /** Multi-Dataset mode (#4703).  The box that switches it on is not here:
+   *  it sits at the top of the picker's Advanced block with the list it opens
+   *  (#5230).  While on, the dropdown gives way to a one-line summary of what
+   *  the import will make (:prop:`multiSummary`), so a shut Advanced block
+   *  still leaves it in sight, and an Import button greyed out for want of a
+   *  ticked row says why. */
   readonly multiDataset = input(false);
-  readonly multiDatasetChange = output<boolean>();
-
-  /** ``id`` for the Multi-Dataset box, derived like :prop:`listboxId`. */
-  get multiToggleId(): string {
-    return `${this.mediaTypeFieldId()}-multi`;
-  }
-
-  onMultiToggle(checked: boolean): void {
-    if (checked !== this.multiDataset()) this.multiDatasetChange.emit(checked);
-  }
+  /** The ticked rows' kinds, joined (``"Image, Document"``); empty when none
+   *  is ticked.  Read from the picker's draft list. */
+  readonly multiSummary = input('');
+  /** Whether Multi-Dataset mode hides the dropdown.  Off for the demo flow,
+   *  where the dropdown picks which demos are listed rather than the type of
+   *  the dataset, and so still matters with several datasets to make. */
+  readonly multiHidesMediaType = input(true);
 
   /** Whether the custom dropdown is currently expanded. */
   open = false;

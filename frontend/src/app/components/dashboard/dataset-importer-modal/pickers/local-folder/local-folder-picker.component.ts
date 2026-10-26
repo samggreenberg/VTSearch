@@ -30,12 +30,14 @@ import {
   mediaTypeOptionIcons,
   mediaTypeOptionLabels,
   readRecursiveDefault,
+  singleDatasetMediaTypes,
   toFolderName,
   toTypeId,
 } from '../shared/media-type.util';
 import {
   OutputDraft,
   buildOutputDrafts,
+  checkedKindsSummary,
   convertersByTypeOf,
   isMultiOutputImporter,
   outputsFromDrafts,
@@ -73,8 +75,9 @@ export class LocalFolderPickerComponent {
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
   readonly importAdvanced = viewChild(ImportAdvancedComponent);
-  /** The Multi-Dataset editor, mounted in place of the Advanced block while
-   *  :prop:`multiDataset` is on (#4703). */
+  /** The Multi-Dataset editor, projected into the Advanced block in place of
+   *  the single dataset's fields while :prop:`multiDataset` is on (#4703,
+   *  #5230). */
   readonly multiOutputConfig = viewChild(MultiOutputConfigComponent);
 
   readonly importers = input<ImporterInfo[]>([]);
@@ -195,7 +198,7 @@ export class LocalFolderPickerComponent {
 
     const folderImporter = this.importers().find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
-    this.mediaTypeOptions = mtField?.options || [];
+    this.mediaTypeOptions = singleDatasetMediaTypes(this.mediaTypes(), mtField?.options || []);
 
     const guessedFolder = toFolderName(this.mediaTypes(), this.guessedMediaType());
     if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder)) {
@@ -422,6 +425,13 @@ export class LocalFolderPickerComponent {
    *  least one ticked category in multi mode. */
   get hasOutputs(): boolean {
     return !this.multiDataset() || this.outputDrafts().some((d) => d.checked);
+  }
+
+  /** The ticked rows' kinds (``"Image, Document"``) for the line that stands
+   *  in for the media-type dropdown in multi mode, the list itself being
+   *  under Advanced (#5230). */
+  get multiDatasetSummary(): string {
+    return checkedKindsSummary(this.outputDrafts(), this.mediaTypes());
   }
 
   private resetSourceSpecs(): void {

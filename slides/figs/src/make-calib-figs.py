@@ -41,6 +41,9 @@ from matplotlib.textpath import TextPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import (  # noqa: E402
+    CUT_DOTS,
+    CUT_LW,
+    CUT_WASH,
     FULL_BLEED,
     LABEL_GAP_PT,
     OBJECT_GAP_PT,
@@ -3361,7 +3364,10 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         fontsize=15,
         color=INK,
     )
-    _theta_notch(ax, x0 + theta_mid * w, fold_base, "mid")
+    # Hung a label gap under its notch, as `mid_label_bottom` above assumes,
+    # not at the default drop that clears a row of votes: the votes leave a
+    # gap round the midpoint, and the default put the name on the formula.
+    _theta_notch(ax, x0 + theta_mid * w, fold_base, "mid", drop=0.32 + LABEL_GAP)
 
     _score_histogram(ax, x0, final_base, w, TILT_PANEL_H, None, final, fill="plain", mu_labels=False)
     ax.text(x0 + w, final_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
@@ -3453,7 +3459,7 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         ax.text(
             x_mid,
             caption_y,
-            "a stop, a quantile, a cut — as before",
+            "each stop gives a quantile, and the quantile a cut, as before",
             ha="center",
             va="top",
             fontsize=15,
@@ -3536,9 +3542,12 @@ def blend_schedule_fig() -> None:
     schedule = get_schedule(binary)
     lo_edge = schedule.combine(-10.0, gmm, ctx, fit)
     hi_edge = schedule.combine(10.0, gmm, ctx, fit)
-    ax.axvspan(lo_edge, hi_edge, color=BLUE, alpha=0.16, linewidth=0)
-    ax.plot([gmm, gmm], [0, 1.18], color=BLUE, linewidth=2.2)
-    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=BLUE)
+    # The corridor is the band round the line, so a neutral wash, and the line
+    # is dotted black, as every slide draws a threshold (#5206). The schedule's
+    # curve above stays blue: it is the shipped schedule, not a cut.
+    ax.axvspan(lo_edge, hi_edge, color=CUT_WASH, linewidth=0, zorder=0)
+    ax.plot([gmm, gmm], [0, 1.18], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS)
+    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=INK)
     ax.text(mu_lo, -0.10, _sub(r"\mu_{lo}"), ha="center", va="top", fontsize=15, color=RED)
     ax.text(mu_hi, -0.10, _sub(r"\mu_{hi}"), ha="center", va="top", fontsize=15, color=GREEN)
     ax.annotate(
@@ -3562,7 +3571,7 @@ def blend_schedule_fig() -> None:
         color=INK,
         va="top",
     )
-    fig.text(0.06, 0.425, f"{binary} — the same at every vote count", fontsize=15, color=SOFT, va="top")
+    fig.text(0.06, 0.425, f"{binary}, the same band at every vote count", fontsize=15, color=SOFT, va="top")
     save(fig, OUT, "calib-blend-schedule.webp", column=FULL_BLEED, tight=False)
 
 
@@ -3748,7 +3757,9 @@ def anchored_fig() -> None:
     ax.plot(x, anchored.w_lo * gaussian(x, anchored.mu_lo, anchored.var_lo), color=RED, linewidth=2.4, zorder=3)
     ax.plot(x, anchored.w_hi * gaussian(x, anchored.mu_hi, anchored.var_hi), color=GREEN, linewidth=2.4, zorder=3)
     ax.axvline(plain_mid, color=SOFT, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
-    ax.axvline(anch_mid, color=BLUE, linewidth=2.4, zorder=4)
+    # Dotted black at its own curves' weight, as Twin Peaks draws a cut beside its curve (#5206).
+    cut = ax.axvline(anch_mid, color=INK, linewidth=2.4, linestyle=LL_CUT_DOTS, zorder=4)
+    cut.set_dash_capstyle("round")
 
     ymax = ax.get_ylim()[1]
     for s in bad_anchors:
@@ -3770,7 +3781,7 @@ def anchored_fig() -> None:
         xytext=(10, 0),
         textcoords="offset points",
         ha="left",
-        color=BLUE,
+        color=INK,
         fontsize=15,
     )
     ax.annotate(
@@ -4729,9 +4740,11 @@ def _patch_stage(stage: int) -> plt.Figure:
         for index, point in enumerate(points):
             if index != followed:
                 _cube_dot(ax, point)
-        # The one patch the figure follows: outlined on the photograph, and its
-        # point in the cube drawn green and hatched, ringed the same way, so the
-        # eye can pair the two across the arrow.
+        # The one patch the figure follows: outlined green on the photograph,
+        # and its point in the cube drawn large, green and hatched, so the eye
+        # can pair the two across the arrow. No square round the point: Embed-
+        # time Stories draws a text query as a solid green square in this same
+        # cube, and a ring here read as one (owner, #5203).
         row, col = PATCH_FOLLOWED
         px, py, cell = _patch_cell(row, col)
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
@@ -4740,19 +4753,6 @@ def _patch_stage(stage: int) -> plt.Figure:
         # tint, and on top of the neighbours it lands among.
         point = points[followed]
         _cube_dot(ax, point, edge=GREEN, hatch=PATCH_FOLLOWED_HATCH, scale=PATCH_FOLLOWED_SCALE, zorder=7.8)
-        fx, fy = _cube_at(point)
-        ring = (PATCH_FOLLOWED_SCALE + 0.9) * PATCH_DOT_R
-        ax.add_patch(
-            Rectangle(
-                (fx - ring, fy - ring),
-                2 * ring,
-                2 * ring,
-                facecolor="none",
-                edgecolor=GREEN,
-                linewidth=2.2,
-                zorder=8,
-            )
-        )
     return fig
 
 
@@ -5312,19 +5312,20 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 
     # The two steps, named. Right of the title reserve, and above the row,
     # because they are what the row is a picture of.
-    # The two letters are expanded here and nowhere else. They are the only
-    # notation the aside introduces, the block arrows below repeat them bare,
-    # and a room meeting "EM" for the first time should not have to be told
-    # aloud what the initials stand for (#3301).
+    # The two names are spelled out here and nowhere else. They are the only
+    # notation the aside introduces, the block arrows below carry their
+    # initials, and a room meeting "EM" for the first time should not have to
+    # be told aloud what the initials stand for (#3301). Each name leads its
+    # own sentence, with no initial in front of it (owner, #5203).
     lines = (
         (
-            "E (Expectation) — how much does each curve claim each score?",
-            "M (Maximization) — re-fit each curve to what it claims.",
+            "Expectation: How much does each curve claim each score?",
+            "Maximization: Re-fit each curve to what it claims.",
         )
         if anchors is None
         else (
-            "E (Expectation) — a vote is claimed by its own side.",
-            "M (Maximization) — and it counts κ times over.",
+            "Expectation: A vote is claimed by its own side.",
+            "Maximization: Each vote counts κ times over.",
         )
     )
     # Every line has to end left of the canvas edge. Not a nicety: this axes
@@ -5344,7 +5345,7 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 # ── the line the labels draw (#4452) ─────────────────────────────────────────
 
 #: How many build stages the labels-line figure has: the held-out votes; the
-#: class model fitted to them; the corpus and its fit; expected F-beta at the
+#: class model fitted to them; the corpus and its fit; expected Fβ at the
 #: balanced radio, and the line at its peak; β ¼'s peak beside it; then β 4's
 #: (owner, #4872: one other radio at a time, before all three).
 LL_STAGES = 6
@@ -5394,9 +5395,14 @@ LL_BINS = 46
 LL_VOTES_Y, LL_MODEL_H = 8.15, 1.1
 LL_CORPUS_Y, LL_CORPUS_H = 4.25, 2.75
 LL_F_Y, LL_F_H = 0.8, 2.25
-#: The β the room has picked, and the two it has not: drawn heavier in the
-#: `BALANCE_WEIGHTS` ramp, the same three weights as on `calib-fbeta`.
+#: The balanced radio: the β whose line arrives first, before the other two.
+#: All three are drawn alike, at their weights in the `BALANCE_WEIGHTS` ramp,
+#: the same three weights as on `calib-fbeta`.
 LL_PICKED = 1.0
+#: The radios' lines' dot pattern, in line widths (matplotlib scales it by
+#: the width): a dot with no length, which a round cap draws as a disc the
+#: width of the line, every two and a half widths.
+LL_CUT_DOTS = (0, (0.01, 2.5))
 #: The votes' glyphs as a dot plot: a vote hangs in the first tier, top down,
 #: where the glyph left of it is at least this far away (a 20pt mark's width,
 #: in canvas units), so the pile round the line stacks instead of overprinting.
@@ -5424,7 +5430,7 @@ def _vote_tiers(xs: Sequence[float], gap: float) -> list[int]:
 
 
 def _ll_pile_floor() -> float:
-    """The lowest ink of the votes' pile: lines rising from the corpus stop an object gap under it."""
+    """The lowest ink of the votes' pile: an arrow rising into it stops an object gap under it."""
     tiers = _vote_tiers([float(_ll_at(x)) for x in LL_GOODS + LL_BADS], LL_GLYPH_W)
     assert max(tiers) == 1, f"the votes pile {max(tiers) + 1} deep: respace LL_GOODS / LL_BADS"
     return LL_VOTES_Y - 0.12 - max(tiers) * LL_TIER_STEP - LL_GLYPH_H
@@ -5476,13 +5482,15 @@ def _ll_expected_f(line: "LabelsLine", beta: float) -> tuple[np.ndarray, np.ndar
 
 
 def labels_line_fig() -> None:
-    """How the app finds the F-beta peak without knowing what is a match (#4452).
+    """How the app finds the Fβ peak without knowing what is a match (#4452).
 
     Three rows on one score axis: the votes, held out, and the class model
     they imply; the corpus, and how many matches the fit says it holds; the
-    expected F-beta of every cut, and the line at its peak. The last two pages
-    add the other radios' peaks, β ¼'s and then β 4's — the same three balances
-    as `calib-fbeta`.
+    expected Fβ of every cut, and the line dropped from its peak to the
+    corpus. The last two pages add the other radios' peaks, β ¼'s and then
+    β 4's — the same three balances as `calib-fbeta`. Every line is dotted
+    black at its own curve's weight, and stops at the corpus's baseline
+    (owner, #5203).
     The first two rows are built up on Curvey & InDiscrete (`labels_fit_fig`), so
     the pages start at :data:`LL_FIRST_SHOWN` and are numbered from 1.
     """
@@ -5525,7 +5533,7 @@ def _ll_stage(stage: int) -> plt.Figure:
     if stage >= 3:
         _ll_corpus_row(ax, corpus, line, model)
     if stage >= 4:
-        _ll_f_row(ax, corpus, line, stage)
+        _ll_f_row(ax, line, stage)
     return fig
 
 
@@ -5601,13 +5609,12 @@ def _ll_corpus_row(
         ax.plot(_ll_at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
 
 
-def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) -> None:
-    """Stages 4-6: expected F-beta down the ranking, the line at the picked radio's peak, then β ¼'s, then β 4's."""
+def _ll_f_row(ax: plt.Axes, line: "LabelsLine", stage: int) -> None:
+    """Stages 4-6: expected Fβ down the ranking, each radio's peak dropped to the corpus: β 1's, then β ¼'s, then β 4's."""
     lo, hi = LL_LOGIT
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
     _ll_row_name(ax, LL_F_Y + 0.75, "Expected Fβ")
-    for (beta, _name), weight, reveal in zip(FBETA_ARMS, BALANCE_WEIGHTS, LL_REVEAL, strict=True):
-        picked = beta == LL_PICKED
+    for beta, weight, reveal in zip((b for b, _ in FBETA_ARMS), BALANCE_WEIGHTS, LL_REVEAL, strict=True):
         if stage < reveal:
             continue
         xs, f = _ll_expected_f(line, beta)
@@ -5616,25 +5623,31 @@ def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) 
         cut_x = float(_ll_at(float(_ll_logit(line.threshold(beta)))))
         dot_y = LL_F_Y + float(f.max()) * LL_F_H
         ax.plot([cut_x], [dot_y], marker="o", markersize=8, color=INK, zorder=6)
-        if picked:
-            _ll_line(ax, corpus, line, cut_x, dot_y)
-        else:
-            # The radios not picked: their peaks, dropped to the corpus they
-            # would cut, in black like the three cuts on `calib-fbeta`.
-            ax.plot([cut_x] * 2, [dot_y, LL_CORPUS_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        _ll_cut(ax, cut_x, dot_y, weight)
 
 
-def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float, dot_y: float) -> None:
-    """The line: blue, the palette's "the shipped thing", from the peak that placed it up through the corpus."""
-    top = min(LL_CORPUS_Y + LL_CORPUS_H + 0.15, _ll_pile_floor() - OBJECT_GAP)
-    ax.plot([cut_x] * 2, [dot_y, top], color=BLUE, linewidth=2.6, zorder=5)
-    kept = int(np.sum(corpus >= float(_ll_logit(line.threshold(LL_PICKED)))))
-    bracket_y = LL_CORPUS_Y + LL_CORPUS_H - 0.35
-    right = LL_X0 + LL_W
-    ax.plot([cut_x + 0.08, right], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
-    ax.plot([right] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
-    ax.text(
-        (cut_x + right) / 2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="center", va="bottom", fontsize=16, color=INK
+def _ll_cut(ax: plt.Axes, x: float, bottom: float, weight: float) -> None:
+    """One radio's line: dotted black at its curve's own weight, from *bottom* up to the corpus's baseline.
+
+    All three radios alike (owner, #5203): no one of them is "the shipped
+    thing", so none is blue, and the weight that tells the three curves apart
+    is what tells their lines apart. It stops at the corpus's baseline, where
+    the cut is made, rather than running up through the bars.
+    """
+    # Round dots as wide as the line, so it reads as dotted at every weight: a
+    # dash pattern scales with the width, and at β 4's it is three slabs.
+    # Drawn downward, so the pattern starts at the baseline: the end the room
+    # reads the cut at always shows ink, and the peak's dot covers wherever
+    # the pattern happens to stop. Half a width under it, so the first disc
+    # touches the baseline from below instead of rising over it.
+    ax.plot(
+        [x] * 2,
+        [LL_CORPUS_Y - weight / 2 / FLOW_UNIT_PT, bottom],
+        color=INK,
+        linewidth=weight,
+        linestyle=LL_CUT_DOTS,
+        dash_capstyle="round",
+        zorder=2,
     )
 
 
@@ -5728,6 +5741,9 @@ ACQ_NAME_DROP = 0.2
 #: The asked item's disc: its radius, and its gap over the corpus's bars.
 ACQ_PICK_R = 0.24
 ACQ_PICK_GAP = 0.12
+#: How far the answer's arc, from the asked item back up into the votes,
+#: bends off its chord (matplotlib's `arc3` ``rad``).
+ACQ_ARC_RAD = 0.4
 
 
 def acq_flow_fig() -> None:
@@ -5771,14 +5787,18 @@ def _acq_chance(line: "LabelsLine", logit: float) -> float:
     return float(np.interp(logit, xs, np.asarray(line.unvoted_posteriors, dtype=float)[::-1]))
 
 
-def _acq_cut(ax: plt.Axes, line: "LabelsLine", beta: float, name: str, **style) -> None:
-    """One radio's line: from the chance row's floor up through the corpus, its chance dotted, its name under it."""
+def _acq_cut(ax: plt.Axes, line: "LabelsLine", beta: float, name: str, weight: float) -> None:
+    """One radio's line, drawn as Twin Peaks draws it, from the chance row's floor; its chance dotted, its name under it.
+
+    Up to the corpus's baseline and no further, so the line never runs into
+    the bars or the (?) standing on them (owner, #5203). It starts at the
+    floor rather than at its dot, because the radio's name hangs there.
+    """
     logit = float(_ll_logit(line.threshold(beta)))
     x = float(_ll_at(logit))
-    top = min(LL_CORPUS_Y + LL_CORPUS_H + 0.15, _ll_pile_floor() - OBJECT_GAP)
-    ax.plot([x] * 2, [ACQ_CHANCE_Y, top], zorder=5, **style)
+    _ll_cut(ax, x, ACQ_CHANCE_Y, weight)
     ax.plot([x], [ACQ_CHANCE_Y + _acq_chance(line, logit) * ACQ_CHANCE_H], marker="o", markersize=8,
-            color=style.get("color", INK), zorder=6)  # fmt: skip
+            color=INK, zorder=6)  # fmt: skip
     ax.text(x, ACQ_CHANCE_Y - ACQ_NAME_DROP, name, ha="center", va="top", fontsize=16, color=INK)
 
 
@@ -5812,9 +5832,9 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
     _ll_corpus_row(ax, corpus, line, model)
     _ll_chance_row(ax, line)
     # The radios' lines by weight, as everywhere the three are drawn (owner,
-    # #4872); the picked one in the line's own blue.
+    # #4872), and dotted black like Twin Peaks' (owner, #5203).
     weights = {beta: weight for (beta, _), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True)}
-    _acq_cut(ax, line, LL_PICKED, "β 1", color=BLUE, linewidth=weights[LL_PICKED])
+    _acq_cut(ax, line, LL_PICKED, "β 1", weights[LL_PICKED])
 
     # ── stage 2: Autopilot asks where the chance falls to even odds ───────────
     # Drawn as a reading of the curve rather than as a second line: from the
@@ -5832,24 +5852,35 @@ def _acq_flow_stage(stage: int) -> plt.Figure:
     if stage >= 3:
         for beta, name in FBETA_ARMS:
             if beta != LL_PICKED:
-                _acq_cut(ax, line, beta, f"β {name}", color=INK, linewidth=weights[beta])
+                _acq_cut(ax, line, beta, f"β {name}", weights[beta])
 
     # ── stage 4: the answer goes back into the votes ─────────────────────────
     if stage >= 4:
         # Into the votes' pile from below, an object gap short of its lowest mark.
+        tail = (pick[0] + ACQ_PICK_R * 0.7, pick[1] + ACQ_PICK_R * 0.7)
+        head = (ask_x, _ll_pile_floor() - OBJECT_GAP)
         ax.annotate(
             "",
-            xy=(ask_x, _ll_pile_floor() - OBJECT_GAP),
-            xytext=(pick[0] + ACQ_PICK_R * 0.7, pick[1] + ACQ_PICK_R * 0.7),
-            arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.6, "connectionstyle": "arc3,rad=0.4"},
+            xy=head,
+            xytext=tail,
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": INK,
+                "linewidth": 1.6,
+                "connectionstyle": f"arc3,rad={ACQ_ARC_RAD}",
+            },
             zorder=6,
         )
-        # Right of the arc's bulge and clear of β ¼'s line, which runs between
-        # the two.
-        quarter_x = float(_ll_at(float(_ll_logit(line.threshold(FBETA_ARMS[0][0])))))
+        # A label gap right of the arc's bulge. `arc3` bends a quadratic
+        # Bezier whose control point sits `rad` times the chord, turned a
+        # right angle, off the chord's middle; the curve's own middle is half
+        # that far out. The canvas is drawn at one scale on both axes, so the
+        # bend in canvas units is the bend on the page.
+        dx, dy = head[0] - tail[0], head[1] - tail[1]
+        bulge = ((tail[0] + head[0]) / 2 + ACQ_ARC_RAD * dy / 2, (tail[1] + head[1]) / 2 - ACQ_ARC_RAD * dx / 2)
         ax.text(
-            quarter_x + OBJECT_GAP,
-            (pick[1] + LL_VOTES_Y) / 2,
+            bulge[0] + LABEL_GAP,
+            bulge[1],
             "vote, and retrain",
             ha="left",
             va="center",
@@ -5880,6 +5911,11 @@ TX_CORPUS_Y, TX_CORPUS_H = 1.2, 4.6
 #: else and keep a different count, from the same votes.
 TX_FIND_CORPUS = (3000, 0.04, (1.1, 0.65), (-1.0, 0.9), 7)
 TX_BINS = 30
+#: What the notes say: Train keeps 216, and the same labels keep 95 on Find,
+#: where 120 are really matches. They are the shipped line's numbers, so a
+#: change to `fit_labels_line` moves them, and the notes have to move too
+#: (Find kept 116 until #5040's corpus-fitted Bad component).
+TX_NOTES_COUNTS = (216, 95, 120)
 
 
 @functools.lru_cache(maxsize=None)
@@ -5905,6 +5941,14 @@ def transfer_fig() -> None:
     run on a second corpus: the same labels draw a different line there, and
     keep a different count, because the corpus is half the input.
     """
+    train, train_line = _ll_data()
+    find, find_line = _tx_find()
+    counts = (
+        int(np.sum(train >= float(_ll_logit(train_line.threshold(LL_PICKED))))),
+        int(np.sum(find >= float(_ll_logit(find_line.threshold(LL_PICKED))))),
+        int(round(TX_FIND_CORPUS[0] * TX_FIND_CORPUS[1])),
+    )
+    assert counts == TX_NOTES_COUNTS, f"Transfer Student's notes quote {TX_NOTES_COUNTS}; the line now gives {counts}"
     final = _tx_stage(TX_STAGES)
     box = tight_box(final)
     for stage in range(1, TX_STAGES):
@@ -5962,12 +6006,12 @@ def _tx_corpus(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, sy
 
 
 def _tx_line(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, line: "LabelsLine") -> None:
-    """The line at the middle radio, blue, through the corpus, and what it keeps."""
+    """The line at the middle radio, dotted black (#5206), through the corpus, and what it keeps."""
     x0, w = column
     cut = float(_ll_logit(line.threshold(LL_PICKED)))
     cut_x = float(_tx_at(column, cut))
     top = TX_CORPUS_Y + TX_CORPUS_H + 0.2
-    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=BLUE, linewidth=2.6, zorder=5)
+    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=5)
     kept = int(np.sum(corpus >= cut))
     bracket_y = TX_CORPUS_Y + TX_CORPUS_H - 0.3
     right = x0 + w
@@ -7441,10 +7485,10 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
         fontsize=15,
         color=INK,
     )
-    # The line, at the kept set's foot, in the palette's blue: it is the shipped
-    # decision, and the one thing on the drawing the fragment names in colour.
+    # The line, at the kept set's foot: dotted black, as every slide draws a
+    # threshold (#5206).
     line_bottom = strip_y0 - 1.15
-    ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
+    ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=6)
     ax.text(line_x - 0.14, line_bottom + 0.05, "the line", ha="right", va="bottom", fontsize=16, color=INK)
     return {
         "cell_w": cell_w,
@@ -7669,18 +7713,11 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         for index, _good in deeper_picks:
             _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
         _floor_vote_marks(ax, rows, deeper_picks)
-        # Both steps leave from the line: its own blue, carried down dashed to
-        # the walk row, so the two arrows read as two moves of one line rather
-        # than as one arrow with two heads.
+        # Both steps leave from the line: carried down to the walk row in its
+        # own dots, so the two arrows read as two moves of one line rather than
+        # as one arrow with two heads.
         line_x = rows["line_x"]
-        ax.plot(
-            [line_x] * 2,
-            [walk_y, rows["line_bottom"]],
-            color=BLUE,
-            linewidth=2.0,
-            linestyle=(0, (2, 2)),
-            zorder=6,
-        )
+        ax.plot([line_x] * 2, [walk_y, rows["line_bottom"]], color=INK, linewidth=CUT_LW, linestyle=CUT_DOTS, zorder=6)
         shallower_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][0])
         _floor_walk_arrow(ax, line_x - 0.2, FLOOR_STRIP_X0, walk_y, "a band deeper: worse")
         _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
