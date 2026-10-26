@@ -237,6 +237,19 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--as-labelset",
+        action="store_true",
+        dest="as_labelset",
+        help=(
+            "With --stream-results, stream the hits as a labelset instead: one "
+            "label entry per hit (md5, label, origin, ...; no scores), each naming "
+            "the detector that labelled it, so the export reads back in through a "
+            "label importer. The exporter must support it (server_json_file writes "
+            "a labels JSON file, server_csv_file a labels CSV; gui, webhook and "
+            "email_smtp also stream labelsets)."
+        ),
+    )
+    parser.add_argument(
         "--import-labels-into",
         type=str,
         default=None,
@@ -434,6 +447,7 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
         "chunk_size",
         "stream_results",
         "keep_negatives",
+        "as_labelset",
         "import_labels_into",
         "label_importer_file",
         "label_importer_fields",
@@ -844,6 +858,7 @@ def _dispatch_autodetect(
     stream_results,
     keep_negatives,
     save_dataset,
+    as_labelset=False,
     override_clipper=None,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path.
@@ -895,6 +910,7 @@ def _dispatch_autodetect(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=[args.import_labels_into] if args.import_labels_into else None,
         override_clipper=override_clipper,
@@ -958,10 +974,13 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
     stream_results = bool(getattr(args, "stream_results", False))
     keep_negatives = bool(getattr(args, "keep_negatives", False))
+    as_labelset = bool(getattr(args, "as_labelset", False))
     if stream_results and not chunk_size:
         parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
     if keep_negatives and not stream_results:
         parser.error("--keep-negatives only applies with --stream-results")
+    if as_labelset and not stream_results:
+        parser.error("--as-labelset only applies with --stream-results")
     # The imported dataset is saved to the dashboard unless --tempimport says
     # otherwise (#4226). Streaming exists for sources too big to hold, and
     # saving means holding the whole dataset, so the two cannot be combined.
@@ -986,7 +1005,8 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         stream_results,
         keep_negatives,
         save_dataset,
-        override_clipper,
+        as_labelset=as_labelset,
+        override_clipper=override_clipper,
     )
 
 

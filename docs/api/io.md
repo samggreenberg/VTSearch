@@ -93,7 +93,9 @@ the Settings › AutoFind results exporter.
 **Streaming support** (CLI `--autodetect --tempimport --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
 incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches
-(one POST / one email per batch) so they too stay bounded. This applies to the
+(one POST / one email per batch) so they too stay bounded. With `--as-labelset`
+the same five stream the hits as re-importable label entries instead
+(`export_labelset_streaming`). This applies to the
 CLI streaming path only — the `POST /api/exporters/export` route above always
 receives a fully-materialised results dict. See [CLI.md](../CLI.md) and
 `docs/plans/cli-stream-massive-images.md`.

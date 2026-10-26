@@ -184,6 +184,12 @@ def autodetect_importer_main_chunked(
   key are narrower still: both also require a chunk size. The exporter must
   declare `supports_streaming`, or the run fails with the list of exporters
   that do.
+- **`as_labelset=True`** (with `stream_results`; refused without it) streams
+  the hits as label entries instead, through the exporter's
+  `export_labelset_streaming`: every detector's entries in one export, each
+  naming its `detector`, with no score, threshold or balance. The exporter must
+  report `supports_labelset_streaming`. The CLI flag is `--as-labelset`; the
+  pipeline-YAML key is `as_labelset:`.
 
 ```python
 from vtscore.cli import autodetect_main, autodetect_importer_main
@@ -277,7 +283,8 @@ interesting steps:
 3. If `stream_results`, hand off to the streaming path
    (`_run_streaming_pipeline`): train on the first chunk, then pass the
    exporter a header plus a lazy `(detector_name, hit)` iterator via
-   `export_cli_streaming`.
+   `export_cli_streaming`, or, with `as_labelset`, a lazy iterator of label
+   entries via `export_labelset_streaming`.
 4. Otherwise iterate the source chunk by chunk. On the first non-empty
    chunk, train each AutoFind (or `override_detectors`) detector via
    `_load_and_train_detectors`. A detector whose `media_type` has no

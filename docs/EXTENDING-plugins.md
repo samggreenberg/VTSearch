@@ -1602,6 +1602,8 @@ find-results pickers by construction.
 | `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export_find_results()` |
 | `supports_streaming` | `property -> bool` | Whether this exporter can write results incrementally. Default `False`. |
 | `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
+| `export_labelset_streaming()` | `(header: dict, elements: Iterator[dict], field_values: dict) -> dict` | Write a labelset incrementally, one label entry at a time (`--stream-results --as-labelset`). Default raises `NotImplementedError`. |
+| `supports_labelset_streaming` | `property -> bool` | Derived: `True` when `export_labelset_streaming()` is overridden. Not declared, and not a payload kind. |
 
 #### Streaming exports (`--stream-results`)
 
@@ -1648,6 +1650,42 @@ should write to a sibling `.tmp` path and `os.replace` on success so a crash
 mid-stream can't leave a half-written file at the destination. Open
 follow-ups (globally sorted output, resume) are tracked in
 `docs/plans/cli-stream-massive-images.md`.
+
+#### Streaming a labelset (`--as-labelset`)
+
+`--stream-results --as-labelset` streams the same run's hits as **label
+entries**, so the export reads back in through a label importer. Override
+`export_labelset_streaming()` and `supports_labelset_streaming` follows
+(it is derived from the override, like `supported_payloads`):
+
+```python
+def export_labelset_streaming(self, header, elements, field_values):
+    # header = {"media_type": str,
+    #           "detectors": [str, ...],   # names only: no threshold, no balance
+    #           "keep_negatives": bool,
+    #           "dataset": {...}}          # as for export_cli_streaming
+    # elements yields serialised LabeledElement dicts in chunk order: md5 and
+    # label always; origin / origin_name / filename / category / metadata where
+    # present; and "detector", naming the detector that labelled the entry.
+    # Every detector's entries arrive in the one stream, so an item two
+    # detectors score appears twice. No score and no media id.
+    path = Path(field_values["filepath"])
+    with atomic_write_stream(path) as f:
+        f.write('{"labels": [')
+        for i, entry in enumerate(elements):
+            f.write(("" if i == 0 else ",") + json.dumps(entry))
+        f.write("]}")
+    return {"message": f"Streamed to {path}"}
+```
+
+Each entry has already been through
+`vtscore.datasets.labelset.label_entry_for_export`, so it carries no number
+this server's head measured (#5131). A delivery exporter can group the stream
+with `vtscore.exporters.base.iter_stream_batches(items, batch_size)`, which
+yields lists of at most `batch_size` and always at least one, an empty list
+for an empty stream. All five built-in streamers implement it:
+`server_json_file` writes a labels JSON file and `server_csv_file` a labels CSV,
+each readable by the label importer of the same name.
 
 **Default class attributes:**
 
