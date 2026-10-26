@@ -36,7 +36,9 @@ has made the chunk durable, so the checkpoint never claims more than the
 output holds.  It can claim less (the process died between the two writes);
 the exporter then cuts the output back to the recorded position and that
 chunk is written again, once.  The checkpoint is removed when the run
-completes.
+completes.  While the run writes, it holds a lock beside the output
+(:func:`exclusive_run`), so a second run on the same file is refused rather
+than interleaving its chunks with the first's.
 """
 
 from __future__ import annotations

@@ -239,6 +239,65 @@ sends one email per `--batch-size` hits. Both default to 500 hits per batch and
 always deliver at least once (even for a zero-hit run), so the receiver learns
 the run happened.
 
+**Resuming an interrupted run** (`--resume`, with `--stream-results`): a
+streamed run over a very large source can take hours, and a plain one that is
+interrupted (a preempted node, an OOM kill, Ctrl-C) leaves nothing behind: the
+export only lands at `--filepath` once it completes. Add `--resume` and the run
+writes the file in place and records a checkpoint beside it,
+`<filepath>.resume.json`, after every chunk it writes. Run the **same command**
+again and it continues after the last chunk the checkpoint records, so a SLURM
+job can simply be requeued:
+
+```bash
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --resume --exporter server_json_file --filepath hits.ndjson
+```
+
+What a resumed run guarantees:
+
+- **The file is the one an uninterrupted run writes.** No chunk is written
+  twice and none is dropped, and the header is written once. A process killed
+  partway through a chunk leaves a partial chunk after the last checkpoint;
+  the resumed run cuts the file back to the checkpoint and writes that chunk
+  again, whole.
+- **Completed chunks are not scored again.** The resumed run walks the source
+  from the start to reach where it stopped, re-reading each completed chunk's
+  files to check them but not embedding or scoring them. The first chunk is
+  the exception: the detectors are retrained on it, as the first run's were,
+  so it is embedded again. The re-read still costs time: for a folder, the
+  walk plus hashing and thumbnailing every file already done (a resume that
+  skips those reads is #5314).
+- **A different run is refused, not appended.** The checkpoint records the
+  run's identity: the source and its parameters, the chunk size, each
+  detector's labels, the settings, `--keep-negatives` / `--override-clipper`,
+  and the exporter and its fields. A resume with any of them changed fails
+  with an error naming what changed. So does one whose source changed in the
+  part already done (a file added, removed or rewritten there, which would
+  shift every chunk after it), one whose output file is missing or shorter
+  than the checkpoint says, and one whose retrained detector lands on a
+  noticeably different threshold. Files added *after* the part already done
+  are fine: they are scored as usual. A retrained threshold that differs only
+  by floating-point noise (a requeue on a different GPU) is set back to the
+  recorded one, so every chunk is judged by one cut, with a
+  `resume_threshold_kept` event. To start over instead, delete the checkpoint.
+- **One run at a time.** While a resumable run is writing, it holds
+  `<filepath>.resume.lock`; a second `--resume` run on the same file is
+  refused rather than interleaving its chunks. The lock dies with the
+  process, so a killed run never blocks the next one.
+- **The checkpoint is removed when the run completes**, along with the lock.
+  Running the same command after that starts a fresh run, as it would without
+  `--resume`.
+
+`--resume` needs a `--filepath` that names the same file on every run, so a
+date or time template (`{YYYYMMDD-HHMMSS}`, the default) is refused; it works
+with `server_json_file` and `server_csv_file`, and not with `--as-labelset` or
+`--outputs`. The checkpoint holds digests, byte offsets and thresholds only,
+never an importer's field values in the clear. In `--progress-format json` a
+resumable run reports `resume_start` (`resumed: false` on a fresh start), a
+`chunk_skipped` per completed chunk it re-reads, and `resume_complete` at the
+end.
+
 **Streaming as a labelset** (`--as-labelset`, with `--stream-results`): stream the
 hits as label entries instead, so the export reads back in through a label
 importer (`--import-labels-into`, or a label import in the app):
@@ -518,7 +577,11 @@ When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included; `yes, as a
 labelset (...)` with `--as-labelset`), so a streaming run can be sanity-checked
 before it starts. The dry run also fails, as the run would, when the exporter
-cannot stream that way. The `Save to dashboard`
+cannot stream that way. With `--resume` it adds `Resume: yes (checkpoint
+<path>: ...)`, saying how many chunks an existing checkpoint has already
+written, or that there is none yet; it fails when the exporter cannot resume
+or the output path has a date template, but it does not check the checkpoint
+against the run (the run does that before loading anything). The `Save to dashboard`
 line says whether the run would keep the dataset; a dry run never saves it.
 With the `autofind_cli_delete_dataset` setting on, it reads `Save to dashboard:
 until detection has run (…)`, and the JSON `dry_run_plan` event's `source`
@@ -794,6 +857,11 @@ keep_negatives: false
 # entries, each naming its detector, through the exporter's labelset
 # streaming mode (same as --as-labelset). Off by default.
 as_labelset: false
+
+# Optional. With stream_results, checkpoint after every chunk so running the
+# same file again after an interruption continues where it stopped (same as
+# --resume; see "Resuming an interrupted run" above). Off by default.
+resume: false
 
 # Optional. One-shot merge of external labels into a detector before
 # scoring (same as --import-labels-into / --label-importer /

@@ -22,6 +22,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **`--resume` continues an interrupted `--stream-results` run** (issue #5280). A streamed run over a very large
+  source can take hours; with `--resume` it writes its output in place and records a checkpoint beside it after
+  every chunk, and running the same command again after a preemption, an OOM kill or Ctrl-C continues after the
+  last chunk written, appending without repeating or dropping one. A checkpoint from a different run (source, chunk
+  size, detector labels, settings, exporter fields), or a source that changed in the part already done, is
+  refused with a message naming what changed. Works with `server_json_file` and `server_csv_file`; a pipeline file
+  sets it as `resume:`. See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
 - **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the
   dataset to the clipper it was trained on; `--override-clipper NAME`, with `--override-clipper-param KEY=VALUE` for
   its parameters, scores at another one instead, say 5-second tiles for a detector trained on 2-second ones. An

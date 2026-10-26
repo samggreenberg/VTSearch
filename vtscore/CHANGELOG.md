@@ -1390,6 +1390,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Resumable streamed exports: `export_cli_streaming_resumable`, `StreamResume`, and `vtscore.io`'s
+  `resumable_write_stream` / `commit_write_stream`** (issue #5280). An optional, additive exporter capability for
+  `--stream-results --resume`: `ResultsExporter.export_cli_streaming_resumable(header, chunks, field_values,
+  resume)` receives the streamed hits one list per chunk and a `vtscore.exporters.base.StreamResume` (`position`,
+  `None` for a fresh run or what the exporter last committed; `commit(position)`, to call once each chunk is
+  durable), and `resumable_stream_path(field_values)` names the file the CLI keeps its checkpoint beside;
+  `supports_resumable_streaming` is derived from overriding the former. Existing exporters are unaffected: one
+  that does not override it is refused by `--resume`. `server_json_file` and `server_csv_file` implement it.
+  `resumable_write_stream(path, position)` writes a text file in place, cutting it back to `position` on resume,
+  and `commit_write_stream(f)` `fsync`s it and returns its byte length. The new `vtscore.cli_resume` module holds
+  the checkpoint (`StreamCheckpoint`, `ResumeRefusedError`); `autodetect_main_chunked` and
+  `autodetect_importer_main_chunked` take `resume=`, and a pipeline file `resume:`. See
+  [`docs/extending/results-exporters.md`](docs/extending/results-exporters.md#resumable-streams).
 - **`AudioLoudnessNormalizeCleaner` (`audio_loudness_normalize`)** (issue #5286): an audio `MediaCleaner` that
   applies one gain per clip, bringing its gated RMS to `rms_db` (default -20 dBFS) without letting any sample pass
   `peak_db` (default -1 dBFS), or with `mode="peak"` bringing its loudest sample to `peak_db`. Off by default, and

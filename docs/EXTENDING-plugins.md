@@ -1604,6 +1604,9 @@ find-results pickers by construction.
 | `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
 | `export_labelset_streaming()` | `(header: dict, elements: Iterator[dict], field_values: dict) -> dict` | Write a labelset incrementally, one label entry at a time (`--stream-results --as-labelset`). Default raises `NotImplementedError`. |
 | `supports_labelset_streaming` | `property -> bool` | Derived: `True` when `export_labelset_streaming()` is overridden. Not declared, and not a payload kind. |
+| `export_cli_streaming_resumable()` | `(header: dict, chunks: Iterator[list[tuple[str, dict]]], field_values: dict, resume: StreamResume) -> dict` | Write hits a chunk at a time so an interrupted run can continue (`--stream-results --resume`). Default raises `NotImplementedError`. |
+| `resumable_stream_path()` | `(field_values: dict) -> str` | The file a resumable stream writes to; the CLI keeps its checkpoint beside it. Default `""`. Override alongside `export_cli_streaming_resumable()`. |
+| `supports_resumable_streaming` | `property -> bool` | Derived: `True` when `export_cli_streaming_resumable()` is overridden. |
 
 #### Streaming exports (`--stream-results`)
 
@@ -1648,8 +1651,47 @@ incremental mode at all leaves `supports_streaming` at `False`, and requesting
 `--stream-results` with it is rejected with a clear error. File-based streamers
 should write to a sibling `.tmp` path and `os.replace` on success so a crash
 mid-stream can't leave a half-written file at the destination. Open
-follow-ups (globally sorted output, resume) are tracked in
+follow-ups (globally sorted output) are tracked in
 `docs/plans/cli-stream-massive-images.md`.
+
+#### Resumable streams (`--resume`)
+
+An atomic stream shows nothing at its destination until it completes, so a
+run killed after hours of work leaves nothing to continue from. A
+`--stream-results --resume` run writes through
+`export_cli_streaming_resumable()` instead, which receives the same hits
+grouped by chunk plus a `vtscore.exporters.base.StreamResume`. The CLI owns the
+checkpoint (beside the path `resumable_stream_path()` returns); the exporter
+keeps its destination in step with it:
+
+```python
+from vtscore.io import commit_write_stream, resumable_write_stream
+
+def resumable_stream_path(self, field_values):
+    return str(field_values["filepath"])
+
+def export_cli_streaming_resumable(self, header, chunks, field_values, resume):
+    # resume.position is None for a fresh run, else the position this method
+    # last committed; resumable_write_stream cuts the file back to it (dropping
+    # a chunk that was only partly written) and appends from there.
+    path = Path(field_values["filepath"])
+    with resumable_write_stream(path, resume.position) as f:
+        if resume.position is None:
+            f.write(json.dumps({"_meta": header}) + "\n")   # header once, on a fresh run
+            resume.commit(commit_write_stream(f))
+        for chunk in chunks:                                 # one list per chunk, maybe empty
+            for detector_name, hit in chunk:
+                f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
+            resume.commit(commit_write_stream(f))            # fsync, then record the offset
+    return {"message": f"Streamed to {path}"}
+```
+
+Commit only once the writes before it are durable, and never in the middle of
+a chunk: the next run resumes after whatever was last committed. The position
+can be any JSON value; `commit_write_stream` returns the file's byte length.
+`supports_resumable_streaming` is derived from the override. `server_json_file`
+and `server_csv_file` implement it; an exporter that leaves it alone is refused
+by `--resume` with the list of those that do.
 
 #### Streaming a labelset (`--as-labelset`)
 
