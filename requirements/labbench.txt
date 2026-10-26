@@ -11,7 +11,7 @@
 #
 # docker/Dockerfile.labbench installs this file first, as a layer every
 # MEDIA_TYPE build shares, then requirements/labbench-$MEDIA_TYPE.txt. Video,
-# document, text, face and extractor deps are skipped to keep the images small.
+# document, text and face deps are skipped to keep the images small.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
@@ -53,7 +53,7 @@ torch>=2.7
 # transformers stack backwards, and the pin is empirically unnecessary for
 # our usage — so docker/Dockerfile.labbench installs it in a dedicated
 # `--no-deps` step, exactly as scripts/install.sh does for a host install
-# (see docs/plans/vtsbrowse-toponymy.md). A requirements file cannot express
+# (see docs/SETUP.md). A requirements file cannot express
 # that: pip rejects `--no-deps` inside one.
 #
 # What DOES belong here are toponymy's real dependencies, declared on its

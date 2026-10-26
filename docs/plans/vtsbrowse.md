@@ -138,7 +138,9 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
 The completed feature's contract. Kept below the open work because it mostly
 documents shipped mechanics; retained because it is the living spec a
-future contributor needs when picking up the open follow-ups.
+future contributor needs when picking up the open follow-ups. When those ship,
+this section moves to `docs/ARCHITECTURE.md` (or `vtscore/docs/`) and the plan
+is deleted.
 
 ### What Browse reuses / does not use
 

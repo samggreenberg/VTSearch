@@ -93,7 +93,7 @@ MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "2048")))
 # rather than refused; this budget replaces it with the protection that
 # actually matters, capping how big a bitmap any one decode may materialise.
 # Sources above it are downsampled (aspect preserved) before the pixels reach
-# a thumbnail, embedder, extractor or converter, all of which resize to a few
+# a thumbnail, embedder or converter, all of which resize to a few
 # hundred pixels anyway.  64 MP is ~192 MB as RGB — comfortably above any
 # real photograph, so ordinary media is never touched.  Crop/clip paths
 # deliberately bypass this and decode at native size.  Set

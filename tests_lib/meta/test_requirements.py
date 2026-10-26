@@ -49,7 +49,7 @@ _ALWAYS_REQUIRED: frozenset[str] = frozenset(
         # behalf because toponymy itself is installed `--no-deps` by a
         # dedicated Dockerfile step (its transformers<5 pin would downgrade
         # the image's transformers stack -- see
-        # docs/plans/vtsbrowse-toponymy.md) AND these images install the
+        # docs/SETUP.md) AND these images install the
         # package with `--no-deps -e .`, so pyproject.toml's declarations
         # never reach them either. Only the ones with no carrier are listed:
         # jinja2 arrives with flask, numba with fast_hdbscan, httpx and

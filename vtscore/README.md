@@ -77,7 +77,7 @@ Two carve-outs matter if you are embedding `vtscore` in your own product:
   `MediaEmbedder.license_notice` property (EUPE sets it; the DINOv3
   embedders do not, so check the publisher's terms yourself).
 - **Two dependencies are AGPL-3.0, and are skippable**: `ultralytics` (image
-  extractor and clipper) and `PyMuPDF` (PDF importer and document
+  object clipper) and `PyMuPDF` (PDF importer and document
   converters). A default install includes both. The Apache-2.0 grant on
   `vtscore` itself is unaffected, but AGPL terms may attach to a combined
   work you distribute or operate as a service — so if you are shipping a

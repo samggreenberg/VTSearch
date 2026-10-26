@@ -12,7 +12,7 @@
 #
 # Note: font hinting / anti-aliasing can introduce sub-pixel noise across
 # machines; treat a small number of near-zero-diff files as noise. A per-pixel
-# tolerance is a tracked follow-up in docs/plans/user-docs-screenshots.md.
+# tolerance is tracked in issue #5278.
 set -euo pipefail
 cd "$(dirname "$0")"
 

@@ -124,10 +124,10 @@ dependencies = [
     # vtscore.projection.signpost_build). toponymy itself is installed
     # `--no-deps` by scripts/install.sh / ensure-test-deps.sh because its
     # transformers<5 pin would downgrade the app's transformers and is
-    # empirically unnecessary for our usage — see docs/plans/vtsbrowse-toponymy.md
-    # (decision 1) — so its real deps are declared here instead. apricot-select
-    # ships a legacy setup.py that needs the stdlib-distutils shim to build;
-    # the install scripts pre-install it before the main requirements pass.
+    # empirically unnecessary for our usage — see docs/SETUP.md, "Packages
+    # installed without their dependency pins" — so its real deps are declared
+    # here instead. apricot-select ships a legacy setup.py sdist; the install
+    # scripts pre-install it before the main requirements pass.
     "fast_hdbscan",
     "vectorizers",
     "apricot-select",
@@ -150,8 +150,7 @@ agpl = [
     # PDF page rendering + document text extraction: vtscore.datasets.pdf,
     # vtscore.converters.document2image / document2text.
     "PyMuPDF",
-    # YOLO object detection: the image extractor (vtscore.media.image.extractor)
-    # and the image clipper (vtscore.media.image.clipper).
+    # YOLO object detection: the image object clipper (vtscore.media.image.clipper).
     "ultralytics",
 ]
 dev = [
@@ -325,7 +324,7 @@ DEP001 = [
     # opt-in only (users install ``lightglue`` to enable structural matching).
     "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
-    # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
+    # empirically unnecessary; see docs/SETUP.md), so it
     # cannot be declared here — declaring it would put its pins back in the
     # resolver. Its real deps ARE declared (fast_hdbscan et al.); the smoke
     # test in tests_lib/projection guards the --no-deps bypass.
@@ -423,8 +422,8 @@ markers = [
     "api: API contracts, error handling, dashboard",
     "sorting: text sort, learned sort, diversity, safe thresholds",
     "datasets: dataset loading, splitting, combining, origins, dedup",
-    "io: importers, exporters, labels, processors",
-    "detectors: detectors, extractors, processors, clippers, eval",
+    "io: importers, exporters, labels",
+    "detectors: detectors, clippers, eval",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",

@@ -3,8 +3,8 @@
 Everything media-format-specific lives here: the `MediaType` plugin that
 describes a content kind (audio, image, text, video, document, face), the
 `MediaEmbedder` that turns one media item into a vector, the `MediaClipper`
-that splits one media into sub-items of the same type, and the `Processor`
-ABCs (`Detector` / `Localizer` / `Extractor`) that score or annotate media.
+that splits one media into sub-items of the same type, and the `MediaCleaner`
+that tidies one media before it is embedded.
 Each media-type sub-package self-registers at import time through sentinel
 attributes - adding a new format is "drop a folder into `vtscore/media/`",
 not "edit an `__init__.py`". This package has no Flask or settings imports
@@ -23,7 +23,6 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/torch_ops.py` | Torch tensor/device adapters shared by every embedder |
 | `vtscore/media/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
 | `vtscore/media/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
-| `vtscore/media/processors.py` | The `Processor` / `Detector` / `Localizer` / `Extractor` ABCs |
 | `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
 | `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
 | `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
@@ -38,12 +37,12 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 **Media types** - one self-registering sub-package each. Every one holds a
 `media_type.py` (the `MediaType`), plus whichever of `clipper.py`,
-`cleaner.py`, `decode.py`, `embedder_*.py` and processor modules it needs.
+`cleaner.py`, `decode.py` and `embedder_*.py` modules it needs.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, speech extractor, synthetic audio generator |
-| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
+| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, synthetic audio generator |
+| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
 | `vtscore/media/document/` | none - a *convert-out* half type (converted to image or text before embedding) | clipper |
@@ -55,8 +54,7 @@ helpers, not public surface. `vtscore/media/assets/` holds bundled data
 files (the SIFT-VLAD codebook).
 
 The package root re-exports the ABCs (`MediaType`, `MediaEmbedder`,
-`MediaClipper`, `MediaCleaner`, `Processor`, `Detector`, `Localizer`,
-`Extractor`), the support types (`MediaResponse`, `DemoDataset`,
+`MediaClipper`, `MediaCleaner`), the support types (`MediaResponse`, `DemoDataset`,
 `ProgressCallback`) and every registry accessor below.
 
 ---
@@ -237,22 +235,6 @@ the import UI pre-checks it. A cleaner with `parameters` overrides
 a step's params from `to_dict()`, so without it a replay runs the cleaner at
 its defaults. Cleaners have their own registry so they never appear in a
 clipper chooser; registration order is run order.
-
-### `Processor` / `Detector` / `Localizer` / `Extractor`
-
-`vtscore/media/processors.py`. Every processor declares `name` and
-`media_type`, may override `load_model()` (default no-op), and implements
-`process(media)` via a typed method:
-
-| ABC | Typed method | Returns |
-|-----|--------------|---------|
-| `Detector` | `detect(media) -> bool` | "does this media match?" |
-| `Localizer` | `localize(media) -> list[dict]` | regions; each **must** include `"confidence"` (float in `[0, 1]`) and `"bbox"` (media-specific) |
-| `Extractor` | `extract(media) -> list[dict]` | per-occurrence metadata; each **must** include `"confidence"` |
-
-Which processors run automatically on load is decided by the host
-application; the library only ships the ABCs and the in-tree
-implementations. See [`docs/EXTENDING-processors.md`](../../../docs/EXTENDING-processors.md).
 
 ---
 

@@ -15,8 +15,8 @@ with the release it was derived from):
     1/12, the rest).
 
 ``detect --shard i/n``
-    Runs the app's own :class:`~vtscore.media.image.face_localizer.FaceLocalizer`
-    (MTCNN, keep-all) on each image at full resolution and at each
+    Runs MTCNN (keep-all, configured as the ``image2face`` converter's detector
+    is) on each image at full resolution and at each
     ``--long-side`` (the image downscaled so its long side is that many pixels,
     standing in for a benchmark that stores smaller copies than the 12 MB
     originals). Every detection is kept with its confidence: thresholds are
@@ -55,8 +55,8 @@ import pile_config as pc  # noqa: E402
 from pilebuild.scale_core import band_for  # noqa: E402
 
 BANDS = ("small", "medium", "large")
-#: The app's defaults: FaceLocalizer's confidence threshold, and image2face's
-#: min_size after its 0.25 padding (a crop 1.5x the box must be >= 32 px).
+#: The app's defaults when this ran: the face confidence threshold, and
+#: image2face's min_size after its 0.25 padding (a crop 1.5x the box must be >= 32 px).
 APP_THRESHOLD = 0.5
 APP_MIN_CROP = 32
 APP_PADDING = 0.25
@@ -143,7 +143,10 @@ def stage_detect(root: Path, out: Path, shard: str, long_sides: list[int]) -> No
 
     from PIL import Image  # noqa: PLC0415
 
-    from vtscore.media.image.face_localizer import FaceLocalizer  # noqa: PLC0415
+    from facenet_pytorch import MTCNN  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    from vtscore.config import resolve_device  # noqa: PLC0415
+    from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
 
     i, n = (int(v) for v in shard.split("/"))
     images = sorted({r["img"] for r in read_annotations(out)})[i::n]
@@ -155,8 +158,19 @@ def stage_detect(root: Path, out: Path, shard: str, long_sides: list[int]) -> No
     todo = [p for p in images if p not in done]
     print(f"shard {shard}: {len(images)} images, {len(done)} done, {len(todo)} to go", flush=True)
 
-    loc = FaceLocalizer("fhibe-census", threshold=0.0)  # keep every detection; report thresholds
-    loc.load_model()
+    mtcnn = MTCNN(keep_all=True, select_largest=False, post_process=False, device=resolve_device())
+
+    def detect_faces(data: bytes) -> list[tuple[list[float], float]]:
+        """Every face MTCNN finds, as ``(box in the decoded image's pixels, confidence)``.
+
+        No threshold: every detection is kept, and ``report`` applies them.
+        """
+        image, scale = decode_bounded_rgb(data)
+        boxes, probs = mtcnn.detect(image)
+        if boxes is None:
+            return []
+        hits = [([float(v) / scale for v in box], round(float(p), 4)) for box, p in zip(boxes, probs) if p is not None]
+        return sorted(hits, key=lambda h: h[1], reverse=True)
 
     def variants(path: str) -> list[tuple[str, bytes, float]]:
         """``(resolution, bytes, scale back to full-res pixels)`` for each resolution measured."""
@@ -187,8 +201,8 @@ def stage_detect(root: Path, out: Path, shard: str, long_sides: list[int]) -> No
         for path, vs in prefetched(todo):
             rec = {"img": path, "det": {}}
             for res, data, s in vs:
-                hits = loc.localize({"media_bytes": data})
-                rec["det"][res] = [[round(c / s, 1) for c in h["bbox"]] + [h["confidence"]] for h in hits]
+                hits = detect_faces(data)
+                rec["det"][res] = [[round(c / s, 1) for c in box] + [conf] for box, conf in hits]
                 rec.setdefault("scale", {})[res] = s
             fh.write(json.dumps(rec) + "\n")
             fh.flush()

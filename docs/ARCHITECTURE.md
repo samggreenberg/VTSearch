@@ -104,13 +104,6 @@ in [ML.md § Embedding Models](ML.md#embedding-models); the converter roster is
 in [EXTENDING-media.md § Built-in
 converters](EXTENDING-media.md#built-in-converters).
 
-### Processors
-
-A **detector** scores every item by how well it matches; an **extractor**
-groups items into categories; a **localizer** finds regions of interest inside
-an item (e.g. faces).  All three are **processors** (ABCs in
-`vtscore/media/processors.py`) and can be exported and imported as JSON.
-
 ### Origin tracking
 
 Every item carries its own provenance, so datasets assembled from several
@@ -143,10 +136,10 @@ VTSearch/
 │   │                       cli_progress.py: text / NDJSON progress)
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
-│   ├── media/              MediaType, MediaEmbedder, MediaClipper, MediaCleaner and Processor
-│   │                       ABCs (base.py, embedder.py, clipper.py, cleaner.py, processors.py),
-│   │                       plus one subpackage per media type (audio/, image/, text/, video/,
-│   │                       document/, face/) holding its embedders, clippers and processors
+│   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs
+│   │                       (base.py, embedder.py, clipper.py, cleaner.py), plus one
+│   │                       subpackage per media type (audio/, image/, text/, video/,
+│   │                       document/, face/) holding its embedders and clippers
 │   ├── converters/         MediaConverter ABC (base.py) + one module per converter;
 │   │                       runner.py stamps converter provenance
 │   ├── embedding/          Embedder façades, per-media vectors, the cached embedding matrix
@@ -625,9 +618,7 @@ the line, #4413; kept on the detector JSON and asked for at creation, #4665,
 else seeded from the `beta` setting; `detector_beta(ctx)` reads any context's
 own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
-`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
-only truly global (cross-dataset) state is `autorun_extractors` /
-`autorun_localizers` in `vtsearch/autorun_processors.py`.
+`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).
 
 Persistent settings live in `vtsearch/settings.py`, split across two tiers.
 The two Pydantic models in `vtsearch/settings_models.py` are the authoritative
@@ -1423,12 +1414,13 @@ exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
 top-of-list draw.
 
 Recording only — nothing reads these values back to change behaviour. The
-consumer (partitioning the conformal calibration set by trustworthy surfacing
-context) is gated on the experiment pre-registered in
-[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
-Two rules keep the record honest: it is written **only on a vote-state change**
-(an idempotent re-apply keeps what the original click recorded, so a stale tab
-cannot rewrite it), and `restore_labels_from_detector` carries it back into
+consumer it was recorded for, partitioning the conformal calibration set by
+trustworthy surfacing context, was retired before it ran once the precision-floor
+ruling chose random verification (#4267, #5260); the record stays as the only
+measure of real, not simulated, vote-order bias. Two rules keep the record
+honest: it is written **only on a vote-state change** (an idempotent
+re-apply keeps what the original click recorded, so a stale tab cannot rewrite
+it), and `restore_labels_from_detector` carries it back into
 vote state on load — without that, the next vote's labelset resync would erase
 every recorded vote's provenance.
 

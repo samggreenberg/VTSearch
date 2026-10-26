@@ -38,6 +38,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   has picks that option; anything else typed is sent as typed. This applies to every form that renders plugin
   fields: Add Dataset, Export, Import Labels, New Detector, AutoFind, and the settings importers and exporters.
 
+### Removed
+
+- **The autorun extractor / localizer API** (issues #3452, #5259). The routes under `/api/autorun-extractors`,
+  `/api/autorun-localizers` and `/api/pregen-processors`, plus `/api/extract`, `/api/localize`,
+  `/api/auto-extract` and `/api/auto-localize`, are removed. No screen ever called them, and nothing outside the
+  repo did either. They ran OCR, speech, YOLO-class and face processors over a loaded dataset; the
+  `image2text` and `image2face` converters still do the OCR and the face finding at import. AutoFind and
+  `/api/auto-detect` are unaffected.
+
 ## 2026-10-26
 
 ### Changed

@@ -100,7 +100,8 @@ fi
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 python -m pip install --ignore-installed blinker -q
 
-# VTSBrowse signpost naming deps (see docs/plans/vtsbrowse-toponymy.md):
+# VTSBrowse signpost naming deps (see docs/SETUP.md, "Packages installed
+# without their dependency pins"):
 # apricot-select ships a legacy setup.py sdist and must precede the main
 # requirements pass (it's declared in pyproject.toml). Do NOT wrap it in
 # SETUPTOOLS_USE_DISTUTILS=stdlib, as scripts/install.sh explains: setuptools

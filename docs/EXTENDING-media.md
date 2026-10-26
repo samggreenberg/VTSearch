@@ -9,9 +9,7 @@ groups).
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
-exporters, sources for datasets/labels/settings) ·
-[EXTENDING-processors.md](EXTENDING-processors.md) (detectors, localizers,
-extractors).
+exporters, sources for datasets/labels/settings).
 
 ## Contents
 
@@ -590,8 +588,8 @@ All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/emb
 ## Adding a Media Clipper
 
 Media clippers split a single media item into one or more items of the
-**same** type. Unlike processors which return metadata about media,
-clippers return **new media dicts** that can replace the original.
+**same** type. Clippers return **new media dicts** that can replace the
+original, not metadata about it.
 
 **Library contract:**
 [`vtscore/docs/extending/clippers.md`](../vtscore/docs/extending/clippers.md)

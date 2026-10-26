@@ -1,7 +1,7 @@
 """Slow smoke test: the real toponymy library, end-to-end through our glue.
 
 toponymy is installed ``--no-deps`` (its ``transformers<5`` pin is bypassed —
-see ``docs/plans/vtsbrowse-toponymy.md``), so the resolver never checks that a
+see ``docs/SETUP.md``), so the resolver never checks that a
 future environment still satisfies it.  This test is that check: import the
 library for real, run :func:`build_region_labels` (clusterable UMAP →
 multiresolution clustering → contrastive keyphrases → KeyphraseNamer) on a

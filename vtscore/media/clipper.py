@@ -14,10 +14,8 @@ class MediaClipper(ABC):
     items of the **same** type.  Each concrete clipper operates on exactly one
     media type (declared via :attr:`media_type`).
 
-    Unlike :class:`~vtscore.media.processors.Processor` subclasses which
-    return metadata *about* a media (booleans, bounding boxes, labels), a
-    ``MediaClipper`` returns **new media dicts** that can be used directly in
-    place of the original.
+    A ``MediaClipper`` returns **new media dicts** that can be used directly
+    in place of the original, not metadata *about* a media.
 
     Examples:
 

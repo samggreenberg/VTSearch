@@ -26,8 +26,8 @@ different readers:
 normalization and template variables, entry-point packaging, the
 `MediaType` thumbnail hooks, `FetchedItem`) is stated canonically in the
 library guide; the app guide summarises it and links there. App-tier
-wiring (routes, the SPA's forms and pickers, settings sync, processors,
-auth) lives only here. Each side keeps its own contract table per ABC.
+wiring (routes, the SPA's forms and pickers, settings sync, auth) lives
+only here. Each side keeps its own contract table per ABC.
 
 Where the two overlap, they describe one class, so they can contradict
 each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)
@@ -42,7 +42,6 @@ ABC, update both sides and let the gate confirm it.
 |-------|----------------|------------------|
 | [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory and the entry-point group table live there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md), [media-sources](../vtscore/docs/extending/media-sources.md) |
-| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. | — (app tier only; processors are not auto-discovered) |
 
 Each guide explains the interface contract, where files go, how
 discovery/registration works, and includes a complete example. The
@@ -449,36 +448,6 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 - [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
 - [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid
-
-### New Localizer / Extractor Checklist
-
-See [EXTENDING-processors.md](EXTENDING-processors.md).
-
-- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
-- [ ] Implement `name` (from a constructor argument, **not** hardcoded),
-      `media_type`, and the type-specific method (`localize` or `extract`)
-- [ ] Optionally override `load_model()`, and call it (idempotently) at the
-      top of `localize` / `extract`: nothing in the app calls it for you
-- [ ] Add a `from_config(name, config)` classmethod, and a `to_dict()` that
-      reports the matching `extractor_type` / `localizer_type` + `config`
-- [ ] **Wire it into the hardcoded factory dict** in
-      `vtsearch/routes/processors/crud.py` (`_ensure_extractor_factories` or
-      `_ensure_localizer_factories`) — processors are *not* auto-discovered,
-      and an unregistered type is a 400 from every endpoint
-- [ ] Optionally add it to `_PREGEN_PROCESSORS` in the same file
-- [ ] Register as autorun via `POST /api/autorun-extractors` or
-      `POST /api/autorun-localizers`, then run it with `POST /api/auto-extract`
-      / `POST /api/auto-localize`
-- [ ] Test: build it via `_build_extractor` / `_build_localizer` and assert a
-      bad config raises (see `tests/detectors/test_processors.py`)
-
-Note that `Detector` (the `Processor` subtype) has no factory dict and no
-endpoint; it is not registrable. The ML classifiers users actually train are
-detectors in a different sense, covered below.
-
-For ML classifiers, create a detector instead: register it via
-`POST /api/detectors/registry`, label items in the right pane, and toggle
-its AutoFind flag with `PUT /api/detectors/registry/<id>/autofind`.
 
 ### New Login Provider Checklist
 
