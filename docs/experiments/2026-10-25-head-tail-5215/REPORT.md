@@ -1,7 +1,7 @@
 # Telling a head whose positives sit under the bulk's tail before shrinking its count (issue #5215)
 
 **Status (2026-10-25): offline on #5084's snapshots on the head's count line (Binary Photo, Region Photo, FHIBE faces), at
-beta 1/4 and 1, in three corpora each (0.44% as run, 0.1%, 1%), then a closed loop on Binary Photo at 0.44%. The gate
+beta 1/4 and 1, in three corpora each (0.44% as run, 0.1%, 1%), then a closed loop on Binary Photo at 0.44%, 1% (the pool) and 0.1% (the whole cell). The gate
 is a knob, `HEAD_COUNT_PRECISION_TOP_Z`, off by default (`None`); nothing in the app changes. The gate is chosen on
 Binary + Region Photo and read on faces.**
 
@@ -11,6 +11,10 @@ and 0.71 beta above, recovers 0.012 of Binary Photo's 0.014 loss at 1% and beta 
 It costs Binary at 0.1% (-0.005 at beta 1/4) and faces at 0.1% (-0.005 at beta 1). It holds Region Photo within 0.003
 of the shipped line. None of the label signals the issue suggested separates the heads. The held-out Bads' placement
 does not, and neither do the Goods' rank, the labelled precision above the line, or the Goods-vs-Bads AUC.
+
+**The closed loop does not confirm the gate.** On Binary Photo it gains +0.0012 mean F-beta over clicks 0-50 at 0.44%
+and +0.0004 at 1%, and costs -0.0024 at 0.1% (beta 1/4). Beta 1 is level within 0.0007 everywhere. Recommendation: do
+not ship; the knob stays off.
 
 ## What was priced
 
@@ -92,53 +96,69 @@ Literal heads (Binary Photo, beta 1/4, 0.44%, median over each class's snapshots
 The gate is not clean. Banana and clock still lose to the shrink although their tops stand out, and "book", the issue's
 example, sits above 6.1 and wins under the shrink at 0.44%.
 
-## The closed loop (Binary Photo, 0.44%)
+## The closed loop (Binary Photo, three prevalences)
 
 The knob was run on the app's trajectory pass (`head_tail_5215.sh`): Binary Photo, 144 cells x 5 seeds, 200 clicks, at
-beta 1/4 and 1. Each run is paired with a control run of the same cell and seed, which runs with the knob off. The
-runs come from a frozen tree at 086882fd6. Gains are class means ± SE over classes (`tables/ab_binary_summary.csv`,
-`ab_binary_gains.csv`).
+beta 1/4 and 1, in three session sets:
 
-| Binary Photo, 0.44%, gate over 0.71 beta | beta 1/4 | beta 1 |
+- **0.44%:** the bench as built.
+- **1%:** the pool. The user's half has its negatives thinned (`SOTA_POOL_PREVALENCE=0.01`), and the withheld half
+  stays at 0.44%.
+- **0.1%:** the whole cell. Positives are thinned before the split (`SOTA_CELL_PREVALENCE=0.001`), about 8 withheld
+  positives a class.
+
+Each run is paired with the control of its cell and seed (the knob off). The runs come from a frozen tree at 086882fd6.
+Gains are class means ± SE over classes (`tables/ab_binary{,_p01,_c001}_summary.csv`, `_gains.csv`).
+
+| Binary Photo, gate over 0.71 beta | beta 1/4: 0.44% / 1% / 0.1% | beta 1: 0.44% / 1% / 0.1% |
 |---|---|---|
-| runs per arm | 720 | 720 |
-| mean F-beta, clicks 0-50 | +0.0012 ± 0.0003 | +0.0007 ± 0.0001 |
-| mean F-beta, clicks 0-200 | +0.0009 ± 0.0002 | +0.0005 ± 0.0001 |
-| F-beta at the stop (control 0.616 / 0.507) | +0.0031 ± 0.0014 | +0.0010 ± 0.0003 |
-| F-beta after the closing check | +0.0008 ± 0.0004 | +0.0003 ± 0.0001 |
-| runs whose clicks depart from the control | 0 | 0 |
+| runs per arm | 720 / 720 / 720 | 720 / 720 / 720 |
+| mean F-beta, clicks 0-50 | +0.0012 ± 0.0003 / +0.0004 ± 0.0002 / **-0.0024 ± 0.0007** | +0.0007 ± 0.0001 / +0.0005 ± 0.0001 / -0.0004 ± 0.0003 |
+| mean F-beta, clicks 0-200 | +0.0009 ± 0.0002 / +0.0003 ± 0.0002 / **-0.0028 ± 0.0009** | +0.0005 ± 0.0001 / +0.0003 ± 0.0001 / -0.0001 ± 0.0004 |
+| F-beta at the stop (control 0.616 / 0.627 / 0.470; 0.507 / 0.522 / 0.361) | +0.0031 ± 0.0014 / -0.0003 ± 0.0008 / -0.0025 ± 0.0016 | +0.0010 ± 0.0003 / +0.0003 ± 0.0001 / +0.0001 ± 0.0009 |
+| F-beta after the closing check | +0.0008 ± 0.0004 / +0.0003 ± 0.0002 / -0.0037 ± 0.0013 | +0.0003 ± 0.0001 / -0.0001 ± 0.0000 / +0.0003 ± 0.0006 |
+| runs whose clicks depart from the control | 0 / 0 / 0 | 0 / 0 / 1 |
 
-![Closed loop over clicks](figures/ab_binary_over_clicks.png)
+![Closed loop over clicks, 0.44%](figures/ab_binary_over_clicks.png)
 
-*Figure 2. Top: F-beta of the returned set over clicks, the app (grey) and the gate (blue). Bottom: the paired gain,
-± 1 SE over classes.*
+*Figure 2. 0.44%. Top: F-beta of the returned set over clicks, the app (grey) and the gate (blue). Bottom: the paired
+gain, ± 1 SE over classes.*
 
-The gate changes only what the head returns. No run's clicks depart from its control, because the line does not steer
-the queries. Most of the gain comes between clicks 30 and 75, where the head's count line is in use. It peaks at
-+0.003-0.004 at beta 1/4 around click 50, then decays as held-out Goods take over the line. At beta 1/4 the gain sits
-in medium-sized classes (+0.0021 ± 0.0009 at 0-50; large +0.0003, small +0.0001; `tables/ab_binary_splits.csv`).
+![Closed loop over clicks, 0.1%](figures/ab_binary_c001_over_clicks.png)
 
-The loop confirms the offline sign at 0.44% but at about a quarter of the offline size (+0.0049 / +0.0033 at the head's
-snapshots). The head's line covers only part of a run. The loop did not run 1% (offline +0.012 at beta 1/4) or 0.1%
-(offline -0.005 at beta 1/4). The 0.1% cost is what the gate trades for the 1% gain.
+*Figure 3. 0.1% (the whole cell), as figure 2. The 1% figure is `figures/ab_binary_p01_over_clicks.png`.*
 
-## What it would take to ship
+The gate changes only what the head returns. Clicks depart from the control in one run of 2,160 per beta, because the
+line does not steer the queries.
 
-Default `HEAD_COUNT_PRECISION_TOP_Z = 6.1`. That moves Binary Photo by about +0.001 mean F-beta and +0.003 at the stop
-at beta 1/4, and Region within 0.003 offline. The costs:
+- **0.44%:** the gain sits between clicks 30 and 75, where the head's count line is in use. It peaks at +0.003-0.004
+  at beta 1/4 around click 50, in medium-sized classes (+0.0021 ± 0.0009 at 0-50).
+- **1%:** the gain is smaller than at 0.44%, not larger. Offline 1% re-thinned the corpus under snapshots taken in
+  0.44% sessions (+0.012 at beta 1/4). In the loop the sessions themselves run at 1%, and that gain does not survive.
+- **0.1%:** the gate costs at beta 1/4 and keeps costing to click 200 (-0.004 to -0.005 at clicks 50-150). With about
+  8 withheld positives a class, likely few runs reach 6 held-out Goods, so the head's line serves longer (not
+  counted). The cost is in medium classes (-0.0056 ± 0.0020 at 0-200). At beta 1 it is level.
 
-- a second fixed-scale knob on the head's line;
-- the offline 0.1% loss on Binary (-0.005) and on faces at beta 1 (-0.005), which the loop did not test.
+Averaged over the three prevalences, the gate is -0.0003 at beta 1/4 (clicks 0-50) and +0.0003 at beta 1.
+
+## Recommendation
+
+Do not ship. Keep the knob in the code, off by default, for a later signal to reuse. The offline 1% gain that
+motivated the gate (+0.012) shrinks to +0.0004 in the loop. Its 0.1% cost holds there (-0.0024 at clicks 0-50, -0.0037
+after the check at beta 1/4) and outweighs the +0.0012 at 0.44%. `top_z` reads which bench a head comes from more than
+where its positives sit. No signal the snapshots carry, labelled or not, tells the two kinds of head apart well enough
+to pay.
 
 ## Reproduce
 
 ```
 head_tail_5215.py price --x /expscratch/sgreenberg/head-bulk-5084/{xbin,xreg_old,xfaces.tmp} --out pr_<bench>.pkl
 head_tail_5215.py tables --priced pr_xbin.pkl pr_xreg_old.pkl pr_xfaces.pkl --out tables --figures figures
-head_tail_5215.sh cpack {ctl,tz61} {0.25,1}     # 4 packs per run, from a frozen tree
+head_tail_5215.sh cpack {ctl,tz61} {0.25,1}     # 4 packs per run, from a frozen tree; HEADTAIL5215_TAG=p01 +
+    # SOTA_POOL_PREVALENCE=0.01, or c001 + SOTA_CELL_PREVALENCE=0.001; text_baseline.py with the same prevalence
 head_tail_5215_ab.py --root state-of-the-app --date 2026-10-25 --seeds 5 --path binary \
     --baseline head-bulk-5084/text_baseline.csv --out ab_binary --docs tables
 ```
 
 The snapshot dirs are #5084's extractions (`head_bulk_5084.py extract`, `head_count_5039.py extract-faces`), on dev
-a86fb4f2b. Pricing took about 4 minutes per bench on 16 CPUs; the loop took 2.5 hours on 16 cpu packs.
+a86fb4f2b. Pricing took about 4 minutes per bench on 16 CPUs; each loop prevalence took about 2.5 hours on 16 cpu packs.
