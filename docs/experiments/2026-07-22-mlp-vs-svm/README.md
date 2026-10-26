@@ -10,7 +10,7 @@
 > was about a head the app no longer trains, and it never measured the
 > logistic head the SVM was actually swapped for. `REPORT.md` is regenerated
 > deterministically from the CSVs, so it still states the verdict it measured;
-> read it that way. See [`docs/ML.md`](../../ML.md#the-three-heads-which-one-is-shipped-and-why).
+> read it that way. See [`docs/ML.md`](../../ML.md#the-heads-which-one-is-shipped-and-why).
 
 > **The `visual_genome_m` panel was scored on primary labels only** (found
 > 2026-10-08, #4695). The Stage A/B/C tasks loaded VG from a warm demo cache,

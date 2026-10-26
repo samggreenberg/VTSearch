@@ -44,7 +44,7 @@ embed_missing(medias)   # loaders don't embed; this stage does
 
 The library only requires explicit setup when you want to:
 
-- Read **configuration** (`CoreConfig.from_settings()`)
+- Read **configuration** (`vtscore.config.get_setting()`)
 - Resolve the **active context** from a request
 - **Persist** detector settings (`set_beta`, `set_calibrate_count`, etc.)
   back to your settings store
@@ -148,7 +148,8 @@ the persister registered for its key, and nothing installs one by default:
 `set_beta` then moves only the active detector's in-memory balance (plus the
 balance a registered detector keeps on its JSON), and `set_calibrate_count` /
 `set_calibration_fraction` change nothing the library reads back, because
-their getters read `CoreConfig.from_settings()`. To make them reach your
+their getters read `get_setting()`, which answers from your Hook 1 builder.
+To make them reach your
 settings store - the one your Hook 1 builder reads - install a persister per
 key:
 
@@ -183,7 +184,9 @@ apps.
 Every seam above is a process global, so a test that installs one leaks it
 into every test that follows in the same process. `vtscore.host_seams`
 snapshots the whole set so your test harness doesn't have to know which
-private module global backs each one:
+private module global backs each one (it covers Hooks 1-3 plus the
+current-user resolver and the other host seams listed in
+[architecture.md](architecture.md#dependency-direction)):
 
 ```python
 from vtscore.host_seams import capture_host_seams, restore_host_seams
@@ -198,7 +201,8 @@ restore_host_seams(_STARTUP_SEAMS)
 It is deliberately snapshot-and-restore rather than reset-to-default: an
 integration whose tests run *against* its real wiring would lose the very
 seams under test if the slots were cleared. `capture_host_seams()` copies
-the two keyed registries, so a later registration can't reach back into a
+the three keyed registries (setting getters, setting persisters,
+achievement recorders), so a later registration can't reach back into a
 snapshot already taken.
 
 ## Minimal integration: a script
@@ -473,8 +477,8 @@ you can ignore all of the above and just import what you need:
   Saving or reloading detectors (`vtscore.detectors.store`), detector
   training through `vtscore.detectors.training.train_and_threshold` (it
   reads the balance and the calibration settings) and the load pipeline's
-  concurrency gates do call `CoreConfig.from_settings()`, so install Hook 1
-  before using those.
+  concurrency gates do read settings through `get_setting()`, so install
+  Hook 1 before using those.
 
 The library is designed to scale from "one-line numpy operation" to "a
 full Flask + Angular app" without any code path being mandatory in

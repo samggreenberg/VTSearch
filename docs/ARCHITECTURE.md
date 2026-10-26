@@ -184,7 +184,7 @@ VTSearch/
 │   │                       env var, validator, /api/settings key)
 │   ├── cli_main.py         `python app.py` argparse + dispatch
 │   ├── autofind.py         Runs a user's AutoFind detectors on a dataset
-│   ├── auth/               Flask-side login providers and the g.user resolver
+│   ├── auth/               Flask-side login providers, the g.user resolver, session-secret checks
 │   ├── state/, state_proxies.py  App-side state shim and the active-context proxies
 │   ├── shim/               Flask glue: context resolvers, persistence hooks, achievement
 │   │                       recorders, setting getters, app-only plugin families
@@ -204,7 +204,8 @@ VTSearch/
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
 ├── docker/, gunicorn.conf.py  Container images and the production WSGI config
-├── requirements/           pip install sets: base, gpu, and an AGPL-free *-no-agpl mirror of each
+├── requirements/           pip install sets: base, gpu, an AGPL-free *-no-agpl mirror of each,
+│                           and the image-embedders / slim LabBench sets (docs/DEPLOYMENT.md)
 └── run-tests.sh            The test + gate runner (docs/TESTING.md)
 ```
 
@@ -574,14 +575,9 @@ registries in `vtscore/media/__init__.py` rather than `PluginRegistry`.  The
 built-ins are still auto-discovered at import: each media-type sub-package
 (`audio/`, `image/`, …) exposes `MEDIA_TYPE`, `CLIPPERS` and `CLEANERS`
 sentinels, and every `embedder*.py` / `embedder*/` inside it exposes an
-`EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions:
-
-| Registry | Registration function | Lookup functions |
-|----------|----------------------|------------------|
-| Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
-| Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
-| Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
-| Cleaners | `register_cleaner(cleaner)` | `get_cleaner(name)`, `all_cleaners()`, `cleaners_for_type(type_id)` |
+`EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions; the
+full registration and lookup API is the table in
+[`vtscore.media` § Registry API](../vtscore/docs/packages/media.md#registry-api).
 
 Cleaners (`MediaCleaner`, a `MediaClipper` subclass) get their own registry
 even though they share the clipper descriptor surface, because the UI treats
@@ -589,11 +585,6 @@ them differently: a clipper is a radio choice (one per import), a cleaner is a
 checkbox every item of that type passes through. Keeping them out of
 `_clipper_registry` is what stops them from appearing in a clipper chooser.
 See [EXTENDING-media.md § Adding a Media Cleaner](EXTENDING-media.md#adding-a-media-cleaner).
-
-**`type_id` and `folder_import_name`:** Each media type has a `type_id`
-(e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
-same value. Both `get(type_id)` and `get_by_folder_name(name)` accept
-the canonical type ID.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
 (sentinel: `CONVERTER`) in `vtscore/converters/__init__.py`, with
@@ -682,8 +673,9 @@ than being re-plumbed per knob.
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
 What `achievement_state` holds is in [achievements.md](achievements.md#state).
-The AutoFind keys other than `autofind_on_import` read through to the server
-file for the built-in `default` user (CLI / single-user); see
+Four AutoFind keys (`autofind_detectors`, `autofind_exporter`,
+`autofind_exporter_field_values`, `autofind_cli_delete_dataset`) read through
+to the server file for the built-in `default` user (CLI / single-user); see
 `_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings.py`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).

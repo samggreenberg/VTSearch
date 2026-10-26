@@ -476,7 +476,7 @@ came from: `autofind` (the settings file) or `override` (`--import-labels-into`)
 `--import-labels-into` merges an external label file into a detector's labelset
 *before* the run trains and scores, so a batch of labels produced elsewhere
 (another VTSearch instance, an annotation tool, a script) can be folded in
-headlessly. Three flags work together:
+headlessly. These flags work together:
 
 | Flag | Meaning |
 |------|---------|
@@ -688,7 +688,8 @@ importer:
   # one mapping per dataset, in the shape the web API's `outputs` entries take
   # (media_type, source_specs, category, dataset_name, embedder, embedders,
   # clipper, clipper_params, clipper_chain, cleaners). Replaces
-  # `fields.media_type`; each dataset is saved, scored and exported on its own.
+  # `fields.media_type` and `fields.source_specs` (setting either is refused);
+  # each dataset is saved, scored and exported on its own.
   # outputs:
   #   - media_type: audio
   #   - media_type: image
@@ -783,7 +784,7 @@ is there; each one is intended.
 | `--local` | Changes the mode banner | Ignored | Banner text only. |
 | `--progress-format`, plugin notifications | Progress goes to the SSE stream; notifications become toasts | `text` or `json` on stdout; notifications are printed | No browser is watching a headless run. |
 
-These are the same on both paths, including the ones that once differed:
+These are the same on both paths:
 
 - **Native thread count, OpenBLAS kernels, logging** (`VTSEARCH_TORCH_THREADS`,
   `OPENBLAS_CORETYPE`, `VTSEARCH_LOG_LEVEL`, `VTSEARCH_LOG_FORMAT`,

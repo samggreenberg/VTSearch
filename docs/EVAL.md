@@ -443,7 +443,7 @@ Read the spread across those runs as the noise floor: a contrast smaller than it
 Two things it is *not*:
 
 - **Not extra realism.** "Simulate the app's randomness here" has nothing to simulate — the app is pinned at these sites too. Reseeding them on a default run would measure a detector nobody ships, which is exactly the failure the drift gate below exists to prevent.
-- **Not a knob on the model fit.** The shipped head is a convex liblinear solve in the primal, which does not read its `seed=42` at all; reseeding *it* is a no-op. The Train/Calibrate split is the one place a seed still decides something. (The retired MLP head was the opposite — its weight-init seed moved the ranking, which is part of why it is retired; see [`docs/ML.md`](ML.md#the-three-heads-which-one-is-shipped-and-why).)
+- **Not a knob on the model fit.** The shipped head is a convex liblinear solve in the primal, which does not read its `seed=42` at all; reseeding *it* is a no-op. The Train/Calibrate split is the one place a seed still decides something. (The retired MLP head was the opposite — its weight-init seed moved the ranking, which is part of why it is retired; see [`docs/ML.md`](ML.md#the-heads-which-one-is-shipped-and-why).)
 
 `tests_lib/detectors/test_calibration_seed_arm.py` pins both halves: an unset knob reproduces a default run row for row, and an explicit one actually redraws the split.
 

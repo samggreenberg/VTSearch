@@ -71,13 +71,10 @@
 
 <!-- item-sep -->
 
-> **Shipped (opt-in):** the image (`Qwen2.5-VL-3B`) and audio
-> (`MU-NLPC/whisper-small-audio-captioning`) captioner providers now exist in
-> `vtscore/projection/signpost_captioners.py`, wired per media type behind the
-> `browse_signpost_captioner` setting with the zero-shot tag provider retained
-> as a `FallbackTextProvider` (model-load or per-item decode failure degrades
-> to tags). Default stays **tags**; the items below are the validation still
-> owed before either captioner can become the *default*.
+The image (`Qwen2.5-VL-3B`) and audio (`MU-NLPC/whisper-small-audio-captioning`)
+captioners exist opt-in (`vtscore/projection/signpost_captioners.py`, behind the
+`browse_signpost_captioner` setting, falling back to tags); the items below are
+the validation owed before either becomes the default.
 
 <!-- item-sep -->
 

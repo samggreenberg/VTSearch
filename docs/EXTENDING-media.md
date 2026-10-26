@@ -239,15 +239,13 @@ changes to `vtscore/media/__init__.py` are needed.
 | `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
 | `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |
 | `importable`         | `bool`      | `True`             | Whether the user imports this type natively (folder scan). Set `False` for a *convert-in* half type produced only by a converter (e.g. `face`) |
-| `converts_to`        | `list[str]` | `[]`               | For a non-embeddable *convert-out* half type (e.g. `document`), the embeddable targets it converts into (first = default), e.g. `["image", "text"]` |
+| `converts_to`        | `list[str]` | `[]`               | Class attribute. For a non-embeddable *convert-out* half type (e.g. `document`), the embeddable targets it converts into (first = default), e.g. `["image", "text"]` |
+| `has_thumbnail`      | `bool`      | `False`            | Class attribute. Whether items have a browsable still image (waveform, frame, page); drives the VTSBrowse bin shape (`vtscore/projection/pyramid.py`) and, sent to the frontend via `GET /api/media-types`, whether a type with no viewer of its own is shown in the image viewer (see [`media-types.md`](../vtscore/docs/extending/media-types.md)) |
 
-> **Half media types.** `MediaType` separates two orthogonal capabilities:
-> `importable` (a native ingestion category) and `embeddable` (has a registered
-> embedder — derived automatically). A *convert-out* half type is importable
-> but not embeddable and declares `converts_to` (`document`); a *convert-in*
-> half type is embeddable but sets `importable = False` and has empty
-> `file_extensions` (`face`, produced by the `image2face` converter). Full
-> types are both.
+`embeddable` is derived (true when any embedder is registered for the
+type), not overridden. Types that are importable but not embeddable
+(`document`) or embeddable but not importable (`face`) are *half types*;
+see [media-types.md § Half types](../vtscore/docs/extending/media-types.md#half-types).
 
 **Optional overridable methods:**
 
@@ -271,32 +269,18 @@ changes to `vtscore/media/__init__.py` are needed.
 > `vtscore/projection/signpost_texts.py`). A type that returns its own dict
 > without merging silently drops all of them.
 
-> **Override `image_response` if your type has a picture but is not one.**
-> `media_response` serves your media's *own* bytes, and for most types those
-> are not an image: audio is a WAV, video an MP4, a document an
-> `application/pdf`. Every surface that shows a **picture** of a media — the
-> grid tile, the VTSBrowse bin popup, the labeling thumbnail,
-> `GET /api/medias/<id>/image` and `/api/medias/<id>/thumbnail` — calls
-> `image_response` instead, and paints a placeholder when it returns `None`.
-> Audio returns its waveform PNG, video its mid-frame, `document` its first
-> page rasterised, `face` the crop; `text` has no visual form and keeps the
-> `None` default, and so does `image`, whose source bytes the routes stream
-> directly without consulting the hook. Generate through
-> `ensure_thumbnail_bytes` (below) rather than inline, so the bytes you serve
-> match the ones the warm-up pass produces.
-
-> **Override `ensure_thumbnail_bytes` if your type has a browsable thumbnail.**
-> The path-based hooks above only fire for media the loader can read at ingest.
-> An **archive-member** media (`local_archive_member`) has no file at all — only
-> `{archive path, member}` — so it leaves import with no thumbnail, and every
-> browse tile would stream a tar member and decode it on the request thread.
-> `ensure_thumbnail_bytes` is the type-agnostic way to build one from
-> `_resolve_media_bytes(media)`; the background pass in
-> `vtscore/datasets/thumbnail_warm.py` calls it per media after a load, and the
-> serving path calls it too, so a warmed thumbnail is byte-identical to a lazily
-> generated one. Generate through the same helper your `image_response` fallback
-> uses, memoise onto `media["thumbnail_bytes"]`, and never retain the resolved
-> payload on the media.
+> **Override `image_response` if your type has a picture but is not one**
+> (audio's waveform, video's mid-frame, a document's first page): every
+> surface that shows a picture of a media (grid tile, VTSBrowse popup,
+> labeling thumbnail, `GET /api/medias/<id>/image` and `/thumbnail`) calls it
+> instead of `media_response`, and paints a placeholder on `None`. Generate
+> the bytes through **`ensure_thumbnail_bytes`**, which memoises onto
+> `media["thumbnail_bytes"]` and is also what the background warm-up pass
+> (`vtscore/datasets/thumbnail_warm.py`) calls, so media with no file at
+> ingest (archive members) still get a thumbnail. The contract for both
+> hooks, including the rule never to retain the resolved payload, is in
+> [media-types.md § `image_response` vs. `media_response`](../vtscore/docs/extending/media-types.md#image_response-vs-media_response)
+> and [§ `ensure_thumbnail_bytes`](../vtscore/docs/extending/media-types.md#ensure_thumbnail_bytes).
 
 ### What happens automatically after registration
 
@@ -663,7 +647,7 @@ checkpoint; a sibling model's templates are not evidence.
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports through the process-wide default, which resolves to the calling thread's tracker and is a no-op on a thread that bound none. |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `vtscore.media.set_progress_callback()` (per embedder, `set_default_progress_callback()`); **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports through the process-wide default, which resolves to the calling thread's tracker and is a no-op on a thread that bound none. |
 
 ### Built-in embedders
 
@@ -691,7 +675,7 @@ def supports_text(self) -> bool:
 | `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]` (it skips media your `embed_media_bulk` already stored them on, which is how the shipped SIFT/VLAD embedders detect once per image), enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
-All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
+All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`. Two further properties also change framework behaviour but stay out of that payload: `eval_only` (above) and `supports_tiled_stage1`, which only document structural embedders turn on (see [`vtscore/docs/packages/media.md`](../vtscore/docs/packages/media.md)).
 
 ---
 
@@ -1453,21 +1437,13 @@ SOURCE = _S3SourceFactory()
 
 ### FetchedItem fields
 
-Every fetch and resolve method returns `FetchedItem`. The `path` field is
-always required; the rest are optional bonuses that let sources surface
-data they already have without forcing VTSearch to re-derive it.
-
-| Field | Type | When to set |
-|-------|------|-------------|
-| `path` | `Path \| None` | Always — local file path, or `None` if not found/downloadable |
-| `embedding` | `np.ndarray \| None` | When your API returns a pre-computed vector. The ingest path skips re-embedding when this is present (provided the origin has no clip params) |
-| `embedder_name` | `str` | Required alongside `embedding` — names the embedding space so vectors can be matched against the dataset |
-| `extra` | `dict[str, Any]` | Source-authoritative field overrides written into the media record (e.g. `{"file_size": 12345, "duration": 3.5, "created_at": "2024-01-01T00:00:00Z"}`) |
-
-For a simple source that just downloads files, returning
-`FetchedItem(path=local_path)` is sufficient. The other fields are only
-worth populating when your backing API already provides them in the same
-round-trip.
+Every fetch and resolve method returns `FetchedItem`. Only `path` is
+required (`None` when the item cannot be found); `embedding` +
+`embedder_name` (a pre-computed vector, which lets re-ingestion skip the
+embed step) and `extra` (source-authoritative media fields such as
+`file_size` or `duration`) are worth filling only when your backend returns
+them in the same round trip. The field-by-field contract is in
+[media-sources.md § `FetchedItem`](../vtscore/docs/extending/media-sources.md#fetcheditem-returning-more-than-a-path).
 
 ### MediaSource abstract interface reference
 

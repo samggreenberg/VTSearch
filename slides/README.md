@@ -18,7 +18,7 @@ _out/       rendered decks (gitignored)
 missing fragment or figure — or a headline that has grown to three lines —
 fails the suite rather than rotting quietly.
 
-**Test a deck change with `./run-tests.sh slides`** (~8s, against ~3.5 minutes
+**Test a deck change with `./run-tests.sh slides`** (~8s, against many minutes
 for the full suite). For a change confined to `slides/` it is the whole gate,
 not a shortcut, and it refuses to run once the branch touches anything else;
 which gates it keeps and why that is safe is in
@@ -97,6 +97,22 @@ container does not have — that is the reason the work happens in a workflow
 rather than at the end of a session. It also refuses to publish while `slides/`
 has uncommitted changes (`--allow-dirty` overrides), because the release body
 names the commit the PDFs came from and a dirty tree would make that a lie.
+
+## Attaching an excerpt (Claude sessions)
+
+CLAUDE.md requires a session that changes a deck to end by attaching the pages
+it changed. This is how.
+
+A full `hold-the-line.pdf` is ~75 MiB and the speaker cut ~36 MiB, against a 30 MiB attachment limit, so attaching the deck fails every time; and the user wants the slides that moved anyway. So cut an excerpt from each rendered PDF holding the affected section (or the affected slides plus one either side, when the change is narrower than a section), and attach *that* — around 3–5 MiB for both cuts. Extract it with PyMuPDF, already a project dependency (the `agpl` extra):
+
+```python
+import pymupdf
+doc = pymupdf.open("slides/_out/hold-the-line.pdf")
+ex = pymupdf.open(); ex.insert_pdf(doc, from_page=first, to_page=last)   # 0-based, inclusive
+ex.save("<scratchpad>/hold-the-line.section3.pdf", garbage=4, deflate=True)
+```
+
+Find `first`/`last` from the assembled deck: `_build/<deck>.md` splits on `\n---\n` into chunks whose index is the PDF page **plus one** (chunk 0 is the front matter), so a page is located by grepping its chunk for the figure it names or its outline `+atN` class. The speaker PDF has one page per fragment; pick its pages by searching each page's text (`page.get_text()`) for a phrase from the section's notes. A theme or tooling change that reflows every deck is the case where "the affected pages" *is* the deck — attach an excerpt per deck anyway (the opening outline, one full-bleed figure, one build, one screenshot slide) and say the rest changed the same way.
 
 ## Exporting a pile of images
 
@@ -278,12 +294,10 @@ them and finishes across the full width underneath), and past that the answer
 is a shorter note.
 
 **Every page of a group also carries a letter after the number** — 5a, 5b,
-5c — set a step lighter than the number, because the number is the address
-and the letter is the sub-address. A one-page slide carries no letter, so a
-deck reads `3, 4, 5a, 5b, …`. It is what lets a note, a question or a review
-comment name one *reveal* rather than one slide; write presenter notes
-against those letters. `build.py` emits it and `.pageno-letter` in the theme
-places it.
+5c — set a step lighter than the number. A one-page slide carries no letter,
+so a deck reads `3, 4, 5a, 5b, …`. `build.py` emits it and `.pageno-letter` in
+the theme places it; why notes are written against the letters is in *Builds*
+in [`STYLE.md`](STYLE.md).
 
 ## Numbering
 

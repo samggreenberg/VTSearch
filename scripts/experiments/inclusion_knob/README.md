@@ -32,7 +32,8 @@ python summarize_autopilot.py   # autopilot_prod_tables.md from the two autopilo
 `run_autopilot_sweep.py` is a **driver** over
 `vtscore.eval.voting_iterations.simulate_voting_iterations`, not a simulation of
 its own (issue #3408). It therefore measures the shipped detector by
-construction — the `linear_svm` head, the app's Autopilot phase machine, the
+construction — the shipped head (`PRODUCTION_HEAD`, `linear_svm_prior` since
+#4785; the 2026-07-30 run was on `linear_svm`), the app's Autopilot phase machine, the
 acquisition-inclusion offset, the production Train/Calibrate split — and it does
 **not** reproduce the committed `autopilot_sweep.csv`, which is the 2026-07-30
 run's record from the earlier hand-rolled loop and stays as it is. New runs write
