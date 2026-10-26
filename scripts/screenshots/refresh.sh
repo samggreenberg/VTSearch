@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate every user-docs screenshot from the manifest, in place.
 # After it runs, `git diff --stat docs/user/assets/` is the precise list of
-# shots the GUI change moved. See docs/plans/user-docs-screenshots.md.
+# shots the GUI change moved. See README.md beside this script.
 #
 # Usage:
 #   scripts/screenshots/refresh.sh            # all shots, both themes

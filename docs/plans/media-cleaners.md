@@ -29,28 +29,15 @@ points that still bear on the open work:
 
 <!-- item-sep -->
 
-- **Audio: loudness normalization** — peak or RMS normalize; quiet
-  recordings embed worse with CLAP. Moderate value, low risk.
+- [ ] #5286 — Audio: loudness normalization
 
 <!-- item-sep -->
 
-- **Document: blank-page drop** — *blocked on a pre-convert stage.* The
-  cleaner itself is easy (document in, thinner document out, via PyMuPDF),
-  but it can never run as written: cleaners run last, on the chain's final
-  media type, and a `document` dataset is not embeddable (`converts_to =
-  ["image", "text"]`), so a document-typed gate behind a `document2*`
-  converter fails `validate_chain`'s type check. It needs the `stage`
-  property from Open questions — a `"pre_convert"` gate running on the
-  document *before* the converter — so ship that first or drop the item.
+- [ ] #5287 — Document: blank-page drop (blocked on a pre-convert stage)
 
 <!-- item-sep -->
 
-- **Text: boilerplate removal** *(future idea — good, but deferred)* —
-  strip structured boilerplate that drowns out content: email headers
-  (`Received:` / `From:` / `Subject:` blocks, quoted-reply chains,
-  signatures), page headers/footers, navigation chrome. Worth doing once
-  there's a corpus to tune against; needs per-domain heuristics, so it
-  shouldn't gate the rest of the roster.
+- [ ] #5288 — Text: boilerplate removal (deferred until there is a corpus to tune on)
 
 <!-- item-sep -->
 
@@ -70,9 +57,6 @@ cropping (can eat context the detector needs), audio noise reduction
   when a cleaner mutates. Is a per-import "keep originals" toggle (default
   on) worth it, or is the mutating-items-only bound enough in practice?
   (Metadata-only gates sidestep this entirely — they store nothing.)
-- **Pre-clip / pre-convert stage** — a per-cleaner `stage` property is now
-  wanted by two items: tiling-vs-edge-trim ordering (does a tiled letterbox
-  hurt enough to justify it?) and the document blank-page gate, which is
-  blocked without a `"pre_convert"` placement. Open sub-questions: what
-  "Original" means for a pre-clip-cleaned sub-clip, and whether pre-convert
-  and pre-clip are one stage or two.
+- **Pre-clip / pre-convert stage** — a per-cleaner `stage` property, wanted by
+  the document blank-page gate and by tiling-vs-edge-trim ordering. Its design
+  questions live in #5287.

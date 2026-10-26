@@ -5,7 +5,7 @@
  * never seen. Safe to re-run: each dataset is imported only if absent (or drawn
  * by an older generator), and each detector's votes are reset to the same
  * baseline every run. refresh.sh runs this before capture.ts. See
- * docs/plans/user-docs-screenshots.md.
+ * README.md beside this script.
  *
  *   - drawings        : the training pile, SigLIP (the main fixture), with its
  *                       Browse map laid out up front

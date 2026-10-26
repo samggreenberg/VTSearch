@@ -82,9 +82,8 @@ def region_box_for_category(media: dict[str, Any], category: str) -> Optional[tu
 
     Datasets like Visual Genome stamp store-only ground-truth boxes on each
     media as ``media["regions"] = [{"box": [x0, y0, x1, y1], "label": cat}, ...]``
-    (normalised ``[0, 1]`` coordinates - see
-    ``docs/plans/visual-genome-dataset.md``).  The eval harness uses these to
-    simulate a user who, when voting Good, also drags a region around the
+    (normalised ``[0, 1]`` coordinates - see "Visual Genome's ground truth" in
+    ``docs/EVAL.md``).  The eval harness uses these to simulate a user who, when voting Good, also drags a region around the
     object instead of voting on the whole image.
 
     When more than one annotated region carries *category* (e.g. an image with

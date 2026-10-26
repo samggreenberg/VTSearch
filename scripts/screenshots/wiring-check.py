@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Docs ⇄ screenshot-manifest wiring check (no browser needed).
 
-Asserts three invariants from docs/plans/user-docs-screenshots.md:
+Asserts three invariants from scripts/screenshots/README.md:
 
   (a) every shot id in docs/user/screenshots.manifest.ts has BOTH theme files
       (`<id>.light.webp` and `<id>.dark.webp`) on disk under docs/user/assets/;

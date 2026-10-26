@@ -657,9 +657,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=OPENLOGO_DOWNLOAD_SIZE_MB,
         ),
         # Visual Genome is multi-label and sliced flat over the image list (not
-        # per-category), so the advertised count is only approximate — see
-        # docs/plans/visual-genome-dataset.md (real-download verification is a
-        # tracked follow-up).
+        # per-category), so the advertised count is only approximate.
         DemoDataset(
             id="visual_genome_s",
             label="Visual Genome (S)",
