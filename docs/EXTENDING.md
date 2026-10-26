@@ -337,9 +337,9 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source).
 Unlike the one-shot families, a source stays bound to a user and is
 consulted on every settings read and write, so read
-[§ How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works)
+[§ What the sync engine expects of a source](EXTENDING-plugins.md#what-the-sync-engine-expects-of-a-source)
 before you start — it carries the contracts (cheap freshness probe,
-dirty-key protection, lock ordering) that the base class cannot express.
+dirty-key protection, no lock held) that the base class cannot express.
 
 - [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
 - [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`

@@ -131,7 +131,13 @@ export class SortStateService {
     return this._acqThreshold() ?? this._threshold();
   }
 
-  /** The balance's state on `threshold`; null when the sort has no detector behind it. */
+  /**
+   * The balance's state on `threshold`; null when the sort has no detector behind it.
+   *
+   * It travels apart from {@link beta}: the state only ever arrives *with* the
+   * line it describes (a sort, a Tune pass, or the balance POST's own
+   * response), so it can never describe a line other than the one on screen.
+   */
   get balance(): LineBalance | null {
     return this._balance();
   }
@@ -164,7 +170,11 @@ export class SortStateService {
     return this._sortEtaSeconds();
   }
 
-  /** The active detector's balance, F-beta's beta. */
+  /**
+   * The active detector's balance, F-beta's beta: what the Threshold's radios
+   * show. Seeded per pair by `PairScopeService.seedBeta` (`GET /api/balance`)
+   * and set on a pick; the line's state at it is {@link balance}.
+   */
   get beta(): number {
     return this._beta();
   }
