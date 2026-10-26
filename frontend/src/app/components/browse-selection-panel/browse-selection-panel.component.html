@@ -19,24 +19,38 @@
     </button>
   </div>
 
-  @if (canVerify()) {
+  @if (canVerify() || showInPhotoOffered()) {
     <div class="bsp-actions">
-      <button
-        type="button"
-        class="btn btn--sm bsp-verify-good"
-        [disabled]="count() === 0"
-        (click)="onVerifyGood()"
-        title="Mark the selected items Verified Good and remove them from this browse (they're no longer unverified)">
-        Verified Good
-      </button>
-      <button
-        type="button"
-        class="btn btn--sm bsp-verify-bad"
-        [disabled]="count() === 0"
-        (click)="onVerifyBad()"
-        title="Mark the selected items Verified Bad and remove them from this browse (they're no longer unverified)">
-        Verified Bad
-      </button>
+      @if (canVerify()) {
+        <button
+          type="button"
+          class="btn btn--sm bsp-verify-good"
+          [disabled]="count() === 0"
+          (click)="onVerifyGood()"
+          title="Mark the selected items Verified Good and remove them from this browse (they're no longer unverified)">
+          Verified Good
+        </button>
+        <button
+          type="button"
+          class="btn btn--sm bsp-verify-bad"
+          [disabled]="count() === 0"
+          (click)="onVerifyBad()"
+          title="Mark the selected items Verified Bad and remove them from this browse (they're no longer unverified)">
+          Verified Bad
+        </button>
+      }
+      @if (showInPhotoOffered()) {
+        <button
+          type="button"
+          class="btn btn--toolbar bsp-show-in-photo"
+          [disabled]="count() !== 1"
+          (click)="onShowInPhoto()"
+          [title]="count() === 1
+            ? 'Open the photo the selected item was cut from, with the item outlined'
+            : 'Select exactly one item to open the photo it was cut from'">
+          Show in photo
+        </button>
+      }
     </div>
   }
 

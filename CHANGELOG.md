@@ -556,6 +556,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Show in photo in Browse.** On a Face dataset whose import also made an Image dataset, Browse's bin details
+  header gains **Show in photo** for the face shown large, and the Selection panel gains it for a selection of one
+  face. Either opens the same window as in Train: the photo the face was cut from, with the face outlined, over the
+  map. A floating bin details window steps aside while it is open and comes back on **← Back** or Esc. The bin
+  details' large preview now rests on the face last clicked once the pointer leaves the grid, rather than snapping
+  back to the tile's representative, so the button names the face you picked.
+
 - **A face demo of whole scenes: Celebrities in Context.** Add Dataset › Demo gains **Celebrities in Context (S)**
   and **(M)**: 60 well-known people, 20 or 60 photos each (1,200 / 3,600 photos, ~86 / ~259 MB), taken from the
   Celebrity Together dataset's red-carpet, event and press photos. Unlike the VGGFace2 Faces demo, whose photos are
@@ -1229,6 +1236,11 @@ not list every commit. Use `git log` for the full history.
   stays, and exporting it exports the face from every copy, as for the photo. With *Reference files in place* on,
   a merged item that is cut from a file (a face, a video frame, a tile) also lost the recipe its picture is re-made
   from, and showed the whole file in its place (the whole photo for a face); it shows its own picture again.
+
+- **A merged archive-member item still plays after its dataset is reopened** (issue #5238). When an
+  **Archive members (no extract)** manifest lists one member twice, the import merges the two items into one.
+  After the dataset was saved and reopened, that item had no bytes to serve, and reopening the dataset in full
+  could drop it. It now still finds the member it came from.
 
 - **A (?) hint's text is no longer cut off at a dialog's edge** (issue #5226). A **(?)** beside a field opens
   its explanation in a box centred over the icon. Near a dialog's edge (Add Dataset › Demo › Downloaded Media's

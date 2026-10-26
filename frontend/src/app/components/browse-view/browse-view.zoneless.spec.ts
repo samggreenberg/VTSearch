@@ -2,7 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
-import { signal } from '@angular/core';
+import { Component, input, output, signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 
 import { BrowseViewComponent } from './browse-view.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
@@ -20,10 +21,19 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
+import { SourcePhotoService, type SourcePhotoRequest } from '../../services/source-photo.service';
+import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
+
+/** Stands in for Show in photo's overlay, whose lookup is its own spec's. */
+@Component({ selector: 'vt-source-photo-modal', standalone: true, template: '' })
+class SourcePhotoModalStub {
+  readonly request = input.required<SourcePhotoRequest>();
+  readonly closed = output<void>();
+}
 
 /**
  * Zoneless staleness canary for the VTSBrowse view.
@@ -46,6 +56,9 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   /** Fired by hand where a test needs "the backend lost the dataset and it has
    *  been loaded again" (#5158). */
   let pairReloaded: Subject<void>;
+  /** The open Show in photo overlay, as `SourcePhotoService` holds it. */
+  let sourcePhotoRequest: ReturnType<typeof signal<SourcePhotoRequest | null>>;
+  let closeSourcePhoto: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     metaSubject = new Subject<ProjectionMeta>();
@@ -55,6 +68,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     navigate = vi.fn(() => Promise.resolve(true));
     openResults = vi.fn();
     getAutofindRun = vi.fn((): Observable<unknown> => EMPTY);
+    sourcePhotoRequest = signal<SourcePhotoRequest | null>(null);
+    closeSourcePhoto = vi.fn(() => sourcePhotoRequest.set(null));
 
     const noop = () => {};
     const projectionStub: Partial<ProjectionApiService> = {
@@ -156,8 +171,22 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         { provide: ToastService, useValue: { error: () => {}, success: () => {} } },
         { provide: ActivatedRoute, useValue: routeStub },
         { provide: Router, useValue: routerStub },
+        {
+          provide: SourcePhotoService,
+          useValue: {
+            offered: signal(false),
+            request: sourcePhotoRequest,
+            open: vi.fn(),
+            close: closeSourcePhoto,
+          },
+        },
       ],
-    }).compileComponents();
+    })
+      .overrideComponent(BrowseViewComponent, {
+        remove: { imports: [SourcePhotoModalComponent] },
+        add: { imports: [SourcePhotoModalStub] },
+      })
+      .compileComponents();
 
     fixture = TestBed.createComponent(BrowseViewComponent);
   });
@@ -637,6 +666,33 @@ describe('BrowseViewComponent (zoneless canary)', () => {
 
       expect(buildSubset).toHaveBeenCalledWith([1, 2]);
       expect(fixture.componentInstance.status()).toBe('building');
+    });
+  });
+
+  describe('Show in photo (#4750)', () => {
+    it('renders the overlay the bin details or selection panel asked for, and Back closes it', async () => {
+      await settleZoneless(fixture);
+      expect(fixture.debugElement.query(By.directive(SourcePhotoModalStub))).toBeNull();
+
+      sourcePhotoRequest.set({ mediaId: 7, fromName: 'Faces' });
+      await settleZoneless(fixture);
+      const overlay = fixture.debugElement.query(By.directive(SourcePhotoModalStub));
+      expect((overlay.componentInstance as SourcePhotoModalStub).request()).toEqual({
+        mediaId: 7,
+        fromName: 'Faces',
+      });
+
+      (overlay.componentInstance as SourcePhotoModalStub).closed.emit();
+      await settleZoneless(fixture);
+      expect(closeSourcePhoto).toHaveBeenCalled();
+      expect(fixture.debugElement.query(By.directive(SourcePhotoModalStub))).toBeNull();
+    });
+
+    it('closes the overlay when the view goes away, so it does not reopen over the next one', async () => {
+      await settleZoneless(fixture);
+      sourcePhotoRequest.set({ mediaId: 7, fromName: 'Faces' });
+      fixture.destroy();
+      expect(sourcePhotoRequest()).toBeNull();
     });
   });
 

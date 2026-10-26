@@ -602,7 +602,10 @@ is cut from, so that every face can show you its photo.
 
 **Show in photo.** When an import made both a Face and an Image dataset, a
 face in Train or Tune is one click from the photo it was cut out of. Click
-**Show in photo** under the face, or, in Train, right-click it in the list. The photo
+**Show in photo** under the face, or, in Train, right-click it in the list. In
+[Browse](#browse-exploring-a-dataset-spatially) the button sits in the bin
+details header, for the face shown large, and in the Selection panel, for a
+selection of one face. The photo
 opens over the ranking with the face outlined, under the main viewer's rotate,
 zoom and reset controls (its keys work too: `+` / `-` zoom, `[` / `]` rotate).
 **← Back** (or Esc) returns you to the face you were on, with the ranking as
@@ -1994,7 +1997,13 @@ of the map:
   own thumbnail smaller/larger buttons size the grid independently of the
   map.
 - A **large preview** of the item you're pointing at in that grid (a
-  waveform that plays for audio), with its own size buttons.
+  waveform that plays for audio), with its own size buttons. When the pointer
+  leaves the grid, it rests on the item you last clicked, else the tile's
+  representative.
+- On faces cut from photos, a **Show in photo** button in the header, which
+  opens the photo the face in the large preview was cut from, with the face
+  outlined (see [Faces](#faces-find-a-person-in-a-set-of-photos)). Click a face in
+  the grid, then the button.
 - An optional **metadata column** - name, media type, MD5, and whatever
   custom fields the dataset carries - toggled by the ⓘ button. Each value
   has a copy button next to it.
@@ -2015,7 +2024,9 @@ Click a tile to add its items to the **Selection** panel on the right, and
 click it again to take them out; dragging a region adds every tile inside it.
 The panel lists what you've picked - sortable by recency, name, or ID - and
 clicking any entry drops it from the selection. The checkbox at the top of
-the panel selects everything in view, or clears the whole selection. This is
+the panel selects everything in view, or clears the whole selection. On faces
+cut from photos, the panel's **Show in photo** opens the photo of the one face
+selected; with more than one selected it is greyed out. This is
 how you carve a region of interest out of a large collection by eye; on a
 whole dataset the selection is for looking, and is gone when you leave
 Browse.
