@@ -1327,6 +1327,19 @@ QUERY_HOLD: "int | None" = None if not _QUERY_HOLD else 0 if _QUERY_HOLD in ("of
 #: centroid in place of the query's set, as the app's does.  On (the default) is the app;
 #: ``CALIB_QUERY_MISS=0`` is the arm before (the typed query's set until the quota).
 QUERY_MISS: bool = os.environ.get("CALIB_QUERY_MISS", "1").strip() not in ("0", "off", "false")
+#: Issue #5241: open on SAM3's zero-shot detection scores in place of the typed query's cosine.
+#: ``CALIB_SEED_SAM3`` names ``sam3_score_5213.py``'s output dir, ``CALIB_SEED_SAM3_PROMPTS`` the prompt set
+#: (``typed`` - the default, the cells' own query text - ``noun`` or ``both``).  The sort orders the opening's
+#: picks and is the typed query's set a Test gives; the head still learns in the cell's own space.  Unset is
+#: the app (SigLIP's cosine).
+SEED_SAM3: "str | None" = os.environ.get("CALIB_SEED_SAM3", "").strip() or None
+SEED_SAM3_PROMPTS: str = os.environ.get("CALIB_SEED_SAM3_PROMPTS", "typed").strip() or "typed"
+#: Issue #5241: how the typed query's set is cut (``_query_step``'s *line*): ``fixed:X`` or ``gmm``.  Unset is
+#: the app's text rule, which keeps nearly every image on SAM3's scores.
+QUERY_LINE: "str | None" = os.environ.get("CALIB_QUERY_LINE", "").strip() or None
+#: Issue #5241: ``CALIB_QUERY_HOLD_PATCH=1`` lets ``CALIB_QUERY_HOLD`` hold on a patch space too (an eval arm;
+#: the app holds on a single-vector space only).
+QUERY_HOLD_PATCH: bool = os.environ.get("CALIB_QUERY_HOLD_PATCH", "").strip() not in ("", "0", "off", "false")
 
 #: Issue #4482's band picks: one in N of Autopilot's picks past the opening is
 #: drawn uniformly within a band of the unvoted ranking, the way the spot check

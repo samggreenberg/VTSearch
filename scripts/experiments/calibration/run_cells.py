@@ -228,6 +228,12 @@ def cell_opening(ds: str, emb: str, cat: str, medias: dict) -> "tuple[dict[int, 
     """
     if cfg.SEED_EXAMPLES is not None:
         return None, "example", f"examples={cfg.SEED_EXAMPLES}", cfg.learn_embedder(emb)
+    if cfg.SEED_SAM3 is not None:
+        # #5241: SAM3's zero-shot scores are the opening sort; the query names its prompts.
+        from sam3_scores import load_sam3  # noqa: PLC0415
+
+        scores, prompts = load_sam3(Path(cfg.SEED_SAM3), cfg.SEED_SAM3_PROMPTS)(cat, medias)
+        return scores, "text", f"sam3:{prompts}", f"sam3_{cfg.SEED_SAM3_PROMPTS}"
     seed_scores = _text_seed_scores(ds, emb, cat, medias)
     if seed_scores is None:
         return None, "known_good", "", ""
@@ -425,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
         f"query_tier={'on' if cfg.QUERY_TIER else 'off'} "
         f"query_hold={'app' if cfg.QUERY_HOLD is None else cfg.QUERY_HOLD or 'off'} "
         f"query_miss={'on' if cfg.QUERY_MISS else 'off'} "
+        f"seed_sam3={cfg.SEED_SAM3_PROMPTS + ':' + cfg.SEED_SAM3 if cfg.SEED_SAM3 else 'off'} "
+        f"query_line={cfg.QUERY_LINE or 'app'} query_hold_patch={'on' if cfg.QUERY_HOLD_PATCH else 'off'} "
         f"find_corpus={cfg.FIND_CORPUS or 'off'} find_mix={(cfg.FIND_MIX or 'only') if cfg.FIND_CORPUS else 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
@@ -655,6 +663,8 @@ def main(argv: list[str] | None = None) -> int:
                 query_tier=cfg.QUERY_TIER,
                 **({} if cfg.QUERY_HOLD is None else {"query_hold": cfg.QUERY_HOLD}),
                 query_miss=cfg.QUERY_MISS,
+                query_line=cfg.QUERY_LINE,
+                query_hold_patch=cfg.QUERY_HOLD_PATCH,
                 **(
                     {}
                     if find_medias is None

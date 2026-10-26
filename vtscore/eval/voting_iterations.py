@@ -1687,6 +1687,7 @@ def _query_test(
     beta: float | None,
     calibration_rows: bool,
     line_beta: float | None = None,
+    line: str | None = None,
     dump_suffix: str = "__eval",
 ) -> tuple[StepModel, list[dict[str, Any]]]:
     """What a Test on the withheld half gives a typed-query run until the quota (#4758): the typed query's own set.
@@ -1702,7 +1703,7 @@ def _query_test(
     """
     from vtscore.detectors.centroid_head import CENTROID_THRESHOLD  # noqa: PLC0415
 
-    step = _query_step(seed_scores, test_ids, line_beta=line_beta)
+    step = _query_step(seed_scores, test_ids, line_beta=line_beta, line=line)
     scored: list[Any] = []
     metrics = _evaluate_on_test(
         step,
@@ -3220,6 +3221,8 @@ def simulate_voting_iterations(  # noqa: C901
     query_tier: bool = True,
     query_hold: int = QUERY_HOLD_LABELS,
     query_miss: bool = True,
+    query_line: Optional[str] = None,
+    query_hold_patch: bool = False,
     find_corpus: Optional[Mapping[int, dict[str, Any]]] = None,
     find_corpus_scores: Optional[Mapping[int, float]] = None,
     find_mix: "float | str | None" = None,
@@ -3459,6 +3462,14 @@ def simulate_voting_iterations(  # noqa: C901
             (the typed query's set until the quota).  The click's untagged row
             is then the centroid's (``detector_tier = "centroid"``).  Picks
             never change.  Inert where *query_tier* is.
+        query_line: How the typed query's set is cut
+            (:func:`~vtscore.eval.step_trainers._query_step`'s *line*): ``None``
+            - the default - is the app's text rule; ``"fixed:X"`` and ``"gmm"``
+            are for an opening sort that is not a cosine (#5241, SAM3's).
+        query_hold_patch: Let *query_hold* hold on a patch space too (#5241): an
+            eval arm that shows an opening's set past the quota on Region, with
+            the head's rows tagged as on a single-vector space.  ``False`` - the
+            default - is the app (no hold on a patch space).
         find_corpus: A second corpus to Find on at every click (#4960,
             :mod:`vtscore.eval.find_corpus`): another dataset's medias in this
             run's embedder, whose cell of the same name as *target_category*
@@ -4976,6 +4987,7 @@ def simulate_voting_iterations(  # noqa: C901
                         beta=row_beta,
                         calibration_rows=emit_calibration_metrics and style_obj is not None,
                         line_beta=beta,
+                        line=query_line,
                     )
                 else:
                     c_step, c_rows, _c_cal = _centroid_test(
@@ -5246,7 +5258,12 @@ def simulate_voting_iterations(  # noqa: C901
         held = (
             query_on
             and not centroid
-            and query_holds(len(good_votes), len(bad_votes), patch_space=region_aware, hold=query_hold)
+            and query_holds(
+                len(good_votes),
+                len(bad_votes),
+                patch_space=False if query_hold_patch else region_aware,
+                hold=query_hold,
+            )
         )
         centroid_step: StepModel | None = None
         # Evaluate on the held-out test set.  The calibration study (#2781)
@@ -5267,6 +5284,7 @@ def simulate_voting_iterations(  # noqa: C901
                 beta=details.get("beta"),
                 calibration_rows=emit_calibration_metrics and style_obj is not None,
                 line_beta=beta,
+                line=query_line,
             )
             metrics = c_rows[0]
         elif centroid:
@@ -5789,6 +5807,7 @@ def simulate_voting_iterations(  # noqa: C901
                 beta=details.get("beta"),
                 calibration_rows=emit_calibration_metrics and style_obj is not None,
                 line_beta=beta,
+                line=query_line,
             )
             q_bands = _band_metrics(
                 q_step,
