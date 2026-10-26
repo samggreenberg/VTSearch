@@ -73,6 +73,14 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Emitted when the user marks the selection Verified Bad. */
   readonly verifyBad = output<void>();
 
+  /** Offer Show in photo (#4750): the browse view's dataset is a face dataset
+   *  whose import also made an Image dataset. It acts on a selection of exactly
+   *  one item. */
+  readonly showInPhotoOffered = input(false);
+
+  /** Emitted with the one selected item's id, whose photo the browse view opens. */
+  readonly showInPhoto = output<number>();
+
   /**
    * Emitted when the header checkbox asks for a select-all-in-view (the [ ]/[-]
    * → [x] click). The actual selection lives on the canvas — only it knows the
@@ -210,6 +218,12 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   onVerifyBad(): void {
     if (this.count() === 0) return;
     this.verifyBad.emit();
+  }
+
+  /** Ask for the photo the one selected item was cut from. */
+  onShowInPhoto(): void {
+    if (this.count() !== 1) return;
+    this.showInPhoto.emit(this.ids[0]);
   }
 
   /** Clicking a selected item drops it from the selection. */

@@ -9,6 +9,7 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { topOpenModal, type ModalComponent } from '../modal/modal.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -344,6 +345,39 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     fixture.destroy();
   });
 
+  it('steps out of sight behind a dialog, which its clicks and Escape do not dismiss', async () => {
+    // Floating, the popup sits above the dialog layer, so Show in photo's
+    // overlay would open under it. While a dialog is up the popup hides, and a
+    // click or Escape in the dialog is the dialog's, not a reason to dismiss.
+    const fixture = makeFixture();
+    await settlePasses(fixture);
+    const panel = fixture.nativeElement.querySelector('.bin-popup') as HTMLElement;
+    expect(panel.style.visibility).toBe('visible');
+    const dismissed = vi.fn();
+    fixture.componentInstance.dismissed.subscribe(dismissed);
+
+    try {
+      topOpenModal.set({} as ModalComponent);
+      await settlePasses(fixture);
+      expect(panel.style.visibility).toBe('hidden');
+
+      document.body.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(dismissed).not.toHaveBeenCalled();
+    } finally {
+      topOpenModal.set(null);
+    }
+
+    // The dialog closed: the popup is back where it was, and an outside click
+    // dismisses it again.
+    await settlePasses(fixture);
+    expect(panel.style.visibility).toBe('visible');
+    document.body.click();
+    expect(dismissed).toHaveBeenCalledTimes(1);
+
+    fixture.destroy();
+  });
+
   it('stays hidden until settings load, then reveals', async () => {
     // Cold open: settings not yet resolved. The popup's size (thumbnail size,
     // metadata column, preview pane) all come from settings, so it must not
@@ -587,6 +621,79 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
     fixture.componentRef.setInput('repId', 21);
     await settlePasses(fixture);
     expect(fixture.componentInstance.displayedId).toBe(21);
+
+    fixture.destroy();
+  });
+
+  describe('Show in photo (#4750)', () => {
+    function photoButton(fixture: ComponentFixture<BrowseBinPopupComponent>): HTMLButtonElement | null {
+      return fixture.nativeElement.querySelector('.bin-popup-photo-btn');
+    }
+
+    it('is offered only where the browse view says so', async () => {
+      const fixture = makeDockedFixture([1, 2, 3]);
+      await settlePasses(fixture);
+      expect(photoButton(fixture)).toBeNull();
+
+      fixture.componentRef.setInput('showInPhotoOffered', true);
+      await settlePasses(fixture);
+      expect(photoButton(fixture)?.textContent).toContain('Show in photo');
+
+      fixture.destroy();
+    });
+
+    it('asks for the photo of the item shown large', async () => {
+      const fixture = makeDockedFixture([1, 2, 3]);
+      fixture.componentRef.setInput('showInPhotoOffered', true);
+      const requested: number[] = [];
+      fixture.componentInstance.showInPhotoRequested.subscribe((id) => requested.push(id));
+      await settlePasses(fixture);
+
+      // The pane opens on the representative…
+      photoButton(fixture)!.click();
+      // …and follows the item the user points at.
+      fixture.componentInstance.onEntryEnter(3);
+      await settlePasses(fixture);
+      photoButton(fixture)!.click();
+
+      expect(requested).toEqual([1, 3]);
+      fixture.destroy();
+    });
+  });
+
+  it('rests the pane on the member last clicked once the cursor leaves the grid', async () => {
+    // Reaching for the header's Show in photo leaves the grid. Were the pane to
+    // snap back to the representative, the button would name it rather than the
+    // face the user just picked.
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+    const cmp = fixture.componentInstance;
+
+    // Nothing clicked yet: leaving falls back to the representative.
+    cmp.onEntryEnter(2);
+    cmp.onGridLeave();
+    expect(cmp.displayedId).toBe(1);
+
+    // Clicked, then pointed elsewhere and left: the pane rests on the click.
+    cmp.onEntryEnter(3);
+    cmp.onEntryClick(3);
+    cmp.onEntryEnter(2);
+    cmp.onGridLeave();
+    expect(cmp.displayedId).toBe(3);
+
+    // The clicked member is verified away: back to the representative.
+    fixture.componentRef.setInput('memberIds', [1, 2]);
+    await settlePasses(fixture);
+    cmp.onGridLeave();
+    expect(cmp.displayedId).toBe(1);
+
+    // A fresh bin forgets the click.
+    cmp.onEntryClick(2);
+    fixture.componentRef.setInput('memberIds', [20, 21]);
+    fixture.componentRef.setInput('repId', 21);
+    await settlePasses(fixture);
+    cmp.onGridLeave();
+    expect(cmp.displayedId).toBe(21);
 
     fixture.destroy();
   });
