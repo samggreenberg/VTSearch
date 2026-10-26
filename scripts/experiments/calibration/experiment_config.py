@@ -813,8 +813,8 @@ def exclusion_arm_name() -> str:
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "1") == "1"
 MEDIA_TYPE = "image"
 
-#: The #2852 anchored-mixture study (design + pre-registered decision rules:
-#: ``docs/plans/population-anchored-calibration.md``) flips this on via
+#: The #2852 anchored-mixture study (results + decision rules:
+#: ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``) flips this on via
 #: ``CALIB_ANCHORED=1``; every step then additionally emits the label-anchored,
 #: fold-anchored ("cross-LabeledGMM"), and rank-transfer arm rows.  Requires
 #: ``CALIB_SAFE_THRESHOLDS=1`` (the anchored arms ride the variant-row path).

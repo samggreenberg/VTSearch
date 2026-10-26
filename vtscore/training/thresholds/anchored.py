@@ -44,8 +44,8 @@ def rank_transfer(
     *scale*; two models scoring the same haystack are related by an
     approximately monotone map, and a quantile is invariant under any monotone
     map - so this is the scale-transfer step that lets a cut measured on a fold
-    model's distribution be applied to the final model's (deficit 2 of
-    ``docs/plans/population-anchored-calibration.md``).
+    model's distribution be applied to the final model's (deficit 2 in
+    ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``).
     """
     src = np.sort(np.asarray(source_scores, dtype=np.float64).ravel())
     tgt = np.asarray(target_scores, dtype=np.float64).ravel()
@@ -691,7 +691,8 @@ def fold_anchored_gmm_threshold(
     Two limits of that recommendation are on record rather than fixed here.
     The gain tracks *positive*-anchor count, so on binary-voting detectors with
     few positives this only reaches a dead heat with the ``cap50`` blend it
-    replaced (open work in ``docs/plans/population-anchored-calibration.md``).
+    replaced - not owed, since on the app's balanced path this cut decides no
+    trained head's line (#5261, ``docs/ML.md``).
     And every arm was scored at inclusion 0 - which the shipped ``mid_tilt``
     rule reproduces bit-for-bit while restoring the Inclusion tilt away from
     it; the tilt itself is the part issue #2865's inclusion sweep still owes a

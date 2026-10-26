@@ -302,8 +302,8 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 `CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
 `analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
 `python selftest_analyze_anchored.py`. Results land under
-`/expscratch/$USER/calibration-anchored`. Design and pre-registered decision rules:
-`docs/plans/population-anchored-calibration.md`.
+`/expscratch/$USER/calibration-anchored`. Results and decision rules:
+`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`.
 
 Cost note: the fold-anchored arms score the sim set once per calibration fold
 per step (`calibrate_count=2` → two extra scoring passes); disable them with
