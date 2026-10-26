@@ -136,6 +136,15 @@ stub randomness the UI exposes (never rely on unseeded draws).
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
+  With ImageMagick it tolerates the hinting and anti-aliasing noise of a render
+  on another rendering stack (a newer Chromium, say): pixels within `SHOT_FUZZ`
+  percent colour distance count as equal (default 5), and up to `SHOT_MAX_PX`
+  may still differ (default 150).
+  It lists every shot with pixels still differing, passes included as `near`,
+  so a near miss stays visible. Without ImageMagick it compares bytes. The
+  tolerance covers rasterisation, not typefaces: the app's font stack ends in
+  the system sans-serif (Inter in the cloud container), so a render on a
+  machine that resolves it to another face (macOS, Windows) drifts everywhere.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the user-facing
   docs (the guide, its how-to pages, README.md and demos.md) has a matching
