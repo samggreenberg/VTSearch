@@ -56,11 +56,7 @@ v22 breaking change is a no-op here (see the audit below).
 
 <!-- item-sep -->
 
-- [ ] #5291 — Evaluate Angular Aria for `vt-modal`'s focus management
-
 <!-- item-sep -->
-
-- [ ] #5292 — Re-look at Signal Forms for the settings, import and config forms
 
 <!-- item-sep -->
 
