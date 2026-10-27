@@ -118,10 +118,14 @@ describe('DetectorStatsModalComponent', () => {
       });
 
       expect(sectionTitles(el)).toContain('Import');
-      const rows = Array.from(el.querySelectorAll('tr')).map((tr) => tr.textContent?.replace(/\s+/g, ' ').trim());
+      const rows = Array.from(el.querySelectorAll('tr')).map((tr) =>
+        Array.from(tr.querySelectorAll('td'))
+          .map((td) => td.textContent?.trim())
+          .join(' '),
+      );
       expect(rows).toContain('Importer server_json_file');
       expect(rows).toContain('Filepath /data/labels/cats.json');
-      expect(rows.some((r) => r?.startsWith('Imported ') && r !== 'Imported -')).toBe(true);
+      expect(rows.some((r) => r.startsWith('Imported ') && r !== 'Imported -')).toBe(true);
     });
 
     it('is absent for a detector no importer created', async () => {
