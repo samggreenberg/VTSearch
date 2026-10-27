@@ -1045,7 +1045,11 @@ class ImporterFieldOptionsResponseSchema(Schema):
 
 
 class ImporterSuggestedNameRequestSchema(Schema):
-    """Body for ``POST /api/dataset/import/<importer_name>/suggested-name``."""
+    """Body for ``POST /api/dataset/import/<importer_name>/suggested-name``.
+
+    Shared by ``POST /api/label-importers/suggested-name/<importer_name>``,
+    which names a detector rather than a dataset.
+    """
 
     values = fields.Dict(load_default=dict)
 

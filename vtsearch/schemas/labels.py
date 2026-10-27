@@ -14,6 +14,8 @@ Listing / non-plugin-field routes in ``importers.py`` / ``exporters.py``:
 * ``POST /api/exporters/export``                -> :class:`RunExportRequestSchema` ->
                                                    :class:`RunExportResponseSchema`
 * ``GET  /api/label-importers``                 -> :class:`LabelImportersListResponseSchema`
+* ``POST /api/label-importers/suggested-name/<importer_name>``
+                                                -> :class:`LabelImporterSuggestedNameResponseSchema`
 * ``POST /api/label-importers/ingest-missing``  -> :class:`IngestMissingRequestSchema` ->
                                                    :class:`IngestMissingResponseSchema`
 
@@ -322,6 +324,18 @@ class LabelImporterEntrySchema(_PluginEntrySchema):
     """One entry in ``GET /api/label-importers``."""
 
 
+class LabelImporterSuggestedNameResponseSchema(Schema):
+    """Response for ``POST /api/label-importers/suggested-name/<importer_name>``.
+
+    ``detector_name`` is what the importer would name a detector created
+    from the supplied form values, i.e. the value the New Detector ›
+    Trained form prefills its Detector name box with.  The body is the
+    shared :class:`~vtsearch.schemas.datasets.ImporterSuggestedNameRequestSchema`.
+    """
+
+    detector_name = fields.String(required=True)
+
+
 class IngestMissingRequestSchema(Schema):
     """Body for ``POST /api/label-importers/ingest-missing``."""
 
@@ -380,6 +394,7 @@ __all__ = [
     "IngestMissingRequestSchema",
     "IngestMissingResponseSchema",
     "LabelImporterEntrySchema",
+    "LabelImporterSuggestedNameResponseSchema",
     "LabeledElementSchema",
     "LabelsExportQuerySchema",
     "LabelsExportResponseSchema",

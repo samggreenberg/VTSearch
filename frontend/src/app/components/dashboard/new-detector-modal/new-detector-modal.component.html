@@ -148,7 +148,7 @@
                       <vt-plugin-checkbox
                         [inputId]="'nmm-' + field.key"
                         [value]="labelImporterValues[field.key]"
-                        (valueChange)="labelImporterValues[field.key] = $event"
+                        (valueChange)="labelImporterValues[field.key] = $event; onLabelImporterFieldChanged(field.key)"
                         [title]="field.description || field.label || field.key"
                       ></vt-plugin-checkbox>
                     }
@@ -168,6 +168,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                     />
                   } @else if (field.field_type === 'file') {
@@ -187,6 +188,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -198,6 +200,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -209,6 +212,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -257,6 +261,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -271,6 +276,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"

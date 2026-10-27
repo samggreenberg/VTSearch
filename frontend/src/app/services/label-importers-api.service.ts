@@ -7,8 +7,10 @@ import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { FieldOptions } from '../models/api.models';
 import type { LabelImporterEntry } from '../generated/api-client/models/label-importer-entry';
 import type { IngestMissingResponse } from '../generated/api-client/models/ingest-missing-response';
+import type { LabelImporterSuggestedNameResponse } from '../generated/api-client/models/label-importer-suggested-name-response';
 import { getLabelImporters } from '../generated/api-client/fn/label-importers/get-label-importers';
 import { ingestMissing } from '../generated/api-client/fn/label-importers/ingest-missing';
+import { labelImporterSuggestedName } from '../generated/api-client/fn/label-importers/label-importer-suggested-name';
 
 @Injectable({ providedIn: 'root' })
 export class LabelImportersApiService {
@@ -64,6 +66,21 @@ export class LabelImportersApiService {
       `/api/label-importers/field-options/${encodeURIComponent(importerName)}`,
       { field_key: fieldKey, values },
     );
+  }
+
+  /**
+   * Ask the label importer what it would name a detector created from
+   * *values* (#5342).
+   *
+   * Backed by the plugin's ``default_detector_name``, so an importer can
+   * turn an opaque selection (an id, a saved-query key) into a
+   * human-readable name for the New Detector › Trained form's name box.
+   */
+  getSuggestedName(importerName: string, values: Record<string, unknown>): Observable<LabelImporterSuggestedNameResponse> {
+    return labelImporterSuggestedName(this.http, this.config.rootUrl, {
+      importer_name: importerName,
+      body: { values },
+    }).pipe(map((r) => r.body));
   }
 
   ingestMissing(entries: Record<string, unknown>[]): Observable<IngestMissingResponse> {
