@@ -32,7 +32,7 @@ def _wav_folder(folder: Path, n: int) -> Path:
 
 
 def _names(chunks: list[dict[int, dict[str, Any]]]) -> list[list[str]]:
-    return [[media.get("origin_name") or media.get("filename") for media in chunk.values()] for chunk in chunks]
+    return [[str(media.get("origin_name") or media.get("filename")) for media in chunk.values()] for chunk in chunks]
 
 
 @pytest.fixture

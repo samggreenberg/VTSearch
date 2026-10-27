@@ -699,7 +699,7 @@ class _FolderRun:
 
         import vtscore.cli as cli_mod
         import vtscore.datasets.loader_folder as loader_folder
-        from tests_lib.helpers import make_wav_file
+        from tests.helpers import make_wav_file
         from vtscore.embedding.media_vectors import set_media_embedding
 
         self.tmp_path = tmp_path
