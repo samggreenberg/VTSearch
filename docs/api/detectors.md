@@ -390,7 +390,9 @@ Runs the label importer and creates a detector seeded with the labels it
 returns (entries labelled neither `good` nor `bad` are counted in `skipped`).
 The media type is inferred from the labels' origins; labels spanning more than
 one media type, or none whose origin names one, are rejected (400). A missing
-`name` is a 422; a taken one a 409.
+`name` is a 422; a taken one a 409. The new registry entry keeps how it was
+imported as `imported` (the importer, its fields, the time), which
+[the detector's stats](#detector-statistics) return.
 
 → (201)
 ```json
@@ -557,6 +559,14 @@ one, else the one it last trained in), `embedder_type`, query and example,
 the `size` items scored), `labelled` (the picks the ranges rest on),
 `precision` / `recall` / `fbeta` as `{point, lo, hi}` ranges, a plain-language
 `found` line, and `stale`.
+
+`imported` says how a label importer created the detector (through
+[`from-labelset`](#register-detector-from-a-label-importer) or the CLI's
+`--import-labels-into … --create-detector`): `{"importer": "server_json_file",
+"params": {"filepath": "/data/labels/cats.json"}, "imported_at": 1761580800.0}`.
+`params` holds the fields the importer ran with, minus `file` and `password`
+fields, the policy a dataset origin follows. It is `null` for a detector made
+any other way. The Stats dialog's *Import* section reads it.
 
 403 if the caller cannot access the detector; 404 if it does not exist.
 

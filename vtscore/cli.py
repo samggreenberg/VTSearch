@@ -1080,7 +1080,7 @@ def import_labels_into_detector(
             raise DetectorNotFoundError(det_name)
         _check_detector_media_type(create_media_type, "create_media_type")
 
-    label_entries = _run_label_importer(importer_name, field_values)
+    label_entries, import_record = _run_label_importer(importer_name, field_values)
     existing = LabelSet.from_dict((data or {}).get("labelset") or {})
     applied, skipped = _merge_label_entries(existing, label_entries)
 
@@ -1094,12 +1094,19 @@ def import_labels_into_detector(
     data["labelset"] = existing.to_dict()
     _write_detector(path, data)
     if created:
-        _register_created_detector(det_name, create_media_type, applied)
+        _register_created_detector(det_name, create_media_type, applied, imported=import_record)
     return applied, skipped
 
 
-def _run_label_importer(importer_name: str, field_values: dict[str, Any]) -> list[dict[str, Any]]:
-    """Validate *field_values* for the named label importer, run it, and return its entries."""
+def _run_label_importer(
+    importer_name: str, field_values: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Validate *field_values* for the named label importer, run it, and return its entries.
+
+    Also returns the run's import record (the importer, its normalized field
+    values, the time), which a detector the import creates keeps (#5334).
+    """
+    from vtscore.detectors.import_record import build_import_record
     from vtscore.labels.importers import get_label_importer
 
     importer = get_label_importer(importer_name)
@@ -1111,7 +1118,7 @@ def _run_label_importer(importer_name: str, field_values: dict[str, Any]) -> lis
     label_entries = importer.run_cli(field_values)
     if not isinstance(label_entries, list):
         raise ValueError(f"Label importer {importer_name!r} returned {type(label_entries).__name__}, expected list.")
-    return label_entries
+    return label_entries, build_import_record(importer, field_values)
 
 
 def _merge_label_entries(existing: "LabelSet", label_entries: list[dict[str, Any]]) -> tuple[int, int]:
@@ -1171,8 +1178,12 @@ def _new_detector_data(det_name: str, media_type: str) -> dict[str, Any]:
     }
 
 
-def _register_created_detector(det_name: str, media_type: str, num_labels: int) -> None:
+def _register_created_detector(
+    det_name: str, media_type: str, num_labels: int, *, imported: dict[str, Any] | None = None
+) -> None:
     """Add a CLI-created detector to the registry so it appears in its creator's Drafts.
+
+    *imported* is the import record of the label import that created it.
 
     Skipped when an entry already owns the name - one whose labelset file had
     been deleted - since that entry now finds its file again, and a second
@@ -1188,6 +1199,7 @@ def _register_created_detector(det_name: str, media_type: str, num_labels: int) 
         media_type=media_type,
         num_training=num_labels,
         created_by=get_current_user(),
+        imported=imported,
     )
 
 

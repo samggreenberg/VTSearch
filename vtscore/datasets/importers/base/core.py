@@ -23,7 +23,7 @@ from vtscore.datasets.chunks import DeferredChunk
 from vtscore.plugins import FieldOption, PluginBase, PluginField
 
 from .naming import derive_display_name
-from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_value
+from .origin import _dataset_name_field, _origin_params, _serialise_origin_value
 from .outputs import OutputSpec
 
 
@@ -671,20 +671,7 @@ class ImporterBase(PluginBase):
         if self.origin_suppressed:
             return {"importer": self.name, "params": {}}
 
-        params: dict[str, str] = {}
-        for f in self.fields:
-            if not _field_in_origin(f):
-                continue
-            if f.field_type == "checkbox":
-                val = field_values.get(f.key, str(f.default).lower() == "true")
-                truthy = val if isinstance(val, bool) else str(val).lower() == "true"
-                params[f.key] = "true" if truthy else "false"
-                continue
-            raw = field_values.get(f.key, "")
-            serialised = _serialise_origin_value(raw, f.origin_serializer)
-            if serialised:
-                params[f.key] = serialised
-
+        params = _origin_params(self.fields, field_values)
         for key in self._effective_extra_origin_keys():
             raw = field_values.get(key, "")
             serialised = _serialise_origin_value(raw, None)

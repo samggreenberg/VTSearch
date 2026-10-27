@@ -463,6 +463,18 @@ class DetectorRegistryReadersResponseSchema(Schema):
     readers = fields.List(fields.String(), required=True)
 
 
+class DetectorImportRecordSchema(Schema):
+    """How a detector was imported (#5334), for one a label importer created.
+
+    ``params`` holds the importer's field values as it ran, minus ``file`` and
+    ``password`` fields (the policy a dataset origin follows).
+    """
+
+    importer = fields.String(required=True, metadata={"description": "Name of the label importer."})
+    params = fields.Dict(keys=fields.String(), values=fields.String(), required=True)
+    imported_at = fields.Float(required=True, metadata={"description": "Unix time of the import."})
+
+
 class DetectorRegistryStatsResponseSchema(Schema):
     """Response for ``GET /api/detectors/registry/<id>/stats``.
 
@@ -496,6 +508,9 @@ class DetectorRegistryStatsResponseSchema(Schema):
     # Every test verdict the detector keeps, one per tested dataset, newest
     # first (#4526): the *Tested on* section.
     test_verdicts = fields.List(fields.Nested(LineTestVerdictSchema), required=True)
+    # The label importer that created the detector, its fields and when
+    # (#5334); ``None`` for a detector made any other way.
+    imported = fields.Nested(DetectorImportRecordSchema, required=True, allow_none=True)
 
 
 class DetectorBrowsePositivesResponseSchema(Schema):

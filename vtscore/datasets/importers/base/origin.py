@@ -57,6 +57,32 @@ def _serialise_origin_value(value: Any, serializer: Any) -> str:
     return str(value)
 
 
+def _origin_params(fields: list[PluginField], field_values: dict[str, Any]) -> dict[str, str]:
+    """The ``params`` an origin keeps from *field_values*, one string per kept field.
+
+    Applies the per-field policy above: fields :func:`_field_in_origin` rules
+    out are dropped, a checkbox always records ``"true"`` / ``"false"``, and
+    any other field records its serialised value when it has one.  Shared by
+    :meth:`ImporterBase.build_origin` and a detector's import record
+    (:mod:`vtscore.detectors.import_record`), so a field kept out of one is
+    kept out of both.
+    """
+    params: dict[str, str] = {}
+    for f in fields:
+        if not _field_in_origin(f):
+            continue
+        if f.field_type == "checkbox":
+            val = field_values.get(f.key, str(f.default).lower() == "true")
+            truthy = val if isinstance(val, bool) else str(val).lower() == "true"
+            params[f.key] = "true" if truthy else "false"
+            continue
+        raw = field_values.get(f.key, "")
+        serialised = _serialise_origin_value(raw, f.origin_serializer)
+        if serialised:
+            params[f.key] = serialised
+    return params
+
+
 def _dataset_name_field() -> PluginField:
     return PluginField(
         key=DATASET_NAME_FIELD_KEY,

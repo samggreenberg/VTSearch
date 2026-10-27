@@ -165,6 +165,7 @@ def register_detector(
     embedder: str = "",
     embedder_type: str = "",
     readers: list[str] | None = None,
+    imported: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
 
@@ -190,6 +191,10 @@ def register_detector(
         embedder_type: The detector's locked embedder *type* ("semantic" /
             "patch_semantic" / "structural"), resolved at create time.  Drives
             detector/dataset compatibility gating without loading the detector.
+        imported: How the detector was imported, when a label importer created
+            it: the record :func:`vtscore.detectors.import_record.build_import_record`
+            builds (importer name, the fields it ran with, when).  ``None`` for
+            a detector made any other way.
 
     Returns:
         The newly created entry dict.
@@ -212,6 +217,7 @@ def register_detector(
         # detector besides the creator. Empty = private to the creator;
         # ``["*"]`` = visible to everyone. See ``can_user_access_detector``.
         "readers": list(readers) if readers else [],
+        "imported": dict(imported) if imported else None,
     }
     _read_modify_write(lambda entries: entries.append(entry))
     return entry

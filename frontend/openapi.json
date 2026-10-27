@@ -2741,6 +2741,31 @@
         ],
         "type": "object"
       },
+      "DetectorImportRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "imported_at": {
+            "description": "Unix time of the import.",
+            "type": "number"
+          },
+          "importer": {
+            "description": "Name of the label importer.",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "imported_at",
+          "importer",
+          "params"
+        ],
+        "type": "object"
+      },
       "DetectorLabelVoteRequest": {
         "properties": {
           "provenance": {
@@ -3165,6 +3190,10 @@
           "embedder_type": {
             "type": "string"
           },
+          "imported": {
+            "$ref": "#/components/schemas/DetectorImportRecord",
+            "nullable": true
+          },
           "last_trained_at": {
             "nullable": true
           },
@@ -3212,6 +3241,7 @@
           "created_by",
           "embedder",
           "embedder_type",
+          "imported",
           "media_example",
           "media_type",
           "name",
@@ -11462,7 +11492,7 @@
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).",
+        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``.",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {

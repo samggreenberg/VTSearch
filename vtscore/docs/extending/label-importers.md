@@ -61,6 +61,15 @@ Optional:
 
 Expose `LABEL_IMPORTER = YourImporter()` at module level.
 
+A detector your importer creates (the Dashboard's New Detector › Trained, or
+the CLI's `--import-labels-into … --create-detector`) keeps a record of the run
+on its registry entry: your `name`, the field values it ran with, and the time
+(`vtscore.detectors.import_record.build_import_record`). The fields kept follow
+a dataset origin's policy: `"file"` and `"password"` fields are left out, and
+`PluginField.include_in_origin` / `origin_serializer` tune any field as they do
+for a dataset importer. Set `include_in_origin=False` on a field whose value
+should not be written to disk.
+
 ## The returned label format
 
 `run()` must return a list of dicts. The minimum shape:

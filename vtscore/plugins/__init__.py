@@ -212,7 +212,9 @@ class PluginField:
     clears: list[str] = field(default_factory=list)
 
     #: Whether this field's value should be copied into the importer's
-    #: persisted origin dict (see :meth:`DatasetImporter.build_origin`).
+    #: persisted origin dict (see :meth:`DatasetImporter.build_origin`), or,
+    #: for a label importer, into the import record a detector it creates
+    #: keeps (see :mod:`vtscore.detectors.import_record`).
     #: ``None`` means "use the field-type default": ``False`` for
     #: ``"file"`` and ``"password"`` fields (don't persist file uploads or
     #: secrets), ``True`` for every other type.  Set explicitly to
