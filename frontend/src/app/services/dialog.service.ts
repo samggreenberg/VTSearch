@@ -2,10 +2,10 @@ import { Injectable, signal } from '@angular/core';
 
 export type DialogType = 'info' | 'warning' | 'error' | 'success';
 
-interface DialogButton {
+export interface DialogButton<T = unknown> {
   label: string;
   primary: boolean;
-  value: unknown;
+  value: T;
 }
 
 /**
@@ -109,6 +109,16 @@ export class VtDialogService {
         { label: actionLabel, primary: true, value: 'confirm' },
       ],
     }) as Promise<'confirm' | 'escape' | 'cancel'>;
+  }
+
+  /**
+   * A question with its own set of answers, for a dialog that offers more
+   * than yes or no. Resolves the clicked button's value. Escape and backdrop
+   * dismissal resolve the first non-primary button's, so list the
+   * "not now" answer first.
+   */
+  choose<T>(message: string, buttons: readonly DialogButton<T>[], type: DialogType = 'info'): Promise<T> {
+    return this.show({ message, type, showInput: false, buttons: [...buttons] }) as Promise<T>;
   }
 
   prompt(message: string, defaultValue = '', type: DialogType = 'info'): Promise<string | null> {

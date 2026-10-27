@@ -77,6 +77,28 @@ describe('VtDialogService', () => {
     expect(await promise).toBe('escape');
   });
 
+  it('choose shows its own buttons and resolves the clicked one', async () => {
+    const promise = service.choose('Where to?', [
+      { label: 'Not now', primary: false, value: 'later' },
+      { label: 'Go', primary: true, value: 'go' },
+    ]);
+    expect(service.dialogMessage()).toBe('Where to?');
+    expect(service.dialogType()).toBe('info');
+    expect(service.dialogButtons().map((b) => b.label)).toEqual(['Not now', 'Go']);
+    service.resolve('go');
+    expect(await promise).toBe('go');
+  });
+
+  it('choose resolves the first non-primary answer on dismissal', async () => {
+    const promise = service.choose('Where to?', [
+      { label: 'Not now', primary: false, value: 'later' },
+      { label: 'Elsewhere', primary: false, value: 'elsewhere' },
+      { label: 'Go', primary: true, value: 'go' },
+    ]);
+    service.cancel();
+    expect(await promise).toBe('later');
+  });
+
   it('getIconType should return correct icon type', () => {
     service.dialogType.set('warning');
     expect(service.getIconType()).toBe('warning');

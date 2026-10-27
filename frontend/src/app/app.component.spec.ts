@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
+import { SettingsPanelService } from './services/settings-panel.service';
 import { provideZoneless } from './testing/zoneless-testbed';
 import { provideHttpTesting } from './testing/test-providers';
 
@@ -190,7 +191,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.menuOpen = true;
     fixture.componentInstance.onSettings();
-    expect(fixture.componentInstance.showSettings).toBe(true);
+    expect(fixture.componentInstance.showSettings()).toBe(true);
     expect(fixture.componentInstance.menuOpen).toBe(false);
   });
 
@@ -202,7 +203,7 @@ describe('AppComponent', () => {
     ]);
     fixture.componentInstance.isOnLabelView.set(true);
     fixture.componentInstance.onSettings();
-    expect(fixture.componentInstance.settingsViewTab).toBe('image');
+    expect(fixture.componentInstance.settingsViewTab()).toBe('image');
   });
 
   it('should set settingsViewTab from dashboard when all same media type', () => {
@@ -217,7 +218,7 @@ describe('AppComponent', () => {
     ]);
     fixture.componentInstance.isOnLabelView.set(false);
     fixture.componentInstance.onSettings();
-    expect(fixture.componentInstance.settingsViewTab).toBe('audio');
+    expect(fixture.componentInstance.settingsViewTab()).toBe('audio');
   });
 
   it('should set empty settingsViewTab from dashboard when mixed media types', () => {
@@ -230,6 +231,37 @@ describe('AppComponent', () => {
     vi.spyOn(datasetState, 'detectors', 'get').mockReturnValue([]);
     fixture.componentInstance.isOnLabelView.set(false);
     fixture.componentInstance.onSettings();
-    expect(fixture.componentInstance.settingsViewTab).toBe('');
+    expect(fixture.componentInstance.settingsViewTab()).toBe('');
+  });
+
+  describe('a SettingsPanelService request (#5344)', () => {
+    it('opens Settings on the requested tab, with the importer when asked', () => {
+      const fixture = TestBed.createComponent(AppComponent);
+      const app = fixture.componentInstance;
+      void TestBed.inject(SettingsPanelService).open({ tab: 'autofind', importer: true });
+      expect(app.showSettings()).toBe(true);
+      expect(app.settingsTab()).toBe('autofind');
+      expect(app.settingsImporter()).toBe(true);
+    });
+
+    it('resolves on close, saying whether an import was applied', async () => {
+      const fixture = TestBed.createComponent(AppComponent);
+      const app = fixture.componentInstance;
+      const session = TestBed.inject(SettingsPanelService).open({ tab: 'autofind' });
+      app.onSettingsImported();
+      app.onSettingsClosed();
+      await expect(session).resolves.toEqual({ imported: true });
+      expect(app.showSettings()).toBe(false);
+    });
+
+    it('does not carry its tab over to the next gear click', () => {
+      const fixture = TestBed.createComponent(AppComponent);
+      const app = fixture.componentInstance;
+      void TestBed.inject(SettingsPanelService).open({ tab: 'autofind', importer: true });
+      app.onSettingsClosed();
+      app.onSettings();
+      expect(app.settingsTab()).toBe('');
+      expect(app.settingsImporter()).toBe(false);
+    });
   });
 });
