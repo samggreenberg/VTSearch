@@ -7,11 +7,13 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { verdictLine, verdictTitle } from '../../../utils/line-test';
 import { isSoloMediaType } from '../../../utils/solo-media-type';
+import { originParamRows, type OriginParamRow } from '../../../utils/origin-params';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
  *  many positives currently resolve into the active dataset), the test
- *  verdicts the detector keeps (*Tested on*, #4526), and the detector's
+ *  verdicts the detector keeps (*Tested on*, #4526), how a label importer
+ *  created it when one did (*Import*, #5334), and the detector's
  *  creation/provenance metadata. Counts only — no embeddings or MLP
  *  weights are read (see the "No Persisted Vectors" rule). */
 @Component({
@@ -58,6 +60,11 @@ export class DetectorStatsModalComponent implements OnInit {
    *  detector's type, where it could be nothing else (#5106). */
   get showMediaType(): boolean {
     return !isSoloMediaType(this.soloMediaType(), this.stats()?.media_type);
+  }
+
+  /** The fields the detector's label importer ran with, one row each. */
+  get importParams(): OriginParamRow[] {
+    return originParamRows(this.stats()?.imported?.params);
   }
 
   close(): void {

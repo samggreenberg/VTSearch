@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A detector remembers the label importer that created it** (issue #5334). `register_detector` takes an
+  optional `imported=` record, kept on the entry as `imported` (`None` by default), and the new
+  `vtscore.detectors.import_record.build_import_record(importer, field_values)` builds it: the importer's `name`,
+  the field values it ran with, and `imported_at`. The fields kept follow a dataset origin's policy, so
+  `PluginField.include_in_origin` and `origin_serializer` now govern a label importer's fields too (`"file"` and
+  `"password"` fields stay out by default). `import_labels_into_detector(..., create_media_type=...)` records it on
+  the detector it creates. Additive: existing callers and importers are unaffected.
+
 - **A converter may hand over the vector it computed.** A `MediaConverter.convert` output may carry
   `"embeddings": {embedder_name: vector}` (and `"embedder"`, naming the primary) when the conversion itself
   embedded the media; `vtscore.converters.runner` files the vector on the media dict, so the embed stage finds

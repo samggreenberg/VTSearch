@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **A detector made from imported labels says how it was imported** (issue #5334). A detector created by New
+  Detector › Trained, or by the CLI's `--import-labels-into … --create-detector`, keeps the label importer that
+  created it, the fields that importer ran with (never a password or an uploaded file) and when. Its **Stats**
+  window shows them in a new **Import** section, and `GET /api/detectors/registry/<id>/stats` returns them as
+  `imported`. Detectors created before this change, or any other way, have none.
+
 - **`--resume` continues an interrupted `--stream-results` run** (issue #5280). A streamed run over a very large
   source can take hours; with `--resume` it writes its output in place and records a checkpoint beside it after
   every chunk, and running the same command again after a preemption, an OOM kill or Ctrl-C continues after the

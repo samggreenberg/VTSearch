@@ -484,6 +484,11 @@ class TestCreateDetectorOnImport:
         assert entry["media_type"] == "audio"
         assert entry["num_training"] == 2
         assert entry["created_by"] == "default"
+        # How it was imported: the importer, the field it ran with, when (#5334).
+        assert entry["imported"]["importer"] == "server_json_file"
+        assert set(entry["imported"]["params"]) == {"filepath"}
+        assert Path(entry["imported"]["params"]["filepath"]).resolve() == labels.resolve()
+        assert entry["imported"]["imported_at"] > 0
 
     def test_created_detector_belongs_to_the_run_user(self, tmp_path):
         from vtscore.cli import import_labels_into_detector

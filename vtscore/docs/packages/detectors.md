@@ -22,6 +22,7 @@ Every module in the package, grouped by what it is for.
 | Module                                       | Concern                                                             |
 |----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
+| `vtscore/detectors/import_record.py`         | The record of the label importer that created a detector            |
 | `vtscore/detectors/store.py`                 | Low-level per-detector JSON file I/O                                |
 | `vtscore/detectors/embedder_type.py`         | Resolve and validate a detector's immutable embedder *type*         |
 | `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
@@ -124,8 +125,9 @@ see [`concepts.md`](../concepts.md) - which is also why
 `vtscore.config.DATA_DIR / "detector_registry.json"` (`REGISTRY_PATH`).
 Each entry is a flat dict with `id` (uuid hex), `name`, `media_type`,
 `num_training`, `text_query`, `media_example`, `examples`, `created_by`,
-`created_at`, `embedder`, `embedder_type`, `readers`; once its labels
-change it also carries `last_trained_at` and `trained_on`, the ids of the
+`created_at`, `embedder`, `embedder_type`, `readers`, and `imported` (how a
+label importer created it, or `None`; built by `import_record.py`); once its
+labels change it also carries `last_trained_at` and `trained_on`, the ids of the
 datasets it holds labels from. `record_detector_training(detector_id,
 num_training, *, dataset_id="", labeled_in_dataset=True)` stamps all
 three: a writer that composed its labels against one dataset passes its

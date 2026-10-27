@@ -29,6 +29,7 @@ describe('DetectorStatsModalComponent', () => {
     autofind: false,
     readers: [],
     test_verdicts: [] as ReturnType<typeof wireVerdict>[],
+    imported: null as { importer: string; params: Record<string, string>; imported_at: number } | null,
   };
 
   beforeEach(async () => {
@@ -96,6 +97,37 @@ describe('DetectorStatsModalComponent', () => {
     expect(rows[1].textContent).toContain('(1 pick, 2026-10-05)');
     expect(rows[1].querySelector('.stale-mark')!.textContent).toContain('out of date');
     expect(rows[1].title).toContain('retrained since');
+  });
+
+  describe('the Import section (#5334)', () => {
+    async function load(stats: typeof mockStats): Promise<HTMLElement> {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/detectors/registry/det1/stats').flush(stats);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    function sectionTitles(el: HTMLElement): (string | undefined)[] {
+      return Array.from(el.querySelectorAll('.section-title')).map((h) => h.textContent?.trim());
+    }
+
+    it('names the importer, the fields it ran with and when, for an imported detector', async () => {
+      const el = await load({
+        ...mockStats,
+        imported: { importer: 'server_json_file', params: { filepath: '/data/labels/cats.json' }, imported_at: 1700000000 },
+      });
+
+      expect(sectionTitles(el)).toContain('Import');
+      const rows = Array.from(el.querySelectorAll('tr')).map((tr) => tr.textContent?.replace(/\s+/g, ' ').trim());
+      expect(rows).toContain('Importer server_json_file');
+      expect(rows).toContain('Filepath /data/labels/cats.json');
+      expect(rows.some((r) => r?.startsWith('Imported ') && r !== 'Imported -')).toBe(true);
+    });
+
+    it('is absent for a detector no importer created', async () => {
+      const el = await load(mockStats);
+      expect(sectionTitles(el)).not.toContain('Import');
+    });
   });
 
   describe('the Media type row on a server locked to one media type (#5106)', () => {

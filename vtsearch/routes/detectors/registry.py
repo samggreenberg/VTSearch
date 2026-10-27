@@ -428,6 +428,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtscore.datasets.ingest import _media_type_from_origin
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.labels.importers import get_label_importer, list_label_importers
+    from vtscore.detectors.import_record import build_import_record
     from vtscore.detectors.registry import register_detector, update_detector
     from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
     from vtsearch.routes._policy import abort_if_semantic_only_type
@@ -519,6 +520,8 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         num_training=len(labelset),
         embedder_type=embedder_type_val,
         created_by=get_current_user(),
+        # The importer, its fields and the time, for the Stats window (#5334).
+        imported=build_import_record(importer, field_values, imported_at=detector_data["created_at"]),
     )
     update_detector(entry["id"], last_trained_at=time.time())
     entry["num_training"] = len(labelset)
@@ -1221,7 +1224,8 @@ def get_detector_stats(detector_id: str):
     much of the positive set the Browse button could currently project;
     ``test_verdicts`` is every test verdict the detector keeps, one per tested
     dataset, newest first and marked stale once the detector has been
-    retrained since (#4526).
+    retrained since (#4526).  ``imported`` is how a label importer created the
+    detector (#5334), or ``None``.
     """
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.line_verdicts import verdict_summaries
@@ -1286,6 +1290,7 @@ def get_detector_stats(detector_id: str):
         "readers": entry.get("readers", []) or [],
         "autofind": name in set(get_autofind_detectors()),
         "test_verdicts": verdict_summaries(data),
+        "imported": entry.get("imported") or None,
     }
 
 

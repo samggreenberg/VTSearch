@@ -73,6 +73,28 @@
       </tbody>
     </table>
 
+    @if (stats.imported; as imported) {
+      <h3 class="section-title" title="This detector was created from labels a label importer brought in">Import</h3>
+      <table class="data-table stats-table">
+        <tbody>
+          <tr>
+            <td class="stat-label" title="The label importer that created this detector">Importer</td>
+            <td class="stat-value">{{ imported.importer }}</td>
+          </tr>
+          @for (p of importParams; track p.key) {
+            <tr>
+              <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.label }}</td>
+              <td class="stat-value">{{ p.value }}</td>
+            </tr>
+          }
+          <tr>
+            <td class="stat-label" title="When the labels were imported">Imported</td>
+            <td class="stat-value">{{ formatTimestamp(imported.imported_at) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    }
+
     <h3 class="section-title">Provenance</h3>
     <table class="data-table stats-table">
       <tbody>
