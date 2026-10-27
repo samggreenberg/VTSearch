@@ -1774,6 +1774,15 @@ with bulk-action and per-card controls.
   have a detector at all, both tabs are dimmed and the grid stays on
   Drafts, where a new detector lands.
 
+  Your first detector on the AutoFind tab asks where its results should
+  go, if you haven't picked a results exporter on the Settings
+  **AutoFind** tab. **Set up AutoFind…** opens that tab. **Import
+  settings…** opens it with the settings importer up, for a new server
+  your saved settings haven't reached yet; the detector you just moved
+  stays on AutoFind whatever the file says. **Not now** keeps the results
+  in the app. **Move to AutoFind** on the [test verdict](#the-result) asks
+  the same.
+
   Only detectors on the tab you're looking at can be selected, so
   **Train**, **Tune** and **Find** always act on rows you can see. Switching
   tabs clears the detector selection, and picking a detector from the
