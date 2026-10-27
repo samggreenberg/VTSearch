@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Iterator
 
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.plugins import FieldOption, PluginBase, PluginField
 
 from .naming import derive_display_name
@@ -468,6 +469,36 @@ class ImporterBase(PluginBase):
         medias: dict[int, dict[str, Any]] = {}
         self.run_cli(field_values, medias, thin=thin)
         yield medias
+
+    def run_chunked_cli_deferred(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[DeferredChunk]:
+        """:meth:`run_chunked_cli`'s chunks, each walked but not built (#5314).
+
+        A resumed CLI run (``--stream-results --resume``) reaches the chunks an
+        interrupted run already wrote through this hook, and needs only to
+        check that each is still the chunk it wrote, not its media.  Each
+        :class:`~vtscore.datasets.chunks.DeferredChunk` says how many media
+        its ``build`` makes (the ids of the chunks after it depend on that)
+        and, through its optional ``key``, what it holds; a chunk whose
+        ``key`` the caller can check is never built.  The default wraps each
+        chunk :meth:`run_chunked_cli` yields, already built and with no key,
+        so the caller checks it by its media.
+
+        Override it when building a chunk (reading, hashing, thumbnailing its
+        files) is what costs, and the walk can list a chunk's items without
+        it, as the ``server_folder`` importer does.  The override must yield
+        the chunks :meth:`run_chunked_cli` yields, in its order and at its
+        boundaries; ``count`` must equal the size of what ``build`` returns;
+        and ``key`` must not read any file's contents.  Chunks it cannot list
+        without reading (a PDF's pages, say) are yielded built, with
+        :meth:`DeferredChunk.built <vtscore.datasets.chunks.DeferredChunk.built>`.
+        """
+        for chunk in self.run_chunked_cli(field_values, chunk_size, thin=thin):
+            yield DeferredChunk.built(chunk)
 
     # ------------------------------------------------------------------
     # Multi-dataset imports: one run, several datasets (#4703)

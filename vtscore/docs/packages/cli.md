@@ -204,9 +204,11 @@ def autodetect_importer_main_chunked(
   every chunk, and a later call with the same arguments continues after the
   last chunk it records instead of starting over. It checks the run is the
   same one first (source, chunk size, detectors' labels, settings, what is
-  scored, exporter fields), re-reads the completed chunks to check them
-  against their fingerprints without embedding or scoring them, retrains on
-  the same first chunk and keeps the recorded thresholds; any mismatch raises
+  scored, exporter fields), walks the completed chunks to check them
+  against their fingerprints without embedding or scoring them (an importer
+  that overrides `run_chunked_cli_deferred`, as `server_folder` does, is not
+  asked to read their files), retrains on the same first chunk and keeps the
+  recorded thresholds; any mismatch raises
   `vtscore.cli_resume.ResumeRefusedError` (a `ValueError`). The checkpoint is
   removed when the run completes. The CLI flag is `--resume`; the
   pipeline-YAML key is `resume:`. See `vtscore/cli_resume.py` for the
@@ -425,6 +427,7 @@ class ResumeRefusedError(ValueError): ...
 def run_identity(*, source, chunk_size, detectors, settings, scoring, output) -> dict: ...
 def detector_identity(det: dict | None) -> dict: ...
 def chunk_digest(chunk: dict[int, dict]) -> str: ...
+def key_digest(count: int, key: Any) -> str: ...
 def checkpoint_path_for(output_path) -> Path: ...
 def exclusive_run(output_path): ...        # context manager
 ```
@@ -433,11 +436,18 @@ def exclusive_run(output_path): ...        # context manager
   detectors' labels, settings, what is scored, exporter fields) plus the chunk
   size as it stands, so an importer's field values never land in the file.
   `check_identity` names every section that differs.
-- **Fingerprints** (`chunk_digest`) are 64 bits over each media's `id`,
-  `filename`, `origin_name`, `md5` and clip bounds, taken before embedding.
-  A resumed run re-reads its completed chunks and `check_chunk`s each one,
-  so a file added, removed or rewritten in the part already done is refused
-  at the first chunk it moved.
+- **Fingerprints** are 64 bits per chunk, taken before embedding. A chunk
+  the importer yields with a `key` (a `DeferredChunk` from
+  `run_chunked_cli_deferred`; for `server_folder`, each file's relative path,
+  size and mtime) is fingerprinted by `key_digest` over its media count and
+  that key, and a resumed run passes it without building it. Any other chunk
+  is built and fingerprinted by `chunk_digest`, over each media's `id`,
+  `filename`, `origin_name`, `md5` and clip bounds. A resumed run
+  `check_chunk`s each completed chunk, so a file added, removed or rewritten
+  in the part already done is refused at the first chunk it moved (a rewrite
+  that keeps a file's size and mtime goes unnoticed in a keyed chunk; its
+  results are already written). The checkpoint's `format` is
+  `vtsearch-stream-checkpoint/v2`; an older one is refused as unreadable.
 - **Thresholds**: `pin_thresholds` sets each retrained detector's cut back to
   the recorded one and refuses a move past `THRESHOLD_DRIFT_LIMIT` (`1e-3`).
 - **The lock**: `exclusive_run` takes a non-blocking `flock` on
@@ -526,7 +536,7 @@ lists the extra fields.
 |--------------------|-------------------------------------------------------------------|---------------------------------------|
 | `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
-| `chunk_skipped`    | `chunk_num: int`, `chunk_size: int` (a completed chunk a resumed run re-read and checked, not scored) | `_ResumableChunks.records` in `cli.py` |
+| `chunk_skipped`    | `chunk_num: int`, `chunk_size: int`, `read: bool` (a completed chunk a resumed run checked, not scored; `read` is `false` when its importer's walk checked it without reading its files) | `_ResumableChunks.records` in `cli.py` |
 | `resume_start`     | `checkpoint: str`, `chunks_done: int`, `resumed: bool` (`false` for a resumable run starting fresh) | `_run_resumable_streaming_pipeline` in `cli.py` |
 | `resume_threshold_kept` | `detector`, `retrained: float`, `recorded: float` (the retrained cut moved within noise; the recorded one is kept) | `_write_resumable_stream` in `cli.py` |
 | `resume_complete`  | `checkpoint: str` (now removed), `chunks: int`                    | `_run_resumable_streaming_pipeline` in `cli.py` |

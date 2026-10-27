@@ -53,6 +53,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **A resumed `--resume` run over a folder no longer re-reads the files it already did** (issue #5314). To reach
+  where it stopped, a resumed `server_folder` run now checks each chunk it already wrote by its files' paths, sizes
+  and modification times, without opening them, where it used to hash and thumbnail every one again, which on a
+  run interrupted near its end could cost most of the original runtime. An archive's members are checked by the
+  archive's own size and time. A checkpoint left by an earlier version cannot be resumed; delete it to start over.
+  See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
 - **Dialogs are the browser's own** (issue #5297). Every dialog is now a native modal dialog. What a keyboard or
   screen-reader user notices: a notification that pops up while a dialog is open can be reached with Tab, where
   before only the mouse could get at it; the page behind a dialog is hidden from screen readers; and Tab past a

@@ -74,6 +74,7 @@ verifies that every imported package is declared there.
 
 from __future__ import annotations
 
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.plugins import PluginField
 
 from .core import ImporterBase
@@ -86,6 +87,7 @@ from .specs import MissingMediaTypeError, PickerView, SourceSpec
 __all__ = [
     "DATASET_NAME_FIELD_KEY",
     "DatasetImporter",
+    "DeferredChunk",
     "ImporterBase",
     "MissingMediaTypeError",
     "OutputSpec",

@@ -33,7 +33,8 @@ The largest package in the library. Every module, grouped by role.
 |--------|---------|
 | `vtscore/datasets/loader.py` | `export_dataset_to_file` and the loader re-export façade |
 | `vtscore/datasets/loader_common.py` | Helpers shared by the three loader modules (leaf; no cycles) |
-| `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked) |
+| `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked, and the deferred chunk walk) |
+| `vtscore/datasets/chunks.py` | `DeferredChunk`, a chunk walked but not built (a resumed CLI run's skip) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
 | `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
@@ -241,6 +242,7 @@ of the file instead of at the bottom to dodge a cycle.
 |---------------------------------|---------------------------|------------------------------------------------------|
 | `load_dataset_from_folder`      | `loader_folder.py`    | Populates `medias` in-place; returns `None`.         |
 | `load_dataset_from_folder_chunked` | `loader_folder.py` | Iterator of chunk dicts.                             |
+| `iter_folder_chunks_deferred`   | `loader_folder.py`    | Iterator of `DeferredChunk`s: the same chunks, unbuilt, each keyed by its files' path, size and mtime. |
 | `load_dataset_from_pickle`      | `loader_pickle.py`    | Populates `medias` in-place; returns the cached `coverage_atlas` payload, or `None`. |
 | `load_dataset_from_pickle_chunked` | `loader_pickle.py` | Iterator of chunk dicts.                             |
 | `load_demo_dataset`             | `loader_demo.py`       | Populates `medias` in-place; returns `None`.         |

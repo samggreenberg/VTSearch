@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Iterator, Optional
 
 from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.datasets.loader_common import (
     _get_embedding_value,
     _get_md5_value,
@@ -827,6 +828,67 @@ def load_dataset_from_folder_chunked(
             files are found in ``folder_path``, or if an override map
             has a bare-basename key that would silently fan out.
     """
+    for deferred in iter_folder_chunks_deferred(
+        folder_path,
+        media_type,
+        chunk_size,
+        content_vectors=content_vectors,
+        content_md5s=content_md5s,
+        on_progress=on_progress,
+        origin=origin,
+        thin=thin,
+        custom_metadata_map=custom_metadata_map,
+        recursive=recursive,
+        content_embedder_name=content_embedder_name,
+    ):
+        yield deferred.build()
+
+
+def _folder_chunk_key(
+    specs_with_idx: list[tuple[int, int, Path, str]], stamp_mtime: bool
+) -> Callable[[], list[list[Any]]]:
+    """The ``key`` of a folder chunk: a ``[relative path, size, mtime_ns]`` row per file (no mtime without *stamp_mtime*)."""
+
+    def key() -> list[list[Any]]:
+        rows: list[list[Any]] = []
+        for _gi, _mid, file_path, rel_path in specs_with_idx:
+            st = file_path.stat()
+            rows.append([rel_path, st.st_size, st.st_mtime_ns] if stamp_mtime else [rel_path, st.st_size])
+        return rows
+
+    return key
+
+
+def iter_folder_chunks_deferred(
+    folder_path: Path,
+    media_type: str,
+    chunk_size: int,
+    content_vectors: dict[str, Any] | None = None,
+    content_md5s: dict[str, str] | None = None,
+    on_progress: Optional[ProgressCallback] = None,
+    origin: dict[str, Any] | None = None,
+    thin: bool = False,
+    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    recursive: bool = True,
+    content_embedder_name: str = "",
+    stamp_mtime: bool = True,
+) -> Iterator[DeferredChunk]:
+    """Walk a folder of media files into chunks without building them (#5314).
+
+    The chunks :func:`load_dataset_from_folder_chunked` yields, in the same
+    order and at the same boundaries, each as a
+    :class:`~vtscore.datasets.chunks.DeferredChunk`: the walk is done, but no
+    file is read until the chunk's ``build`` is called, so a caller can pass a
+    chunk by for the cost of listing its files.  Each chunk's ``key`` is one
+    ``[relative path, size, mtime_ns]`` row per file, read with ``stat``;
+    *stamp_mtime* ``False`` leaves the mtime out, for a folder whose mtimes
+    say nothing about its contents (an extracted archive's, which depend on
+    the extractor).  The arguments are :func:`load_dataset_from_folder_chunked`'s.
+
+    Raises:
+        ValueError: As :func:`load_dataset_from_folder_chunked`; an empty
+            folder only once the walk has found nothing.
+    """
     if on_progress is None:
         on_progress = resolve_progress_callback()
 
@@ -873,6 +935,15 @@ def load_dataset_from_folder_chunked(
         mt, content_vectors, content_md5s, custom_metadata_map, thin, origin, content_embedder_name
     )
 
+    def deferred(specs: list[tuple[int, int, Path, str]], index: int) -> DeferredChunk:
+        return DeferredChunk(
+            count=len(specs),
+            build=lambda: _build_folder_chunk(
+                specs, index, build_one, on_progress, media_type, total_files, _progress_interval, thin
+            ),
+            key=_folder_chunk_key(specs, stamp_mtime),
+        )
+
     # Accumulate a chunk's worth of file specs (cheap path ops) before building,
     # so the build parallelises within the chunk without reading ahead — pulling
     # one chunk still touches only that chunk's files (streaming laziness).
@@ -884,17 +955,13 @@ def load_dataset_from_folder_chunked(
         media_seen += 1
 
         if len(pending) >= chunk_size:
-            yield _build_folder_chunk(
-                pending, chunk_index, build_one, on_progress, media_type, total_files, _progress_interval, thin
-            )
+            yield deferred(pending, chunk_index)
             pending = []
             media_id = 1
             chunk_index += 1
 
     if pending:
-        yield _build_folder_chunk(
-            pending, chunk_index, build_one, on_progress, media_type, total_files, _progress_interval, thin
-        )
+        yield deferred(pending, chunk_index)
 
     if media_seen == 0:
         # Matches the monolithic loader's empty-folder contract.  Raised after

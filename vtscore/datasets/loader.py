@@ -42,6 +42,7 @@ from vtscore.datasets.loader_demo import (  # noqa: F401  - re-exported for cons
 )
 from vtscore.datasets.loader_folder import (  # noqa: F401  - re-exported for consumers
     apply_custom_metadata_md5,
+    iter_folder_chunks_deferred,
     load_dataset_from_folder,
     load_dataset_from_folder_chunked,
 )

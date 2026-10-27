@@ -19,6 +19,7 @@ from vtscore.cli_resume import (
     checkpoint_path_for,
     chunk_digest,
     detector_identity,
+    key_digest,
     run_identity,
 )
 
@@ -96,6 +97,30 @@ class TestChunkDigest:
         assert chunk_digest(embedded) == chunk_digest(chunk)
 
 
+class TestKeyDigest:
+    """The fingerprint of a chunk passed unbuilt: its size and its importer's key (#5314)."""
+
+    KEY = [["a.jpg", 10, 1_700_000_000_000_000_000], ["b.jpg", 20, 1_700_000_000_000_000_000]]
+
+    def test_is_stable(self):
+        assert key_digest(2, self.KEY) == key_digest(2, [list(row) for row in self.KEY])
+        assert len(key_digest(2, self.KEY)) == 16
+
+    @pytest.mark.parametrize(
+        ("count", "key"),
+        [
+            (2, [KEY[1], KEY[0]]),
+            (2, [KEY[0], ["b.jpg", 21, KEY[1][2]]]),
+            (2, [KEY[0], ["b.jpg", 20, KEY[1][2] + 1]]),
+            (1, KEY[:1]),
+            (3, KEY),
+        ],
+        ids=["order", "size", "mtime", "removed", "count"],
+    )
+    def test_tells_a_changed_chunk_apart(self, count, key):
+        assert key_digest(count, key) != key_digest(2, self.KEY)
+
+
 class TestCheckpointFile:
     def test_round_trips(self, tmp_path):
         path = checkpoint_path_for(tmp_path / "hits.ndjson")
@@ -119,6 +144,17 @@ class TestCheckpointFile:
             1234,
         )
         loaded.check_identity(_identity())
+
+    def test_a_v1_checkpoint_is_refused(self, tmp_path):
+        """v1 fingerprinted every chunk by its media; v2 by its key where it has one."""
+        path = tmp_path / "c.json"
+        StreamCheckpoint(path=path, identity=_identity()).save()
+        data = json.loads(path.read_text())
+        assert data["format"] == "vtsearch-stream-checkpoint/v2"
+        path.write_text(json.dumps({**data, "format": "vtsearch-stream-checkpoint/v1"}))
+
+        with pytest.raises(ResumeRefusedError, match="cannot be read"):
+            StreamCheckpoint.load(path)
 
     def test_no_file_is_no_checkpoint(self, tmp_path):
         assert StreamCheckpoint.load(tmp_path / "none.json") is None
