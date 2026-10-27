@@ -37,7 +37,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   converter hands each photo to the server's provider, which detects and embeds every face in one pass; each crop
   arrives with its vector already filed under the `face` embedder, plus its quality and embedding-space tag in its
   metadata, and the embedder refuses to mix two providers' spaces in one dataset. **The app downloads no face
-  models**: put a pipeline config at `imagekit/face.json` in the models folder, or point `IMAGEKIT_FACE_CONFIG` at
+  models**: put a pipeline config at `data/models/imagekit/face.json` (under the models folder), or point `IMAGEKIT_FACE_CONFIG` at
   one, and Face turns on, with no restart. Without one, Face is left out of every picker, an import that asks for
   faces anyway fails naming what is missing, and the startup log says which
   ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#face-models)). `IMAGEKIT_FACE_PROVIDER` picks the backend. Two CLIs,

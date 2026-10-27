@@ -434,8 +434,9 @@ Every face in the app goes through this package: the `image2face` converter
 server's provider through `vtscore/media/face/imagekit_bridge.py`.
 
 - **Face is on only where models are.** The app downloads none. It reads the
-  pipeline config `IMAGEKIT_FACE_CONFIG` names, else `imagekit/face.json` in
-  its models folder (`VTSEARCH_MODELS_DIR`), and checks that the provider
+  pipeline config `IMAGEKIT_FACE_CONFIG` names, else `face.json` in the
+  `imagekit` directory of its models folder (`VTSEARCH_MODELS_DIR`, default
+  `data/models/`), and checks that the provider
   exists and every model file the config names is on disk, loading nothing
   (`imagekit_bridge.face_models()`). Without them the converter hides itself,
   the app's listings leave out the `face` media type and embedder, and a run

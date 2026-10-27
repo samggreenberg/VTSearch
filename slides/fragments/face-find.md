@@ -19,6 +19,6 @@
 <!-- **c** — It cuts the face out and uses those five points to turn it
      upright, so a tilted head looks like a level one. -->
 
-<!-- **d** — Then a face model — ArcFace here — trained to tell people apart,
+<!-- **d** — Then a face model, ArcFace here, trained to tell people apart,
      puts every face in its own space, where one person's photos land together.
      From here it's the same loop: vote, train, Find. -->

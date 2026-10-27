@@ -19,7 +19,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   detects and embeds each face from the full photo in one pass through the `imagekit` face-provider seam.
 - **`vtscore.media.face.imagekit_bridge.face_models()`** says whether this server has face models, checked on
   disk without loading any: a `FaceModels(available, reason, config_path, provider)`. The pipeline config comes
-  from `IMAGEKIT_FACE_CONFIG`, else `imagekit/face.json` in the models folder (`default_config_path()`); the
+  from `IMAGEKIT_FACE_CONFIG`, else `face.json` in the models folder's `imagekit` directory (`default_config_path()`); the
   provider from `IMAGEKIT_FACE_PROVIDER`, else the config's own `provider`, else `oss`. Nothing is downloaded.
   `Image2FaceMediaConverter.hidden_from_picker` follows it, and `get_face_pipeline()` raises
   `FaceProviderUnconfigured` naming what is missing.
