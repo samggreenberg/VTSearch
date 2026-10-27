@@ -92,9 +92,8 @@ the InsightFace model-zoo weights are for non-commercial research only.
   `conf` / `landms` heads, as the common PyTorch RetinaFace exports produce.
   `imagekit/face/detection/retinaface_r50.json` is the reference config:
   ImageNet normalisation and a 2048 px cap, as specified.
-- **MTCNN** is the legacy alternative (and what VTSearch's shipped face path
-  still uses, through `facenet-pytorch`). It is deliberately not implemented
-  here.
+- **MTCNN** is the legacy alternative (VTSearch's face path before #5320,
+  through `facenet-pytorch`). It is deliberately not implemented here.
 
 ### Embedder
 
@@ -430,31 +429,36 @@ stderr as a `WARNING:` line and skipped; the run continues. The logic lives in
 
 ## Inside VTSearch
 
-The app's face path is `image2face` (the converter that cuts face crops out of
-photos) plus a face embedder. The shipped default, MTCNN + FaceNet, is
-unchanged; the seam sits beside it:
+Every face in the app goes through this package: the `image2face` converter
+(which cuts face crops out of photos) and the `face` embedder both reach the
+server's provider through `vtscore/media/face/imagekit_bridge.py`.
 
-- The converter's **Face provider** option (`provider`): `mtcnn` (default) or
-  `imagekit`. With `imagekit`, the server's provider detects **and embeds**
-  every face from the full photo in one pass; each crop leaves with its vector
-  filed under the `imagekit_face` embedder and its quality and compat tag in
-  `custom_metadata` (`Face Quality`, `Face Compat`), so the embed stage has
-  nothing to do and no face is embedded twice. The crop is still cut and
-  aligned as for MTCNN, from the provider's box and landmarks.
-- The **`imagekit_face` embedder** (`vtscore/media/face/embedder_imagekit.py`)
-  fronts the seam for crops that arrive without a vector (an MTCNN-cut crop
-  re-bound to it, a reload that lost its vectors): the provider runs on the
-  crop itself and the best detection's embedding is the crop's. It refuses to
-  add its vector to a crop stamped with another provider's `Face Compat`, so
-  one dataset holds one embedding space.
-- Two environment variables, read in `vtscore/media/face/imagekit_bridge.py`
-  and nowhere else: `IMAGEKIT_FACE_PROVIDER` (the provider) and
-  `IMAGEKIT_FACE_CONFIG` (the pipeline config JSON). Without the latter the
-  provider is unconfigured: the converter yields no faces and the embedder
-  declines every item, each with a log line naming the variable. The runtime
-  options follow the app's own device (`VTSEARCH_DEVICE`) and thread
-  (`VTSEARCH_TORCH_THREADS`) settings. See the environment-variable table in
+- **Face is on only where models are.** The app downloads none. It reads the
+  pipeline config `IMAGEKIT_FACE_CONFIG` names, else `face.json` in the
+  `imagekit` directory of its models folder (`VTSEARCH_MODELS_DIR`, default
+  `data/models/`), and checks that the provider
+  exists and every model file the config names is on disk, loading nothing
+  (`imagekit_bridge.face_models()`). Without them the converter hides itself,
+  the app's listings leave out the `face` media type and embedder, and a run
+  that asks for faces anyway fails naming what is missing. Models put in place
+  later turn Face on with no restart. The provider is `IMAGEKIT_FACE_PROVIDER`,
+  else the config's `provider`, else `oss`. See "Face models" in
   `docs/DEPLOYMENT.md`.
+- **The converter** hands each photo to the provider, which detects **and
+  embeds** every face from the full photo in one pass; each crop leaves with
+  its vector filed under the `face` embedder and its quality and compat tag in
+  `custom_metadata` (`Face Quality`, `Face Compat`), so the embed stage has
+  nothing to do and no face is embedded twice. The stored crop is cut from the
+  provider's box and, with `align: roll` (the default), turned upright by its
+  landmarks.
+- **The `face` embedder** (`vtscore/media/face/embedder_imagekit.py`) fronts
+  the seam for crops that arrive without a vector (a reload that lost its
+  vectors): the provider runs on the crop itself and the best detection's
+  embedding is the crop's. It refuses to add its vector to a crop stamped with
+  another provider's `Face Compat`, so one dataset holds one embedding space.
+- The runtime options follow the app's own device (`VTSEARCH_DEVICE`) and
+  thread (`VTSEARCH_TORCH_THREADS`) settings; a config's `runtime` block is
+  for the CLIs.
 
 ## Package layout
 

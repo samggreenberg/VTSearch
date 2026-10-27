@@ -1,4 +1,4 @@
-"""The ``imagekit_face`` embedder and the bridge behind it, on a fake pipeline."""
+"""The ``face`` embedder (the imagekit provider seam) and the bridge behind it, on a fake pipeline."""
 
 from __future__ import annotations
 
@@ -61,14 +61,14 @@ def _crop(meta=None) -> dict:
 class TestDescriptor:
     def test_identity_and_flags(self):
         emb = ImagekitFaceEmbedder()
-        assert emb.name == "imagekit_face" and emb.media_type_id == "face" and emb.embedding_dim == 512
-        assert emb.is_default is False and emb.supports_text is False and emb.supports_patch_regions is False
+        assert emb.name == "face" and emb.media_type_id == "face" and emb.embedding_dim == 512
+        assert emb.is_default is True and emb.supports_text is False and emb.supports_patch_regions is False
         assert emb.license_notice and "IMAGEKIT_FACE_PROVIDER" in emb.license_notice
         assert emb.embed_text("a face") is None
 
-    def test_registered_beside_facenet_which_stays_first(self):
-        assert get_embedder("imagekit_face").media_type_id == "face"
-        assert [e.name for e in embedders_for_type("face")][0] == "face"
+    def test_it_is_the_one_face_embedder(self):
+        assert get_embedder("face").media_type_id == "face"
+        assert [e.name for e in embedders_for_type("face")] == ["face"]
 
     def test_model_id_is_the_compat_once_loaded_and_never_loads(self, monkeypatch):
         emb = ImagekitFaceEmbedder()
@@ -115,6 +115,8 @@ class TestBridge:
 
         register_provider("recording", Recording)
         cfg = tmp_path / "faces.json"
+        (tmp_path / "d.onnx").write_bytes(b"")
+        (tmp_path / "e.onnx").write_bytes(b"")
         cfg.write_text(json.dumps({"detector": {"model_bundle": "d.onnx"}, "embedder": {"model": "e.onnx"}}))
         monkeypatch.setenv(bridge.CONFIG_ENV_VAR, str(cfg))
         monkeypatch.setenv("IMAGEKIT_FACE_PROVIDER", "recording")
@@ -157,8 +159,8 @@ class TestEmbed:
         failures: dict = {}
         # The conftest stubs ``load_models`` on every registered singleton, so
         # hand it the fake pipeline directly, as the other embedder tests do.
-        monkeypatch.setattr(get_embedder("imagekit_face"), "_model", fake)
-        embed_missing(medias, "imagekit_face", failures=failures)
+        monkeypatch.setattr(get_embedder("face"), "_model", fake)
+        embed_missing(medias, "face", failures=failures)
         assert medias[1]["embeddings"] == {} and "CompatibilityError" in failures[1]
 
     def test_unreadable_bytes_decline_the_item(self, fake):

@@ -15,12 +15,26 @@ instead, since every commit on `dev` is effectively a new app release.)
 - **A converter may hand over the vector it computed.** A `MediaConverter.convert` output may carry
   `"embeddings": {embedder_name: vector}` (and `"embedder"`, naming the primary) when the conversion itself
   embedded the media; `vtscore.converters.runner` files the vector on the media dict, so the embed stage finds
-  nothing missing. Additive: outputs without the key behave as before. The first user is `image2face`'s
-  `imagekit` provider, which detects and embeds each face from the full photo in one pass through the
-  `imagekit` face-provider seam, and the new `imagekit_face` face embedder (`vtscore.media.face.embedder_imagekit`)
-  that fronts that seam beside FaceNet, which is now explicitly the face type's default.
+  nothing missing. Additive: outputs without the key behave as before. The first user is `image2face`, which
+  detects and embeds each face from the full photo in one pass through the `imagekit` face-provider seam.
+- **`vtscore.media.face.imagekit_bridge.face_models()`** says whether this server has face models, checked on
+  disk without loading any: a `FaceModels(available, reason, config_path, provider)`. The pipeline config comes
+  from `IMAGEKIT_FACE_CONFIG`, else `face.json` in the models folder's `imagekit` directory (`default_config_path()`); the
+  provider from `IMAGEKIT_FACE_PROVIDER`, else the config's own `provider`, else `oss`. Nothing is downloaded.
+  `Image2FaceMediaConverter.hidden_from_picker` follows it, and `get_face_pipeline()` raises
+  `FaceProviderUnconfigured` naming what is missing.
 
 ### Changed
+
+- **The face embedder is the `imagekit` provider seam's, under the name `face`** (issue #5320).
+  `vtscore.media.face.embedder_imagekit.ImagekitFaceEmbedder` is now the face type's only embedder and its
+  default, registered as `face` (display name "Face identity (512d)"); `imagekit_bridge.EMBEDDER_NAME` is
+  `"face"`. **Breaking for saved data:** vectors stored under `face` before this change are FaceNet's.
+- **`image2face` finds faces only through the face provider** (issue #5320). `Image2FaceMediaConverter`'s
+  `provider` and `sideways` fields are gone, `ALIGN_MODES` is `("none", "roll")`, and `roll` fits the landmarks
+  to `imagekit.face.face_align.ARCFACE_TEMPLATE`. `FaceParams` is `(threshold, padding, min_size, align)`, and
+  `_imagekit_faces` is `_find_faces`. A server without face models makes `convert` raise
+  `FaceProviderUnconfigured` instead of returning no faces.
 
 - **The head's count line keeps 0.71·β times what stands out at a balance of 1 and below, not β^0.708** (issue
   #5084). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods, `head_count_cut` now keeps
@@ -2588,6 +2602,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   own lock, which is state by any reading.
 
 ### Removed
+
+- **FaceNet and MTCNN** (issue #5320). `vtscore.media.face.embedder_facenet` (`FaceEmbedder`) is deleted, and
+  from `vtscore.converters.image2face` so are `FACE_TEMPLATE`, `SIDEWAYS_TURNS`, `SIDEWAYS_IOU`, `PROVIDERS`,
+  `to_stored_frame` and the MTCNN helpers (`_make_detector`, `_detect_faces`, `_kept_faces`,
+  `_sideways_landmarks`). `facenet-pytorch` is no longer installed.
 
 - **The processor ABCs and the four processors built on them** (issues #5259, #3452). `vtscore.media.processors`
   (`Processor`, `Detector`, `Localizer`, `Extractor`) is deleted, and `vtscore.media` no longer re-exports those

@@ -1,28 +1,32 @@
-"""How the app reaches the ``imagekit`` face-provider seam.
+"""How the app reaches the ``imagekit`` face-provider seam, and whether it can.
 
-The face path has two implementations side by side.  The shipped default is
-MTCNN + FaceNet (``facenet-pytorch``), measured on the FHIBE face bench and
-untouched by this module.  The second is the ``imagekit`` package's provider
-seam (:mod:`imagekit.face.pipeline`): one ``FacePipeline`` that detects, aligns
-and embeds every face in an image, behind which a server swaps the backend
-with an environment variable - ``oss`` (open SCRFD + ArcFace/MagFace ONNX
-weights) or ``vista`` (the proprietary ``vistaimage`` package) - and the app
-never sees which.
+Every face in the app goes through the ``imagekit`` package's provider seam
+(:mod:`imagekit.face.pipeline`): one ``FacePipeline`` that detects, aligns and
+embeds every face in an image, behind which a server swaps the backend - ``oss``
+(open SCRFD + ArcFace/MagFace ONNX weights) or ``vista`` (the proprietary
+``vistaimage`` package) - and the app never sees which.  The ``image2face``
+converter and the ``face`` embedder both reach it through this module.
 
-Two environment variables, read here and nowhere else in the app:
+**The app downloads no face models.**  It uses the ones a deployment puts on
+disk, and Face is on exactly when they are there (:func:`face_models`):
 
-* ``IMAGEKIT_FACE_PROVIDER`` picks the provider (``oss`` when unset; the
-  package's own default, :data:`imagekit.face.PROVIDER_ENV_VAR`).
 * ``IMAGEKIT_FACE_CONFIG`` names the pipeline config JSON (model paths, runtime
-  block; the schema is in ``imagekit/README.md``).  Without it the seam is
-  *unconfigured*: the converter's ``imagekit`` provider produces no faces and
-  the embedder declines every item, both with a log line naming the variable,
-  rather than guessing a model path.
+  block; the schema is in ``imagekit/README.md``).  Unset, the app looks for
+  one at :func:`default_config_path`, ``imagekit/face.json`` in the models
+  folder (``VTSEARCH_MODELS_DIR``), so dropping a models directory there turns
+  Face on with no environment to set.
+* ``IMAGEKIT_FACE_PROVIDER`` picks the provider; unset, the config's own
+  ``provider`` key, else ``oss``.
+
+Without a config whose models exist, Face is *off*: the ``image2face``
+converter hides itself from every picker and refuses to run, naming what is
+missing, and the app's listings drop the ``face`` media type and embedder
+(``vtsearch.settings.unavailable_plugins``).  Face datasets already built still
+open: their vectors are in the pickle.
 
 The pipeline is built once per process (:func:`get_face_pipeline`) and shared
-by the ``image2face`` converter and the ``imagekit_face`` embedder, the way
-every other model here is a process singleton.  Runtime options come from the
-app's own device and thread settings.
+by the converter and the embedder, the way every other model here is a process
+singleton.  Runtime options come from the app's own device and thread settings.
 """
 
 from __future__ import annotations
@@ -30,7 +34,10 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from typing import TYPE_CHECKING, Any
+import time
+from importlib import util as importlib_util
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 if TYPE_CHECKING:
     from imagekit.face.pipeline import FacePipeline
@@ -41,24 +48,54 @@ logger = logging.getLogger(__name__)
 #: Names the pipeline config JSON the server's provider loads from.
 CONFIG_ENV_VAR = "IMAGEKIT_FACE_CONFIG"
 
-#: The registry name of the embedder that fronts the seam, and the key the
-#: converter files a face's vector under.
-EMBEDDER_NAME = "imagekit_face"
+#: Where, under the models folder, the app looks for a pipeline config when
+#: :data:`CONFIG_ENV_VAR` is unset.
+DEFAULT_CONFIG_RELPATH = Path("imagekit") / "face.json"
 
-#: ``custom_metadata`` keys the converter stamps on every face it embeds
-#: through the seam.  The compat tag is what the embedder checks before it
-#: will embed anything further into the same dataset.
+#: The registry name of the face embedder, and the key the converter files a
+#: face's vector under.
+EMBEDDER_NAME = "face"
+
+#: ``custom_metadata`` keys the converter stamps on every face it embeds.  The
+#: compat tag is what the embedder checks before it will embed anything further
+#: into the same dataset.
 COMPAT_METADATA_KEY = "Face Compat"
 QUALITY_METADATA_KEY = "Face Quality"
 
+#: How long a :func:`face_models` answer is reused.  The listing routes ask once
+#: per converter and per demo, so a page load asks dozens of times; a model
+#: dropped in still shows up within a couple of seconds, with no restart.
+_STATUS_TTL_S = 2.0
+
 
 class FaceProviderUnconfigured(RuntimeError):
-    """``IMAGEKIT_FACE_CONFIG`` is unset, so no provider can be built."""
+    """This server has no usable face models, so no provider can be built."""
+
+
+class FaceModels(NamedTuple):
+    """Whether this server has face models, and where they are."""
+
+    available: bool
+    #: Why Face is off, naming what is missing; ``""`` when it is on.
+    reason: str
+    #: The pipeline config in use (or the one that failed), ``None`` when none was found.
+    config_path: Optional[Path]
+    #: The provider that config selects.
+    provider: str
 
 
 _lock = threading.Lock()
 _pipeline: Any = None
 _compat = ""
+_provider = ""
+_status: Optional[tuple[float, tuple, FaceModels]] = None
+
+
+def default_config_path() -> Path:
+    """Where the app looks for a pipeline config when :data:`CONFIG_ENV_VAR` is unset."""
+    from vtscore.config import paths  # noqa: PLC0415
+
+    return Path(paths.MODELS_CACHE_DIR).expanduser() / DEFAULT_CONFIG_RELPATH
 
 
 def runtime_options() -> "RuntimeOptions":
@@ -76,45 +113,129 @@ def runtime_options() -> "RuntimeOptions":
     )
 
 
-def provider_name() -> str:
-    """The provider the server selects (``IMAGEKIT_FACE_PROVIDER``, else ``oss``)."""
-    from imagekit.face.pipeline import default_provider_name  # noqa: PLC0415
+def _env_provider() -> str:
+    from imagekit.face.pipeline import PROVIDER_ENV_VAR  # noqa: PLC0415
 
-    return default_provider_name()
+    return os.environ.get(PROVIDER_ENV_VAR, "").strip()
 
 
-def pipeline_config() -> dict[str, Any]:
-    """The pipeline config ``IMAGEKIT_FACE_CONFIG`` names; raises :class:`FaceProviderUnconfigured` when unset."""
-    from imagekit.face.pipeline import read_pipeline_config  # noqa: PLC0415
+def _config_provider(config: dict[str, Any]) -> str:
+    """The provider *config* runs under: the environment's, else its own ``provider``, else ``oss``."""
+    from imagekit.face.pipeline import DEFAULT_PROVIDER, PROVIDER_KEY  # noqa: PLC0415
 
-    path = os.environ.get(CONFIG_ENV_VAR, "").strip()
-    if not path:
-        raise FaceProviderUnconfigured(
-            f"the imagekit face provider is not configured: set {CONFIG_ENV_VAR} to a pipeline config JSON "
-            "(model paths and runtime; see imagekit/README.md), or use the mtcnn provider"
+    return _env_provider() or str(config.get(PROVIDER_KEY) or "").strip() or DEFAULT_PROVIDER
+
+
+def _missing_paths(config: dict[str, Any], provider: str) -> list[str]:
+    """The model files *config* names that are not on disk, each as ``"<what> <path>"``."""
+    from imagekit.face.pipeline import BUILTIN_PROVIDERS, DETECTOR_KEY, EMBEDDER_KEY  # noqa: PLC0415
+
+    detector = config.get(DETECTOR_KEY)
+    embedder = config.get(EMBEDDER_KEY)
+    detector = detector if isinstance(detector, dict) else {}
+    embedder = embedder if isinstance(embedder, dict) else {}
+    wanted = {
+        "detector model": detector.get("model_bundle") or detector.get("model"),
+        "detector config": detector.get("config"),
+        "embedder model": embedder.get("model"),
+        "embedder config": embedder.get("config"),
+    }
+    missing: list[str] = []
+    for what, path in wanted.items():
+        if path and not Path(str(path)).exists():
+            missing.append(f"{what} {path}")
+        elif not path and what.endswith("model") and provider in BUILTIN_PROVIDERS:
+            missing.append(f"{what} (the config names none)")
+    return missing
+
+
+def _check() -> FaceModels:
+    """:func:`face_models` without the cache: the config, its provider and its model files, on disk."""
+    from imagekit.face.pipeline import DEFAULT_PROVIDER, available_providers, read_pipeline_config  # noqa: PLC0415
+
+    named = os.environ.get(CONFIG_ENV_VAR, "").strip()
+    path = Path(named).expanduser() if named else default_config_path()
+    provider = _env_provider() or DEFAULT_PROVIDER
+    if not named and not path.is_file():
+        return FaceModels(
+            False,
+            f"no face models: put a pipeline config at {path}, or set {CONFIG_ENV_VAR} to one "
+            "(imagekit/README.md says where models come from)",
+            None,
+            provider,
         )
-    return read_pipeline_config(path)
+    if not path.is_file():
+        return FaceModels(False, f"{CONFIG_ENV_VAR} names {path}, which is not a file", path, provider)
+    try:
+        config = read_pipeline_config(path)
+    except Exception as exc:  # a broken JSON file is a deployment error, reported, not raised
+        return FaceModels(False, f"{path} is not a readable pipeline config: {exc}", path, provider)
+    provider = _config_provider(config)
+    if provider not in available_providers():
+        return FaceModels(
+            False, f"{path} selects face provider {provider!r}; available: {available_providers()}", path, provider
+        )
+    if provider == "vista":
+        from imagekit.face.providers.vista import VISTA_PACKAGES  # noqa: PLC0415
+
+        absent = [name for name in VISTA_PACKAGES if importlib_util.find_spec(name) is None]
+        if absent:
+            return FaceModels(
+                False, f"the 'vista' face provider needs {', '.join(absent)}, not installed here", path, provider
+            )
+    missing = _missing_paths(config, provider)
+    if missing:
+        return FaceModels(False, f"{path} names face models that are missing: {'; '.join(missing)}", path, provider)
+    return FaceModels(True, "", path, provider)
+
+
+def face_models() -> FaceModels:
+    """Whether this server has face models, checked on disk without loading any.
+
+    Cheap enough for a listing route to call: a small JSON read and a few
+    ``stat`` calls, reused for :data:`_STATUS_TTL_S`.  A model that is present
+    but cannot load (a corrupt file) still reads as available here; it fails at
+    :func:`get_face_pipeline`, loudly.
+    """
+    global _status
+    key = (os.environ.get(CONFIG_ENV_VAR, ""), _env_provider(), str(default_config_path()))
+    now = time.monotonic()
+    cached = _status
+    if cached is not None and cached[1] == key and now - cached[0] < _STATUS_TTL_S:
+        return cached[2]
+    status = _check()
+    _status = (now, key, status)
+    return status
+
+
+def provider_name() -> str:
+    """The provider this server runs: the built pipeline's, else the one its config selects."""
+    return _provider or face_models().provider
 
 
 def get_face_pipeline() -> "FacePipeline":
     """The process-wide, initialised pipeline for the server's provider; built on first use.
 
-    Raises :class:`FaceProviderUnconfigured` when the config variable is
-    unset, and whatever the provider raises when it cannot load (a missing
-    ``vistaimage``, a bad model path).  A failure is not cached: the next call
-    tries again, so a fixed environment needs no restart of the import.
+    Raises :class:`FaceProviderUnconfigured`, naming what is missing, when the
+    server has no face models (:func:`face_models`), and whatever the provider
+    raises when they cannot load (a missing ``vistaimage``, a corrupt model).
+    A failure is not cached: the next call tries again, so models put in place
+    later need no restart.
     """
-    global _pipeline, _compat
+    global _pipeline, _compat, _provider
     with _lock:
         if _pipeline is not None:
             return _pipeline
-        from imagekit.face.pipeline import load_pipeline  # noqa: PLC0415
+        from imagekit.face.pipeline import load_pipeline, read_pipeline_config  # noqa: PLC0415
 
-        config = pipeline_config()
-        pipeline = load_pipeline(config, runtime_options(), provider_name())
+        status = _check()
+        if not status.available or status.config_path is None:
+            raise FaceProviderUnconfigured(status.reason)
+        pipeline = load_pipeline(read_pipeline_config(status.config_path), runtime_options(), status.provider)
         _compat = pipeline.compatibility()
+        _provider = status.provider
         _pipeline = pipeline
-        logger.info("imagekit face provider %r ready (compat %s)", provider_name(), _compat)
+        logger.info("face provider %r ready from %s (compat %s)", status.provider, status.config_path, _compat)
         return pipeline
 
 
@@ -124,8 +245,10 @@ def loaded_compat() -> str:
 
 
 def reset_for_tests() -> None:
-    """Drop the cached pipeline so a test can install a fake or re-run the build."""
-    global _pipeline, _compat
+    """Drop the cached pipeline and availability answer so a test can install a fake or re-run the build."""
+    global _pipeline, _compat, _provider, _status
     with _lock:
         _pipeline = None
         _compat = ""
+        _provider = ""
+        _status = None

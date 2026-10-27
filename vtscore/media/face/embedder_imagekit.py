@@ -1,29 +1,30 @@
-"""Face embedder over the ``imagekit`` provider seam (the server's chosen backend).
+"""The face embedder: face identity over the ``imagekit`` provider seam (the server's chosen backend).
 
-This is the face embedder a deployment uses when its faces come from the
-``image2face`` converter's ``imagekit`` provider: one ``FacePipeline``
-(:mod:`vtscore.media.face.imagekit_bridge`) behind which the server picks the
-backend - the open SCRFD + ArcFace/MagFace ONNX weights, or the proprietary
-``vistaimage`` package - and the app never sees which.  FaceNet
-(:mod:`vtscore.media.face.embedder_facenet`) stays the default.
+One ``FacePipeline`` (:mod:`vtscore.media.face.imagekit_bridge`) sits behind
+it, and the server picks the backend - the open SCRFD + ArcFace/MagFace ONNX
+weights, or the proprietary ``vistaimage`` package - so the app never sees
+which.  Like the ``image2face`` converter, it runs only on a server with face
+models (``imagekit_bridge.face_models``); without them it declines every item.
 
 **Most faces never reach this embedder.**  The converter embeds each face from
 the *full photo* in the same pass that detects it, and files the vector under
 this embedder's name on the crop it emits; the embed stage then finds nothing
-missing.  What does reach it is a face crop with no vector of its own - a crop
-produced by the MTCNN provider and re-bound here, a reload that lost its
-vectors - and for those the pipeline runs on the crop itself: the provider's
-detector finds the face inside the crop (every provider embeds from a
-detection, the proprietary one included), and the best detection's embedding
-is the crop's.  A crop in which the provider finds no face gets no vector and
-is dropped at the end of the load, with the reason in the drop toast.
+missing.  What does reach it is a face crop with no vector of its own - a reload
+that lost its vectors, a crop from somewhere else - and for those the pipeline
+runs on the crop itself: the provider's detector finds the face inside the crop
+(every provider embeds from a detection, the proprietary one included), and the
+best detection's embedding is the crop's.  A crop in which the provider finds no
+face gets no vector and is dropped at the end of the load, with the reason in
+the drop toast.
 
 **One embedding space per dataset.**  Every face the converter embeds carries
 its space's tag in ``custom_metadata["Face Compat"]``.  Before this embedder
 adds a vector to a crop that carries a *different* tag it raises
 :class:`imagekit.face.compat.CompatibilityError`, which fails the batch with
 that message rather than quietly mixing two providers' vectors under one
-name.
+name.  A face dataset embedded by the retired FaceNet embedder (#5320) carries
+no tag; its stored vectors still load, but they are FaceNet's, so re-import
+the photos to search it in this embedder's space.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class ImagekitFaceEmbedder(MediaEmbedder):
-    """Embeds face crops through the server's ``imagekit`` face provider."""
+    """Embeds face crops through the server's face provider."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -52,7 +53,7 @@ class ImagekitFaceEmbedder(MediaEmbedder):
 
     @property
     def display_name(self) -> str:
-        return "imagekit face provider (face identity, 512d)"
+        return "Face identity (512d)"
 
     @property
     def model_id(self) -> Optional[str]:
@@ -70,7 +71,7 @@ class ImagekitFaceEmbedder(MediaEmbedder):
 
     @property
     def is_default(self) -> bool:
-        return False
+        return True
 
     @property
     def supports_text(self) -> bool:

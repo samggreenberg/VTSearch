@@ -62,7 +62,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 30 |
+| `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 8 |
 | `settings_importers` | app | Settings importers | 2 |

@@ -350,7 +350,7 @@ slides:
   outline-hold-the-line +at13
   data-set-fhibe
   # Face Off: how a face is found and matched — the detector's box and five
-  # points, the crop turned upright by them, FaceNet's space. Drawn, not
+  # points, the crop turned upright by them, ArcFace's space. Drawn, not
   # photographed, so it spends none of the twenty (`make-media-figs.py`).
   face-find
   # Then Head Start: how the trained head's line is placed, the linear SVM before and after it

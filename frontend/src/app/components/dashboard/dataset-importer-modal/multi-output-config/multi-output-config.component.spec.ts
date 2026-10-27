@@ -163,7 +163,7 @@ describe('MultiOutputConfigComponent', () => {
     fixture.componentRef.setInput('drafts', demoOutputDrafts(mediaTypes, 'image', ['face'], 'face'));
     await settleZoneless(fixture);
     flushOptions('image');
-    flushOptions('face', [{ name: 'facenet', is_default: true }], []);
+    flushOptions('face', [{ name: 'face', is_default: true }], []);
     await settleZoneless(fixture);
 
     const byLabel = (label: string) => rows().find((r) => r.querySelector('.mo-row-label')?.textContent?.trim() === label)!;

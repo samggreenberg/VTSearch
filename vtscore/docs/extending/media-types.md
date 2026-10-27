@@ -126,7 +126,7 @@ Two rules bind overrides:
 Two shipped types are *half types*. `document` is **convert-out**:
 importable but not embeddable, with `converts_to = ["image", "text"]`, so
 a PDF must pass through `document2image` or `document2text` before it can
-be searched. `face` is **convert-in**: embeddable (FaceNet) but not
+be searched. `face` is **convert-in**: embeddable (the `face` embedder) but not
 importable (`importable = False`, empty `file_extensions`), because face
 crops only ever come from the `image2face` converter. A new type that fits
 either shape sets the same attributes; nothing else special-cases them.

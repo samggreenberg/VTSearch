@@ -431,8 +431,8 @@ export class CenterPanelComponent implements OnDestroy {
    *  whether the image viewer draws one (Marquee, Shift-drag). An image always
    *  offers it: the box is kept on the label, and a patch embedder trains on
    *  it, even one on another dataset the labels later go to. Any other still
-   *  type offers it only when a bound embedder reads regions; a face's FaceNet
-   *  embeds the whole crop, so a box there would only crop its Good-pile tile
+   *  type offers it only when a bound embedder reads regions; a face's embedder
+   *  embeds the whole face, so a box there would only crop its Good-pile tile
    *  and train nothing (#4771). */
   get regionDrawOffered(): boolean {
     return this.mediaType === 'image' || this.regionOverlayCapable;

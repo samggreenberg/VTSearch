@@ -322,7 +322,6 @@ DEP001 = [
     "paddleocr",
     "rarfile",
     "whisper",
-    "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
@@ -363,12 +362,6 @@ DEP003 = [
     # (via the scripts' --no-deps step) deptry reclassifies the import from
     # DEP001 (missing) to DEP003 (transitive/undeclared). See the DEP001 note.
     "toponymy",
-    # facenet-pytorch (FaceNet embedder + MTCNN face detector) is installed
-    # --no-deps by the install scripts because its torch<2.3 / numpy<2 pins
-    # would downgrade the app's stack. Once installed, deptry reclassifies the
-    # import from DEP001 (missing) to DEP003 (present/undeclared), so it needs
-    # ignoring under both rules. See the DEP001 note.
-    "facenet_pytorch",
     # Same dual classification again: on a venv where lightglue IS installed
     # (pulled in transitively, e.g. alongside the GRID GPU stack) deptry
     # reclassifies the guarded structural-SPLG import from DEP001 to DEP003.

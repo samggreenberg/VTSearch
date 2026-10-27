@@ -435,6 +435,57 @@ gated: it needs an accepted license plus a token, from `HF_TOKEN` or a
 server-wide **Sign in with HuggingFace** (see
 [HuggingFace / PyTorch](#huggingface--pytorch)).
 
+### Face models
+
+Face (the `image2face` converter, the `face` media type and its embedder) runs on face models
+the deployment supplies. **The app never downloads them**, so a fresh install has no Face, and
+Face is on exactly when the server finds them:
+
+1. the pipeline config `IMAGEKIT_FACE_CONFIG` names, if it is set;
+2. otherwise `face.json` in the models folder's `imagekit` directory. The
+   models folder is `VTSEARCH_MODELS_DIR`: `data/models/` by default, and
+   `/opt/vtsearch/models` in the solo, labbench and image-embedders images.
+
+The config names a face detector and a face embedder, each relative to the config's own
+directory, so a models directory moves as one unit:
+
+```
+data/models/imagekit/
+├── face.json
+├── det_10g.onnx
+├── w600k_r50.onnx
+└── arcface_r50.json
+```
+
+```json
+{
+  "detector": {"model_bundle": "det_10g.onnx"},
+  "embedder": {"model": "w600k_r50.onnx", "config": "arcface_r50.json"}
+}
+```
+
+Where the weights come from, which ones work, and the full config schema are in
+[`imagekit/README.md`](../imagekit/README.md#models-where-to-get-them). **Check the licence of
+any weights you deploy**: the InsightFace model-zoo weights (`buffalo_l`, above) are for
+non-commercial research only. `arcface_r50.json` is a copy of
+`imagekit/face/extraction/arcface_r50.json`. `IMAGEKIT_FACE_PROVIDER` picks the backend, else the
+config's own `provider` key, else `oss`; the `vista` provider also needs its package installed.
+
+The check reads the config and looks for each model file it names; it loads nothing. It runs
+again every couple of seconds, so models put in place while the server runs turn Face on with no
+restart. The startup log says which way it went:
+
+```
+🙂 Face: on (oss provider, /app/data/models/imagekit/face.json)
+😶 Face: off, no face models: put a pipeline config at /app/data/models/imagekit/face.json, or set IMAGEKIT_FACE_CONFIG to one ...
+```
+
+While Face is off, the Face output, its media type and its embedder are left out of every
+picker, and an import that names `image2face` anyway fails on its first photo with the same
+reason. Face datasets saved earlier still open: their vectors are in the pickle. In Docker,
+mount the models directory (e.g. `-v ./face-models:/app/data/models/imagekit:ro` for the main
+images), or mount it anywhere and set `IMAGEKIT_FACE_CONFIG`.
+
 ### Demo dataset downloads
 
 Demo datasets are downloaded only when a user selects them through the web
@@ -655,8 +706,8 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 |----------|---------|-------------|
 | `VTSEARCH_DEVICE` | `auto` | Preferred compute device for embedding, training, and scoring. `auto` resolves to `cuda` when a usable GPU is visible, then `mps`, then `cpu`; explicit values (`cuda`, `cuda:1`, `cpu`, `mps`) pass through unchanged. Resolution is lazy — the var records intent, torch is only imported when a device is actually needed. Pin it to `cpu` to keep a shared GPU free, or to `cuda:N` to place the process on one card of a multi-GPU box. |
 | `VTSEARCH_TORCH_THREADS` | server: the process's CPU allocation; library/batch use: `1` | Thread count for `torch` and the native math libraries. When the server starts (`python app.py` **or** gunicorn importing `app.py`), `vtsearch/torch_threads.py` resolves it — the variable if set, otherwise the CPUs this process may run on (`os.sched_getaffinity`, i.e. the SLURM/cgroup/container allocation) — and exports the result as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported, **overwriting** any value already in the environment (including the `OMP_NUM_THREADS=1` the Dockerfiles set). Code that imports `vtscore` without `app.py` (scripts, tests) defaults to `1`. Each thread allocates its own scratch buffers, so lower it on a memory-constrained box. |
-| `IMAGEKIT_FACE_PROVIDER` | `oss` | Which face backend the `image2face` converter's `imagekit` provider and the `imagekit_face` embedder run: `oss` (open SCRFD + ArcFace/MagFace ONNX weights on ONNX Runtime) or `vista` (a proprietary `vistaimage` package behind the same interface, which must be installed), or a third-party provider registered under its own name. The shipped MTCNN + FaceNet path does not read it. See [`imagekit/README.md`](../imagekit/README.md). |
-| `IMAGEKIT_FACE_CONFIG` | unset | Path to the pipeline config JSON naming the provider's models (and optionally a `runtime` block). Relative model paths resolve against the file's directory. Unset, the provider is *unconfigured*: the converter's `imagekit` option yields no faces and the `imagekit_face` embedder declines every item, each logging which variable is missing. The runtime follows `VTSEARCH_DEVICE` (install `onnxruntime-gpu` for CUDA) and `VTSEARCH_TORCH_THREADS`. |
+| `IMAGEKIT_FACE_PROVIDER` | the config's `provider`, else `oss` | Which face backend runs Face (the `image2face` converter and the `face` embedder): `oss` (open SCRFD + ArcFace/MagFace ONNX weights on ONNX Runtime) or `vista` (a proprietary `vistaimage` package behind the same interface, which must be installed), or a third-party provider registered under its own name. See [Face models](#face-models) and [`imagekit/README.md`](../imagekit/README.md). |
+| `IMAGEKIT_FACE_CONFIG` | `data/models/imagekit/face.json` (under `VTSEARCH_MODELS_DIR`) | Path to the pipeline config JSON naming the face models (and optionally a `runtime` block). Relative model paths resolve against the file's directory. With no config whose models exist, Face is off: see [Face models](#face-models). The runtime follows `VTSEARCH_DEVICE` (install `onnxruntime-gpu` for CUDA) and `VTSEARCH_TORCH_THREADS`. |
 | `VTSEARCH_EMBED_BATCH_SIZE` | `32` | Items per GPU embedding batch. Lower it if a large model OOMs on a small card; non-positive or unparseable values fall back to the default. Some embedders (e.g. video models, whose per-clip frame stacks are much larger) ship a smaller default of their own. |
 | `VTSEARCH_DECODE_WORKERS` | allocated CPUs − 1, capped at 8 | Threads used to decode images *ahead* of the GPU forward during bulk image embedding. Decoding a batch inline, forwarding it, then decoding the next leaves the GPU idle for the whole decode — measured at 82% idle for base SigLIP on a V100 — so the decode runs on a pool, one batch ahead. The default is sized from the CPUs this process may actually run on (`os.sched_getaffinity`, which reflects a SLURM/cgroup allocation rather than the node's core count), leaving one for the calling thread. Set `0` to decode inline on the calling thread. Results are unaffected either way; the only cost of the pool is holding two batches of decoded images instead of one. |
 | `VTSEARCH_EMBED_PRECISION` | `fp32` | Compute precision for the **image** embedding forward pass. `fp32` is full precision and the shipped default. `fp16` / `bf16` cast the weights (fastest; `bf16` needs sm_80+, so not a V100); `autocast_fp16` / `autocast_bf16` keep fp32 weights and wrap the forward in `torch.autocast`, which holds softmax and layer norm in fp32 — numerically safer, slower; `auto` picks `bf16` where supported, else `fp16`. Every half mode degrades to `fp32` off CUDA, where half is emulated and *slower* than the fp32 it replaces. Stored vectors are always fp32 — only the compute is half. **Half precision changes the vectors** (cosine similarities shift ~1e-3, against a ~1e-7 fp32 kernel-selection noise floor), so a dataset embedded in one mode is not interchangeable with one embedded in another; re-embed a collection wholesale rather than in halves. **The speedup is only on the heavy encoders.** End to end it is 2.0x (L40S) to 2.5x (V100) on `siglip2_l`, but **0.99x on the default `siglip`** on both cards — with decode overlapped, base SigLIP's forward is not the bottleneck, so the knob buys the shipped default nothing. **EmbeddingGemma 2** (`embeddinggemma2`, `embeddinggemma2_audio`) honours only the `bf16` modes: its activations overflow fp16 (NaN or silently degraded vectors, per its model card), so the `fp16` modes run it in `fp32`. This is also the escape hatch back to `fp32`. |

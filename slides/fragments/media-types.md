@@ -16,5 +16,5 @@
      can start a search for "dog barking" the way we started on books. -->
 
 <!-- **c** — Two don't. A document has no model of its own; it has to become
-     something else first. And FaceNet knows people, not words, so a face
+     something else first. And ArcFace knows people, not words, so a face
      search starts from a photo. The loop on top is the same for all six. -->

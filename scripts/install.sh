@@ -893,21 +893,6 @@ vts_install_toponymy() {
     pip install --no-deps "toponymy==0.5.2" --progress-bar on
 }
 
-# --- facenet-pytorch (FaceNet face-identity embedder) ------------------------
-# The `face` embedder (vtscore.media.face.embedder_facenet) loads FaceNet's
-# InceptionResnetV1 via facenet-pytorch. facenet-pytorch 2.6.0 hard-pins
-# torch<2.3, torchvision<0.18, numpy<2.0 and Pillow<10.3 -- a plain install
-# would honor those by DOWNGRADING the app's entire torch/numpy/Pillow stack.
-# Those pins are empirically unnecessary: the model builds and runs a correct
-# forward pass on the app's modern stack (verified on torch 2.13 / numpy 2.x /
-# Pillow 12). So install it --no-deps -- exactly the toponymy pattern -- and let
-# the app's own torch, torchvision, numpy, Pillow, requests and tqdm (all
-# already present) satisfy it at runtime. Pretrained weights are lazy-downloaded
-# from GitHub on first model use, not here.
-vts_install_face_deps() {
-    pip install --no-deps facenet-pytorch --progress-bar on
-}
-
 # --- setuptools (PYSEC-2026-3447) --------------------------------------------
 # setuptools < 83 carries PYSEC-2026-3447 and fails run-tests.sh's pip-audit
 # gate. This used to be a flat "setuptools<82" pin, added because torch 2.12.0
@@ -925,7 +910,7 @@ vts_upgrade_setuptools() {
 }
 
 vts_install_cpu() {
-    vts_progress_init 6 "Installing VTSearch CPU dependencies"
+    vts_progress_init 5 "Installing VTSearch CPU dependencies"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -944,9 +929,6 @@ vts_install_cpu() {
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
     pip install -r "$(vts_requirements_file base)" --progress-bar on
     vts_upgrade_setuptools  # torch arrived with base; follow its setuptools pin
-
-    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
-    vts_install_face_deps
 
     vts_progress_step "Wiring up pre-commit git hook"
     vts_install_precommit
@@ -1143,7 +1125,7 @@ vts_install_gpu() {
         exit 2
     fi
 
-    vts_progress_init 10 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 9 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -1194,9 +1176,6 @@ vts_install_gpu() {
       --prefer-binary \
       -r "$(vts_requirements_file gpu)" \
       --progress-bar on
-
-    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
-    vts_install_face_deps
 
     vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
     vts_install_cuml "$cuda_tag"

@@ -1,10 +1,10 @@
-"""The image2face converter's ``imagekit`` provider: detect + embed in one pass, vectors ride with the crops.
+"""The image2face converter over the face provider: detect + embed in one pass, vectors ride with the crops.
 
 The provider seam is exercised against a fake pipeline installed into the
 bridge (no models, no ``IMAGEKIT_FACE_CONFIG``), so what is tested is the
 app's side of the contract: the crop, its filed vector, its metadata, the
-runner carrying the vector into the media dict, and the degrade-to-nothing
-paths.
+runner carrying the vector into the media dict, a server without face models
+refusing loudly, and one photo's failure yielding nothing.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import pytest
 from PIL import Image
 
 from imagekit.face.records import FaceDetection, FaceRecord
-from vtscore.converters.image2face import PROVIDERS, Image2FaceMediaConverter
+from vtscore.converters.image2face import Image2FaceMediaConverter
 from vtscore.converters.runner import run_converters_on_folder
 from vtscore.media.face import imagekit_bridge as bridge
 from vtscore.media.provenance import SOURCE_BOX_FIELD
@@ -67,29 +67,9 @@ def _png(width=200, height=200) -> bytes:
 
 
 def _params(**overrides):
-    params = {
-        "threshold": 0.5,
-        "padding": 0.0,
-        "min_size": 10,
-        "align": "none",
-        "sideways": "false",
-        "provider": "imagekit",
-    }
+    params = {"threshold": 0.5, "padding": 0.0, "min_size": 10, "align": "none"}
     params.update(overrides)
     return params
-
-
-class TestParams:
-    def test_provider_defaults_to_mtcnn(self):
-        conv = Image2FaceMediaConverter()
-        assert conv._resolve_params(None).provider == "mtcnn"
-        assert PROVIDERS == ("mtcnn", "imagekit")
-        field = next(f for f in conv.fields if f.key == "provider")
-        assert field.options == ["mtcnn", "imagekit"] and field.default == "mtcnn"
-
-    def test_an_unknown_provider_is_refused(self):
-        with pytest.raises(ValueError, match="provider"):
-            Image2FaceMediaConverter()._resolve_params({"provider": "nope"})
 
 
 class TestConvert:
@@ -99,8 +79,8 @@ class TestConvert:
         assert fake.calls == [((200, 200, 3), 0.5, "group.png")]
         assert [o["filename"] for o in outputs] == ["group_face_1.png", "group_face_2.png"]
         first = outputs[0]
-        assert first["embedder"] == "imagekit_face" and set(first["embeddings"]) == {"imagekit_face"}
-        vec = first["embeddings"]["imagekit_face"]
+        assert first["embedder"] == "face" and set(first["embeddings"]) == {"face"}
+        vec = first["embeddings"]["face"]
         assert vec.shape == (512,) and np.linalg.norm(vec) == pytest.approx(1.0)
         meta = first["custom_metadata"]
         assert meta["Face Compat"] == "fake:1" and meta["Detection Confidence"] == 0.9
@@ -117,16 +97,17 @@ class TestConvert:
     def test_alignment_uses_the_provider_landmarks(self, fake):
         conv = Image2FaceMediaConverter()
         plain = conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params(align="none"))
-        turned = conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params(align="similarity"))
-        assert turned[0]["width"] == turned[0]["height"]  # the similarity crop is a square at the fit's scale
-        assert plain[0]["embeddings"]["imagekit_face"] is not None and turned[0]["embedder"] == "imagekit_face"
+        turned = conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params(align="roll"))
+        # The crop turns on the provider's landmarks; the vector is the provider's, from the full photo.
+        assert (turned[0]["width"], turned[0]["height"]) == (plain[0]["width"], plain[0]["height"])
+        np.testing.assert_array_equal(turned[0]["embeddings"]["face"], plain[0]["embeddings"]["face"])
 
-    def test_unconfigured_provider_yields_nothing_with_a_warning(self, monkeypatch, caplog):
-        monkeypatch.delenv(bridge.CONFIG_ENV_VAR, raising=False)
+    def test_a_server_without_face_models_refuses_naming_what_is_missing(self):
+        """Not an empty dataset: the run fails on its first photo, saying where models go."""
         conv = Image2FaceMediaConverter()
-        with caplog.at_level(logging.WARNING):
-            assert conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params()) == []
-        assert bridge.CONFIG_ENV_VAR in caplog.text
+        with pytest.raises(bridge.FaceProviderUnconfigured, match="no face models") as err:
+            conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params())
+        assert bridge.CONFIG_ENV_VAR in str(err.value)
 
     def test_a_failing_provider_yields_nothing_with_a_warning(self, monkeypatch, caplog):
         class Broken:
@@ -144,17 +125,6 @@ class TestConvert:
             )
         assert "face provider failed" in caplog.text
 
-    def test_mtcnn_path_attaches_no_vector(self, monkeypatch):
-        conv = Image2FaceMediaConverter()
-        from vtscore.converters.image2face import FaceDetection as MtcnnFace
-
-        monkeypatch.setattr(
-            conv, "_detect_faces", lambda *a, **k: [MtcnnFace((10, 10, 60, 60), 0.8, (10, 10, 60, 60), None)]
-        )
-        (out,) = conv.convert_normalized({"filename": "g.png", "media_bytes": _png()}, _params(provider="mtcnn"))
-        assert "embeddings" not in out and "embedder" not in out
-        assert out["custom_metadata"] == {"Detection Confidence": 0.8}
-
 
 class TestRunnerCarryThrough:
     def test_folder_conversion_files_the_vector_under_the_embedder(self, fake, tmp_path):
@@ -168,9 +138,9 @@ class TestRunnerCarryThrough:
         )
         assert len(medias) == 2
         for media in medias.values():
-            assert media["embedder"] == "imagekit_face"
-            assert set(media["embeddings"]) == {"imagekit_face"}
-            assert media["embeddings"]["imagekit_face"].shape == (512,)
+            assert media["embedder"] == "face"
+            assert set(media["embeddings"]) == {"face"}
+            assert media["embeddings"]["face"].shape == (512,)
             assert media["custom_metadata"]["Face Compat"] == "fake:1"
 
     def test_embed_stage_finds_nothing_missing(self, fake, tmp_path):
@@ -184,10 +154,10 @@ class TestRunnerCarryThrough:
             medias=medias,
             converter_specs=[{"converter": "image2face", "params": _params()}],
         )
-        before = {mid: m["embeddings"]["imagekit_face"].copy() for mid, m in medias.items()}
+        before = {mid: m["embeddings"]["face"].copy() for mid, m in medias.items()}
         failures: dict = {}
         embed_missing(medias, failures=failures)
         assert failures == {}
         for mid, media in medias.items():
-            np.testing.assert_array_equal(media["embeddings"]["imagekit_face"], before[mid])
-            assert media["embedder"] == "imagekit_face"
+            np.testing.assert_array_equal(media["embeddings"]["face"], before[mid])
+            assert media["embedder"] == "face"

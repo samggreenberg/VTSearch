@@ -30,15 +30,17 @@ what is on `dev` but not yet on `main`; each release dates that section
   refused with a message naming what changed. Works with `server_json_file` and `server_csv_file`; a pipeline file
   sets it as `resume:`. See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
-- **A pluggable face backend behind the `image2face` converter.** The new `imagekit` package (see
-  [`imagekit/README.md`](imagekit/README.md)) detects, aligns and embeds faces through one `FacePipeline`
-  interface with swappable providers: `oss` runs open SCRFD and ArcFace/MagFace ONNX weights on ONNX Runtime, and
-  `vista` wraps a proprietary backend behind the same interface. The converter's new **Face provider** option
-  (`provider`, default `mtcnn`, the shipped path) hands a photo to the server's provider, which detects and embeds
-  every face in one pass; each crop then arrives with its vector already filed under the new `imagekit_face`
-  embedder, plus its quality and embedding-space tag in its metadata, and the embedder refuses to mix two providers'
-  spaces in one dataset. The server picks the backend with `IMAGEKIT_FACE_PROVIDER` and names its models with
-  `IMAGEKIT_FACE_CONFIG` ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#environment-variables)). Two CLIs,
+- **Faces come from a pluggable face backend, and Face is on only where its models are** (issues #5318, #5320).
+  The new `imagekit` package (see [`imagekit/README.md`](imagekit/README.md)) detects, aligns and embeds faces
+  through one `FacePipeline` interface with swappable providers: `oss` runs open SCRFD and ArcFace/MagFace ONNX
+  weights on ONNX Runtime, and `vista` wraps a proprietary backend behind the same interface. The `image2face`
+  converter hands each photo to the server's provider, which detects and embeds every face in one pass; each crop
+  arrives with its vector already filed under the `face` embedder, plus its quality and embedding-space tag in its
+  metadata, and the embedder refuses to mix two providers' spaces in one dataset. **The app downloads no face
+  models**: put a pipeline config at `data/models/imagekit/face.json` (under the models folder), or point `IMAGEKIT_FACE_CONFIG` at
+  one, and Face turns on, with no restart. Without one, Face is left out of every picker, an import that asks for
+  faces anyway fails naming what is missing, and the startup log says which
+  ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#face-models)). `IMAGEKIT_FACE_PROVIDER` picks the backend. Two CLIs,
   `scripts/detect_faces.py` and `scripts/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
   now a runtime dependency.
 
@@ -99,6 +101,12 @@ what is on `dev` but not yet on `main`; each release dates that section
   fields: Add Dataset, Export, Import Labels, New Detector, AutoFind, and the settings importers and exporters.
 
 ### Removed
+
+- **The MTCNN detector and the FaceNet embedder** (issue #5320). The face path above replaces them, and
+  `facenet-pytorch` leaves every install. With them go `image2face`'s **Face provider**, **Find sideways faces**
+  and `similarity` alignment options (`roll`, the default, and `none` remain). The embedder name `face` now
+  belongs to the provider's embedder, so a face dataset or detector saved before this change holds FaceNet's
+  vectors under that name: re-import its photos to search it in the new space.
 
 - **The autorun extractor / localizer API** (issues #3452, #5259). The routes under `/api/autorun-extractors`,
   `/api/autorun-localizers` and `/api/pregen-processors`, plus `/api/extract`, `/api/localize`,

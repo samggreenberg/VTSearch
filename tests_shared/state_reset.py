@@ -339,3 +339,23 @@ def isolated_example_media_dir(tmp_path, monkeypatch):
         return original()
 
     monkeypatch.setattr(paths_mod, "example_media_dir", _isolated)
+
+
+@pytest.fixture(autouse=True)
+def no_face_models(tmp_path, monkeypatch):
+    """Start every test on a server without face models, whatever this machine has (#5320).
+
+    Face is on exactly when face models are on disk
+    (:func:`vtscore.media.face.imagekit_bridge.face_models`): ``IMAGEKIT_FACE_CONFIG``,
+    else ``imagekit/face.json`` in the models folder, which the session keeps
+    pointing at a developer's real one (:mod:`tests_shared.data_dir`).  Either
+    would turn Face on for one machine's run and not another's.  A test that
+    wants Face on points ``IMAGEKIT_FACE_CONFIG`` at a config of its own, or
+    installs a fake pipeline on the bridge.
+    """
+    from vtscore.media.face import imagekit_bridge
+
+    monkeypatch.delenv(imagekit_bridge.CONFIG_ENV_VAR, raising=False)
+    monkeypatch.delenv("IMAGEKIT_FACE_PROVIDER", raising=False)
+    absent = tmp_path / "no-face-models" / imagekit_bridge.DEFAULT_CONFIG_RELPATH
+    monkeypatch.setattr(imagekit_bridge, "default_config_path", lambda: absent)
