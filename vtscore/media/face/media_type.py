@@ -7,9 +7,13 @@
 * ``face`` is a **convert-in** half type — embeddable but *not* importable; a
   face never arrives from a ``.face`` file, it is cropped out of an image by
   the ``image2face`` converter
-  (:class:`~vtscore.converters.image2face.Image2FaceMediaConverter`) and then
-  embedded in FaceNet identity space by
-  :class:`~vtscore.media.face.embedder_facenet.FaceEmbedder`.
+  (:class:`~vtscore.converters.image2face.Image2FaceMediaConverter`), which
+  also embeds it through the server's face provider into the identity space of
+  :class:`~vtscore.media.face.embedder_imagekit.ImagekitFaceEmbedder`.
+
+Face is on only on a server with face models
+(:func:`vtscore.media.face.imagekit_bridge.face_models`); without them the app's
+listings leave this type out.
 
 Because a face crop *is* a small image, this type serves and thumbnails its
 media exactly like the image type; it just declares no importable file
@@ -39,7 +43,7 @@ class FaceMediaType(MediaType):
     """Handles face crops - HTTP serving, thumbnails, and identity embedding.
 
     Embedding is handled by
-    :class:`~vtscore.media.face.embedder_facenet.FaceEmbedder`.
+    :class:`~vtscore.media.face.embedder_imagekit.ImagekitFaceEmbedder`.
     """
 
     #: A face crop is a small still image: a browsable-thumbnail type.

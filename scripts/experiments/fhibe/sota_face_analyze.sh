@@ -15,18 +15,18 @@
 # Env: SOTA_FACE_DATE (default today), SOTA_FACE_SIZES (default "1024 640"), SOTA_FACE_ARM
 # (an arm sota_face.sh ran under the same variable, #4777) and SOTA_FACE_TAG (the run dirs' tag,
 # as sota_face.sh took it; default `sota`) and SOTA_FACE_BETAS (the presets it ran; default "0.25 1 4").
-# The arm `ik` (#5321) is the imagekit provider's cells, so its sessions are read under its own
-# embedder (`imagekit_face`, analyze.py's path `face_ik`); every other arm is FaceNet's.
+# The arm defaults to `ik` (#5321), the face provider's cells: the face path as it ships since #5320.
+# SOTA_FACE_ARM= (empty) and the other retired MTCNN arms read FaceNet's cells, filed under `face` too.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOTA="$HERE/../state_of_app"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
-ARM="${SOTA_FACE_ARM:-}"
+ARM="${SOTA_FACE_ARM-ik}"
 SET="$D-${SOTA_FACE_TAG:-sota}${ARM:+-$ARM}"
 FACES="fhibe_faces${ARM:+_$ARM}"
-if [[ "$ARM" == ik ]]; then EMBEDDER=imagekit_face PATH_NAME=face_ik; else EMBEDDER=face PATH_NAME=face; fi
+EMBEDDER=face PATH_NAME=face
 OUT="${1:?usage: sota_face_analyze.sh OUT [K ...]}"
 shift
 KS=("${@:-1 4}")

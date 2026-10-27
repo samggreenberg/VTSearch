@@ -39,7 +39,7 @@ def test_a_lone_photo_is_never_admitted(ids):
 
 
 def test_every_cell_must_admit_an_identity(ids):
-    """The crop arms lose people whose faces MTCNN missed; the photo arms run the same people anyway."""
+    """The crop arms lose people whose faces the detector missed; the photo arms run the same people anyway."""
     pools = {"photo": {"a", "b", "c"}, "face": {"a", "c"}}
     chosen, common = ids.sample(pools, None, seed=0)
     assert chosen == ["a", "c"] and common == {"a", "c"}

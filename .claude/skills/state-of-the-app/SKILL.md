@@ -1,6 +1,6 @@
 ---
 name: state-of-the-app
-description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (FaceNet crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
+description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (the face provider's crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
 ---
 
 # State of the App
@@ -387,8 +387,8 @@ differs from the photo paths, and the owner settled how its review works:
 
 ## Face (FHIBE): standing decisions (owner, 2026-10-10, #4762)
 
-The face path is FaceNet on `image2face` crops, benchmarked on FHIBE (#4699). The owner set it up as
-follows:
+The face path is the face provider's `image2face` crops and vectors (FaceNet's on MTCNN's crops before
+#5320), benchmarked on FHIBE (#4699). The owner set it up as follows:
 
 - **Bench:** the #4699 baseline's 562 people (`<release>-derived/runs/2026-10-09-k4/identities.txt`),
   all of whom can start from 4 photos on every arm. People are the replication; one seed.
@@ -399,12 +399,14 @@ follows:
   typed query. The report's opening rule is the same: the session shows the example sort until
   Autopilot shows a detector.
 - **Paths:** both stored sizes. They share one path (`--path face`), so each analysis also names its
-  `--dataset`. **Since #4777 the app aligns its face crops (`image2face` `align="roll"`), so the
-  review runs `fhibe_faces_roll_1024` and `fhibe_faces_roll_640`:** pass `SOTA_FACE_ARM=roll` to
-  `sota_face.sh` and `sota_face_analyze.sh` (run dirs `<date>-sota-roll-k<K>-b<beta>`; `sota_face.sh
-  prepare` first, since the arm has its own prepared grids). The plain `fhibe_faces_*` cells are the
-  app before #4777 (#4762's review). #4777's roll sessions (`2026-10-10-sota-roll-*`) are the last
-  review's numbers for the shipped crops.
+  `--dataset`. **Since #5320 the app's face path is the face provider's, so the review runs
+  `fhibe_faces_ik_1024` and `fhibe_faces_ik_640`**, the default arm of `sota_face.sh` and
+  `sota_face_analyze.sh` (`SOTA_FACE_ARM=ik`; run dirs `<date>-sota-ik-k<K>-b<beta>`; `sota_face.sh
+  prepare` first, since the arm has its own prepared grids). Building those cells needs the face
+  models on the GRID (`IMAGEKIT_FACE_CONFIG`). #5321's sessions (`2026-10-26-5321-ik-*`) are the
+  last review's numbers for the shipped path. The MTCNN + FaceNet arms are retired but still run on
+  their cells: `SOTA_FACE_ARM=roll` (the app from #4777 to #5320) and `SOTA_FACE_ARM=` (before
+  #4777, #4762's review).
 - **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs
   (`<date>-sota-k<K>-b<beta>`) and 6,744 runs a seed. Run them with `fhibe/sota_face.sh`
   (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each;

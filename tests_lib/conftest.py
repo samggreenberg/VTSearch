@@ -77,6 +77,7 @@ from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
+    no_face_models as _no_face_models,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
     freeze_collected_heap,
     freeze_startup_heap,

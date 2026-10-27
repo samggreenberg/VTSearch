@@ -425,9 +425,14 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     "o365_better": os.environ.get("CALIB_O365_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # FHIBE (#4699): one identity per cell, the person's one-person photos as
     # its positives. The photo arms are whole images at two stored sizes; the
-    # face arms are `image2face` crops of those copies, embedded by FaceNet. The
-    # pile pairs embedders with datasets by media type, so a face roster names
-    # face embedders only. No region arm: no patch cell is built.
+    # face arms are `image2face` crops of those copies. The pile pairs embedders
+    # with datasets by media type, so a face roster names face embedders only.
+    # No region arm: no patch cell is built.
+    #
+    # The MTCNN + FaceNet arms (`fhibe_faces_*`, `_roll_`, `_sim_`, `_side_`) are
+    # retired (#5320): no longer built, but their cells are read by path, so their
+    # rosters stay. `face` there is FaceNet's vectors, under the name the face
+    # provider's embedder now carries.
     #
     # FHIBE has no names to type, so these cells open on example photos
     # (`CALIB_SEED_EXAMPLES`), never on a text sort.
@@ -441,11 +446,8 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim", "side")
         for size in (1024, 640)
     },
-    # The face path through the `imagekit` provider (#5321): its own vectors, so its own roster.
-    **{
-        f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "imagekit_face").split(",")
-        for size in (1024, 640)
-    },
+    # The face path as the app ships it, through the face provider (#5321).
+    **{f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "face").split(",") for size in (1024, 640)},
     # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
     "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),

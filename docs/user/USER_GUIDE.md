@@ -545,7 +545,8 @@ Dashboard while it loads, its own **Cancel**, and its own AutoFind run.
   cropped out of the images, so it has no files of its own to find. This list
   is the only place Face is offered: the *Dataset media type* dropdown leaves
   it out, because a Face dataset made on its own could not show the photo any
-  of its faces came from.
+  of its faces came from. Face appears only on a server with face models
+  installed; if the row is missing, ask whoever runs the server.
 - Each ticked row's **Details ▾** opens that dataset's own settings
   (*Include media*, embedders, clipper, cleanup). *Build Browse map now* and
   *Merge near-duplicates* apply to every dataset of the import and sit once,

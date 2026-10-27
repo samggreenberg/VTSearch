@@ -38,7 +38,7 @@ isn't directly compatible with the source format:
 | Audio files   | Embed them with an image model (SigLIP, DINOv3) | `audio2image` (spectrogram)          |
 | Audio files   | Transcribe speech and embed with a text model   | `audio2text` (Whisper ASR)           |
 | Image files   | Search them by the text they contain            | `image2text` (OCR)                   |
-| Image files   | Embed each face in FaceNet identity space       | `image2face`                         |
+| Image files   | Search the faces in them by who they are        | `image2face`                         |
 | Video files   | Embed individual frames with an image model     | `video2image`                        |
 | Video files   | Embed the audio track with an audio model       | `video2audio`                        |
 | Documents (PDF) | Run an image embedder over each page          | `document2image`                     |
@@ -119,7 +119,7 @@ automatically.
 | `audio2image`    | `Audio2ImageMediaConverter`    | audio → image    | `spectrogram_type`, `n_mels`, `time_window_s`, `colormap` | `librosa` + `matplotlib` |
 | `audio2text`     | `Audio2TextMediaConverter`     | audio → text     | `model_size`, `language` | `openai-whisper` (`import whisper`) |
 | `image2text`     | `Image2TextMediaConverter`     | image → text     | `language`, `threshold` | PaddleOCR |
-| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align`, `sideways` | `facenet-pytorch` (MTCNN), opt-in |
+| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size`, `align` | face models the deployment supplies (`imagekit`); hidden without them |
 | `video2image`    | `Video2ImageMediaConverter`    | video → image    | `n_clips` / `seconds_per_frame` (mutually clearing) | `vtscore.media.video.decode` |
 | `video2audio`    | `Video2AudioMediaConverter`    | video → audio    | `ffmpeg_timeout` | FFmpeg |
 | `document2image` | `Document2ImageMediaConverter` | document → image | - | PyMuPDF (`agpl` extra) |

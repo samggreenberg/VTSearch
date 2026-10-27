@@ -40,6 +40,7 @@ from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_ti
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
+    no_face_models as _no_face_models,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
     freeze_collected_heap,
     freeze_startup_heap,

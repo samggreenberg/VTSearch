@@ -299,8 +299,7 @@ class MediaEmbedder(ABC):
         A direct weights URL is acceptable where there is no plain repo id (e.g.
         EUPE, loaded from a ``.pt`` URL via ``torch.hub``).  ``None`` (the
         default) means the embedder has no single downloadable model id worth
-        surfacing — the classical SIFT/VLAD structural embedder, or FaceNet whose
-        weights ship inside ``facenet-pytorch``.
+        surfacing — the classical SIFT/VLAD structural embedder, for one.
         """
         return None
 

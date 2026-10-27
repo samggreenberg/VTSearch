@@ -121,13 +121,6 @@ python -m pip install --prefer-binary \
   -r "$REPO_DIR/requirements/base.txt" \
   -q
 
-# FaceNet face-identity embedder (vtscore.media.face). facenet-pytorch pins
-# torch<2.3 / numpy<2 / Pillow<10.3, which a plain install would honor by
-# downgrading the app's stack; those pins are empirically unnecessary (the
-# model runs a correct forward pass on the modern stack), so install --no-deps
-# and let the app's own torch/torchvision/numpy/Pillow satisfy it at runtime.
-python -m pip install --no-deps facenet-pytorch -q
-
 # The installs above can leave an old dist-info beside the new one of the same
 # project (--ignore-installed never uninstalls, and a plain upgrade uninstalls
 # the copy first on sys.path, which can be the user site's rather than the one

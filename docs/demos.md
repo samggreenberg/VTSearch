@@ -140,8 +140,10 @@ The tables below are generated from the demo-dataset registry (each media type's
 > **Download** column is the full-source figure for all its variants.
 >
 > **Face demos.** Both face demos are image datasets meant to be loaded with
-> the **Images → Faces** converter (`image2face`), which crops each face it
-> finds for the FaceNet embedder; each photo's category is a person. Tick
+> the **Images → Faces** converter (`image2face`), which crops and embeds each
+> face it finds; each photo's category is a person. The converter is offered
+> only on a server with face models
+> ([DEPLOYMENT.md](DEPLOYMENT.md#face-models)). Tick
 > **Multi-Dataset** and then **Face** beside **Image** to load the faces and
 > their photos as linked datasets, so a face can show its photo; **Convert
 > to: Face** loads the faces alone.

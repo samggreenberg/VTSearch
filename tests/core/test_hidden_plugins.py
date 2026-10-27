@@ -216,3 +216,58 @@ class TestRouteIntegration:
         from vtscore.datasets.importers import get_importer
 
         assert get_importer(victim_name) is not None
+
+
+class TestFaceFollowsItsModels:
+    """Face is on exactly when this server has face models (#5320): no setting, no admin hide.
+
+    Every test starts without face models (``tests_shared.state_reset.no_face_models``).
+    """
+
+    @pytest.fixture
+    def face_models(self, tmp_path, monkeypatch):
+        """Put face models on this server: a pipeline config whose two model files exist."""
+        import json
+
+        from vtscore.media.face import imagekit_bridge
+
+        (tmp_path / "det.onnx").write_bytes(b"")
+        (tmp_path / "emb.onnx").write_bytes(b"")
+        config = tmp_path / "face.json"
+        config.write_text(json.dumps({"detector": {"model_bundle": "det.onnx"}, "embedder": {"model": "emb.onnx"}}))
+        monkeypatch.setenv(imagekit_bridge.CONFIG_ENV_VAR, str(config))
+
+    @staticmethod
+    def _listings(client) -> dict[str, set[str]]:
+        return {
+            "media_types": {m["type_id"] for m in client.get("/api/media-types").get_json()["media_types"]},
+            "embedders": {e["name"] for e in client.get("/api/embedders").get_json()["embedders"]},
+            "face_embedders": {e["name"] for e in client.get("/api/embedders?media_type=face").get_json()["embedders"]},
+            "converters": {c["name"] for c in client.get("/api/converters").get_json()["converters"]},
+            "face_converters": {c["name"] for c in client.get("/api/converters?target=face").get_json()["converters"]},
+            "image_converters": {
+                c["name"] for c in client.get("/api/converters?source=image").get_json()["converters"]
+            },
+        }
+
+    def test_without_face_models_every_listing_leaves_face_out(self, client):
+        got = self._listings(client)
+        assert "face" not in got["media_types"] and "image" in got["media_types"]
+        assert "face" not in got["embedders"] and got["face_embedders"] == set()
+        assert "image2face" not in got["converters"] | got["face_converters"] | got["image_converters"]
+
+    def test_with_face_models_face_is_listed(self, client, face_models):
+        got = self._listings(client)
+        assert "face" in got["media_types"]
+        assert "face" in got["embedders"] and got["face_embedders"] == {"face"}
+        assert "image2face" in got["converters"] & got["face_converters"] & got["image_converters"]
+
+    def test_it_is_not_an_admin_hide(self, client):
+        """The settings UI shows only what an admin hid; a missing model is not their choice."""
+        assert settings_mod.unavailable_plugins() == {"media_types": {"face"}, "embedders": {"face"}}
+        assert settings_mod.get_effective_hidden_plugins() == {}
+        assert settings_mod.is_plugin_hidden("media_types", "face") is False
+
+    def test_an_admin_hide_still_applies_with_face_models(self, client, face_models):
+        settings_mod.set_hidden_plugins({"media_types": ["face"]})
+        assert "face" not in self._listings(client)["media_types"]
