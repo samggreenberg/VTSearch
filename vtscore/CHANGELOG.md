@@ -30,7 +30,8 @@ instead, since every commit on `dev` is effectively a new app release.)
   from `IMAGEKIT_FACE_CONFIG`, else `face.json` in the models folder's `imagekit` directory (`default_config_path()`); the
   provider from `IMAGEKIT_FACE_PROVIDER`, else the config's own `provider`, else `oss`. Nothing is downloaded.
   `Image2FaceMediaConverter.hidden_from_picker` follows it, and `get_face_pipeline()` raises
-  `FaceProviderUnconfigured` naming what is missing.
+  `FaceProviderUnconfigured` naming what is missing. An install that cannot import `imagekit` at all (a slim one,
+  without `cv2`) reads as off too, rather than raising.
 - **Deferred chunks: `ImporterBase.run_chunked_cli_deferred` and `DeferredChunk`** (issue #5314). An optional,
   additive importer hook a resumed `--stream-results --resume` run reads its source through: it yields one
   `vtscore.datasets.importers.base.DeferredChunk` per `run_chunked_cli` chunk, carrying the chunk's `count`, a

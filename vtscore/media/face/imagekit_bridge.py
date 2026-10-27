@@ -211,9 +211,16 @@ def face_models() -> FaceModels:
     ``stat`` calls, reused for :data:`_STATUS_TTL_S`.  A model that is present
     but cannot load (a corrupt file) still reads as available here; it fails at
     :func:`get_face_pipeline`, loudly.
+
+    So does a server that cannot import ``imagekit`` at all: a slim install
+    leaves out the face path's own dependencies (the LabBench images have no
+    ``cv2``), and that makes a server without Face, not one that cannot start.
     """
     global _status
-    from imagekit.face.providers.ext import BACKEND_ENV_VAR  # noqa: PLC0415
+    try:
+        from imagekit.face.providers.ext import BACKEND_ENV_VAR  # noqa: PLC0415
+    except ImportError as exc:
+        return FaceModels(False, f"the face path's dependencies are not installed here ({exc})", None, "")
 
     key = (
         os.environ.get(CONFIG_ENV_VAR, ""),
