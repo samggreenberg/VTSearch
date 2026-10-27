@@ -28,8 +28,8 @@ LabBench type when the build is given no ``MEDIA_TYPE``.
 ``DefaultLoginProvider``, whose data directory is the data directory itself)
     ``solo_embedder_per_media_type`` maps each media type to the embedder the
     image bakes for it, so the dataset importer hides its embedder dropdown
-    and uses it silently; the slim requirements only cover that embedder. Users can
-    still override it in Settings > Import Defaults. The embedder is resolved
+    and uses it silently; the slim requirements only cover that embedder.
+    Users can still override it in Settings > Import Defaults. The embedder is resolved
     by the same registry call ``scripts/preload_default_embedder.py`` bakes
     with, so the lock is always the baked embedder and this file names no
     model.

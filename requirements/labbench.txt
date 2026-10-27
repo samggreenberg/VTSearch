@@ -1,7 +1,7 @@
 # VTSearch: LabBench core dependencies (every LabBench media type)
 #
-# Pared-down requirements for the LabBench deployment: browsing/voting on a
-# dataset of one media type with that type's default embedder. This file is
+# Pared-down requirements for the LabBench deployment: browsing/voting on
+# datasets with each media type's default embedder. This file is
 # the part every LabBench image shares; it is not installable on its own as a
 # working image. Each supported media type adds its own deps in
 # labbench-<type>.txt, which pulls this file in with `-r labbench.txt`:
@@ -10,8 +10,9 @@
 #   labbench-audio.txt   audio search with CLAP General
 #
 # docker/Dockerfile.labbench installs this file first, as a layer every
-# MEDIA_TYPE build shares, then requirements/labbench-$MEDIA_TYPE.txt. Video,
-# document, text and face deps are skipped to keep the images small.
+# MEDIA_TYPE build shares, then requirements/labbench-$MEDIA_TYPE.txt, or every
+# labbench-<type>.txt when MEDIA_TYPE is unset. Video, document, text and face
+# deps are skipped to keep the images small.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask

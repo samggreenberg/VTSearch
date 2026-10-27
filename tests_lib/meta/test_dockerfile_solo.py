@@ -115,6 +115,18 @@ def test_bakes_through_the_server_preload(preload, env, calls):
     assert calls["calls"] == [["audio"]]
 
 
+def test_bakes_several_types_in_one_preload(preload, env, calls):
+    """An all-types LabBench image (docker/Dockerfile.labbench with no MEDIA_TYPE) bakes each type."""
+    assert preload.main(["image", "audio"]) == 0
+    assert calls["calls"] == [["image", "audio"]]
+
+
+@pytest.mark.parametrize("argv", [["image", "vidoe"], ["image", ""]], ids=["unknown", "blank"])
+def test_one_bad_type_among_several_fails_before_any_download(preload, env, calls, argv):
+    assert preload.main(argv) == 2
+    assert calls["calls"] == []
+
+
 def test_a_preload_that_loads_nothing_fails_the_build(preload, env, calls, capsys):
     """The case the script exists for: the server preload swallowed the error."""
     calls["result"] = []
