@@ -9,6 +9,9 @@ points are the ones closer to FHIBE's annotated points four times in five. Using
 config-only change: the same `oss` provider, the same packaged SCRFD decode config, and the same compat tag
 (`oss-arcface-r50:1`).
 
+**Owner's decision (2026-10-27): buffalo_m.** The owner takes the CPU saving and accepts the static AP
+loss, without a session review. #5328 rebuilds the real FHIBE cells on buffalo_m.
+
 | | buffalo_l | **buffalo_m** | change |
 |---|---:|---:|---:|
 | detect + embed per face, whole `image2face` path, 1024 px | 250 ms | **190 ms** | −23% |
