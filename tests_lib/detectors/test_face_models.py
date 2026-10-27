@@ -145,6 +145,12 @@ class TestThePipeline:
             def initialize(self, opts, config):
                 built.append(config)
 
+            def process(self, image, *, confidence_threshold=None, media_id=""):
+                return []
+
+            def process_buffer(self, buffer, *, confidence_threshold=None, media_id=""):
+                return []
+
             def compatibility(self):
                 return "fake:7"
 

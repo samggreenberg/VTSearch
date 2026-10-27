@@ -130,8 +130,10 @@ def _missing_paths(config: dict[str, Any], provider: str) -> list[str]:
     """The model files *config* names that are not on disk, each as ``"<what> <path>"``."""
     from imagekit.face.pipeline import BUILTIN_PROVIDERS, DETECTOR_KEY, EMBEDDER_KEY  # noqa: PLC0415
 
-    detector = config.get(DETECTOR_KEY) if isinstance(config.get(DETECTOR_KEY), dict) else {}
-    embedder = config.get(EMBEDDER_KEY) if isinstance(config.get(EMBEDDER_KEY), dict) else {}
+    detector = config.get(DETECTOR_KEY)
+    embedder = config.get(EMBEDDER_KEY)
+    detector = detector if isinstance(detector, dict) else {}
+    embedder = embedder if isinstance(embedder, dict) else {}
     wanted = {
         "detector model": detector.get("model_bundle") or detector.get("model"),
         "detector config": detector.get("config"),
