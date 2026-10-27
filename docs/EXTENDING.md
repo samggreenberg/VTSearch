@@ -270,7 +270,8 @@ To let `docker/Dockerfile.labbench` build another media type, add a
 dependencies) and an entry for the type in `HIDDEN_BY_TYPE` in
 `scripts/seed_labbench_settings.py`, naming any plugin the slim file leaves
 without its dependencies. `tests_lib/meta/test_dockerfile_labbench.py` checks
-that the two agree.
+that the two agree. The all-types build (no `MEDIA_TYPE`) picks the new type up
+from its requirements file, with no edit to the Dockerfile.
 
 ### For a new media type, importer, or exporter
 

@@ -3,7 +3,8 @@
 # requirements/labbench.txt (the core every LabBench image shares) plus what
 # the image media type and its default embedder, SigLIP, need.
 #
-# Used by docker/Dockerfile.labbench with MEDIA_TYPE=image (the default).
+# Used by docker/Dockerfile.labbench with MEDIA_TYPE=image, and by its
+# all-types build (MEDIA_TYPE unset).
 
 -r labbench.txt
 

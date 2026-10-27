@@ -110,6 +110,15 @@ class TestWhatMakesItOff:
         monkeypatch.setenv("IMAGEKIT_FACE_PROVIDER", "oss")
         assert bridge.face_models() == bridge.FaceModels(True, "", models_folder, "oss")
 
+    def test_a_server_that_cannot_import_imagekit_is_off_not_broken(self, models_folder, monkeypatch):
+        """The slim LabBench images install no ``cv2``, which ``imagekit`` imports at the top; server
+        startup asks this, so raising there stopped every LabBench container booting (#5339)."""
+        _models(models_folder.parent)
+        monkeypatch.setitem(sys.modules, "imagekit.face.providers.ext", None)
+        status = bridge.face_models()
+        assert status.available is False and status.config_path is None
+        assert "not installed here" in status.reason
+
 
 class TestTheAnswerIsLive:
     def test_models_put_in_place_later_need_no_restart(self, models_folder, monkeypatch):

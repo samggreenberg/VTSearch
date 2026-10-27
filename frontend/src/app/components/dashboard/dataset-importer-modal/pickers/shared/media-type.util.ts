@@ -33,12 +33,23 @@ export function getTabLabel(mediaTypes: MediaTypeInfo[], mediaType: string): str
 
 /** The single-dataset media-type dropdown's options: *options* (an importer's
  *  ``media_type`` field, which lists every registered type) less the
- *  convert-in types (face).  A face has no file of its own, so a Face dataset
- *  is made only in Multi-Dataset mode, beside the images it is cut from: on
- *  its own it would read nothing, and no face could open its photo. */
+ *  convert-in types (face) and any type *mediaTypes* leaves out.  A face has
+ *  no file of its own, so a Face dataset is made only in Multi-Dataset mode,
+ *  beside the images it is cut from: on its own it would read nothing, and no
+ *  face could open its photo.
+ *
+ *  *mediaTypes* is the ``/api/media-types`` listing, which drops the types the
+ *  server hides (an admin's ``hidden_plugins``, such as the types an all-types
+ *  LabBench image does not install, and Face on a server without face models);
+ *  the importer's own option list does not, so the dropdown follows the
+ *  listing.  An empty listing (not loaded yet) filters nothing. */
 export function singleDatasetMediaTypes(mediaTypes: MediaTypeInfo[], options: string[]): string[] {
-  const derived = new Set(mediaTypes.filter((m) => m.importable === false).map((m) => m.folder_import_name || m.type_id));
-  return derived.size ? options.filter((o) => !derived.has(o)) : options;
+  if (mediaTypes.length === 0) return options;
+  const offered = new Set(
+    mediaTypes.filter((m) => m.importable !== false).flatMap((m) => [m.folder_import_name || m.type_id, m.type_id]),
+  );
+  const kept = options.filter((o) => offered.has(o));
+  return kept.length === options.length ? options : kept;
 }
 
 /** Map of ``type_id`` → human label. */

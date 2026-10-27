@@ -59,6 +59,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The LabBench image carries every LabBench media type unless told otherwise** (issue #5339). `docker build -f
+  docker/Dockerfile.labbench .` with no `MEDIA_TYPE` used to build the image-only (SigLIP) image. It now builds one
+  image for image and audio together: both types' slim dependencies installed, and both default embedders' weights
+  (SigLIP, CLAP General) baked in. That image is not locked to a media type, so Add Dataset and New Detector offer
+  image and audio, and the types it does not install (video, text, document) are hidden. Each type's embedder
+  stays locked to its baked one. `--build-arg MEDIA_TYPE=image` or `=audio` still builds the one-type, locked
+  image, and both LabBench compose files pass it, so they build what they did before. Give the all-types image its
+  own data volume, as each LabBench variant needs. See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
+
 - **A resumed `--resume` run over a folder no longer re-reads the files it already did** (issue #5314). To reach
   where it stopped, a resumed `server_folder` run now checks each chunk it already wrote by its files' paths, sizes
   and modification times, without opening them, where it used to hash and thumbnail every one again, which on a
@@ -94,6 +103,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   normalized clip keeps its Original, like any other cleanup.
 
 ### Fixed
+
+- **Add Dataset's media-type choice leaves out the types the server hides** (issue #5339). The folder and form
+  importers offered every registered media type for a single dataset, whatever the server hid: a media type an
+  admin hides (`hidden_plugins`, `--hide-plugin`), or Face on a server without face models, which got a bare
+  "face" entry. They now offer only the media types the server lists.
 
 - **A clipper picked for a server folder import keeps the options you set** (issue #5300). In Add Dataset ›
   Files › Folder, picking a clipper under Advanced (the **Details** button) and setting its options sent only the

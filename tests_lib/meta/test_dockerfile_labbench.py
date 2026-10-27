@@ -1,7 +1,8 @@
-"""``docker/Dockerfile.labbench`` built per media type (issue #4958).
+"""``docker/Dockerfile.labbench`` built per media type (issue #4958), or for all of them (#5339).
 
-The LabBench image installs only one media type's dependencies, so the media
-types it can be built for are spelled in three places that must agree: one
+The LabBench image installs only its media types' dependencies (one type's,
+or with no ``MEDIA_TYPE`` every supported type's), so the media types it can
+be built for are spelled in three places that must agree: one
 ``requirements/labbench-<type>.txt`` each (what the Dockerfile installs),
 :data:`HIDDEN_BY_TYPE` in ``scripts/seed_labbench_settings.py`` (what the
 seeded settings hide for that type), and the compose files' ``MEDIA_TYPE``
@@ -31,6 +32,8 @@ from vtscore.plugins.inventory import gather_plugins
 _ROOT = Path(__file__).resolve().parents[2]
 _DOCKERFILE = _ROOT / "docker" / "Dockerfile.labbench"
 _SCRIPT = _ROOT / "scripts" / "seed_labbench_settings.py"
+#: Where the Dockerfile writes the media types it resolved, for the later steps.
+_TYPES = re.escape("$(cat /opt/vtsearch/labbench-media-types)")
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +57,16 @@ def _dockerfile_text() -> str:
 
 def _requirement_types() -> set[str]:
     return {p.stem.removeprefix("labbench-") for p in (_ROOT / "requirements").glob("labbench-*.txt")}
+
+
+def _builds() -> list[tuple[str, ...]]:
+    """Every image the Dockerfile can build: each type alone, and all of them (no ``MEDIA_TYPE``)."""
+    types = sorted(_requirement_types())
+    return [(t,) for t in types] + [tuple(types)]
+
+
+def _build_id(build: tuple[str, ...]) -> str:
+    return "+".join(build)
 
 
 def _compose_files_building_labbench() -> list[Path]:
@@ -109,19 +122,29 @@ def test_compose_media_type_is_supported(compose: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_default_media_type_is_image() -> None:
-    """``docker build -f docker/Dockerfile.labbench .`` still builds the SigLIP image."""
+def test_default_media_type_is_unset() -> None:
+    """``docker build -f docker/Dockerfile.labbench .`` builds every LabBench type (#5339)."""
     match = re.search(r"^ARG MEDIA_TYPE=(\S*)\s*$", _dockerfile_text(), re.MULTILINE)
-    assert match and match.group(1) == "image"
+    assert match and match.group(1) == ""
 
 
-def test_dockerfile_installs_bakes_seeds_and_locks_the_same_media_type() -> None:
-    """One ``MEDIA_TYPE`` feeds all four, so the image is one type end to end."""
+def test_unset_media_type_stands_for_every_requirements_file() -> None:
     text = _dockerfile_text()
-    assert re.search(r'-r "requirements/labbench-\$\{MEDIA_TYPE\}\.txt"', text)
-    assert re.search(r'^RUN .*python -u scripts/preload_default_embedder\.py "\$MEDIA_TYPE"', text, re.MULTILINE)
-    assert re.search(r'^RUN python scripts/seed_labbench_settings\.py "\$MEDIA_TYPE" /app/data', text, re.MULTILINE)
-    assert re.search(r"^ENV .*VTSEARCH_SOLO_MEDIA_TYPE=\$\{MEDIA_TYPE\}", text, re.MULTILINE)
+    assert re.search(r"supported=\$\(ls requirements/labbench-\*\.txt ", text)
+    assert re.search(r"echo \$\{MEDIA_TYPE:-\$supported\} > /opt/vtsearch/labbench-media-types", text)
+
+
+def test_dockerfile_installs_bakes_and_seeds_the_same_media_types() -> None:
+    """All three read the list the Dockerfile resolved once, so the image is the same types end to end."""
+    text = _dockerfile_text()
+    assert re.search(rf'for t in {_TYPES}; do echo "-r requirements/labbench-\$t\.txt"; done', text)
+    assert re.search(rf"^RUN .*python -u scripts/preload_default_embedder\.py {_TYPES}", text, re.MULTILINE)
+    assert re.search(rf"^RUN python scripts/seed_labbench_settings\.py {_TYPES} /app/data", text, re.MULTILINE)
+
+
+def test_only_a_one_type_image_is_locked() -> None:
+    """The lock is ``MEDIA_TYPE`` itself, so it is empty (no lock) in an all-types image."""
+    assert re.search(r"^ENV .*VTSEARCH_SOLO_MEDIA_TYPE=\$\{MEDIA_TYPE\}", _dockerfile_text(), re.MULTILINE)
 
 
 def test_core_requirements_install_before_media_type_is_declared() -> None:
@@ -142,26 +165,47 @@ def test_dockerfile_age_off_matches_the_seed(seed) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("media_type", sorted(_requirement_types()))
-def test_hidden_plugins_are_registered(seed, media_type: str) -> None:
+@pytest.mark.parametrize("build", _builds(), ids=_build_id)
+def test_hidden_plugins_are_registered(seed, build: tuple[str, ...]) -> None:
     """A misspelled name hides nothing, silently."""
     inventory = {family: {entry.name for entry in entries} for family, entries in gather_plugins().items()}
-    for family, names in seed.server_settings(media_type)["hidden_plugins"].items():
+    for family, names in seed.server_settings(*build)["hidden_plugins"].items():
         assert family in inventory, f"unknown plugin family {family!r}"
         missing = set(names) - inventory[family]
-        assert not missing, f"{media_type}: no {family} plugin named {sorted(missing)}"
+        assert not missing, f"{_build_id(build)}: no {family} plugin named {sorted(missing)}"
+
+
+@pytest.mark.parametrize("build", _builds(), ids=_build_id)
+def test_every_image_hides_the_demo_importer(seed, build: tuple[str, ...]) -> None:
+    assert "demo" in seed.server_settings(*build)["hidden_plugins"]["importers"]
+
+
+def test_an_all_types_image_hides_the_media_types_it_does_not_install(seed) -> None:
+    """It has no media-type lock, so without the hide its pickers would offer types it cannot import."""
+    supported = _requirement_types()
+    hidden = seed.server_settings(*sorted(supported))["hidden_plugins"]["media_types"]
+    assert set(hidden) == set(all_type_ids()) - supported
 
 
 @pytest.mark.parametrize("media_type", sorted(_requirement_types()))
-def test_every_image_hides_the_demo_importer(seed, media_type: str) -> None:
-    assert "demo" in seed.server_settings(media_type)["hidden_plugins"]["importers"]
+def test_a_one_type_image_leaves_media_types_to_its_lock(seed, media_type: str) -> None:
+    """``VTSEARCH_SOLO_MEDIA_TYPE`` already does it, and a hidden ``video`` would cost audio's video2audio detection."""
+    assert "media_types" not in seed.server_settings(media_type)["hidden_plugins"]
+
+
+def test_an_all_types_image_hides_what_any_of_its_types_hides(seed) -> None:
+    build = sorted(_requirement_types())
+    hidden = seed.server_settings(*build)["hidden_plugins"]
+    for media_type in build:
+        for family, names in seed.HIDDEN_BY_TYPE[media_type].items():
+            assert set(names) <= set(hidden[family]), f"{media_type}'s {family} hide is lost in the all-types image"
 
 
 @pytest.mark.parametrize("media_type", sorted(_requirement_types()))
 def test_seeded_embedder_lock_is_the_baked_embedder(seed, env, media_type: str) -> None:
     """The lock names what ``preload_default_embedder.py`` bakes, and an embedder of that type."""
     baked = vtscore.embedding.predict_embedders_to_preload(extra_media_types=[media_type])
-    lock = seed.baked_embedder(media_type)
+    lock = seed.baked_embedders(media_type)[media_type]
     assert lock == baked[0]
     assert lock in {e.name for e in embedders_for_type(media_type)}
 
@@ -174,17 +218,31 @@ def test_main_writes_both_files(seed, env, tmp_path) -> None:
     user = json.loads((data / "user_settings.json").read_text())
     assert not (data / "default").exists()
     assert server == seed.server_settings("audio")
-    assert user == {"solo_embedder_per_media_type": {"audio": seed.baked_embedder("audio")}}
+    assert user == {"solo_embedder_per_media_type": seed.baked_embedders("audio")}
 
 
-def test_main_rejects_a_missing_argument(seed, env, capsys) -> None:
+def test_main_seeds_every_type_it_is_given(seed, env, tmp_path) -> None:
+    """The all-types image: each type locked to its own baked embedder."""
+    data = tmp_path / "data"
+    build = sorted(_requirement_types())
+    assert seed.main([*build, str(data)]) == 0
+    server = json.loads((data / "settings.json").read_text())
+    user = json.loads((data / "user_settings.json").read_text())
+    assert server == seed.server_settings(*build)
+    assert user == {"solo_embedder_per_media_type": seed.baked_embedders(*build)}
+    assert set(user["solo_embedder_per_media_type"]) == set(build)
+
+
+def test_main_rejects_a_missing_argument(seed, env, tmp_path, capsys) -> None:
     assert seed.main([]) == 2
     assert seed.main(["audio"]) == 2
+    assert seed.main(["", str(tmp_path / "data")]) == 2
     assert "MEDIA_TYPE" in capsys.readouterr().err
 
 
-def test_main_rejects_an_unsupported_type_and_lists_the_supported(seed, env, tmp_path, capsys) -> None:
-    assert seed.main(["video", str(tmp_path / "data")]) == 2
+@pytest.mark.parametrize("types", [["video"], ["audio", "video"]], ids=["alone", "among-supported"])
+def test_main_rejects_an_unsupported_type_and_lists_the_supported(seed, env, tmp_path, capsys, types) -> None:
+    assert seed.main([*types, str(tmp_path / "data")]) == 2
     err = capsys.readouterr().err
     assert "'video'" in err
     assert "audio" in err and "image" in err

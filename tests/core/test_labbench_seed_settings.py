@@ -31,22 +31,26 @@ def _load_seed():
 
 _SEED = _load_seed()
 
+#: Each one-type image, and the all-types image a build with no MEDIA_TYPE makes.
+_BUILDS = [(t,) for t in sorted(_SEED.HIDDEN_BY_TYPE)] + [tuple(sorted(_SEED.HIDDEN_BY_TYPE))]
 
-@pytest.mark.parametrize("media_type", sorted(_SEED.HIDDEN_BY_TYPE))
-def test_server_seed_is_server_settings(media_type: str) -> None:
-    seeded = _SEED.server_settings(media_type)
+
+@pytest.mark.parametrize("build", _BUILDS, ids="+".join)
+def test_server_seed_is_server_settings(build: tuple[str, ...]) -> None:
+    seeded = _SEED.server_settings(*build)
     assert set(seeded) <= set(ServerSettings.model_fields)
     parsed = ServerSettings.model_validate(seeded)
     assert parsed.hidden_plugins == seeded["hidden_plugins"]
     assert parsed.dataset_max_age_days == seeded["dataset_max_age_days"]
 
 
-@pytest.mark.parametrize("media_type", sorted(_SEED.HIDDEN_BY_TYPE))
-def test_user_seed_is_user_settings(media_type: str) -> None:
-    seeded = _SEED.user_settings(media_type, "some_embedder")
+@pytest.mark.parametrize("build", _BUILDS, ids="+".join)
+def test_user_seed_is_user_settings(build: tuple[str, ...]) -> None:
+    embedders = {media_type: f"{media_type}_embedder" for media_type in build}
+    seeded = _SEED.user_settings(embedders)
     assert set(seeded) <= set(UserSettings.model_fields)
     parsed = UserSettings.model_validate(seeded)
-    assert parsed.solo_embedder_per_media_type == {media_type: "some_embedder"}
+    assert parsed.solo_embedder_per_media_type == embedders
 
 
 def test_user_seed_has_the_app_s_filename() -> None:
