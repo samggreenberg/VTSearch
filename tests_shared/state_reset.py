@@ -357,5 +357,6 @@ def no_face_models(tmp_path, monkeypatch):
 
     monkeypatch.delenv(imagekit_bridge.CONFIG_ENV_VAR, raising=False)
     monkeypatch.delenv("IMAGEKIT_FACE_PROVIDER", raising=False)
+    monkeypatch.delenv("IMAGEKIT_EXT_BACKEND", raising=False)
     absent = tmp_path / "no-face-models" / imagekit_bridge.DEFAULT_CONFIG_RELPATH
     monkeypatch.setattr(imagekit_bridge, "default_config_path", lambda: absent)

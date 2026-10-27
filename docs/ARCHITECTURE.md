@@ -197,7 +197,7 @@ VTSearch/
 │   │   │                   compat guard, alignment, CSV/NPZ helpers
 │   │   ├── detection/      FaceDetector (SCRFD / RetinaFace on ONNX Runtime) + its JSON configs
 │   │   ├── extraction/     FaceEmbeddingExtractor (MagFace / ArcFace ONNX) + reference configs
-│   │   └── providers/      oss (this package's models) and vista (proprietary, lazy import)
+│   │   └── providers/      oss (this package's models) and ext (an external backend, lazy import)
 │   └── cli.py              detect_faces / process_faces (entry points under scripts/)
 │
 ├── frontend/               Angular SPA source (see docs/FRONTEND.md)

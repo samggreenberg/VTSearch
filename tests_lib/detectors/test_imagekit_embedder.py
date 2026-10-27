@@ -144,7 +144,7 @@ class TestEmbed:
         emb = ImagekitFaceEmbedder()
         assert emb.embed_media(_crop({"Face Compat": "fake:1"})) is not None
         with pytest.raises(CompatibilityError, match="fake:1"):
-            emb.embed_media(_crop({"Face Compat": "vistaface:3"}))
+            emb.embed_media(_crop({"Face Compat": "extface:3"}))
 
     def test_bulk_matches_single(self, fake):
         emb = ImagekitFaceEmbedder()
@@ -155,7 +155,7 @@ class TestEmbed:
     def test_the_embed_stage_reports_a_mixed_space(self, fake, monkeypatch):
         from vtscore.datasets.stages.embedding import embed_missing
 
-        medias = {1: _crop({"Face Compat": "vistaface:3"})}
+        medias = {1: _crop({"Face Compat": "extface:3"})}
         failures: dict = {}
         # The conftest stubs ``load_models`` on every registered singleton, so
         # hand it the fake pipeline directly, as the other embedder tests do.

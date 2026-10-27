@@ -48,7 +48,6 @@ from imagekit.face.records import (
     FaceRecord,
     embedding_quality,
     oss_compat,
-    vista_compat,
 )
 
 __all__ = [
@@ -91,5 +90,4 @@ __all__ = [
     "single_compat",
     "stamp_compat",
     "unregister_provider",
-    "vista_compat",
 ]

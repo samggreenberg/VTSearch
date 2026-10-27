@@ -1,9 +1,9 @@
 """The provider seam: the ``FacePipeline`` protocol and the registry that hands one out.
 
 An application asks :func:`get_pipeline` for a pipeline by provider name -
-``"oss"`` (this package's detector + embedder), ``"vista"`` (the proprietary
-``vistaimage`` package behind the same interface), or any name a third party
-registered - and from then on sees only :class:`FacePipeline` and
+``"oss"`` (this package's detector + embedder), ``"ext"`` (an external backend
+module behind the same interface), or any name a third party registered - and
+from then on sees only :class:`FacePipeline` and
 :class:`~imagekit.face.records.FaceRecord`.  Swapping the backend is one
 environment variable (:data:`PROVIDER_ENV_VAR`) on the server that has it.
 
@@ -43,7 +43,7 @@ DEFAULT_PROVIDER = "oss"
 ENTRY_POINT_GROUP = "imagekit.face_providers"
 
 #: Provider names this package itself supplies.
-BUILTIN_PROVIDERS: tuple[str, ...] = ("oss", "vista")
+BUILTIN_PROVIDERS: tuple[str, ...] = ("oss", "ext")
 
 
 @runtime_checkable
@@ -115,11 +115,11 @@ def _ensure_builtins() -> None:
     if _builtins_registered:
         return
     _builtins_registered = True
+    from imagekit.face.providers.ext import ExtFacePipeline  # noqa: PLC0415
     from imagekit.face.providers.oss import OssFacePipeline  # noqa: PLC0415
-    from imagekit.face.providers.vista import VistaFacePipeline  # noqa: PLC0415
 
     _registry.setdefault("oss", OssFacePipeline)
-    _registry.setdefault("vista", VistaFacePipeline)
+    _registry.setdefault("ext", ExtFacePipeline)
 
 
 def _load_entry_points() -> None:

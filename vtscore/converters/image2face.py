@@ -4,7 +4,7 @@ This is the *convert-in* path for the :class:`~vtscore.media.face.media_type.Fac
 half type: images are the only source of faces (faces have no native import),
 so every face in the app is produced here.  The photo goes to the face provider
 this server is configured with (:mod:`vtscore.media.face.imagekit_bridge`: the
-open SCRFD + ArcFace/MagFace ONNX weights, or a proprietary backend behind the
+open SCRFD + ArcFace/MagFace ONNX weights, or an external backend behind the
 same interface), which detects **and embeds** every face in one pass from the
 full photo.  Each face above the confidence ``threshold`` is cropped (with
 optional ``padding``) into its own ``face``-type media, and leaves with its

@@ -33,7 +33,7 @@ what is on `dev` but not yet on `main`; each release dates that section
 - **Faces come from a pluggable face backend, and Face is on only where its models are** (issues #5318, #5320).
   The new `imagekit` package (see [`imagekit/README.md`](imagekit/README.md)) detects, aligns and embeds faces
   through one `FacePipeline` interface with swappable providers: `oss` runs open SCRFD and ArcFace/MagFace ONNX
-  weights on ONNX Runtime, and `vista` wraps a proprietary backend behind the same interface. The `image2face`
+  weights on ONNX Runtime, and `ext` wraps an external backend module behind the same interface. The `image2face`
   converter hands each photo to the server's provider, which detects and embeds every face in one pass; each crop
   arrives with its vector already filed under the `face` embedder, plus its quality and embedding-space tag in its
   metadata, and the embedder refuses to mix two providers' spaces in one dataset. **The app downloads no face
