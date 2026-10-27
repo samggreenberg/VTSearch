@@ -14,8 +14,10 @@
 #   text      E5
 #   document  SigLIP: a half type, meaning document input converted to page
 #             images (document2image), so it bakes what the pages embed with
-#   face      FaceNet: a half type, meaning image input with the faces cropped
-#             out (image2face), embedded in FaceNet identity space
+#   face      nothing: a half type, meaning image input with the faces cropped
+#             out (image2face). The app downloads no face models (#5320); mount
+#             the deployment's own (docs/DEPLOYMENT.md, "Face models"), or Face
+#             stays off
 #
 # The lock does not yet force a half type's pipeline in every flow (#4891).
 #
@@ -87,14 +89,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # Mirrors scripts/install.sh's `vts_install_toponymy`; see docker/Dockerfile
 # for why it is a dedicated `--no-deps` step (issue #3852).
 RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
-
-# ---------- FaceNet (the face half type) ----------
-# facenet-pytorch is both halves of a face container: the image2face
-# converter's MTCNN detector and the face embedder. Mirrors scripts/install.sh's
-# `vts_install_face_deps`: its torch<2.3 / numpy<2 / Pillow<10.3 pins would
-# downgrade the stack, and are empirically unnecessary, so it goes in
-# `--no-deps` on the torch / torchvision / numpy / Pillow already installed.
-RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 # ---------- bake the media type's default embedder ----------
 # Weights go to a non-volume path so a volume mounted on /app/data cannot mask

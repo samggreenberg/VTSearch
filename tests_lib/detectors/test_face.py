@@ -141,9 +141,10 @@ class TestFaceEmbedder:
         assert d["license_notice"]
 
     def test_embed_text_returns_none(self):
-        from vtscore.media import get_embedder
+        # A fresh instance: the conftest stubs the registered singletons' embed calls.
+        from vtscore.media.face.embedder_imagekit import ImagekitFaceEmbedder
 
-        assert get_embedder("face").embed_text("a face") is None
+        assert ImagekitFaceEmbedder().embed_text("a face") is None
 
 
 # ---------------------------------------------------------------------------

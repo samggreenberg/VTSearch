@@ -15,8 +15,10 @@ names a model, so a change of default (or of how an embedder loads) cannot
 leave the image baking the wrong files.
 
 That includes the half media types, which name a pipeline: ``document``
-bakes the image default its pages embed with, and ``face`` the face embedder
-its crops embed with.
+bakes the image default its pages embed with.  ``face`` is the exception: the
+app downloads no face models (#5320), a deployment mounts its own, so a face
+image built without them has nothing to bake, and Face turns on once they are
+mounted (``docs/DEPLOYMENT.md``).
 
 ``preload_predicted_embedders`` logs a load failure and carries on, which is
 right for a server and wrong for a build, so the result is checked here and a
@@ -70,6 +72,18 @@ def main(argv: list[str]) -> int:
         if not wanted:
             print(f"[preload] no embedder is registered for {media_type!r}; nothing to bake.", flush=True)
             return 0
+
+        from vtscore.media.face import imagekit_bridge
+
+        if imagekit_bridge.EMBEDDER_NAME in wanted and not imagekit_bridge.face_models().available:
+            wanted = [name for name in wanted if name != imagekit_bridge.EMBEDDER_NAME]
+            print(
+                "[preload] no face models to bake: the app downloads none, and Face turns on when "
+                "a deployment mounts its own (docs/DEPLOYMENT.md).",
+                flush=True,
+            )
+            if not wanted:
+                return 0
 
         cache = os.environ["VTSEARCH_MODELS_DIR"]
         print(f"[preload] media_type={media_type} embedders={wanted} cache={cache}", flush=True)

@@ -114,19 +114,6 @@ RUN if [ ! -f "requirements/labbench-${MEDIA_TYPE}.txt" ]; then \
         --prefer-binary \
         -r "requirements/labbench-${MEDIA_TYPE}.txt"
 
-# ---------- FaceNet (image2face, the face embedder) ----------
-# Docker builds never run scripts/install.sh, so this step mirrors its
-# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
-# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
-# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
-# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
-# wheel; FaceNet's checkpoint downloads into the models cache on first use.
-# Only an image build reaches the face path (it needs torchvision, which
-# labbench-image.txt adds); in an audio build the package is inert. It comes
-# after the type's install because pip reports a --no-deps package's unmet
-# pins as a dependency-conflict ERROR on every later install.
-RUN pip install --no-cache-dir --no-deps facenet-pytorch
-
 # ---------- the app itself ----------
 # `--no-deps`: the requirements files above are this image's whole
 # dependency set, so pyproject.toml's (the full app's) must not reach it.

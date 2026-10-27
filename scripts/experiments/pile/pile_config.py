@@ -150,52 +150,24 @@ DATASETS: dict[str, dict] = {
     # FHIBE (#4699): Sony's consented face benchmark. One media per one-person
     # photo, `category` = FHIBE's subject id, read from a copy whose long side is
     # `long_side` px -- the census (docs/experiments/2026-10-09-fhibe-supply-4699)
-    # found MTCNN's recall is a pixel cliff at 24 px, so the stored size IS the
+    # found face recall is a pixel cliff at 24 px, so the stored size IS the
     # localization difficulty, and the owner chose to build both sizes. The
-    # `fhibe_faces_*` datasets are the `image2face` crops of the same copy,
-    # embedded with FaceNet; they are separate datasets because a photo yields
-    # zero, one or several crops, and `--verify` requires one media count per
-    # dataset. All four are `on_request`: FHIBE is downloaded per user under
-    # Sony's terms and is not in every checkout's pile.
+    # `fhibe_faces_*` datasets are the `image2face` crops of the same copy; they
+    # are separate datasets because a photo yields zero, one or several crops,
+    # and `--verify` requires one media count per dataset. All are `on_request`:
+    # FHIBE is downloaded per user under Sony's terms and is not in every
+    # checkout's pile.
     "fhibe_1024": {"boxed": True, "kind": "fhibe", "long_side": 1024, "on_request": True},
     "fhibe_640": {"boxed": True, "kind": "fhibe", "long_side": 640, "on_request": True},
-    "fhibe_faces_1024": {"boxed": False, "kind": "fhibe", "long_side": 1024, "media_type": "face", "on_request": True},
-    "fhibe_faces_640": {"boxed": False, "kind": "fhibe", "long_side": 640, "media_type": "face", "on_request": True},
-    # The same crops turned upright by their landmarks (#4777): `align` is image2face's own.
-    # Same detections, ids and labels as `fhibe_faces_*`, so they pair cell for cell. Since #4777
-    # the app's default is `roll`, so `fhibe_faces_roll_*` is the face path as it ships and the
-    # plain `fhibe_faces_*` (no `align`: "none") is the app before it, kept so #4762 reproduces.
-    **{
-        f"fhibe_faces_{tag}_{size}": {
-            "boxed": False,
-            "kind": "fhibe",
-            "long_side": size,
-            "media_type": "face",
-            "align": align,
-            "on_request": True,
-        }
-        for tag, align in (("roll", "roll"), ("sim", "similarity"))
-        for size in (1024, 640)
-    },
-    # `roll` plus image2face's `sideways` search (#4788): the same faces and boxes, each face's
-    # landmarks from the quarter turn MTCNN is most confident of. Pairs with `fhibe_faces_roll_*`.
-    **{
-        f"fhibe_faces_side_{size}": {
-            "boxed": False,
-            "kind": "fhibe",
-            "long_side": size,
-            "media_type": "face",
-            "align": "roll",
-            "sideways": True,
-            "on_request": True,
-        }
-        for size in (1024, 640)
-    },
-    # The face path through the `imagekit` provider (#5321): image2face's `provider`, the
-    # provider's detector, boxes, landmarks and vectors (each embedded from the full photo,
-    # so `align` turns only the stored crop). Built with `IMAGEKIT_FACE_PROVIDER` /
-    # `IMAGEKIT_FACE_CONFIG` set; its cell is `imagekit_face`'s, and FaceNet never embeds it.
-    # Only the subject crops pair with the MTCNN arms: the extra faces are the provider's own.
+    # The face path as the app ships it (#5321): the face provider's detector, boxes,
+    # landmarks and vectors (each embedded from the full photo, so `align` turns only the
+    # stored crop). Built with `IMAGEKIT_FACE_PROVIDER` / `IMAGEKIT_FACE_CONFIG` set.
+    #
+    # The MTCNN + FaceNet arms -- `fhibe_faces_{1024,640}`, `_roll_`, `_sim_` and `_side_` --
+    # were retired with that path in #5320. Like Visual Genome in #4038 they are unrebuildable
+    # but readable by path: their cells stay on disk and their rosters in calibration's
+    # `experiment_config` keep the studies on them running. Their vectors are FaceNet's, filed
+    # under `face`, the name the provider's embedder now carries.
     **{
         f"fhibe_faces_ik_{size}": {
             "boxed": False,
@@ -203,7 +175,6 @@ DATASETS: dict[str, dict] = {
             "long_side": size,
             "media_type": "face",
             "align": "roll",
-            "provider": "imagekit",
             "on_request": True,
         }
         for size in (1024, 640)
@@ -3513,13 +3484,11 @@ EMBEDDERS: dict[str, dict] = {
     # EmbeddingGemma 2 (#4837): ~2,520 vision patches an image, so a batch of 32
     # peaks at 33 GB on a V100 in fp32 for no more throughput than 8 gets.
     "embeddinggemma2": {"patch": False, "batch": 8},
-    # FaceNet over `image2face` crops (#4699). The only embedder of `face` media,
-    # so it pairs only with datasets whose `media_type` is "face" -- see `cells`.
+    # The face provider's vectors over `image2face` crops (#5321; FaceNet's before #5320).
+    # The only embedder of `face` media, so it pairs only with datasets whose `media_type`
+    # is "face" -- see `cells`. The loader files the vectors as image2face hands them over,
+    # so this embedder embeds nothing at build time.
     "face": {"patch": False, "batch": 128, "media_type": "face"},
-    # The `imagekit` face provider's vectors (#5321). The loader files them as image2face
-    # hands them over, so this embedder embeds nothing at build time; it pairs only with
-    # datasets built through that provider, and FaceNet only with the MTCNN ones.
-    "imagekit_face": {"patch": False, "batch": 128, "media_type": "face", "provider": "imagekit"},
 }
 
 
@@ -3532,14 +3501,10 @@ def embeds(embedder: str, dataset: str) -> bool:
     """Whether *embedder* can embed *dataset*'s media at all.
 
     Every embedder used to embed every dataset, because every dataset was images.
-    FaceNet embeds only face crops and SigLIP no face crops, so a pair whose
-    media types differ is not a missing cell but no cell.
+    The face embedder embeds only face crops and SigLIP no face crops, so a pair
+    whose media types differ is not a missing cell but no cell.
     """
-    spec = EMBEDDERS.get(embedder, {})
-    if spec.get("media_type", "image") != media_type_of(dataset):
-        return False
-    # A face cell's vectors come from the provider that found its faces (#5321).
-    return spec.get("provider") == DATASETS[dataset].get("provider")
+    return EMBEDDERS.get(embedder, {}).get("media_type", "image") == media_type_of(dataset)
 
 
 def embed_batch_size(embedder: str) -> int | None:

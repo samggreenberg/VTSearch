@@ -260,7 +260,6 @@ quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the so
 # ---------------------------------------------------------------------------
 repo_type  # noqa: F821 - huggingface_hub.snapshot_download(repo_id, repo_type=..., ...)
 ignore_patterns  # noqa: F821 - same call's file filter
-pretrained  # noqa: F821 - facenet-pytorch InceptionResnetV1(pretrained=...)
 
 # ---------------------------------------------------------------------------
 # Test-local names that exist only to document the shape of an unpacked

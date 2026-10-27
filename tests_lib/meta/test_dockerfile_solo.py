@@ -90,10 +90,24 @@ def test_a_type_the_server_warms_nothing_for_has_nothing_to_bake(preload, env, c
 
 
 def test_half_types_bake_what_they_embed_as(preload, env, calls):
-    """document's pages embed as images; face crops embed with the face model."""
+    """document's pages embed as images."""
     assert preload.main(["document"]) == 0
+    assert calls["calls"] == [["document"]]
+
+
+def test_a_face_image_without_face_models_has_nothing_to_bake(preload, env, calls, capsys):
+    """The app downloads no face models (#5320): the deployment mounts its own, so the build passes."""
     assert preload.main(["face"]) == 0
-    assert calls["calls"] == [["document"], ["face"]]
+    assert calls["calls"] == []
+    assert "no face models to bake" in capsys.readouterr().out
+
+
+def test_face_models_present_at_build_time_are_loaded(preload, env, calls, monkeypatch):
+    from vtscore.media.face import imagekit_bridge
+
+    monkeypatch.setattr(imagekit_bridge, "face_models", lambda: imagekit_bridge.FaceModels(True, "", None, "oss"))
+    assert preload.main(["face"]) == 0
+    assert calls["calls"] == [["face"]]
 
 
 def test_bakes_through_the_server_preload(preload, env, calls):
