@@ -98,6 +98,12 @@ LABEL_IMPORTER = PostgresLabelImporter()
 CLI and a web upload. `add_cli_arguments(parser)` is auto-derived from
 `fields`, so most importers work from the CLI with no extra code.
 
+`default_detector_name(field_values)` names a detector created from the
+importer: the first `file` field's filename without its extension, else
+`"<display_name> detector"`. Override it to turn an opaque selection into
+a readable name; the app prefills the New Detector › Trained form's name
+box with it as the form is filled.
+
 ---
 
 ## Labelset sources
