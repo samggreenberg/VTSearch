@@ -509,8 +509,8 @@ class TestApiEmbeddersResponseShape:
         # All image embedders must be present; five CLIP-family bimodal
         # models (siglip, siglip2, siglip2_l, siglip_l, clip), single/patch pairs for
         # DINOv2/DINOv3/EUPE, and the SIFT/VLAD structural embedder.  The
-        # FaceNet face-identity embedder is *not* here — it belongs to the
-        # separate ``face`` media type now.
+        # face-identity embedder is *not* here — it belongs to the separate
+        # ``face`` media type.
         assert set(entries) == {
             "siglip",
             "siglip2",

@@ -387,6 +387,23 @@ def _report_docs_links() -> None:
         )
 
 
+def _report_face_models() -> None:
+    """Say whether Face is on, and why not when it is off.
+
+    The app downloads no face models (#5320): Face is on exactly when this
+    server has some on disk (``vtscore.media.face.imagekit_bridge.face_models``),
+    and its pickers simply leave Face out otherwise, so the startup log is the
+    one place an operator learns which and why.
+    """
+    from vtscore.media.face import imagekit_bridge
+
+    status = imagekit_bridge.face_models()
+    if status.available:
+        print(f"\U0001f642 Face: on ({status.provider} provider, {status.config_path})", flush=True)
+    else:
+        print(f"\U0001f636 Face: off, {status.reason}", flush=True)
+
+
 def _format_override(value) -> str:
     """Render an override value for the startup banner."""
     if isinstance(value, dict):
@@ -426,6 +443,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     _report_admin_overrides()
     _report_import_hooks()
     _report_docs_links()
+    _report_face_models()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
     # watchdog that writes every thread's stack when the interpreter freezes.

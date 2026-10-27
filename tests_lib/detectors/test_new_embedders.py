@@ -1106,8 +1106,7 @@ class TestAllEmbeddersRegistration:
         embedders = all_embedders()
         # 7 original + 11 image embedders (clip, clip_l, siglip2, siglip2_l,
         # siglip_l, plus single/patch variants for dinov2, dinov3, eupe)
-        # + 2 face embedders (face: FaceNet, the default; imagekit_face: the
-        #   imagekit provider seam beside it)
+        # + 1 face embedder (face: the imagekit provider seam; FaceNet retired in #5320)
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
@@ -1121,7 +1120,7 @@ class TestAllEmbeddersRegistration:
         # app builds from are `embedders_for_type` / `all_embedders_dict`; the
         # `embedders_for_type("image")` set below is unchanged by `clip_l`, which
         # is the check that the withholding actually works.
-        assert len(embedders) == 30
+        assert len(embedders) == 29
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1195,7 +1194,6 @@ class TestAllEmbeddersRegistration:
             "languagebind",
             "videomae",
             "face",
-            "imagekit_face",
         }
         assert names == expected
 
@@ -1235,12 +1233,11 @@ class TestAllEmbeddersRegistration:
         }
 
     def test_embedders_for_face(self):
-        """The face embedders belong to the ``face`` media type, not image; FaceNet leads."""
+        """The face embedder belongs to the ``face`` media type, not image, and is its default."""
         from vtscore.media import embedders_for_type
 
-        ordered = embedders_for_type("face")
-        assert {e.name for e in ordered} == {"face", "imagekit_face"}
-        assert ordered[0].name == "face" and ordered[0].is_default is True
+        (face,) = embedders_for_type("face")
+        assert face.name == "face" and face.is_default is True
 
     def test_siglip_is_still_default_image_embedder(self):
         """SigLIP must remain the first (default) image embedder so callers
@@ -1303,14 +1300,14 @@ class TestAllEmbeddersRegistration:
 
         dicts = all_embedders_dict()
         # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
-        # plus single/patch variants for dinov2, dinov3, eupe) + 2 face embedders
-        #   (face: FaceNet, and imagekit_face: the imagekit provider seam)
+        # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
+        #   (face: the imagekit provider seam)
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap)
         # + EmbeddingGemma 2's audio half (#4837); its image half is eval_only, like clip_l.
-        assert len(dicts) == 28
+        assert len(dicts) == 27
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d

@@ -1471,15 +1471,38 @@ def is_plugin_hidden(family: str, name: str) -> bool:
     return name in family_names
 
 
+def unavailable_plugins() -> dict[str, set[str]]:
+    """The ``{family: {name, ...}}`` this server cannot run right now, hidden like an admin hide.
+
+    Face is the one case: on a server without face models
+    (:func:`vtscore.media.face.imagekit_bridge.face_models`) the ``face`` media
+    type and its embedder drop out of every listing.  The ``image2face``
+    converter hides itself (its ``hidden_from_picker``), which also covers the
+    listings that read only that flag.  Never persisted and never part of
+    :func:`get_effective_hidden_plugins`: it is a fact about the machine, not a
+    choice an admin made, so the settings UI does not show it as one.
+    """
+    from vtscore.media.face import imagekit_bridge  # noqa: PLC0415
+
+    if imagekit_bridge.face_models().available:
+        return {}
+    return {"media_types": {"face"}, "embedders": {imagekit_bridge.EMBEDDER_NAME}}
+
+
+def _hidden_in(family: str) -> set[str]:
+    """Everything hidden in *family*: the admin's hides plus what this server cannot run."""
+    return set(get_effective_hidden_plugins().get(family) or ()) | unavailable_plugins().get(family, set())
+
+
 def filter_visible_plugins(family: str, plugins: Iterable[Any], *, id_attr: str = "name") -> list[Any]:
-    """Drop plugins whose id-attribute is hidden in *family*.
+    """Drop plugins whose id-attribute is hidden in *family* (or that this server cannot run).
 
     The single chokepoint for the listing routes. *id_attr* names the
     attribute that carries the plugin's registry id - ``"name"`` for the
     PluginBase families, ``"type_id"`` for :class:`MediaType` (whose
     registry key is the type id, not its human-readable name).
     """
-    hidden = get_effective_hidden_plugins().get(family)
+    hidden = _hidden_in(family)
     if not hidden:
         return list(plugins)
     return [p for p in plugins if getattr(p, id_attr, None) not in hidden]
@@ -1493,7 +1516,7 @@ def filter_visible_plugin_dicts(
     Reads ``dict[id_key]`` to compare against the hide set. Entries
     without that key are kept.
     """
-    hidden = get_effective_hidden_plugins().get(family)
+    hidden = _hidden_in(family)
     if not hidden:
         return list(plugin_dicts)
     return [d for d in plugin_dicts if d.get(id_key) not in hidden]

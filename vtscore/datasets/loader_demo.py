@@ -318,8 +318,8 @@ def load_demo_dataset(
     # A converter discards the loaded media just the same: it replaces every
     # source item with its outputs, which leave unembedded for the framework
     # embed stage. Embedding the sources first was a whole extra pass (an
-    # image→face demo ran FaceNet over every full photo, weights download
-    # included) that filled most of the progress bar before any conversion
+    # image→face demo embedded every full photo, weights download included)
+    # that filled most of the progress bar before any conversion
     # began, leaving the real work to crawl along its last few percent (#5176).
     clipper_applied = bool(_effective_clipper(clipper_name, media_type_id))
     external_dir = mt.load_demo_source(

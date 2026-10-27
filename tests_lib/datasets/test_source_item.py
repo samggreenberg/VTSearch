@@ -312,15 +312,26 @@ class TestJoinThroughTheRealLoaders:
     ``source_path`` is the loader's ``media_path`` (both resolved).
     """
 
-    def test_every_face_resolves_to_its_own_photo(self, tmp_path):
+    def test_every_face_resolves_to_its_own_photo(self, tmp_path, monkeypatch):
         import io
-        from unittest.mock import MagicMock, patch
 
+        import numpy as np
         from PIL import Image
 
-        from vtscore.converters.image2face import CONVERTER
+        from imagekit.face.records import FaceDetection, FaceRecord
         from vtscore.converters.runner import run_converters_on_folder
         from vtscore.datasets.loader_folder import load_dataset_from_folder
+        from vtscore.media.face import imagekit_bridge
+
+        class OneFace:
+            """A fake face provider: one face in every photo."""
+
+            def process(self, image, *, confidence_threshold=None, media_id=""):
+                det = FaceDetection((10, 10, 60, 60), None, 0.9)
+                return [FaceRecord.from_detection(det, np.ones(512, np.float32), "fake:1", media_id, 0)]
+
+            def compatibility(self):
+                return "fake:1"
 
         names = ["a.png", "trip/b.png", "trip/c.png"]
         for shade, name in enumerate(names):
@@ -332,15 +343,13 @@ class TestJoinThroughTheRealLoaders:
         photos: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "image", photos)
         faces: dict[int, dict[str, Any]] = {}
-        detector = MagicMock()
-        detector.detect.return_value = ([[10, 10, 60, 60]], [0.9], None)
-        with patch.object(CONVERTER, "_make_detector", return_value=detector):
-            run_converters_on_folder(
-                tmp_path,
-                target_media_type="face",
-                medias=faces,
-                converter_specs=[{"converter": "image2face", "params": {"padding": "0", "min_size": "1"}}],
-            )
+        monkeypatch.setattr(imagekit_bridge, "_pipeline", OneFace())
+        run_converters_on_folder(
+            tmp_path,
+            target_media_type="face",
+            medias=faces,
+            converter_specs=[{"converter": "image2face", "params": {"padding": "0", "min_size": "1"}}],
+        )
 
         assert len(faces) == len(names)
         photo_by_name = {m["origin_name"]: mid for mid, m in photos.items()}
