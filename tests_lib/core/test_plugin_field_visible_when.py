@@ -144,7 +144,9 @@ class TestSchema:
     """The HTTP path: the per-plugin marshmallow schema."""
 
     def _load(self, fields: list[PluginField], body: dict) -> dict:
-        return make_plugin_arg_schema(_FakePlugin(fields))().load(body)
+        loaded = make_plugin_arg_schema(_FakePlugin(fields))().load(body)
+        assert isinstance(loaded, dict)
+        return loaded
 
     def test_inactive_required_field_may_be_omitted(self):
         assert self._load([_enable(), _email()], {"enable_email": "false"})["email"] == ""
