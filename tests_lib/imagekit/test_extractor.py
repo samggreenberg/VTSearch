@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import cv2
@@ -11,16 +10,22 @@ import numpy as np
 import pytest
 
 from imagekit import RuntimeOptions
-from imagekit.face.extraction import ARCFACE_CONFIG_PATH, MAGFACE_CONFIG_PATH, ExtractorConfig, FaceEmbeddingExtractor
+from imagekit.face.extraction import (
+    ARCFACE_CONFIG_PATH,
+    ARCFACE_MBF_CONFIG_PATH,
+    MAGFACE_CONFIG_PATH,
+    ExtractorConfig,
+    FaceEmbeddingExtractor,
+)
 from imagekit.face.face_align import norm_crop
 from imagekit.face.records import FaceDetection
+from tests_lib.imagekit._real_models import FACE_IMAGE as _FACE_IMAGE
+from tests_lib.imagekit._real_models import MODEL_DIR as _MODEL_DIR
+from tests_lib.imagekit._real_models import detector_path, embedder_paths, expected_compat
 from tests_lib.imagekit._synthetic_models import build_embedder_model, expected_embedding, write_embedder_config
 
 LM = np.array([[200, 150], [260, 150], [230, 190], [205, 220], [255, 220]], np.float32)
 BOX = (170.0, 110.0, 290.0, 250.0)
-
-_MODEL_DIR = os.environ.get("IMAGEKIT_TEST_MODEL_DIR")
-_FACE_IMAGE = os.environ.get("IMAGEKIT_TEST_FACE_IMAGE")
 
 
 @pytest.fixture
@@ -73,7 +78,7 @@ class TestLifecycle:
         assert ext.get_compatibility() == "explicit:1"
 
     def test_packaged_reference_configs_parse(self):
-        for path in (MAGFACE_CONFIG_PATH, ARCFACE_CONFIG_PATH):
+        for path in (MAGFACE_CONFIG_PATH, ARCFACE_CONFIG_PATH, ARCFACE_MBF_CONFIG_PATH):
             cfg = ExtractorConfig.from_dict(json.loads(path.read_text()))
             assert cfg.compatibility.startswith("oss-") and cfg.embedding_dim == 512
             assert [t["name"] for t in cfg.transforms] == ["Align", "Normalize", "ToTensor"]
@@ -125,19 +130,19 @@ class TestExtract:
 
 @pytest.mark.skipif(not _MODEL_DIR, reason="IMAGEKIT_TEST_MODEL_DIR not set")
 class TestRealWeights:
-    """Run only with ``IMAGEKIT_TEST_MODEL_DIR`` (holding ``w600k_r50.onnx``); never in the default suite."""
+    """Run only with ``IMAGEKIT_TEST_MODEL_DIR`` (`_real_models`); never in the default suite."""
 
     @pytest.fixture
     def real(self) -> FaceEmbeddingExtractor:
         assert _MODEL_DIR is not None
         ext = FaceEmbeddingExtractor()
-        ext.initialize(RuntimeOptions(num_threads=2), Path(_MODEL_DIR) / "w600k_r50.onnx", ARCFACE_CONFIG_PATH)
+        ext.initialize(RuntimeOptions(num_threads=2), *embedder_paths())
         return ext
 
     def test_shape_and_compat(self, real, image):
         vec = real.extract(FaceDetection(BOX, LM, 1.0), image)
         assert vec.shape == (512,) and vec.dtype == np.float32 and np.isfinite(vec).all()
-        assert real.get_compatibility() == "oss-arcface-r50:1"
+        assert real.get_compatibility() == expected_compat()
 
     @pytest.mark.skipif(not _FACE_IMAGE, reason="IMAGEKIT_TEST_FACE_IMAGE not set")
     def test_a_face_and_its_mirror_embed_alike(self, real):
@@ -146,7 +151,7 @@ class TestRealWeights:
 
         assert _MODEL_DIR is not None and _FACE_IMAGE is not None
         det = FaceDetector()
-        det.initialize(RuntimeOptions(num_threads=2), Path(_MODEL_DIR) / "det_10g.onnx")
+        det.initialize(RuntimeOptions(num_threads=2), detector_path())
         image = read_image_tensor(_FACE_IMAGE)
         mirror = np.ascontiguousarray(image[:, ::-1])
         a = real.extract(det.detect(image)[0], image)

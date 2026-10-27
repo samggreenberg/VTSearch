@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import cv2
@@ -12,6 +11,9 @@ import pytest
 from imagekit import RuntimeOptions
 from imagekit.face.detection import DEFAULT_CONFIG_PATH, DetectorConfig, FaceDetector
 from imagekit.runtime import CUDA_PROVIDER
+from tests_lib.imagekit._real_models import FACE_IMAGE as _FACE_IMAGE
+from tests_lib.imagekit._real_models import MODEL_DIR as _MODEL_DIR
+from tests_lib.imagekit._real_models import detector_path
 from tests_lib.imagekit._synthetic_models import (
     build_retinaface_model,
     build_scrfd_model,
@@ -29,8 +31,6 @@ FACE_A_DUP = scrfd_face(0, 21, 30, 0.6, (24, 16, 8, 16), kps=KPS)
 
 BLACK = np.zeros((640, 640, 3), np.uint8)
 
-_MODEL_DIR = os.environ.get("IMAGEKIT_TEST_MODEL_DIR")
-_FACE_IMAGE = os.environ.get("IMAGEKIT_TEST_FACE_IMAGE")
 needs_real_models = pytest.mark.skipif(not _MODEL_DIR, reason="IMAGEKIT_TEST_MODEL_DIR not set")
 
 
@@ -203,13 +203,13 @@ class TestDetectorConfig:
 
 @needs_real_models
 class TestRealWeights:
-    """Run only with ``IMAGEKIT_TEST_MODEL_DIR`` (holding ``det_10g.onnx``); never in the default suite."""
+    """Run only with ``IMAGEKIT_TEST_MODEL_DIR`` (`_real_models`); never in the default suite."""
 
     @pytest.fixture
     def real(self) -> FaceDetector:
         assert _MODEL_DIR is not None
         det = FaceDetector()
-        det.initialize(RuntimeOptions(num_threads=2), Path(_MODEL_DIR) / "det_10g.onnx")
+        det.initialize(RuntimeOptions(num_threads=2), detector_path())
         return det
 
     def test_noise_has_no_faces(self, real):
