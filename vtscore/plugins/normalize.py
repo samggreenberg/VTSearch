@@ -61,7 +61,7 @@ from typing import TYPE_CHECKING, Any
 from vtscore.plugins import inactive_field_keys
 
 if TYPE_CHECKING:
-    from vtscore.plugins import PluginBase
+    from vtscore.plugins import PluginBase, PluginField
 
 _TEXT_LIKE_TYPES = frozenset({"text", "url", "email", "password", "folder", "server_path", "select"})
 
@@ -171,6 +171,18 @@ def _is_blank(value: Any) -> bool:
     return isinstance(value, str) and not value.strip()
 
 
+def _reset_inactive(f: PluginField, field_values: dict[str, Any]) -> None:
+    """Discard what the caller sent for a field its ``visible_when`` switches off.
+
+    A file becomes ``None``; anything else is blanked, so the default fill in
+    :func:`normalize_field_values` treats it as untouched.
+    """
+    if f.field_type == "file":
+        field_values[f.key] = None
+    elif f.key in field_values:
+        field_values[f.key] = "" if f.field_type in _TEXT_LIKE_TYPES else None
+
+
 def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> dict[str, Any]:
     """Normalize *field_values* against *plugin*'s declared fields.
 
@@ -198,14 +210,10 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
     inactive = inactive_field_keys(plugin.fields, field_values)
     for f in plugin.fields:
         off = f.key in inactive
-        if off and f.field_type == "file":
-            field_values[f.key] = None
-            continue
+        if off:
+            _reset_inactive(f, field_values)
         if f.field_type == "file":
             continue
-        if off and f.key in field_values:
-            # Blank it, so the default fill below treats it as untouched.
-            field_values[f.key] = "" if f.field_type in _TEXT_LIKE_TYPES else None
 
         # A blank field takes its declared default.  This runs for *every*
         # non-file type (not just the text-like ones normalized below)
