@@ -39,16 +39,14 @@ path, one per radio: the document-logo review at beta 1
 the recall end (#4458) and the precision end (#4479).
 
 The face slide, Face Value, draws the left panel alone, from one starting photo:
-FHIBE's 562 people, FaceNet on aligned crops, 150 votes. It reads the end-check
-arm of the weak-check study (`2026-10-11-weak-check-faces-4778`), not the face
-review of 2026-10-10: that arm was the face path as it shipped on FaceNet (crops
-turned upright, the head started from the Goods' centroid, no prompted check), which
-the review predates, and the face-gap study re-ran that app and reproduced it exactly
-(`2026-10-12-face-gap-4780`). Its committed `curves.csv` is the objective at every
-vote and `ab.csv` the set after the end-of-run check. Neither carries the
-precision-recall path, so the slide has no right panel; the notes quote the set at
-50 clicks, which `ab.csv` does carry. The app has run ArcFace since #5320, so the
-panel is titled as FaceNet's (`FACE_TITLE`), as Mind the Gap's left panel is (#5329).
+FHIBE's 562 people, 150 votes, on the face path as it ships since #5327: the
+imagekit provider, SCRFD `det_2.5g` plus ArcFace `w600k_r50` (InsightFace
+`buffalo_m`, the owner's pick in #5330). It reads the buffalo_m review of
+2026-10-27 (`2026-10-27-face-value-5336`), the arm of a paired comparison against
+#5321's buffalo_l sessions. Its committed `curves.csv` is the objective at every
+vote and `ab.csv` the set at 50 clicks and after the end-of-run check. Neither
+carries the precision-recall path, so the slide has no right panel; the notes quote
+the set at 50 clicks, which `ab.csv` does carry.
 
 **Nothing here is a guess**, as in `make-logo-line-fig.py`: `EXPECT` pins the
 numbers the presenter notes quote, and `main` fails if the reports or CSVs say
@@ -98,10 +96,11 @@ TEXT_QUERY = "typed query"
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
 
-#: The face path as it shipped on FaceNet (module docstring): the weak-check study's end-check arm.
-FACE_REPORT = EXPERIMENTS / "2026-10-11-weak-check-faces-4778"
-#: Per starting-photo count and radio, the objective at every vote, today's app (`control`) and the
-#: arm; and the arm's set after the end-of-run check and at 25 and 50 clicks.
+#: The face path as it ships (module docstring): the buffalo_m review, #5336.
+FACE_REPORT = EXPERIMENTS / "2026-10-27-face-value-5336"
+#: Per starting-photo count and radio, the objective at every vote, buffalo_l (`control`, #5321) and
+#: buffalo_m (`arm`, the face path as it ships); and the arm's set after the end-of-run check and at
+#: 25 and 50 clicks.
 FACE_CURVES, FACE_AB = FACE_REPORT / "curves.csv", FACE_REPORT / "ab.csv"
 #: The slide's sessions start from one photo, as FHIBE's card says the job does.
 FACE_K = 1
@@ -175,19 +174,19 @@ EXPECT = {
     ("regions", 4.0, "kept"): 94,
     ("regions", 0.25, "precision"): 0.79,
     ("regions", 4.0, "recall"): 0.80,
-    ("faces", 0.25, "text"): 0.32,
-    ("faces", 1.0, "text"): 0.53,
-    ("faces", 4.0, "text"): 0.64,
-    ("faces", 0.25, "at50"): 0.90,
-    ("faces", 1.0, "at50"): 0.81,
-    ("faces", 4.0, "at50"): 0.83,
-    ("faces", 0.25, "after"): 0.92,
-    ("faces", 1.0, "after"): 0.82,
-    ("faces", 4.0, "after"): 0.84,
-    ("faces", 0.25, "precision"): 0.95,
-    ("faces", 4.0, "recall"): 0.86,
-    ("faces", 0.25, "kept"): 2,
-    ("faces", 4.0, "kept"): 7,
+    ("faces", 0.25, "text"): 0.86,
+    ("faces", 1.0, "text"): 0.64,
+    ("faces", 4.0, "text"): 0.76,
+    ("faces", 0.25, "at50"): 0.97,
+    ("faces", 1.0, "at50"): 0.91,
+    ("faces", 4.0, "at50"): 0.93,
+    ("faces", 0.25, "after"): 0.97,
+    ("faces", 1.0, "after"): 0.91,
+    ("faces", 4.0, "after"): 0.93,
+    ("faces", 0.25, "precision"): 0.98,
+    ("faces", 4.0, "recall"): 0.98,
+    ("faces", 0.25, "kept"): 4,
+    ("faces", 4.0, "kept"): 8,
 }
 
 plt.rcParams.update(
@@ -704,13 +703,9 @@ def doc_figure(data: dict[float, dict], stage: int) -> Figure:
     return fig
 
 
-#: Face Value's one panel: Photo Finish's left panel widened to the slide, since there is no
-#: precision-recall panel to share it with. Its top comes down to Mind the Gap's (`TOP` in
-#: `make-face-gap-fig.py`), so the panel's title clears the title notch.
-FACE_AXES = (LEFT_AXES[0], PANEL_BOTTOM, RIGHT_AXES[0] + RIGHT_AXES[2] - LEFT_AXES[0] - 0.08, 0.68 - PANEL_BOTTOM)
-#: The panel's title: the app has run ArcFace since #5320, and these are FaceNet's sessions. The
-#: same words as Mind the Gap's FaceNet panel, the slide after it.
-FACE_TITLE = "FaceNet: the app before ArcFace"
+#: Face Value's one panel: Photo Finish's left panel at the same height, widened to the
+#: slide, since there is no precision-recall panel to share it with.
+FACE_AXES = (LEFT_AXES[0], PANEL_BOTTOM, RIGHT_AXES[0] + RIGHT_AXES[2] - LEFT_AXES[0] - 0.08, PANEL_HEIGHT)
 
 
 def face_figure(data: dict[float, dict]) -> Figure:
@@ -736,7 +731,6 @@ def face_figure(data: dict[float, dict]) -> Figure:
         rect=FACE_AXES,
     )
     ax.set_xticklabels(["start\nphoto", "25", "50", "100", "150", END_LABEL])
-    ax.set_title(FACE_TITLE, loc="left", fontsize=18, pad=12)
     return fig
 
 
