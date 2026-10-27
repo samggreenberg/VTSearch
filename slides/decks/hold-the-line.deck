@@ -370,7 +370,8 @@ slides:
   # on its own sessions, on the face path as it ships: SCRFD + ArcFace, buffalo_m
   # (#5336's review, `make-sota-figs.py`).
   # Last, Mind the Gap: for whom. she/her people against he/him, FaceNet
-  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`).
+  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`), kept as
+  # that study's record.
   sota-faces
   face-gap
 
