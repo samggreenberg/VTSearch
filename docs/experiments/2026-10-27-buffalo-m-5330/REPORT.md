@@ -10,13 +10,15 @@ config-only change: the same `oss` provider, the same packaged SCRFD decode conf
 (`oss-arcface-r50:1`).
 
 **Owner's decision (2026-10-27): buffalo_m.** The owner takes the CPU saving and accepts the static AP
-loss, without a session review. #5328 rebuilds the real FHIBE cells on buffalo_m.
+loss, without a session review. The owner kept that choice after the GPU timing below. #5328 rebuilds
+the real FHIBE cells on buffalo_m.
 
 | | buffalo_l | **buffalo_m** | change |
 |---|---:|---:|---:|
 | detect + embed per face, whole `image2face` path, 1024 px | 250 ms | **190 ms** | −23% |
 | the same at 640 px | 260 ms | **190 ms** | −27% |
 | detector alone, per photo (median, same process) | 130 ms | **79 ms** | ×0.59 |
+| the whole path on a V100 (onnxruntime-gpu), 1024 / 640 px | 59 / 30 ms | **58 / 29 ms** | −2% / −3% |
 | subject found, 1024 px cell (of 10,278 one-person photos) | 10,200 | **10,146** | −54 |
 | subject found, 640 px cell | 9,919 | **9,861** | −58 |
 | landmark error against FHIBE's points, median (NME) | 0.054 | **0.061** | |
@@ -37,6 +39,11 @@ loss, without a session review. #5328 rebuilds the real FHIBE cells on buffalo_m
 - **The saving is CPU time only.** ArcFace and the alignment cost the same in both packs, so cutting the
   detector's time by 40% saves a quarter of the whole. buffalo_m's 190 ms per face is still slower than the FaceNet
   path's 180 / 100 ms at 1024 / 640 px measured in #5321.
+- **On a GPU the saving is gone.** On a V100 both packs take 59 / 30 ms per face at 1024 / 640 px.
+  The time scales with the photo, not the detector, so the CPU work around the networks (decoding,
+  resizing, cropping) dominates. The venv ships the CPU build of onnxruntime, so the app runs this
+  path on CPU today. onnxruntime-gpu 1.31 fails on the V100s ("architectural feature absent"), and 1.22
+  runs on them.
 - **No licence difference.** Both packs are InsightFace's model zoo under the same non-commercial
   research terms, so buffalo_m does not help with #5320's gate 2.
 
@@ -73,6 +80,16 @@ where both detectors find the subject and both eyes are annotated.
 embed) on the same 200 photos at 8 threads on the AMD node (rack7n11), after a 5-photo warm-up. It ran
 each config twice, and the two repeats agree within 1%. This job puts buffalo_l at 250 ms per face, below
 #5321's 330 ms. Only the ratio inside this job is the comparison here.
+
+**And on a GPU.** `buffalo_m_cost_gpu_5330.py` repeats the same timing on a V100 (rack8n04, Xeon Gold
+5218R host), with `VTSEARCH_DEVICE=cuda`. It loads onnxruntime-gpu 1.22.0 from a private directory ahead
+of the venv's CPU build, and both sessions report `CUDAExecutionProvider`. The two repeats agree within
+1 ms.
+
+| per face, V100 | buffalo_l | buffalo_m |
+|---|---:|---:|
+| 1024 px | 59 ms | 58 ms |
+| 640 px | 30 ms | 29 ms |
 
 ## The detectors
 
