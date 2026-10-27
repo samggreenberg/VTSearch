@@ -96,6 +96,31 @@ describe('PluginImportFormComponent (datasource-importer default binding)', () =
     expect(component.canSubmit).toBe(true);
   });
 
+  it('shows a visible_when field only while its checkbox is ticked (#5343)', async () => {
+    setImporter({
+      name: 'mailer',
+      fields: [
+        { key: 'enable_email', field_type: 'checkbox', default: 'false' },
+        { key: 'email', field_type: 'email', required: true, visible_when: { enable_email: ['true'] } },
+      ],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Switched off: not rendered, and its `required` blocks nothing.
+    expect(el.querySelector('#pif-email')).toBeNull();
+    expect(component.canSubmit).toBe(true);
+
+    // A real click: the re-render must come from the event, not a manual tick.
+    (el.querySelector('#pif-enable_email') as HTMLInputElement).click();
+    await fixture.whenStable();
+    expect(el.querySelector('#pif-email')).not.toBeNull();
+    expect(component.canSubmit).toBe(false);
+
+    component.values['email'] = 'a@b.c';
+    expect(component.canSubmit).toBe(true);
+  });
+
   it('marks the control of a required field, not only its label (#4311)', async () => {
     setImporter({
       name: 'imp',

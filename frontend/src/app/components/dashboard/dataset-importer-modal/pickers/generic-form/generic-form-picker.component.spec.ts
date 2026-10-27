@@ -56,6 +56,31 @@ describe('GenericFormPickerComponent', () => {
     expect(component.canSubmit()).toBe(true);
   });
 
+  it('requires a visible_when field only while its condition holds (#5343)', () => {
+    const conditional = {
+      ...importer,
+      fields: [
+        importer.fields[0],
+        { key: 'remote', field_type: 'checkbox', label: 'Remote', default: 'false' },
+        { key: 'path', field_type: 'text', label: 'Path', required: true, visible_when: { remote: ['true'] } },
+      ],
+    };
+    component.open(conditional);
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
+
+    expect(component.visibleImporterFields.map((f) => f.key)).not.toContain('path');
+    expect(component.canSubmit()).toBe(true);
+
+    component.setFormValue('remote', 'true');
+    expect(component.visibleImporterFields.map((f) => f.key)).toContain('path');
+    expect(component.canSubmit()).toBe(false);
+
+    component.setFormValue('path', '/data/sounds');
+    expect(component.canSubmit()).toBe(true);
+  });
+
   it('submits via runImporter and reports success through importStarted', () => {
     openAndFlush();
     component.setFormValue('path', '/data/sounds');
