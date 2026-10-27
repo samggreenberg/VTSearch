@@ -17,17 +17,18 @@ way it read that slide:
   that, one row per kind: cut it into pieces, then tidy each piece. Pages: a, the files; b, cut;
   c, cleaned.
 * `figs/face-find*.webp`, **Face Off** (section XIII, after the FHIBE card): a photo, the face the
-  detector finds in it with its five points, the crop turned upright by them, and FaceNet's space,
-  where one person's crops land together. Pages a to d, one per step.
+  detector finds in it with its five points, the crop turned upright by them, and the face model's
+  space (ArcFace, the open provider's), where one person's crops land together. Pages a to d, one
+  per step.
 
 **Nothing on them is a guess.** `_check_registries` asserts what the figures draw against the
 shipped registries, so a new converter or a changed default fails here rather than leaving a slide
 that no longer describes the app: the six types; each one's default embedder and whether it takes a
 typed phrase (`MediaEmbedder.supports_text`); the eight converters, drawn as exactly the arrows
 `list_converters()` returns; and the clippers and cleaners Cut and Dried names. Face Off's five
-points are the converter's own `FACE_TEMPLATE` turned by `FACE_TILT`, and `_check_face` asserts that
-the converter's `fit_similarity` reads that turn back off them, which is the angle a `roll` crop is
-turned by.
+points are the template the converter's `roll` turns a crop upright by (`ARCFACE_TEMPLATE`, in units
+of the crop) turned by `FACE_TILT`, and `_check_face` asserts that the converter's `fit_similarity`
+reads that turn back off them, which is the angle a `roll` crop is turned by.
 
 Face Off is drawn rather than photographed. FHIBE's photos live on the GRID, and the card's two
 pages already show ten of the twenty its terms allow (`make-data-cards.FHIBE_PHOTO_LIMIT`), every
@@ -60,7 +61,8 @@ sys.path.insert(0, str(SRC))
 from slide_figure import FULL_BLEED, LABEL_GAP_PT, save  # noqa: E402
 
 from vtscore.converters import list_converters  # noqa: E402
-from vtscore.converters.image2face import FACE_TEMPLATE, fit_similarity  # noqa: E402
+from imagekit.face.face_align import ARCFACE_TEMPLATE, TEMPLATE_SIZE  # noqa: E402
+from vtscore.converters.image2face import fit_similarity  # noqa: E402
 from vtscore.media import all_cleaners, all_clippers, all_embedders, all_types  # noqa: E402
 
 OUT = SRC.parent
@@ -244,6 +246,10 @@ def _document(ax: plt.Axes, cx: float, cy: float, w: float = PAGE_W, h: float = 
 #: upright is plainly turned. The FHIBE photo on the card's zoom tilts by about this much.
 FACE_TILT = 24.0
 
+#: Where an upright face's five points sit in its crop, in the crop's units with y down: the template
+#: `image2face`'s `roll` fits a face's landmarks to.
+FACE_TEMPLATE = np.asarray(ARCFACE_TEMPLATE, dtype=np.float64) / TEMPLATE_SIZE
+
 
 def _face_points(cx: float, cy: float, side: float, angle: float) -> np.ndarray:
     """`FACE_TEMPLATE`'s five points for a face box of *side* centred on (cx, cy), turned *angle*°.
@@ -313,13 +319,13 @@ def _check_face() -> None:
 MEDIA = {
     "video": dict(at=(0, 1), name="Video", embedder="X-CLIP", phrase='"a goal"'),
     "image": dict(at=(1, 1), name="Images", embedder="SigLIP", phrase='"book"'),
-    "face": dict(at=(2, 1), name="Faces", embedder="FaceNet", note="start from a photo"),
+    "face": dict(at=(2, 1), name="Faces", embedder="ArcFace", note="start from a photo"),
     "audio": dict(at=(0, 0), name="Audio", embedder="CLAP", phrase='"dog barking"'),
     "text": dict(at=(1, 0), name="Text", embedder="E5", phrase='"a complaint"'),
     "document": dict(at=(2, 0), name="Documents", embedder=None, note="convert first"),
 }
 #: The registry name of each default embedder the slide prints by its family name.
-EMBEDDER_IDS = {"X-CLIP": "xclip", "SigLIP": "siglip", "FaceNet": "face", "CLAP": "clap_general", "E5": "e5"}
+EMBEDDER_IDS = {"X-CLIP": "xclip", "SigLIP": "siglip", "ArcFace": "face", "CLAP": "clap_general", "E5": "e5"}
 
 #: Every converter as an arrow on Shape Shifters: (source, target, the word along it), in the
 #: order the build reveals them, a source at a time.
@@ -682,7 +688,7 @@ def _face_find(stage: int) -> Figure:
     if stage >= 4:
         INTRO._block_arrow(ax, (CROP_X + CROP_SIDE + GAP, mid_y), (CUBE_X - GAP, mid_y), "embed")
         # The model's name over its arrow, a label gap above the arrowhead's reach.
-        ax.text((CROP_X + CROP_SIDE + CUBE_X) / 2, mid_y + INTRO.FLOW_HEAD_W / 2 + LABEL_GAP, "FaceNet",
+        ax.text((CROP_X + CROP_SIDE + CUBE_X) / 2, mid_y + INTRO.FLOW_HEAD_W / 2 + LABEL_GAP, "ArcFace",
                 ha="center", va="bottom", fontsize=NAME_PT, color=INK)  # fmt: skip
         _wire_cube(ax)
         for p in _cloud():

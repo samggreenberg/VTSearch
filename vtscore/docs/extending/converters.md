@@ -42,7 +42,7 @@ something else through it. Examples that ship in the box:
 | `video2audio` | video → audio | Extract the audio track for CLAP embedding |
 | `document2image` | document → image | Render PDF pages as searchable images |
 | `document2text` | document → text | Extract embedded text from PDFs |
-| `image2face` | image → face | Crop detected faces out of images for the FaceNet identity space (`face` is a convert-in type: this is the only way media of that type arise) |
+| `image2face` | image → face | Crop detected faces out of images, each embedded by the face provider as it is found (`face` is a convert-in type: this is the only way media of that type arise) |
 
 If you instead want to add a new content kind (point clouds, 3D
 meshes), write a [media type](media-types.md). If you want a different

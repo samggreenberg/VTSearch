@@ -230,10 +230,11 @@ Both paths install every runtime and dev dependency from `pyproject.toml`
 (through `requirements/base.txt` or `requirements/gpu.txt`, which forward to
 `-e .[dev,agpl]`), editable-install the `vtsearch` package itself, and add a few
 packages that need special handling: `toponymy` (names regions on the Browse
-map) and `facenet-pytorch` (the face embedder), both installed without their
-over-strict dependency pins (see
+map), installed without its over-strict dependency pins (see
 [below](#packages-installed-without-their-dependency-pins)). In a git checkout they also install the
-`pre-commit` git hook.
+`pre-commit` git hook. Neither path installs face models: Face turns on when a
+deployment supplies its own (see
+[DEPLOYMENT.md](DEPLOYMENT.md#face-models)).
 
 The **GPU** path additionally:
 
@@ -290,12 +291,6 @@ to end. So:
   `tests_lib/projection/test_toponymy_smoke.py` (marked `slow`) runs the real
   library end to end, and `tests_lib/meta/test_dockerfile_toponymy.py` checks
   that every install path uses `--no-deps` and pins the same version.
-
-**`facenet-pytorch`** (the `face` embedder) pins `torch<2.3`,
-`torchvision<0.18`, `numpy<2.0` and `Pillow<10.3`. The model builds and runs a
-correct forward pass on the app's current stack, so it gets the same treatment:
-`--no-deps`, with the app's own torch, torchvision, numpy and Pillow satisfying
-it at run time.
 
 An environment that skipped the toponymy step still draws the Browse map but
 names no region; see
@@ -531,8 +526,9 @@ pipeline rather than an embedding space:
 - **`document`**: document input, converted to page images by `document2image`.
   The build bakes the image default (SigLIP), which is what the pages embed with.
   The converter needs PyMuPDF, so do not combine it with `REQUIREMENTS=base-no-agpl.txt`.
-- **`face`**: image input, with the faces cropped out by `image2face` and
-  embedded in FaceNet identity space. The build bakes FaceNet.
+- **`face`**: image input, with the faces cropped out and embedded by `image2face`.
+  The build bakes nothing: the app downloads no face models, so mount the
+  deployment's own ([DEPLOYMENT.md](DEPLOYMENT.md#face-models)), or Face stays off.
 
 The lock does not yet force that pipeline in every import flow, or give the
 new-detector flow the embedded type (#4891).

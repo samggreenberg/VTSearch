@@ -46,7 +46,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
 | `vtscore/media/document/` | none - a *convert-out* half type (converted to image or text before embedding) | clipper |
-| `vtscore/media/face/` | FaceNet | clipper - a *convert-in* half type: never imported, only produced by the `image2face` converter |
+| `vtscore/media/face/` | the `imagekit` face provider | clipper, the provider bridge - a *convert-in* half type: never imported, only produced by the `image2face` converter |
 
 Underscore-prefixed modules (`_clap_shared.py`, `_dinov3_shared.py`,
 `_frame_sampling.py`, `vtscore/media/_toponymy_demo.py`, …) are internal
@@ -302,7 +302,7 @@ startup.
 | `text` | `e5` (`intfloat/e5-base-v2`) | `bge` | `text_default`, `text_paragraph`, `text_sentence` | `text_markup_strip`, `text_whitespace` |
 | `video` | `xclip` (`microsoft/xclip-base-patch32`) | `languagebind`, `videomae` | `video_auto`, `video_default`, `video_tiling`, `video_scene` | `video_letterbox_crop`, `video_blank_trim` |
 | `document` | none (convert-out: `converts_to = ["image", "text"]`) | - | `document_default` | - |
-| `face` | none flagged default; `face` (FaceNet) is the only embedder | - | `face_default` | - |
+| `face` | `face` (the server's `imagekit` face provider) | - | `face_default` | - |
 
 `face` declares no file extensions and `importable = False`: face crops
 come only from the `image2face` converter (see
