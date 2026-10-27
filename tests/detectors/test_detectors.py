@@ -2881,12 +2881,14 @@ class TestRegisterModelFromLabelset:
         assert res.status_code == 201, res.get_json()
         detector_id = res.get_json()["detector"]["id"]
 
-        imported = get_detector(detector_id)["imported"]
+        entry = get_detector(detector_id)
+        assert entry is not None
+        imported = entry["imported"]
         assert imported["importer"] == "server_json_file"
         # Only the importer's own fields: the route's name / beta are not import fields.
         assert set(imported["params"]) == {"filepath"}
         assert Path(imported["params"]["filepath"]).resolve() == labels_path.resolve()
-        assert imported["imported_at"] == pytest.approx(get_detector(detector_id)["created_at"], abs=60)
+        assert imported["imported_at"] == pytest.approx(entry["created_at"], abs=60)
 
         stats = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
         assert stats["imported"] == imported
