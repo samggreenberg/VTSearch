@@ -126,4 +126,15 @@ describe('media-type.util', () => {
     const options = ['audio', 'images'];
     expect(singleDatasetMediaTypes(mediaTypes, options)).toBe(options);
   });
+
+  it('singleDatasetMediaTypes leaves out the types the listing hides', () => {
+    // An all-types LabBench image hides the types it does not install, but an
+    // importer's media_type field still lists every registered type.
+    expect(singleDatasetMediaTypes(mediaTypes, ['audio', 'images', 'videos', 'texts'])).toEqual(['audio', 'images']);
+  });
+
+  it('singleDatasetMediaTypes filters nothing before the listing loads', () => {
+    const options = ['audio', 'images', 'videos'];
+    expect(singleDatasetMediaTypes([], options)).toBe(options);
+  });
 });

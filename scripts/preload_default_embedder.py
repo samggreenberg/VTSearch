@@ -68,10 +68,10 @@ def main(argv: list[str]) -> int:
         from vtscore.media import all_type_ids
 
         valid = sorted(all_type_ids())
-        for media_type in media_types:
-            if media_type not in valid:
-                print(f"Unknown media type {media_type!r}. Valid values: {valid}\n{_USAGE}", file=sys.stderr, flush=True)
-                return 2
+        unknown = next((mt for mt in media_types if mt not in valid), None)
+        if unknown is not None:
+            print(f"Unknown media type {unknown!r}. Valid values: {valid}\n{_USAGE}", file=sys.stderr, flush=True)
+            return 2
 
         wanted = predict_embedders_to_preload(extra_media_types=media_types)
         if not wanted:
