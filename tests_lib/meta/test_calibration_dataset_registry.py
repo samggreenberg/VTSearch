@@ -157,7 +157,8 @@ class TestFhibeIsRunnable:
     """#4699: every FHIBE cell is a roster the harness can enumerate.
 
     The photos and the face crops at both sizes (#4699), the crops turned upright by their
-    landmarks, `roll` and `similarity` (#4777), and `roll` with the sideways search (#4788).
+    landmarks, `roll` and `similarity` (#4777), `roll` with the sideways search (#4788), and the
+    crops the `imagekit` face provider finds and embeds (#5321).
     """
 
     FHIBE = (
@@ -165,7 +166,7 @@ class TestFhibeIsRunnable:
         "fhibe_640",
         "fhibe_faces_1024",
         "fhibe_faces_640",
-        *(f"fhibe_faces_{tag}_{size}" for tag in ("roll", "sim", "side") for size in (1024, 640)),
+        *(f"fhibe_faces_{tag}_{size}" for tag in ("roll", "sim", "side", "ik") for size in (1024, 640)),
     )
 
     def test_every_fhibe_pile_dataset_has_a_roster(self, cfg, pc):

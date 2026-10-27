@@ -302,6 +302,79 @@ class TestFaceLabels:
         # No turned copy found a face, so every crop is the roll arm's own.
         assert all(roll[k]["media_bytes"] == side[k]["media_bytes"] for k in roll)
 
+    def test_an_imagekit_arm_carries_the_providers_vectors(self, mod, pc, release, converter, monkeypatch):
+        """``provider: imagekit`` (#5321): the provider's faces, labelled by the same rule, each with its vector."""
+        pytest.importorskip("imagekit")
+        from imagekit.face.records import FaceDetection, FaceRecord
+
+        from vtscore.media.face import imagekit_bridge as bridge
+
+        photos = sorted(mod.read_photos(release), key=lambda p: p.pid)
+
+        class _Pipeline:
+            """The annotated face (vector 3 e_0) and a stray at the edge (vector e_1), no landmarks."""
+
+            def __init__(self):
+                self.order = list(photos)
+
+            def process(self, image, *, confidence_threshold=None, media_id=""):
+                p = self.order.pop(0)
+                assert media_id == p.uid
+                return [
+                    FaceRecord.from_detection(FaceDetection(tuple(p.face), None, 0.99), 3 * np.eye(512)[0], "t:1", media_id, 0),
+                    FaceRecord.from_detection(FaceDetection((150, 100, 190, 140), None, 0.9), np.eye(512)[1], "t:1", media_id, 1),
+                ]  # fmt: skip
+
+            def compatibility(self):
+                return "t:1"
+
+        monkeypatch.setattr(bridge, "_pipeline", _Pipeline())
+        monkeypatch.setattr(converter, "_make_detector", lambda: pytest.fail("the imagekit arm ran MTCNN"))
+        spec = {"boxed": False, "kind": "fhibe", "long_side": 200, "media_type": "face", "provider": "imagekit"}
+        monkeypatch.setitem(pc.DATASETS, "fhibe_faces_t_ik", spec)
+        medias: dict[int, dict] = {}
+        mod.load("fhibe_faces_t_ik", medias, bridge.EMBEDDER_NAME)
+        subjects = {k: m for k, m in medias.items() if not k & mod.EXTRA_BIT}
+        extras = {k: m for k, m in medias.items() if k & mod.EXTRA_BIT}
+        assert set(subjects) == {p.pid for p in photos}
+        assert len(extras) == 3 and all(m["categories"] == [] for m in extras.values())
+        # Unit vectors under the provider's embedder, so the build's embed pass has nothing to do.
+        assert all(np.allclose(m["embeddings"]["imagekit_face"][:2], [1, 0]) for m in subjects.values())
+        assert all(np.allclose(m["embeddings"]["imagekit_face"][:2], [0, 1]) for m in extras.values())
+        assert all(m["custom_metadata"]["Face Compat"] == "t:1" for m in medias.values())
+
+    def test_an_imagekit_arm_refuses_another_embedders_cell(self, mod, pc, release, converter, monkeypatch):
+        pytest.importorskip("imagekit")
+        from imagekit.face.records import FaceDetection, FaceRecord
+
+        from vtscore.media.face import imagekit_bridge as bridge
+
+        class _Pipeline:
+            def process(self, image, *, confidence_threshold=None, media_id=""):
+                return [
+                    FaceRecord.from_detection(
+                        FaceDetection((20, 30, 60, 70), None, 0.99), np.ones(512), "t:1", media_id, 0
+                    )
+                ]
+
+        monkeypatch.setattr(bridge, "_pipeline", _Pipeline())
+        spec = {"boxed": False, "kind": "fhibe", "long_side": 200, "media_type": "face", "provider": "imagekit"}
+        monkeypatch.setitem(pc.DATASETS, "fhibe_faces_t_ik", spec)
+        with pytest.raises(SystemExit, match="imagekit_face"):
+            mod.load("fhibe_faces_t_ik", {}, "face")
+
+    def test_an_unconfigured_provider_fails_the_build(self, mod, pc, release, converter, monkeypatch):
+        """No ``IMAGEKIT_FACE_CONFIG``: the app's converter yields no faces, but a build must not."""
+        pytest.importorskip("imagekit")
+        from vtscore.media.face import imagekit_bridge as bridge
+
+        bridge.reset_for_tests()
+        monkeypatch.delenv(bridge.CONFIG_ENV_VAR, raising=False)
+        spec = {"boxed": False, "kind": "fhibe", "long_side": 200, "media_type": "face", "provider": "imagekit"}
+        monkeypatch.setitem(pc.DATASETS, "fhibe_faces_t_ik", spec)
+        with pytest.raises(bridge.FaceProviderUnconfigured):
+            mod.load("fhibe_faces_t_ik", {}, bridge.EMBEDDER_NAME)
+
     def test_every_aligned_dataset_names_a_mode_image2face_has(self, pc):
         from vtscore.converters.image2face import ALIGN_MODES
 
@@ -318,8 +391,15 @@ class TestPairing:
         assert ("fhibe_faces_1024", "siglip") not in pairs
         assert ("fhibe_1024", "face") not in pairs and ("coco_better", "face") not in pairs
 
+    def test_a_face_cell_takes_the_embedder_of_its_provider(self, pc):
+        """#5321: the imagekit arm's vectors are the provider's; FaceNet never embeds it, nor it the MTCNN arms."""
+        pairs = pc.cells()
+        assert ("fhibe_faces_ik_1024", "imagekit_face") in pairs
+        assert ("fhibe_faces_ik_1024", "face") not in pairs
+        assert ("fhibe_faces_roll_1024", "imagekit_face") not in pairs
+
     def test_every_non_face_dataset_keeps_every_image_embedder(self, pc):
-        image_embedders = [e for e in pc.EMBEDDERS if e != "face"]
+        image_embedders = [e for e in pc.EMBEDDERS if pc.EMBEDDERS[e].get("media_type", "image") == "image"]
         for ds in pc.DATASETS:
             if pc.media_type_of(ds) == "image":
                 assert all((ds, e) in pc.cells() for e in image_embedders), ds
