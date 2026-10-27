@@ -87,11 +87,17 @@ export class AutoDetectResultsModalComponent implements OnInit {
   // zoneless CD trigger) yet read in the template, so they must repaint on emit.
   readonly exporters = signal<ExporterEntry[]>([]);
   readonly selectedExporter = signal('');
+  /** Every field the active exporter declares, ``hidden`` ones included. */
+  private readonly declaredExporterFields = signal<ImporterField[]>([]);
+  exportFieldValues: Record<string, string> = {};
+
   /** The active exporter's *renderable* fields. ``hidden`` fields are left
    *  out (their values are the plugin author's, fixed via ``default``) but
-   *  are still seeded into ``exportFieldValues``. */
-  readonly exporterFields = signal<ImporterField[]>([]);
-  exportFieldValues: Record<string, string> = {};
+   *  are still seeded into ``exportFieldValues``; so is any field whose
+   *  ``visible_when`` fails on the current ``exportFieldValues``. */
+  exporterFields(): ImporterField[] {
+    return visibleFields(this.declaredExporterFields(), this.exportFieldValues);
+  }
   /** An Export click is in flight (disables the button). */
   readonly exporting = signal(false);
 
@@ -276,7 +282,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private updateExporterFields(): void {
     const exp = this.exporters().find((e) => e.name === this.selectedExporter());
     const fields = (exp?.fields ?? []) as ImporterField[];
-    this.exporterFields.set(visibleFields(fields));
+    this.declaredExporterFields.set(fields);
     this.exportFieldValues = {};
     for (const field of fields) {
       if (field.default) {

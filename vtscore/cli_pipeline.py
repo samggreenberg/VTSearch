@@ -368,11 +368,21 @@ def _parse_import_labels_create(value: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _require_fields(plugin: Any, plugin_name: str, fields: dict[str, Any]) -> None:
-    """Fail fast on a required label-importer field left out of the YAML."""
+    """Fail fast on a required label-importer field left out of the YAML.
+
+    A field its ``visible_when`` condition switches off is not required.
+    """
+    from vtscore.plugins import inactive_field_keys  # noqa: PLC0415
+
+    inactive = inactive_field_keys(plugin.fields, fields)
     missing = [
         f.key
         for f in plugin.fields
-        if f.required and not f.default and f.field_type != "checkbox" and _is_blank(fields.get(f.key))
+        if f.required
+        and not f.default
+        and f.field_type != "checkbox"
+        and f.key not in inactive
+        and _is_blank(fields.get(f.key))
     ]
     if missing:
         hint = " (or 'import_labels.file')" if missing == ["filepath"] else ""

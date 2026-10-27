@@ -58,6 +58,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from vtscore.plugins import inactive_field_keys
+
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
 
@@ -183,12 +185,27 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
     runs, so the default is templated, security-validated and
     required-checked exactly like a typed value.
 
+    A field switched off by its
+    :attr:`~vtscore.plugins.PluginField.visible_when` condition loses
+    whatever the caller sent for it and carries what an untouched field
+    would - its default, else blank (``None`` for a file upload) - and is
+    exempt from ``required``.  The plugin never acts on a value the user
+    could no longer see.
+
     Idempotent: running the pass twice on the same dict produces the
     same result and never raises differently the second time.
     """
+    inactive = inactive_field_keys(plugin.fields, field_values)
     for f in plugin.fields:
+        off = f.key in inactive
+        if off and f.field_type == "file":
+            field_values[f.key] = None
+            continue
         if f.field_type == "file":
             continue
+        if off and f.key in field_values:
+            # Blank it, so the default fill below treats it as untouched.
+            field_values[f.key] = "" if f.field_type in _TEXT_LIKE_TYPES else None
 
         # A blank field takes its declared default.  This runs for *every*
         # non-file type (not just the text-like ones normalized below)
@@ -213,7 +230,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
             # - leave it alone and let the plugin handle it.
             continue
 
-        if not value and f.required:
+        if not value and f.required and not off:
             raise ValueError(f"{f.label} is required.")
 
         if value:

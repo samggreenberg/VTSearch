@@ -1329,9 +1329,15 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Typed view of the selected label importer's plugin fields for the
    *  template (the generated LabelImporterEntry types `fields` as an open
-   *  dict because plugin field schemas aren't part of the OpenAPI client). */
+   *  dict because plugin field schemas aren't part of the OpenAPI client),
+   *  less any whose ``visible_when`` fails on `labelImporterValues`. */
   get selectedLabelImporterFields(): ImporterField[] {
-    return visibleFields((this.selectedLabelImporter?.fields ?? []) as ImporterField[]);
+    return visibleFields(this.allLabelImporterFields, this.labelImporterValues);
+  }
+
+  /** Every field the selected label importer declares, rendered or not. */
+  private get allLabelImporterFields(): ImporterField[] {
+    return (this.selectedLabelImporter?.fields ?? []) as ImporterField[];
   }
 
   selectLabelImporter(importer: LabelImporterEntry): void {
@@ -1360,9 +1366,11 @@ export class NewDetectorModalComponent implements OnInit {
 
   onLabelImporterFieldChanged(changedKey: string): void {
     if (!this.selectedLabelImporter?.fields) return;
+    // Every field, so one a condition hides now doesn't reappear with a
+    // list fetched for the old value.
     this.labelImporterFieldOptions.refreshDependentsOf(
       changedKey,
-      this.selectedLabelImporterFields,
+      this.allLabelImporterFields,
       this.labelImporterValues,
     );
   }

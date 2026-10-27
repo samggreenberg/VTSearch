@@ -12,7 +12,7 @@ import { DatasetsCrudApiService } from '../../../../../services/datasets-crud-ap
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { apiErrorMessage } from '../../../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../../../utils/dynamic-field-options';
-import { visibleFields } from '../../../../../utils/plugin-fields';
+import { inactiveFieldKeys, visibleFields } from '../../../../../utils/plugin-fields';
 import {
   CleanerInfo,
   CleanerSelection,
@@ -213,9 +213,10 @@ export class GenericFormPickerComponent {
 
   /** The active importer's renderable fields. ``hidden`` fields keep their
    *  seeded default in ``formValues`` and are still submitted; they just
-   *  get no widget. */
+   *  get no widget. A field whose ``visible_when`` fails on ``formValues``
+   *  gets none either, and :prop:`canSubmit` stops requiring it. */
   get visibleImporterFields(): ImporterField[] {
-    return visibleFields((this.selectedImporter()?.fields ?? []) as ImporterField[]);
+    return visibleFields((this.selectedImporter()?.fields ?? []) as ImporterField[], this.formValues());
   }
 
   get effectiveSoloMediaType(): string | null {
@@ -498,8 +499,9 @@ export class GenericFormPickerComponent {
     if (!this.hasOutputs) return false;
     const fields = this.selectedImporter()?.fields ?? [];
     const values = this.formValues();
+    const inactive = inactiveFieldKeys(fields, values);
     for (const f of fields) {
-      if (!f.required) continue;
+      if (!f.required || inactive.has(f.key)) continue;
       if (f.key === 'media_type' && this.multiDataset()) continue;
       if (f.field_type === 'file') {
         if (!this.selectedFile()) return false;
