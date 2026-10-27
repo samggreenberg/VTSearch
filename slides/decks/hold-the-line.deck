@@ -367,8 +367,8 @@ slides:
   many-words
   # Then how the face path does, as photos, regions and documents end on theirs:
   # Face Value, the objective at every click from one starting photo, each radio
-  # on its own sessions, from the weak-check study's end-check arm — the face path
-  # as it ships, which the face review of 2026-10-10 predates (`make-sota-figs.py`).
+  # on its own sessions, on the face path as it ships: SCRFD + ArcFace, buffalo_m
+  # (#5336's review, `make-sota-figs.py`).
   # Last, Mind the Gap: for whom. she/her people against he/him, FaceNet
   # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`).
   sota-faces

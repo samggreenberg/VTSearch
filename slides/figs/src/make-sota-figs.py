@@ -39,15 +39,14 @@ path, one per radio: the document-logo review at beta 1
 the recall end (#4458) and the precision end (#4479).
 
 The face slide, Face Value, draws the left panel alone, from one starting photo:
-FHIBE's 562 people, FaceNet on aligned crops, 150 votes. It reads the end-check
-arm of the weak-check study (`2026-10-11-weak-check-faces-4778`), not the face
-review of 2026-10-10: that arm is the face path as it ships (crops turned upright,
-the head started from the Goods' centroid, no prompted check), which the review
-predates, and the face-gap study re-ran today's app and reproduced it exactly
-(`2026-10-12-face-gap-4780`). Its committed `curves.csv` is the objective at every
-vote and `ab.csv` the set after the end-of-run check. Neither carries the
-precision-recall path, so the slide has no right panel; the notes quote the set at
-50 clicks, which `ab.csv` does carry.
+FHIBE's 562 people, 150 votes, on the face path as it ships since #5327: the
+imagekit provider, SCRFD `det_2.5g` plus ArcFace `w600k_r50` (InsightFace
+`buffalo_m`, the owner's pick in #5330). It reads the buffalo_m review of
+2026-10-27 (`2026-10-27-face-value-5336`), the arm of a paired comparison against
+#5321's buffalo_l sessions. Its committed `curves.csv` is the objective at every
+vote and `ab.csv` the set at 50 clicks and after the end-of-run check. Neither
+carries the precision-recall path, so the slide has no right panel; the notes quote
+the set at 50 clicks, which `ab.csv` does carry.
 
 **Nothing here is a guess**, as in `make-logo-line-fig.py`: `EXPECT` pins the
 numbers the presenter notes quote, and `main` fails if the reports or CSVs say
@@ -97,10 +96,11 @@ TEXT_QUERY = "typed query"
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
 
-#: The face path as it ships (module docstring): the weak-check study's end-check arm.
-FACE_REPORT = EXPERIMENTS / "2026-10-11-weak-check-faces-4778"
-#: Per starting-photo count and radio, the objective at every vote, today's app (`control`) and the
-#: arm; and the arm's set after the end-of-run check and at 25 and 50 clicks.
+#: The face path as it ships (module docstring): the buffalo_m review, #5336.
+FACE_REPORT = EXPERIMENTS / "2026-10-27-face-value-5336"
+#: Per starting-photo count and radio, the objective at every vote, buffalo_l (`control`, #5321) and
+#: buffalo_m (`arm`, the face path as it ships); and the arm's set after the end-of-run check and at
+#: 25 and 50 clicks.
 FACE_CURVES, FACE_AB = FACE_REPORT / "curves.csv", FACE_REPORT / "ab.csv"
 #: The slide's sessions start from one photo, as FHIBE's card says the job does.
 FACE_K = 1
@@ -174,19 +174,19 @@ EXPECT = {
     ("regions", 4.0, "kept"): 94,
     ("regions", 0.25, "precision"): 0.79,
     ("regions", 4.0, "recall"): 0.80,
-    ("faces", 0.25, "text"): 0.32,
-    ("faces", 1.0, "text"): 0.53,
-    ("faces", 4.0, "text"): 0.64,
-    ("faces", 0.25, "at50"): 0.90,
-    ("faces", 1.0, "at50"): 0.81,
-    ("faces", 4.0, "at50"): 0.83,
-    ("faces", 0.25, "after"): 0.92,
-    ("faces", 1.0, "after"): 0.82,
-    ("faces", 4.0, "after"): 0.84,
-    ("faces", 0.25, "precision"): 0.95,
-    ("faces", 4.0, "recall"): 0.86,
-    ("faces", 0.25, "kept"): 2,
-    ("faces", 4.0, "kept"): 7,
+    ("faces", 0.25, "text"): 0.86,
+    ("faces", 1.0, "text"): 0.64,
+    ("faces", 4.0, "text"): 0.76,
+    ("faces", 0.25, "at50"): 0.97,
+    ("faces", 1.0, "at50"): 0.91,
+    ("faces", 4.0, "at50"): 0.93,
+    ("faces", 0.25, "after"): 0.97,
+    ("faces", 1.0, "after"): 0.91,
+    ("faces", 4.0, "after"): 0.93,
+    ("faces", 0.25, "precision"): 0.98,
+    ("faces", 4.0, "recall"): 0.98,
+    ("faces", 0.25, "kept"): 4,
+    ("faces", 4.0, "kept"): 8,
 }
 
 plt.rcParams.update(
