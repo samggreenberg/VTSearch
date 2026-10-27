@@ -104,10 +104,12 @@ Final AP (the ranking after 150 votes, the same at every β): FaceNet 0.91 / 0.8
 - **Four starting photos help FaceNet (+0.02 to +0.04) and not imagekit.** From one photo imagekit
   already leads by ten votes in.
 - **Click 0 from four photos is worse under imagekit at β 1 and 4: 0.59 against 0.74 and 0.73 against
-  0.81.** This is the same pattern #4780 saw (ArcFace 0.53 against FaceNet 0.74). The example sort's
-  line is `FACE_TEMPLATE`, fitted on FaceNet's scores. On ArcFace's scores it cuts in the wrong place.
-  From one photo the template's cut happens to land better, and imagekit leads at click 0 in every cell.
-  By the label quota, imagekit leads everywhere.
+  0.81.** This is the same pattern #4780 saw (ArcFace 0.53 against FaceNet 0.74). It is the line, not
+  the sort: imagekit's example sort ranks better at click 0 in every cell (AP 0.99 against 0.89 from
+  four photos, 0.98 against 0.76 from one). The example sort's line is the centroid's count line
+  (`centroid_cut`, rule `count_gap_floor_skip25_b1`, #4732 and #4759), worked out on FaceNet's
+  cosines. On ArcFace's cosines it cuts in the wrong place from four photos. From one photo it lands
+  better, and imagekit leads at click 0 there. By the label quota imagekit leads everywhere.
 
 ## The gaps, beside FaceNet's
 
@@ -216,8 +218,10 @@ FaceNet at 1024 px.
 
 - **#5320's choice of weights.** This run measures `buffalo_l`. If gate 2 picks other weights, the cells
   are rebuilt and this review repeated on them (one config file; the commands are below).
-- **Refit or drop `FACE_TEMPLATE` for imagekit's scores.** Click 0 from four photos loses 0.08–0.15 to
-  FaceNet's template.
+- **The centroid's count line on imagekit's cosines.** From four photos click 0 loses 0.07–0.15 F to
+  FaceNet's, although its sort's AP is 0.10 higher. The line rule (#4759) was chosen on FaceNet.
+- **`FACE_TEMPLATE` was not exercised.** Both arms store `roll` crops, so this run says nothing about
+  re-fitting or dropping the `similarity` template (#5320's judgement call).
 - **The β 1 line on imagekit's scores.** It over-returns in 9% of one-photo sessions with near-perfect
   rankings. It costs about 0.03 of the session mean and most of the residual pronoun gap.
 - **The eval default arm can follow the app.** On this bench the imagekit cells are the better face
