@@ -161,7 +161,9 @@ DATASETS: dict[str, dict] = {
     "fhibe_640": {"boxed": True, "kind": "fhibe", "long_side": 640, "on_request": True},
     # The face path as the app ships it (#5321): the face provider's detector, boxes,
     # landmarks and vectors (each embedded from the full photo, so `align` turns only the
-    # stored crop). Built with `IMAGEKIT_FACE_PROVIDER` / `IMAGEKIT_FACE_CONFIG` set.
+    # stored crop). Built with `IMAGEKIT_FACE_PROVIDER` / `IMAGEKIT_FACE_CONFIG` set: since #5328
+    # on InsightFace `buffalo_m` (SCRFD det_2.5g + ArcFace w600k_r50; the owner's pick in #5330),
+    # #5321's on `buffalo_l`. The compat tag is the same for both, so the cell cannot tell them apart.
     #
     # The MTCNN + FaceNet arms -- `fhibe_faces_{1024,640}`, `_roll_`, `_sim_` and `_side_` --
     # were retired with that path in #5320. Like Visual Genome in #4038 they are unrebuildable
