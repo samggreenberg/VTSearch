@@ -12,7 +12,7 @@ environment variable. Two providers ship:
 | Provider | What runs | Selected by |
 |---|---|---|
 | `oss` | This package's own SCRFD (or RetinaFace) detector and MagFace/ArcFace embedder, open weights, ONNX Runtime | `IMAGEKIT_FACE_PROVIDER=oss` (the default) |
-| `vista` | A proprietary `vistaimage` package behind the same interface, imported lazily; absent on most machines | `IMAGEKIT_FACE_PROVIDER=vista` |
+| `ext` | An external backend module behind the same interface (`IMAGEKIT_EXT_BACKEND`, default `ext_backend`), imported lazily; absent on most machines | `IMAGEKIT_FACE_PROVIDER=ext` |
 
 A third party registers its own provider under a name of its choosing (see
 [Registering an external provider](#registering-an-external-provider)).
@@ -269,9 +269,11 @@ trained on. `fallback` says what a detection without landmarks gets:
 `provider` and `runtime` are optional (the environment's provider and the
 runtime defaults otherwise). Relative paths resolve against the config file's
 own directory, so a models directory moves as one unit. `model_bundle` is the
-`.onnx` file or a directory holding exactly one. The `vista` provider reads
-the same keys and passes `model_bundle` / `model` / `config` to the
-proprietary classes.
+`.onnx` file or a directory holding exactly one. The `ext` provider reads
+the same keys and passes `model_bundle` / `model` / `config` to its backend's
+classes; it also reads an optional top-level `ext_backend`, the module to
+import (`IMAGEKIT_EXT_BACKEND` wins over it; `ext_backend` when neither is
+set).
 
 ## Core types
 
@@ -288,7 +290,7 @@ ONNX Runtime's default.
 | `confidence` | `float` | detector confidence |
 | `embedding` | `np.ndarray (512,) float32` | **unnormalised**, as the model produced it |
 | `quality` | `float` | L2 norm of `embedding` (magnitude-aware losses encode quality there) |
-| `compat` | `str` | embedding-space tag, e.g. `oss-magface-ir100:1`, `vistaface:3` |
+| `compat` | `str` | embedding-space tag, e.g. `oss-magface-ir100:1`, or the tag an external backend reports |
 | `media_id` | `str` | the image it came from |
 
 Helpers: `unit_embedding()` (an L2-normalised copy), `to_row()` /
@@ -313,20 +315,22 @@ confidence first. `process_buffer` decodes an encoded image first.
 
 - **`imagekit.face.providers.oss.OssFacePipeline`** composes this package's
   `FaceDetector` and `FaceEmbeddingExtractor`.
-- **`imagekit.face.providers.vista.VistaFacePipeline`** wraps the proprietary
-  `vistaimage` package (with `vistacommon`), which exposes nearly the same
-  classes: `vistaimage.face.FaceDetector` with `initialize(runtime_opts,
-  model_bundle)` / `detect(image_tensor, confidence_threshold)`,
-  `vistaimage.face.FaceEmbeddingExtractor` with `initialize(runtime_opts,
+- **`imagekit.face.providers.ext.ExtFacePipeline`** wraps an external
+  backend: one module, named by `IMAGEKIT_EXT_BACKEND` (else the config's
+  `ext_backend`, else `ext_backend`), which exposes nearly the same classes:
+  `backend.face.FaceDetector` with `initialize(runtime_opts, model_bundle)` /
+  `detect(image_tensor, confidence_threshold)`,
+  `backend.face.FaceEmbeddingExtractor` with `initialize(runtime_opts,
   model_filepath, model_config_path=None)` / `extract(detection, image_tensor)`
-  / `get_compatibility()`, `vistaimage.read_image_tensor(image_filepath=...)`,
-  and `vistacommon.RuntimeOptions(use_gpu, gpu_device_id, num_threads)`. Two
-  things differ and are mapped at the boundary: its embedding object carries a
-  `.values` sequence, and its compatibility is an integer, which becomes
-  `vistaface:<n>`. Both packages are imported **lazily inside `initialize()`**,
-  so the module loads everywhere and the missing package is named
-  (`VistaProviderUnavailable`, an `ImportError`) only when the provider is
-  asked for. Nothing of `vistaimage`'s leaks out: every result is a
+  / `get_compatibility()`, and `backend.RuntimeOptions(use_gpu, gpu_device_id,
+  num_threads)`. Its embedding object carries a `.values` sequence, which is
+  mapped at the boundary; `get_compatibility()` returns the embedding-space tag
+  as a string, which every record carries **verbatim** (anything but a
+  non-empty string is refused at `initialize()`). The module is imported with
+  `importlib.import_module` **lazily inside `initialize()`**, so this package
+  loads everywhere and the missing module is named
+  (`ExtProviderUnavailable`, an `ImportError`) only when the provider is
+  asked for. Nothing of the backend's leaks out: every result is a
   `FaceRecord`.
 
 ### The registry
@@ -335,9 +339,9 @@ confidence first. `process_buffer` decodes an encoded image first.
 from imagekit.face import get_pipeline, available_providers, default_provider_name
 
 get_pipeline("oss")          # a new, uninitialised OssFacePipeline
-get_pipeline("vista")        # a new VistaFacePipeline (vistaimage imported at initialize())
+get_pipeline("ext")          # a new ExtFacePipeline (its backend imported at initialize())
 get_pipeline()               # the default: IMAGEKIT_FACE_PROVIDER, else "oss"
-available_providers()        # ["oss", "vista", ...entry points...]
+available_providers()        # ["ext", "oss", ...entry points...]
 ```
 
 `imagekit.face.load_pipeline(config, opts=None, name=None)` is `get_pipeline`
@@ -364,7 +368,7 @@ acme = "acme_faces:AcmeFacePipeline"
 A plugin cannot shadow a built-in or another plugin's name (a clash is logged
 and ignored; `register_provider(..., replace=True)` is the explicit override).
 The provider implements the protocol above and converts its own types to
-`FaceRecord` at its boundary, as `vista` does.
+`FaceRecord` at its boundary, as `ext` does.
 
 ## The index-compat guard
 
@@ -485,7 +489,7 @@ imagekit/
             arcface_r50.json
         providers/
             oss.py         # OssFacePipeline
-            vista.py       # VistaFacePipeline (lazy import of vistaimage / vistacommon)
+            ext.py         # ExtFacePipeline (lazy import of the IMAGEKIT_EXT_BACKEND module)
 scripts/
     detect_faces.py        # detection-only CLI
     process_faces.py       # full pipeline CLI
@@ -498,9 +502,10 @@ embedder on **synthetic ONNX graphs** built with `onnx.helper`
 (`tests_lib/imagekit/_synthetic_models.py`), whose heads encode known faces so
 the decoders, NMS, the scale map-back and the whole pipeline run through ONNX
 Runtime with no weights on disk; alignment; the records and their CSV / NPZ
-forms; the registry and entry points; the `vista` wrapper against a fake
-in-test `vistaimage` / `vistacommon` (lazy import, record conversion, the
-`vistaface:<n>` mapping, the clear error when absent); and the two CLIs.
+forms; the registry and entry points; the `ext` wrapper against a fake
+in-test backend registered under the configured module name (lazy import,
+record conversion, the backend's compat tag passed through verbatim, the clear
+error when absent); and the two CLIs.
 
 Tests against real weights skip unless `IMAGEKIT_TEST_MODEL_DIR` names a
 directory holding `det_10g.onnx` and `w600k_r50.onnx`; set

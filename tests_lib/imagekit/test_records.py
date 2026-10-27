@@ -15,7 +15,6 @@ from imagekit.face.records import (
     detection_to_row,
     embedding_quality,
     oss_compat,
-    vista_compat,
 )
 
 _LM = np.array([[10, 20], [30, 20], [20, 30], [12, 40], [28, 40]], np.float32)
@@ -31,8 +30,6 @@ def _record(embedding=None, landmarks: np.ndarray | None = _LM) -> FaceRecord:
 class TestHelpers:
     def test_compat_tags(self):
         assert oss_compat("magface-ir100", 1) == "oss-magface-ir100:1"
-        assert vista_compat(3) == "vistaface:3"
-        assert vista_compat("7") == "vistaface:7"
 
     def test_quality_is_the_l2_norm(self):
         assert embedding_quality(np.array([3.0, 4.0])) == pytest.approx(5.0)

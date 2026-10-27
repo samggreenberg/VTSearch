@@ -1,6 +1,6 @@
-"""The built-in providers: ``oss`` (open weights, this package) and ``vista`` (proprietary, lazy)."""
+"""The built-in providers: ``oss`` (open weights, this package) and ``ext`` (an external backend, lazy)."""
 
 from imagekit.face.providers.oss import OssFacePipeline
-from imagekit.face.providers.vista import VistaFacePipeline, VistaProviderUnavailable
+from imagekit.face.providers.ext import ExtFacePipeline, ExtProviderUnavailable
 
-__all__ = ["OssFacePipeline", "VistaFacePipeline", "VistaProviderUnavailable"]
+__all__ = ["ExtFacePipeline", "ExtProviderUnavailable", "OssFacePipeline"]

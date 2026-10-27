@@ -3,8 +3,8 @@
 :class:`FaceRecord` is the **only** face type the rest of an application
 handles: a box, five landmarks, a confidence, the raw embedding, its quality,
 the embedding-space tag (``compat``) and the id of the media it came from.
-Every provider - the open-weights ``oss`` pipeline, the proprietary ``vista``
-wrapper, a third party's - converts to it at its own boundary, so nothing
+Every provider - the open-weights ``oss`` pipeline, the ``ext`` wrapper around
+an external backend, a third party's - converts to it at its own boundary, so nothing
 provider-specific leaks past :mod:`imagekit.face.providers`.
 
 :class:`FaceDetection` is the detector-only half (box, landmarks,
@@ -38,11 +38,6 @@ _LANDMARK_COLUMNS = tuple(f"{name}_{axis}" for name in LANDMARK_NAMES for axis i
 def oss_compat(model_name: str, version: int | str) -> str:
     """The compat tag of an open-weights embedder: ``oss-<model>:<version>``."""
     return f"oss-{model_name}:{version}"
-
-
-def vista_compat(compatibility: int | str) -> str:
-    """Map the proprietary extractor's integer compatibility into ``vistaface:<n>``."""
-    return f"vistaface:{int(compatibility)}"
 
 
 def embedding_quality(embedding: np.ndarray) -> float:
@@ -161,9 +156,9 @@ class FaceRecord:
             produced it.  :meth:`unit_embedding` is the cosine-space copy.
         quality: L2 norm of ``embedding``: magnitude-aware losses (MagFace)
             encode face quality in the norm.
-        compat: Embedding-space tag, e.g. ``"oss-magface-ir100:1"`` or
-            ``"vistaface:3"``.  Vectors with different tags must never be
-            compared (:mod:`imagekit.face.compat`).
+        compat: Embedding-space tag, e.g. ``"oss-magface-ir100:1"``, or
+            whatever tag an external backend reports.  Vectors with
+            different tags must never be compared (:mod:`imagekit.face.compat`).
         media_id: Identifier of the image this face came from; the CSV and
             ``.npz`` writers key on it.
     """

@@ -12,6 +12,8 @@ machine has.
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -91,13 +93,20 @@ class TestWhatMakesItOff:
         _models(models_folder.parent, provider="nobody")
         assert "'nobody'" in bridge.face_models().reason
 
-    def test_the_vista_provider_needs_its_package(self, models_folder):
-        _models(models_folder.parent, provider="vista")
+    def test_the_ext_provider_needs_its_backend_module(self, models_folder):
+        _models(models_folder.parent, provider="ext")
         status = bridge.face_models()
-        assert status.available is False and "vistaimage" in status.reason and status.provider == "vista"
+        assert status.available is False and "'ext_backend'" in status.reason and status.provider == "ext"
+
+    def test_the_ext_backend_module_is_configurable(self, models_folder, monkeypatch):
+        _models(models_folder.parent, provider="ext", ext_backend="from_the_config.backend")
+        assert "'from_the_config.backend'" in bridge.face_models().reason  # its parent package is missing too
+        monkeypatch.setenv("IMAGEKIT_EXT_BACKEND", "tests_fake_ext_backend")
+        monkeypatch.setitem(sys.modules, "tests_fake_ext_backend", types.ModuleType("tests_fake_ext_backend"))
+        assert bridge.face_models() == bridge.FaceModels(True, "", models_folder, "ext")
 
     def test_the_environment_picks_the_provider_over_the_config(self, models_folder, monkeypatch):
-        _models(models_folder.parent, provider="vista")
+        _models(models_folder.parent, provider="ext")
         monkeypatch.setenv("IMAGEKIT_FACE_PROVIDER", "oss")
         assert bridge.face_models() == bridge.FaceModels(True, "", models_folder, "oss")
 

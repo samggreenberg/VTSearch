@@ -16,10 +16,10 @@ def test_stamp_then_check_passes_the_same_space():
 
 def test_a_different_space_is_refused_on_add_or_query():
     meta = stamp_compat({"other": 1}, "oss-magface-ir100:1")
-    with pytest.raises(CompatibilityError, match="vistaface:3"):
-        check_compat(meta, "vistaface:3")
+    with pytest.raises(CompatibilityError, match="extface:3"):
+        check_compat(meta, "extface:3")
     with pytest.raises(CompatibilityError):
-        stamp_compat(meta, "vistaface:3")
+        stamp_compat(meta, "extface:3")
 
 
 def test_an_unstamped_index_is_refused_rather_than_passed():

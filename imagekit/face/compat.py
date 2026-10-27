@@ -3,8 +3,8 @@
 Two embedders produce two spaces, and a cosine between them is noise with a
 confident-looking value.  Every :class:`~imagekit.face.records.FaceRecord`
 carries the tag of the space it lives in (``compat``: ``"oss-magface-ir100:1"``,
-``"vistaface:3"``, ...), and this module is where an index or a dataset turns
-that tag into a rule:
+an external backend's own tag, ...), and this module is where an index or a
+dataset turns that tag into a rule:
 
 * :func:`stamp_compat` writes the tag into the index's metadata when the index
   is **created**;

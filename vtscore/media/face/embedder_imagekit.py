@@ -2,8 +2,7 @@
 
 One ``FacePipeline`` (:mod:`vtscore.media.face.imagekit_bridge`) sits behind
 it, and the server picks the backend - the open SCRFD + ArcFace/MagFace ONNX
-weights, or the proprietary ``vistaimage`` package - so the app never sees
-which.  Like the ``image2face`` converter, it runs only on a server with face
+weights, or an external backend module - so the app never sees which.  Like the ``image2face`` converter, it runs only on a server with face
 models (``imagekit_bridge.face_models``); without them it declines every item.
 
 **Most faces never reach this embedder.**  The converter embeds each face from
@@ -12,7 +11,7 @@ this embedder's name on the crop it emits; the embed stage then finds nothing
 missing.  What does reach it is a face crop with no vector of its own - a reload
 that lost its vectors, a crop from somewhere else - and for those the pipeline
 runs on the crop itself: the provider's detector finds the face inside the crop
-(every provider embeds from a detection, the proprietary one included), and the
+(every provider embeds from a detection, the external one included), and the
 best detection's embedding is the crop's.  A crop in which the provider finds no
 face gets no vector and is dropped at the end of the load, with the reason in
 the drop toast.

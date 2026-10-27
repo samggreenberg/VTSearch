@@ -3,9 +3,9 @@
 Every face in the app goes through the ``imagekit`` package's provider seam
 (:mod:`imagekit.face.pipeline`): one ``FacePipeline`` that detects, aligns and
 embeds every face in an image, behind which a server swaps the backend - ``oss``
-(open SCRFD + ArcFace/MagFace ONNX weights) or ``vista`` (the proprietary
-``vistaimage`` package) - and the app never sees which.  The ``image2face``
-converter and the ``face`` embedder both reach it through this module.
+(open SCRFD + ArcFace/MagFace ONNX weights) or ``ext`` (an external backend
+module) - and the app never sees which.  The ``image2face`` converter and the
+``face`` embedder both reach it through this module.
 
 **The app downloads no face models.**  It uses the ones a deployment puts on
 disk, and Face is on exactly when they are there (:func:`face_models`):
@@ -16,7 +16,9 @@ disk, and Face is on exactly when they are there (:func:`face_models`):
   folder (``VTSEARCH_MODELS_DIR``), so dropping a models directory there turns
   Face on with no environment to set.
 * ``IMAGEKIT_FACE_PROVIDER`` picks the provider; unset, the config's own
-  ``provider`` key, else ``oss``.
+  ``provider`` key, else ``oss``.  The ``ext`` provider imports the backend
+  module ``IMAGEKIT_EXT_BACKEND`` names, else the config's ``ext_backend``,
+  else ``ext_backend``.
 
 Without a config whose models exist, Face is *off*: the ``image2face``
 converter hides itself from every picker and refuses to run, naming what is
@@ -149,6 +151,16 @@ def _missing_paths(config: dict[str, Any], provider: str) -> list[str]:
     return missing
 
 
+def _importable(module: str) -> bool:
+    """Whether *module* is installed here, found without importing it (a dotted path's parents aside)."""
+    try:
+        return importlib_util.find_spec(module) is not None
+    except ValueError:  # already imported, but built in memory with no spec
+        return True
+    except ImportError:  # a dotted path whose parent package is missing
+        return False
+
+
 def _check() -> FaceModels:
     """:func:`face_models` without the cache: the config, its provider and its model files, on disk."""
     from imagekit.face.pipeline import DEFAULT_PROVIDER, available_providers, read_pipeline_config  # noqa: PLC0415
@@ -175,13 +187,16 @@ def _check() -> FaceModels:
         return FaceModels(
             False, f"{path} selects face provider {provider!r}; available: {available_providers()}", path, provider
         )
-    if provider == "vista":
-        from imagekit.face.providers.vista import VISTA_PACKAGES  # noqa: PLC0415
+    if provider == "ext":
+        from imagekit.face.providers.ext import backend_module_name  # noqa: PLC0415
 
-        absent = [name for name in VISTA_PACKAGES if importlib_util.find_spec(name) is None]
-        if absent:
+        backend = backend_module_name(config)
+        if not _importable(backend):
             return FaceModels(
-                False, f"the 'vista' face provider needs {', '.join(absent)}, not installed here", path, provider
+                False,
+                f"the 'ext' face provider needs its backend module {backend!r}, not installed here",
+                path,
+                provider,
             )
     missing = _missing_paths(config, provider)
     if missing:
@@ -198,7 +213,14 @@ def face_models() -> FaceModels:
     :func:`get_face_pipeline`, loudly.
     """
     global _status
-    key = (os.environ.get(CONFIG_ENV_VAR, ""), _env_provider(), str(default_config_path()))
+    from imagekit.face.providers.ext import BACKEND_ENV_VAR  # noqa: PLC0415
+
+    key = (
+        os.environ.get(CONFIG_ENV_VAR, ""),
+        _env_provider(),
+        os.environ.get(BACKEND_ENV_VAR, ""),
+        str(default_config_path()),
+    )
     now = time.monotonic()
     cached = _status
     if cached is not None and cached[1] == key and now - cached[0] < _STATUS_TTL_S:
@@ -218,7 +240,7 @@ def get_face_pipeline() -> "FacePipeline":
 
     Raises :class:`FaceProviderUnconfigured`, naming what is missing, when the
     server has no face models (:func:`face_models`), and whatever the provider
-    raises when they cannot load (a missing ``vistaimage``, a corrupt model).
+    raises when they cannot load (a missing ``ext`` backend module, a corrupt model).
     A failure is not cached: the next call tries again, so models put in place
     later need no restart.
     """
