@@ -6,11 +6,12 @@
 Writes `figs/face-gap.webp` and one build stage, from the face-gap study's committed curves
 (`docs/experiments/2026-10-12-face-gap-4780/curves_by_group.csv`): what the session shows at every
 click, F-beta at β 1, from one starting photo at 1024 px, for FHIBE's she/her people (283) and he/him
-people (278). The study ran today's app at one commit, so the left panel is the face path as it ships
-(FaceNet on crops turned upright, the head started from the Goods' centroid, no prompted check). The
-right panel is the same sessions with every face's vector swapped for ArcFace's, a face model the app
-does not ship: its licence is non-commercial research. Click 0 is the starting photo's own sort, as on
-Face Value.
+people (278). The study ran the app at one commit, so the left panel is the face path as it shipped
+then (FaceNet on crops turned upright, the head started from the Goods' centroid, no prompted check).
+The right panel is the same sessions with every face's vector swapped for ArcFace's, on MTCNN's boxes.
+ArcFace is the face model the app has run since #5320 (on its own detector's boxes; #5321 measures
+that path), so the left panel is titled as the app before it (#5329). The slide stays as the record of
+this study. Click 0 is the starting photo's own sort, as on Face Value.
 
 Page a draws FaceNet alone; page b adds ArcFace beside it, on the same axes. The two groups are told
 apart by weight and darkness, never hue: the deck's hues mean the line, the Goods and the Bads.
@@ -41,7 +42,7 @@ REPO = SRC.parents[2]
 CURVES = REPO / "docs" / "experiments" / "2026-10-12-face-gap-4780" / "curves_by_group.csv"
 
 #: The panels: the set's name in the CSV and its title on the slide.
-PANELS = (("fn", "FaceNet: the app"), ("arc", "ArcFace"))
+PANELS = (("fn", "FaceNet: the app before ArcFace"), ("arc", "ArcFace"))
 #: The groups: the CSV's pronoun, the slide's label, and how heavy and dark its line is drawn.
 GROUPS = (
     ("She/her/hers", "she/her", INK, 3.4),

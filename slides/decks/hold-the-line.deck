@@ -365,12 +365,15 @@ slides:
   # Goods' average (#4384, #4859). Head Start's schematic again, drawn with a typed query instead of faces
   # (`make-many-words-figs.py`).
   many-words
-  # Then how the face path does, as photos, regions and documents end on theirs:
+  # Then how the face path did, as photos, regions and documents end on theirs:
   # Face Value, the objective at every click from one starting photo, each radio
   # on its own sessions, from the weak-check study's end-check arm — the face path
-  # as it ships, which the face review of 2026-10-10 predates (`make-sota-figs.py`).
+  # as it shipped on FaceNet, which the face review of 2026-10-10 predates
+  # (`make-sota-figs.py`). The app has run ArcFace since #5320, so the panel is
+  # titled as FaceNet's (#5329); #5336 redraws it from the ArcFace path.
   # Last, Mind the Gap: for whom. she/her people against he/him, FaceNet
-  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`).
+  # against ArcFace on the same sessions (#4780, `make-face-gap-fig.py`), kept as
+  # that study's record.
   sota-faces
   face-gap
 
