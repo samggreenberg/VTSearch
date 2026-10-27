@@ -13,9 +13,9 @@ model needs a JSON config beside it (``<model>.json``, or an explicit
 ``model_config_path``) naming its embedding space, e.g.
 ``"compatibility": "oss-magface-ir100:1"``; there is no packaged default,
 because a default would let two different weights claim the same space.  The
-package ships reference configs for the two open models next to this module
-(:data:`MAGFACE_CONFIG_PATH`, :data:`ARCFACE_CONFIG_PATH`) to copy beside the
-weights.
+package ships reference configs for the open models next to this module
+(:data:`MAGFACE_CONFIG_PATH`, :data:`ARCFACE_CONFIG_PATH`,
+:data:`ARCFACE_MBF_CONFIG_PATH`) to copy beside the weights.
 
 Initialise-before-use and raise-on-failure exactly as the detector.
 """
@@ -49,6 +49,9 @@ MAGFACE_CONFIG_PATH = Path(__file__).with_name("magface_ir100.json")
 
 #: Reference config for InsightFace's ArcFace ResNet-50 (``buffalo_l`` / ``w600k_r50``).
 ARCFACE_CONFIG_PATH = Path(__file__).with_name("arcface_r50.json")
+
+#: Reference config for InsightFace's ArcFace MobileFaceNet (``buffalo_s`` / ``w600k_mbf``), the GRID's default.
+ARCFACE_MBF_CONFIG_PATH = Path(__file__).with_name("arcface_mbf.json")
 
 NOT_INITIALIZED = "Must initialize FaceEmbeddingExtractor first!"
 

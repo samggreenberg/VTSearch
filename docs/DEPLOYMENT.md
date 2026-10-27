@@ -452,23 +452,25 @@ directory, so a models directory moves as one unit:
 ```
 data/models/imagekit/
 ├── face.json
-├── det_10g.onnx
-├── w600k_r50.onnx
-└── arcface_r50.json
+├── det_500m.onnx
+├── w600k_mbf.onnx
+└── arcface_mbf.json
 ```
 
 ```json
 {
-  "detector": {"model_bundle": "det_10g.onnx"},
-  "embedder": {"model": "w600k_r50.onnx", "config": "arcface_r50.json"}
+  "detector": {"model_bundle": "det_500m.onnx"},
+  "embedder": {"model": "w600k_mbf.onnx", "config": "arcface_mbf.json"}
 }
 ```
 
 Where the weights come from, which ones work, and the full config schema are in
 [`imagekit/README.md`](../imagekit/README.md#models-where-to-get-them). **Check the licence of
-any weights you deploy**: the InsightFace model-zoo weights (`buffalo_l`, above) are for
-non-commercial research only. `arcface_r50.json` is a copy of
-`imagekit/face/extraction/arcface_r50.json`. `IMAGEKIT_FACE_PROVIDER` picks the backend, else the
+any weights you deploy**: the InsightFace model-zoo weights (`buffalo_s`, above, the GRID's
+default; `buffalo_l` and `buffalo_m` likewise) are for non-commercial research only.
+`arcface_mbf.json` is a copy of `imagekit/face/extraction/arcface_mbf.json`; `buffalo_l`'s
+ResNet-50 recogniser takes `arcface_r50.json` instead, a different embedding space (compat tag),
+so changing packs means re-importing every face dataset. `IMAGEKIT_FACE_PROVIDER` picks the backend, else the
 config's own `provider` key, else `oss`; the `ext` provider also needs its backend module installed
 (`IMAGEKIT_EXT_BACKEND` names it, else the config's `ext_backend` key, else `ext_backend`).
 

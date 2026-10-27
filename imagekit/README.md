@@ -83,8 +83,10 @@ the InsightFace model-zoo weights are for non-commercial research only.
   model the packaged default config (`scrfd_10g_gnkps`) describes. The
   [SCRFD page](https://github.com/deepinsight/insightface/tree/master/detection/scrfd)
   lists the other sizes (500M, 2.5G, 10G, 34G, with and without `_kps`) and the
-  export script (`tools/scrfd2onnx.py`) for a checkpoint of your own. Any SCRFD
-  export with 2 anchors at strides 8/16/32 works; set `feat_stride` /
+  export script (`tools/scrfd2onnx.py`) for a checkpoint of your own.
+  `buffalo_s.zip`'s `det_500m.onnx` (SCRFD-500M with keypoints, VTSearch's GRID
+  default since #5341) and `buffalo_m.zip`'s `det_2.5g.onnx` decode with the
+  same packaged config. Any SCRFD export with 2 anchors at strides 8/16/32 works; set `feat_stride` /
   `num_anchors` in the config for another head layout.
 - **RetinaFace-ResNet50**. Selected by a config whose `model.name` starts with
   `retinaface`; decoded with the usual prior boxes (`min_sizes`
@@ -105,8 +107,11 @@ the InsightFace model-zoo weights are for non-commercial research only.
 - **ArcFace** (InsightFace). `buffalo_l.zip`'s `w600k_r50.onnx` is an
   ArcFace-loss ResNet-50 with the same 112 x 112 / 512-d contract; describe it
   with `imagekit/face/extraction/arcface_r50.json` (compat
-  `oss-arcface-r50:1`). Other InsightFace recognition models (`glintr100`,
-  `w600k_mbf`, ...) take the same config with their own `name` and
+  `oss-arcface-r50:1`). `buffalo_s.zip`'s `w600k_mbf.onnx` is the
+  MobileFaceNet recogniser on the same contract, described by
+  `imagekit/face/extraction/arcface_mbf.json` (compat `oss-arcface-mbf:1`); it
+  is VTSearch's GRID default since #5341. Other InsightFace recognition models
+  (`glintr100`, ...) take the same config with their own `name` and
   `compatibility`.
 
 ## ONNX export notes
@@ -508,5 +513,7 @@ record conversion, the backend's compat tag passed through verbatim, the clear
 error when absent); and the two CLIs.
 
 Tests against real weights skip unless `IMAGEKIT_TEST_MODEL_DIR` names a
-directory holding `det_10g.onnx` and `w600k_r50.onnx`; set
+directory holding the models: a deployment's models directory with its
+`face.json` (the tests run on whatever pack it names, against the compat tag its
+embedder config promises), or one holding `det_10g.onnx` and `w600k_r50.onnx`; set
 `IMAGEKIT_TEST_FACE_IMAGE` to a photo with a face for the positive cases.

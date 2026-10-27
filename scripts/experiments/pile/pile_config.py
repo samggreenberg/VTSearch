@@ -161,9 +161,10 @@ DATASETS: dict[str, dict] = {
     "fhibe_640": {"boxed": True, "kind": "fhibe", "long_side": 640, "on_request": True},
     # The face path as the app ships it (#5321): the face provider's detector, boxes,
     # landmarks and vectors (each embedded from the full photo, so `align` turns only the
-    # stored crop). Built with `IMAGEKIT_FACE_PROVIDER` / `IMAGEKIT_FACE_CONFIG` set: since #5328
-    # on InsightFace `buffalo_m` (SCRFD det_2.5g + ArcFace w600k_r50; the owner's pick in #5330),
-    # #5321's on `buffalo_l`. The compat tag is the same for both, so the cell cannot tell them apart.
+    # stored crop). Built on the pile's own models dir, `$VTS_PILE/models/imagekit/face.json`, with no
+    # `IMAGEKIT_FACE_*` set: since #5341 InsightFace `buffalo_s` (SCRFD det_500m + MobileFaceNet
+    # w600k_mbf, compat `oss-arcface-mbf:1`), the GRID's default. #5328's cells were `buffalo_m` and
+    # #5321's `buffalo_l` (both `oss-arcface-r50:1`, a different space).
     #
     # The MTCNN + FaceNet arms -- `fhibe_faces_{1024,640}`, `_roll_`, `_sim_` and `_side_` --
     # were retired with that path in #5320. Like Visual Genome in #4038 they are unrebuildable
