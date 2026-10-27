@@ -447,10 +447,7 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for size in (1024, 640)
     },
     # The face path as the app ships it, through the face provider (#5321).
-    **{
-        f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "face").split(",")
-        for size in (1024, 640)
-    },
+    **{f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "face").split(",") for size in (1024, 640)},
     # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
     "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
