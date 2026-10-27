@@ -17,12 +17,15 @@ The checkpoint holds three things:
 - **How far it got**: ``chunks_done``, the exporter's ``position`` after them
   (for a file, its byte length; see
   :class:`~vtscore.exporters.base.StreamResume`), and one fingerprint per
-  completed chunk (:func:`chunk_digest`).  A resumed run re-reads the
-  completed chunks to reach where it stopped, without embedding or scoring
-  them, and checks each against its fingerprint, so a source that changed
-  underneath the run - a file added, removed or rewritten in the part already
-  done, which would shift every chunk after it - is refused at the first
-  chunk that differs.
+  completed chunk.  A resumed run walks the source to where it stopped,
+  without embedding or scoring the completed chunks, and checks each against
+  its fingerprint, so a source that changed underneath the run - a file
+  added, removed or rewritten in the part already done, which would shift
+  every chunk after it - is refused at the first chunk that differs.  A chunk
+  whose importer can say what it holds without reading it (the
+  ``server_folder`` walk: each file's path, size and mtime) is fingerprinted
+  by that (:func:`key_digest`) and passed without reading its files; any
+  other is re-read and fingerprinted by its media (:func:`chunk_digest`).
 - **Each detector's threshold**: the cut the written chunks were judged at.
   A resumed run retrains its detectors on the same first chunk, keeps the
   recorded cut so every chunk is judged by one threshold, and refuses a
@@ -54,8 +57,9 @@ from typing import Any
 
 from vtscore.io import atomic_write_json
 
-#: The ``format`` tag of a checkpoint file.
-CHECKPOINT_FORMAT = "vtsearch-stream-checkpoint/v1"
+#: The ``format`` tag of a checkpoint file.  ``v2`` fingerprints a chunk by its
+#: importer's key where it has one (#5314); a ``v1`` checkpoint is refused.
+CHECKPOINT_FORMAT = "vtsearch-stream-checkpoint/v2"
 
 #: Appended to the output path to name its checkpoint.
 CHECKPOINT_SUFFIX = ".resume.json"
@@ -142,6 +146,19 @@ def chunk_digest(chunk: dict[int, dict[str, Any]]) -> str:
     """
     rows = [[media.get(key) for key in _FINGERPRINT_FIELDS] for media in chunk.values()]
     return digest(rows)[:16]
+
+
+def key_digest(count: int, key: Any) -> str:
+    """A short fingerprint of a chunk that was not built: its size and its importer's *key*.
+
+    The *key* is the :class:`~vtscore.datasets.chunks.DeferredChunk` one, what
+    the walk knows of the chunk's items without reading them (for a folder,
+    each file's relative path, size and mtime).  It pins the chunk's
+    boundaries as :func:`chunk_digest` does, and catches a rewrite as far as
+    the file's size and mtime show one.  The *count* rides along for a key
+    that is not one row per media.
+    """
+    return digest({"count": count, "key": key})[:16]
 
 
 def detector_identity(det: dict[str, Any] | None) -> dict[str, Any]:

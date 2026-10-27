@@ -9,6 +9,7 @@ the dashboard, and the run then scores that saved dataset.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import sys
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from vtscore import cli_progress
 
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtscore.utils.hits import build_media_hit
 
@@ -1253,12 +1255,40 @@ def _renumber_chunks(
     """
     next_id = 1
     for chunk in chunks:
-        renumbered: dict[int, dict[str, Any]] = {}
-        for media in chunk.values():
-            media["id"] = next_id
-            renumbered[next_id] = media
-            next_id += 1
-        yield renumbered
+        yield _renumbered(chunk, next_id)
+        next_id += len(chunk)
+
+
+def _renumbered(chunk: dict[int, dict[str, Any]], first_id: int) -> dict[int, dict[str, Any]]:
+    """*chunk*'s medias re-keyed in order from *first_id*, each ``id`` set to its key."""
+    renumbered: dict[int, dict[str, Any]] = {}
+    for media_id, media in enumerate(chunk.values(), start=first_id):
+        media["id"] = media_id
+        renumbered[media_id] = media
+    return renumbered
+
+
+def _renumber_deferred_chunks(chunks: Iterator[DeferredChunk], importer_name: str) -> Iterator[DeferredChunk]:
+    """:func:`_renumber_chunks` for chunks not built yet: each numbered on from the last, built or not.
+
+    A chunk advances the ids by its declared ``count``, so the chunks after one
+    that is never built get the ids an all-built stream gives them.  Building
+    a chunk to a different size than it declared is refused, since every id
+    after it would then be wrong.
+    """
+
+    def build(deferred: DeferredChunk, first_id: int) -> dict[int, dict[str, Any]]:
+        chunk = deferred.build()
+        if len(chunk) != deferred.count:
+            raise ValueError(
+                f"Importer '{importer_name}' built {len(chunk)} media for a chunk it declared as {deferred.count}."
+            )
+        return _renumbered(chunk, first_id)
+
+    next_id = 1
+    for deferred in chunks:
+        yield DeferredChunk(count=deferred.count, build=functools.partial(build, deferred, next_id), key=deferred.key)
+        next_id += deferred.count
 
 
 def _load_pickle_chunked(dataset_path: str, chunk_size: int) -> Iterator[dict[int, dict[str, Any]]]:
@@ -1421,6 +1451,24 @@ def _load_importer_chunked_raw(
     importer.validate_cli_field_values(field_values)
     thin = _reference_files_choice(field_values)
     yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=thin))
+
+
+def _load_importer_chunked_deferred(
+    importer_name: str, field_values: dict[str, Any], chunk_size: int
+) -> Iterator[DeferredChunk]:
+    """Yield chunks of medias via a named importer, not yet built (``run_chunked_cli_deferred``)."""
+    from vtscore.datasets.importers import get_importer
+
+    importer = get_importer(importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+
+    importer.validate_cli_field_values(field_values)
+    thin = _reference_files_choice(field_values)
+    yield from _renumber_deferred_chunks(
+        importer.run_chunked_cli_deferred(field_values, chunk_size, thin=thin), importer_name
+    )
 
 
 def _check_multi_output(importer: Any) -> None:
@@ -1618,24 +1666,29 @@ class _SourceSpec:
             return _load_importer_chunked(self.importer_name, self.field_values, self.chunk_size)
         return _load_importer_whole(self.importer_name, self.field_values)
 
-    def load_raw(self) -> Iterator[dict[int, dict[str, Any]]]:
-        """Open the media source as :meth:`load` does, but leave each chunk unembedded.
+    def load_deferred(self) -> Iterator[DeferredChunk]:
+        """Open the media source as :meth:`load` does, but leave each chunk unbuilt and unembedded.
 
-        Each chunk comes out as its loader produced it, so a caller can decide
-        per chunk whether to pay for :meth:`prepare`; ``prepare`` over every
-        chunk is :meth:`load`.  A resumed run (``--resume``) reads its
-        completed chunks this way, to check them without embedding them again.
+        Each chunk comes out as a :class:`~vtscore.datasets.chunks.DeferredChunk`,
+        so a caller decides per chunk whether to build it and then pay for
+        :meth:`prepare`; building and preparing every chunk is :meth:`load`.
+        A resumed run (``--resume``) passes its completed chunks by this way:
+        an importer that walks its chunks without building them
+        (``run_chunked_cli_deferred``) never reads their files, and every
+        other source's are built but not embedded.
         """
         if self.outputs:
             raise ValueError("A multi-dataset source is opened with load_outputs(), one media stream per dataset.")
+        if self.kind == "importer" and self.chunk_size:
+            return _load_importer_chunked_deferred(self.importer_name, self.field_values, self.chunk_size)
         if self.kind == "pickle":
-            return self.load()
-        if self.chunk_size:
-            return _load_importer_chunked_raw(self.importer_name, self.field_values, self.chunk_size)
-        return _load_importer_whole_raw(self.importer_name, self.field_values)
+            chunks = self.load()
+        else:
+            chunks = _load_importer_whole_raw(self.importer_name, self.field_values)
+        return (DeferredChunk.built(chunk) for chunk in chunks)
 
     def prepare(self, chunk: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
-        """Make one :meth:`load_raw` chunk ready to score: embed an importer's media.
+        """Make one built :meth:`load_deferred` chunk ready to score: embed an importer's media.
 
         A dataset pickle already carries its vectors, so its chunks pass
         through unchanged.
@@ -2341,7 +2394,7 @@ def _run_resumable_streaming_pipeline(
                 "resume_start",
                 text=(
                     f"Resuming from {checkpoint_path}: {previous.chunks_done} chunk(s) already written; "
-                    "re-reading them to check the source, without scoring them again."
+                    "walking past them to check the source, without scoring them again."
                 ),
                 checkpoint=str(checkpoint_path),
                 chunks_done=previous.chunks_done,
@@ -2376,60 +2429,77 @@ def _run_resumable_streaming_pipeline(
 
 
 class _ResumableChunks:
-    """A resumable run's chunk stream: each raw chunk fingerprinted, the completed ones checked and skipped.
+    """A resumable run's chunk stream: each chunk fingerprinted, the completed ones checked and skipped.
 
-    Chunks are numbered by their position in the raw stream
-    (:meth:`_SourceSpec.load_raw`), empty ones included, so a chunk that
+    Chunks are numbered by their position in the source
+    (:meth:`_SourceSpec.load_deferred`), empty ones included, so a chunk that
     scored to nothing still advances the checkpoint.  *previous* is the
     checkpoint of the run this one continues, ``None`` for a fresh run; its
-    completed chunks are re-read and checked against their fingerprints, but
-    never embedded or scored.
+    completed chunks are checked against their fingerprints but never
+    embedded or scored, and not even built when the importer can say what
+    one holds without building it (a ``key``; see :meth:`check`).
     """
 
     def __init__(self, spec: _SourceSpec, previous: "StreamCheckpoint | None") -> None:
         self._spec = spec
-        self._raw = iter(spec.load_raw())
+        self._chunks = iter(spec.load_deferred())
         self._previous = previous
         #: How many chunks the earlier run completed.
         self.done = previous.chunks_done if previous is not None else 0
-        #: How many raw chunks have been pulled so far.
+        #: How many chunks have been pulled so far.
         self.seen = 0
         #: The position of the last chunk handed to the exporter; every chunk
         #: before it was either handed over too or had nothing to write.
         self.handed = self.done
         # The completed chunks' fingerprints are the recorded ones (each is
-        # checked as it is re-read); the chunks after them are fingerprinted afresh.
+        # checked as it is passed); the chunks after them are fingerprinted afresh.
         self._completed = list(previous.chunk_digests) if previous is not None else []
         self._new: list[str] = []
 
-    def pull(self) -> dict[int, dict[str, Any]] | None:
-        """The next raw chunk, fingerprinted and checked; ``None`` at the end of the source."""
-        from vtscore.cli_resume import chunk_digest  # noqa: PLC0415
-
-        raw = next(self._raw, None)
-        if raw is None:
+    def pull(self) -> DeferredChunk | None:
+        """The next chunk, not built yet; ``None`` at the end of the source."""
+        deferred = next(self._chunks, None)
+        if deferred is None:
             if self._previous is not None:
                 self._previous.check_reached(self.seen)
             return None
         self.seen += 1
-        if self._previous is not None and self.seen <= self.done:
-            self._previous.check_chunk(self.seen, chunk_digest(raw))
+        return deferred
+
+    def check(self, deferred: DeferredChunk, *, build: bool) -> dict[int, dict[str, Any]] | None:
+        """Fingerprint the chunk just pulled, checking it if it was completed; its media if built.
+
+        A chunk with a ``key`` is fingerprinted by it
+        (:func:`~vtscore.cli_resume.key_digest`) and built only when *build*
+        asks; one without is built either way and fingerprinted by its media
+        (:func:`~vtscore.cli_resume.chunk_digest`).  Which of the two a chunk
+        gets depends on its importer alone, so a resumed run fingerprints each
+        chunk the way the run it continues did.
+        """
+        from vtscore.cli_resume import chunk_digest, key_digest  # noqa: PLC0415
+
+        raw = deferred.build() if build or deferred.key is None else None
+        if deferred.key is not None:
+            fingerprint = key_digest(deferred.count, deferred.key())
         else:
-            self._new.append(chunk_digest(raw))
+            fingerprint = chunk_digest(raw or {})
+        if self._previous is not None and self.seen <= self.done:
+            self._previous.check_chunk(self.seen, fingerprint)
+        else:
+            self._new.append(fingerprint)
         return raw
 
     def first(self, empty_error: str) -> dict[int, dict[str, Any]]:
         """The first non-empty chunk, prepared: the one the detectors train on.
 
-        Embedded whether or not it was completed, so a resumed run's head is
-        the one the written chunks came from.
+        Built and embedded whether or not it was completed, so a resumed run's
+        head is the one the written chunks came from.
         """
-        while True:
-            raw = self.pull()
-            if raw is None:
-                raise ValueError(empty_error)
+        while (deferred := self.pull()) is not None:
+            raw = self.check(deferred, build=deferred.count > 0)
             if raw and (chunk := self._spec.prepare(raw)):
                 return chunk
+        raise ValueError(empty_error)
 
     def records(
         self,
@@ -2446,16 +2516,21 @@ class _ResumableChunks:
             yield list(_chunk_hit_records(results, keep_negatives))
         # Only the first chunk's prepared snapshots are reused (see _stream_hit_records).
         routed = None
-        while (raw := self.pull()) is not None:
+        while (deferred := self.pull()) is not None:
             if self.seen <= self.done:
+                read = self.check(deferred, build=False) is not None
                 cli_progress.emit(
                     "chunk_skipped",
-                    text=f"Skipping chunk {self.seen} ({len(raw)} medias): already written.",
+                    text=(
+                        f"Skipping chunk {self.seen} ({deferred.count} medias): already written"
+                        f"{'' if read else '; checked without reading its files'}."
+                    ),
                     chunk_num=self.seen,
-                    chunk_size=len(raw),
+                    chunk_size=deferred.count,
+                    read=read,
                 )
                 continue
-            records = self._score(raw, detector_mlps, keep_negatives)
+            records = self._score(self.check(deferred, build=True) or {}, detector_mlps, keep_negatives)
             # Before the yield: the exporter commits this chunk before it asks for the next.
             self.handed = self.seen
             yield records

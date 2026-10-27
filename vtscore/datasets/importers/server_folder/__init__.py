@@ -38,11 +38,12 @@ from vtscore.datasets.archive import (
     extract_archive_cached,
     find_archives,
     is_archive_path,
-    iter_archive_chunks,
+    iter_archive_chunks_deferred,
     load_archive_into,
 )
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
-from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
+from vtscore.datasets.loader import iter_folder_chunks_deferred, load_dataset_from_folder
 from vtscore.datasets.pdf import load_pdf_images_into
 
 
@@ -60,6 +61,15 @@ def _coerce_dig_archives(field_values: dict[str, Any]) -> bool:
     if isinstance(val, bool):
         return val
     return str(val).lower() == "true"
+
+
+def _require_cli_path(field_values: dict[str, Any]) -> None:
+    """Refuse a CLI ``--path`` that is neither a directory nor an archive file."""
+    path = Path(field_values["path"])
+    if not path.exists():
+        raise FileNotFoundError(f"Path not found: {path}")
+    if not is_archive_path(path) and not path.is_dir():
+        raise NotADirectoryError(f"Not a directory or supported archive: {path}")
 
 
 def _run_converter_specs(
@@ -298,11 +308,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             raise ValueError(f"No {output_type} files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        path = Path(field_values["path"])
-        if not path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
-        if not is_archive_path(path) and not path.is_dir():
-            raise NotADirectoryError(f"Not a directory or supported archive: {path}")
+        _require_cli_path(field_values)
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -315,6 +321,22 @@ class ServerFolderDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
+        for deferred in self._iter_deferred_chunks(field_values, chunk_size, thin):
+            yield deferred.build()
+
+    def _iter_deferred_chunks(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool,
+    ) -> Iterator[DeferredChunk]:
+        """Every chunk of the import, walked but not built: what :meth:`run_chunked` builds.
+
+        The direct rows' chunks read no file until they are built (see
+        :func:`~vtscore.datasets.loader_folder.iter_folder_chunks_deferred`),
+        and neither do an archive's.  The PDF and converter chunks come built,
+        as their sizes are not known until their sources are read.
+        """
         path = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
         dig_archives = _coerce_dig_archives(field_values)
@@ -335,7 +357,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
             mt = get(spec.source_type)
             try:
-                yield from load_dataset_from_folder_chunked(
+                yield from iter_folder_chunks_deferred(
                     path,
                     mt.folder_import_name,
                     chunk_size,
@@ -354,7 +376,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             chunk: dict[int, dict[str, Any]] = {}
             load_pdf_images_into(path, chunk, thin=thin, recursive=recursive)
             if chunk:
-                yield chunk
+                yield DeferredChunk.built(chunk)
 
         if converter_specs:
             converter_chunk: dict[int, dict[str, Any]] = {}
@@ -368,7 +390,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 folder_path_for_origin=str(path),
             )
             if converter_chunk:
-                yield converter_chunk
+                yield DeferredChunk.built(converter_chunk)
 
         if dig_archives:
             for archive in find_archives(path, recursive):
@@ -381,8 +403,8 @@ class ServerFolderDatasetImporter(DatasetImporter):
         specs: list[SourceSpec],
         chunk_size: int,
         thin: bool,
-    ) -> Iterator[dict[int, dict[str, Any]]]:
-        yield from iter_archive_chunks(
+    ) -> Iterator[DeferredChunk]:
+        yield from iter_archive_chunks_deferred(
             archive,
             output_type,
             specs,
@@ -399,12 +421,18 @@ class ServerFolderDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        path = Path(field_values["path"])
-        if not path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
-        if not is_archive_path(path) and not path.is_dir():
-            raise NotADirectoryError(f"Not a directory or supported archive: {path}")
+        _require_cli_path(field_values)
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
+
+    def run_chunked_cli_deferred(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[DeferredChunk]:
+        """The CLI's chunks, unbuilt: a resumed run passes the ones it wrote by without reading their files."""
+        _require_cli_path(field_values)
+        yield from self._iter_deferred_chunks(field_values, chunk_size, thin)
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
         base = super().build_cli_args(field_values)

@@ -135,9 +135,9 @@ class TestLoad:
             next(iter(source))
 
     @pytest.mark.parametrize("chunk_size", [None, 10])
-    def test_load_raw_is_lazy_too(self, chunk_size):
+    def test_load_deferred_is_lazy_too(self, chunk_size):
         spec = _SourceSpec(kind="importer", importer_name="definitely_not_an_importer", chunk_size=chunk_size)
-        source = spec.load_raw()
+        source = spec.load_deferred()
         with pytest.raises(ValueError, match="Unknown importer"):
             next(iter(source))
 

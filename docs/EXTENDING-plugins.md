@@ -638,6 +638,7 @@ to the framework.
 | `handles_own_clipping` | `bool` (class attribute, default `False`) | `True` when `run()` applies the clipper itself (the demo importer), so the pipeline skips its own clipper stage instead of clipping twice |
 | `picker_view` | `str` (class attribute, default `"form"`) | Which Add Dataset widget renders the importer; the other values (`"local_folder"`, `"local_files"`, `"server_folder"`, `"demo"`) select built-in UI sections, so a new importer keeps `"form"` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
+| `run_chunked_cli_deferred()` | `(field_values, chunk_size, thin) -> Iterator[DeferredChunk]` | `run_chunked_cli()`'s chunks walked but not built, so a resumed `--resume` run passes the ones it already wrote without reading them. Default wraps `run_chunked_cli()`'s built chunks. See [Deferred chunks](#deferred-chunks-for-a-resumed-cli-run) |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
 | `origin_display()` | `(origin: dict) -> str` | Human-readable string for an origin dict |
@@ -1041,6 +1042,52 @@ python app.py --autodetect --importer s3 --bucket my-data --prefix audio/ \
 CLI arguments are auto-generated from `fields`. A `file` field takes a path
 on the command line and reaches `run()` wrapped as a `CliUploadedFile`, so
 the same body serves both paths.
+
+### Deferred chunks for a resumed CLI run
+
+A `--stream-results --resume` run ([CLI.md](CLI.md#large-datasets-chunking-and-streaming))
+that was interrupted walks your chunks again from the start to reach where it
+stopped. It needs only to check that each chunk it already wrote is the chunk it
+wrote, not the chunk's media, so it reads them through
+`run_chunked_cli_deferred()`, which yields one
+`vtscore.datasets.importers.base.DeferredChunk` per chunk:
+
+- `count`: how many media the chunk holds. The ids of every later chunk depend
+  on it, so it must equal the size of what `build` returns.
+- `build`: a zero-argument callable that builds the chunk's medias dict, as
+  `run_chunked_cli()` would have yielded it. It is called at most once, before
+  the next chunk is pulled, and a chunk that is only checked is never built.
+- `key` (optional): a zero-argument callable returning what the chunk holds,
+  without reading any file's contents, as JSON-serialisable data that changes
+  when the chunk's items do (paths, sizes and mtimes, say). A chunk with no
+  `key` is built so it can be checked by its media.
+
+The default wraps each chunk `run_chunked_cli()` yields, already built and with
+no key, so a resumed run re-reads your completed chunks. Override it when
+building a chunk is the expensive part and your walk knows a chunk's items
+before reading them. Yield the same chunks, in the same order and at the same
+boundaries, as `run_chunked_cli()`; yield a chunk you cannot list without
+reading its sources with `DeferredChunk.built(medias)`. The built-in
+`server_folder` importer does this for its folder and archive chunks
+(`vtscore.datasets.loader.iter_folder_chunks_deferred` walks a folder this way),
+and yields its PDF-page and converter chunks built:
+
+```python
+from vtscore.datasets.importers.base import DeferredChunk
+
+def run_chunked_cli_deferred(self, field_values, chunk_size, thin=False):
+    for paths in self._walk(field_values, chunk_size):     # cheap: listing, no reads
+        yield DeferredChunk(
+            count=len(paths),
+            build=lambda paths=paths: self._build(paths, thin),
+            key=lambda paths=paths: [[p.name, p.stat().st_size, p.stat().st_mtime_ns] for p in paths],
+        )
+```
+
+A chunk's fingerprint in the checkpoint comes from its `key` when it has one,
+so a resumed run checks a keyed chunk only as far as the key reaches: a file
+rewritten with its size and mtime unchanged passes. That chunk's results are
+already written, so nothing the run outputs depends on it.
 
 ### Wiring up dependencies
 

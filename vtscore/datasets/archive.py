@@ -41,12 +41,14 @@ import shutil
 import tarfile
 import threading
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 from uuid import uuid4
 
 from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.config import DATA_DIR
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
@@ -63,6 +65,7 @@ __all__ = [
     "find_archives",
     "is_archive_path",
     "iter_archive_chunks",
+    "iter_archive_chunks_deferred",
     "load_archive_into",
 ]
 
@@ -305,20 +308,65 @@ def iter_archive_chunks(
     re-derive on demand.  Each yielded chunk is a self-contained medias dict
     with IDs starting at 1.
     """
+    for deferred in iter_archive_chunks_deferred(
+        archive_path,
+        output_type,
+        specs,
+        chunk_size,
+        thin=thin,
+        content_vectors=content_vectors,
+        content_md5s=content_md5s,
+        custom_metadata_map=custom_metadata_map,
+        on_progress=on_progress,
+    ):
+        yield deferred.build()
+
+
+def _stamped(deferred: DeferredChunk, stamp: list[Any]) -> DeferredChunk:
+    """*deferred* with the archive's ``[name, size, mtime_ns]`` beside its members' rows in its ``key``."""
+    files_key = deferred.key or (lambda: None)
+    return replace(deferred, key=lambda: {"archive": stamp, "files": files_key()})
+
+
+def iter_archive_chunks_deferred(
+    archive_path: str | Path,
+    output_type: str,
+    specs: list["SourceSpec"],
+    chunk_size: int,
+    *,
+    thin: bool = False,
+    content_vectors: dict[str, Any] | None = None,
+    content_md5s: dict[str, str] | None = None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+    on_progress: Optional[ProgressCallback] = None,
+) -> Iterator[DeferredChunk]:
+    """The chunks :func:`iter_archive_chunks` yields, each as a :class:`~vtscore.datasets.chunks.DeferredChunk` (#5314).
+
+    The archive is extracted (or its cached extraction reused) and walked, but
+    a direct row's chunk reads no member until it is built
+    (:func:`~vtscore.datasets.loader_folder.iter_folder_chunks_deferred`).
+    Its ``key`` is the archive's own ``[name, size, mtime_ns]`` with a
+    ``[relative path, size]`` row per member: an extractor may or may not
+    keep the members' mtimes, so the archive's stands in for them.  The PDF
+    and converter chunks are built as they are reached, as they cannot be
+    counted without reading their sources.
+    """
     from vtscore.converters.runner import run_converters_on_folder  # noqa: PLC0415
-    from vtscore.datasets.loader import load_dataset_from_folder_chunked  # noqa: PLC0415
+    from vtscore.datasets.loader import iter_folder_chunks_deferred  # noqa: PLC0415
     from vtscore.datasets.pdf import load_pdf_images_into  # noqa: PLC0415
     from vtscore.media import get  # noqa: PLC0415
 
     cached_dir = extract_archive_cached(archive_path, on_progress)
     origin = build_local_archive_origin(Path(archive_path), output_type)
+    st = Path(archive_path).stat()
+    stamp = [Path(archive_path).name, st.st_size, st.st_mtime_ns]
 
     for spec in specs:
         if spec.converter is not None:
             continue
         mt = get(spec.source_type)
         try:
-            yield from load_dataset_from_folder_chunked(
+            for deferred in iter_folder_chunks_deferred(
                 cached_dir,
                 mt.folder_import_name,
                 chunk_size,
@@ -328,7 +376,9 @@ def iter_archive_chunks(
                 content_md5s=content_md5s or None,
                 custom_metadata_map=custom_metadata_map or None,
                 recursive=True,
-            )
+                stamp_mtime=False,
+            ):
+                yield _stamped(deferred, stamp)
         except ValueError:
             # No files of this source type inside the archive – keep going;
             # PDF / converter rows may still produce output.
@@ -338,7 +388,7 @@ def iter_archive_chunks(
         pdf_chunk: dict[int, dict[str, Any]] = {}
         load_pdf_images_into(cached_dir, pdf_chunk, thin=thin, recursive=True)
         if pdf_chunk:
-            yield pdf_chunk
+            yield DeferredChunk.built(pdf_chunk)
 
     converter_specs = [s for s in specs if s.converter is not None]
     if converter_specs:
@@ -353,7 +403,7 @@ def iter_archive_chunks(
             recursive=True,
         )
         if converter_chunk:
-            yield converter_chunk
+            yield DeferredChunk.built(converter_chunk)
 
 
 # A chunk size large enough that the chunked loader yields everything in one

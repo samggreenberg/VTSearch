@@ -19,8 +19,24 @@ instead, since every commit on `dev` is effectively a new app release.)
   `imagekit` provider, which detects and embeds each face from the full photo in one pass through the
   `imagekit` face-provider seam, and the new `imagekit_face` face embedder (`vtscore.media.face.embedder_imagekit`)
   that fronts that seam beside FaceNet, which is now explicitly the face type's default.
+- **Deferred chunks: `ImporterBase.run_chunked_cli_deferred` and `DeferredChunk`** (issue #5314). An optional,
+  additive importer hook a resumed `--stream-results --resume` run reads its source through: it yields one
+  `vtscore.datasets.importers.base.DeferredChunk` per `run_chunked_cli` chunk, carrying the chunk's `count`, a
+  `build()` callable and an optional `key()` that says what it holds without reading any file, so the run passes
+  the chunks it already wrote without building them. The default wraps `run_chunked_cli`'s chunks, built and
+  keyless, so existing importers are unaffected (their completed chunks are re-read, as before). `server_folder`
+  implements it, through the new `vtscore.datasets.loader.iter_folder_chunks_deferred` (keyed by each file's
+  relative path, size and mtime) and `vtscore.datasets.archive.iter_archive_chunks_deferred`;
+  `vtscore.cli_resume.key_digest` fingerprints a keyed chunk. See
+  [`docs/extending/dataset-importers.md`](docs/extending/dataset-importers.md#chunked-loading-and-resumed-cli-runs).
 
 ### Changed
+
+- **A resume checkpoint is `vtsearch-stream-checkpoint/v2`** (issue #5314). A chunk with an importer `key` is
+  fingerprinted by `key_digest` rather than by its media's md5; a `v1` checkpoint is refused as unreadable.
+  `server_folder`'s `run_chunked` and `iter_archive_chunks` now build each chunk outside the walk that skips a
+  source type with no files, so a `ValueError` raised while building a file reaches the caller, where it used to
+  end that source type's walk at the file without a word.
 
 - **The head's count line keeps 0.71·β times what stands out at a balance of 1 and below, not β^0.708** (issue
   #5084). While the class model holds fewer than `HEAD_COUNT_GOODS` held-out Goods, `head_count_cut` now keeps

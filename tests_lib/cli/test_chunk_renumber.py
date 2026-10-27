@@ -10,7 +10,10 @@ globally unique regardless of which chunked importer is feeding it.
 
 from __future__ import annotations
 
-from vtscore.cli import _renumber_chunks
+import pytest
+
+from vtscore.cli import _renumber_chunks, _renumber_deferred_chunks
+from vtscore.datasets.chunks import DeferredChunk
 
 
 class TestRenumberChunks:
@@ -93,3 +96,32 @@ class TestRenumberChunks:
         # media's own ``id`` field.
         assert out[1][2]["id"] == 2
         assert out[1][2]["name"] == "b"
+
+
+class TestRenumberDeferredChunks:
+    """The same numbering for chunks a resumed run may never build (#5314)."""
+
+    @staticmethod
+    def _chunk(*names: str) -> dict[int, dict]:
+        return {i: {"id": i, "name": name} for i, name in enumerate(names, 1)}
+
+    def test_ids_continue_past_a_chunk_that_is_never_built(self):
+        chunks = [self._chunk("a1", "a2"), self._chunk("b1", "b2", "b3"), self._chunk("c1")]
+        deferred = list(_renumber_deferred_chunks(iter(DeferredChunk.built(c) for c in chunks), "stub"))
+
+        assert [d.count for d in deferred] == [2, 3, 1]
+        assert deferred[2].build() == {6: {"id": 6, "name": "c1"}}
+
+    def test_the_key_rides_along(self):
+        key = lambda: [["a.wav", 1, 2]]  # noqa: E731
+        (deferred,) = _renumber_deferred_chunks(
+            iter([DeferredChunk(count=1, build=lambda: self._chunk("a"), key=key)]), "stub"
+        )
+
+        assert deferred.key is key
+
+    def test_a_chunk_built_to_another_size_than_it_declared_is_refused(self):
+        (deferred,) = _renumber_deferred_chunks(iter([DeferredChunk(count=3, build=lambda: self._chunk("a"))]), "stub")
+
+        with pytest.raises(ValueError, match="Importer 'stub' built 1 media for a chunk it declared as 3"):
+            deferred.build()

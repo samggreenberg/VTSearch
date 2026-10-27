@@ -262,21 +262,26 @@ What a resumed run guarantees:
   the resumed run cuts the file back to the checkpoint and writes that chunk
   again, whole.
 - **Completed chunks are not scored again.** The resumed run walks the source
-  from the start to reach where it stopped, re-reading each completed chunk's
-  files to check them but not embedding or scoring them. The first chunk is
-  the exception: the detectors are retrained on it, as the first run's were,
-  so it is embedded again. The re-read still costs time: for a folder, the
-  walk plus hashing and thumbnailing every file already done (a resume that
-  skips those reads is #5314).
+  from the start to reach where it stopped, checking each completed chunk but
+  not embedding or scoring it. For `server_folder`, the check needs only the
+  walk: each file's path, size and modification time, read without opening
+  the file, so the files already done are not hashed or thumbnailed again.
+  That covers the folder's own files and those of an archive (`--path` an
+  archive, or `--dig-archives`), whose members are checked by the archive's
+  own size and time. Its PDF-page and converter chunks, and every other
+  importer's or dataset's chunks, are re-read to be checked. The first chunk
+  is the exception throughout: the detectors are retrained on it, as the
+  first run's were, so it is read and embedded again.
 - **A different run is refused, not appended.** The checkpoint records the
   run's identity: the source and its parameters, the chunk size, each
   detector's labels, the settings, `--keep-negatives` / `--override-clipper`,
   and the exporter and its fields. A resume with any of them changed fails
   with an error naming what changed. So does one whose source changed in the
   part already done (a file added, removed or rewritten there, which would
-  shift every chunk after it), one whose output file is missing or shorter
-  than the checkpoint says, and one whose retrained detector lands on a
-  noticeably different threshold. Files added *after* the part already done
+  shift every chunk after it; a folder walk sees a rewrite by the file's size
+  or modification time), one whose output file is missing or shorter than the
+  checkpoint says, and one whose retrained detector lands on a noticeably
+  different threshold. Files added *after* the part already done
   are fine: they are scored as usual. A retrained threshold that differs only
   by floating-point noise (a requeue on a different GPU) is set back to the
   recorded one, so every chunk is judged by one cut, with a
@@ -295,8 +300,10 @@ with `server_json_file` and `server_csv_file`, and not with `--as-labelset` or
 `--outputs`. The checkpoint holds digests, byte offsets and thresholds only,
 never an importer's field values in the clear. In `--progress-format json` a
 resumable run reports `resume_start` (`resumed: false` on a fresh start), a
-`chunk_skipped` per completed chunk it re-reads, and `resume_complete` at the
-end.
+`chunk_skipped` per completed chunk it passes (`read: false` when the walk
+alone checked it), and `resume_complete` at the end. A checkpoint written
+before checks were made from the walk (format `v1`) cannot be resumed: delete
+it to start over.
 
 **Streaming as a labelset** (`--as-labelset`, with `--stream-results`): stream the
 hits as label entries instead, so the export reads back in through a label

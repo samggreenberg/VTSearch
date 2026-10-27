@@ -7,8 +7,8 @@ tests pin the guarantees ``docs/CLI.md`` makes for it:
 - an interrupted run, resumed, leaves the file an uninterrupted run writes:
   no chunk repeated, none dropped, the header written once - even when the
   process died partway through writing a chunk;
-- the completed chunks are re-read to check the source, but not embedded or
-  scored again;
+- the completed chunks are checked against the source, but not embedded or
+  scored again, and a folder's are not even read (#5314);
 - a checkpoint from a different run (chunk size, detectors, what is scored),
   a source that changed in the part already done, a retrained threshold that
   moved, or an output that lost what was written is refused;
@@ -29,6 +29,7 @@ from typing import Any
 import pytest
 
 from vtsearch.settings import get_detectors_dir
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 from vtscore.utils.hashing import content_md5
 
 
@@ -605,11 +606,24 @@ class TestResumeDryRun:
 # ---------------------------------------------------------------------------
 
 
-class _StubImporter:
-    """Yields fixed chunks of already-embedded medias, as a chunked importer would."""
+class _StubImporter(DatasetImporter):
+    """Yields fixed chunks of already-embedded medias, as a chunked importer would.
+
+    It overrides only ``run_chunked_cli``, so a resumed run reaches its chunks
+    through the base class's ``run_chunked_cli_deferred``: built, with no key.
+    """
+
+    name = "stub"
+    display_name = "Stub"
+    description = "Test"
+    fields: list[PluginField] = []
 
     def __init__(self, medias: list[dict]) -> None:
+        super().__init__()
         self.medias = medias
+
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
+        raise NotImplementedError
 
     def validate_cli_field_values(self, field_values: dict) -> None:
         pass
@@ -670,3 +684,129 @@ class TestResumeFromAnImporter:
         # The first chunk (ids 1-2) trains the detectors; 3-4 were written; 5+ are new.
         assert embedded == [1, 5, 7, 9]
         assert out.read_bytes() == (tmp_path / "reference.ndjson").read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# A folder source: completed chunks are walked, not read (#5314)
+# ---------------------------------------------------------------------------
+
+
+class _FolderRun:
+    """A ``server_folder`` resumable run over a folder of nine wavs, two per chunk."""
+
+    def __init__(self, tmp_path: Path, monkeypatch) -> None:
+        import numpy as np
+
+        import vtscore.cli as cli_mod
+        import vtscore.datasets.loader_folder as loader_folder
+        from tests_lib.helpers import make_wav_file
+        from vtscore.embedding.media_vectors import set_media_embedding
+
+        self.tmp_path = tmp_path
+        self.folder = tmp_path / "clips"
+        self.folder.mkdir()
+        for i in range(1, 10):
+            make_wav_file(self.folder, f"clip_{i:03d}.wav", frequency=400.0 + 10 * i)
+        _write_detector("resume-det")
+        _settings_file(tmp_path, "resume-det")
+
+        #: Every file the folder loader builds (reads, hashes, thumbnails), in order.
+        self.built: list[str] = []
+        real_build = loader_folder._build_per_file_media
+
+        def build(**kwargs: Any) -> dict:
+            self.built.append(kwargs["rel_path"])
+            return real_build(**kwargs)
+
+        def embed(chunk: dict) -> dict:
+            # The pickle fixture's 2-dim embedding, keyed by the file's number.
+            for media in chunk.values():
+                number = int(media["filename"][5:8])
+                set_media_embedding(media, "clap", np.asarray(_make_audio_media(number)["embedding"], np.float32))
+            return chunk
+
+        monkeypatch.setattr(loader_folder, "_build_per_file_media", build)
+        monkeypatch.setattr(cli_mod, "_embed_loaded_medias", embed)
+
+    def run(self, out: Path) -> None:
+        from vtscore.cli import autodetect_importer_main_chunked
+
+        autodetect_importer_main_chunked(
+            "server_folder",
+            {"path": str(self.folder), "media_type": "audio"},
+            2,
+            settings_path=str(self.tmp_path / "settings.json"),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+            keep_negatives=True,
+            resume=True,
+        )
+
+    def walk(self) -> list[str]:
+        """The files in walk order: what an uninterrupted run builds."""
+        self.built.clear()
+        self.run(self.tmp_path / "reference.ndjson")
+        walk = list(self.built)
+        self.built.clear()
+        return walk
+
+
+@pytest.fixture
+def folder_run(client, tmp_path, monkeypatch, head) -> _FolderRun:
+    return _FolderRun(tmp_path, monkeypatch)
+
+
+class TestResumeFromAFolder:
+    def test_completed_chunks_are_walked_without_reading_their_files(self, folder_run, scorer, capsys):
+        walk = folder_run.walk()
+        out = folder_run.tmp_path / "hits.ndjson"
+        scorer.calls, scorer.at = 0, 3
+        with pytest.raises(KeyboardInterrupt):
+            folder_run.run(out)
+        scorer.at = None
+        folder_run.built.clear()
+        capsys.readouterr()
+
+        folder_run.run(out)
+
+        # Chunk 1 is built to retrain the detectors; chunk 2 was written and is
+        # only walked; chunks 3-5 are new.
+        assert folder_run.built == walk[:2] + walk[4:]
+        assert "Skipping chunk 2 (2 medias): already written; checked without reading its files." in (
+            capsys.readouterr().out
+        )
+        assert out.read_bytes() == (folder_run.tmp_path / "reference.ndjson").read_bytes()
+
+    def test_a_file_removed_from_the_part_already_done_is_refused(self, folder_run, scorer, capsys):
+        walk = folder_run.walk()
+        out = folder_run.tmp_path / "hits.ndjson"
+        scorer.calls, scorer.at = 0, 4
+        with pytest.raises(KeyboardInterrupt):
+            folder_run.run(out)
+        scorer.calls, scorer.at = 0, None
+        (folder_run.folder / walk[3]).unlink()
+        before = out.read_bytes()
+
+        with pytest.raises(SystemExit):
+            folder_run.run(out)
+
+        assert "chunk 2 no longer holds the same media" in _error(capsys)
+        assert scorer.calls == 0
+        assert out.read_bytes() == before
+
+    def test_a_file_rewritten_in_the_part_already_done_is_refused(self, folder_run, scorer, capsys):
+        walk = folder_run.walk()
+        out = folder_run.tmp_path / "hits.ndjson"
+        scorer.calls, scorer.at = 0, 4
+        with pytest.raises(KeyboardInterrupt):
+            folder_run.run(out)
+        scorer.calls, scorer.at = 0, None
+        rewritten = folder_run.folder / walk[5]
+        rewritten.write_bytes(rewritten.read_bytes() + b"\x00")
+
+        with pytest.raises(SystemExit):
+            folder_run.run(out)
+
+        assert "chunk 3 no longer holds the same media" in _error(capsys)
+        assert scorer.calls == 0
