@@ -64,7 +64,8 @@
       [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >Dashboard</button>
     <!-- Toasty's hand-off when Autopilot finishes training (#4680), under the
-         button it suggests. Any further vote drops it (AutopilotStateService). -->
+         button it suggests. Any further vote drops it (AutopilotStateService),
+         and so does leaving the Train view (#5354). -->
     @if (isOnLabelView()) {
       @if (autopilotHandoff(); as handoff) {
         @if (handoff.kind === 'all-labeled') {
