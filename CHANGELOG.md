@@ -29,6 +29,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   through `default_detector_name()`, e.g. a saved query's title instead of its id; see
   [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#naming-the-created-detector).
 
+- **A first AutoFind detector asks where its results go** (issue #5344). Moving your first detector to AutoFind,
+  from the Dashboard's ⋯ menu or the Tune verdict, now asks how to handle its results when no AutoFind exporter is
+  set. **Set up AutoFind…** opens Settings on the AutoFind tab. **Import settings…** opens it with the settings
+  importer up, for a new server you haven't brought your settings to; the detector you just moved stays on AutoFind
+  whatever the imported file lists. **Not now** keeps the results in the app. Picking None on purpose means the
+  question comes back only after you empty the AutoFind tab.
+
 - **A detector made from imported labels says how it was imported** (issue #5334). A detector created by New
   Detector › Trained, or by the CLI's `--import-labels-into … --create-detector`, keeps the label importer that
   created it, the fields that importer ran with (never a password or an uploaded file) and when. Its **Stats**

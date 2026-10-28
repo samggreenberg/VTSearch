@@ -431,6 +431,38 @@ describe('SettingsModalComponent', () => {
     expect(component.activeSettingsTab()).toBe('general');
   });
 
+  describe('opened for a purpose (#5344)', () => {
+    it('opens on initialTab', async () => {
+      fixture.componentRef.setInput('initialTab', 'autofind');
+      await flushInit();
+      expect(component.activeSettingsTab()).toBe('autofind');
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-auto-find-settings')).toBeTruthy();
+      // The AutoFind pane lists the exporters it offers.
+      httpMock.expectOne('/api/exporters').flush([]);
+    });
+
+    it('opens with the settings importer up when startWithImporter is set', async () => {
+      fixture.componentRef.setInput('startWithImporter', true);
+      // The importer's list is a resource, which holds the fixture unstable
+      // until it lands, so answer it before flushInit settles.
+      TestBed.tick();
+      httpMock.expectOne('/api/settings-importers').flush([]);
+      await flushInit();
+      expect(component.showImporterModal).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-settings-importer-modal')).toBeTruthy();
+    });
+
+    it('emits imported as soon as an import is applied', async () => {
+      await flushInit();
+      const imported = vi.fn();
+      component.imported.subscribe(imported);
+      component.onImportComplete();
+      expect(imported).toHaveBeenCalledTimes(1);
+      // No theme in the reload, so it doesn't save one back.
+      httpMock.expectOne('/api/settings').flush({ volume: 50 });
+    });
+  });
+
   it('should ignore preselectedViewTab when not in mediaTypes', async () => {
     fixture.componentRef.setInput('preselectedViewTab', 'video');
     await flushInit();
