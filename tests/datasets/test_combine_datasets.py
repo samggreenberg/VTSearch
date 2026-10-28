@@ -828,16 +828,28 @@ class TestStageDemoEndpoint:
         assert resp.status_code == 400
 
     def test_accepts_valid_demo(self, client):
-        """If any demo dataset exists, staging it returns 200."""
+        """If any demo dataset exists, staging it returns 200 and starts the staging task.
+
+        The task itself is mocked.  Run for real it is a daemon thread that
+        outlives this test, downloading and embedding the first demo (ESC-50)
+        into the session data dir while the rest of this group's tests read it.
+        """
+        from unittest.mock import patch
+
         from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets configured")
         name = next(iter(DEMO_DATASETS))
-        resp = client.post(f"/api/dataset/stage-demo/{name}")
+        with patch(
+            "vtsearch.routes.datasets.staging._stage_importer_in_background", return_value="task-1"
+        ) as mock_stage:
+            resp = client.post(f"/api/dataset/stage-demo/{name}")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
+        assert data["task_id"] == "task-1"
+        assert mock_stage.call_args.args[1] == {"name": name}
 
 
 @pytest.mark.xdist_group("shared-staging-dir")

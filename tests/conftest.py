@@ -36,7 +36,11 @@ from tests_shared.pass_cache import (
     record_pass_report,
 )
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit
-from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer
+from tests_shared.xdist_plumbing import (
+    make_crash_safe_scheduler,
+    restore_xdist_group_suffix,
+    set_worker_timeout_timer,
+)
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
@@ -63,8 +67,9 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(items, config):
-    """Auto-assign group markers based on the test file's parent directory, then drop recorded passes."""
+    """Auto-assign group markers, restore xdist's group suffix (#5356), then drop recorded passes."""
     add_group_markers(items, root_dir_name="tests")
+    restore_xdist_group_suffix(config, items)
     deselect_cached_passes(config, items)
 
 

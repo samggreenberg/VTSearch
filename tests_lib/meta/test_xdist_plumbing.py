@@ -3,10 +3,13 @@
 ``tests_shared/xdist_plumbing.py`` replaces pytest-xdist's loadgroup scheduler
 and, in a worker, pytest-timeout's ``thread`` timer.  What they fix only shows
 across processes, so these run whole ``-n 2 --dist loadgroup`` sessions in a
-subprocess, over a throwaway suite whose conftest wires the two hooks as both
+subprocess, over a throwaway suite whose conftest wires the hooks as both
 repo conftests do.  With pytest-xdist 3.8.0's own scheduler each of these
 sessions hangs once its worker dies, and the test fails on ``subprocess.run``'s
 timeout.
+
+It also restores the ``@<group>`` nodeid suffix that pytest-xdist 3.8.0 can no
+longer write on pytest 9.2, without which ``xdist_group`` groups nothing (#5356).
 """
 
 from __future__ import annotations
@@ -27,7 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _CONFTEST = """
 import pytest
-from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer
+from tests_shared.xdist_plumbing import make_crash_safe_scheduler, restore_xdist_group_suffix, set_worker_timeout_timer
+
+def pytest_collection_modifyitems(items, config):
+    restore_xdist_group_suffix(config, items)
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_xdist_make_scheduler(config, log):
@@ -43,7 +49,7 @@ def _quick(prefix: str, n: int) -> str:
     return "".join(f"def test_{prefix}{i}():\n    time.sleep(0.05)\n" for i in range(n))
 
 
-def _session(tmp_path: Path, files: dict[str, str], *args: str, conftest_extra: str = "") -> str:
+def _session(tmp_path: Path, files: dict[str, str], *args: str, conftest_extra: str = "", returncode: int = 1) -> str:
     """Run pytest on ``files`` under ``-n 2 --dist loadgroup``; its stdout and stderr together."""
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     (tmp_path / "conftest.py").write_text(_CONFTEST + conftest_extra)
@@ -62,7 +68,7 @@ def _session(tmp_path: Path, files: dict[str, str], *args: str, conftest_extra: 
         text=True,
         timeout=120,
     )
-    assert r.returncode == 1, r.stdout
+    assert r.returncode == returncode, r.stdout
     return r.stdout
 
 
@@ -83,6 +89,63 @@ def test_a_test_past_the_timeout_fails_by_name_and_the_rest_still_run(tmp_path):
     # The timeout's own report, from the worker, and only once: the test is not run again.
     assert out.count("test_b.py::test_hangs ran past 2s on xdist worker gw") == 1, out
     assert "in test_hangs" in out
+
+
+_RECORD_WORKER = (
+    "def _record(name):\n    with open(f'ran-{name}', 'w') as f:\n        f.write(os.environ['PYTEST_XDIST_WORKER'])\n"
+)
+
+
+def test_a_group_runs_on_one_worker(tmp_path):
+    """Every ``xdist_group`` test lands on one worker, even split across files (#5356).
+
+    The group's two halves sit at either end of the collection, with ungrouped
+    tests between them, so plain ``--dist load`` (what loadgroup degraded to
+    when pytest-xdist's suffix stopped reaching the nodeid) hands them to both
+    workers.
+    """
+
+    def grouped(prefix: str) -> str:
+        return _RECORD_WORKER + "".join(
+            f"@pytest.mark.xdist_group('g')\ndef test_{prefix}{i}():\n    _record('{prefix}{i}')\n    time.sleep(0.05)\n"
+            for i in range(4)
+        )
+
+    out = _session(
+        tmp_path,
+        {"test_a.py": grouped("a"), "test_m.py": _quick("m", 16), "test_z.py": grouped("z")},
+        "-v",
+        returncode=0,
+    )
+    assert "test_a.py::test_a0@g" in out, out
+    workers = {path.read_text() for path in tmp_path.glob("ran-*")}
+    assert len(list(tmp_path.glob("ran-*"))) == 8, out
+    assert len(workers) == 1, f"group 'g' ran on {sorted(workers)}"
+
+
+@pytest.mark.xdist_group("xdist-group-suffix-probe")
+def test_this_session_suffixes_its_own_grouped_tests(request):
+    """The live suite's own grouped tests carry the suffix loadgroup schedules by (#5356)."""
+    if not getattr(request.config.option, "loadgroup", False):
+        pytest.skip("not running in a --dist loadgroup worker")
+    assert request.node.nodeid.endswith("@xdist-group-suffix-probe")
+
+
+def test_restore_xdist_group_suffix_leaves_a_suffixed_or_ungrouped_item_alone():
+    from tests_shared.xdist_plumbing import restore_xdist_group_suffix
+
+    def item(nodeid: str, *groups: str) -> Any:
+        marks = [SimpleNamespace(args=(g,), kwargs={}) for g in groups]
+        return SimpleNamespace(nodeid=nodeid, iter_markers=lambda name: iter(marks))
+
+    already, plain = item("t.py::test_a@g", "g"), item("t.py::test_b")
+    restore_xdist_group_suffix(SimpleNamespace(option=SimpleNamespace(loadgroup=True)), [already, plain])
+    assert (already.nodeid, plain.nodeid) == ("t.py::test_a@g", "t.py::test_b")
+    assert not hasattr(already, "_id") and not hasattr(plain, "_id")
+    # Outside a loadgroup worker nothing is touched, not even a grouped item.
+    grouped = item("t.py::test_c", "g")
+    restore_xdist_group_suffix(SimpleNamespace(option=SimpleNamespace()), [grouped])
+    assert not hasattr(grouped, "_id")
 
 
 def test_a_crash_mid_group_hands_the_rest_of_the_group_on(tmp_path):
@@ -220,3 +283,17 @@ def test_both_conftests_take_both_hooks(tier):
     tree = ast.parse((REPO_ROOT / tier / "conftest.py").read_text())
     defined = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
     assert {"pytest_xdist_make_scheduler", "pytest_timeout_set_timer"} <= defined
+
+
+@pytest.mark.parametrize("tier", ["tests", "tests_lib"])
+def test_both_conftests_restore_the_group_suffix_before_the_pass_cache(tier):
+    """The pass cache records suffixed nodeids, so the suffix must be on before it matches items."""
+    tree = ast.parse((REPO_ROOT / tier / "conftest.py").read_text())
+    hook = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "pytest_collection_modifyitems")
+    calls = [
+        n.value.func.id
+        for n in hook.body
+        if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
+    ]
+    assert "restore_xdist_group_suffix" in calls and "deselect_cached_passes" in calls, calls
+    assert calls.index("restore_xdist_group_suffix") < calls.index("deselect_cached_passes"), calls
