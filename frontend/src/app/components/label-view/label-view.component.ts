@@ -888,6 +888,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
     // `pairScope` is component-provided, so Angular fires its scope on destroy.
     this.voteState.stopPolling();
+    // Toasty's hand-off speaks for this view. The header shows it on Tune and
+    // Browse too, so a run's "trained!" left up would greet the user there
+    // after a trip through the Dashboard (#5354).
+    this.autopilotStateService.handoff.set(null);
   }
 
   // --- Divider drag ---

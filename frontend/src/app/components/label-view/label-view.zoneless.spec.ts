@@ -1841,6 +1841,18 @@ describe('LabelViewComponent', () => {
     freshFixture.destroy();
   });
 
+  it("drops Toasty's hand-off when the Train view goes away (#5354)", () => {
+    // The header shows the hand-off on Tune and Browse as well, so one left up
+    // here would say "Your detector is trained!" over a Find run's map.
+    const autopilot = TestBed.inject(AutopilotStateService);
+    flushInitialRequests();
+    autopilot.handoff.set({ kind: 'done', votes: 25 });
+
+    fixture.destroy();
+
+    expect(autopilot.handoff()).toBeNull();
+  });
+
   it('should clear stale vote state so autopilot starts in good phase', () => {
     const autopilot = TestBed.inject(AutopilotStateService);
     const voteState = TestBed.inject(VoteStateService);
