@@ -489,6 +489,11 @@ reason. Face datasets saved earlier still open: their vectors are in the pickle.
 mount the models directory (e.g. `-v ./face-models:/app/data/models/imagekit:ro` for the main
 images), or mount it anywhere and set `IMAGEKIT_FACE_CONFIG`.
 
+The face models run on the device `VTSEARCH_DEVICE` resolves to, which needs `onnxruntime-gpu` for
+CUDA. `docker/Dockerfile.gpu` and a CUDA `scripts/install.sh` install it in place of the CPU
+`onnxruntime`, so there Face uses the GPU. The image-embedders images install neither build, nor
+OpenCV, so they have no Face.
+
 ### Demo dataset downloads
 
 Demo datasets are downloaded only when a user selects them through the web
