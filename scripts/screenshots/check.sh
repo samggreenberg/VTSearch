@@ -28,10 +28,15 @@
 # visible. Without ImageMagick this compares bytes, with no tolerance at all.
 #
 # The tolerance is for rasterisation, not typefaces. capture.ts draws every shot
-# in faces it carries (README.md, "One typeface on every machine"), so a render
-# on macOS or Windows draws the container's glyphs and differs only in how its
-# rasteriser paints them; whether these defaults cover a Mac's CoreText is not
-# yet measured. Emoji are the exception: each platform draws its own.
+# in faces it carries, unhinted (README.md, "One typeface on every machine"), so
+# a render elsewhere draws the container's glyphs at the container's advances.
+# A render on the GRID (Linux, AMD EPYC, fontconfig hinting `slight`) was the
+# first off the container (#5302): every shot without callouts matched its
+# baseline exactly past 5% fuzz, bar one whose numbers differed. So on another
+# Linux machine these defaults have room to spare; a Mac's CoreText is not yet
+# measured. What a render elsewhere cannot match is what the app computes there:
+# the Browse map's layout and the odd score or percentage move with the CPU's
+# floating point. Emoji, too: each platform draws its own.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -101,12 +106,19 @@ for new in "$TMP"/*.webp; do
         drift=1
         continue
     fi
-    # AE prints a pixel count: 6 may write a large one as 1.296e+06, and 7.1
-    # follows it with a normalised share in parentheses. Anything else is an
-    # error message, and a shot that could not be compared is not a match.
-    out=$(im_run compare -metric AE -fuzz "$SHOT_FUZZ%" "$base" "$new" null: 2>&1) || true
+    # Count the differing pixels from compare's mask (white where they differ
+    # past the fuzz), not from `-metric AE`'s printout: what AE prints varies by
+    # version. 7.1 follows the count with a normalised share in parentheses,
+    # and 6.9.13 prints the count times the quantum range (6.5535e+06 for 100
+    # px) with the true count in parentheses, which made every shot drift.
+    # Anything other than a number is an error message, and a shot that could
+    # not be compared is not a match.
+    if [[ "$im" == magick ]]; then count=(magick); else count=(convert); fi
+    out=$(im_run compare -fuzz "$SHOT_FUZZ%" -alpha off -compose src \
+        -highlight-color white -lowlight-color black "$base" "$new" png:- 2>/dev/null \
+        | "${count[@]}" png:- -alpha off -format '%[fx:round(mean*w*h)]' info: 2>&1) || true
     px="${out%% *}"
-    if [[ ! "$px" =~ ^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$ ]]; then
+    if [[ ! "$px" =~ ^[0-9]+$ ]]; then
         echo "DRIFT: $name (compare failed: $out)"
         drift=1
         continue

@@ -53,7 +53,7 @@
  */
 
 const ACCENT = '#e8453c';
-const LAYER_ID = '__shot_callouts';
+export const LAYER_ID = '__shot_callouts';
 
 /**
  * The hand-drawn loop's shape (`ring`): how far past the target's ends and
