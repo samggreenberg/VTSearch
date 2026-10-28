@@ -111,6 +111,7 @@ other parameter is optional.
 | `step`        | `str`       | `""`     | For `"number"` fields: step increment. The CLI parses the value as `int` only when `step`, `default`, `min` and `max` all lack a decimal point; otherwise (e.g. `step="0.05"`) as `float` |
 | `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 | `hidden`      | `bool`      | `False`  | When `True`, no GUI form renders a widget for this field: the value is yours to fix via `default`, not the user's to type. Pair the two — the framework fills a hidden field in from its default like any other blank field, so your `run()` / `export()` reads it exactly as if the user had typed it. A plugin whose fields are *all* hidden presents as a bare action button. Hiding is a **GUI affordance only** (the field-level sibling of `PluginBase.hidden_from_picker`): the field keeps its CLI flag, stays on the wire, and is validated and normalised like any other, so it is never a place to put a secret — use `field_type="password"` for that |
+| `visible_when` | `dict[str, str \| bool \| list]` | `{}` | Show this field only while other fields hold given values, e.g. `{"enable_email": True}` (see [Conditional fields](#conditional-fields)). While the condition fails the field is not rendered, not required, and reaches your `run()` / `export()` as its default (or blank) rather than as whatever was typed before it disappeared |
 | `opened_in_browser` | `bool` | `False` | For `"url"` fields: the URL is opened by the user's browser (e.g. an exporter's `open_url`) and never fetched by the server, so it is validated with `validate_browser_url` (scheme allowlist; `localhost` and LAN hosts pass) instead of the SSRF guard `validate_url`. Leave it `False` for any URL your plugin fetches itself |
 | `include_in_origin` | `bool \| None` | `None` | Whether to copy this field's value into the persisted origin dict (a dataset importer's), or into the import record of a detector a label importer creates. `None` means "use the field-type default": `False` for `"file"` and `"password"`, `True` otherwise |
 | `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Converts the value to the string persisted in the origin. Use for list/dict values whose `str(...)` isn't round-trip safe. Ignored when `include_in_origin` resolves to `False` |
@@ -869,6 +870,41 @@ The default `run()`:
 
 Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
+
+### Conditional fields
+
+Show a field only when it applies by naming the field that controls it.
+The canonical case is a checkbox that switches on the inputs it needs:
+
+```python
+fields = [
+    PluginField("enable_email", "Send e-mail", "checkbox", default="false"),
+    PluginField("email", "Address", "email", visible_when={"enable_email": True}),
+    PluginField("source", "Source", "select", options=["s3", "gcs", "local"]),
+    PluginField("bucket", "Bucket", "text", visible_when={"source": ["s3", "gcs"]}),
+]
+```
+
+Every entry in `visible_when` must match. Several values under one key
+mean "any of these". Any field type can be conditional, and any can
+control: a checkbox, a static or dynamic select, a text box. A blank
+controller counts as its `default`, and so does a controller that is
+itself switched off.
+
+While its condition fails the field is *inactive*, and every form, the
+HTTP routes, the CLI and `normalize_field_values` agree on what that means:
+
+- **Not rendered.** It reappears with what the user typed if they switch it
+  back on.
+- **Not required.** `required=True` applies only while the field is shown,
+  so `email` above blocks nothing while the box is unticked.
+- **Reset before your plugin runs.** Your body receives the field's
+  `default`, or blank (`None` for a file), never a stale value. Still read
+  the controller first (`if parse_checkbox(field_values["enable_email"])`),
+  because a field that has a default carries it even while switched off.
+
+`vtscore.plugins.inactive_field_keys(self.fields, field_values)` returns
+the switched-off keys, if your body wants the same answer.
 
 ### Dynamic field options
 

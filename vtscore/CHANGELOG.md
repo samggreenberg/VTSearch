@@ -12,6 +12,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Conditional plugin fields** (issue #5343). `PluginField.visible_when` shows a field only while other fields
+  hold given values, for example `visible_when={"enable_email": True}` or `{"source": ["s3", "gcs"]}` (all
+  entries must match, and a list means any of its values). While the condition fails the field is inactive:
+  no form renders it, it is not `required`, the request schema drops whatever was sent for it, and
+  `normalize_field_values` resets it to its default. The new `vtscore.plugins.inactive_field_keys(fields,
+  values)` is the shared evaluator, and `ConditionValue` is the type of one accepted value. `to_dict()` gains a
+  `visible_when` key (`{key: [str, ...]}`). Additive: a field without a condition behaves as before.
+
 - **`LabelImporter.default_detector_name(field_values)`** (issue #5342). The label-importer counterpart of
   `ImporterBase.default_display_name`: the name a detector created from the importer gets by default. The base
   returns the first `file` field's filename without its extension, else `"<display_name> detector"` (what the

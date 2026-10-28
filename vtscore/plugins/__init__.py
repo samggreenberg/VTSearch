@@ -38,7 +38,7 @@ import importlib.util
 import sys
 import threading
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
@@ -65,7 +65,13 @@ FieldType = Literal[
 #: to ``{"value", "label"}`` before serialising them to the frontend.
 FieldOption = str | tuple[str, str]
 
+#: One value a :attr:`PluginField.visible_when` condition accepts: a string
+#: (compared with the controlling field's value after stripping whitespace)
+#: or a ``bool`` (the natural spelling for a ``"checkbox"`` controller).
+ConditionValue = str | bool
+
 __all__ = [
+    "ConditionValue",
     "EntryPointTombstone",
     "FieldOption",
     "FieldType",
@@ -73,6 +79,7 @@ __all__ = [
     "PluginBase",
     "PluginField",
     "PluginRegistry",
+    "inactive_field_keys",
     "make_plugin_registry",
     "notify",
     "parse_checkbox",
@@ -257,6 +264,38 @@ class PluginField:
     #: ``required=False``.
     hidden: bool = False
 
+    #: Show this field only while other fields hold particular values:
+    #: ``{controller_key: accepted}``, where *accepted* is one value or a
+    #: list of them.  Every entry must match (AND); list several values
+    #: under one key for OR.  The canonical case is a checkbox that
+    #: switches a group of inputs on::
+    #:
+    #:     PluginField(key="enable_email", label="Send e-mail", field_type="checkbox", default="false"),
+    #:     PluginField(key="email", label="Address", field_type="email", visible_when={"enable_email": True}),
+    #:
+    #: and a select whose choice decides which inputs apply
+    #: (``visible_when={"source": ["s3", "gcs"]}``).  Any field type can be
+    #: conditional, and any field type can control one.
+    #:
+    #: The controller's value is compared as a string after stripping, so
+    #: ``True`` / ``False`` mean ``"true"`` / ``"false"``; a ``"checkbox"``
+    #: controller reads both sides through :func:`parse_checkbox`, so
+    #: ``"True"`` matches a ticked box too.  A blank controller counts as
+    #: its :attr:`default`, and so does a controller that is itself switched
+    #: off by its own condition — the value the plugin would receive for it.
+    #: A key naming no field of the plugin is ignored.
+    #:
+    #: While its condition fails the field is **inactive**, and that is
+    #: more than presentation: no form renders it, it is not
+    #: :attr:`required`, and :func:`~vtscore.plugins.normalize.normalize_field_values`
+    #: replaces whatever was submitted for it with its :attr:`default` (or
+    #: blank; ``None`` for a file), so the plugin never acts on a value the
+    #: user could no longer see.  :func:`inactive_field_keys` is the one
+    #: evaluator, shared by the HTTP schema, the CLI and the normalize pass;
+    #: ``frontend/src/app/utils/plugin-fields.ts`` mirrors it for the forms.
+    #: Empty (the default) means always shown, exactly as before.
+    visible_when: dict[str, ConditionValue | list[ConditionValue]] = field(default_factory=dict)
+
     #: For ``"url"`` fields: ``True`` declares that the URL is opened by the
     #: **user's browser** (handed back as an exporter's ``open_url``) and is
     #: never fetched by the server.  Such a value is validated with
@@ -311,6 +350,7 @@ class PluginField:
             "step": self.step,
             "clears": list(self.clears),
             "hidden": self.hidden,
+            "visible_when": {key: list(_condition_tokens(accepted)) for key, accepted in self.visible_when.items()},
             "template_vars": list(self.template_vars),
         }
 
@@ -327,6 +367,95 @@ class PluginField:
             if val and "." in str(val):
                 return False
         return True
+
+
+# ---------------------------------------------------------------------------
+# visible_when: which fields a condition switches off
+# ---------------------------------------------------------------------------
+
+
+def _condition_token(value: Any) -> str:
+    """The string a ``visible_when`` comparison sees for *value*."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _condition_tokens(accepted: Any) -> tuple[str, ...]:
+    """The accepted values of one ``visible_when`` entry, as strings."""
+    items = accepted if isinstance(accepted, (list, tuple)) else [accepted]
+    return tuple(_condition_token(v) for v in items)
+
+
+def _field_token(f: PluginField, value: Any) -> str:
+    """*value* as a comparison token for the controlling field *f*.
+
+    A checkbox reads through :func:`parse_checkbox`, so ``"True"``, ``True``
+    and ``"true"`` are one token and a blank box is ``"false"``.
+    """
+    if f.field_type == "checkbox":
+        return "true" if parse_checkbox(value) else "false"
+    return _condition_token(value)
+
+
+def _submitted_token(f: PluginField, values: Mapping[str, Any]) -> str:
+    """The token for the value *f* would reach the plugin with: the caller's,
+    or :attr:`PluginField.default` when the caller left it blank."""
+    raw = values.get(f.key)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raw = f.default
+    return _field_token(f, raw)
+
+
+def _condition_holds(
+    f: PluginField,
+    by_key: Mapping[str, PluginField],
+    values: Mapping[str, Any],
+    chain: frozenset[str],
+) -> bool:
+    """Whether every entry of *f*'s ``visible_when`` matches *values*.
+
+    A controller that is itself switched off counts as its default.  *chain*
+    holds the fields already being resolved above this one, so a cycle (an
+    author error) stops at the field it re-enters, which counts as active.
+    """
+    if not f.visible_when:
+        return True
+    chain = chain | {f.key}
+    for ctrl_key, accepted in f.visible_when.items():
+        ctrl = by_key.get(ctrl_key)
+        if ctrl is None:
+            continue
+        if ctrl.key in chain or _condition_holds(ctrl, by_key, values, chain):
+            actual = _submitted_token(ctrl, values)
+        else:
+            actual = _field_token(ctrl, ctrl.default)
+        if actual not in {_field_token(ctrl, v) for v in _condition_tokens(accepted)}:
+            return False
+    return True
+
+
+def inactive_field_keys(fields: Iterable[PluginField], values: Mapping[str, Any]) -> frozenset[str]:
+    """Keys of the fields whose :attr:`PluginField.visible_when` fails on *values*.
+
+    *values* is the form as submitted, in any of the shapes a plugin's field
+    values arrive in (form strings, JSON, argparse's already-coerced values);
+    a missing or blank key reads as that field's default.  An inactive field
+    is not rendered, not required, and is reset to its default before the
+    plugin runs: see :attr:`PluginField.visible_when` for the rules.
+
+    This is the single evaluator every ingress point uses — the HTTP schema,
+    the CLI, :func:`~vtscore.plugins.normalize.normalize_field_values` — and
+    ``frontend/src/app/utils/plugin-fields.ts`` is its TypeScript twin, so the
+    form a user sees and the values the server accepts cannot disagree.
+    """
+    fields = list(fields)
+    if not any(f.visible_when for f in fields):
+        return frozenset()
+    by_key = {f.key: f for f in fields}
+    return frozenset(f.key for f in fields if not _condition_holds(f, by_key, values, frozenset()))
 
 
 # ---------------------------------------------------------------------------
@@ -763,10 +892,15 @@ class PluginBase:
         users see the same identifier they typed; the normalize pass's
         generic ``"<Label> is required."`` is rewritten when the
         rejected field comes from missing CLI input.
+
+        A field switched off by its :attr:`~PluginField.visible_when` is
+        never missing: ``--email`` is not required while ``--no-enable-email``
+        is in force.
         """
+        inactive = inactive_field_keys(self.fields, field_values)
         for f in self.fields:
             # Booleans are always populated by argparse (default included).
-            if f.field_type == "checkbox":
+            if f.field_type == "checkbox" or f.key in inactive:
                 continue
             # A field with a declared default is never "missing": the
             # normalize pass below fills a blank one from it, so rejecting

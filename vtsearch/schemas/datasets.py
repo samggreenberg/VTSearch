@@ -303,6 +303,19 @@ class ImporterFieldSchema(Schema):
             )
         }
     )
+    visible_when = fields.Dict(
+        keys=fields.String(),
+        values=fields.List(fields.String()),
+        metadata={
+            "description": (
+                "Show this field only while each named field holds one of the listed values (every entry must "
+                'match). Values are compared as strings after trimming; a checkbox controller reads ``"true"`` / '
+                '``"false"``, and a blank or itself-hidden controller counts as its ``default``. While the '
+                "condition fails the field is not rendered and not required, and the server resets it to its "
+                "default. Empty means always shown."
+            )
+        },
+    )
     template_vars = fields.List(
         fields.String(),
         metadata={

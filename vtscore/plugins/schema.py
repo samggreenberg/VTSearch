@@ -41,6 +41,11 @@ file         skipped - file fields are populated from
 Required text-like fields are marshmallow-required *and* validated as
 non-empty after stripping whitespace, so ``"   "`` is rejected as well as
 ``""``.
+
+A field with a ``visible_when`` condition is the exception: whether it is
+required depends on the rest of the body, so a ``pre_load`` hook decides
+(see ``_inactive_dropper``) and drops the field outright while its
+condition fails.
 """
 
 from __future__ import annotations
@@ -48,6 +53,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from marshmallow import Schema, ValidationError, fields, pre_load, validate
+
+from vtscore.plugins import inactive_field_keys
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase, PluginField
@@ -118,6 +125,47 @@ def _blank_defaulted_dropper(plugin: PluginBase):
     return pre_load(drop_blank_defaulted)
 
 
+def _inactive_dropper(plugin: PluginBase):
+    """Build the ``pre_load`` hook that applies ``visible_when`` conditions.
+
+    A field whose condition fails on this body is switched off: the hook
+    deletes its key, so the field loads exactly as if it had been omitted
+    (its ``load_default``) and none of its validators judge a value the user
+    could no longer see - a stale ``select`` choice cannot fail ``OneOf``, a
+    stale number cannot fail its ``Range``.  The required check marshmallow
+    would have made for a conditional field (see :func:`_presence_kwargs`)
+    happens here instead, for the active ones only, with marshmallow's own
+    message.
+
+    Runs alongside :func:`_blank_defaulted_dropper`; the two commute, because
+    :func:`~vtscore.plugins.inactive_field_keys` already reads a blank
+    controller as its default.
+    """
+    conditional = [pf.key for pf in plugin.fields if pf.visible_when and pf.field_type != "file"]
+    must_fill = [
+        pf.key
+        for pf in plugin.fields
+        if pf.visible_when and pf.required and not pf.default and pf.field_type not in ("file", "checkbox")
+    ]
+
+    def drop_inactive(self, data, **kwargs):  # noqa: ARG001 - marshmallow hook signature
+        if not conditional or not isinstance(data, dict):
+            return data
+        inactive = inactive_field_keys(plugin.fields, data)
+        missing = [key for key in must_fill if key not in inactive and key not in data]
+        if missing:
+            raise ValidationError({key: ["Missing data for required field."] for key in missing})
+        dropped = [key for key in conditional if key in inactive and key in data]
+        if not dropped:
+            return data
+        trimmed = dict(data)
+        for key in dropped:
+            del trimmed[key]
+        return trimmed
+
+    return pre_load(drop_inactive)
+
+
 def _presence_kwargs(pf: PluginField) -> dict:
     """Return marshmallow ``required`` / ``load_default`` kwargs for *pf*.
 
@@ -127,8 +175,13 @@ def _presence_kwargs(pf: PluginField) -> dict:
     - has default → ``load_default=<default>``.
     - neither → ``load_default=""`` (preserves the legacy ``.get(key, "")``
       fallback).
+
+    A field with a :attr:`~vtscore.plugins.PluginField.visible_when`
+    condition is never marshmallow-required: whether it must be present
+    depends on the rest of the body, which :func:`_inactive_dropper`'s hook
+    reads instead.
     """
-    if pf.required and not pf.default:
+    if pf.required and not pf.default and not pf.visible_when:
         return {"required": True}
     if pf.default:
         return {"load_default": pf.default}
@@ -234,6 +287,7 @@ def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
             attrs[pf.key] = mf
 
     attrs["_drop_blank_defaulted"] = _blank_defaulted_dropper(plugin)
+    attrs["_drop_inactive"] = _inactive_dropper(plugin)
     attrs["Meta"] = type("Meta", (), {"unknown": "exclude"})
     cls_name = f"{type(plugin).__name__}ArgSchema"
     return type(cls_name, (Schema,), attrs)
@@ -290,6 +344,7 @@ def make_plugin_route_schema(
             attrs[key] = fields.Raw(load_default=None)
 
     attrs["_drop_blank_defaulted"] = _blank_defaulted_dropper(plugin)
+    attrs["_drop_inactive"] = _inactive_dropper(plugin)
     attrs["Meta"] = type("Meta", (), {"unknown": "include"})
     cls_name = f"{route_id}_{type(plugin).__name__}_Args"
     return type(cls_name, (Schema,), attrs)

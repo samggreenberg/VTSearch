@@ -195,9 +195,10 @@ export class SourceSpecsPickerComponent {
   /** The chosen converter's renderable parameter fields. A ``hidden`` one
    *  is the converter author's to fix via ``default``; ``paramValue``
    *  already falls back to that default, so leaving it out of the form
-   *  changes nothing but what the user sees. */
+   *  changes nothing but what the user sees. A field whose ``visible_when``
+   *  fails on the draft's params is left out too; the server resets it. */
   visibleConverterFields(sourceType: string): ConverterInfo['fields'] {
-    return visibleFields(this.currentConverter(sourceType)?.fields ?? []);
+    return visibleFields(this.currentConverter(sourceType)?.fields ?? [], this.getDraft(sourceType).params);
   }
 
   paramValue(sourceType: string, key: string): string | number | null {
