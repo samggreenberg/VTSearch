@@ -222,8 +222,24 @@ def _build_parser() -> argparse.ArgumentParser:
             "--chunk-size and a streaming-capable exporter (server_json_file "
             "→ NDJSON, server_csv_file, gui, webhook, email_smtp; the last two "
             "deliver in --batch-size groups). Output is ordered by chunk, not globally "
-            "sorted by score. Lets --autodetect run against a media source "
+            "sorted by score (add --max-results N for each detector's top N, sorted). "
+            "Lets --autodetect run against a media source "
             "with more items (and more hits) than fit in RAM."
+        ),
+    )
+    parser.add_argument(
+        "--max-results",
+        type=int,
+        default=None,
+        dest="max_results",
+        metavar="N",
+        help=(
+            "With --stream-results, keep only each detector's N highest-scoring "
+            "hits and write them sorted by score once the last chunk is scored, "
+            "instead of every hit in chunk order. Peak memory stays at N hits per "
+            "detector, however large the source. With --keep-negatives the "
+            "below-threshold items compete for the N places too, after every hit. "
+            "Not with --resume."
         ),
     )
     parser.add_argument(
@@ -464,6 +480,7 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
         "keep_negatives",
         "as_labelset",
         "resume",
+        "max_results",
         "import_labels_into",
         "label_importer_file",
         "label_importer_fields",
@@ -877,6 +894,7 @@ def _dispatch_autodetect(
     as_labelset=False,
     override_clipper=None,
     resume=False,
+    max_results=None,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path.
 
@@ -886,6 +904,7 @@ def _dispatch_autodetect(
     *override_clipper* is ``--override-clipper``'s ``input_spec``
     (:func:`_override_clipper`).  *resume* is ``--resume``, which only a
     chunked run takes (``--stream-results`` already requires ``--chunk-size``).
+    *max_results* is ``--max-results``.
     """
     from vtscore.cli import (
         autodetect_importer_main,
@@ -934,6 +953,7 @@ def _dispatch_autodetect(
         save_dataset=save_dataset,
         override_detectors=[args.import_labels_into] if args.import_labels_into else None,
         override_clipper=override_clipper,
+        max_results=max_results,
         **source_kwargs,
     )
 
@@ -976,6 +996,25 @@ def _start_headless_run(args, parser) -> None:
     _authenticate_cli_user(args, parser)
 
 
+def _max_results(args, parser, *, stream_results: bool, resume: bool) -> int | None:
+    """``--max-results``, refused where it cannot apply (#5279).
+
+    It keeps the best of a streamed run, so it needs ``--stream-results``; and
+    it writes nothing until the last chunk is scored, so ``--resume`` would have
+    no written chunk to checkpoint.
+    """
+    max_results = getattr(args, "max_results", None)
+    if max_results is None:
+        return None
+    if max_results < 1:
+        parser.error("--max-results must be a positive integer")
+    if not stream_results:
+        parser.error("--max-results only applies with --stream-results (it keeps the best of a streamed run)")
+    if resume:
+        parser.error("--max-results cannot be combined with --resume: it writes nothing until the last chunk")
+    return max_results
+
+
 def _run_autodetect(args, parser, importer, exporter) -> None:
     """Drive the ``--autodetect`` flow: progress wiring, auth, optional label
     import, then dispatch to the importer/pickle code path."""
@@ -1006,6 +1045,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         parser.error("--resume only applies with --stream-results (it checkpoints the stream after each chunk)")
     if resume and as_labelset:
         parser.error("--resume cannot resume a labelset stream (--as-labelset); it resumes hit streams only")
+    max_results = _max_results(args, parser, stream_results=stream_results, resume=resume)
     # The imported dataset is saved to the dashboard unless --tempimport says
     # otherwise (#4226). Streaming exists for sources too big to hold, and
     # saving means holding the whole dataset, so the two cannot be combined.
@@ -1033,6 +1073,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         as_labelset=as_labelset,
         override_clipper=override_clipper,
         resume=resume,
+        max_results=max_results,
     )
 
 

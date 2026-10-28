@@ -332,6 +332,12 @@ lazy iterator:
 | `--stream-results` | `export_cli_streaming(header, records, field_values)` | `(detector_name, hit)` tuples: each hit as in `export_find_results`, plus a `"label"` |
 | `--stream-results --as-labelset` | `export_labelset_streaming(header, elements, field_values)` | label entries: `LabeledElement` dicts, each with a `"detector"` key |
 
+The records arrive in chunk order, each chunk's sorted. With `--max-results N`
+(#5279) the header carries `"max_results": N` and they arrive only once the
+last chunk is scored: each detector's best N, detector by detector, sorted by
+score. Either way an exporter that writes what it is given in the order it is
+given needs nothing more.
+
 Write each record as it arrives; never collect them. A file exporter writes
 through `vtscore.io.atomic_write_stream`, and a delivery exporter (a POST, an
 email) groups the stream with `iter_stream_batches(items, batch_size)` from

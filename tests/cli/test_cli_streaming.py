@@ -546,3 +546,156 @@ class TestStreamingAsLabelset:
                 stream_results=True,
                 as_labelset=True,
             )
+
+
+def _make_audio_media_scoring(media_id: int, e0: float) -> dict:
+    """An audio media the ``_stub_split_training`` head scores ``sigmoid(100 * (e0 - 0.65))``."""
+    return {**_make_audio_media(media_id), "embedding": [e0, (1.0 - e0 * e0) ** 0.5]}
+
+
+#: Worst first, best last, so chunk order is the reverse of score order. The
+#: stub head puts 0.66 and up above its cut (good) and 0.64 and down below.
+_RISING_E0 = [0.62, 0.64, 0.66, 0.67, 0.68, 0.69, 0.70]
+
+
+class TestStreamingMaxResults:
+    """``--max-results N`` writes each detector's N best records, sorted by score (#5279).
+
+    A plain streamed run writes each chunk as it scores it, so the hits come
+    out in chunk order.  These runs feed the medias worst first in chunks of
+    two, so the best hits arrive last, and pin that the export is still each
+    detector's top N, highest first.
+    """
+
+    def _run(self, tmp_path, detector_names, out, *, exporter_name="server_json_file", **kwargs):
+        for name in detector_names:
+            _write_pretrained_detector(name)
+        settings_path = _settings_file_with_detectors(tmp_path, detector_names)
+        ds_path = tmp_path / "ds.pkl"
+        medias = {i: _make_audio_media_scoring(i, e0) for i, e0 in enumerate(_RISING_E0, 1)}
+        _write_pickle_dataset(ds_path, medias)
+
+        from vtscore.cli import autodetect_main_chunked
+
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            exporter_name=exporter_name,
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+            **kwargs,
+        )
+
+    def test_writes_the_top_n_across_chunks_highest_first(self, client, tmp_path, capsys, _stub_split_training):
+        out = tmp_path / "hits.ndjson"
+        self._run(tmp_path, ["stream-top"], out, max_results=3)
+
+        meta, hits = _read_ndjson(out)
+        assert meta["max_results"] == 3
+        # e0 0.70, 0.69, 0.68: the last chunk's one media, then the third's two.
+        assert [h["filename"] for h in hits] == ["clip_007.wav", "clip_006.wav", "clip_005.wav"]
+        assert [h["score"] for h in hits] == sorted((h["score"] for h in hits), reverse=True)
+        assert all(h["label"] == "good" and h["detector"] == "stream-top" for h in hits)
+        assert (
+            "Detector 'stream-top': 5 result(s) scored; writing the top 3 (--max-results 3)." in capsys.readouterr().out
+        )
+
+    def test_without_it_the_export_is_in_chunk_order(self, client, tmp_path, _stub_split_training):
+        """The control: the same run, uncapped, is chunk-ordered and its meta carries no max_results."""
+        out = tmp_path / "hits.ndjson"
+        self._run(tmp_path, ["stream-untop"], out)
+
+        meta, hits = _read_ndjson(out)
+        assert "max_results" not in meta
+        assert [h["filename"] for h in hits] == [f"clip_{i:03d}.wav" for i in (4, 3, 6, 5, 7)]
+
+    def test_more_places_than_hits_writes_every_hit_sorted(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "hits.ndjson"
+        self._run(tmp_path, ["stream-top-all"], out, max_results=100)
+
+        _meta, hits = _read_ndjson(out)
+        assert [h["filename"] for h in hits] == [f"clip_{i:03d}.wav" for i in (7, 6, 5, 4, 3)]
+
+    def test_with_keep_negatives_the_bads_fill_the_places_past_the_last_hit(
+        self, client, tmp_path, _stub_split_training
+    ):
+        out = tmp_path / "hits.ndjson"
+        self._run(tmp_path, ["stream-top-neg"], out, max_results=6, keep_negatives=True)
+
+        _meta, hits = _read_ndjson(out)
+        assert [(h["filename"], h["label"]) for h in hits] == [
+            ("clip_007.wav", "good"),
+            ("clip_006.wav", "good"),
+            ("clip_005.wav", "good"),
+            ("clip_004.wav", "good"),
+            ("clip_003.wav", "good"),
+            ("clip_002.wav", "bad"),
+        ]
+
+    def test_each_detector_gets_its_own_top_n(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "hits.ndjson"
+        self._run(tmp_path, ["stream-top-a", "stream-top-b"], out, max_results=2)
+
+        meta, hits = _read_ndjson(out)
+        order = [d["detector_name"] for d in meta["detectors"]]
+        assert sorted(order) == ["stream-top-a", "stream-top-b"]
+        assert [(h["detector"], h["filename"]) for h in hits] == [
+            (order[0], "clip_007.wav"),
+            (order[0], "clip_006.wav"),
+            (order[1], "clip_007.wav"),
+            (order[1], "clip_006.wav"),
+        ]
+
+    def test_a_labelset_stream_keeps_the_top_n_too(self, client, tmp_path, _stub_split_training):
+        out = tmp_path / "labels.json"
+        self._run(tmp_path, ["stream-top-ls"], out, max_results=2, as_labelset=True)
+
+        data = json.loads(out.read_text())
+        assert data["max_results"] == 2
+        assert [e["origin_name"] for e in data["labels"]] == ["clip_007.wav", "clip_006.wav"]
+
+    def test_csv_rows_come_out_sorted(self, client, tmp_path, _stub_split_training):
+        import csv
+
+        out = tmp_path / "hits.csv"
+        self._run(tmp_path, ["stream-top-csv"], out, exporter_name="server_csv_file", max_results=2)
+
+        with out.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert [r["filename"] for r in rows] == ["clip_007.wav", "clip_006.wav"]
+
+    def test_dry_run_reports_the_cap(self, client, tmp_path, capsys):
+        _write_pretrained_detector("stream-top-dry")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-top-dry")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+
+        from vtscore.cli import autodetect_main_chunked
+
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(tmp_path / "hits.ndjson")},
+            dry_run=True,
+            stream_results=True,
+            max_results=10,
+        )
+
+        assert "each detector's top 10 by score written to the exporter after the last chunk" in capsys.readouterr().out
+
+    def test_without_stream_results_it_is_refused(self, tmp_path):
+        from vtscore.cli import _run_source, _SourceSpec
+
+        spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"))
+        with pytest.raises(ValueError, match="requires --stream-results"):
+            _run_source(spec, save_dataset=False, dry_run=True, max_results=5)
+
+    def test_with_resume_it_is_refused(self, tmp_path):
+        from vtscore.cli import _run_source, _SourceSpec
+
+        spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"), chunk_size=2)
+        with pytest.raises(ValueError, match="cannot be combined with --resume"):
+            _run_source(spec, save_dataset=False, dry_run=True, stream_results=True, resume=True, max_results=5)

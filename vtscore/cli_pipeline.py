@@ -36,6 +36,7 @@ _TOP_LEVEL_KEYS = {
     "keep_negatives",
     "as_labelset",
     "resume",
+    "max_results",
     "import_labels",
     "exporter",
     "tempimport",
@@ -150,6 +151,16 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'resume:' only applies with 'stream_results:' (it checkpoints the stream after each chunk).")
     if resume and as_labelset:
         raise ValueError("'resume:' cannot resume a labelset stream ('as_labelset:'); it resumes hit streams only.")
+    max_results = raw.get("max_results")
+    if max_results is not None:
+        if not isinstance(max_results, int) or isinstance(max_results, bool) or max_results <= 0:
+            raise ValueError("'max_results:' must be a positive integer.")
+        if not stream_results:
+            raise ValueError("'max_results:' only applies with 'stream_results:'.")
+        if resume:
+            raise ValueError(
+                "'max_results:' cannot be combined with 'resume:'; it writes nothing until the last chunk."
+            )
     tempimport = raw.get("tempimport", False)
     if not isinstance(tempimport, bool):
         raise ValueError("'tempimport:' must be a boolean.")
@@ -186,6 +197,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "keep_negatives": keep_negatives,
         "as_labelset": as_labelset,
         "resume": resume,
+        "max_results": max_results,
         "tempimport": tempimport,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
@@ -554,4 +566,5 @@ def _dispatch(config: dict[str, Any]) -> None:
         as_labelset=config.get("as_labelset", False),
         override_clipper=config.get("override_clipper"),
         resume=config.get("resume", False),
+        max_results=config.get("max_results"),
     )

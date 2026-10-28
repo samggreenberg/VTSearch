@@ -40,6 +40,7 @@ class TestDescribe:
             "as_labelset": False,
             "save_dataset": False,
             "resume": False,
+            "max_results": None,
         }
 
     def test_pickle_chunked_carries_chunk_size_and_flags(self):
@@ -53,6 +54,7 @@ class TestDescribe:
             "as_labelset": False,
             "save_dataset": False,
             "resume": False,
+            "max_results": None,
         }
 
     def test_importer_carries_params(self):
@@ -68,6 +70,7 @@ class TestDescribe:
             "as_labelset": False,
             "save_dataset": False,
             "resume": False,
+            "max_results": None,
         }
 
     def test_as_labelset_is_reported(self):
@@ -78,6 +81,11 @@ class TestDescribe:
     def test_resume_is_reported(self):
         spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl", chunk_size=10)
         assert spec.describe(stream_results=True, keep_negatives=False, resume=True)["resume"] is True
+
+    def test_max_results_is_reported(self):
+        """``--dry-run`` says a streamed run keeps only each detector's top N (#5279)."""
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl", chunk_size=10)
+        assert spec.describe(stream_results=True, keep_negatives=False, max_results=100)["max_results"] == 100
 
     def test_save_dataset_is_reported(self):
         """``--dry-run`` reads whether the import would be kept from here (#4226)."""

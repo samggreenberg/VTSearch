@@ -252,6 +252,7 @@ class TestPipeline:
             (["--keep-negatives"], "--keep-negatives"),
             (["--as-labelset"], "--as-labelset"),
             (["--resume"], "--resume"),
+            (["--max-results", "5"], "--max-results"),
             (["--label-importer", "server_csv_file"], "--label-importer"),
         ],
     )
@@ -442,6 +443,15 @@ class TestAutodetectWiring:
         _, kwargs = rec.calls["autodetect_main_chunked"]
         assert kwargs["resume"] is True
 
+    def test_max_results_reaches_the_entry_point(self, monkeypatch):
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(
+            monkeypatch,
+            ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results", "--max-results", "7"],
+        )
+        _, kwargs = rec.calls["autodetect_main_chunked"]
+        assert kwargs["max_results"] == 7
+
     def test_no_resume_is_not_passed(self, monkeypatch):
         """Only a chunked entry point takes ``resume``; a run without the flag passes none."""
         rec = _AutodetectRecorder(monkeypatch)
@@ -514,6 +524,28 @@ class TestAutodetectValidation:
             _run_main(monkeypatch, [*argv, "--as-labelset", "--resume"])
         assert exc.value.code == 2
         assert "--resume cannot resume a labelset stream" in capsys.readouterr().err
+
+    def test_max_results_requires_stream_results(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--max-results", "5"])
+        assert exc.value.code == 2
+        assert "--max-results only applies with --stream-results" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("value", ["0", "-3"])
+    def test_max_results_must_be_positive(self, monkeypatch, capsys, value):
+        argv = ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results"]
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, [*argv, "--max-results", value])
+        assert exc.value.code == 2
+        assert "--max-results must be a positive integer" in capsys.readouterr().err
+
+    def test_max_results_refuses_resume(self, monkeypatch, capsys):
+        """A top-N run writes nothing until its last chunk, so there is no chunk to checkpoint (#5279)."""
+        argv = ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results"]
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, [*argv, "--max-results", "5", "--resume"])
+        assert exc.value.code == 2
+        assert "--max-results cannot be combined with --resume" in capsys.readouterr().err
 
     def test_unknown_importer_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:

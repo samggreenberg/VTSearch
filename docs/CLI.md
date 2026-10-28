@@ -228,9 +228,36 @@ never held in memory), each chunk's hits are written straight to the exporter,
 and nothing accumulates across chunks. `server_json_file` switches to
 newline-delimited JSON (NDJSON): a metadata header line followed by one hit per
 line. The tradeoff: streamed hits are ordered by chunk, **not** globally sorted
-by score (sort the NDJSON afterwards if you need a global ranking). Only
-above-threshold (predicted-good) hits are written; add `--keep-negatives` to
-also stream the below-threshold items (tagged `label=bad`).
+by score: each chunk's hits come out sorted, detector by detector, and the next
+chunk's follow. Only above-threshold (predicted-good) hits are written; add
+`--keep-negatives` to also stream the below-threshold items (tagged `label=bad`).
+
+**Only the best hits, sorted** (`--max-results N`, with `--stream-results`):
+keep each detector's N highest-scoring hits and write them sorted by score,
+highest first, instead of every hit in chunk order. This is the "give me the
+top 1,000" run:
+
+```bash
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --max-results 1000 --exporter server_json_file --filepath top.ndjson
+```
+
+The run holds at most N hits per detector at any moment, however large the
+source, so its memory stays flat. Every chunk is still scored, and the export
+is written only once the last chunk is done, since that chunk can hold the
+best hit. The output is detector by detector, in the order the header lists
+them, each detector's hits sorted by score (equal scores keep the order they
+were scored in). The NDJSON `_meta` line then carries `"max_results": N`; a
+file without it is chunk-ordered. A detector with fewer than N hits writes all
+of them. With `--keep-negatives` the below-threshold items compete for the N
+places too, always after every hit, so they fill only the places the hits
+leave. The run reports how many results each detector scored and how many it
+kept (a `top_results` event under `--progress-format json`). It works with
+`--as-labelset` and `--outputs` (N per detector per dataset), and every
+streaming exporter; a pipeline file sets it as `max_results:`. It cannot be
+combined with `--resume`: nothing is written until the last chunk is scored,
+so there is no finished chunk to checkpoint.
 
 The delivery exporters stream too, but batch rather than flush per hit:
 `webhook` POSTs the hits in `--batch-size` groups (each request body carries the
@@ -582,7 +609,8 @@ without one).
 
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included; `yes, as a
-labelset (...)` with `--as-labelset`), so a streaming run can be sanity-checked
+labelset (...)` with `--as-labelset`; each detector's top N written after the
+last chunk with `--max-results N`), so a streaming run can be sanity-checked
 before it starts. The dry run also fails, as the run would, when the exporter
 cannot stream that way. With `--resume` it adds `Resume: yes (checkpoint
 <path>: ...)`, saying how many chunks an existing checkpoint has already
@@ -853,8 +881,13 @@ tempimport: false
 # Optional. Stream each chunk's hits straight to the exporter instead of
 # accumulating them (same as --stream-results). Requires tempimport: true,
 # chunk_size and a streaming-capable exporter. Output is chunk-ordered, not
-# globally sorted.
+# globally sorted, unless max_results is set.
 stream_results: false
+
+# Optional. With stream_results, write only each detector's N best hits
+# (say 1000), sorted by score, once the last chunk is scored (same as
+# --max-results N). Not with resume. Off (null) by default.
+max_results: null
 
 # Optional. With stream_results, also emit below-threshold hits (label=bad).
 # Same as --keep-negatives. Off by default.
