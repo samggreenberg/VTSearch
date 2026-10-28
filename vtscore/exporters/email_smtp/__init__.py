@@ -33,8 +33,33 @@ def _is_valid_email(addr: str) -> bool:
     return bool(_EMAIL_RE.match(addr or ""))
 
 
+def _has_labels(results: dict[str, Any]) -> bool:
+    """Whether a find-results payload's ``hits`` hold both sides of the threshold.
+
+    Such a payload labels every hit ``"good"`` or ``"bad"``
+    (``ResultsExporter.export_find_results``), and the email has to show which
+    is which; a one-sided payload carries no ``label`` and renders as it
+    always has.  Decided once per payload, so every detector's table has the
+    same columns.
+    """
+    return any(hit.get("label") is not None for r in results.get("results", {}).values() for hit in r["hits"])
+
+
+def _label_tag(hit: dict[str, Any]) -> str:
+    """The plain-text ``[good]`` / ``[bad]`` prefix for one labelled hit."""
+    return f"[{hit.get('label') or '?'}] "
+
+
+def _label_td(hit: dict[str, Any]) -> str:
+    """The HTML ``Label`` cell for one labelled hit."""
+    from html import escape
+
+    return f"<td>{escape(str(hit.get('label') or ''))}</td>"
+
+
 def _build_plain_text(results: dict[str, Any]) -> str:
     """Render results as a human-readable plain-text summary."""
+    labelled = _has_labels(results)
     lines: list[str] = [
         "Auto-Detect Results",
         "===================",
@@ -47,9 +72,11 @@ def _build_plain_text(results: dict[str, Any]) -> str:
         lines.append(f"Threshold: {det_result['threshold']}  |  Total Hits: {det_result['total_hits']}")
         if det_result["hits"]:
             for hit in det_result["hits"]:
-                lines.append(f"  Clip #{hit['id']}: {hit.get('filename', 'N/A')} (score: {hit['score']})")
+                tag = _label_tag(hit) if labelled else ""
+                lines.append(f"  {tag}Clip #{hit['id']}: {hit.get('filename', 'N/A')} (score: {hit['score']})")
         else:
-            lines.append("  No positive hits found.")
+            # Not "no positive hits": a Bad export sends the below-threshold side.
+            lines.append("  No hits.")
         lines.append("")
     return "\n".join(lines)
 
@@ -58,23 +85,26 @@ def _build_html(results: dict[str, Any]) -> str:
     """Render results as a minimal HTML e-mail body."""
     from html import escape
 
+    labelled = _has_labels(results)
+    label_th = "<th>Label</th>" if labelled else ""
     rows = ""
     for det_result in results.get("results", {}).values():
         hits_html = ""
         for hit in det_result["hits"]:
             hits_html += (
-                f"<tr><td>Clip #{hit['id']}</td>"
+                f"<tr>{_label_td(hit) if labelled else ''}"
+                f"<td>Clip #{hit['id']}</td>"
                 f"<td>{escape(str(hit.get('filename', 'N/A')))}</td>"
                 f"<td>{hit['score']}</td></tr>"
             )
         if not hits_html:
-            hits_html = '<tr><td colspan="3"><em>No positive hits found.</em></td></tr>'
+            hits_html = f'<tr><td colspan="{4 if labelled else 3}"><em>No hits.</em></td></tr>'
         rows += (
             f"<h3>{escape(str(det_result['detector_name']))}</h3>"
             f"<p>Threshold: {det_result['threshold']} &mdash; "
             f"Total Hits: {det_result['total_hits']}</p>"
             f"<table border='1' cellpadding='4' cellspacing='0'>"
-            f"<tr><th>Clip</th><th>Filename</th><th>Score</th></tr>"
+            f"<tr>{label_th}<th>Clip</th><th>Filename</th><th>Score</th></tr>"
             f"{hits_html}</table>"
         )
     return (
@@ -176,8 +206,14 @@ def _group_batch_by_detector(batch: list[tuple[str, dict[str, Any]]]) -> dict[st
     return grouped
 
 
-def _build_batch_plain(media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int) -> str:
-    """Render a streamed batch of hits as a plain-text summary."""
+def _build_batch_plain(
+    media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int, *, labelled: bool = False
+) -> str:
+    """Render a streamed batch of hits as a plain-text summary.
+
+    *labelled* (a ``--keep-negatives`` stream) tags each hit with its
+    ``label``, since the batch then mixes both sides of the threshold.
+    """
     lines: list[str] = [
         f"Auto-Detect Results (streamed, part {part})",
         "=========================================",
@@ -189,31 +225,39 @@ def _build_batch_plain(media_type: str, batch: list[tuple[str, dict[str, Any]]],
         lines.append(f"--- {detector_name} ---")
         for hit in hits:
             clip_id = hit.get("id")
-            label = f"Clip #{clip_id}" if clip_id is not None else "Clip"
-            lines.append(f"  {label}: {hit.get('filename', 'N/A')} (score: {hit.get('score', 'N/A')})")
+            clip = f"Clip #{clip_id}" if clip_id is not None else "Clip"
+            tag = _label_tag(hit) if labelled else ""
+            lines.append(f"  {tag}{clip}: {hit.get('filename', 'N/A')} (score: {hit.get('score', 'N/A')})")
         lines.append("")
     return "\n".join(lines)
 
 
-def _build_batch_html(media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int) -> str:
-    """Render a streamed batch of hits as a minimal HTML e-mail body."""
+def _build_batch_html(
+    media_type: str, batch: list[tuple[str, dict[str, Any]]], part: int, *, labelled: bool = False
+) -> str:
+    """Render a streamed batch of hits as a minimal HTML e-mail body.
+
+    *labelled* adds a ``Label`` column, as in :func:`_build_batch_plain`.
+    """
     from html import escape
 
+    label_th = "<th>Label</th>" if labelled else ""
     rows = ""
     for detector_name, hits in _group_batch_by_detector(batch).items():
         hits_html = ""
         for hit in hits:
             clip_id = hit.get("id")
-            label = f"Clip #{clip_id}" if clip_id is not None else "Clip"
+            clip = f"Clip #{clip_id}" if clip_id is not None else "Clip"
             hits_html += (
-                f"<tr><td>{escape(label)}</td>"
+                f"<tr>{_label_td(hit) if labelled else ''}"
+                f"<td>{escape(clip)}</td>"
                 f"<td>{escape(str(hit.get('filename', 'N/A')))}</td>"
                 f"<td>{escape(str(hit.get('score', 'N/A')))}</td></tr>"
             )
         rows += (
             f"<h3>{escape(str(detector_name))}</h3>"
             f"<table border='1' cellpadding='4' cellspacing='0'>"
-            f"<tr><th>Clip</th><th>Filename</th><th>Score</th></tr>"
+            f"<tr>{label_th}<th>Clip</th><th>Filename</th><th>Score</th></tr>"
             f"{hits_html}</table>"
         )
     return (
@@ -490,10 +534,18 @@ class EmailResultsExporter(ResultsExporter):
         :meth:`_send_batches`).
         """
         media_type = header.get("media_type", "unknown")
+        # Every streamed record carries ``label``, so the header, not the
+        # records, says whether both sides are in the stream; it also keeps
+        # every part's columns the same.
+        labelled = bool(header.get("keep_negatives"))
 
         def _render(batch: list[tuple[str, dict[str, Any]]], part: int) -> tuple[str, str, str]:
             subject = f"VTSearch Auto-Detect: {len(batch)} hit(s) on {media_type} dataset (part {part})"
-            return subject, _build_batch_plain(media_type, batch, part), _build_batch_html(media_type, batch, part)
+            return (
+                subject,
+                _build_batch_plain(media_type, batch, part, labelled=labelled),
+                _build_batch_html(media_type, batch, part, labelled=labelled),
+            )
 
         total_hits, parts, to_addr = self._send_batches(field_values, records, _render)
         return {
