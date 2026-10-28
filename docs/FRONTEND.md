@@ -547,6 +547,15 @@ needed, and promotes to active only once they settle. It has cancel-and-replace
 semantics and a `switching$` observable for loading UI. A failed load must not
 promote — that would re-open the 409 cascade.
 
+**The detector load names the dataset being switched to** (`DATASET_OVERRIDE`,
+so no detector rides with it). The backend restores the detector's labels and
+seeds its examples against the request's dataset, and while the switch is in
+flight the active layer still names the previous pair, or none on the
+Dashboard. Loaded against that, the votes were re-derived when the new pair's
+first request arrived, outside the session's label history (#5358). So when the
+dataset needs loading too, the detector load waits for it: it would answer 409
+for a dataset that is not loaded yet (#3139).
+
 ### `activeContextInterceptor` — the header attachment
 
 Reads the **active** layer only and sets each header when its id is non-empty.
@@ -617,9 +626,8 @@ its dataset (#5158), starts `ContextSwitchService.reloadActivePair()`, and its
 `reloaded$` makes the view run its pair-change reset. For Browse that reset
 has to ask for a build: a dataset load leaves the pyramid out of memory, and
 the build restores the layout persisted in the dataset's container rather than
-fitting it again. The reload loads the dataset *before* the detector,
-because the detector load resolves its dataset from the request's
-`X-Dataset-Id`, which during a reload names the unloaded dataset. A 409 that
+fitting it again. The reload loads the dataset *before* the detector, as every
+switch does, because the detector load names the dataset, which is unloaded. A 409 that
 lands mid-switch or mid-reload, or for a request sent before the last reload
 landed, is absorbed without a toast; one off the pair views still toasts. A
 reload that fails, or a pair lost again within a minute of one, sends the tab

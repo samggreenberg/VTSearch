@@ -38,6 +38,8 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
   let detectors: DetectorRegistryEntry[];
   let loadRegisteredSubjects: Map<string, Subject<unknown>>;
   let loadDetectorSubjects: Map<string, Subject<unknown>>;
+  /** The dataset each detector load named, by detector id. */
+  let loadDetectorDatasets: Map<string, string>;
   let loadingTasks$: BehaviorSubject<LoadingTask[]>;
   let detectorLoadingTasks$: BehaviorSubject<LoadingTask[]>;
   let cancelledTaskIds: string[];
@@ -81,6 +83,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     detectors = [];
     loadRegisteredSubjects = new Map();
     loadDetectorSubjects = new Map();
+    loadDetectorDatasets = new Map();
     loadingTasks$ = new BehaviorSubject<LoadingTask[]>([]);
     detectorLoadingTasks$ = new BehaviorSubject<LoadingTask[]>([]);
     cancelledTaskIds = [];
@@ -120,9 +123,10 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     };
 
     const detectorsRegistryApiStub = {
-      loadDetector: (id: string): Subject<unknown> => {
+      loadDetector: (id: string, datasetId = ''): Subject<unknown> => {
         const s = new Subject<unknown>();
         loadDetectorSubjects.set(id, s);
+        loadDetectorDatasets.set(id, datasetId);
         return s;
       },
       cancelDetectorLoadingTask: (taskId: string): Subject<unknown> => {
@@ -463,6 +467,52 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     // non-idle task, killing the unrelated d3 load mid-flight.
     expect(cancelledTaskIds).toEqual(['task-d1']);
     expect(cancelledDetectorTaskIds).toEqual([]);
+  });
+
+  it('loads the detector for the dataset it switches to, not the one still active (#5358)', () => {
+    // From the Dashboard nothing is active, so the interceptor would name no
+    // dataset, and the backend restored the detector's labels against none.
+    datasets = [makeDataset('d1', { loaded: true })];
+    detectors = [makeDetector('m1', { detector_loaded: false })];
+
+    switcher.applyActivePair('d1', 'm1').subscribe();
+
+    expect(loadDetectorDatasets.get('m1')).toBe('d1');
+  });
+
+  it('names no dataset for one the registry does not list', () => {
+    detectors = [makeDetector('m1', { detector_loaded: false })];
+
+    switcher.applyActivePair('d-unknown', 'm1').subscribe();
+
+    expect(loadDetectorDatasets.get('m1')).toBe('');
+  });
+
+  it('loads the dataset before the detector when a switch needs both (#5358)', () => {
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: false })];
+    detectors = [makeDetector('m1', { detector_loaded: false })];
+
+    let emitted = false;
+    switcher.applyActivePair('d1', 'm1').subscribe({ next: () => (emitted = true) });
+
+    // The detector load names d1, which answers 409 until d1 is loaded.
+    expect(loadRegisteredSubjects.has('d1')).toBe(true);
+    expect(loadDetectorSubjects.has('m1')).toBe(false);
+
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: 'task-d1' });
+    loadRegisteredSubjects.get('d1')!.complete();
+    loadingTasks$.next([makeLoadingTask({ dataset_id: 'd1', task_id: 'task-d1', status: 'idle' })]);
+    expect(loadDetectorDatasets.get('m1')).toBe('d1');
+    expect(emitted).toBe(false);
+
+    loadDetectorSubjects.get('m1')!.next({ ok: true, task_id: 'task-m1' });
+    loadDetectorSubjects.get('m1')!.complete();
+    detectorLoadingTasks$.next([makeLoadingTask({ detector_id: 'm1', task_id: 'task-m1', status: 'idle' })]);
+
+    expect(emitted).toBe(true);
+    expect(activeContext.datasetId).toBe('d1');
+    expect(activeContext.modelId).toBe('m1');
   });
 
   it('reloadActivePair loads both halves again, dataset first, though the registry reads loaded (#5155)', () => {
