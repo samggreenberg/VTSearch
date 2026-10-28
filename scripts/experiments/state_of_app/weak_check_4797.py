@@ -13,6 +13,8 @@ The objective is read as #4778 read it (``prior_4776.read_runs``): Test's untagg
 * the share of sessions the weak check prompts, the vote it starts at, and the Goods in hand then (counted over the
   votes cast before the check's first round, which logs its picks at the round's last vote);
 * the same effect split by those Goods and by that vote (#4778's strata);
+* per vote, both arms' mean and the paired difference (``weak_4797_curves.csv``), and every pair's numbers
+  (``weak_4797_per_run.csv``), for the figures and the examples;
 * the pairing check: the first vote where a pair's picks differ, which must not come before the app's first weak
   check (a departure before it is drift, not the check).
 
@@ -109,7 +111,7 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=16)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    summary, splits = [], []
+    summary, splits, curves, per_run = [], [], [], []
     for path in args.paths.split(","):
         for btag, beta in BETAS:
             cells = {
@@ -155,6 +157,18 @@ def main() -> int:
             }
             row.update(effect(keys, A, C))
             summary.append(row)
+            fa, fc_ = np.array([A[k]["F"] for k in keys]), np.array([C[k]["F"] for k in keys])
+            for v in range(HORIZON):
+                d = fa[:, v] - fc_[:, v]
+                curves.append({"path": path, "beta": beta, "vote": v + 1, "F_app": fa[:, v].mean(),
+                               "F_end": fc_[:, v].mean(), "d": d.mean(), "d_se": se_cat(keys, d)})  # fmt: skip
+            for k in keys:
+                per_run.append({"path": path, "beta": beta, "category": k[1], "seed": k[2],
+                                "first_vote": PA[k]["first"], "goods_at_first": PA[k]["goods"],
+                                "goods150_app": PA[k]["goods_150"], "goods150_end": PC[k]["goods_150"],
+                                "d_1_50": A[k]["F"][:50].mean() - C[k]["F"][:50].mean(),
+                                "d_1_150": A[k]["F"].mean() - C[k]["F"].mean(),
+                                "F150_app": A[k]["F"][-1], "F150_end": C[k]["F"][-1]})  # fmt: skip
             print(
                 f"{path:6s} b{btag:3s} n={len(keys):4d} early_dep={early} prompted={row['prompted_share']:.0%} "
                 f"first~{row['first_vote_median']:.0f} goods~{row['goods_at_first_median']:.0f} "
@@ -176,7 +190,9 @@ def main() -> int:
                     if ks:
                         splits.append({"path": path, "beta": beta, "by": by, "stratum": label, "runs": len(ks),
                                        "share": len(ks) / len(keys), **effect(ks, A, C)})  # fmt: skip
-    for name, rows in (("weak_4797_summary.csv", summary), ("weak_4797_splits.csv", splits)):
+    tables = (("weak_4797_summary.csv", summary), ("weak_4797_splits.csv", splits), ("weak_4797_curves.csv", curves),
+              ("weak_4797_per_run.csv", per_run))  # fmt: skip
+    for name, rows in tables:
         df = pd.DataFrame(rows).round(4)
         df.to_csv(args.out / name, index=False)
         if args.docs:
