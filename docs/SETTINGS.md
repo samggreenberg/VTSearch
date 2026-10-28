@@ -188,6 +188,7 @@ An abridged example; the full field list is `UserSettings` in
   "show_metadata": false,
   "hide_all_hints": false,
   "hidden_hints": [],
+  "used_features": [],
   "enable_achievements": true,
   "autopilot_enabled": true,
   "hide_left_panel": true,

@@ -238,6 +238,15 @@ class TestSettingsModule:
         with pytest.raises(ValueError):
             settings_mod.set_hidden_hints(["train", 3])  # pyright: ignore[reportArgumentType]
 
+    def test_no_feature_is_used_until_the_user_tries_it(self):
+        """A hint that teaches a feature shows until its first use (#5360)."""
+        assert settings_mod.get_used_features() == []
+
+    def test_used_features_persist_and_drop_blank_and_repeated_ids(self, isolated_settings):
+        settings_mod.set_used_features(["browse-pan-zoom", "", "browse-select", "browse-pan-zoom"])
+        settings_mod.reset()
+        assert settings_mod.get_used_features() == ["browse-pan-zoom", "browse-select"]
+
     def test_get_grid_icon_size_left_default(self):
         result = settings_mod.get_grid_icon_size_left()
         assert isinstance(result, dict)

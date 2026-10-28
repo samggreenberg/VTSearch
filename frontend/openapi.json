@@ -467,6 +467,12 @@
             ],
             "type": "string"
           },
+          "used_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "volume": {
             "type": "number"
           }
@@ -7169,6 +7175,12 @@
               "system"
             ],
             "type": "string"
+          },
+          "used_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "volume": {
             "type": "number"

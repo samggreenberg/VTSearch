@@ -244,14 +244,23 @@ describe('SettingsModalComponent', () => {
     req.flush(mockSettings);
     expect(component.allHintsHidden()).toBe(true);
 
-    // Show All also brings back the hints hidden one at a time.
-    component.settings.update((s) => ({ ...s, hidden_hints: ['train'] }));
+    // Show All also brings back the hints hidden one at a time, and the ones
+    // a feature's first use retired (#5360).
+    component.settings.update((s) => ({ ...s, hidden_hints: ['train'], used_features: ['browse-pan-zoom'] }));
     component.onShowAllHints();
     req = httpMock.expectOne('/api/settings');
     expect(req.request.body.hide_all_hints).toBe(false);
     expect(req.request.body.hidden_hints).toEqual([]);
+    expect(req.request.body.used_features).toEqual([]);
     req.flush(mockSettings);
     expect(component.noHintsHidden()).toBe(true);
+  });
+
+  it('enables Show All once a tried feature has retired its hint (#5360)', async () => {
+    await flushInit();
+    expect(component.noHintsHidden()).toBe(true);
+    component.settings.update((s) => ({ ...s, used_features: ['browse-pan-zoom'] }));
+    expect(component.noHintsHidden()).toBe(false);
   });
 
   it("disables Show All while no hint is hidden and Hide All once they all are (#4680)", async () => {

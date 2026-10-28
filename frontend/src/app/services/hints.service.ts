@@ -43,6 +43,13 @@ export const HINT_IDS = [
   'test-vote',
   'test-done',
   'review',
+  // Browse view: a ladder, each rung up until the first use of the feature
+  // it teaches (#5360).
+  'browse-pan-zoom',
+  'browse-thumbnail-size',
+  'browse-tile-details',
+  'browse-select',
+  'browse-verify',
   // Dialogs on the way: what to do in each.
   'import-dataset',
   'new-detector',
@@ -53,11 +60,27 @@ export const HINT_IDS = [
 export type HintId = (typeof HINT_IDS)[number];
 
 /**
+ * The features a hint teaches, by the id the `used_features` setting stores
+ * (#5360). Such a hint stays up until the user first uses its feature, on any
+ * visit, and then never shows again: the next one takes over. Each feature is
+ * named after the hint that teaches it.
+ */
+export const FEATURE_IDS = [
+  'browse-pan-zoom',
+  'browse-thumbnail-size',
+  'browse-tile-details',
+  'browse-select',
+  'browse-verify',
+] as const;
+export type FeatureId = (typeof FEATURE_IDS)[number];
+
+/**
  * Whether each of Toasty's hints may show, backed by two per-user settings:
  * `hide_all_hints` (a bubble's "Hide all hints" box, Settings' Hide All) and
- * `hidden_hints` (the ids hidden one by one with "Hide this hint"). Settings'
- * Show All clears both; that write goes through the Settings modal's own draft,
- * not through here.
+ * `hidden_hints` (the ids hidden one by one with "Hide this hint"). A third,
+ * `used_features`, records the features the user has tried, which retire the
+ * hints that teach them (#5360). Settings' Show All clears all three; that
+ * write goes through the Settings modal's own draft, not through here.
  *
  * Whether a hint is *needed* is the caller's business (the Dashboard shows
  * "add a dataset" only while there are none); this service answers whether
@@ -77,6 +100,9 @@ export class HintsService {
   // thing, and on failure the hint comes back.
   private readonly pendingHidden = signal<ReadonlySet<HintId>>(new Set());
   private readonly pendingHideAll = signal(false);
+  // Likewise for first uses: the hint retires on the gesture, and a second
+  // use before the first write lands sends nothing.
+  private readonly pendingUsed = signal<ReadonlySet<FeatureId>>(new Set());
 
   /**
    * True when hint `id` may show. False until settings load, so a user who
@@ -108,5 +134,28 @@ export class HintsService {
     this.pendingHideAll.set(true);
     const settle = () => this.pendingHideAll.set(false);
     this.settingsState.update({ hide_all_hints: true }).subscribe({ next: settle, error: settle });
+  }
+
+  /** True once this user has used feature `id`, on this visit or an earlier one. */
+  hasUsed(id: FeatureId): boolean {
+    return this.pendingUsed().has(id) || (this.settingsState.settingsSignal()?.used_features ?? []).includes(id);
+  }
+
+  /**
+   * The user just used feature `id`: record it, the first time only. Nothing
+   * is sent before settings load, since the write replaces the stored list.
+   */
+  markUsed(id: FeatureId): void {
+    const settings = this.settingsState.settingsSignal();
+    if (!settings || this.hasUsed(id)) return;
+    const used = [...new Set([...(settings.used_features ?? []), ...this.pendingUsed(), id])];
+    this.pendingUsed.update((ids) => new Set(ids).add(id));
+    const settle = () =>
+      this.pendingUsed.update((ids) => {
+        const next = new Set(ids);
+        next.delete(id);
+        return next;
+      });
+    this.settingsState.update({ used_features: used }).subscribe({ next: settle, error: settle });
   }
 }
