@@ -15,6 +15,11 @@ The refit cannot be shared with the photo benches. On COCO Better at click 0, th
 0.17 to 0.084 (one photo, β 1). There a category has 50 withheld positives, and the bar keeps a fifth of
 what the app keeps. Shipped, it is a face-only centroid rule.
 
+**Shipped (owner, 2026-10-28): face crops draw the centroid's line at z 5.5, at every β**
+(`centroid_line_rule`, `CENTROID_LINE_RULE_BY_MEDIA_TYPE`). The app's example sort, its centroid head and
+the eval harness's default all read it; other media types and Find's line are unchanged. From a frozen
+tree with no `CALIB_CENTROID_LINE` set, 18 face cells (3 people × K × β) matched the arm's in every value.
+
 | one photo, 1024 px | β ¼ | β 1 | β 4 |
 |---|---:|---:|---:|
 | click 0, F: the app → bar z5.5 | 0.89 → 0.89 | 0.73 → 0.85 | 0.79 → 0.84 |
