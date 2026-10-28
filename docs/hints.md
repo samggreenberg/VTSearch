@@ -141,16 +141,16 @@ the hint ids (`FEATURE_IDS` in `hints.service.ts`), and Settings' Show All
 clears it with the hidden hints, so the ladder starts over. None shows while
 the map loads, builds, or is still under its cover. While `browse-tile-details`
 is up, the empty bin-details panel's "Right-click a bin" line is hidden, and
-while `browse-select` is up, so is the empty Selection list's "Click bins on
-the canvas" line: Toasty is saying it.
+while `browse-select` or `browse-verify` is up, so is the empty Selection
+list's "Click bins on the canvas" line: Toasty is saying it.
 
 | Hint | Toasty | Text | Fires when |
 |---|---|---|---|
 | `browse-pan-zoom` | happy | This map shows your {media}, with similar ones near each other. Drag to pan, or double-click to zoom in. | The user has never moved a map. Stands under the zoom buttons. Any move retires it: a drag, the wheel, a double-click, the zoom buttons, the arrow keys, a minimap jump or zoom to fit. |
 | `browse-thumbnail-size` | happy | These buttons change how large the thumbnails appear. Try making them larger or smaller. | The user has never resized a map's thumbnails, on a map whose tiles show them (not text, whose tiles are density cells). Stands under the two size buttons, and either one retires it. |
 | `browse-tile-details` | happy | Each tile holds the items that landed there. Right-click one to see them all. | The user has never right-clicked a tile to open its bin details. Stands under the buttons at the map's top left (**Rebuild Map**), reaching over the map. |
-| `browse-select` | happy | Nothing is selected yet. Click a tile to add its items here. | The user has never selected anything on a map. Stands under the Selection panel's header. The first selection retires it: a tile clicked or boxed, select-all, or an item picked in the bin details. |
-| `browse-verify` | happy | These are your detector's matches. Select any that are wrong, then click **Verified Bad**. | On a map opened from Tune, the one kind whose Selection panel has **Verified Good** and **Verified Bad**, the user has never verified items on a map. Stands under **Verified Bad**, and either button retires it. |
+| `browse-select` | happy | Nothing is selected yet. Click a tile to add its items here. | The user has never selected anything on a map. Stands under the Selection panel's sort row, in place of the empty list's own line. The first selection retires it: a tile clicked or boxed, select-all, or an item picked in the bin details. |
+| `browse-verify` | happy | These are your detector's matches. Select any that are wrong, then click **Verified Bad**. | On a map opened from Tune, the one kind whose Selection panel has **Verified Good** and **Verified Bad**, the user has never verified items on a map. Stands where `browse-select` does, below **Verified Bad**, and either button retires it. |
 
 `{media}` is the plural of the map's media type ("images", "audio clips", …),
 as on the Dashboard.

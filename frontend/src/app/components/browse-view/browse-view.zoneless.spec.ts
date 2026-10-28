@@ -808,6 +808,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
         id: 'browse-verify',
         text: "These are your detector's matches. Select any that are wrong, then click Verified Bad.",
       });
+      expect(fixture.nativeElement.querySelector('.bsp-empty')).toBeNull();
 
       fixture.debugElement.injector.get(BrowseSelectionService).addAll([2]);
       component.onVerify('bad');

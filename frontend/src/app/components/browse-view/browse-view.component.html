@@ -296,7 +296,7 @@
             class="browse-side-selection"
             [mediaType]="mediaType()"
             [canVerify]="canVerify"
-            [emptyNoteHidden]="browseHint() === 'browse-select'"
+            [emptyNoteHidden]="browseHint() === 'browse-select' || browseHint() === 'browse-verify'"
             [volume]="volume()"
             [showInPhotoOffered]="sourcePhoto.offered()"
             (verifyGood)="onVerify('good')"
@@ -343,12 +343,12 @@
             </vt-toasty-hint>
           }
           @case ('browse-select') {
-            <vt-toasty-hint hintId="browse-select" [anchor]="selectionPanel.header().nativeElement">
+            <vt-toasty-hint hintId="browse-select" [anchor]="selectionPanel.toolbar().nativeElement">
               Nothing is selected yet. Click a tile to add its items here.
             </vt-toasty-hint>
           }
           @case ('browse-verify') {
-            <vt-toasty-hint hintId="browse-verify" [anchor]="selectionPanel.verifyBadButton()?.nativeElement">
+            <vt-toasty-hint hintId="browse-verify" [anchor]="selectionPanel.toolbar().nativeElement">
               These are your detector's matches. Select any that are wrong, then click
               <strong>Verified Bad</strong>.
             </vt-toasty-hint>

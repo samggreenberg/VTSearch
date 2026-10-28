@@ -81,14 +81,13 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Emitted with the one selected item's id, whose photo the browse view opens. */
   readonly showInPhoto = output<number>();
 
-  /** Hides the empty list's "Click bins on the canvas" line while Toasty, at
-   *  the {@link header}, says the same (#5360). */
+  /** Hides the empty list's "Click bins on the canvas" line while Toasty,
+   *  standing in its place under the {@link toolbar}, says the same (#5360). */
   readonly emptyNoteHidden = input(false);
 
-  /** The panel's header and its Verified Bad button, for the browse view's
-   *  Toasty hints to stand at (#5360). */
-  readonly header = viewChild.required<ElementRef<HTMLElement>>('header');
-  readonly verifyBadButton = viewChild<ElementRef<HTMLElement>>('verifyBadButton');
+  /** The sort row above the list, for the browse view's Toasty hints to
+   *  stand under (#5360). */
+  readonly toolbar = viewChild.required<ElementRef<HTMLElement>>('toolbar');
 
   /**
    * Emitted when the header checkbox asks for a select-all-in-view (the [ ]/[-]
