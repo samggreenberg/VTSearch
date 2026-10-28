@@ -96,6 +96,10 @@ export class GenericFormPickerComponent {
   readonly autofind = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
+  /** Fired with the dataset type whose Import Defaults the form has just
+   *  applied, so the modal, which owns the two toggles above, can apply that
+   *  type's saved ones. */
+  readonly typeDefaultsApplied = output<string>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
   /** The form's field values, as the template and :prop:`canSubmit` read
@@ -300,6 +304,7 @@ export class GenericFormPickerComponent {
     }
 
     this.resetSourceSpecs();
+    this.applyTypeDefaults();
 
     this.fieldOptions.refreshAll(importer.fields || [], this.workingValues);
 
@@ -315,7 +320,25 @@ export class GenericFormPickerComponent {
     this.loadCleaners(mediaType);
     this.loadEmbedders(mediaType);
     this.resetSourceSpecs();
+    this.applyTypeDefaults();
     this.onFieldChanged('media_type');
+  }
+
+  /** Apply what the current type's Import Defaults say outside the single
+   *  dataset's fields (those load with their option lists): open the
+   *  Multi-Dataset editor on the saved kinds, and hand the type to the modal
+   *  for the two whole-import toggles. */
+  private applyTypeDefaults(): void {
+    const typeId = this.outputTypeId;
+    if (!this.multiDataset() && this.supportsMultiOutput && !this.effectiveSoloMediaType) {
+      const fresh = buildOutputDrafts(this.mediaTypes(), this.convertersByType);
+      const drafts = this.importDefaults.savedMultiDatasetDrafts(typeId, this.mediaTypes(), fresh);
+      if (drafts) {
+        this.multiDataset.set(true);
+        this.outputDrafts.set(drafts);
+      }
+    }
+    this.typeDefaultsApplied.emit(typeId);
   }
 
   /** Called whenever a form field value changes.  Refreshes options for
@@ -619,21 +642,29 @@ export class GenericFormPickerComponent {
   }
 
   private offerSaveImportDefaults(): void {
-    // A multi-dataset import has no single configuration to offer as the
-    // type's default.
-    if (this.multiDataset()) return;
     const typeId = this.outputTypeId;
-    const cfg = this.importDefaults.snapshotImportConfig(
-      typeId,
-      this.selectedEmbedder(),
-      this.selectedClipper(),
-      this.clipperParamValues(),
-      this.sourceSpecs(),
-      this.availableEmbedders(),
-      this.availableClippers(),
-      this.selectedCleaners(),
-      this.cleaners(),
-    );
+    const cfg = this.multiDataset()
+      ? this.importDefaults.snapshotMultiDatasetConfig(
+          typeId,
+          this.mediaTypes(),
+          this.outputDrafts(),
+          this.buildProjection(),
+          this.mergeNearDuplicates(),
+        )
+      : {
+          ...this.importDefaults.snapshotImportConfig(
+            typeId,
+            this.selectedEmbedder(),
+            this.selectedClipper(),
+            this.clipperParamValues(),
+            this.sourceSpecs(),
+            this.availableEmbedders(),
+            this.availableClippers(),
+            this.selectedCleaners(),
+            this.cleaners(),
+          ),
+          ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
+        };
     this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }

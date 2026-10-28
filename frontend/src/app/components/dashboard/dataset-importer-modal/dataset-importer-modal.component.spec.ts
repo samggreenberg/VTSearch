@@ -7,6 +7,7 @@ import { settleResource, settleZoneless } from '../../../testing/settle-resource
 import { getTabLabel } from './pickers/shared/media-type.util';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import type { ImporterInfo } from '../../../models/api.models';
+import { ImportDefaultsService } from './pickers/shared/import-defaults.service';
 
 describe('DatasetImporterModalComponent', () => {
   let component: DatasetImporterModalComponent;
@@ -199,7 +200,11 @@ describe('DatasetImporterModalComponent', () => {
   /** Flush the embedder + clipper fetches and the embedder-aware demo-list
    *  refetch that fire when a demo media-type tab is selected (either via
    *  the auto-select inside ``buildDemoTabs`` or an explicit user pick). */
-  function flushDemoTabRequests(tab: string, embedders: typeof mockEmbedders): void {
+  function flushDemoTabRequests(
+    tab: string,
+    embedders: typeof mockEmbedders,
+    converters: Array<Record<string, unknown>> = [],
+  ): void {
     httpMock.expectOne(req =>
       req.url === '/api/embedders' && req.params.get('media_type') === tab,
     ).flush({ embedders });
@@ -216,7 +221,7 @@ describe('DatasetImporterModalComponent', () => {
     }
     httpMock.expectOne(req =>
       req.url === '/api/converters' && req.params.get('source') === tab,
-    ).flush({ converters: [] });
+    ).flush({ converters });
   }
 
   /** Open the demo picker and flush the always-issued requests.  Opening
@@ -832,6 +837,106 @@ describe('DatasetImporterModalComponent', () => {
       const req = httpMock.expectOne('/api/dataset/import/generic_form');
       expect(req.request.body['autofind']).toBe('true');
       req.flush({});
+    });
+  });
+
+  // #5355: what "Save as default" saved for a type - the whole-import toggles
+  // and Multi-Dataset with its kinds - comes back when an import of it starts.
+  describe('saved Import Defaults beyond the Advanced fields', () => {
+    const image2face = { name: 'image2face', source_type: 'image', target_type: 'face' };
+
+    /** Answer whatever embedder / clipper / cleaner lists are open for *type*. */
+    function flushOptionLists(type: string): void {
+      const empty: Record<string, Record<string, unknown[]>> = {
+        '/api/embedders': { embedders: [] },
+        '/api/clippers': { clippers: [] },
+        '/api/cleaners': { cleaners: [] },
+      };
+      httpMock
+        .match((req) => req.url in empty && req.params.get('media_type') === type)
+        .forEach((req) => req.flush(empty[req.request.url]));
+    }
+
+    it("applies the type's saved toggles as the picker lands on it", () => {
+      flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      openAndFlushDemoPicker();
+      expect(component.buildProjection()).toBe(false); // nothing saved for audio
+      selectDemoTabAndFlush('image', mockImageEmbedders);
+      expect(component.buildProjection()).toBe(true);
+      expect(component.mergeNearDuplicates()).toBe(false);
+      selectDemoTabAndFlush('audio', mockEmbedders);
+      expect(component.buildProjection()).toBe(false);
+    });
+
+    it('leaves the toggles as the user set them', () => {
+      flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      openAndFlushDemoPicker();
+      component.onMergeNearDuplicatesChange(true);
+      selectDemoTabAndFlush('image', mockImageEmbedders);
+      expect(component.buildProjection()).toBe(false);
+      expect(component.mergeNearDuplicates()).toBe(true);
+    });
+
+    it('opens an image demo in Multi-Dataset mode on the saved kinds, and offers the changed kinds as the default', () => {
+      flushImporters({
+        import_defaults_by_media_type: { image: { multi_dataset: ['image', 'face'], build_projection: true } },
+      });
+      openAndFlushDemoPicker();
+      const demo = component.demoPicker();
+      demo.selectDemoTabWithEmbedder('image');
+      flushDemoTabRequests('image', mockImageEmbedders, [image2face]);
+
+      expect(demo.multiDataset()).toBe(true);
+      const ticked = () => demo.outputDrafts().filter((d) => d.checked).map((d) => d.category);
+      expect(ticked()).toEqual(['image', 'face']);
+      expect(component.buildProjection()).toBe(true);
+
+      // Render, so the picker reads the modal's toggles and the editor loads
+      // each ticked row's option lists.
+      TestBed.tick();
+      flushOptionLists('image');
+      flushOptionLists('face');
+
+      const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
+      demo.onOutputDraftsChange(demo.outputDrafts().map((d) => (d.category === 'face' ? { ...d, checked: false } : d)));
+      demo.selectDemo(mockDemos[1] as any);
+      demo.submit();
+      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
+    });
+
+    it('offers a one-dataset demo import as the default too, and starts from a saved embedder', () => {
+      flushImporters({ import_defaults_by_media_type: { image: { embedder: 'siglip' } } });
+      openAndFlushDemoPicker();
+      const demo = component.demoPicker();
+      demo.selectDemoTabWithEmbedder('image');
+      httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'image')
+        .flush({ embedders: mockImageEmbedders });
+      expect(demo.selectedDemoEmbedder()).toBe('siglip');
+      httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'siglip')
+        .flush({ datasets: mockDemos });
+      flushOptionLists('image');
+      httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'image')
+        .flush({ converters: [] });
+
+      component.onBuildProjectionChange(true);
+      TestBed.tick();
+      const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
+      demo.selectDemo(mockDemos[1] as any);
+      demo.submit();
+      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
+    });
+
+    it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', () => {
+      flushImporters({ import_defaults_by_media_type: { image: { multi_dataset: ['image'] } } });
+      component.openServerFolderBrowser(component.importers().find((i) => i.name === 'server_folder'));
+      flushOptionLists('audio');
+      const picker = component.serverFolderPicker();
+      expect(picker.multiDataset()).toBe(false); // lands on audio: nothing saved
+
+      picker.onMediaTypeChange('image');
+      flushOptionLists('image');
+      expect(picker.multiDataset()).toBe(true);
+      expect(picker.outputDrafts().filter((d) => d.checked).map((d) => d.category)).toEqual(['image']);
     });
   });
 

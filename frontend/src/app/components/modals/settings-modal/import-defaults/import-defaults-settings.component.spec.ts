@@ -17,10 +17,11 @@ import { settleZoneless } from '../../../../testing/settle-resource';
 /**
  * Unit spec for the Import-Defaults settings sub-panel. The panel reads a
  * per-mediaType ``ImportDefaultsByMediaType`` map (embedder / clipper /
- * source-specs) and emits a full replacement map on every edit. These tests
- * drive the listings API through a stub so the lazy per-tab embedder/clipper/
- * converter fetches resolve synchronously, and assert on the component's
- * derived getters and the ``defaultsChange`` payloads.
+ * source-specs / ingest toggles / Multi-Dataset kinds) and emits a full
+ * replacement map on every edit. These tests drive the listings API through a
+ * stub so the lazy per-tab embedder/clipper/converter fetches resolve
+ * synchronously, and assert on the component's derived getters and the
+ * ``defaultsChange`` payloads.
  */
 describe('ImportDefaultsSettingsComponent', () => {
   let fixture: ComponentFixture<ImportDefaultsSettingsComponent>;
@@ -153,21 +154,50 @@ describe('ImportDefaultsSettingsComponent', () => {
   });
 
   // The stub gives Image no embedders, clippers or converters, as the real
-  // registry does Document: a tab with nothing to set says so (#5225).
-  it('says a type has no defaults to set rather than showing a blank tab', async () => {
+  // registry does Document: its tab still has the two ingest toggles, so it is
+  // never blank (#5225), and says nothing about having no defaults (#5355).
+  it('offers the ingest toggles on a type with nothing else to set', async () => {
     await create({ solo: 'image' });
     const body = fixture.nativeElement.querySelector('.import-defaults-body') as HTMLElement;
     expect(component.showSourceSpecsPicker).toBe(false);
     expect(component.showEmbedderPicker).toBe(false);
-    expect(body.querySelector('.empty-state')?.textContent?.trim()).toBe('Image imports have no defaults to set.');
+    expect(body.querySelector('#import-default-projection-image')).not.toBeNull();
+    expect(body.querySelector('#import-default-near-dupes-image')).not.toBeNull();
+    expect(body.querySelector('.empty-state')).toBeNull();
     expect(body.querySelector('.import-defaults-footer')).not.toBeNull();
   });
 
-  it('shows no such note on a type with something to set', async () => {
+  it('shows the source-specs picker on a type with something to set', async () => {
     await create();
     const body = fixture.nativeElement.querySelector('.import-defaults-body') as HTMLElement;
     expect(body.querySelector('vt-source-specs-picker')).not.toBeNull();
     expect(body.querySelector('.empty-state')).toBeNull();
+  });
+
+  it('the ingest toggles show the saved values and save a tick, dropping the key on untick', async () => {
+    await create({ defaults: { audio: { build_projection: true } } });
+    expect(component.currentBuildProjection).toBe(true);
+    expect(component.currentMergeNearDuplicates).toBe(false);
+    const emits = captureEmits();
+
+    component.onMergeNearDuplicatesChange(true);
+    expect(emits.at(-1)).toEqual({ audio: { build_projection: true, merge_near_duplicates: true } });
+
+    // Unticked is stored as no key, and with nothing else set the type goes.
+    component.onBuildProjectionChange(false);
+    expect(emits.at(-1)).toEqual({});
+  });
+
+  it('shows a saved Multi-Dataset default with a Clear that forgets only it', async () => {
+    await create();
+    expect(fixture.nativeElement.querySelector('.multi-dataset-default')).toBeNull();
+
+    await create({ defaults: { audio: { embedder: 'wav2vec', multi_dataset: ['audio', 'image'] } } });
+    const row = fixture.nativeElement.querySelector('.multi-dataset-default') as HTMLElement;
+    expect(row.textContent).toContain('Multi-Dataset: Sound, Image');
+    const emits = captureEmits();
+    (row.querySelector('button') as HTMLButtonElement).click();
+    expect(emits).toEqual([{ audio: { embedder: 'wav2vec' } }]);
   });
 
   it('lazy-loads a tab on first switch and caches it afterwards', async () => {
@@ -258,6 +288,12 @@ describe('ImportDefaultsSettingsComponent', () => {
 
     // A saved cleanup choice alone still offers Reset, the only way to clear it here.
     await create({ defaults: { audio: { cleaners: { trim_silence: { enabled: false } } } } });
+    expect(component.hasOverridesForActiveType).toBe(true);
+
+    await create({ defaults: { audio: { merge_near_duplicates: true } } });
+    expect(component.hasOverridesForActiveType).toBe(true);
+
+    await create({ defaults: { audio: { multi_dataset: ['audio'] } } });
     expect(component.hasOverridesForActiveType).toBe(true);
   });
 
