@@ -46,7 +46,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 - [`scalability.md`](scalability.md)
 - [`cli-stream-massive-images.md`](cli-stream-massive-images.md)
-- [`cli-detector-converter.md`](cli-detector-converter.md)
 
 ## Plugins and I/O
 
