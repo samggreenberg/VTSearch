@@ -252,6 +252,7 @@ scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch d
 tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
 quiet_forever  # noqa: F821 - holds the evidence-baseline draw waiting so only a read lands it
 quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the sort ends
+label_files  # noqa: F821 - writes the labels' origin files and points the resolver at them
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -274,12 +275,13 @@ cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
 # ---------------------------------------------------------------------------
 # Autouse fixtures imported for side effects in both conftests (the ``import``
 # is what registers them with pytest). The local alias goes through ``as
-# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir``) so a reader immediately sees ``F401`` and knows the
+# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir`` and ``_no_face_models``) so a reader immediately sees ``F401`` and knows the
 # import is deliberate; the ``noqa: F401`` at the import site silences ruff,
 # and this entry silences vulture.
 # ---------------------------------------------------------------------------
 _allow_test_tmp_paths  # noqa: F821
 _isolated_example_media_dir  # noqa: F821
+_no_face_models  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream

@@ -20,6 +20,53 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+## 2026-10-28
+
+### Changed
+
+- **The GPU Docker image runs the face models on the GPU** (issue #5363). `docker/Dockerfile.gpu` now installs
+  `onnxruntime-gpu` 1.26.0 in place of the CPU `onnxruntime`, as a CUDA `scripts/install.sh` already did, so
+  Face's detector and embedder use the GPU there, with the same vectors as on the CPU (cosine at least 0.999999
+  per face in #5332's comparison), so face datasets built before need no re-import. 1.26.0 is the newest
+  `onnxruntime-gpu` built for CUDA 12; later releases need CUDA 13, which this image does not have. See
+  [Face models](docs/DEPLOYMENT.md#face-models).
+
+- **Save as Default remembers Multi-Dataset and the two ingest toggles, after a demo import too** (issue #5355).
+  The **Save as Default** offer that follows an import now also saves **Build Browse map now**, **Merge
+  near-duplicates** and, after a Multi-Dataset import, **Multi-Dataset** with the kinds it made, so the next import
+  of that kind of media (an Image demo and its Faces, say) opens the same way. It is now offered after a demo import
+  and after a Multi-Dataset import, where it used to be skipped, and the demo catalogue starts from a saved embedder
+  and clipper as the other importers do. Settings › Import has both toggles for each media type, and shows a saved
+  Multi-Dataset default with a **Clear** button. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
+- **The LabBench image carries every LabBench media type unless told otherwise** (issue #5339). `docker build -f
+  docker/Dockerfile.labbench .` with no `MEDIA_TYPE` used to build the image-only (SigLIP) image. It now builds one
+  image for image and audio together: both types' slim dependencies installed, and both default embedders' weights
+  (SigLIP, CLAP General) baked in. That image is not locked to a media type, so Add Dataset and New Detector offer
+  image and audio, and the types it does not install (video, text, document) are hidden. Each type's embedder
+  stays locked to its baked one. `--build-arg MEDIA_TYPE=image` or `=audio` still builds the one-type, locked
+  image, and both LabBench compose files pass it, so they build what they did before. Give the all-types image its
+  own data volume, as each LabBench variant needs. See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
+
+- **A resumed `--resume` run over a folder no longer re-reads the files it already did** (issue #5314). To reach
+  where it stopped, a resumed `server_folder` run now checks each chunk it already wrote by its files' paths, sizes
+  and modification times, without opening them, where it used to hash and thumbnail every one again, which on a
+  run interrupted near its end could cost most of the original runtime. An archive's members are checked by the
+  archive's own size and time. A checkpoint left by an earlier version cannot be resumed; delete it to start over.
+  See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
+- **Dialogs are the browser's own** (issue #5297). Every dialog is now a native modal dialog. What a keyboard or
+  screen-reader user notices: a notification that pops up while a dialog is open can be reached with Tab, where
+  before only the mouse could get at it; the page behind a dialog is hidden from screen readers; and Tab past a
+  dialog's last control moves to the browser's toolbar, then back to the dialog's first control, instead of
+  wrapping straight round. The ☰ menu button no longer shows through a dialog's dimmed backdrop.
+
+- **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
+  under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
+  field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
+  now reads **Server path**.
+
 ### Added
 
 - **Toasty shows you round the Browse map** (issue #5360). Every Browse map, however you opened it, now has a
@@ -78,52 +125,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   message naming the problem. A pipeline file sets it as `override_clipper:`. See
   [`docs/CLI.md`](docs/CLI.md#how-the-run-scores).
 
-### Changed
-
-- **The GPU Docker image runs the face models on the GPU** (issue #5363). `docker/Dockerfile.gpu` now installs
-  `onnxruntime-gpu` 1.26.0 in place of the CPU `onnxruntime`, as a CUDA `scripts/install.sh` already did, so
-  Face's detector and embedder use the GPU there, with the same vectors as on the CPU (cosine at least 0.999999
-  per face in #5332's comparison), so face datasets built before need no re-import. 1.26.0 is the newest
-  `onnxruntime-gpu` built for CUDA 12; later releases need CUDA 13, which this image does not have. See
-  [Face models](docs/DEPLOYMENT.md#face-models).
-
-- **Save as Default remembers Multi-Dataset and the two ingest toggles, after a demo import too** (issue #5355).
-  The **Save as Default** offer that follows an import now also saves **Build Browse map now**, **Merge
-  near-duplicates** and, after a Multi-Dataset import, **Multi-Dataset** with the kinds it made, so the next import
-  of that kind of media (an Image demo and its Faces, say) opens the same way. It is now offered after a demo import
-  and after a Multi-Dataset import, where it used to be skipped, and the demo catalogue starts from a saved embedder
-  and clipper as the other importers do. Settings › Import has both toggles for each media type, and shows a saved
-  Multi-Dataset default with a **Clear** button. See
-  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
-
-- **The LabBench image carries every LabBench media type unless told otherwise** (issue #5339). `docker build -f
-  docker/Dockerfile.labbench .` with no `MEDIA_TYPE` used to build the image-only (SigLIP) image. It now builds one
-  image for image and audio together: both types' slim dependencies installed, and both default embedders' weights
-  (SigLIP, CLAP General) baked in. That image is not locked to a media type, so Add Dataset and New Detector offer
-  image and audio, and the types it does not install (video, text, document) are hidden. Each type's embedder
-  stays locked to its baked one. `--build-arg MEDIA_TYPE=image` or `=audio` still builds the one-type, locked
-  image, and both LabBench compose files pass it, so they build what they did before. Give the all-types image its
-  own data volume, as each LabBench variant needs. See [SETUP.md](docs/SETUP.md#labbench-slim-image-or-audio).
-
-- **A resumed `--resume` run over a folder no longer re-reads the files it already did** (issue #5314). To reach
-  where it stopped, a resumed `server_folder` run now checks each chunk it already wrote by its files' paths, sizes
-  and modification times, without opening them, where it used to hash and thumbnail every one again, which on a
-  run interrupted near its end could cost most of the original runtime. An archive's members are checked by the
-  archive's own size and time. A checkpoint left by an earlier version cannot be resumed; delete it to start over.
-  See [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
-
-- **Dialogs are the browser's own** (issue #5297). Every dialog is now a native modal dialog. What a keyboard or
-  screen-reader user notices: a notification that pops up while a dialog is open can be reached with Tab, where
-  before only the mouse could get at it; the page behind a dialog is hidden from screen readers; and Tab past a
-  dialog's last control moves to the browser's toolbar, then back to the dialog's first control, instead of
-  wrapping straight round. The ☰ menu button no longer shows through a dialog's dimmed backdrop.
-
-- **The server-file importers ask for a Server path** (issue #5254). **Server JSON File** and **Server CSV File**
-  under Import Labels (and New Detector › Trained), and **Server JSON File** under Import Settings, labelled their
-  field **Path or URL**, but they only ever read a file on the server; a web address was never fetched. The field
-  now reads **Server path**.
-
-### Added
 
 - **`--stream-results --as-labelset` streams a headless run's hits as a labelset** (issue #5285). A run over a
   source larger than RAM can now write its predictions as label entries rather than hits: each carries the item's
@@ -138,6 +139,21 @@ what is on `dev` but not yet on `main`; each release dates that section
   -20 dBFS RMS, never pushing a sample past -1 dBFS, so a quietly recorded sound is analysed like the same sound
   recorded loud. Set its mode to `peak` to bring each clip's loudest sample to the peak level instead. A
   normalized clip keeps its Original, like any other cleanup.
+
+### Removed
+
+- **The MTCNN detector and the FaceNet embedder** (issue #5320). The face path above replaces them, and
+  `facenet-pytorch` leaves every install. With them go `image2face`'s **Face provider**, **Find sideways faces**
+  and `similarity` alignment options (`roll`, the default, and `none` remain). The embedder name `face` now
+  belongs to the provider's embedder, so a face dataset or detector saved before this change holds FaceNet's
+  vectors under that name: re-import its photos to search it in the new space.
+
+- **The autorun extractor / localizer API** (issues #3452, #5259). The routes under `/api/autorun-extractors`,
+  `/api/autorun-localizers` and `/api/pregen-processors`, plus `/api/extract`, `/api/localize`,
+  `/api/auto-extract` and `/api/auto-localize`, are removed. No screen ever called them, and nothing outside the
+  repo did either. They ran OCR, speech, YOLO-class and face processors over a loaded dataset; the
+  `image2text` and `image2face` converters still do the OCR and the face finding at import. AutoFind and
+  `/api/auto-detect` are unaffected.
 
 ### Fixed
 
@@ -177,21 +193,6 @@ what is on `dev` but not yet on `main`; each release dates that section
   name stay distinct, so picking the second "my-cool-dataset" imports that one. Typing a name exactly one option
   has picks that option; anything else typed is sent as typed. This applies to every form that renders plugin
   fields: Add Dataset, Export, Import Labels, New Detector, AutoFind, and the settings importers and exporters.
-
-### Removed
-
-- **The MTCNN detector and the FaceNet embedder** (issue #5320). The face path above replaces them, and
-  `facenet-pytorch` leaves every install. With them go `image2face`'s **Face provider**, **Find sideways faces**
-  and `similarity` alignment options (`roll`, the default, and `none` remain). The embedder name `face` now
-  belongs to the provider's embedder, so a face dataset or detector saved before this change holds FaceNet's
-  vectors under that name: re-import its photos to search it in the new space.
-
-- **The autorun extractor / localizer API** (issues #3452, #5259). The routes under `/api/autorun-extractors`,
-  `/api/autorun-localizers` and `/api/pregen-processors`, plus `/api/extract`, `/api/localize`,
-  `/api/auto-extract` and `/api/auto-localize`, are removed. No screen ever called them, and nothing outside the
-  repo did either. They ran OCR, speech, YOLO-class and face processors over a loaded dataset; the
-  `image2text` and `image2face` converters still do the OCR and the face finding at import. AutoFind and
-  `/api/auto-detect` are unaffected.
 
 ## 2026-10-26
 

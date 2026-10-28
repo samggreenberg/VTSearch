@@ -24,6 +24,5 @@ python app.py --autodetect --tempimport --importer server_folder --path /data/im
 
 <!-- item-sep -->
 
-- [ ] #5314 — `--resume`: skip a folder's completed chunks at the walk, without re-reading their files
 
 <!-- item-sep -->
