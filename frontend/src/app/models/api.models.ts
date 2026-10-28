@@ -192,12 +192,12 @@ export interface SavedCleanerChoice {
 }
 
 /** Saved per-mediaType defaults for the Add Dataset advanced panel:
- *  the embedder, clipper (+ params), converter rows and cleanup gates the
- *  user wants applied automatically every time they import a dataset whose
- *  output is the matching mediaType. Edited from Settings > Import
- *  (all but the cleanup gates, which only the post-import "Save as default"
- *  offer writes); silently auto-filled into the importer form on importer
- *  selection. */
+ *  the embedder, clipper (+ params), converter rows, cleanup gates, ingest
+ *  toggles and Multi-Dataset kinds the user wants applied automatically every
+ *  time they import a dataset whose output is the matching mediaType. Edited
+ *  from Settings > Import (all but the cleanup gates and the Multi-Dataset
+ *  kinds, which only the post-import "Save as default" offer writes); silently
+ *  auto-filled into the importer form on importer selection. */
 export interface ImportDefaultsForMediaType {
   embedder?: string;
   clipper?: string;
@@ -211,6 +211,16 @@ export interface ImportDefaultsForMediaType {
    *  off stays off rather than falling back to its ``default_enabled``.
    *  Absent when the saved selection was the registry's own. */
   cleaners?: Record<string, SavedCleanerChoice>;
+  /** "Build Browse map now"; only present when on. */
+  build_projection?: boolean;
+  /** "Merge near-duplicates"; only present when on. */
+  merge_near_duplicates?: boolean;
+  /** Multi-Dataset: the kinds (category ``type_id``s, e.g. ``["image",
+   *  "face"]``) to tick when an import of this type starts, which opens the
+   *  dialog in Multi-Dataset mode.  Absent means the single-dataset form.  A
+   *  Multi-Dataset import is filed under the type it started from: a demo's
+   *  own type, or the folder / form importers' media type. */
+  multi_dataset?: string[];
 }
 export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
 

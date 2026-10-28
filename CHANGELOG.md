@@ -73,6 +73,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **Save as Default remembers Multi-Dataset and the two ingest toggles, after a demo import too** (issue #5355).
+  The **Save as Default** offer that follows an import now also saves **Build Browse map now**, **Merge
+  near-duplicates** and, after a Multi-Dataset import, **Multi-Dataset** with the kinds it made, so the next import
+  of that kind of media (an Image demo and its Faces, say) opens the same way. It is now offered after a demo import
+  and after a Multi-Dataset import, where it used to be skipped, and the demo catalogue starts from a saved embedder
+  and clipper as the other importers do. Settings › Import has both toggles for each media type, and shows a saved
+  Multi-Dataset default with a **Clear** button. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
+
 - **The LabBench image carries every LabBench media type unless told otherwise** (issue #5339). `docker build -f
   docker/Dockerfile.labbench .` with no `MEDIA_TYPE` used to build the image-only (SigLIP) image. It now builds one
   image for image and audio together: both types' slim dependencies installed, and both default embedders' weights

@@ -66,9 +66,39 @@
         }
       }
 
-      @if (!showSourceSpecsPicker && !showEmbedderPicker) {
-        <p class="empty-state">{{ activeTypeLabel }} imports have no defaults to set.</p>
+      <!-- Made only by the import dialog's "Save as default": which kinds a
+           Multi-Dataset import offers depends on the importer. -->
+      @if (currentMultiDatasetSummary) {
+        <div class="multi-dataset-default">
+          <span title="{{ activeTypeLabel }} imports open in Multi-Dataset mode, making one dataset of each of these kinds">Multi-Dataset: {{ currentMultiDatasetSummary }}</span>
+          <button
+            type="button"
+            class="btn btn--sm"
+            (click)="clearMultiDataset()"
+            title="Start {{ activeTypeLabel }} imports on the one-dataset form again">
+            Clear
+          </button>
+        </div>
       }
+
+      <div class="form-group">
+        <label class="form-label" [for]="'import-default-projection-' + activeType" title="Build the Browse map while importing a {{ activeTypeLabel }} dataset, so Browse opens straight away later">
+          <input
+            [id]="'import-default-projection-' + activeType"
+            type="checkbox"
+            [ngModel]="currentBuildProjection"
+            (ngModelChange)="onBuildProjectionChange($event)" />
+          Build Browse map now
+        </label>
+        <label class="form-label" [for]="'import-default-near-dupes-' + activeType" title="Merge near-duplicate copies (resizes, recompressions, trivial edits) when importing a {{ activeTypeLabel }} dataset">
+          <input
+            [id]="'import-default-near-dupes-' + activeType"
+            type="checkbox"
+            [ngModel]="currentMergeNearDuplicates"
+            (ngModelChange)="onMergeNearDuplicatesChange($event)" />
+          Merge near-duplicates
+        </label>
+      </div>
 
       <div class="import-defaults-footer">
         <button

@@ -668,13 +668,13 @@ class UserSettings(BaseModel):
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
     # Per-media-type default settings for the Add Dataset advanced panel -
-    # the embedder, clipper (+ params), source-spec converter rows and
-    # cleanup gates the user wants applied automatically every time they
-    # import a dataset of that output mediaType. Set from the Settings > Data
-    # Imports tab (cleanup gates only via the post-import "Save as default"
-    # offer) and silently auto-filled into the importer form when an importer is
-    # selected. Keys are canonical media-type ids; each value is a
-    # free-form dict shaped like:
+    # the embedder, clipper (+ params), source-spec converter rows, cleanup
+    # gates, ingest toggles and Multi-Dataset kinds the user wants applied
+    # automatically every time they import a dataset of that output mediaType.
+    # Set from the Settings > Data Imports tab (cleanup gates and Multi-Dataset
+    # kinds only via the post-import "Save as default" offer) and silently
+    # auto-filled into the importer form when an importer is selected. Keys
+    # are canonical media-type ids; each value is a free-form dict shaped like:
     #     {
     #       "embedder": "<embedder name>" | "",
     #       "clipper": "<clipper name>" | "",
@@ -683,7 +683,12 @@ class UserSettings(BaseModel):
     #                         "params": {...}}, ...],
     #       "cleaners": {"<cleaner name>": {"enabled": true|false,
     #                                       "params": {...}}, ...},
+    #       "build_projection": true,        # only present when on
+    #       "merge_near_duplicates": true,   # only present when on
+    #       "multi_dataset": ["<media type id>", ...],
     #     }
+    # ``multi_dataset`` opens the dialog in Multi-Dataset mode with those kinds
+    # ticked; a Multi-Dataset import is filed under the type it started from.
     # Any missing sub-key falls back to the importer's existing default.
     import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
 

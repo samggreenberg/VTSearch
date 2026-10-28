@@ -60,6 +60,10 @@ export class DemoPickerComponent {
    *  Import footer button; the parent forwards the payload to its own
    *  ``demoSelected`` output and closes the modal. */
   readonly demoDatasetSelected = output<DemoDatasetEntry & Record<string, unknown>>();
+  /** Fired with the dataset type whose Import Defaults the picker has just
+   *  applied, so the modal, which owns the two toggles above, can apply that
+   *  type's saved ones. */
+  readonly typeDefaultsApplied = output<string>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -305,6 +309,7 @@ export class DemoPickerComponent {
       this.activeTabConvertsTo.set(convertsTo);
       this.activeTabConvertsToOptional.set(false);
       this.applyConverterTarget(mediaType, convertsTo.length ? convertsTo[0] : '');
+      this.applySavedMultiDataset();
       return;
     }
     // A directly embeddable tab (e.g. image) may still have registered
@@ -314,10 +319,28 @@ export class DemoPickerComponent {
     this.applyConverterTarget(mediaType, '');
     this.datasetsListingsApi.getConvertersForSource(mediaType).subscribe({
       next: (converters) => {
+        // The user has moved to another tab while this was in flight.
+        if (this.activeTab() !== mediaType) return;
         const targets = Array.from(new Set(converters.map((c) => c.target_type))).filter((t) => t !== mediaType);
         this.activeTabConvertsTo.set(targets);
+        this.applySavedMultiDataset();
       },
     });
+  }
+
+  /** Open the Multi-Dataset editor on the kinds saved for the active tab's
+   *  type, once its rows (its own type and the types it converts into) are
+   *  known.  A tab with a saved Multi-Dataset default takes the whole-import
+   *  toggles from that type too, as its Save as default filed them there. */
+  private applySavedMultiDataset(): void {
+    if (this.multiDataset() || !this.supportsMultiOutput || this.effectiveSoloMediaType) return;
+    const tab = this.activeTab();
+    const fresh = demoOutputDrafts(this.mediaTypes(), tab, this.activeTabConvertsTo());
+    const drafts = this.importDefaults.savedMultiDatasetDrafts(tab, this.mediaTypes(), fresh);
+    if (!drafts) return;
+    this.multiDataset.set(true);
+    this.outputDrafts.set(drafts);
+    this.typeDefaultsApplied.emit(tab);
   }
 
   /** Set the convert-on-load target for the active tab and (re)load the
@@ -327,11 +350,16 @@ export class DemoPickerComponent {
     this.selectedConverterTarget.set(target);
     this.selectedDemoConverter.set(target ? `${sourceType}2${target}` : '');
     const embeddableType = target || sourceType;
+    this.typeDefaultsApplied.emit(embeddableType);
+    // The demos' readiness depends on both picks: the embedder list re-asks
+    // for it, and so does the clipper list if it lands second with a clipper.
+    let embeddersLoaded = false;
     this.datasetsListingsApi.getEmbedders(embeddableType).subscribe({
       next: (embedders) => {
+        embeddersLoaded = true;
         this.demoEmbedders.set(embedders);
         this.selectedDemoEmbedder.set(
-          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
+          this.importDefaults.chooseEmbedderForType(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
         this.updateDemoStatuses();
         if (this.selectedDemoEmbedder()) {
@@ -342,8 +370,14 @@ export class DemoPickerComponent {
     this.datasetsListingsApi.getClippers(embeddableType).subscribe({
       next: (clippers) => {
         this.demoClippers.set(clippers);
-        this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
-        this.demoClipperParamValues.set({});
+        const chosen = this.importDefaults.chooseClipperForType(clippers, embeddableType, this.mediaTypes());
+        this.selectedDemoClipper.set(chosen.name);
+        this.demoClipperParamValues.set(chosen.params ?? {});
+        // A saved clipper changes which demos are ready, as picking it would.
+        if (embeddersLoaded && this.effectiveDemoClipper() && this.selectedDemoEmbedder()) {
+          this.updateDemoStatuses();
+          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
+        }
       },
     });
     this.datasetsListingsApi.getCleaners(embeddableType).subscribe({
@@ -505,6 +539,7 @@ export class DemoPickerComponent {
   submit(): void {
     const demo = this.selectedDemo();
     if (!demo) return;
+    this.offerSaveImportDefaults();
     const userName = this.demoDatasetName().trim();
     if (this.multiDataset()) {
       // One dataset per ticked row, each with its own settings; the
@@ -534,5 +569,42 @@ export class DemoPickerComponent {
       merge_near_duplicates: this.mergeNearDuplicates(),
       ...(this.autofind() !== null ? { autofind: this.autofind() } : {}),
     } as any);
+  }
+
+  /** Offer this import's settings as the default.  A Multi-Dataset import is
+   *  filed under the demo's own type; a one-dataset import under the type it
+   *  makes (the "Convert to" target, if any), whose defaults seeded it. */
+  private offerSaveImportDefaults(): void {
+    if (this.multiDataset()) {
+      const tab = this.activeTab();
+      const cfg = this.importDefaults.snapshotMultiDatasetConfig(
+        tab,
+        this.mediaTypes(),
+        this.outputDrafts(),
+        this.buildProjection(),
+        this.mergeNearDuplicates(),
+      );
+      this.importDefaults.maybeOfferSaveImportDefaults(tab, cfg, this.mediaTypes());
+      return;
+    }
+    const typeId = this.selectedConverterTarget() || this.activeTab();
+    const cfg = {
+      ...this.importDefaults.snapshotImportConfig(
+        typeId,
+        this.selectedDemoEmbedder(),
+        this.selectedDemoClipper(),
+        this.demoClipperParamValues(),
+        [],
+        this.demoEmbedders(),
+        this.demoClippers(),
+        this.selectedCleaners(),
+        this.cleaners(),
+      ),
+      ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
+    };
+    // A demo has no Include-media rows to pick; keep the saved ones.
+    const savedSpecs = this.importDefaults.savedSourceSpecs(typeId, this.mediaTypes());
+    if (savedSpecs) cfg.source_specs = savedSpecs;
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }
