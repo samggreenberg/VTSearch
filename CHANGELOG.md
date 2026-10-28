@@ -69,6 +69,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **New Detector warns about a hard starting face** (issue #5372). When every face you picked on the **Face**
+  tab is a hard view (turned, covered or small), a note under the faces says that a search from it may miss the
+  person and that a clearer photo will help. It never blocks **Create**, and one clear face clears it. The verdict
+  is the face's Face Quality under 14. That cut was read on the GRID's default face models (buffalo_s), so a
+  server with other face models shows no warning. The study is in
+  [`docs/experiments/2026-10-28-face-quality-5372/`](docs/experiments/2026-10-28-face-quality-5372/REPORT.md).
+
 - **Toasty shows you round the Browse map** (issue #5360). Every Browse map, however you opened it, now has a
   hint, one at a time. It starts with how to move around (drag to pan, double-click to zoom), then the
   thumbnail-size buttons, right-clicking a tile to see everything in it, clicking a tile to select its items, and,

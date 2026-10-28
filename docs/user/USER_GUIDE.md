@@ -613,7 +613,10 @@ is cut from, so that every face can show you its photo.
    picture of the face from your own computer works too, dropped on the box
    below; crop it to the face, since an uncropped photo is not searched for
    faces first.) Then vote as usual; every vote goes on a face, never a
-   photo.
+   photo. If the face you picked is turned away, covered or small, the
+   form says it is a *hard view*: a search started from it alone may miss
+   the person. You can still click **Create**, but adding a clearer face of
+   the same person first helps, and one clear face is enough.
 5. To see the whole photos, rank the faces (in Train's **Manual** tab,
    **Sort: Learned**; or Tune's **Review** tab) and switch **Show: Faces |
    Photos** to **Photos**: every photo with a matching face, the face

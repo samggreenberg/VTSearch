@@ -126,6 +126,10 @@ interface MediaExampleItem {
    *  path); sent with the example so the seeded media points back at its
    *  real source. Absent for uploads and other non-re-derivable picks. */
   origin?: Record<string, unknown> | null;
+  /** For a face: true when the server read its Face Quality as a hard view
+   *  (turned, covered, small), false when not, null/absent with no verdict
+   *  (#5372). */
+  hardView?: boolean | null;
 }
 
 @Component({
@@ -281,6 +285,16 @@ export class NewDetectorModalComponent implements OnInit {
     const id = this.datasetId();
     const dataset = id ? this.datasetState.datasetById().get(id) : undefined;
     return dataset?.loaded && dataset.media_type === this.mediaType() ? dataset : null;
+  });
+  /**
+   * How many faces the user picked when every one is a hard view (#5372), else
+   * 0: a search started only from such faces tends to miss the person, while one
+   * clear face among them is enough. Seeds don't count, and a face with no
+   * verdict counts as clear, so the warning only shows when the server is sure.
+   */
+  readonly hardViewFaces = computed(() => {
+    const faces = this.mediaExamples().filter((ex) => !ex.seed && ex.mediaType === 'face');
+    return faces.every((ex) => ex.hardView === true) ? faces.length : 0;
   });
   /** True while a picked dataset item is being saved as an example. */
   readonly datasetPickBusy = signal(false);
@@ -509,7 +523,7 @@ export class NewDetectorModalComponent implements OnInit {
       .saveServerMediaFromMediaId({ media_id: mediaId, crop_params: cropParams })
       .subscribe({
         next: (res) => {
-          this.addMediaExample(res.filename, res.original_name || res.filename, this.mediaType());
+          this.addMediaExample(res.filename, res.original_name || res.filename, this.mediaType(), null, false, res.face_hard_view);
           this.submitting.set(false);
         },
         error: (err) => {
@@ -536,10 +550,11 @@ export class NewDetectorModalComponent implements OnInit {
     mediaType: string,
     origin?: Record<string, unknown> | null,
     seed = false,
+    hardView?: boolean | null,
   ): void {
     this.mediaExamples.update((list) => [
       ...list,
-      { value, display, mediaType, thumbFailed: false, origin: origin ?? null, seed },
+      { value, display, mediaType, thumbFailed: false, origin: origin ?? null, seed, hardView: hardView ?? null },
     ]);
     this.pendingText.set('');
     if (!seed) this.exampleTab.set('media');
@@ -991,7 +1006,7 @@ export class NewDetectorModalComponent implements OnInit {
     this.sortingApi.saveServerMediaFromMediaId({ media_id: mediaId }, dataset.id).subscribe({
       next: (res) => {
         this.datasetPickBusy.set(false);
-        this.addMediaExample(res.filename, res.original_name || res.filename, dataset.media_type);
+        this.addMediaExample(res.filename, res.original_name || res.filename, dataset.media_type, null, false, res.face_hard_view);
         this.view.set('main');
       },
       error: (err) => {
@@ -1301,13 +1316,16 @@ export class NewDetectorModalComponent implements OnInit {
     const mediaType = this.pendingFileMediaType;
     this.pendingFile = null;
     this.sortingApi
-      .uploadServerMediaFile(file, cropParams ? { mediaType, cropParams } : undefined)
+      .uploadServerMediaFile(file, { mediaType, cropParams: cropParams ?? undefined })
       .subscribe({
         next: (res) => {
           this.addMediaExample(
             res.filename,
             res.original_name || res.filename,
             mediaType || this.mediaType(),
+            null,
+            false,
+            res.face_hard_view,
           );
           // Close the picker if it was open so the user lands back on the form.
           if (this.view() === 'media-picker') this.view.set('main');

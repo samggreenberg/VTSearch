@@ -6930,6 +6930,10 @@
       "ServerMediaUploadResponse": {
         "additionalProperties": false,
         "properties": {
+          "face_hard_view": {
+            "nullable": true,
+            "type": "boolean"
+          },
           "filename": {
             "type": "string"
           },
@@ -15334,7 +15338,7 @@
     },
     "/api/server-media-files/upload": {
       "post": {
-        "description": "Optional form fields:\n\n* ``media_type``: required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params``: JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).",
+        "description": "Optional form fields:\n\n* ``media_type``: required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params``: JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).\n\nA ``media_type`` of ``\"face\"`` also reads the picture's Face Quality for\nthe ``face_hard_view`` verdict (#5372).",
         "operationId": "upload_server_media_file",
         "responses": {
           "201": {

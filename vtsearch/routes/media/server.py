@@ -120,6 +120,9 @@ def upload_server_media_file():
       the file is cropped server-side before being saved, so the persisted
       example is the cropped sub-region (and downstream code that reads
       the saved file by name does not need any changes).
+
+    A ``media_type`` of ``"face"`` also reads the picture's Face Quality for
+    the ``face_hard_view`` verdict (#5372).
     """
     import json
     import uuid
@@ -155,7 +158,12 @@ def upload_server_media_file():
                 dest.unlink(missing_ok=True)
                 abort(400, message="Invalid crop_params for this media type")
 
-    return {"filename": safe_name, "original_name": file.filename}
+    response: dict[str, object] = {"filename": safe_name, "original_name": file.filename}
+    if request.form.get("media_type", "").strip() == "face":
+        from vtscore.media.face import imagekit_bridge
+
+        response["face_hard_view"] = imagekit_bridge.hard_view_of_file(dest)
+    return response
 
 
 @media_server_bp.route("/api/server-media-files/<path:filename>/thumbnail", methods=["GET"])
@@ -604,4 +612,11 @@ def server_media_file_from_media_id(body: dict):
     dest.write_bytes(media_bytes)
 
     original = media.get("filename") or media.get("origin_name") or f"media_{media_id}{suffix}"
-    return {"filename": safe_name, "original_name": original}
+    response: dict[str, object] = {"filename": safe_name, "original_name": original}
+    if media.get("media_type") == "face":
+        from vtscore.media.face import imagekit_bridge
+
+        # The stamped quality is the face as its photo showed it; a crop is a new picture, so read that.
+        hard_view = None if crop_params else imagekit_bridge.media_hard_view(media)
+        response["face_hard_view"] = hard_view if hard_view is not None else imagekit_bridge.hard_view_of_file(dest)
+    return response

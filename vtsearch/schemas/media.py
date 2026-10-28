@@ -530,10 +530,15 @@ class ServerMediaUploadResponseSchema(Schema):
     ``filename`` is the server-generated UUID name (the persistence
     key); ``original_name`` is the user's original file name, kept for
     display.
+
+    ``face_hard_view`` comes only with a face: true when its Face Quality says
+    it is a hard view (turned, covered, small) that a search may miss the
+    person from (#5372), null when there is no verdict.
     """
 
     filename = fields.String(required=True)
     original_name = fields.String(required=True)
+    face_hard_view = fields.Boolean(allow_none=True)
 
 
 class ExampleSortServerRequestSchema(Schema):
