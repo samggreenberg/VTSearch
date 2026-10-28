@@ -15,6 +15,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -204,8 +205,11 @@ class TestHardView:
             def initialize(self, opts, config):
                 pass
 
-            def process(self, image, *, confidence_threshold=None, media_id=""):
+            def process(self, image, *, confidence_threshold=None, media_id="") -> list[Any]:
                 return [types.SimpleNamespace(quality=q) for q in qualities]
+
+            def process_buffer(self, buffer, *, confidence_threshold=None, media_id="") -> list[Any]:
+                return []
 
             def compatibility(self):
                 return "fake:5372"
