@@ -857,8 +857,9 @@ describe('DatasetImporterModalComponent', () => {
         .forEach((req) => req.flush(empty[req.request.url]));
     }
 
-    it("applies the type's saved toggles as the picker lands on it", () => {
+    it("applies the type's saved toggles as the picker lands on it", async () => {
       flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      await settleResource();
       openAndFlushDemoPicker();
       expect(component.buildProjection()).toBe(false); // nothing saved for audio
       selectDemoTabAndFlush('image', mockImageEmbedders);
@@ -868,8 +869,9 @@ describe('DatasetImporterModalComponent', () => {
       expect(component.buildProjection()).toBe(false);
     });
 
-    it('leaves the toggles as the user set them', () => {
+    it('leaves the toggles as the user set them', async () => {
       flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      await settleResource();
       openAndFlushDemoPicker();
       component.onMergeNearDuplicatesChange(true);
       selectDemoTabAndFlush('image', mockImageEmbedders);
@@ -877,10 +879,11 @@ describe('DatasetImporterModalComponent', () => {
       expect(component.mergeNearDuplicates()).toBe(true);
     });
 
-    it('opens an image demo in Multi-Dataset mode on the saved kinds, and offers the changed kinds as the default', () => {
+    it('opens an image demo in Multi-Dataset mode on the saved kinds, and offers the changed kinds as the default', async () => {
       flushImporters({
         import_defaults_by_media_type: { image: { multi_dataset: ['image', 'face'], build_projection: true } },
       });
+      await settleResource();
       openAndFlushDemoPicker();
       const demo = component.demoPicker();
       demo.selectDemoTabWithEmbedder('image');
@@ -904,8 +907,9 @@ describe('DatasetImporterModalComponent', () => {
       expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
     });
 
-    it('offers a one-dataset demo import as the default too, and starts from a saved embedder', () => {
+    it('offers a one-dataset demo import as the default too, and starts from a saved embedder', async () => {
       flushImporters({ import_defaults_by_media_type: { image: { embedder: 'siglip' } } });
+      await settleResource();
       openAndFlushDemoPicker();
       const demo = component.demoPicker();
       demo.selectDemoTabWithEmbedder('image');
@@ -926,8 +930,9 @@ describe('DatasetImporterModalComponent', () => {
       expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
     });
 
-    it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', () => {
+    it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', async () => {
       flushImporters({ import_defaults_by_media_type: { image: { multi_dataset: ['image'] } } });
+      await settleResource();
       component.openServerFolderBrowser(component.importers().find((i) => i.name === 'server_folder'));
       flushOptionLists('audio');
       const picker = component.serverFolderPicker();

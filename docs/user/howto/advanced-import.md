@@ -73,7 +73,11 @@ searched, and groups similar pictures. A few hundred pictures take a minute or
 two on an ordinary computer. The first dataset set up with a given embedder
 also downloads that model, once.
 
-Defaults for all of this, per kind of media, are under **Import** in
+To start the next import of the same kind of media this way, click **Save as
+Default** on the notification that follows the import; it remembers every
+choice above, and **Multi-Dataset** with the kinds you ticked (see
+[Save as default](../USER_GUIDE.md#save-as-default)). Defaults for all of
+this, per kind of media, are under **Import** in
 Settings <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-settings.dark.webp" /><img src="../assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture>.
 
 ## Where next
