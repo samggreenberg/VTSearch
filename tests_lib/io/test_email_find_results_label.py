@@ -11,7 +11,8 @@ whichever side was sent.
 
 from __future__ import annotations
 
-import email
+from email import message_from_string, policy
+from email.message import EmailMessage
 from unittest.mock import MagicMock, patch
 
 from vtscore.exporters.email_smtp import (
@@ -117,9 +118,11 @@ class TestStreamedLabel:
                 iter(_BATCH),
                 {"from": "vt@example.com", "to": "user@example.com"},
             )
-        message = email.message_from_string(server.sendmail.call_args.args[2])
-        plain = next(p for p in message.walk() if p.get_content_type() == "text/plain")
-        return plain.get_payload(decode=True).decode("utf-8")
+        message = message_from_string(server.sendmail.call_args.args[2], policy=policy.default)
+        assert isinstance(message, EmailMessage)
+        plain = message.get_body(preferencelist=("plain",))
+        assert plain is not None
+        return plain.get_content()
 
     def test_header_keep_negatives_turns_the_tag_on(self):
         """Every streamed record carries ``label``; the header says whether both sides are in it."""
