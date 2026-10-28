@@ -95,28 +95,33 @@ class TestStreaming:
     def test_peak_memory_is_n_hits_per_detector_not_the_run(self):
         """However many records stream through, only the kept ones stay alive.
 
-        Every hit is registered in a WeakSet as it is made; a hit the heap
-        drops (or never takes) is freed at once, so the set's size is the
-        number of hits alive at that moment.  Ten thousand records through a
-        heap of five per detector must never have more than the heaps' ten
-        alive, plus the new one and the previous one, which the consuming
-        loop's variables still name until they are rebound.
+        Every hit counts itself alive as it is made and dead when it is freed
+        (a ``weakref.finalize``); a hit the heap drops, or never takes, is
+        freed at once, so the count is the number of hits alive at that
+        moment.  Ten thousand records through a heap of five per detector
+        must never have more than the heaps' ten alive, plus the new one and
+        the previous one, which the consuming loop's variables still name
+        until they are rebound.
         """
-        alive: weakref.WeakSet[_Hit] = weakref.WeakSet()
-        peak = 0
+        alive = peak = 0
+
+        def freed() -> None:
+            nonlocal alive
+            alive -= 1
 
         def records() -> Iterator[tuple[str, dict]]:
-            nonlocal peak
+            nonlocal alive, peak
             for i in range(10_000):
                 hit = _hit(f"h{i}", (i * 7919 % 10_007) / 10_007)
-                alive.add(hit)
-                peak = max(peak, len(alive))
+                weakref.finalize(hit, freed)
+                alive += 1
+                peak = max(peak, alive)
                 yield ("dogs" if i % 2 else "cats"), hit
                 del hit
 
         out = list(_top_records(records(), 5, ["dogs", "cats"]))
         assert len(out) == 10
-        assert peak <= 2 * 5 + 2
+        assert 2 * 5 <= peak <= 2 * 5 + 2
 
     def test_reports_how_many_each_detector_scored_and_kept(self, capsys):
         cli_progress.set_format("json")
