@@ -329,6 +329,7 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)`: return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
+- [ ] If your form holds opaque values (ids, query keys), override `default_detector_name(field_values)` so a new detector's name box shows a readable name — see [Naming the created detector](EXTENDING-plugins.md#naming-the-created-detector)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 

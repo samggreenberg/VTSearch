@@ -123,6 +123,25 @@ POST /api/label-importers/field-options/{importer_name}
 Options for a dynamic-options field on a label importer, for the dependent
 selects in the importer form (contract in the note at the top).
 
+### Label importer suggested detector name
+
+```
+POST /api/label-importers/suggested-name/{importer_name}
+```
+
+**Body:** `{"values": {...}}` (the current form snapshot, optional; a `file`
+field carries the chosen file's name).
+
+Calls the importer's `default_detector_name(values)` and returns the name it
+would give a detector created from those values, so the New Detector ›
+Trained form can prefill its Detector name box — including a label the
+importer resolved from an opaque selection. See
+[Naming the created detector](../EXTENDING-plugins.md#naming-the-created-detector).
+
+→ `{"detector_name": "Q1 Field Survey"}`
+
+404 (unknown importer), 502 (the importer raised).
+
 ### Run label import
 
 ```

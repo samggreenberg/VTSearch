@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **A label importer names the detector it creates** (issue #5342). On New Detector › Trained, the **Detector
+  name** box now fills in as the importer's form is filled, with the name the importer suggests (numbered past
+  any detector that already has it), until you type your own. The built-in importers suggest what a blank box
+  already resolved to: the uploaded file's name, else "*Importer* detector". A plugin can suggest something better
+  through `default_detector_name()`, e.g. a saved query's title instead of its id; see
+  [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#naming-the-created-detector).
+
 - **A first AutoFind detector asks where its results go** (issue #5344). Moving your first detector to AutoFind,
   from the Dashboard's ⋯ menu or the Tune verdict, now asks how to handle its results when no AutoFind exporter is
   set. **Set up AutoFind…** opens Settings on the AutoFind tab. **Import settings…** opens it with the settings

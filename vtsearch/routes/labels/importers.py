@@ -13,6 +13,10 @@ POST /api/label-importers/field-options/<importer_name>
     Return dropdown options for a dynamic-options field.  Delegates to
     ``get_field_options(field_key, current_values)`` on the importer.
 
+POST /api/label-importers/suggested-name/<importer_name>
+    Return the name the importer would give a detector created from the
+    current form values.  Delegates to ``default_detector_name(values)``.
+
 POST /api/label-importers/import/<importer_name>
     Run the named label importer. Accepts ``multipart/form-data`` (when
     the importer has a ``"file"`` field) or JSON (for text-only
@@ -61,7 +65,7 @@ from __future__ import annotations
 import logging
 
 from flask import jsonify
-from flask_smorest import Blueprint
+from flask_smorest import Blueprint, abort
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +78,13 @@ from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, ru
 from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
+    ImporterSuggestedNameRequestSchema,
 )
 from vtsearch.schemas.labels import (
     IngestMissingRequestSchema,
     IngestMissingResponseSchema,
     LabelImporterEntrySchema,
+    LabelImporterSuggestedNameResponseSchema,
 )
 from vtsearch.state import (
     apply_label,
@@ -247,6 +253,43 @@ def label_importer_field_options(body: dict, importer_name: str):
     assert importer is not None
 
     return plugin_field_options(importer, body)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/label-importers/suggested-name/<importer_name>
+# ---------------------------------------------------------------------------
+
+
+@label_importers_bp.route("/api/label-importers/suggested-name/<importer_name>", methods=["POST"])
+@label_importers_bp.arguments(ImporterSuggestedNameRequestSchema)
+@label_importers_bp.response(200, LabelImporterSuggestedNameResponseSchema)
+@label_importers_bp.alt_response(404, description="Unknown importer name.")
+@label_importers_bp.alt_response(502, description="default_detector_name raised an error.")
+def label_importer_suggested_name(body: dict, importer_name: str):
+    """Return the name the importer would give a detector created from these values.
+
+    Calls the importer's ``default_detector_name(field_values)`` with a
+    snapshot of the current form, so the New Detector › Trained form can
+    prefill its Detector name box with something human-readable --
+    including a label a plugin resolved from an opaque internal selection,
+    which no client-side derivation could produce.  The caller decides for
+    itself whether to overwrite what the user typed.
+
+    Errors from the plugin are surfaced as a 502 with the original
+    message; the frontend treats any failure as "no suggestion", since a
+    name hint is never worth blocking an import.
+    """
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
+    assert importer is not None  # narrowed by err check
+
+    try:
+        suggested = importer.default_detector_name(body.get("values") or {})
+    except Exception as exc:  # noqa: BLE001 (surface remote-service errors verbatim)
+        abort(502, message=str(exc) or type(exc).__name__)
+
+    return {"detector_name": str(suggested or "").strip()}
 
 
 # ---------------------------------------------------------------------------

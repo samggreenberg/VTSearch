@@ -20,6 +20,13 @@ CUDA_PROVIDER = "CUDAExecutionProvider"
 #: ONNX Runtime's CPU execution provider, the fallback behind every GPU session.
 CPU_PROVIDER = "CPUExecutionProvider"
 
+#: ``SessionOptions.log_severity_level`` for every session: errors only.  The
+#: InsightFace recognisers declare a batch of 1 on their output while the
+#: extractor embeds a photo's faces as one batch, so at the default (warning)
+#: level ONNX Runtime prints a ``VerifyOutputSizes`` warning for every photo
+#: with more than one face, which floods a server's console.
+LOG_SEVERITY_ERROR = 3
+
 
 @dataclass(frozen=True)
 class RuntimeOptions:
@@ -55,10 +62,11 @@ class RuntimeOptions:
             )
 
     def session_options(self) -> "ort.SessionOptions":
-        """A fresh ``SessionOptions`` carrying the thread settings."""
+        """A fresh ``SessionOptions`` carrying the thread settings, logging errors only."""
         import onnxruntime as ort  # noqa: PLC0415
 
         opts = ort.SessionOptions()
+        opts.log_severity_level = LOG_SEVERITY_ERROR
         if self.num_threads > 0:
             opts.intra_op_num_threads = int(self.num_threads)
             opts.inter_op_num_threads = 1
