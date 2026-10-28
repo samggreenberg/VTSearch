@@ -142,6 +142,12 @@ class TestConfig:
         with pytest.raises(ValueError):
             runtime_options_from_config({"runtime": 5})
 
+    def test_sessions_log_errors_only(self):
+        # A multi-face batch on a batch-1 recogniser must not print a warning per photo.
+        opts = RuntimeOptions(num_threads=3).session_options()
+        assert opts.log_severity_level == 3
+        assert opts.intra_op_num_threads == 3
+
     def test_paths_resolve_against_the_config_file(self, tmp_path):
         raw = {
             "provider": "oss",
