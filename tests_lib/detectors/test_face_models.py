@@ -178,3 +178,48 @@ class TestThePipeline:
         assert isinstance(pipeline, Fake) and bridge.get_face_pipeline() is pipeline
         assert built[0]["detector"]["model_bundle"] == str(models_folder.parent / "det.onnx")
         assert bridge.loaded_compat() == "fake:7" and bridge.provider_name() == "fake_5320"
+
+
+class TestHardView:
+    """A face under its space's Face Quality cut is a hard view (#5372); elsewhere there is no verdict."""
+
+    def test_the_cut_is_per_space(self):
+        assert bridge.is_hard_view(13.9, "oss-arcface-mbf:1") is True
+        assert bridge.is_hard_view(14.0, "oss-arcface-mbf:1") is False
+        assert bridge.is_hard_view(13.9, "oss-arcface-r50:1") is None
+        assert bridge.is_hard_view(None, "oss-arcface-mbf:1") is None
+        assert bridge.is_hard_view(True, "oss-arcface-mbf:1") is None
+
+    def test_a_loaded_face_reads_what_its_converter_stamped(self):
+        meta = {bridge.QUALITY_METADATA_KEY: 11.0, bridge.COMPAT_METADATA_KEY: "oss-arcface-mbf:1"}
+        assert bridge.media_hard_view({"custom_metadata": meta}) is True
+        assert bridge.media_hard_view({}) is None
+
+    def test_a_picture_is_read_by_the_provider(self, models_folder, tmp_path, monkeypatch):
+        from PIL import Image
+
+        qualities = [12.0]
+
+        class Fake:
+            def initialize(self, opts, config):
+                pass
+
+            def process(self, image, *, confidence_threshold=None, media_id=""):
+                return [types.SimpleNamespace(quality=q) for q in qualities]
+
+            def compatibility(self):
+                return "fake:5372"
+
+        register_provider("fake_5372", Fake)
+        picture = tmp_path / "face.png"
+        Image.new("RGB", (32, 32)).save(picture)
+        assert bridge.hard_view_of_file(picture) is None  # Face is off
+        _models(models_folder.parent, provider="fake_5372")
+        bridge.reset_for_tests()  # face_models() keeps its "off" answer for a moment
+        assert bridge.hard_view_of_file(picture) is None  # no cut for this space
+        monkeypatch.setitem(bridge.HARD_VIEW_QUALITY, "fake:5372", 14.0)
+        assert bridge.hard_view_of_file(picture) is True
+        qualities[:] = [20.0]
+        assert bridge.hard_view_of_file(picture) is False
+        qualities[:] = []
+        assert bridge.hard_view_of_file(picture) is None  # no face found
