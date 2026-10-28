@@ -366,6 +366,7 @@ class TestTheOpeningReadsTheAcquisitionCut:
             media["media_type"] = media_type
         _results, cuts = cosine_sort_cuts(query, role="score", beta=1.0)
         assert cuts.branch == rule
+        assert cuts.line is not None
         assert cuts.line.centroid_rule == rule
 
     def test_text_sort_active_rounds_both_lines_to_four_decimals(self, monkeypatch):
