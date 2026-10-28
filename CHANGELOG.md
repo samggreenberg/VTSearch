@@ -111,6 +111,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Smart and Stable count every sort of a detector that started with labels, so Autopilot gets past Refine
+  Boundary** (issue #5358). Smart and Stable only counted a sort whose labels matched the session's history, and
+  the labels a detector brings back (continuing it after a restart, or after a switch to another dataset and back)
+  never enter that history, so none of its sorts counted: both stayed on "No history yet", and Refine Boundary ran
+  until the line reached Done's level or the votes reached 200. A detector holding a label this dataset does not
+  contain, as a Face detector's example can be, was left out the same way. Each sort now counts.
+
 - **Add Dataset's media-type choice leaves out the types the server hides** (issue #5339). The folder and form
   importers offered every registered media type for a single dataset, whatever the server hid: a media type an
   admin hides (`hidden_plugins`, `--hide-plugin`), or Face on a server without face models, which got a bare

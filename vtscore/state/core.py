@@ -934,6 +934,12 @@ class DetectorContext:
         "good_votes",
         "bad_votes",
         "label_history",
+        # The votes in force before ``label_history[0]``, as ``(good ids, bad
+        # ids)``: the labels restored silently from the detector's labelset
+        # when its votes were derived for this dataset, which the history never
+        # records.  The progress cache replays the history on top of them, so
+        # its label sets are the ones the learned sort trained on (#5358).
+        "label_history_base",
         "vote_click_times",
         "vote_region_boxes",
         # Per-vote surfacing provenance (which flow / phase / sort / rank
@@ -1144,6 +1150,8 @@ class DetectorContext:
         self.good_votes: dict[int, None] = {}
         self.bad_votes: dict[int, None] = {}
         self.label_history: list[tuple[int, str, float]] = []
+        # Replaced whole, never mutated, so the progress cache can read it without the state lock.
+        self.label_history_base: tuple[frozenset[int], frozenset[int]] = (frozenset(), frozenset())
         self.vote_click_times: dict[int, int] = {}
         # Per-good-vote region boxes (normalised x0, y0, x1, y1).  Only set when
         # the user drew a region as part of a yes-vote; absent for image-level

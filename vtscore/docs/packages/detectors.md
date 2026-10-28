@@ -709,6 +709,10 @@ active dataset, and apply matching votes silently
    detector trained on dataset A still restores labels when you load
    dataset B if both share the same underlying files.
 
+The votes it leaves are recorded as the detector's `label_history_base`:
+the history records none of them, but every learned sort trains on them,
+so the labeling-session analyzer replays the history on top of them.
+
 Returns the number of labels restored.
 
 ### `dataset_sync.ensure_votes_match_active_dataset()`
@@ -716,7 +720,8 @@ Returns the number of labels restored.
 Rehydrate per-dataset detector state on dataset switch. No-op unless
 the dataset id or labelset file mtime has changed since the detector
 last saw it. When triggered, clears `good_votes` / `bad_votes` /
-`label_history` / etc., replays `restore_labels_from_detector`, and
+`label_history` / etc., replays `restore_labels_from_detector`, drops the
+pair's labeling-session cache (`drop_progress_cache`), and
 caches the parsed labelset + mtime so subsequent requests within the
 same `(dataset_id, file_mtime)` tuple are no-ops.
 
@@ -757,7 +762,9 @@ LRU map keyed by `(dataset_id, detector_id)` and bounded at
 `_MAX_CACHED_PAIRS` (3). Each cache carries
 `steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
-`good_ids` / `bad_ids` (running label sets), `prev_snapshot` and `prev_beta`
+`good_ids` / `bad_ids` (running label sets, starting from `base`, the detector's
+`label_history_base`: the labels restored from its labelset, which the history
+does not record), `prev_snapshot` and `prev_beta`
 (the last model-bearing step's scores over the unlabeled pool with its cut and
 ambiguity band, and the balance that cut was drawn at: the Stable baseline),
 `coverage_atlas` (the per-step replay of coverage evidence),
@@ -777,6 +784,7 @@ Every entry point resolves its cache through the active
 | Function                                        | Behaviour                                                              |
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
+| `drop_progress_cache(dataset_id, detector_id)`  | Drop one pair's cache, as a rehydrate does when it restarts that pair's label history |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines; `smart_threshold` is deprecated and ignored (#5134) |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |

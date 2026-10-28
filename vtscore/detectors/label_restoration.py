@@ -81,6 +81,13 @@ def restore_labels_from_detector(det_data: dict) -> int:
     votes.  The good/bad counts still reflect restored labels, so autopilot's
     initial Find Goods / Find Bads gates can skip ahead.
 
+    The votes the restore leaves are recorded as the detector's
+    ``label_history_base``: the learned sort trains on them as well as on the
+    history, so the Smart / Stable cache replays the history on top of them
+    (#5358).  Both callers run this on an empty history (a rehydrate clears it
+    first, a load runs on a new context), so the votes it leaves are exactly
+    what was in force before the history's first event.
+
     A Good element's ``region_box`` rides along into ``vote_region_boxes``,
     and any recorded surfacing provenance rides along into ``vote_provenance``.
     Dropping either here erases it the moment the next vote resyncs the
@@ -91,6 +98,13 @@ def restore_labels_from_detector(det_data: dict) -> int:
 
     Returns the number of labels successfully restored.
     """
+    restored = _apply_saved_labels(det_data)
+    _record_history_base()
+    return restored
+
+
+def _apply_saved_labels(det_data: dict) -> int:
+    """Apply *det_data*'s labelset to the votes, silently; :func:`restore_labels_from_detector`'s body."""
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.datasets.vote_provenance import read_provenance
     from vtscore.state import (
@@ -138,3 +152,19 @@ def restore_labels_from_detector(det_data: dict) -> int:
         restored += _resolve_unmatched(unresolved, md5_lookup)
 
     return restored
+
+
+def _record_history_base() -> None:
+    """Record the active detector's votes as the base its label history replays on (#5358).
+
+    Run after every restore, whatever it restored: a restore that found nothing
+    to apply leaves no base, and must not leave the previous dataset's.
+    """
+    from vtscore.state import _state_lock, get_active_detector_context
+    from vtscore.state.core import is_request_missing_detector_context
+
+    with _state_lock:
+        ctx = get_active_detector_context()
+        if is_request_missing_detector_context(ctx):
+            return
+        ctx.label_history_base = (frozenset(ctx.good_votes), frozenset(ctx.bad_votes))

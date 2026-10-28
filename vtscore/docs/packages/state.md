@@ -110,6 +110,7 @@ canonical persisted form.
 | `embedder_type` | `str` | Immutable embedder *type* (single-vector / patch / structural) the detector was created against |
 | `good_votes` / `bad_votes` | `dict[int, None]` | Set-shaped vote dicts |
 | `label_history` | `list[tuple[int, str, float]]` | `(media_id, label, timestamp)` events |
+| `label_history_base` | `tuple[frozenset[int], frozenset[int]]` | Good and bad ids in force before the first event: the labels restored silently from the labelset |
 | `vote_click_times` | `dict[int, int]` | Ordinal assigned at vote time |
 | `vote_region_boxes` | `dict[int, tuple[float, float, float, float]]` | Optional box per good vote |
 | `vote_provenance` | `dict[int, dict]` | Optional surfacing context per vote (see `vtscore/datasets/vote_provenance.py`) |
