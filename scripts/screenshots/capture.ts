@@ -28,7 +28,7 @@ import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smil
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { execFile, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
@@ -42,6 +42,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ASSETS = process.env.OUT_DIR
   ? resolve(process.env.OUT_DIR)
   : resolve(HERE, '../../docs/user/assets');
+// A render for check.sh also writes each shot's `computed` boxes beside it
+// (`writeComputedBoxes`); a refresh into the assets dir does not.
+const WRITE_COMPUTED = Boolean(process.env.OUT_DIR);
 const VIEWPORT = { width: 1440, height: 900 };
 /**
  * The widest a written shot may be, in pixels. The guide embeds a shot at most
@@ -581,6 +584,55 @@ async function clipBox(page: Page, clip: NonNullable<Shot['clip']>, marks: Box |
 }
 
 /**
+ * Write where *selectors* (a shot's `computed`) lie in the written image, one
+ * `x0,y0 x1,y1` rectangle per line in its pixels, for check.sh to blank in the
+ * render and the baseline alike (#5378). *region* is the viewport box the
+ * screenshot took. It was captured at `deviceScaleFactor` 2 and is written at
+ * most `MAX_WIDTH` wide (`encodeWebp`), so a CSS px is `2 * scale` image px.
+ * Each box is cut to its scrolling ancestors and to the image, and grown by a
+ * pixel for its anti-aliased edge; one wholly outside is left out. With no box the file is still written,
+ * empty, so check.sh can tell a shot that named regions which were not there.
+ */
+async function writeComputedBoxes(
+  page: Page,
+  selectors: string[],
+  region: { x: number; y: number; width: number; height: number },
+  out: string,
+): Promise<void> {
+  const boxes: Box[] = await page.evaluate((sels) => {
+    const found: { x: number; y: number; w: number; h: number }[] = [];
+    for (const sel of sels) {
+      document.querySelectorAll(sel).forEach((el) => {
+        // Cut to every scrolling ancestor, so an entry scrolled out of a list's
+        // view does not blank what is drawn where it would be.
+        const r = el.getBoundingClientRect();
+        let [l, t, rt, b] = [r.left, r.top, r.right, r.bottom];
+        for (let p = el.parentElement; p; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+          const pr = p.getBoundingClientRect();
+          [l, t, rt, b] = [Math.max(l, pr.left), Math.max(t, pr.top), Math.min(rt, pr.right), Math.min(b, pr.bottom)];
+        }
+        if (rt > l && b > t) found.push({ x: l, y: t, w: rt - l, h: b - t });
+      });
+    }
+    return found;
+  }, selectors);
+  const k = 2 * Math.min(1, MAX_WIDTH / (2 * region.width));
+  const W = Math.round(region.width * k);
+  const H = Math.round(region.height * k);
+  const lines: string[] = [];
+  for (const b of boxes) {
+    const x0 = Math.max(0, Math.floor((b.x - region.x) * k) - 1);
+    const y0 = Math.max(0, Math.floor((b.y - region.y) * k) - 1);
+    const x1 = Math.min(W - 1, Math.ceil((b.x + b.w - region.x) * k));
+    const y1 = Math.min(H - 1, Math.ceil((b.y + b.h - region.y) * k));
+    if (x1 > x0 && y1 > y0) lines.push(`${x0},${y0} ${x1},${y1}`);
+  }
+  await writeFile(out, lines.map((l) => l + '\n').join(''));
+}
+
+/**
  * Write a Playwright PNG capture out as WebP.
  *
  * WebP came in with the photographs the guide was shot on for a while (#4202),
@@ -728,9 +780,14 @@ async function captureShot(
       // gauges poll on an interval and re-render live values into the DOM after
       // the first mask, so mask again once the frame has settled.
       await maskVolatile(page);
-      const png = shot.clip
-        ? await page.screenshot({ clip: await clipBox(page, shot.clip, marks) })
-        : await page.screenshot();
+      const vp = page.viewportSize() ?? VIEWPORT;
+      const region = shot.clip
+        ? await clipBox(page, shot.clip, marks)
+        : { x: 0, y: 0, width: vp.width, height: vp.height };
+      const png = shot.clip ? await page.screenshot({ clip: region }) : await page.screenshot();
+      if (WRITE_COMPUTED && shot.computed?.length) {
+        await writeComputedBoxes(page, shot.computed, region, resolve(ASSETS, `${shot.id}.${theme}.computed`));
+      }
       written.set(theme, encodeWebp(png, resolve(ASSETS, `${shot.id}.${theme}.webp`)));
     }
     timing.capture = (Date.now() - t1) / 1000;
