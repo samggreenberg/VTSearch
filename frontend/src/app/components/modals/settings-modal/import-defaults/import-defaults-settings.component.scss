@@ -15,6 +15,13 @@
   background: var(--bg-subtle);
 }
 
+// A saved Multi-Dataset default: what it makes, and the button that drops it.
+.multi-dataset-default {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .import-defaults-footer {
   margin-top: var(--space-sm);
   display: flex;

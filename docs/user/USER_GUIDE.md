@@ -526,6 +526,19 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
+#### Save as default
+
+The **Advanced** section starts from your saved defaults for the kind of media
+being imported. When an import's settings differ from them, the notification
+that follows it offers **Save as Default**: click it, and the next import of
+that kind starts the same way. It covers the embedder, clipper, included media
+and cleanup, **Build Browse map now** and **Merge near-duplicates**, and, for a
+[Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder) import,
+**Multi-Dataset** itself with the rows you ticked. A Multi-Dataset import is
+saved under the kind you started from: a demo's own kind, or the importer's
+*Dataset media type*. Nothing is remembered unless you click it; the saved
+defaults are under **Import** in Settings, where you can change or reset them.
+
 ### Multi-Dataset import: several datasets from one folder
 
 A folder (or archive) often holds more than one kind of media: photos, the
@@ -572,6 +585,10 @@ into, so an Image demo offers **Image**, **Face** and **Text**. Every row reads
 the demo's own files, so the datasets are linked just as a folder's are. A
 row's **Details ▾** has its embedder, clipper and cleanup; a conversion runs
 with its default settings.
+
+**Every time.** To have imports of a kind of media open in Multi-Dataset mode
+with the same rows ticked, click **Save as Default** on the notification that
+follows one such import (see [Save as default](#save-as-default)).
 
 ### Faces: find a person in a set of photos
 
@@ -1686,8 +1703,10 @@ server's own values:
 - **Panels** - the metadata panel, the **Hide left panel** / **Hide right
   panel in Train and Tune** toggles, and per-media-type Scroll Style (focus
   mode and thumbnail size for each side of Train, Tune and Find).
-- **Import** - default embedder, clipper, and converters per
-  media type. On a server set up to tell you when an import finishes
+- **Import** - default embedder, clipper, converters, **Build Browse map
+  now** and **Merge near-duplicates** per media type, and a saved
+  Multi-Dataset default with a **Clear** button (see
+  [Save as default](#save-as-default)). On a server set up to tell you when an import finishes
   (often by email), **Alert me when an import finishes** is here too:
   untick it to ask the server not to.
 - **Browse Map** - per-media-type look of the spatial Browse view
@@ -1776,6 +1795,15 @@ with bulk-action and per-card controls.
   and move it back to Drafts later if it needs more tuning. Until you
   have a detector at all, both tabs are dimmed and the grid stays on
   Drafts, where a new detector lands.
+
+  Your first detector on the AutoFind tab asks where its results should
+  go, if you haven't picked a results exporter on the Settings
+  **AutoFind** tab. **Set up AutoFind…** opens that tab. **Import
+  settings…** opens it with the settings importer up, for a new server
+  your saved settings haven't reached yet; the detector you just moved
+  stays on AutoFind whatever the file says. **Not now** keeps the results
+  in the app. **Move to AutoFind** on the [test verdict](#the-result) asks
+  the same.
 
   Only detectors on the tab you're looking at can be selected, so
   **Train**, **Tune** and **Find** always act on rows you can see. Switching

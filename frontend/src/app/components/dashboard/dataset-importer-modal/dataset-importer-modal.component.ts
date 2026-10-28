@@ -86,11 +86,15 @@ export class DatasetImporterModalComponent implements OnInit {
   /** "Build the 2-D Browse projection at ingest" toggle, shared across
    *  every import flow (only one is visible at a time, so a single field
    *  carries the choice and persists it when the user switches flows).
-   *  Defaults off per the opt-in cost tradeoff. */
-  buildProjection = false;
+   *  Defaults off per the opt-in cost tradeoff, unless the user's Import
+   *  Defaults for the type being imported say on (:meth:`onTypeDefaultsApplied`). */
+  readonly buildProjection = signal(false);
   /** "Merge near-duplicates" toggle, shared across every import flow like
    *  ``buildProjection``. */
-  mergeNearDuplicates = false;
+  readonly mergeNearDuplicates = signal(false);
+  /** Whether the user has set either toggle in this dialog, after which a
+   *  type's saved defaults no longer overwrite them. */
+  private ingestTogglesTouched = false;
 
   /** "Run AutoFind" checkbox: run the user's AutoFind detectors on the dataset
    *  once it is saved.  Starts from the ``autofind_on_import`` setting, which
@@ -154,6 +158,27 @@ export class DatasetImporterModalComponent implements OnInit {
   onRunAutofindChange(value: boolean): void {
     this.runAutofindTouched = true;
     this.runAutofind.set(value);
+  }
+
+  onBuildProjectionChange(value: boolean): void {
+    this.ingestTogglesTouched = true;
+    this.buildProjection.set(value);
+  }
+
+  onMergeNearDuplicatesChange(value: boolean): void {
+    this.ingestTogglesTouched = true;
+    this.mergeNearDuplicates.set(value);
+  }
+
+  /** The showing picker has landed on *typeId* and applied its Import
+   *  Defaults.  The two whole-import toggles are this dialog's, shared by
+   *  every picker, so the type's saved ones are applied here - until the user
+   *  sets either toggle, after which their choice stands. */
+  onTypeDefaultsApplied(typeId: string): void {
+    if (this.ingestTogglesTouched) return;
+    const saved = this.importDefaults.ingestTogglesFor(typeId, this.mediaTypes());
+    this.buildProjection.set(saved.buildProjection);
+    this.mergeNearDuplicates.set(saved.mergeNearDuplicates);
   }
 
   ngOnInit(): void {

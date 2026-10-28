@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 
 import { FindViewComponent } from './find-view.component';
@@ -14,6 +14,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
 import { KeyboardService } from '../../services/keyboard.service';
+import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -1209,6 +1210,20 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       fixture.destroy();
       await new Promise((resolve) => setTimeout(resolve));
       expect(start).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Move to AutoFind (#5344)', () => {
+    beforeEach(() => setUp(true));
+
+    it("asks where a first AutoFind detector's results go once the move lands", async () => {
+      const offer = vi.spyOn(TestBed.inject(AutoFindSetupService), 'offerAfterMove').mockResolvedValue();
+      vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+      await flushInit([1]);
+      fixture.componentInstance.onMoveToAutoFind();
+      expect(offer).not.toHaveBeenCalled();
+      httpMock.expectOne('/api/detectors/registry/det1/autofind').flush({ ok: true, autofind: true });
+      expect(offer).toHaveBeenCalledWith({ id: 'det1', name: expect.any(String) });
     });
   });
 });

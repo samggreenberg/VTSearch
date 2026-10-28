@@ -29,6 +29,13 @@ what is on `dev` but not yet on `main`; each release dates that section
   through `default_detector_name()`, e.g. a saved query's title instead of its id; see
   [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#naming-the-created-detector).
 
+- **A first AutoFind detector asks where its results go** (issue #5344). Moving your first detector to AutoFind,
+  from the Dashboard's ⋯ menu or the Tune verdict, now asks how to handle its results when no AutoFind exporter is
+  set. **Set up AutoFind…** opens Settings on the AutoFind tab. **Import settings…** opens it with the settings
+  importer up, for a new server you haven't brought your settings to; the detector you just moved stays on AutoFind
+  whatever the imported file lists. **Not now** keeps the results in the app. Picking None on purpose means the
+  question comes back only after you empty the AutoFind tab.
+
 - **A detector made from imported labels says how it was imported** (issue #5334). A detector created by New
   Detector › Trained, or by the CLI's `--import-labels-into … --create-detector`, keeps the label importer that
   created it, the fields that importer ran with (never a password or an uploaded file) and when. Its **Stats**
@@ -65,6 +72,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   [`docs/CLI.md`](docs/CLI.md#how-the-run-scores).
 
 ### Changed
+
+- **Save as Default remembers Multi-Dataset and the two ingest toggles, after a demo import too** (issue #5355).
+  The **Save as Default** offer that follows an import now also saves **Build Browse map now**, **Merge
+  near-duplicates** and, after a Multi-Dataset import, **Multi-Dataset** with the kinds it made, so the next import
+  of that kind of media (an Image demo and its Faces, say) opens the same way. It is now offered after a demo import
+  and after a Multi-Dataset import, where it used to be skipped, and the demo catalogue starts from a saved embedder
+  and clipper as the other importers do. Settings › Import has both toggles for each media type, and shows a saved
+  Multi-Dataset default with a **Clear** button. See
+  [Save as default](docs/user/USER_GUIDE.md#save-as-default).
 
 - **The LabBench image carries every LabBench media type unless told otherwise** (issue #5339). `docker build -f
   docker/Dockerfile.labbench .` with no `MEDIA_TYPE` used to build the image-only (SigLIP) image. It now builds one
@@ -117,6 +133,11 @@ what is on `dev` but not yet on `main`; each release dates that section
   never enter that history, so none of its sorts counted: both stayed on "No history yet", and Refine Boundary ran
   until the line reached Done's level or the votes reached 200. A detector holding a label this dataset does not
   contain, as a Face detector's example can be, was left out the same way. Each sort now counts.
+
+- **Toasty's "Your detector is trained!" no longer follows you out of the Train view** (issue #5354). The hint
+  Autopilot raises when it finishes training stayed up until the next vote, so after going to the Dashboard,
+  running Find on another dataset and clicking **Browse**, Toasty told the map to "Click **Dashboard** to put it to
+  work". It now ends when you leave the Train view.
 
 - **Add Dataset's media-type choice leaves out the types the server hides** (issue #5339). The folder and form
   importers offered every registered media type for a single dataset, whatever the server hid: a media type an

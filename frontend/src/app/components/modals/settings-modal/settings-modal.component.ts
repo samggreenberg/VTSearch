@@ -90,7 +90,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   readonly hfStatus = this.hfAuth.status;
 
   readonly preselectedViewTab = input('');
+  /** The rail tab to open on ('' = General), for a caller that opens Settings
+   *  for one purpose (#5344's AutoFind prompt). */
+  readonly initialTab = input<SettingsTabId | ''>('');
+  /** Open the settings importer over the modal straight away. */
+  readonly startWithImporter = input(false);
   readonly closed = output<void>();
+  /** A settings import was applied. */
+  readonly imported = output<void>();
 
   readonly settings = signal<AppSettings>({ volume: 50 });
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
@@ -146,6 +153,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    if (this.initialTab()) this.activeSettingsTab.set(this.initialTab() as SettingsTabId);
+    if (this.startWithImporter()) this.showImporterModal = true;
     this.hfAuth.refresh();
 
     // Keep the "Browser motion" status line live if the user flips their OS
@@ -615,6 +624,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   onImportComplete(): void {
+    // Applied server-side already, so say so now: closing before the reload
+    // below lands would cancel it.
+    this.imported.emit();
     // Reload settings from the server after import
     this.settingsApi
       .getSettings()

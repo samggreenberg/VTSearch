@@ -248,10 +248,15 @@ An abridged example; the full field list is `UserSettings` in
   audio and image datasets independently. Empty entries fall back to the
   frontend's per-type default.
 - `import_defaults_by_media_type`: the embedder, clipper (+ params),
-  converter rows and cleanup gates to auto-fill into the Add Dataset advanced
-  panel for each output media type. Set from Settings → Import, or by
-  the **Save as default** offer after an import (the only way to save the
-  cleanup gates).
+  converter rows, cleanup gates and ingest toggles (`build_projection`,
+  `merge_near_duplicates`, each present only when on) to auto-fill into the
+  Add Dataset advanced panel for each output media type, plus
+  `multi_dataset`: the kinds (media type ids, e.g. `["image", "face"]`) that
+  open the dialog in Multi-Dataset mode, filed under the type the import
+  started from (a demo's own type, or the importer's media type). Set from
+  Settings → Import, or by the **Save as default** offer after an import (the
+  only way to save the cleanup gates or a `multi_dataset` list; Settings can
+  only clear the latter).
 - `settings_source` (not shown; excluded from the defaults endpoint): opt-in
   bidirectional sync. Set it to a plugin name + field values to auto-export
   every settings change and auto-import on the user's first settings access

@@ -26,6 +26,7 @@ import { DashboardLoadingTasksService } from '../../services/dashboard-loading-t
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutoFindService } from '../../services/autofind.service';
+import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
@@ -141,6 +142,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
   private autofind = inject(AutoFindService);
+  private autofindSetup = inject(AutoFindSetupService);
   private hints = inject(HintsService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
 
@@ -942,12 +944,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Move a detector between the Drafts and AutoFind tabs by toggling its
    *  per-user AutoFind membership. The row disappears from the current tab
-   *  (and from the selection) and reappears on the other one. */
+   *  (and from the selection) and reappears on the other one. A user's first
+   *  AutoFind detector asks where its results should go (#5344). */
   setDetectorAutofind(model: DetectorRegistryEntry, autofind: boolean): void {
     this.detectorsRegistryApi.setAutofind(model.id, autofind).subscribe({
       next: () => {
         this.dashSelection.deselect('detector', model.id);
         this.datasetState.refresh();
+        if (autofind) void this.autofindSetup.offerAfterMove(model);
       },
       error: () => {
         // Global error interceptor surfaces the failure in the banner.
