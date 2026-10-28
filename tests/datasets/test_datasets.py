@@ -498,45 +498,87 @@ class TestStartupState:
         )
 
 
-@pytest.mark.xdist_group("shared-demo-data-dir")
+@pytest.fixture
+def demo_paths(tmp_path, monkeypatch):
+    """Point the demo-list route at a cache dir and source folders only this test sees.
+
+    Every xdist worker shares the session's data dir (``tests_shared/data_dir.py``),
+    so a container planted in the real ``EMBEDDINGS_DIR``, or a source folder made
+    under the real ``DATA_DIR``, can be replaced, emptied or removed by a test on
+    another worker while the request is in flight (#5357).  The route module binds
+    both names at import, so they are patched there; the global ``DEMO_DATASETS``
+    is left alone.
+
+    Returns a namespace holding ``embeddings`` (the empty cache dir) and
+    ``sources``: each demo that declares a ``required_folder``, mapped to its
+    private stand-in, which does not exist until a test creates it.
+    """
+    from types import SimpleNamespace
+
+    import vtsearch.routes.datasets.ui as ui_routes
+    from vtscore.datasets import DEMO_DATASETS
+
+    embeddings = tmp_path / "embeddings"
+    embeddings.mkdir()
+    sources = {
+        name: tmp_path / "sources" / name
+        for name, info in DEMO_DATASETS.items()
+        if info.get("required_folder") is not None
+    }
+    demos = {
+        name: {**info, "required_folder": sources[name]} if name in sources else info
+        for name, info in DEMO_DATASETS.items()
+    }
+    monkeypatch.setattr(ui_routes, "EMBEDDINGS_DIR", embeddings)
+    monkeypatch.setattr(ui_routes, "DEMO_DATASETS", demos)
+    return SimpleNamespace(embeddings=embeddings, sources=sources)
+
+
+def _plant_demo_container(demo_paths, demo_name, meta=None, payload=None):
+    """Write a cached container for *demo_name* into the private cache dir."""
+    import pickle
+
+    from vtscore.datasets.container import write_container
+
+    pkl_bytes = pickle.dumps(payload if payload is not None else {"name": demo_name, "medias": {}})
+    write_container(demo_paths.embeddings / f"{demo_name}.pkl", pkl_bytes, {"format_version": 1, **(meta or {})})
+
+
+def _demo_entry(client, demo_name, query=""):
+    """Fetch the demo list and return *demo_name*'s entry."""
+    resp = client.get(f"/api/dataset/demo-list{query}")
+    assert resp.status_code == 200
+    ds = next((d for d in resp.get_json()["datasets"] if d["name"] == demo_name), None)
+    assert ds is not None, f"{demo_name} is missing from the demo list"
+    return ds
+
+
+def _demo_without_source_folder():
+    """The first demo that declares no ``required_folder``: a cached container alone makes it ready."""
+    from vtscore.datasets import DEMO_DATASETS
+
+    name = next((n for n, info in DEMO_DATASETS.items() if info.get("required_folder") is None), None)
+    if name is None:
+        pytest.skip("No demo dataset without required_folder found")
+    return name
+
+
 class TestDemoDatasetReadiness:
     """Demo datasets report three-state status: ready / needs_embedding / needs_download.
 
-    These tests create/delete real files under the repo-shared
-    ``data/embeddings/`` and ``data/ESC-50-master/`` paths (several write the
-    *same* filename), so they are pinned to one xdist worker via
-    ``--dist loadgroup`` together with every other test touching those paths.
+    Every test runs against the private cache dir and source folders of
+    ``demo_paths``, so none depends on what the worker-shared data dir holds.
     """
 
-    def test_audio_pkl_without_esc50_shows_needs_download(self, client):
+    def test_audio_pkl_without_esc50_shows_needs_download(self, client, demo_paths):
         """Audio pkl exists but ESC-50 audio dir is absent → needs_download (stale pkl)."""
-        import pickle
+        _plant_demo_container(demo_paths, "esc50_s")
 
-        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
-        from vtscore.datasets.container import write_container
+        ds = _demo_entry(client, "esc50_s")
+        assert ds["status"] == "needs_download", "Stale audio pkl without ESC-50 dir must be needs_download"
+        assert ds["ready"] is False
 
-        esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        if esc50_dir.exists():
-            pytest.skip("ESC-50 is present; cannot test stale-pkl scenario")
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
-            assert ds is not None
-            assert ds["status"] == "needs_download", "Stale audio pkl without ESC-50 dir must be needs_download"
-            assert ds["ready"] is False
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_corrupt_cached_pkl_does_not_crash_demo_list(self, client):
+    def test_corrupt_cached_pkl_does_not_crash_demo_list(self, client, demo_paths):
         """A corrupt cached pkl must not 500 the catalog; it degrades to unknown metadata.
 
         Regression: ``read_pkl_embedder`` used to raise ``BadZipFile`` on a non-zip
@@ -544,153 +586,52 @@ class TestDemoDatasetReadiness:
         entirely — one bad cache file blanked the whole demo listing. The demo is
         still listed; its embedder just reports empty.
         """
-        from vtscore.config import EMBEDDINGS_DIR
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
         # Not a zip container — what a truncated download or legacy raw pickle
         # looks like on disk.
-        pkl_file.write_bytes(b"\x80\x05not-a-zip-container")
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            assert resp.status_code == 200, "one corrupt cache file must not 500 the whole catalog"
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
-            assert ds is not None, "the demo is still listed despite an unreadable cache file"
-            assert ds["pkl_embedder"] == "", "unreadable cache degrades to empty embedder, not an exception"
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_audio_pkl_with_empty_esc50_shows_needs_download(self, client):
-        """Audio pkl exists and ESC-50 audio dir exists but is empty → needs_download."""
-        import pickle
-
-        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
-
-        esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        if esc50_dir.exists() and any(esc50_dir.iterdir()):
-            pytest.skip("ESC-50 audio dir is non-empty; cannot test empty-dir scenario")
-
-        # Create the directory structure but leave it empty
-        from vtscore.datasets.container import write_container
-
-        esc50_dir.mkdir(parents=True, exist_ok=True)
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
-            assert ds is not None
-            assert ds["status"] == "needs_download", "Audio pkl with empty ESC-50 dir must be needs_download"
-            assert ds["ready"] is False
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-            try:
-                esc50_dir.rmdir()
-            except OSError:
-                pass
-
-    def test_video_pkl_without_ucf101_shows_needs_download(self, client):
-        """Video pkl exists but UCF-101 dir is absent → needs_download (stale pkl)."""
-        import pickle
-
-        from vtscore.config import EMBEDDINGS_DIR
-        from vtscore.datasets.downloader import VIDEO_DIR
-
-        ucf101_dir = VIDEO_DIR / "ucf101"
-        if ucf101_dir.exists():
-            pytest.skip("UCF-101 is present; cannot test stale-pkl scenario")
-
-        from vtscore.datasets.container import write_container
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / "ucf101_s.pkl"
-        write_container(pkl_file, pickle.dumps({"name": "ucf101_s", "medias": {}}), {"format_version": 1})
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "ucf101_s"), None)
-            assert ds is not None
-            assert ds["status"] == "needs_download", "Stale video pkl without UCF-101 dir must be needs_download"
-            assert ds["ready"] is False
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_no_pkl_with_source_folder_shows_needs_embedding(self, client):
-        """No pkl but required_folder exists with content → needs_embedding."""
-        import struct
-        import wave
-
-        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
-
-        esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        # Ensure no pkl exists for esc50_s
-        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        if pkl_file.exists():
-            pytest.skip("esc50_s.pkl exists; cannot test needs_embedding scenario")
-
-        # Create the ESC-50 audio dir with a dummy file
-        esc50_dir.mkdir(parents=True, exist_ok=True)
-        dummy_wav = esc50_dir / "_test_dummy.wav"
-        already_populated = (
-            any(f.name != "_test_dummy.wav" for f in esc50_dir.iterdir()) if esc50_dir.exists() else False
-        )
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(44100)
-            wf.writeframes(struct.pack("<h", 0) * 100)
-        dummy_wav.write_bytes(buf.getvalue())
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
-            assert ds is not None
-            assert ds["status"] == "needs_embedding", "No pkl with source folder should be needs_embedding"
-            assert ds["ready"] is False
-            assert ds["download_size_mb"] == 0, "needs_embedding should report 0 MB download"
-        finally:
-            dummy_wav.unlink(missing_ok=True)
-            if not already_populated:
-                try:
-                    esc50_dir.rmdir()
-                except OSError:
-                    pass
-
-    def test_no_pkl_no_source_shows_needs_download(self, client):
-        """No pkl and no required_folder → needs_download."""
-        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
-
-        esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
-        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        if pkl_file.exists():
-            pytest.skip("esc50_s.pkl exists; cannot test needs_download scenario")
-        if esc50_dir.exists() and any(esc50_dir.iterdir()):
-            pytest.skip("ESC-50 is present; cannot test needs_download scenario")
+        (demo_paths.embeddings / "esc50_s.pkl").write_bytes(b"\x80\x05not-a-zip-container")
 
         resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200, "one corrupt cache file must not 500 the whole catalog"
         data = resp.get_json()
         ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
-        assert ds is not None
+        assert ds is not None, "the demo is still listed despite an unreadable cache file"
+        assert ds["pkl_embedder"] == "", "unreadable cache degrades to empty embedder, not an exception"
+
+    def test_audio_pkl_with_empty_esc50_shows_needs_download(self, client, demo_paths):
+        """Audio pkl exists and ESC-50 audio dir exists but is empty → needs_download."""
+        demo_paths.sources["esc50_s"].mkdir(parents=True)
+        _plant_demo_container(demo_paths, "esc50_s")
+
+        ds = _demo_entry(client, "esc50_s")
+        assert ds["status"] == "needs_download", "Audio pkl with empty ESC-50 dir must be needs_download"
+        assert ds["ready"] is False
+
+    def test_video_pkl_without_ucf101_shows_needs_download(self, client, demo_paths):
+        """Video pkl exists but UCF-101 dir is absent → needs_download (stale pkl)."""
+        _plant_demo_container(demo_paths, "ucf101_s")
+
+        ds = _demo_entry(client, "ucf101_s")
+        assert ds["status"] == "needs_download", "Stale video pkl without UCF-101 dir must be needs_download"
+        assert ds["ready"] is False
+
+    def test_no_pkl_with_source_folder_shows_needs_embedding(self, client, demo_paths):
+        """No pkl but required_folder exists with content → needs_embedding."""
+        esc50_dir = demo_paths.sources["esc50_s"]
+        esc50_dir.mkdir(parents=True)
+        (esc50_dir / "_test_dummy.wav").write_bytes(b"RIFF")
+
+        ds = _demo_entry(client, "esc50_s")
+        assert ds["status"] == "needs_embedding", "No pkl with source folder should be needs_embedding"
+        assert ds["ready"] is False
+        assert ds["download_size_mb"] == 0, "needs_embedding should report 0 MB download"
+
+    def test_no_pkl_no_source_shows_needs_download(self, client, demo_paths):
+        """No pkl and no required_folder → needs_download."""
+        ds = _demo_entry(client, "esc50_s")
         assert ds["status"] == "needs_download"
         assert ds["ready"] is False
 
-    def test_status_field_always_present(self, client):
+    def test_status_field_always_present(self, client, demo_paths):
         """Every demo dataset must include a status field."""
         resp = client.get("/api/dataset/demo-list")
         data = resp.get_json()
@@ -699,162 +640,57 @@ class TestDemoDatasetReadiness:
             assert ds["status"] in ("ready", "needs_embedding", "needs_download")
 
 
-@pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetEmbedderStatus:
     """Demo dataset status respects which embedder produced the cached pkl.
 
-    Grouped with ``TestDemoDatasetReadiness``: these tests write the same
-    repo-shared ``data/embeddings/<demo>.pkl`` files."""
+    Like ``TestDemoDatasetReadiness``, every test plants its container in the
+    private cache dir of ``demo_paths``."""
 
-    def test_ready_with_matching_embedder(self, client):
+    def test_ready_with_matching_embedder(self, client, demo_paths):
         """Container with matching embedder in meta → ready."""
-        import pickle
+        demo_name = _demo_without_source_folder()
+        _plant_demo_container(demo_paths, demo_name, {"embedder": "TestEmbedder"})
 
-        from vtscore.config import EMBEDDINGS_DIR
-        from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.container import write_container
+        ds = _demo_entry(client, demo_name, "?embedder=TestEmbedder")
+        assert ds["status"] == "ready"
+        assert ds["ready"] is True
+        assert ds["pkl_embedder"] == "TestEmbedder"
 
-        demo_name = None
-        for name, info in DEMO_DATASETS.items():
-            if info.get("required_folder") is None:
-                demo_name = name
-                break
-        if demo_name is None:
-            pytest.skip("No demo dataset without required_folder found")
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
-        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "TestEmbedder"})
-        try:
-            resp = client.get("/api/dataset/demo-list?embedder=TestEmbedder")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
-            assert ds is not None
-            assert ds["status"] == "ready"
-            assert ds["ready"] is True
-            assert ds["pkl_embedder"] == "TestEmbedder"
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_needs_embedding_with_mismatched_embedder(self, client):
+    def test_needs_embedding_with_mismatched_embedder(self, client, demo_paths):
         """Container with non-matching embedder in meta → needs_embedding."""
-        import pickle
+        demo_name = _demo_without_source_folder()
+        _plant_demo_container(demo_paths, demo_name, {"embedder": "OldEmbedder"})
 
-        from vtscore.config import EMBEDDINGS_DIR
-        from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.container import write_container
+        ds = _demo_entry(client, demo_name, "?embedder=NewEmbedder")
+        assert ds["status"] == "needs_embedding"
+        assert ds["ready"] is False
+        assert ds["pkl_embedder"] == "OldEmbedder"
 
-        demo_name = None
-        for name, info in DEMO_DATASETS.items():
-            if info.get("required_folder") is None:
-                demo_name = name
-                break
-        if demo_name is None:
-            pytest.skip("No demo dataset without required_folder found")
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
-        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "OldEmbedder"})
-        try:
-            resp = client.get("/api/dataset/demo-list?embedder=NewEmbedder")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
-            assert ds is not None
-            assert ds["status"] == "needs_embedding"
-            assert ds["ready"] is False
-            assert ds["pkl_embedder"] == "OldEmbedder"
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_no_embedder_param_ignores_check(self, client):
+    def test_no_embedder_param_ignores_check(self, client, demo_paths):
         """Without embedder query param, pkl existence alone means ready."""
-        import pickle
+        demo_name = _demo_without_source_folder()
+        _plant_demo_container(demo_paths, demo_name, {"embedder": "SomeEmbedder"})
 
-        from vtscore.config import EMBEDDINGS_DIR
-        from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.container import write_container
+        ds = _demo_entry(client, demo_name)
+        assert ds["status"] == "ready"
+        assert ds["ready"] is True
 
-        demo_name = None
-        for name, info in DEMO_DATASETS.items():
-            if info.get("required_folder") is None:
-                demo_name = name
-                break
-        if demo_name is None:
-            pytest.skip("No demo dataset without required_folder found")
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
-        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "SomeEmbedder"})
-        try:
-            resp = client.get("/api/dataset/demo-list")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
-            assert ds is not None
-            assert ds["status"] == "ready"
-            assert ds["ready"] is True
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
-
-    def test_pkl_embedder_field_present(self, client):
+    def test_pkl_embedder_field_present(self, client, demo_paths):
         """Every demo in the response should have a pkl_embedder field."""
         resp = client.get("/api/dataset/demo-list")
         data = resp.get_json()
         for ds in data["datasets"]:
             assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
 
-    def test_no_embedder_in_meta_returns_empty(self, client):
+    def test_no_embedder_in_meta_returns_empty(self, client, demo_paths):
         """When container meta has no embedder, pkl_embedder is empty string."""
-        import pickle
+        demo_name = _demo_without_source_folder()
+        payload = {"name": demo_name, "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}}}
+        _plant_demo_container(demo_paths, demo_name, payload=payload)
 
-        from vtscore.config import EMBEDDINGS_DIR
-        from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.container import write_container
-
-        demo_name = None
-        for name, info in DEMO_DATASETS.items():
-            if info.get("required_folder") is None:
-                demo_name = name
-                break
-        if demo_name is None:
-            pytest.skip("No demo dataset without required_folder found")
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        pkl_bytes = pickle.dumps(
-            {
-                "name": demo_name,
-                "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
-            }
-        )
-        write_container(pkl_file, pkl_bytes, {"format_version": 1})
-        try:
-            resp = client.get("/api/dataset/demo-list?embedder=FallbackEmb")
-            data = resp.get_json()
-            ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
-            assert ds is not None
-            assert ds["pkl_embedder"] == ""
-            assert ds["status"] == "ready"
-        finally:
-            pkl_file.unlink(missing_ok=True)
-            try:
-                EMBEDDINGS_DIR.rmdir()
-            except OSError:
-                pass
+        ds = _demo_entry(client, demo_name, "?embedder=FallbackEmb")
+        assert ds["pkl_embedder"] == ""
+        assert ds["status"] == "ready"
 
 
 class TestImporterMetadata:

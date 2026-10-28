@@ -529,33 +529,40 @@ class TestCombineDatasetsOrigin:
 
 
 class TestAvailableFilesEndpoint:
-    def test_returns_list(self, client):
+    """``available-files`` globs ``EMBEDDINGS_DIR`` and stats every pkl it finds.
+
+    The real dir sits in the session data dir every xdist worker shares, where a
+    pkl another worker removes between the glob and the stat 500s the route, so
+    each test hands the route a private dir instead (#5357).
+    """
+
+    @pytest.fixture
+    def embeddings_dir(self, tmp_path, monkeypatch):
+        import vtsearch.routes.datasets.staging as staging_routes
+
+        monkeypatch.setattr(staging_routes, "EMBEDDINGS_DIR", tmp_path)
+        return tmp_path
+
+    def test_returns_list(self, client, embeddings_dir):
         resp = client.get("/api/dataset/available-files")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "files" in data
-        assert isinstance(data["files"], list)
+        assert data["files"] == []
 
-    def test_lists_pkl_files(self, client, tmp_path):
+    def test_lists_pkl_files(self, client, embeddings_dir):
         """When EMBEDDINGS_DIR contains .pkl files, they appear in the list."""
-        from vtscore.config import EMBEDDINGS_DIR
-
-        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        test_pkl = EMBEDDINGS_DIR / "_test_combine.pkl"
         from vtscore.datasets.container import write_container
 
-        write_container(test_pkl, pickle.dumps({"medias": {}}), {"format_version": 1})
-        try:
-            resp = client.get("/api/dataset/available-files")
-            data = resp.get_json()
-            names = [f["name"] for f in data["files"]]
-            assert "_test_combine" in names
-            # Check fields
-            entry = next(f for f in data["files"] if f["name"] == "_test_combine")
-            assert "path" in entry
-            assert "size_mb" in entry
-        finally:
-            test_pkl.unlink(missing_ok=True)
+        write_container(embeddings_dir / "_test_combine.pkl", pickle.dumps({"medias": {}}), {"format_version": 1})
+
+        resp = client.get("/api/dataset/available-files")
+        data = resp.get_json()
+        names = [f["name"] for f in data["files"]]
+        assert "_test_combine" in names
+        # Check fields
+        entry = next(f for f in data["files"] if f["name"] == "_test_combine")
+        assert "path" in entry
+        assert "size_mb" in entry
 
 
 class TestCombineEndpoint:
@@ -817,12 +824,7 @@ class TestStageImportEndpoint:
         assert result["ok"] is True
 
 
-@pytest.mark.xdist_group("shared-demo-data-dir")
 class TestStageDemoEndpoint:
-    """Grouped with the demo-status tests in ``test_datasets.py``: staging a
-    demo reads the repo-shared ``data/embeddings/<demo>.pkl`` those tests
-    create and delete."""
-
     def test_rejects_invalid_name(self, client):
         resp = client.post("/api/dataset/stage-demo/nonexistent_xyz_demo")
         assert resp.status_code == 400
