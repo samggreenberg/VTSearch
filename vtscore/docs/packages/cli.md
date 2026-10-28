@@ -61,9 +61,10 @@ builds - i.e. in how it produces media chunks:
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`,
 `stream_results=False`, `keep_negatives=False`, `save_dataset=False`,
-`override_detectors=None` and `override_clipper=None` (an `input_spec`,
+`override_detectors=None`, `override_clipper=None` (an `input_spec`,
 `{"clipper": name, "clipper_params": {...}}`, that every detector is scored
-at in place of its own; see [Behaviour](#behaviour)); the two importer
+at in place of its own; see [Behaviour](#behaviour)) and `max_results=None`
+(with `stream_results`, each detector's best N records only); the two importer
 variants also take `outputs=None` (several datasets from one import).
 They catch every
 exception, report it via `cli_progress.emit_error()`, and
@@ -87,6 +88,7 @@ def autodetect_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
+    max_results: int | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
@@ -104,6 +106,7 @@ def autodetect_main_chunked(
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
@@ -121,6 +124,7 @@ def autodetect_importer_main(
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
     override_clipper: dict[str, Any] | None = None,
+    max_results: int | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -140,6 +144,7 @@ def autodetect_importer_main_chunked(
     outputs: list[OutputSpec] | None = None,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
@@ -213,6 +218,15 @@ def autodetect_importer_main_chunked(
   removed when the run completes. The CLI flag is `--resume`; the
   pipeline-YAML key is `resume:`. See `vtscore/cli_resume.py` for the
   checkpoint's contents and guarantees.
+- **`max_results=N`** (with `stream_results`; refused without it and with
+  `resume`) hands the exporter only each detector's N best records, sorted by
+  score, instead of every record in chunk order. `_top_records` keeps one
+  bounded min-heap per detector, so the run holds at most N hits per detector
+  however large the source, and yields once the last chunk is scored. `bad`
+  records (with `keep_negatives`) rank below every `good` one; equal scores
+  keep their scoring order. The header gains `"max_results": N`, and a
+  `top_results` event per detector reports `seen` and `kept`. The CLI flag is
+  `--max-results`; the pipeline-YAML key is `max_results:`.
 
 ```python
 from vtscore.cli import autodetect_main, autodetect_importer_main
@@ -370,7 +384,7 @@ validates the shape, and returns a normalised config dict ready for
 
 The file's schema - exactly one of `dataset:` / `importer:`, plus
 `settings`, `detectors`, `chunk_size`, `tempimport`, `stream_results`,
-`keep_negatives`, `as_labelset`, `resume`, `import_labels`, `exporter` and
+`keep_negatives`, `as_labelset`, `resume`, `max_results`, `import_labels`, `exporter` and
 `override_clipper` - is documented with an
 annotated example in [`docs/CLI.md`](../../../docs/CLI.md#pipeline-file).
 An `importer.outputs:` list takes the keys an `OutputSpec` takes (each
@@ -540,6 +554,7 @@ lists the extra fields.
 | `resume_start`     | `checkpoint: str`, `chunks_done: int`, `resumed: bool` (`false` for a resumable run starting fresh) | `_run_resumable_streaming_pipeline` in `cli.py` |
 | `resume_threshold_kept` | `detector`, `retrained: float`, `recorded: float` (the retrained cut moved within noise; the recorded one is kept) | `_write_resumable_stream` in `cli.py` |
 | `resume_complete`  | `checkpoint: str` (now removed), `chunks: int`                    | `_run_resumable_streaming_pipeline` in `cli.py` |
+| `top_results`      | `detector`, `kept: int`, `seen: int` (the records the detector produced), `max_results: int`; one per detector, before the export | `_top_records` in `cli.py` |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`, plus `override_input_spec` when the clipper override did it | `_input_spec_reclip` / `_override_reclip` in `cli.py` |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |

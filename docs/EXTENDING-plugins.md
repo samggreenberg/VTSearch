@@ -1709,10 +1709,12 @@ def export_cli_streaming(self, header, records, field_values):
     #           "detectors": [{"detector_name": str, "threshold": float,
     #                          "balance": dict | None}, ...],
     #           "keep_negatives": bool,
-    #           "dataset": {...}}  # only when one import makes several datasets;
+    #           "dataset": {...},  # only when one import makes several datasets;
     #                              # this method is then called once per dataset
+    #           "max_results": int}  # only with --max-results N
     # records yields (detector_name, hit) tuples in CHUNK order (not globally
-    # sorted by score). Each hit is the build_media_hit() dict plus a "label"
+    # sorted by score), or, with "max_results", each detector's best N sorted
+    # by score, detector by detector, once the last chunk is scored. Each hit is the build_media_hit() dict plus a "label"
     # key ("good" above threshold, "bad" otherwise — "bad" only appears when
     # keep_negatives is set).
     path = Path(field_values["filepath"])
@@ -1788,7 +1790,8 @@ def export_labelset_streaming(self, header, elements, field_values):
     # header = {"media_type": str,
     #           "detectors": [str, ...],   # names only: no threshold, no balance
     #           "keep_negatives": bool,
-    #           "dataset": {...}}          # as for export_cli_streaming
+    #           "dataset": {...},          # as for export_cli_streaming
+    #           "max_results": int}        # as for export_cli_streaming
     # elements yields serialised LabeledElement dicts in chunk order: md5 and
     # label always; origin / origin_name / filename / category / metadata where
     # present; and "detector", naming the detector that labelled the entry.

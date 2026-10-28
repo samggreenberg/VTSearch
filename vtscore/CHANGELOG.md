@@ -1413,6 +1413,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`max_results=` on the four `vtscore.cli.autodetect_*_main` entry points** (issue #5279), the library form of the
+  new `--max-results` flag: with `stream_results`, the exporter gets each detector's best `max_results` records,
+  sorted by score, once the last chunk is scored, instead of every record in chunk order. The header
+  `export_cli_streaming` and `export_labelset_streaming` receive then carries `"max_results"` (int), and
+  `server_json_file` writes it into the NDJSON `_meta` line and the labels JSON. A new `top_results` CLI event
+  reports each detector's `seen` and `kept` counts. Refused without `stream_results` and with `resume`. Additive: an
+  exporter that ignores the key keeps working, and gets its records in the new order.
+
 - **Conditional plugin fields** (issue #5343). `PluginField.visible_when` shows a field only while other fields
   hold given values, for example `visible_when={"enable_email": True}` or `{"source": ["s3", "gcs"]}` (all
   entries must match, and a list means any of its values). While the condition fails the field is inactive:

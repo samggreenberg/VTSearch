@@ -669,9 +669,14 @@ class ResultsExporter(PluginBase):
                 from one import (#4707) calls this once per dataset and adds
                 ``"dataset"`` (``{"name", "media_type", "category", "id"}``)
                 naming the one these records belong to; exporters that write
-                a metadata header should carry it.
+                a metadata header should carry it.  ``--max-results N``
+                (#5279) adds ``"max_results"`` (int), and *records* then
+                holds only each detector's best N.
             records: Yields ``(detector_name, hit)`` tuples in chunk order
-                (NOT globally sorted by score).  Each *hit* is the dict from
+                (NOT globally sorted by score), or, with ``"max_results"`` in
+                the header, detector by detector, each one's sorted by score,
+                highest first, all of them once the last chunk is scored.
+                Each *hit* is the dict from
                 :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
                 key (``"good"`` for above-threshold, ``"bad"`` otherwise).
             field_values: Mapping of :attr:`PluginField.key` → value.
@@ -719,7 +724,9 @@ class ResultsExporter(PluginBase):
                 whether ``"bad"`` entries are included).  A run that makes
                 several datasets from one import (#4707) calls this once per
                 dataset and adds ``"dataset"``, as in
-                :meth:`export_cli_streaming`.  No threshold and no balance
+                :meth:`export_cli_streaming`, and ``--max-results`` adds
+                ``"max_results"``, ordering *elements* as it orders the
+                records there.  No threshold and no balance
                 state: those are numbers the head measured, and a labelset
                 carries none (#5131).
             elements: Yields serialised

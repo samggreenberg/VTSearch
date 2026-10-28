@@ -39,6 +39,10 @@ def _ndjson_meta(header: dict[str, Any]) -> dict[str, Any]:
     if header.get("dataset"):
         # One of several datasets from one run (#4707): say which.
         meta["dataset"] = header["dataset"]
+    if header.get("max_results"):
+        # --max-results (#5279): the lines are each detector's best, sorted
+        # by score, not chunk-ordered.
+        meta["max_results"] = header["max_results"]
     return meta
 
 
@@ -225,6 +229,8 @@ class ServerJsonResultsExporter(ResultsExporter):
         }
         if header.get("dataset"):
             meta["dataset"] = header["dataset"]
+        if header.get("max_results"):
+            meta["max_results"] = header["max_results"]
 
         total = 0
         with atomic_write_stream(filepath) as f:

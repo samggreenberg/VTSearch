@@ -318,6 +318,50 @@ class TestLoadPipelineFile:
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
         assert load_pipeline_file(p)["resume"] is True
 
+    def test_max_results_round_trips(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "max_results": 50}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        assert load_pipeline_file(p)["max_results"] == 50
+
+    def test_max_results_defaults_to_none(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "tempimport": True})
+        )
+        assert load_pipeline_file(p)["max_results"] is None
+
+    @pytest.mark.parametrize("value", [0, -1, True, "10", 2.5])
+    def test_max_results_must_be_a_positive_integer(self, tmp_path, value):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "max_results": value}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        with pytest.raises(ValueError, match="'max_results:' must be a positive integer"):
+            load_pipeline_file(p)
+
+    def test_max_results_requires_stream_results(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "max_results": 5}))
+        with pytest.raises(ValueError, match="'max_results:' only applies with 'stream_results:'"):
+            load_pipeline_file(p)
+
+    def test_max_results_refuses_resume(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        flags = {"stream_results": True, "tempimport": True, "resume": True, "max_results": 5}
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, **flags}))
+        with pytest.raises(ValueError, match="'max_results:' cannot be combined with 'resume:'"):
+            load_pipeline_file(p)
+
     def test_stream_results_requires_tempimport(self, tmp_path):
         """A streamed run never holds the whole dataset, so it cannot be the
         saved one (#4226): the file must say it is temporary."""
@@ -928,6 +972,31 @@ class TestDispatchStreamingFlags:
             }
         )
         assert seen["resume"] is True
+
+    def test_max_results_reaches_the_run(self, monkeypatch):
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        seen = {}
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": ["Dogs"],
+                "chunk_size": 10,
+                "stream_results": True,
+                "keep_negatives": False,
+                "max_results": 25,
+                "import_labels": None,
+                "exporter": "server_json_file",
+                "exporter_fields": {"filepath": "hits.ndjson"},
+                "tempimport": True,
+            }
+        )
+        assert seen["max_results"] == 25
 
 
 class TestImportLabelsCreate:

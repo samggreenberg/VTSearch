@@ -20,6 +20,17 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ## Unreleased
 
+### Added
+
+- **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
+  chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
+  `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
+  highest first, once the last chunk is scored. Memory stays at N hits per detector however large the source. The
+  NDJSON `_meta` line records `max_results`, `--keep-negatives` lets the below-threshold items fill the places the
+  hits leave, and it works with `--as-labelset` and every streaming exporter. A pipeline file sets it as
+  `max_results:`. It cannot be combined with `--resume`. See
+  [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
+
 ## 2026-10-28
 
 ### Changed

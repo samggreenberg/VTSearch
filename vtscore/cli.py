@@ -112,7 +112,12 @@ def _print_dry_run_streaming(source_description: dict[str, Any]) -> None:
     if source_description.get("stream_results"):
         neg = "included" if source_description.get("keep_negatives") else "dropped"
         mode = "yes, as a labelset (label entries" if source_description.get("as_labelset") else "yes (hits"
-        print(f"  Streaming: {mode} written to the exporter per chunk; negatives {neg})", flush=True)
+        max_results = source_description.get("max_results")
+        if max_results:
+            written = f"each detector's top {max_results} by score written to the exporter after the last chunk"
+        else:
+            written = "written to the exporter per chunk"
+        print(f"  Streaming: {mode} {written}; negatives {neg})", flush=True)
     if source_description.get("resume"):
         checkpoint = source_description.get("resume_checkpoint", "")
         done = source_description.get("resume_chunks_done")
@@ -1728,6 +1733,7 @@ class _SourceSpec:
         save_dataset: bool = False,
         as_labelset: bool = False,
         resume: bool = False,
+        max_results: int | None = None,
     ) -> dict[str, Any]:
         """Build the ``source_description`` block reported by ``--dry-run``."""
         common: dict[str, Any] = {
@@ -1738,6 +1744,7 @@ class _SourceSpec:
             "as_labelset": as_labelset,
             "save_dataset": save_dataset,
             "resume": resume,
+            "max_results": max_results,
         }
         if self.kind == "pickle":
             return {**common, "dataset": self.dataset_path}
@@ -2152,6 +2159,56 @@ def _chunk_hit_records(
                 yield det_name, {**hit, "label": "bad"}
 
 
+def _top_records(
+    records: Iterator[tuple[str, dict[str, Any]]],
+    max_results: int,
+    detector_order: list[str],
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Each detector's *max_results* best records, highest score first (``--max-results``, #5279).
+
+    One pass over *records* with a bounded min-heap per detector: a record
+    that beats the weakest one kept takes its place, and every other record is
+    dropped as soon as it is read, so peak memory is *max_results* hits per
+    detector however many the run scores.  Nothing is yielded until *records*
+    is exhausted, since the last chunk can still hold the best hit.  The
+    detectors come out in *detector_order* (the header's, which names every
+    detector a record can carry), each one's records sorted by score, ties in
+    the order they arrived.  With ``keep_negatives`` the ``bad`` records
+    compete too, ranked below every ``good`` one, so they fill a detector's
+    quota only past its last hit.
+    """
+    import heapq  # noqa: PLC0415
+
+    heaps: dict[str, list[tuple[bool, float, int, dict[str, Any]]]] = {}
+    seen: dict[str, int] = {}
+    for arrival, (det_name, hit) in enumerate(records):
+        seen[det_name] = seen.get(det_name, 0) + 1
+        # -arrival makes the earlier of two equal records the stronger, and,
+        # being unique, settles every comparison before it reaches the hit.
+        entry = (hit["label"] == "good", hit["score"], -arrival, hit)
+        heap = heaps.setdefault(det_name, [])
+        if len(heap) < max_results:
+            heapq.heappush(heap, entry)
+        elif entry > heap[0]:
+            heapq.heapreplace(heap, entry)
+    for det_name in detector_order:
+        kept, total = len(heaps.get(det_name, [])), seen.get(det_name, 0)
+        cli_progress.emit(
+            "top_results",
+            text=(
+                f"Detector '{det_name}': {total} result(s) scored; "
+                f"writing the top {kept} (--max-results {max_results})."
+            ),
+            detector=det_name,
+            kept=kept,
+            seen=total,
+            max_results=max_results,
+        )
+    for det_name in detector_order:
+        for *_rank, hit in sorted(heaps.pop(det_name, []), reverse=True):
+            yield det_name, hit
+
+
 def _stream_label_records(records: Iterator[tuple[str, dict[str, Any]]]) -> Iterator[dict[str, Any]]:
     """Turn a ``(detector_name, hit)`` stream into label entries, each naming its detector.
 
@@ -2183,6 +2240,7 @@ def _run_streaming_pipeline(
     as_labelset: bool = False,
     override_clipper: dict[str, Any] | None = None,
     resumable_source: _SourceSpec | None = None,
+    max_results: int | None = None,
 ) -> None:
     """Stream scored hits straight to a streaming-capable exporter.
 
@@ -2202,6 +2260,11 @@ def _run_streaming_pipeline(
     reads that source rather than *media_source*: see
     :func:`_run_resumable_streaming_pipeline`.  It is never a labelset or one
     dataset of several (:func:`_check_resumable`).
+
+    With *max_results* (``--max-results``) the exporter gets each detector's
+    best *max_results* records, sorted by score, once the last chunk is
+    scored, instead of every record in chunk order (:func:`_top_records`).
+    It is never resumable (:func:`_check_max_results`).
     """
     if resumable_source is not None:
         _run_resumable_streaming_pipeline(
@@ -2235,8 +2298,10 @@ def _run_streaming_pipeline(
         first_chunk, media_type, override_detectors, autofind_detectors, override_clipper
     )
 
-    header = _stream_header(media_type, detector_mlps, keep_negatives, dataset)
+    header = _stream_header(media_type, detector_mlps, keep_negatives, dataset, max_results)
     records = _stream_hit_records(first_chunk, iterator, detector_mlps, keep_negatives, routed)
+    if max_results is not None:
+        records = _top_records(records, max_results, list(detector_mlps))
     if as_labelset:
         label_header: dict[str, Any] = {
             "media_type": media_type,
@@ -2245,6 +2310,8 @@ def _run_streaming_pipeline(
         }
         if dataset is not None:
             label_header["dataset"] = dataset.to_dict()
+        if max_results is not None:
+            label_header["max_results"] = max_results
         result = exporter.export_labelset_streaming(
             label_header, _stream_label_records(records), exporter_field_values or {}
         )
@@ -2259,8 +2326,13 @@ def _stream_header(
     detector_mlps: dict[str, dict[str, Any]],
     keep_negatives: bool,
     dataset: "_RunDataset | None" = None,
+    max_results: int | None = None,
 ) -> dict[str, Any]:
-    """The metadata a streamed hit export opens with (see ``export_cli_streaming``)."""
+    """The metadata a streamed hit export opens with (see ``export_cli_streaming``).
+
+    ``max_results`` is there only when ``--max-results`` set it: the records
+    are then each detector's best, sorted by score, not chunk-ordered.
+    """
     header: dict[str, Any] = {
         "media_type": media_type,
         "detectors": [
@@ -2275,6 +2347,8 @@ def _stream_header(
     }
     if dataset is not None:
         header["dataset"] = dataset.to_dict()
+    if max_results is not None:
+        header["max_results"] = max_results
     return header
 
 
@@ -2653,6 +2727,7 @@ def _run_pipeline(
     dataset: "_RunDataset | None" = None,
     override_clipper: dict[str, Any] | None = None,
     resumable_source: _SourceSpec | None = None,
+    max_results: int | None = None,
 ) -> bool:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
@@ -2694,6 +2769,10 @@ def _run_pipeline(
     media are read from that source instead of *media_source*, raw, so the
     chunks an earlier attempt completed can be skipped before they are
     embedded (see :func:`_run_resumable_streaming_pipeline`).
+
+    *max_results*, with *stream_results*, exports only each detector's best
+    *max_results* records, sorted by score (``--max-results``; see
+    :func:`_top_records`).
 
     Returns whether detection ran: ``True`` once the detectors have scored the
     source and the exporter has run, ``False`` for a dry run and for a saving
@@ -2748,6 +2827,7 @@ def _run_pipeline(
                 dataset=dataset,
                 override_clipper=override_clipper,
                 resumable_source=resumable_source,
+                max_results=max_results,
             )
         else:
             _run_live_pipeline(
@@ -3269,6 +3349,7 @@ def _run_multi_source(
     keep_negatives: bool,
     as_labelset: bool,
     override_clipper: dict[str, Any] | None = None,
+    max_results: int | None = None,
 ) -> None:
     """Run a multi-dataset source (#4707): one importer run, then detect and export per dataset.
 
@@ -3292,6 +3373,7 @@ def _run_multi_source(
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
         as_labelset=as_labelset,
+        max_results=max_results,
     )
     if dry_run:
         _run_pipeline(
@@ -3308,6 +3390,7 @@ def _run_multi_source(
             source_description=source_description,
             skip_without_detectors=save_dataset,
             override_clipper=override_clipper,
+            max_results=max_results,
         )
         return
 
@@ -3339,6 +3422,7 @@ def _run_multi_source(
             skip_without_detectors=True,
             dataset=run.dataset,
             override_clipper=override_clipper,
+            max_results=max_results,
         )
         detected_any = detected_any or detected
         if detected and run.entry is not None:
@@ -3371,6 +3455,7 @@ def _run_source(
     as_labelset: bool = False,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None:
     """Optionally save *spec*'s dataset to the dashboard, then detect and export.
 
@@ -3407,9 +3492,14 @@ def _run_source(
     *resume* makes a chunked, single-dataset hit stream resumable
     (``--resume``; :func:`_run_resumable_streaming_pipeline`), and is refused
     for any other run (:func:`_check_resumable`).
+
+    *max_results*, with *stream_results*, exports only each detector's best
+    *max_results* records, sorted by score (``--max-results``); it is refused
+    without streaming and with *resume* (:func:`_check_max_results`).
     """
     if as_labelset and not stream_results:
         raise ValueError("as_labelset streams the hits as a labelset, so it requires stream_results.")
+    _check_max_results(max_results, stream_results=stream_results, resume=resume)
     if resume:
         _check_resumable(spec, stream_results=stream_results, as_labelset=as_labelset)
     override_clipper = _resolve_override_clipper(override_clipper)
@@ -3434,6 +3524,7 @@ def _run_source(
             keep_negatives=keep_negatives,
             as_labelset=as_labelset,
             override_clipper=override_clipper,
+            max_results=max_results,
         )
         return
     source_description = spec.describe(
@@ -3442,6 +3533,7 @@ def _run_source(
         save_dataset=save_dataset,
         as_labelset=as_labelset,
         resume=resume,
+        max_results=max_results,
     )
     imported: dict[str, Any] | None = None
     if save_dataset and not dry_run:
@@ -3467,6 +3559,7 @@ def _run_source(
         skip_without_detectors=save_dataset,
         override_clipper=override_clipper,
         resumable_source=spec if resume else None,
+        max_results=max_results,
     )
     if detected and imported is not None:
         _delete_after_detection(imported, settings_path)
@@ -3491,6 +3584,28 @@ def _check_resumable(spec: _SourceSpec, *, stream_results: bool, as_labelset: bo
         raise ValueError("--resume cannot resume a multi-dataset run (--outputs); run each dataset on its own.")
 
 
+def _check_max_results(max_results: int | None, *, stream_results: bool, resume: bool) -> None:
+    """Refuse a ``--max-results`` the run cannot honour.
+
+    It keeps the best of a streamed run's records, so it needs
+    ``stream_results``.  It writes nothing until the last chunk is scored, so
+    a ``--resume`` run would have no written chunk to checkpoint, and the best
+    records so far would die with an interrupted process.  Raised before
+    anything loads.
+    """
+    if max_results is None:
+        return
+    if isinstance(max_results, bool) or not isinstance(max_results, int) or max_results < 1:
+        raise ValueError(f"--max-results must be a positive integer, not {max_results!r}.")
+    if not stream_results:
+        raise ValueError("--max-results keeps the best of a streamed run's results, so it requires --stream-results.")
+    if resume:
+        raise ValueError(
+            "--max-results cannot be combined with --resume: it writes nothing until the last chunk is scored, "
+            "so there is no chunk to checkpoint."
+        )
+
+
 def _autodetect(
     spec: _SourceSpec,
     *,
@@ -3505,6 +3620,7 @@ def _autodetect(
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None:
     """Shared body of the four public ``autodetect_*_main`` entry points.
 
@@ -3527,6 +3643,7 @@ def _autodetect(
             as_labelset=as_labelset,
             override_clipper=override_clipper,
             resume=resume,
+            max_results=max_results,
         )
     except Exception as e:
         cli_progress.emit_error(str(e))
@@ -3546,6 +3663,7 @@ def autodetect_main(
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
+    max_results: int | None = None,
 ) -> None:
     """CLI entry point: run autodetect with all AutoFind detectors.
 
@@ -3571,6 +3689,11 @@ def autodetect_main(
     ``*_default`` clipper scores each media as loaded.  An unknown clipper or
     parameter, or a clipper for another media type than a detector scores,
     fails the run.
+
+    *max_results*, with *stream_results*, exports only each detector's best
+    *max_results* records, sorted by score, once the run has scored every
+    chunk (``--max-results``); peak memory stays at *max_results* hits per
+    detector.  Without it a streamed export is in chunk order.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path),
@@ -3584,6 +3707,7 @@ def autodetect_main(
         save_dataset=save_dataset,
         override_detectors=override_detectors,
         override_clipper=override_clipper,
+        max_results=max_results,
     )
 
 
@@ -3602,11 +3726,12 @@ def autodetect_importer_main(
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
     override_clipper: dict[str, Any] | None = None,
+    max_results: int | None = None,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results.
 
-    *save_dataset*, *override_detectors* and *override_clipper* behave as in
-    :func:`autodetect_main`.
+    *save_dataset*, *override_detectors*, *override_clipper* and *max_results*
+    behave as in :func:`autodetect_main`.
     *outputs*, when given, makes the one importer run produce several datasets
     (#4707), one per :class:`~vtscore.datasets.importers.base.OutputSpec`,
     each saved (unless temporary), scored and exported on its own; see
@@ -3626,6 +3751,7 @@ def autodetect_importer_main(
         save_dataset=save_dataset,
         override_detectors=override_detectors,
         override_clipper=override_clipper,
+        max_results=max_results,
     )
 
 
@@ -3644,14 +3770,16 @@ def autodetect_main_chunked(
     override_detectors: list[str] | None = None,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset.
 
-    *save_dataset*, *override_detectors* and *override_clipper* behave as in
-    :func:`autodetect_main`; *chunk_size* bounds the scoring pass over the
-    saved copy.  *resume*, with *stream_results*, checkpoints the stream after
-    each chunk and continues an interrupted run of the same command
-    (``--resume``; see :mod:`vtscore.cli_resume`).
+    *save_dataset*, *override_detectors*, *override_clipper* and *max_results*
+    behave as in :func:`autodetect_main`; *chunk_size* bounds the scoring pass
+    over the saved copy.  *resume*, with *stream_results*, checkpoints the
+    stream after each chunk and continues an interrupted run of the same
+    command (``--resume``; see :mod:`vtscore.cli_resume`); it cannot be
+    combined with *max_results*.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path, chunk_size=chunk_size),
@@ -3666,6 +3794,7 @@ def autodetect_main_chunked(
         override_detectors=override_detectors,
         override_clipper=override_clipper,
         resume=resume,
+        max_results=max_results,
     )
 
 
@@ -3686,11 +3815,12 @@ def autodetect_importer_main_chunked(
     outputs: list[OutputSpec] | None = None,
     override_clipper: dict[str, Any] | None = None,
     resume: bool = False,
+    max_results: int | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer.
 
-    *save_dataset*, *override_detectors*, *override_clipper* and *outputs*
-    behave as in :func:`autodetect_importer_main`; *chunk_size* bounds the scoring pass over
+    *save_dataset*, *override_detectors*, *override_clipper*, *max_results* and
+    *outputs* behave as in :func:`autodetect_importer_main`; *chunk_size* bounds the scoring pass over
     the saved copy (the import itself is held in memory whole, as a GUI import
     is).  *resume* behaves as in :func:`autodetect_main_chunked`.
     """
@@ -3713,4 +3843,5 @@ def autodetect_importer_main_chunked(
         override_detectors=override_detectors,
         override_clipper=override_clipper,
         resume=resume,
+        max_results=max_results,
     )
