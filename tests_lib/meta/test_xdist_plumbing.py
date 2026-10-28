@@ -114,13 +114,11 @@ def test_a_group_runs_on_one_worker(tmp_path):
     out = _session(
         tmp_path,
         {"test_a.py": grouped("a"), "test_m.py": _quick("m", 16), "test_z.py": grouped("z")},
-        "-v",
         returncode=0,
     )
-    assert "test_a.py::test_a0@g" in out, out
-    workers = {path.read_text() for path in tmp_path.glob("ran-*")}
-    assert len(list(tmp_path.glob("ran-*"))) == 8, out
-    assert len(workers) == 1, f"group 'g' ran on {sorted(workers)}"
+    ran = {path.name: path.read_text() for path in tmp_path.glob("ran-*")}
+    assert len(ran) == 8, out
+    assert len(set(ran.values())) == 1, f"group 'g' was split across workers: {ran}"
 
 
 @pytest.mark.xdist_group("xdist-group-suffix-probe")

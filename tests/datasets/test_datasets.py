@@ -526,9 +526,11 @@ class TestFolderHasContent:
     def test_folder_with_an_entry_has_content(self, tmp_path):
         from vtsearch.routes.datasets.ui import _folder_has_content
 
-        assert _folder_has_content(tmp_path) is False
-        (tmp_path / "clip.wav").write_bytes(b"x")
-        assert _folder_has_content(tmp_path) is True
+        folder = tmp_path / "source"
+        folder.mkdir()
+        assert _folder_has_content(folder) is False
+        (folder / "clip.wav").write_bytes(b"x")
+        assert _folder_has_content(folder) is True
 
 
 @pytest.mark.xdist_group("shared-demo-data-dir")
