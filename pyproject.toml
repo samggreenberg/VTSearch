@@ -90,7 +90,7 @@ dependencies = [
     "torch>=2.7",
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
-    "dnspython>=2.0.0",
+    "dnspython>=2.9.0",
     "librosa",
     "soundfile",
     # Resampler behind ``vtscore.media.audio.decode``. It arrives with librosa
