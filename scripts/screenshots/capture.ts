@@ -22,7 +22,7 @@ import { type Browser, type BrowserContext, type Page, type Request } from 'play
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
-import { drawCallouts, resolveBox } from './callouts.mjs';
+import { LAYER_ID, drawCallouts, resolveBox } from './callouts.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
 import { fileURLToPath } from 'node:url';
@@ -158,12 +158,16 @@ const FONTS = [
  * container, the system face on a Mac), so they are given the pinned face
  * directly, at element specificity, under any component rule that names a
  * family. An icon's letter glyph is SVG `<text>` naming `system-ui`, which any
- * CSS rule outranks. Monospace text all goes through `--font-mono`, the style
- * guide's one monospace stack. Canvas text is `pinTypeface`'s to reach.
+ * CSS rule outranks. The callouts' labels and step discs name `system-ui` in
+ * an inline style, which only an `!important` rule outranks; the container
+ * draws `system-ui` in Inter, so only a render elsewhere showed it. Monospace
+ * text all goes through `--font-mono`, the style guide's one monospace stack.
+ * Canvas text is `pinTypeface`'s to reach.
  */
 const TYPEFACE_CSS =
   `html,body{font-family:${SANS}!important}` +
   `button,input,select,textarea,svg text{font-family:${SANS}}` +
+  `#${LAYER_ID} *{font-family:${SANS}!important}` +
   `:root{--font-mono:${MONO}!important}`;
 
 /**
@@ -780,7 +784,10 @@ async function main() {
   await mkdir(ASSETS, { recursive: true });
   await warnIfMotionForced();
   await openSidePanels();
-  const browser: Browser = await launchChromium();
+  // Linux Chromium hints text as the machine's fontconfig says, and a hinted
+  // glyph advances a whole pixel: the GRID's `hintstyle: slight` set every line
+  // wider than the container's, which hints none (#5302).
+  const browser: Browser = await launchChromium({ args: ['--font-render-hinting=none'] });
   const started = Date.now();
   const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];
   const runs: { label: string; total: number }[] = [];
