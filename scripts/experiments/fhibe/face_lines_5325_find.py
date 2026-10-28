@@ -18,6 +18,7 @@ It also writes, per snapshot, where the bulk's tail stands: the negatives above 
 bulk's share there, and the positives' z.
 
   face_lines_5325_find.py price --runs DIR [--runs DIR ...] --out FILE.csv.gz [--procs N] [--limit N]
+  face_lines_5325_find.py report --priced FILE.csv.gz --runs-root DIR --strata person_strata.csv --out FILE.csv
 """
 
 from __future__ import annotations
@@ -178,6 +179,56 @@ def price(a: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+def _category(run_dir: str, idx: int) -> str:
+    import gzip
+
+    with gzip.open(os.path.join(run_dir, "results", "cells", f"task_{idx:04d}.csv.gz"), "rt") as fh:
+        head = fh.readline().rstrip("\n").split(",")
+        return fh.readline().split(",")[head.index("category")]
+
+
+def report(a: argparse.Namespace) -> int:
+    """Per snapshot, each candidate's F-beta paired against the app's, SE on the person; the pronoun gap; failures.
+
+    A failed session (#5336) ends with AP below 0.1 while the person's full-label ceiling reaches 0.5: its starting
+    photos' vectors miss the person, which no line can mend, so it is flagged and left out of the over-return count.
+    """
+    d = pd.read_csv(a.priced)
+    cats = {(r, i): _category(os.path.join(a.runs_root, r), i) for r, i in d[["run", "idx"]].drop_duplicates().values}
+    d["category"] = [cats[(r, i)] for r, i in zip(d["run"], d["idx"])]
+    strata = pd.read_csv(a.strata)
+    strata["pronoun"] = strata["pronoun"].str.lower().str.extract(r"^(she/her|he/him)", expand=False)
+    d = d.merge(strata[["category", "pronoun"]], on="category", how="left")
+    cell = ["run", "idx"]
+    ap = d.pivot_table(index=cell, columns="snap", values="ap")
+    failed = ((ap["final"] < 0.1) & (ap["ceiling"] >= 0.5)).rename("failed").reset_index()
+    d = d.merge(failed, on=cell, how="left")
+    key = ["size", "k", "beta", "snap"]
+    rows = []
+    for g, h in d[d["snap"] != "ceiling"].groupby(key):
+        r = dict(zip(key, g), sessions=len(h), failed=int(h["failed"].sum()), pos=h["n_pos"].mean(),
+                 k_app=h["k_app"].mean(), F_app=h["F_app"].mean())  # fmt: skip
+        for c in CANDIDATES:
+            if c == "app":
+                continue
+            diff = (h[f"F_{c}"] - h["F_app"]).groupby(h["category"]).mean()
+            r[f"d_{c}"], r[f"se_{c}"] = diff.mean(), diff.std(ddof=1) / math.sqrt(len(diff))
+            r[f"k_{c}"] = h[f"k_{c}"].mean()
+        ok = h[~h["failed"]]
+        r["over_return"] = int(((ok["ap"] >= 0.95) & (ok["F_app"] < 0.7) & (ok["k_app"] > ok["n_pos"])).sum())
+        for c in ("app", *a.gap):
+            by = ok.groupby("pronoun")[f"F_{c}"]
+            m, s, n = by.mean(), by.std(ddof=1), by.size()
+            r[f"gap_{c}"] = m["she/her"] - m["he/him"]
+            r[f"gap_se_{c}"] = math.sqrt(s["she/her"] ** 2 / n["she/her"] + s["he/him"] ** 2 / n["he/him"])
+        rows.append(r)
+    out = pd.DataFrame(rows)
+    out.to_csv(a.out, index=False)
+    with pd.option_context("display.width", 250, "display.max_columns", 60):
+        print(out[out["snap"].isin(["t8", "t20", "t50", "final"])].round(4).to_string(index=False))
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -186,8 +237,14 @@ def main() -> int:
     p.add_argument("--out", required=True)
     p.add_argument("--procs", type=int, default=8)
     p.add_argument("--limit", type=int, default=0)
+    r = sub.add_parser("report")
+    r.add_argument("--priced", required=True, help="price's output")
+    r.add_argument("--runs-root", required=True, help="the directory holding the priced runs")
+    r.add_argument("--strata", required=True, help="person_strata.py's csv")
+    r.add_argument("--gap", nargs="*", default=["z5", "z5.5"], help="candidates whose pronoun gap to report")
+    r.add_argument("--out", required=True)
     a = ap.parse_args()
-    return price(a)
+    return price(a) if a.cmd == "price" else report(a)
 
 
 if __name__ == "__main__":

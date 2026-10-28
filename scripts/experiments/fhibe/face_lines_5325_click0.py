@@ -93,6 +93,8 @@ def dump(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     for ds, by_emb in prepare.get("datasets", {}).items():
         for emb, info in by_emb.items():
+            if cfg.is_patch_embedder(emb):
+                continue  # the region path pools patches, which a whole-image example sort does not reproduce
             cats = info.get("selected_categories") or []
             medias = load_medias(EMBEDDINGS_DIR / cfg.pickle_name(ds, emb), repair=True)
             common.log(f"{ds} x {emb}: {len(medias)} medias, {len(cats)} cells")
