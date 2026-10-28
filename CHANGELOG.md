@@ -104,6 +104,11 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Toasty's "Your detector is trained!" no longer follows you out of the Train view** (issue #5354). The hint
+  Autopilot raises when it finishes training stayed up until the next vote, so after going to the Dashboard,
+  running Find on another dataset and clicking **Browse**, Toasty told the map to "Click **Dashboard** to put it to
+  work". It now ends when you leave the Train view.
+
 - **Add Dataset's media-type choice leaves out the types the server hides** (issue #5339). The folder and form
   importers offered every registered media type for a single dataset, whatever the server hid: a media type an
   admin hides (`hidden_plugins`, `--hide-plugin`), or Face on a server without face models, which got a bare
