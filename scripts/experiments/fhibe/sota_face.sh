@@ -158,7 +158,8 @@ pack)
       --mem="$((PAR * 3))G" --cpus-per-task="$((PAR * 2))" --time="${CALIB_PACK_TIME:-12:00:00}" \
       --export=ALL --output="$LOGS/pack$j-%j.out" \
       --wrap="export CUDA_VISIBLE_DEVICES= $THREADS SOTA_FACE_DATE=$D SOTA_FACE_TAG=$TAG SOTA_FACE_ARM=$ARM SOTA_FACE_BASE=$BASE \
-SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} && \
+SOTA_FACE_IDENTITIES=$IDENTITIES SOTA_FACE_CLAIMS=$claims CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} \
+SOTA_FACE_RUNNER=${SOTA_FACE_RUNNER:-} HARD_FACE_SWAP=${HARD_FACE_SWAP:-} && \
 xargs -P $PAR -L 1 bash $HERE/sota_face.sh cell <$shard; echo pack done") || { echo "pack $j SUBMIT FAILED" >&2; exit 1; }
     [[ "$J" =~ ^[0-9]+$ ]] || { echo "pack $j SUBMIT FAILED (empty job id)" >&2; exit 1; }
     echo "pack $j -> job $J (claims from $(wc -l <"$shard") cells, $PAR at a time)"
@@ -175,7 +176,8 @@ cell)  # K BETA INDEX: one cell, in its run dir's environment (called by pack)
   eval "$ENVX"
   dir="$RUNS/$FHIBE_RUN-k$k-b$(btag "$b")"
   cd "$HERE/../calibration"
-  python run_cells.py --index "$idx" >"$dir/logs/cell-$idx.out" 2>&1 || echo "FAILED k$k b$b $idx"
+  # SOTA_FACE_RUNNER: a study's own cell runner in place of run_cells.py (#5376's swapped examples).
+  python "${SOTA_FACE_RUNNER:-run_cells.py}" --index "$idx" >"$dir/logs/cell-$idx.out" 2>&1 || echo "FAILED k$k b$b $idx"
   ;;
 baseline)  # click 0: the example sort at K = 1 and 4, in the K=1 beta-1 run's environment
   run_env 1 1
