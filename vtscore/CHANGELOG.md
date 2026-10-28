@@ -10,53 +10,6 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
-### Added
-
-- **Conditional plugin fields** (issue #5343). `PluginField.visible_when` shows a field only while other fields
-  hold given values, for example `visible_when={"enable_email": True}` or `{"source": ["s3", "gcs"]}` (all
-  entries must match, and a list means any of its values). While the condition fails the field is inactive:
-  no form renders it, it is not `required`, the request schema drops whatever was sent for it, and
-  `normalize_field_values` resets it to its default. The new `vtscore.plugins.inactive_field_keys(fields,
-  values)` is the shared evaluator, and `ConditionValue` is the type of one accepted value. `to_dict()` gains a
-  `visible_when` key (`{key: [str, ...]}`). Additive: a field without a condition behaves as before.
-
-- **`LabelImporter.default_detector_name(field_values)`** (issue #5342). The label-importer counterpart of
-  `ImporterBase.default_display_name`: the name a detector created from the importer gets by default. The base
-  returns the first `file` field's filename without its extension, else `"<display_name> detector"` (what the
-  app already did), so existing importers are unaffected; override it to turn an opaque selection into a
-  readable name. The app calls it live through `POST /api/label-importers/suggested-name/<name>`.
-
-- **A detector remembers the label importer that created it** (issue #5334). `register_detector` takes an
-  optional `imported=` record, kept on the entry as `imported` (`None` by default), and the new
-  `vtscore.detectors.import_record.build_import_record(importer, field_values)` builds it: the importer's `name`,
-  the field values it ran with, and `imported_at`. The fields kept follow a dataset origin's policy, so
-  `PluginField.include_in_origin` and `origin_serializer` now govern a label importer's fields too (`"file"` and
-  `"password"` fields stay out by default). `import_labels_into_detector(..., create_media_type=...)` records it on
-  the detector it creates. Additive: existing callers and importers are unaffected.
-
-- **A converter may hand over the vector it computed.** A `MediaConverter.convert` output may carry
-  `"embeddings": {embedder_name: vector}` (and `"embedder"`, naming the primary) when the conversion itself
-  embedded the media; `vtscore.converters.runner` files the vector on the media dict, so the embed stage finds
-  nothing missing. Additive: outputs without the key behave as before. The first user is `image2face`, which
-  detects and embeds each face from the full photo in one pass through the `imagekit` face-provider seam.
-- **`vtscore.media.face.imagekit_bridge.face_models()`** says whether this server has face models, checked on
-  disk without loading any: a `FaceModels(available, reason, config_path, provider)`. The pipeline config comes
-  from `IMAGEKIT_FACE_CONFIG`, else `face.json` in the models folder's `imagekit` directory (`default_config_path()`); the
-  provider from `IMAGEKIT_FACE_PROVIDER`, else the config's own `provider`, else `oss`. Nothing is downloaded.
-  `Image2FaceMediaConverter.hidden_from_picker` follows it, and `get_face_pipeline()` raises
-  `FaceProviderUnconfigured` naming what is missing. An install that cannot import `imagekit` at all (a slim one,
-  without `cv2`) reads as off too, rather than raising.
-- **Deferred chunks: `ImporterBase.run_chunked_cli_deferred` and `DeferredChunk`** (issue #5314). An optional,
-  additive importer hook a resumed `--stream-results --resume` run reads its source through: it yields one
-  `vtscore.datasets.importers.base.DeferredChunk` per `run_chunked_cli` chunk, carrying the chunk's `count`, a
-  `build()` callable and an optional `key()` that says what it holds without reading any file, so the run passes
-  the chunks it already wrote without building them. The default wraps `run_chunked_cli`'s chunks, built and
-  keyless, so existing importers are unaffected (their completed chunks are re-read, as before). `server_folder`
-  implements it, through the new `vtscore.datasets.loader.iter_folder_chunks_deferred` (keyed by each file's
-  relative path, size and mtime) and `vtscore.datasets.archive.iter_archive_chunks_deferred`;
-  `vtscore.cli_resume.key_digest` fingerprints a keyed chunk. See
-  [`docs/extending/dataset-importers.md`](docs/extending/dataset-importers.md#chunked-loading-and-resumed-cli-runs).
-
 ### Changed
 
 - **The labeling-session analyzer replays the label history on top of the restored labels** (issue #5358).
@@ -1459,6 +1412,52 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **Conditional plugin fields** (issue #5343). `PluginField.visible_when` shows a field only while other fields
+  hold given values, for example `visible_when={"enable_email": True}` or `{"source": ["s3", "gcs"]}` (all
+  entries must match, and a list means any of its values). While the condition fails the field is inactive:
+  no form renders it, it is not `required`, the request schema drops whatever was sent for it, and
+  `normalize_field_values` resets it to its default. The new `vtscore.plugins.inactive_field_keys(fields,
+  values)` is the shared evaluator, and `ConditionValue` is the type of one accepted value. `to_dict()` gains a
+  `visible_when` key (`{key: [str, ...]}`). Additive: a field without a condition behaves as before.
+
+- **`LabelImporter.default_detector_name(field_values)`** (issue #5342). The label-importer counterpart of
+  `ImporterBase.default_display_name`: the name a detector created from the importer gets by default. The base
+  returns the first `file` field's filename without its extension, else `"<display_name> detector"` (what the
+  app already did), so existing importers are unaffected; override it to turn an opaque selection into a
+  readable name. The app calls it live through `POST /api/label-importers/suggested-name/<name>`.
+
+- **A detector remembers the label importer that created it** (issue #5334). `register_detector` takes an
+  optional `imported=` record, kept on the entry as `imported` (`None` by default), and the new
+  `vtscore.detectors.import_record.build_import_record(importer, field_values)` builds it: the importer's `name`,
+  the field values it ran with, and `imported_at`. The fields kept follow a dataset origin's policy, so
+  `PluginField.include_in_origin` and `origin_serializer` now govern a label importer's fields too (`"file"` and
+  `"password"` fields stay out by default). `import_labels_into_detector(..., create_media_type=...)` records it on
+  the detector it creates. Additive: existing callers and importers are unaffected.
+
+- **A converter may hand over the vector it computed.** A `MediaConverter.convert` output may carry
+  `"embeddings": {embedder_name: vector}` (and `"embedder"`, naming the primary) when the conversion itself
+  embedded the media; `vtscore.converters.runner` files the vector on the media dict, so the embed stage finds
+  nothing missing. Additive: outputs without the key behave as before. The first user is `image2face`, which
+  detects and embeds each face from the full photo in one pass through the `imagekit` face-provider seam.
+- **`vtscore.media.face.imagekit_bridge.face_models()`** says whether this server has face models, checked on
+  disk without loading any: a `FaceModels(available, reason, config_path, provider)`. The pipeline config comes
+  from `IMAGEKIT_FACE_CONFIG`, else `face.json` in the models folder's `imagekit` directory (`default_config_path()`); the
+  provider from `IMAGEKIT_FACE_PROVIDER`, else the config's own `provider`, else `oss`. Nothing is downloaded.
+  `Image2FaceMediaConverter.hidden_from_picker` follows it, and `get_face_pipeline()` raises
+  `FaceProviderUnconfigured` naming what is missing. An install that cannot import `imagekit` at all (a slim one,
+  without `cv2`) reads as off too, rather than raising.
+- **Deferred chunks: `ImporterBase.run_chunked_cli_deferred` and `DeferredChunk`** (issue #5314). An optional,
+  additive importer hook a resumed `--stream-results --resume` run reads its source through: it yields one
+  `vtscore.datasets.importers.base.DeferredChunk` per `run_chunked_cli` chunk, carrying the chunk's `count`, a
+  `build()` callable and an optional `key()` that says what it holds without reading any file, so the run passes
+  the chunks it already wrote without building them. The default wraps `run_chunked_cli`'s chunks, built and
+  keyless, so existing importers are unaffected (their completed chunks are re-read, as before). `server_folder`
+  implements it, through the new `vtscore.datasets.loader.iter_folder_chunks_deferred` (keyed by each file's
+  relative path, size and mtime) and `vtscore.datasets.archive.iter_archive_chunks_deferred`;
+  `vtscore.cli_resume.key_digest` fingerprints a keyed chunk. See
+  [`docs/extending/dataset-importers.md`](docs/extending/dataset-importers.md#chunked-loading-and-resumed-cli-runs).
+
 
 - **Resumable streamed exports: `export_cli_streaming_resumable`, `StreamResume`, and `vtscore.io`'s
   `resumable_write_stream` / `commit_write_stream`** (issue #5280). An optional, additive exporter capability for
