@@ -141,12 +141,14 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
-- **Smart and Stable count every sort of a detector that started with labels, so Autopilot gets past Refine
-  Boundary** (issue #5358). Smart and Stable only counted a sort whose labels matched the session's history, and
-  the labels a detector brings back (continuing it after a restart, or after a switch to another dataset and back)
-  never enter that history, so none of its sorts counted: both stayed on "No history yet", and Refine Boundary ran
-  until the line reached Done's level or the votes reached 200. A detector holding a label this dataset does not
-  contain, as a Face detector's example can be, was left out the same way. Each sort now counts.
+- **Smart and Stable work on a new Face detector, so Autopilot gets past Refine Boundary** (issue #5358). Creating a
+  detector from a picked face made that face its first Good, and then loaded the detector before naming the
+  dataset. The face came back when Train opened on the Face dataset, but outside the session's history, and Smart
+  and Stable only counted a sort whose labels matched that history. None ever did: both stayed on "No history yet",
+  and Refine Boundary ran until the line reached Done's level or the votes reached 200. A detector now loads for the
+  dataset you are switching to, and the face goes in the history. Sorts also count now on a detector whose
+  labels come back after a restart or a switch to another dataset and back, or that holds a label this dataset
+  does not contain, which left those sessions without Smart and Stable the same way.
 
 - **Toasty's "Your detector is trained!" no longer follows you out of the Train view** (issue #5354). The hint
   Autopilot raises when it finishes training stayed up until the next vote, so after going to the Dashboard,
