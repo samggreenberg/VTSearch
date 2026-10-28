@@ -350,7 +350,13 @@ def probe(C: Any) -> list[str]:
 
     if C.CENTROID_LINE is not None and C.CENTROID_LINE != CENTROID_LINE_RULE:
         if C.CENTROID_LINE in CENTROID_LINE_RULES:
-            rows.append(("centroid_line", C.CENTROID_LINE, f"<unset> = {CENTROID_LINE_RULE}, the app's centroid line"))
+            rows.append(
+                (
+                    "centroid_line",
+                    C.CENTROID_LINE,
+                    f"<unset> = the app's centroid line ({CENTROID_LINE_RULE}; face crops' own, #5325)",
+                )
+            )
         else:
             refuse("centroid_line", "CALIB_CENTROID_LINE", "must be one of %s" % ", ".join(CENTROID_LINE_RULES))
     try:

@@ -135,6 +135,16 @@ def is_centroid_head(model: object) -> bool:
 #: * ``count_gap_floor_skip25_b1`` - ``count_gap_floor`` below beta 1, ``count_gap_floor_skip25``
 #:   from beta 1 up.  At a precision balance a lone standout is the set; from beta 1 up the
 #:   line looks past it.  The app's (#4783).
+#:
+#: and #5325's, the app's rule with the bulk's excess read above a higher bar (:data:`CENTROID_BARS`):
+#: on imagekit's face cosines the bulk's upper tail is far heavier than a Gaussian's (6-8 of a
+#: person's impostors above 4 spreads, where a Gaussian bulk puts 0.3), so ``count`` reads them as
+#: the person:
+#:
+#: * ``count_gap_floor_z<bar>`` / ``count_gap_floor_skip25_z<bar>`` - those rules' count above
+#:   ``<bar>`` spreads; ``count_gap_floor_skip25_b1_z<bar>`` gates them as the app's rule does.
+CENTROID_BAR_ZS = (5.0, 5.5, 6.0)
+CENTROID_BARS = {f"{rule}_z{z:g}": z for z in CENTROID_BAR_ZS for rule in ("count_gap_floor", "count_gap_floor_skip25")}
 CENTROID_COUNTS = (
     "count",
     "count_z3",
@@ -147,22 +157,45 @@ CENTROID_COUNTS = (
     "count_gap_floor_skip25",
     "count_gap_floor_skip50",
     "count_gap_floor_rank5",
+    *CENTROID_BARS,
 )
 #: The drop each gap-counting rule reads (:func:`_top_gap_count`); ``widest`` unless named here.
 CENTROID_DROPS = {
     "count_gap_floor_skip25": "skip25",
     "count_gap_floor_skip50": "skip50",
     "count_gap_floor_rank5": "rank5",
+    **{rule: "skip25" for rule in CENTROID_BARS if rule.startswith("count_gap_floor_skip25_")},
 }
 #: The counts whose line never sits above their drop (:func:`centroid_cut`).
-_GAP_FLOORED = ("gap_floor", "count_gap_floor", *CENTROID_DROPS)
-#: Rules gated on the balance: ``rule -> (below beta 1, from beta 1 up)`` (#4783).
-CENTROID_GATED = {"count_gap_floor_skip25_b1": ("count_gap_floor", "count_gap_floor_skip25")}
+_GAP_FLOORED = ("gap_floor", "count_gap_floor", *CENTROID_DROPS, *CENTROID_BARS)
+#: Rules gated on the balance: ``rule -> (below beta 1, from beta 1 up)`` (#4783, #5325).
+CENTROID_GATED = {
+    "count_gap_floor_skip25_b1": ("count_gap_floor", "count_gap_floor_skip25"),
+    **{
+        f"count_gap_floor_skip25_b1_z{z:g}": (f"count_gap_floor_z{z:g}", f"count_gap_floor_skip25_z{z:g}")
+        for z in CENTROID_BAR_ZS
+    },
+}
 CENTROID_LINE_RULES = ("midpoint", "text", "guarded", *CENTROID_COUNTS, *CENTROID_GATED)
 
 #: The rule the app draws a centroid's line by: the larger count, floored at the widest drop (#4759),
 #: and from beta 1 up at the drop below a standout first cosine (#4783).
 CENTROID_LINE_RULE = "count_gap_floor_skip25_b1"
+#: The rule a media type's centroid line is drawn by where it is not :data:`CENTROID_LINE_RULE` (#5325).
+#: Face crops count what stands out at z 5.5 instead of 4: ArcFace's cosines carry about 6 look-alikes per
+#: session above z 4, where a Gaussian bulk puts 0.3, and the count read them as the person (one photo,
+#: beta 1: 6.4 faces kept for 3.8 at click 0, F 0.73; at z 5.5, 3.5 and 0.85).  Shared, the same bar cut
+#: COCO Better's click 0 by 0.06-0.15, so it is the face crops' alone
+#: (``docs/experiments/2026-10-27-face-lines-5325/REPORT.md``).
+CENTROID_LINE_RULE_BY_MEDIA_TYPE: dict[str, str] = {"face": "count_gap_floor_skip25_b1_z5.5"}
+
+
+def centroid_line_rule(media_type: str | None) -> str:
+    """The rule the app draws *media_type*'s centroid line by: its own (:data:`CENTROID_LINE_RULE_BY_MEDIA_TYPE`),
+    else :data:`CENTROID_LINE_RULE`, including for an unknown type.  The app's example sort and centroid head and
+    the eval harness's default centroid line all read it, so the default arm stays the app."""
+    return CENTROID_LINE_RULE_BY_MEDIA_TYPE.get(media_type or "", CENTROID_LINE_RULE)
+
 
 #: How deep ``gap`` looks for the widest drop: the top this many + 1 cosines (#4759).
 CENTROID_GAP_TOP = 10
@@ -197,7 +230,8 @@ def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
     """*rule*'s count of the cosines that stand out (:data:`CENTROID_COUNTS`), or ``None`` with nothing to measure.
 
     ``gap_floor`` counts as ``count`` does and ``count_gap_floor`` (and #4783's variants, with
-    their own drop) as ``count_gap``; :func:`centroid_cut` lowers their lines to the gap.
+    their own drop, and #5325's, with their own bar) as ``count_gap``; :func:`centroid_cut` lowers
+    their lines to the gap.
     """
     from vtscore.training.thresholds import _count_estimate  # noqa: PLC0415
 
@@ -207,7 +241,7 @@ def _centroid_count(cosines: np.ndarray, rule: str) -> float | None:
         return _count_estimate(cosines, z=3.5)
     if rule == "mirror_z3.5":
         return _count_estimate(cosines, z=3.5, bulk="mirror")
-    counted = _count_estimate(cosines)
+    counted = _count_estimate(cosines, z=CENTROID_BARS.get(rule))
     if rule in ("count", "gap_floor") or counted is None:
         return counted
     gap = float(_top_gap_count(cosines, drop=CENTROID_DROPS.get(rule, "widest")))

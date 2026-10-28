@@ -70,6 +70,16 @@ class TestSortLine:
         for beta in BALANCES:
             assert line.threshold_at(beta) == round(centroid_cut(scores, beta=beta), 4)
 
+    def test_a_centroid_line_is_drawn_by_its_own_rule(self):
+        """#5325: a face sort keeps the face crops' rule, so a balance change redraws it by that rule."""
+        from vtscore.detectors.centroid_head import centroid_cut
+
+        scores = _shoulder()[0]
+        rule = "count_gap_floor_skip25_b1_z5.5"
+        line = SortLine("centroid", scores, centroid_rule=rule)
+        for beta in BALANCES:
+            assert line.threshold_at(beta) == round(centroid_cut(scores, rule=rule, beta=beta), 4)
+
     def test_a_centroid_line_moves_at_every_balance(self):
         line = SortLine("centroid", _shoulder()[0])
         assert line.threshold_at(0.25) > line.threshold_at(1.0) > line.threshold_at(4.0)

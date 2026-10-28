@@ -469,3 +469,77 @@ class TestTheLineCountsTheUnvoted:
         assert centroid_line_tag("count_gap_floor~unvoted", 1.0) == "centroid_line:count_gap_floor~unvoted@1"
         with pytest.raises(ValueError):
             parse_centroid_line_variants("count~everything@1")
+
+
+def _heavy_tailed_person(n_neg: int = 10000, n_pos: int = 4, n_alike: int = 7, seed: int = 0) -> np.ndarray:
+    """A face centroid's cosines on imagekit's ArcFace (#5325): a bulk with a heavier upper tail, matches far past it.
+
+    As on FHIBE's buffalo_s cells: a few look-alikes sit 4 to 5 bulk spreads up, where a Gaussian
+    bulk puts 0.3, and the person's photos about 8 spreads up.
+    """
+    rng = np.random.default_rng(seed)
+    sd = 0.07
+    bulk = rng.normal(0.02, sd, n_neg)
+    alike = 0.02 + sd * rng.uniform(4.2, 4.9, n_alike)
+    return np.concatenate([bulk, alike, 0.02 + sd * rng.uniform(7.5, 9.0, n_pos)])
+
+
+class TestTheHigherBars:
+    """#5325: the app's rule with the bulk's excess read above a higher bar."""
+
+    def test_the_bar_rules_gate_as_the_apps_rule_does(self):
+        from vtscore.detectors.centroid_head import CENTROID_BAR_ZS, CENTROID_GATED
+
+        for z in CENTROID_BAR_ZS:
+            gated = f"count_gap_floor_skip25_b1_z{z:g}"
+            assert gated in CENTROID_LINE_RULES
+            below, above = CENTROID_GATED[gated]
+            for seed in range(4):
+                cos = _heavy_tailed_person(seed=seed)
+                for beta in (0.25, 0.5):
+                    assert centroid_cut(cos, rule=gated, beta=beta) == centroid_cut(cos, rule=below, beta=beta)
+                for beta in (1.0, 4.0):
+                    assert centroid_cut(cos, rule=gated, beta=beta) == centroid_cut(cos, rule=above, beta=beta)
+
+    def test_a_heavy_tail_is_counted_as_the_person_at_4_spreads_and_not_above_5(self):
+        for seed in range(4):
+            cos = _heavy_tailed_person(seed=seed)
+            app = int((cos >= centroid_cut(cos, beta=1.0)).sum())
+            bar = int((cos >= centroid_cut(cos, rule="count_gap_floor_skip25_b1_z5.5", beta=1.0)).sum())
+            assert app > 4
+            assert bar == 4
+
+    def test_a_higher_bar_never_keeps_more_and_never_drops_below_the_drop(self):
+        from vtscore.detectors.centroid_head import _top_gap_count
+
+        for seed in range(4):
+            for cos in (_rare_target(seed=seed), _heavy_tailed_person(seed=seed), _standout_person(seed=seed)):
+                for beta in (0.25, 1.0, 4.0):
+                    app = int((cos >= centroid_cut(cos, beta=beta)).sum())
+                    for z in ("5", "5.5", "6"):
+                        bar = int((cos >= centroid_cut(cos, rule=f"count_gap_floor_skip25_b1_z{z}", beta=beta)).sum())
+                        assert bar <= app
+                        assert bar >= _top_gap_count(cos, drop="skip25" if beta >= 1.0 else "widest")
+
+
+class TestTheFaceRule:
+    """#5325: face crops draw the centroid's line at the z5.5 bar; every other media type keeps the app's rule."""
+
+    def test_each_media_type_gets_its_rule(self):
+        from vtscore.detectors.centroid_head import centroid_line_rule
+
+        assert centroid_line_rule("face") == "count_gap_floor_skip25_b1_z5.5"
+        assert centroid_line_rule("face") in CENTROID_LINE_RULES
+        for other in ("image", "video", "", None):
+            assert centroid_line_rule(other) == CENTROID_LINE_RULE
+
+    def test_the_harness_default_is_the_apps_rule_for_its_medias(self):
+        import inspect
+
+        from vtscore.eval.voting_iterations import production_centroid_line, simulate_voting_iterations
+
+        assert inspect.signature(simulate_voting_iterations).parameters["centroid_line"].default is None
+        assert production_centroid_line({1: {"media_type": "face"}}) == "count_gap_floor_skip25_b1_z5.5"
+        assert production_centroid_line({1: {"media_type": "image"}}) == CENTROID_LINE_RULE
+        assert production_centroid_line({1: {}}) == CENTROID_LINE_RULE
+        assert production_centroid_line({}) == CENTROID_LINE_RULE

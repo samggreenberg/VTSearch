@@ -351,6 +351,23 @@ class TestTheOpeningReadsTheAcquisitionCut:
         _results, cuts = text_sort_active(query)
         assert cuts == TextSortCuts(0.123, 0.0456, "tail")
 
+    @pytest.mark.parametrize(
+        ("media_type", "rule"), [("image", "count_gap_floor_skip25_b1"), ("face", "count_gap_floor_skip25_b1_z5.5")]
+    )
+    def test_an_example_sort_draws_its_media_types_centroid_rule(self, monkeypatch, media_type, rule):
+        """#5325: face crops' example sort is cut by their own centroid rule, and its sort line keeps it."""
+        from vtscore.state import get_active_context
+        from vtscore.training.query_sort import cosine_sort_cuts
+
+        from tests_lib.sorting.test_query_sort import _fill_active_medias
+
+        query = _fill_active_medias()
+        for media in get_active_context().medias.values():
+            media["media_type"] = media_type
+        _results, cuts = cosine_sort_cuts(query, role="score", beta=1.0)
+        assert cuts.branch == rule
+        assert cuts.line.centroid_rule == rule
+
     def test_text_sort_active_rounds_both_lines_to_four_decimals(self, monkeypatch):
         import vtscore.training.thresholds as T
         from vtscore.training.query_sort import text_sort_active

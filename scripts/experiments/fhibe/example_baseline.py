@@ -5,8 +5,11 @@ On FHIBE there is nothing to type. The session starts from K photos of the perso
 opening, #4699), and until Autopilot shows a detector the screen holds the **example sort**: every
 media ranked by cosine to the K photos' centroid, at its display line. Since #4732 that line is the
 Goods' centroid's own (:func:`vtscore.detectors.centroid_head.centroid_cut`, the count line at the
-balance), drawn over every media in the pool, as the app's example-sort route draws it
-(:func:`vtscore.training.query_sort.cosine_sort_cuts`). This script writes that sort's scores in
+balance), and since #4779 it counts the unvoted media only, the K photos left out, as the app's
+example-sort route draws it (:func:`vtscore.training.query_sort.cosine_sort_cuts`). It is drawn by the
+run's centroid rule (``CALIB_CENTROID_LINE``, the app's by default), so a study's arm on that rule
+gets its own click 0 (#5325). Until #5325 this script drew the line over every media, the K photos
+included: the app's line before #4779. This script writes that sort's scores in
 ``text_baseline.py``'s columns, one file per K, so the State of the App analyzer
 (``state_of_app/analyze.py --baseline``) reads it as the click-0 anchor and as what a session shows
 before its first detector.
@@ -70,8 +73,14 @@ def score_cell(pool: dict, cat: str, seed: int, k: int) -> dict | None:
     scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
     labels = np.asarray([1 if media_is_positive(pool[i], cat) else 0 for i in ids])
     all_scores = scores.tolist()
-    # The display line over every media, as the app draws it; the midpoint is the pre-#4732 line.
-    line_cut = {b: float(centroid_cut(all_scores, beta=b)) for b in BETAS}
+    # The display line over the unvoted media, as the app draws it (#4779), by the run's centroid rule (the
+    # app's for these medias when unset, #5325); the midpoint over every media is the pre-#4732 line.
+    from vtscore.eval.voting_iterations import production_centroid_line
+
+    rule = cfg.CENTROID_LINE or production_centroid_line(pool)
+    voted = set(examples)
+    unvoted = scores[np.asarray([i not in voted for i in ids])]
+    line_cut = {b: float(centroid_cut(unvoted, rule=rule, beta=b)) for b in BETAS}
     mid_cut = float(centroid_cut(all_scores, rule="midpoint"))
     tset = set(test_ids)
     mask = np.asarray([i in tset for i in ids])

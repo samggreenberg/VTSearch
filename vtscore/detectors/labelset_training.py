@@ -988,7 +988,8 @@ def install_centroid_head(
     corpus the line is cut on (:func:`~vtscore.detectors.centroid_head.fit_centroid`),
     and *beta* is the balance the line is drawn at (#4732): the detector's own,
     as a trained head's is.  *line_mask* flags the scored media the line counts:
-    the unvoted ones (#4779, :func:`_unvoted_mask`).
+    the unvoted ones (#4779, :func:`_unvoted_mask`).  The line is drawn by the
+    detector's media type's rule (:func:`~vtscore.detectors.centroid_head.centroid_line_rule`, #5325).
 
     Every cache a trained head's retrain leaves for a later re-cut is dropped:
     the centroid has no calibration folds, no fitted cut and no labels line.  It
@@ -1001,9 +1002,10 @@ def install_centroid_head(
     scores.  The head is stamped with *labelset*'s signature like a trained one
     (#4204).
     """
-    from vtscore.detectors.centroid_head import fit_centroid
+    from vtscore.detectors.centroid_head import centroid_line_rule, fit_centroid
 
-    head, threshold, line = fit_centroid(goods, score, beta=beta, line_mask=line_mask)
+    rule = centroid_line_rule(getattr(det_ctx, "media_type", None))
+    head, threshold, line = fit_centroid(goods, score, rule=rule, beta=beta, line_mask=line_mask)
     voted = [] if ids is None or line_mask is None else [i for i, n in zip(ids, line_mask, strict=True) if not n]
     _store_quota_head(det_ctx, head, threshold, line, labelset, _quota_ranking(head, score, ids, voted))
     return head, threshold
