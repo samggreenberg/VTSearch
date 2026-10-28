@@ -65,6 +65,21 @@ from vtscore.plugins import PluginBase, PluginField
 __all__ = ["LabelImporter", "PluginField"]
 
 
+def _filename_stem(value: Any) -> str:
+    """Return the filename behind a ``file`` field's *value*, without its directory or extension.
+
+    *value* is a plain filename string (the suggested-name route) or an
+    upload carrying ``.filename``.  Internal whitespace is collapsed, so the
+    result reads as a one-line detector name; ``""`` when there is no name.
+    """
+    filename = value if isinstance(value, str) else getattr(value, "filename", None)
+    if not isinstance(filename, str):
+        return ""
+    base = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    dot = base.rfind(".")
+    return " ".join((base[:dot] if dot > 0 else base).split())
+
+
 class LabelImporter(PluginBase):
     """Abstract base class for label importers.
 
@@ -135,6 +150,36 @@ class LabelImporter(PluginBase):
                 returns it as a 500 JSON error.
         """
         raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
+
+    def default_detector_name(self, field_values: dict[str, Any]) -> str:
+        """Return the default name for a detector created from *field_values*.
+
+        The label-importer counterpart of
+        :meth:`~vtscore.datasets.importers.base.core.ImporterBase.default_display_name`.
+        Subclasses override this to derive a name the generic derivation
+        cannot reach -- most usefully, to turn an opaque internal selection
+        (an id, a saved-query key) into something human-readable.  The base
+        implementation names the detector after the first ``file`` field
+        holding a value (the filename without its extension), falling back
+        to ``"<display_name> detector"``.
+
+        This runs live while the user fills in the New Detector › Trained
+        form: the frontend calls it through ``POST /api/label-importers/
+        suggested-name/<name>`` on every field change and prefills the
+        Detector name box with the result, which the user may overwrite.
+        Keep it cheap and side-effect free; if it must reach a remote
+        service to resolve a label, cache the lookup, because it is called
+        far more often than :meth:`run`.  A ``file`` field's value arrives
+        here as the chosen file's name: the upload itself is only sent with
+        the import.
+        """
+        for field in self.fields:
+            if field.field_type != "file":
+                continue
+            stem = _filename_stem(field_values.get(field.key))
+            if stem:
+                return stem
+        return f"{self.display_name} detector"
 
     # ------------------------------------------------------------------
     # CLI support

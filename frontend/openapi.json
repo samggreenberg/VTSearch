@@ -4794,6 +4794,18 @@
         ],
         "type": "object"
       },
+      "LabelImporterSuggestedNameResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_name"
+        ],
+        "type": "object"
+      },
       "LabelQuota": {
         "additionalProperties": false,
         "properties": {
@@ -13356,6 +13368,61 @@
           }
         },
         "summary": "Re-ingest missing medias from their origins, then apply their labels.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
+    "/api/label-importers/suggested-name/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Calls the importer's ``default_detector_name(field_values)`` with a\nsnapshot of the current form, so the New Detector \u203a Trained form can\nprefill its Detector name box with something human-readable --\nincluding a label a plugin resolved from an opaque internal selection,\nwhich no client-side derivation could produce.  The caller decides for\nitself whether to overwrite what the user typed.\n\nErrors from the plugin are surfaced as a 502 with the original\nmessage; the frontend treats any failure as \"no suggestion\", since a\nname hint is never worth blocking an import.",
+        "operationId": "label_importer_suggested_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterSuggestedNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelImporterSuggestedNameResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "502": {
+            "description": "default_detector_name raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the name the importer would give a detector created from these values.",
         "tags": [
           "label_importers"
         ]

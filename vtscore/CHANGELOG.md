@@ -20,6 +20,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   values)` is the shared evaluator, and `ConditionValue` is the type of one accepted value. `to_dict()` gains a
   `visible_when` key (`{key: [str, ...]}`). Additive: a field without a condition behaves as before.
 
+- **`LabelImporter.default_detector_name(field_values)`** (issue #5342). The label-importer counterpart of
+  `ImporterBase.default_display_name`: the name a detector created from the importer gets by default. The base
+  returns the first `file` field's filename without its extension, else `"<display_name> detector"` (what the
+  app already did), so existing importers are unaffected; override it to turn an opaque selection into a
+  readable name. The app calls it live through `POST /api/label-importers/suggested-name/<name>`.
+
 - **A detector remembers the label importer that created it** (issue #5334). `register_detector` takes an
   optional `imported=` record, kept on the entry as `imported` (`None` by default), and the new
   `vtscore.detectors.import_record.build_import_record(importer, field_values)` builds it: the importer's `name`,

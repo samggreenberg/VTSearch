@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **A label importer names the detector it creates** (issue #5342). On New Detector › Trained, the **Detector
+  name** box now fills in as the importer's form is filled, with the name the importer suggests (numbered past
+  any detector that already has it), until you type your own. The built-in importers suggest what a blank box
+  already resolved to: the uploaded file's name, else "*Importer* detector". A plugin can suggest something better
+  through `default_detector_name()`, e.g. a saved query's title instead of its id; see
+  [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#naming-the-created-detector).
+
 - **A detector made from imported labels says how it was imported** (issue #5334). A detector created by New
   Detector › Trained, or by the CLI's `--import-labels-into … --create-detector`, keeps the label importer that
   created it, the fields that importer ran with (never a password or an uploaded file) and when. Its **Stats**

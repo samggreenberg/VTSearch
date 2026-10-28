@@ -58,6 +58,7 @@ Optional:
 |--------|---------|---------|
 | `icon: str` | `"🏷️"` | Emoji in the UI |
 | `run_cli(field_values)` | delegates to `run()` | Override only when CLI values need different handling |
+| `default_detector_name(field_values)` | the first `file` field's filename stem, else `"<display_name> detector"` | The name a detector created from this importer gets by default; the app prefills the New Detector › Trained form's name box with it, live. Keep it cheap: it runs on every form change |
 
 Expose `LABEL_IMPORTER = YourImporter()` at module level.
 

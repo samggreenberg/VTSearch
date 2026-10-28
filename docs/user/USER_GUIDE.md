@@ -1353,8 +1353,11 @@ It has two tabs:
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**). A name left
-  blank comes from the imported file's name. It takes files
+  the imported labels (the button reads **Create & Import**). As you fill
+  the form, **Detector name** fills in with the name the source suggests:
+  an uploaded file's name, else the source's own (*Server JSON File
+  detector*), or whatever a plugin source names after what you picked.
+  Type over it to choose your own. It takes files
   exported from VTSearch, which record where each item came from (see
   [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
   labels made elsewhere, use **Import Labels** on an existing detector

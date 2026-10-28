@@ -1994,12 +1994,52 @@ LABEL_IMPORTER = PostgresLabelImporter()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run_cli()` | `(field_values: dict) -> list[dict[str, str]]` | CLI variant; default delegates to `run()` |
+| `default_detector_name()` | `(field_values: dict) -> str` | Name a detector created from this importer. Shown live in the New Detector › Trained form's Detector name box. Default: the uploaded file's stem, else `"<display_name> detector"`. See [Naming the created detector](#naming-the-created-detector) |
 
 **Default class attributes:**
 
 | Attribute | Default | Description |
 |-----------|---------|-------------|
 | `icon` | `"🏷️"` | Emoji shown in the UI |
+
+### Naming the created detector
+
+The Dashboard's **New Detector › Trained** tab creates a detector from a
+label importer. As the user fills in your importer's form, the modal asks
+your importer what it would call that detector and prefills the
+**Detector name** box with the answer (numbered past any detector that
+already has the name), until the user types a name of their own. The
+answer comes from `default_detector_name(field_values)`, the label-importer
+counterpart of a dataset importer's
+[`default_display_name()`](#naming-the-imported-dataset).
+
+The base implementation names the detector after the first `file` field
+holding a value (the filename without its extension), and otherwise falls
+back to `"<display_name> detector"`. Override it when your form holds
+something only your importer can turn into words:
+
+```python
+class SavedQueryLabelImporter(LabelImporter):
+    name = "saved_query"
+    fields = [
+        PluginField("query_id", "Query", "select", dynamic_options=True),
+    ]
+
+    def default_detector_name(self, field_values):
+        query = _lookup_query(field_values.get("query_id", ""))
+        # Fall back to the base derivation when there is nothing to resolve.
+        return query.title if query else super().default_detector_name(field_values)
+```
+
+The same constraints as the dataset hook apply: it runs on every form
+change (debounced), so keep it cheap and side-effect free, and cache any
+remote lookup. A `file` field's value arrives as the chosen file's name,
+not the upload, which is only sent with the import.
+
+API contract: `POST /api/label-importers/suggested-name/<name>` with body
+`{"values": {...}}` returns `{"detector_name": "..."}`. An exception from
+your `default_detector_name()` comes back as a 502; the form treats any
+failure as "no suggestion" and falls back to its own default.
 
 ### How it gets invoked
 
