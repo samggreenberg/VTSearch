@@ -81,7 +81,11 @@ def test_an_example_the_dataset_lacks_does_not_keep_the_sorts_out(client):
     """
     res = client.post(
         "/api/detectors/registry",
-        json={"name": "foreign-example-5358", "media_type": "audio", "examples": [{"type": "media", "value": "gone.wav"}]},
+        json={
+            "name": "foreign-example-5358",
+            "media_type": "audio",
+            "examples": [{"type": "media", "value": "gone.wav"}],
+        },
     )
     assert res.status_code == 201
     load_detector_and_wait(client, res.get_json()["detector"]["id"])
