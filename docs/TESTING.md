@@ -73,6 +73,8 @@ Both let a later run skip work an earlier run on the *same inputs* already did, 
 
 **The `docs` and frontend-only narrowings do not wait to be asked:** a bare `./run-tests.sh` on a markdown-only branch narrows itself to the markdown surface, and on a branch that changes nothing outside `frontend/` to the frontend surface; each prints a banner listing the changed files and every lane it skipped, and `VTSEARCH_FULL_GATES=1` turns both off (see the `docs` note under Test Groups).
 
+**Choosing a shape for a new docs gate.** Docs drift because nothing ties a code change to the prose that describes it, and the most repeated drift is a hand-maintained inventory of registry contents (embedders, plugin families, demo datasets, settings keys) disagreeing with the code. Prefer an invariant (`scripts/check-docs.py`, `scripts/screenshots/wiring-check.py`) over generation (`scripts/gen-docs-inventories.py`, the OpenAPI snapshot) over digest pinning (`scripts/check-eval-app-sync.py`): a noisy pin gets `--update`d blindly, so reach for the cheapest shape that catches the class.
+
 ## Test Groups
 
 Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` / `downloads` / `meta` / `gpu` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.

@@ -23,7 +23,6 @@ and the "Scoring across source types" note in `docs/CLI.md`.
 
 <!-- item-sep -->
 
-- [ ] #5282 — `--override-clipper` CLI flag
 
 <!-- item-sep -->
 
@@ -48,5 +47,6 @@ stage) after routing to the target type and before scoring.
 ### CLI surface
 
 For the common case nothing changes — the pipeline auto-converts per the
-detector's `media_type` and re-clips per its `input_spec`. The two knobs on top
-of that, mean aggregation and a clipper override, are #5281 and #5282.
+detector's `media_type` and re-clips per its `input_spec`. On top of that, the
+CLI's `--override-clipper` re-clips at a different granularity, and mean
+aggregation is #5281.

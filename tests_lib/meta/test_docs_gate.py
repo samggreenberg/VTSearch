@@ -330,7 +330,7 @@ class TestPlanRefCheck:
         assert [f.check for f in failures] == ["PLAN"]
 
     def test_live_plan_citation_is_quiet(self):
-        text = "See docs/plans/documentation-accuracy.md for the audit.\n"
+        text = "See docs/plans/codebase-audit-2026-08.md for the audit.\n"
         assert gate.check_plan_refs_in(REPO_ROOT / "vtscore" / "__synthetic__.py", text, FILES) == []
 
     def test_non_markdown_sources_are_scanned(self):

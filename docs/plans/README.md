@@ -55,4 +55,3 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 ## Cross-cutting audits
 
 - [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md)
-- [`documentation-accuracy.md`](documentation-accuracy.md)
