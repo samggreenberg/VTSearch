@@ -379,6 +379,19 @@ class TestTheBalanceCountsTheCentroidsLine:
         kept = sum(1 for s in self._unvoted_scores(ctx, snap) if s >= threshold)
         assert detector_balance_state(ctx, 1.0)["count"] == kept
 
+    @pytest.mark.parametrize(
+        ("media_type", "rule"), [("image", "count_gap_floor_skip25_b1"), ("face", "count_gap_floor_skip25_b1_z5.5")]
+    )
+    def test_the_line_is_drawn_by_the_detectors_media_type(self, labels, media_type, rule):
+        """#5325: a face detector's centroid line is drawn, and redrawn, by the face crops' rule."""
+        snap, _make = labels
+        rows = scoring_rows_for_snap(snap, EMBEDDER)
+        ctx = DetectorContext("", name="quota", media_type=media_type)
+        lt.install_centroid_head(
+            ctx, [snap[1]["embeddings"][EMBEDDER]], lambda h: score_rows_with_model(h, rows)[0], None, beta=1.0
+        )
+        assert ctx.centroid_line.rule == rule
+
     def test_without_ids_no_ranking_is_kept(self, labels):
         """A caller that names no ids keeps the old contract: no ranking, and a Find pass builds one."""
         snap, _make = labels

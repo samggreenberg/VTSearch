@@ -73,11 +73,14 @@ def score_cell(pool: dict, cat: str, seed: int, k: int) -> dict | None:
     scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
     labels = np.asarray([1 if media_is_positive(pool[i], cat) else 0 for i in ids])
     all_scores = scores.tolist()
-    # The display line over the unvoted media, as the app draws it (#4779), by the run's centroid rule; the
-    # midpoint over every media is the pre-#4732 line.
+    # The display line over the unvoted media, as the app draws it (#4779), by the run's centroid rule (the
+    # app's for these medias when unset, #5325); the midpoint over every media is the pre-#4732 line.
+    from vtscore.eval.voting_iterations import production_centroid_line
+
+    rule = cfg.CENTROID_LINE or production_centroid_line(pool)
     voted = set(examples)
     unvoted = scores[np.asarray([i not in voted for i in ids])]
-    line_cut = {b: float(centroid_cut(unvoted, rule=cfg.CENTROID_LINE, beta=b)) for b in BETAS}
+    line_cut = {b: float(centroid_cut(unvoted, rule=rule, beta=b)) for b in BETAS}
     mid_cut = float(centroid_cut(all_scores, rule="midpoint"))
     tset = set(test_ids)
     mask = np.asarray([i in tset for i in ids])

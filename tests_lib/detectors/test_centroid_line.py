@@ -520,3 +520,26 @@ class TestTheHigherBars:
                         bar = int((cos >= centroid_cut(cos, rule=f"count_gap_floor_skip25_b1_z{z}", beta=beta)).sum())
                         assert bar <= app
                         assert bar >= _top_gap_count(cos, drop="skip25" if beta >= 1.0 else "widest")
+
+
+class TestTheFaceRule:
+    """#5325: face crops draw the centroid's line at the z5.5 bar; every other media type keeps the app's rule."""
+
+    def test_each_media_type_gets_its_rule(self):
+        from vtscore.detectors.centroid_head import centroid_line_rule
+
+        assert centroid_line_rule("face") == "count_gap_floor_skip25_b1_z5.5"
+        assert centroid_line_rule("face") in CENTROID_LINE_RULES
+        for other in ("image", "video", "", None):
+            assert centroid_line_rule(other) == CENTROID_LINE_RULE
+
+    def test_the_harness_default_is_the_apps_rule_for_its_medias(self):
+        import inspect
+
+        from vtscore.eval.voting_iterations import production_centroid_line, simulate_voting_iterations
+
+        assert inspect.signature(simulate_voting_iterations).parameters["centroid_line"].default is None
+        assert production_centroid_line({1: {"media_type": "face"}}) == "count_gap_floor_skip25_b1_z5.5"
+        assert production_centroid_line({1: {"media_type": "image"}}) == CENTROID_LINE_RULE
+        assert production_centroid_line({1: {}}) == CENTROID_LINE_RULE
+        assert production_centroid_line({}) == CENTROID_LINE_RULE

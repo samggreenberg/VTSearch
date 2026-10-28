@@ -59,11 +59,15 @@ class SortLine:
     so :meth:`threshold_at` draws the sort's own number at the sort's own
     balance, bit for bit, while the cache holds 8 bytes a media rather than a
     list's 32.  *tiled* is whether a structural sort's dataset is tiled.
+    *centroid_rule* is the centroid's line rule (``None``, the app's
+    :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`), its media
+    type's (:func:`~vtscore.detectors.centroid_head.centroid_line_rule`, #5325).
     """
 
     rule: Literal["text", "centroid", "structural"]
     scores: np.ndarray | None = None
     tiled: bool = False
+    centroid_rule: str | None = None
 
     def threshold_at(self, beta: float | None) -> float:
         """The display line at *beta*, rounded to 4 decimals as the sort rounds it."""
@@ -79,7 +83,7 @@ class SortLine:
             return round(text_sort_cuts(self.scores.tolist(), beta=beta).threshold, 4)
         from vtscore.detectors.centroid_head import centroid_cut
 
-        return round(centroid_cut(self.scores, beta=beta), 4)
+        return round(centroid_cut(self.scores, rule=self.centroid_rule, beta=beta), 4)
 
 
 def _cosine_sort_scored(query_vec, *, role: str, snap) -> tuple[list[dict], list[float]]:
@@ -208,7 +212,7 @@ def cosine_sort_cuts(
         return text_sort_active(query_vec, snap=snap, beta=beta)
     import numpy as np
 
-    from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
+    from vtscore.detectors.centroid_head import centroid_line_rule
     from vtscore.training.thresholds import TextSortCuts, calculate_gmm_threshold
 
     if snap is None:
@@ -223,8 +227,11 @@ def cosine_sort_cuts(
     counted = sims < EXAMPLE_SELF_COSINE
     if leave and len(sims) == len(snap):
         counted &= np.fromiter((cid not in leave for cid in snap), dtype=bool, count=len(sims))
-    line = SortLine("centroid", sims[counted])
-    return results, TextSortCuts(line.threshold_at(beta), round(acq, 4), CENTROID_LINE_RULE, line)
+    # The line's rule is the media type's (#5325), read off the first media as the app's check reads its detector's.
+    first = next(iter(snap.values()), None) if snap else None
+    rule = centroid_line_rule(first.get("media_type") if isinstance(first, dict) else None)
+    line = SortLine("centroid", sims[counted], centroid_rule=rule)
+    return results, TextSortCuts(line.threshold_at(beta), round(acq, 4), rule, line)
 
 
 def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[list[dict], float]:
