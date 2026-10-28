@@ -59,6 +59,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labeling-session analyzer replays the label history on top of the restored labels** (issue #5358).
+  `DetectorContext.label_history_base` holds the good and bad ids in force before `label_history[0]`;
+  `restore_labels_from_detector` records it, and a `_ProgressCache`'s running label sets start from it, so a
+  model `inject_live_model` keyed by the full votes is found again. The new `drop_progress_cache(dataset_id,
+  detector_id)` drops one pair's cache, which `ensure_votes_match_active_dataset` now does when it restarts that
+  pair's history. `learned_sort.model_matches_local_votes` no longer refuses a model trained with labels the
+  dataset does not hold; its `has_cross_dataset` argument is accepted and ignored.
+
 - **The face embedder is the `imagekit` provider seam's, under the name `face`** (issue #5320).
   `vtscore.media.face.embedder_imagekit.ImagekitFaceEmbedder` is now the face type's only embedder and its
   default, registered as `face` (display name "Face identity (512d)"); `imagekit_bridge.EMBEDDER_NAME` is

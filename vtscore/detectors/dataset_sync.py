@@ -144,6 +144,7 @@ def ensure_votes_match_active_dataset() -> None:
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtscore.detectors.label_restoration import restore_labels_from_detector
+    from vtscore.detectors.labeling_progress import drop_progress_cache
 
     entry = get_detector(det_ctx.detector_id)
     if not entry or not entry.get("name"):
@@ -207,6 +208,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.good_votes.clear()
             det_ctx.bad_votes.clear()
             det_ctx.label_history.clear()
+            det_ctx.label_history_base = (frozenset(), frozenset())
             det_ctx.vote_click_times.clear()
             det_ctx.click_counter = 0
             det_ctx.last_learned_scores.clear()
@@ -225,6 +227,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.cached_labelset_media_type = ""
             if ds_ctx.coverage_atlas is not None:
                 ds_ctx.coverage_atlas.reset_labeled()
+        drop_progress_cache(ds_ctx.dataset_id, det_ctx.detector_id)
         return
 
     from vtscore.datasets.labelset import LabelSet
@@ -282,6 +285,10 @@ def ensure_votes_match_active_dataset() -> None:
         # update; this is where the equivalent bulk update lands.
         resync_coverage_atlas_to_detector(ds_ctx, det_ctx)
         clock.mark("resync_atlas")
+    # The label history starts over, so the Smart / Stable steps replayed from
+    # the old one describe nothing (#5358).  Dropped once ``_state_lock`` is
+    # released: ``_progress_lock`` is only ever taken outside it (audit M1).
+    drop_progress_cache(ds_ctx.dataset_id, det_ctx.detector_id)
     n_labels = len(det_ctx.cached_labelset.elements)
     ms = clock.finish(labels=n_labels)
     logging.getLogger(__name__).info(

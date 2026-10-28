@@ -134,6 +134,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Smart and Stable count every sort of a detector that started with labels, so Autopilot gets past Refine
+  Boundary** (issue #5358). Smart and Stable only counted a sort whose labels matched the session's history, and
+  the labels a detector brings back (continuing it after a restart, or after a switch to another dataset and back)
+  never enter that history, so none of its sorts counted: both stayed on "No history yet", and Refine Boundary ran
+  until the line reached Done's level or the votes reached 200. A detector holding a label this dataset does not
+  contain, as a Face detector's example can be, was left out the same way. Each sort now counts.
+
 - **Toasty's "Your detector is trained!" no longer follows you out of the Train view** (issue #5354). The hint
   Autopilot raises when it finishes training stayed up until the next vote, so after going to the Dashboard,
   running Find on another dataset and clicking **Browse**, Toasty told the map to "Click **Dashboard** to put it to

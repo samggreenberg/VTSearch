@@ -106,7 +106,12 @@ class _ProgressCache:
     Each entry in ``steps`` corresponds to one index in ``label_history`` and
     stores the model, threshold, label sets, and stability result for that step.
     ``good_ids`` / ``bad_ids`` track the running label sets so the next step
-    only needs to apply a single delta.
+    only needs to apply a single delta.  They start from ``base``, the
+    detector's ``label_history_base``: the labels restored from its labelset,
+    which the history never records but every learned sort trains on.  Without
+    them the running sets never equal the votes a sort was keyed by, so no step
+    ever finds its model, and a detector that started with labels had no Smart
+    or Stable at all (#5358).
 
     Every input a cache is built from is resolved *per request* from the
     ``X-Dataset-Id`` / ``X-Detector-Id`` headers (``label_history``,
@@ -122,6 +127,8 @@ class _ProgressCache:
 
     key: tuple[str, str]
 
+    #: ``(good ids, bad ids)`` in force before the first history event.
+    base: tuple[frozenset[int], frozenset[int]] = (frozenset(), frozenset())
     steps: list[dict[str, Any]] = field(default_factory=list)
     good_ids: set[int] = field(default_factory=set)
     bad_ids: set[int] = field(default_factory=set)
@@ -166,6 +173,11 @@ class _ProgressCache:
     #: nothing has changed.  The key covers everything the status reads, so a
     #: hit is exactly the answer a recompute would produce.
     smart_memo: Optional[tuple[Any, dict[str, Any]]] = None
+
+    def reset_to_base(self) -> None:
+        """Set the running label sets to the base: their state before any step is replayed."""
+        self.good_ids = set(self.base[0])
+        self.bad_ids = set(self.base[1])
 
 
 # Caches keyed by ``(dataset_id, detector_id)``, most-recently-used last.
@@ -225,6 +237,23 @@ def _active_cache_key() -> tuple[str, str]:
         return ("", "")
 
 
+def _active_history_base() -> tuple[frozenset[int], frozenset[int]]:
+    """The active detector's ``label_history_base``, or an empty base when none resolves.
+
+    Read without ``_state_lock``, as :func:`_active_cache_key` reads: the field
+    is a tuple of frozensets that is only ever replaced whole, so the read sees
+    one base or the next, never half of one.  A base replaced after this read
+    comes with a fresh history, and the rehydrate that replaces it drops this
+    pair's cache (:func:`drop_progress_cache`), so a cache never outlives it.
+    """
+    try:
+        from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
+
+        return get_active_detector_context().label_history_base
+    except Exception:
+        return (frozenset(), frozenset())
+
+
 def _active_cache() -> _ProgressCache:
     """Return the cache for the active ``(dataset, detector)`` pair.
 
@@ -242,7 +271,8 @@ def _active_cache() -> _ProgressCache:
     key = _active_cache_key()
     cache = _caches.get(key)
     if cache is None:
-        cache = _ProgressCache(key=key)
+        cache = _ProgressCache(key=key, base=_active_history_base())
+        cache.reset_to_base()
         _caches[key] = cache
     _caches.move_to_end(key)
     while len(_caches) > _MAX_CACHED_PAIRS:
@@ -267,6 +297,22 @@ def clear_progress_cache() -> None:
     """
     with _progress_lock:
         _caches.clear()
+
+
+def drop_progress_cache(dataset_id: str, detector_id: str) -> None:
+    """Drop the one ``(dataset_id, detector_id)`` pair's progress data, if cached.
+
+    For a detector whose votes were re-derived on that dataset: its label
+    history and ``label_history_base`` start over, so steps replayed from the
+    old history describe nothing, and a cache that still covered as many events
+    as the new history holds would read as fresh (#5358).  Every other pair's
+    cache is still good, so unlike :func:`clear_progress_cache` this keeps them.
+
+    Must be called without ``_state_lock`` held (see the lock-ordering note in
+    the module docstring).
+    """
+    with _progress_lock:
+        _caches.pop((dataset_id, detector_id), None)
 
 
 def invalidate_progress_cache_from(media_id: int) -> None:
@@ -319,17 +365,17 @@ def invalidate_progress_cache_from(media_id: int) -> None:
         del cache.steps[truncate_at:]
 
         # Restore the running ID sets to the surviving prefix's final state.
-        cache.good_ids.clear()
-        cache.bad_ids.clear()
         if cache.steps:
             last = cache.steps[-1]
-            cache.good_ids.update(last["good_ids"])
-            cache.bad_ids.update(last["bad_ids"])
+            cache.good_ids = set(last["good_ids"])
+            cache.bad_ids = set(last["bad_ids"])
         else:
-            # truncate_at == 0: media was present from the very first step, so
-            # the whole prefix is gone and no label survives.  No cached step
-            # remains to source the Smart / Stable indicators from, so drop the
-            # stale snapshot (parity with the old step-0 full-clear path).
+            # truncate_at == 0: media was present from the very first step - in
+            # the base, or the first event - so the whole prefix is gone and the
+            # replay starts again from the base.  No cached step remains to
+            # source the Smart / Stable indicators from, so drop the stale
+            # snapshot (parity with the old step-0 full-clear path).
+            cache.reset_to_base()
             cache.status_snapshot = None
 
         # Reset the stability prediction chain - it will restart from the
@@ -753,11 +799,12 @@ def _ensure_cache(
     if cache.coverage_atlas is None:
         cache.coverage_atlas = _build_coverage_atlas(clips_dict)
         # A freshly built (or cloned) atlas starts with an empty label overlay.
-        # Defensively seed it with any labels already accumulated in the
-        # running ID sets so coverage_level() is correct before the history
-        # replay below runs; normally these sets are empty at first build
-        # (invalidate rewinds and replays its atlas in place rather than
-        # nulling it, so this branch no longer runs mid-history).
+        # Seed it with the labels already in the running ID sets so
+        # coverage_level() is correct before the history replay below runs: at
+        # first build that is the base, the restored labels the Span light's
+        # atlas carries too (``resync_coverage_atlas_to_detector``).  Invalidate
+        # rewinds and replays its atlas in place rather than nulling it, so this
+        # branch no longer runs mid-history.
         if cache.coverage_atlas is not None:
             for mid in cache.good_ids | cache.bad_ids:
                 if mid in cache.coverage_atlas.vector_to_leaf:
