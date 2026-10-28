@@ -464,6 +464,12 @@ class UserSettings(BaseModel):
     # is kept rather than rejected. Settings' Show All clears both.
     hide_all_hints: bool = False
     hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
+    # The features the user has tried at least once (#5360), by the ids the
+    # frontend owns (``FEATURE_IDS`` in ``hints.service.ts``). A hint that
+    # teaches a feature stays up until the feature's first use, and the next
+    # hint takes over, as on the Browse map. Settings' Show All clears this
+    # with the two above, so those hints teach again.
+    used_features: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
     # Whether Train and Tune open with each side panel folded to a thin
     # strip (#4673). The left folds only on the Autopilot tab, where the

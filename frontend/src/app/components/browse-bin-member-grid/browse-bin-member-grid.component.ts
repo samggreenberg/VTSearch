@@ -81,6 +81,9 @@ export class BrowseBinMemberGridComponent implements OnDestroy {
   readonly mediaType = input('');
   /** Docked presentation: fixed-width cell tracks and an empty-state hint. */
   readonly docked = input(false);
+  /** Hides the docked empty state's "Right-click a bin" line while Toasty
+   *  says the same over the map (#5360). */
+  readonly emptyHintHidden = input(false);
   /** The viewed item — shown in the shell's detail pane and ringed here. */
   readonly focusedId = input<number | null>(null);
 

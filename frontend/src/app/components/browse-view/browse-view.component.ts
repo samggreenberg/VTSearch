@@ -43,6 +43,9 @@ import { ToastService } from '../../services/toast.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SourcePhotoService } from '../../services/source-photo.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
+import { HintsService, type FeatureId } from '../../services/hints.service';
+import { datasetMediaWords } from '../../utils/media-words';
 import {
   BROWSE_COLORMAP_IDS,
   DEFAULT_THUMBNAIL_BORDER,
@@ -76,6 +79,7 @@ type BrowseIconSize = (typeof BrowseViewComponent.ICON_SIZES)[number];
     BrowseBinPopupComponent,
     NoFocusStealDirective,
     SourcePhotoModalComponent,
+    ToastyHintComponent,
   ],
   // Scoped per browse view so the canvas, its minimap, and the selection panel
   // share one viewport channel and one selection set without leaking across
@@ -102,6 +106,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private dialog = inject(VtDialogService);
   private toast = inject(ToastService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private hints = inject(HintsService);
   private ngZone = inject(NgZone);
   /** Show in photo (#4750), opened from the bin details or the selection panel
    *  on a face dataset; the overlay renders here, over the map. */
@@ -360,6 +365,30 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.resultsRunId ? 'Find Results' : 'Tune';
   }
 
+  /**
+   * Toasty's hint on the map (#5360): the first rung of this ladder whose
+   * feature the user has never used, on any visit, skipping a rung they hid.
+   * Each rung's first use retires it for good and the next takes over. None
+   * while the map is loading, building or still under its cover. The
+   * thumbnail rung is only for media whose tiles show thumbnails, and the
+   * verify rung only for a Tune map, the one whose selection can be verified.
+   */
+  readonly browseHint = computed<FeatureId | null>(() => {
+    if (this.status() !== 'ready' || !this.revealed()) return null;
+    const rungs: [FeatureId, boolean][] = [
+      ['browse-pan-zoom', true],
+      ['browse-thumbnail-size', this.mediaTypeCaps.usesThumbnails(this.mediaType())],
+      ['browse-tile-details', true],
+      ['browse-select', true],
+      ['browse-verify', this.canVerify],
+    ];
+    const rung = rungs.find(([id, applies]) => applies && !this.hints.hasUsed(id) && this.hints.isShown(id));
+    return rung?.[0] ?? null;
+  });
+
+  /** What the map shows, in the pan-zoom hint's words ("images", …). */
+  readonly hintMedia = computed(() => datasetMediaWords(this.mediaType()));
+
   /** What to tell a user whose Tune subset handoff is gone (e.g. after a
    *  reload). A Find run's map is rebuilt from the run instead. */
   private readonly expiredMessage = 'This map has expired. Re-run Tune and click Browse to rebuild it.';
@@ -570,6 +599,17 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       }
       if (settings || settingsErrored) this.maybeStartInitialLoad();
     });
+    // Any first selection retires the select hint: a tile clicked or boxed on
+    // the canvas, select-all, or an item picked in the bin details.
+    effect(() => {
+      this.selection.version();
+      if (this.selection.size > 0) untracked(() => this.hints.markUsed('browse-select'));
+    });
+  }
+
+  /** The user moved the map (see {@link BrowseCanvasComponent.navigated}). */
+  onNavigated(): void {
+    this.hints.markUsed('browse-pan-zoom');
   }
 
   /**
@@ -825,6 +865,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex() + delta),
     );
     if (next === this.hexScaleIndex()) return;
+    this.hints.markUsed('browse-thumbnail-size');
     this.hexScaleIndex.set(next);
     this.canvas()?.setThumbnailRadius(this.thumbnailRadius, true);
     this.iconSizePref.set(BrowseViewComponent.ICON_SIZES[next])?.subscribe();
@@ -1257,6 +1298,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.dismissContextMenu();
       return;
     }
+    this.hints.markUsed('browse-tile-details');
     this.contextMembers.set(event.members);
     this.contextRepId.set(event.repId);
     if (this.detailsDocked()) {
@@ -1458,7 +1500,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .voteBulk(ids, target, { flow: 'bulk' })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => this.dropFromBrowse(ids, target),
+        next: () => {
+          this.hints.markUsed('browse-verify');
+          this.dropFromBrowse(ids, target);
+        },
         error: () =>
           this.toast.error({ message: 'Failed to verify the selected items.' }),
       });

@@ -198,6 +198,14 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   /** A right-click on the canvas; the view opens the bin popup in response. */
   readonly contextMenu = output<BrowseContextMenuEvent>();
   /**
+   * The user moved the view: dragged it, zoomed (the wheel, a double-click,
+   * the +/- buttons), panned with the arrow keys, jumped with the minimap or
+   * zoomed to fit. Emitted once a drag starts moving and on every other such
+   * step, never for a fit the canvas makes on its own. The view's first Toasty
+   * hint ("Drag to pan…") retires on the first one (#5360).
+   */
+  readonly navigated = output<void>();
+  /**
    * The densest visible cell's item count, emitted whenever it changes. Density
    * shading is renormalized to this per frame (yellow = this many items, the
    * darkest red = 1), so the legend reads it to label the ramp with live
@@ -705,6 +713,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // snap-back / directional glide and hard-clamp straight to the bounds.
       this.cancelSettle();
       this.cancelPanAnim();
+      this.navigated.emit();
       this.transform.centerX = x;
       this.transform.centerY = y;
       // A minimap click/drag can target a content edge; keep the viewport inside
@@ -2155,6 +2164,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     ) {
       this.dragMoved = true;
       this.framedByUser = true;
+      this.navigated.emit();
       // The press turned into a pan: the map is about to slide out from under a
       // stationary cursor while hover stays frozen ({@link onCanvasMouseMove}
       // early-returns for the rest of the drag), so a hover held from before the
@@ -2417,6 +2427,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   zoomToFit(): void {
     this.cancelSettle();
     this.cancelPanAnim();
+    this.navigated.emit();
     this.fitToData();
     this.commitZoomChange();
     this.refreshHoverAfterZoom();
@@ -2443,6 +2454,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.animActive) this.endZoomAnim();
     this.cancelSettle();
     this.framedByUser = true;
+    this.navigated.emit();
     const z = this.effZoom;
     const stepX = (dirX * this.width * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
     const stepY = (dirY * this.height * BrowseCanvasComponent.KEY_PAN_FRACTION) / z;
@@ -2657,6 +2669,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     this.framedByUser = true;
+    this.navigated.emit();
     // A zoom takes over from any in-flight snap-back or directional glide;
     // continue from where the view visually is and reschedule the settle below.
     this.cancelSettle();

@@ -1891,6 +1891,13 @@ workflow](#autopilot-the-guided-workflow)). In the Tune view he explains the
 first pick, the verdict once the test is done, and the **Review** tab the
 first time you open it.
 
+On the [Browse](#browse-exploring-a-dataset-spatially) map he shows you round
+one feature at a time: how to move around, the thumbnail-size buttons,
+right-clicking a tile to see everything in it, clicking a tile to select it,
+and, on a map opened from Tune, **Verified Bad**. Each of these stays up until
+the first time you use what it shows, on any visit, and then the next one
+takes over, so once you know your way around the map he says nothing there.
+
 The dialogs on that path have hints too: **Add Dataset**, **New Detector**,
 **Use This Example?**, **Find Results** and **Export Results**. Toasty stands
 below the dialog box, or beside its top corner when the box fills the window.
@@ -1908,7 +1915,8 @@ away.
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
 **Settings → General → Toasty's hints** has **Hide All** and **Show All**,
-which brings back every hint, including ones you hid one at a time. Toasty
+which brings back every hint, including ones you hid one at a time and the
+Browse map's, even for features you have already tried. Toasty
 also turns up on the notifications at the top of the screen: happy on good
 news, surprised on a warning, sad on an error.
 

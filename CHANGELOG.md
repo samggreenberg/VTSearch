@@ -22,6 +22,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **Toasty shows you round the Browse map** (issue #5360). Every Browse map, however you opened it, now has a
+  hint, one at a time. It starts with how to move around (drag to pan, double-click to zoom), then the
+  thumbnail-size buttons, right-clicking a tile to see everything in it, clicking a tile to select its items, and,
+  on a map opened from Tune, **Verified Bad**. Each one stays up until the first time you use what it shows, on any
+  visit, and then the next takes over. A new per-user setting, `used_features`, remembers what you have tried.
+  Settings' **Show All** clears it along with the hints you hid, so the walk-through starts again.
+
 - **A label importer names the detector it creates** (issue #5342). On New Detector › Trained, the **Detector
   name** box now fills in as the importer's form is filled, with the name the importer suggests (numbered past
   any detector that already has it), until you type your own. The built-in importers suggest what a blank box

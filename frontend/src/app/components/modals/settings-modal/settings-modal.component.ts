@@ -246,10 +246,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   /** Toasty's hints (#4680): Hide All has nothing to do once "Hide all
-   *  hints" is on, and Show All has nothing to do while no hint is hidden. */
+   *  hints" is on, and Show All has nothing to do while no hint is hidden,
+   *  by hand or by a first use of the feature it teaches (#5360). */
   readonly allHintsHidden = computed(() => this.settings().hide_all_hints === true);
   readonly noHintsHidden = computed(
-    () => !this.settings().hide_all_hints && (this.settings().hidden_hints ?? []).length === 0,
+    () =>
+      !this.settings().hide_all_hints &&
+      (this.settings().hidden_hints ?? []).length === 0 &&
+      (this.settings().used_features ?? []).length === 0,
   );
 
   /** Hide All: the same switch as a hint's "Hide all hints" box. */
@@ -258,9 +262,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Show All: every hint back, including ones hidden one at a time. */
+  /** Show All: every hint back, including ones hidden one at a time and ones
+   *  a feature's first use retired. */
   onShowAllHints(): void {
-    this.settings.update((s) => ({ ...s, hide_all_hints: false, hidden_hints: [] }));
+    this.settings.update((s) => ({ ...s, hide_all_hints: false, hidden_hints: [], used_features: [] }));
     this.save();
   }
 

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
-import { Component, input, output, signal } from '@angular/core';
+import { Component, input, output, signal, type WritableSignal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 
 import { BrowseViewComponent } from './browse-view.component';
@@ -23,6 +23,8 @@ import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import { SourcePhotoService, type SourcePhotoRequest } from '../../services/source-photo.service';
 import { SourcePhotoModalComponent } from '../modals/source-photo-modal/source-photo-modal.component';
+import { ToastyHintComponent } from '../toasty-hint/toasty-hint.component';
+import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
@@ -59,6 +61,8 @@ describe('BrowseViewComponent (zoneless canary)', () => {
   /** The open Show in photo overlay, as `SourcePhotoService` holds it. */
   let sourcePhotoRequest: ReturnType<typeof signal<SourcePhotoRequest | null>>;
   let closeSourcePhoto: ReturnType<typeof vi.fn>;
+  /** The user's settings, as the stubbed `SettingsStateService` holds them. */
+  let settingsValue: WritableSignal<AppSettings | null>;
 
   beforeEach(async () => {
     metaSubject = new Subject<ProjectionMeta>();
@@ -114,10 +118,11 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     // the saved per-media display prefs before the first canvas fit. The stub
     // carries the real `perMediaType`, which the view's per-media prefs are
     // built on (see `makeSettingsStateStub`).
-    const { stub: settingsStub, settings: settingsValue } = makeSettingsStateStub({
+    const { stub: settingsStub, settings } = makeSettingsStateStub({
       error: signal(null) as unknown as SettingsStateService['error'],
       update: () => of({}) as ReturnType<SettingsStateService['update']>,
     });
+    settingsValue = settings;
     settingsValue.set({});
     const subsetStub: Partial<BrowseSubsetService> = {
       take: () => subsetHandoff,
@@ -666,6 +671,150 @@ describe('BrowseViewComponent (zoneless canary)', () => {
 
       expect(buildSubset).toHaveBeenCalledWith([1, 2]);
       expect(fixture.componentInstance.status()).toBe('building');
+    });
+  });
+
+  describe("Toasty's hint ladder (#5360)", () => {
+    const ready = {
+      projection_id: 'p1',
+      bounds: [0, 0, 1, 1],
+      base_radius: 1,
+      tile_span: 1,
+      point_count: 12,
+      levels: [0],
+      status: 'ready',
+    } as unknown as ProjectionMeta;
+
+    beforeEach(() => {
+      // A write lands in the settings, as the real service's does, so a
+      // recorded first use outlives its pending entry.
+      TestBed.inject(SettingsStateService).update = vi.fn((changes) => {
+        settingsValue.update((s) => ({ ...s, ...changes }) as AppSettings);
+        return of(settingsValue()!);
+      }) as unknown as SettingsStateService['update'];
+    });
+
+    /** Open the map and take its cover off, as the canvas's first paint does. */
+    async function openMap(): Promise<BrowseViewComponent> {
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      const component = fixture.componentInstance;
+      component.onCanvasFirstView();
+      await settleZoneless(fixture);
+      return component;
+    }
+
+    /** The hint on screen: its id and what it says. */
+    function shownHint(): { id: string; text: string } | null {
+      const hints = fixture.debugElement.queryAll(By.directive(ToastyHintComponent));
+      expect(hints.length).toBeLessThanOrEqual(1);
+      if (hints.length === 0) return null;
+      const hint = hints[0].componentInstance as ToastyHintComponent;
+      const text = hints[0].nativeElement.querySelector('.toasty-hint__text').textContent;
+      return { id: hint.hintId(), text: text.replace(/\s+/g, ' ').trim() };
+    }
+
+    it('walks through the map one feature at a time, each until its first use', async () => {
+      const component = await openMap();
+      expect(shownHint()).toEqual({
+        id: 'browse-pan-zoom',
+        text: 'This map shows your audio clips, with similar ones near each other. Drag to pan, or double-click to zoom in.',
+      });
+      expect(fixture.nativeElement.querySelector('.bin-popup-empty-hint')).not.toBeNull();
+
+      // The zoom buttons move the map, as a drag or the wheel does.
+      component.zoomIn();
+      await settleZoneless(fixture);
+      expect(shownHint()?.id).toBe('browse-thumbnail-size');
+
+      component.bumpHexSize(1);
+      await settleZoneless(fixture);
+      expect(shownHint()?.id).toBe('browse-tile-details');
+      // Toasty says what the empty details panel would.
+      expect(fixture.nativeElement.querySelector('.bin-popup-empty-hint')).toBeNull();
+
+      // Dismissed before it renders: the bin details' own fetches and scrolling
+      // are theirs to test, not this ladder's.
+      component.onCanvasContextMenu({ members: [3, 4], repId: 3, clientX: 0, clientY: 0, bounds: new DOMRect() });
+      component.dismissContextMenu();
+      await settleZoneless(fixture);
+      expect(shownHint()).toEqual({ id: 'browse-select', text: 'Nothing is selected yet. Click a tile to add its items here.' });
+      expect(fixture.nativeElement.querySelector('.bsp-empty')).toBeNull();
+
+      fixture.debugElement.injector.get(BrowseSelectionService).addAll([3]);
+      await settleZoneless(fixture);
+      // A whole dataset's map has no verify rung: the ladder is done.
+      expect(shownHint()).toBeNull();
+      expect(settingsValue()?.used_features).toEqual([
+        'browse-pan-zoom',
+        'browse-thumbnail-size',
+        'browse-tile-details',
+        'browse-select',
+      ]);
+    });
+
+    it('counts a wheel zoom on the canvas as moving the map', async () => {
+      await openMap();
+      fixture.nativeElement.querySelector('vt-browse-canvas canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
+      await settleZoneless(fixture);
+      expect(settingsValue()?.used_features).toEqual(['browse-pan-zoom']);
+    });
+
+    it('shows nothing while the map is still under its cover', async () => {
+      await settleZoneless(fixture);
+      metaSubject.next(ready);
+      await settleZoneless(fixture);
+      expect(fixture.componentInstance.status()).toBe('ready');
+      expect(shownHint()).toBeNull();
+    });
+
+    it('starts past the features used on an earlier visit', async () => {
+      settingsValue.set({ used_features: ['browse-pan-zoom'] });
+      await openMap();
+      expect(shownHint()?.id).toBe('browse-thumbnail-size');
+    });
+
+    it('skips a rung the user hid without using its feature', async () => {
+      settingsValue.set({ hidden_hints: ['browse-pan-zoom'] });
+      await openMap();
+      expect(shownHint()?.id).toBe('browse-thumbnail-size');
+    });
+
+    it('shows none while every hint is hidden, but still records a first use', async () => {
+      settingsValue.set({ hide_all_hints: true });
+      const component = await openMap();
+      expect(shownHint()).toBeNull();
+      component.onNavigated();
+      expect(settingsValue()?.used_features).toEqual(['browse-pan-zoom']);
+    });
+
+    it('skips the thumbnail rung on a map of text, whose tiles show none', async () => {
+      TestBed.inject(DatasetsRegistryApiService).getStatus = () =>
+        of({ display_name: 'Lines', media_type: 'text' }) as ReturnType<DatasetsRegistryApiService['getStatus']>;
+      settingsValue.set({ used_features: ['browse-pan-zoom'] });
+      await openMap();
+      expect(shownHint()?.id).toBe('browse-tile-details');
+    });
+
+    it('ends a Tune map with Verified Bad, which a verify retires', async () => {
+      query = { subset: '1' };
+      subsetHandoff = { datasetId: 'ds1', ids: [1, 2, 3] };
+      settingsValue.set({
+        used_features: ['browse-pan-zoom', 'browse-thumbnail-size', 'browse-tile-details', 'browse-select'],
+      });
+      const component = await openMap();
+      expect(shownHint()).toEqual({
+        id: 'browse-verify',
+        text: "These are your detector's matches. Select any that are wrong, then click Verified Bad.",
+      });
+      expect(fixture.nativeElement.querySelector('.bsp-empty')).toBeNull();
+
+      fixture.debugElement.injector.get(BrowseSelectionService).addAll([2]);
+      component.onVerify('bad');
+      await settleZoneless(fixture);
+      expect(shownHint()).toBeNull();
+      expect(settingsValue()?.used_features).toContain('browse-verify');
     });
   });
 

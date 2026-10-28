@@ -418,6 +418,22 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"hidden_hints": "add-dataset"})
         assert res.status_code == 422
 
+    def test_used_features_start_empty_and_clear_with_show_all(self, client):
+        """A feature's first use retires the hint that teaches it; Show All brings it back (#5360)."""
+        assert client.get("/api/settings").get_json()["used_features"] == []
+
+        res = client.put("/api/settings", json={"used_features": ["browse-pan-zoom"]})
+        assert res.status_code == 200
+        assert res.get_json()["used_features"] == ["browse-pan-zoom"]
+
+        res = client.put("/api/settings", json={"hide_all_hints": False, "hidden_hints": [], "used_features": []})
+        assert res.status_code == 200
+        assert client.get("/api/settings").get_json()["used_features"] == []
+
+    def test_used_features_must_be_a_list_of_strings(self, client):
+        res = client.put("/api/settings", json={"used_features": "browse-pan-zoom"})
+        assert res.status_code == 422
+
     def test_update_grid_icon_size_left_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_left": {"audio": "XS", "image": "XL"}})
         assert res.status_code == 200

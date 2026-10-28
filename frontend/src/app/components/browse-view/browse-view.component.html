@@ -57,6 +57,7 @@
             <vt-browse-bin-popup
               [docked]="true"
               [availableWidth]="detailsPanelWidth()"
+              [emptyHintHidden]="browseHint() === 'browse-tile-details'"
               [memberIds]="contextMembers()"
               [repId]="contextRepId()"
               [mediaType]="mediaType()"
@@ -78,7 +79,7 @@
           ></div>
         }
         <div class="browse-main">
-          <div class="browse-tools-left" vtNoFocusSteal>
+          <div class="browse-tools-left" #toolsLeft vtNoFocusSteal>
             @if (subset) {
               <button
                 type="button"
@@ -179,6 +180,7 @@
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
             (contextMenu)="onCanvasContextMenu($event)"
+            (navigated)="onNavigated()"
             (firstViewReady)="onCanvasFirstView()"
           />
           <vt-browse-hover-preview
@@ -234,7 +236,7 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v2"/><path d="M5 5h12l2.5 2.5L17 10H5z"/><path d="M12 10v11"/><path d="M9 21h6"/></svg>
               </button>
             </div>
-            <div class="browse-zoom">
+            <div class="browse-zoom" #zoomControls>
               <button
                 type="button"
                 class="browse-size-btn"
@@ -260,7 +262,7 @@
                 <vt-icon type="zoom-out" [size]="16"></vt-icon>
               </button>
             </div>
-            <div class="browse-size">
+            <div class="browse-size" #sizeControls>
               <button
                 type="button"
                 class="browse-size-btn"
@@ -290,9 +292,11 @@
 
         <aside class="browse-side" aria-label="Selection">
           <vt-browse-selection-panel
+            #selectionPanel
             class="browse-side-selection"
             [mediaType]="mediaType()"
             [canVerify]="canVerify"
+            [emptyNoteHidden]="browseHint() === 'browse-select' || browseHint() === 'browse-verify'"
             [volume]="volume()"
             [showInPhotoOffered]="sourcePhoto.offered()"
             (verifyGood)="onVerify('good')"
@@ -316,6 +320,40 @@
             />
           </div>
         </aside>
+
+        <!-- Toasty's hint (#5360): one rung of a ladder at a time (see
+             `browseHint`), each up until the first use of what it teaches.
+             They sit here, in the whole grid, so the ones at the selection
+             panel can reach over the map without being clipped. -->
+        @switch (browseHint()) {
+          @case ('browse-pan-zoom') {
+            <vt-toasty-hint hintId="browse-pan-zoom" [anchor]="zoomControls">
+              This map shows your {{ hintMedia() }}, with similar ones near each other. Drag to pan, or
+              double-click to zoom in.
+            </vt-toasty-hint>
+          }
+          @case ('browse-thumbnail-size') {
+            <vt-toasty-hint hintId="browse-thumbnail-size" [anchor]="sizeControls">
+              These buttons change how large the thumbnails appear. Try making them larger or smaller.
+            </vt-toasty-hint>
+          }
+          @case ('browse-tile-details') {
+            <vt-toasty-hint hintId="browse-tile-details" [anchor]="toolsLeft" reach="right">
+              Each tile holds the items that landed there. Right-click one to see them all.
+            </vt-toasty-hint>
+          }
+          @case ('browse-select') {
+            <vt-toasty-hint hintId="browse-select" [anchor]="selectionPanel.toolbar().nativeElement">
+              Nothing is selected yet. Click a tile to add its items here.
+            </vt-toasty-hint>
+          }
+          @case ('browse-verify') {
+            <vt-toasty-hint hintId="browse-verify" [anchor]="selectionPanel.toolbar().nativeElement">
+              These are your detector's matches. Select any that are wrong, then click
+              <strong>Verified Bad</strong>.
+            </vt-toasty-hint>
+          }
+        }
 
         <!-- Cover the mounted-but-loading canvas until it signals its opening
              view is fully painted (fit + top-view thumbnails), so the user is
