@@ -1108,6 +1108,34 @@ PY
 # tarballs for packages like numpy and scipy, so we pre-install them as
 # binary-only wheels before the full requirements pass, avoiding the need for a
 # C++ compiler.
+# --- onnxruntime-gpu for the face models (#5332) -----------------------------
+# The imagekit face path (image2face, provider oss) runs its SCRFD detector and
+# ArcFace embedder through onnxruntime, and pyproject.toml declares the CPU
+# build, so on a GPU install VTSEARCH_DEVICE=cuda could not reach them. This
+# step swaps it for onnxruntime-gpu, which still carries the CPU provider, so a
+# CPU-only process is unchanged. Both wheels install the same `onnxruntime`
+# module: the CPU one is uninstalled FIRST, because uninstalling it after would
+# delete files the GPU build shares. A later plain `pip install -e .[dev]`
+# reinstalls the CPU build over it; re-run this step after one.
+#   - 1.26.0 is the newest release that runs on a V100 (sm_70): 1.27 and later
+#     fail creating a CUDA session there (cuda_call.cc, at initialization).
+#   - The CUDA 12 / cuDNN 9 libraries come from torch's nvidia-* wheels, which
+#     torch loads before the face models start.
+# Override with VTS_ONNXRUNTIME_GPU_SPEC; skip with VTSEARCH_SKIP_ORT_GPU=1.
+vts_install_onnxruntime_gpu() {
+    if [ "${VTSEARCH_SKIP_ORT_GPU:-0}" = "1" ]; then
+        echo "  (skipped: VTSEARCH_SKIP_ORT_GPU=1; the face models run on the CPU)"
+        return 0
+    fi
+    local spec="${VTS_ONNXRUNTIME_GPU_SPEC:-onnxruntime-gpu==1.26.0}"
+    pip uninstall -y onnxruntime || true
+    if ! pip install "$spec" --progress-bar on; then
+        echo "warning: ${spec} failed to install; putting the CPU onnxruntime back." >&2
+        echo "         The face models will run on the CPU." >&2
+        pip install onnxruntime --progress-bar on
+    fi
+}
+
 vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
@@ -1125,7 +1153,7 @@ vts_install_gpu() {
         exit 2
     fi
 
-    vts_progress_init 9 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
+    vts_progress_init 10 "Installing VTSearch GPU dependencies (CUDA tag: ${cuda_tag})"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -1176,6 +1204,9 @@ vts_install_gpu() {
       --prefer-binary \
       -r "$(vts_requirements_file gpu)" \
       --progress-bar on
+
+    vts_progress_step "Swapping in onnxruntime-gpu for the face models"
+    vts_install_onnxruntime_gpu
 
     vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
     vts_install_cuml "$cuda_tag"
