@@ -341,7 +341,7 @@ class ResultsExporter(PluginBase):
                                "detector_name": "...",
                                "threshold": 0.5,
                                "balance": {...},      # may be absent or None
-                               "total_hits": 15,      # positives only
+                               "total_hits": 15,      # len(hits)
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
                              }
@@ -357,13 +357,22 @@ class ResultsExporter(PluginBase):
                      how an exporter correlates a hit back to the caller's own
                      system), and any clip bounds the media carries.
 
-                     **``negative_hits`` is conventionally ignored.** Every
-                     built-in exporter writes positives only, because "the
-                     items the detector found" is what an export is for.  The
-                     key is nonetheless always present (the CLI fills it only
-                     under ``--keep-negatives``), so an exporter that wants the
-                     below-threshold items can read it.  ``missing_detectors``
-                     is likewise informational.
+                     **Export ``hits``; ``negative_hits`` is informational.**
+                     ``hits`` is the set this export is for, and whoever built
+                     the payload has already chosen which side of the threshold
+                     goes into it (#5283): the Find Results dialog's Good /
+                     Bad / Both moves the side it lists into ``hits`` and
+                     empties ``negative_hits``, and a run with nobody to ask (a
+                     CLI ``--autodetect``, a background AutoFind) sends the
+                     above-threshold side.  When ``hits`` holds both sides,
+                     every hit carries ``"label"`` (``"good"`` / ``"bad"``), as
+                     a streamed run's records do (:meth:`export_cli_streaming`),
+                     and an exporter that writes a row per hit should keep it.
+                     Do not export ``negative_hits`` as well: that overrides
+                     the choice, so a CLI run (which fills it) would send items
+                     nobody asked for, while the dialog (which empties it)
+                     would send none.  ``missing_detectors`` is likewise
+                     informational.
 
                      **``balance``** says what the line at ``threshold``
                      keeps (:func:`vtscore.state.core.detector_balance_state`):

@@ -100,7 +100,7 @@ deliver an empty export.
             "detector_name": "...",
             "threshold": 0.5,
             "balance": {...},  # may be absent or None
-            "total_hits": 15,  # positives only
+            "total_hits": 15,  # len(hits)
             "hits": [
                 {"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "..."},  # + more keys
                 ...,
@@ -129,10 +129,17 @@ Each hit is built by `vtscore.utils.hits.build_media_hit`; the
 }
 ```
 
-Note that a scored run carries `negative_hits` alongside `hits`, and
-every built-in exporter ignores it: an export is conventionally the
-items the detector *found*. The key is there if you want the
-below-threshold items.
+**Export `hits`; treat `negative_hits` as informational.** `hits` is
+the set the export is for, and whoever built the payload has already
+chosen which side of the threshold goes into it: the Find Results
+dialog's Good / Bad / Both moves the side it lists into `hits` (and
+empties `negative_hits`), while a run with nobody to ask (CLI
+`--autodetect`, a background AutoFind) sends the above-threshold side.
+When `hits` holds both sides, every hit carries a `"label"` of
+`"good"` or `"bad"`, the same key a streamed run's records carry; if
+you write a row per hit, keep it. Do not export `negative_hits` too:
+that overrides the choice, sending below-threshold items from a CLI
+run that never asked for them.
 
 The standard idiom is one method per kind, sharing whatever delivery
 code they have in common:

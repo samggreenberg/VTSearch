@@ -307,7 +307,7 @@ class ServerCsvResultsExporter(ResultsExporter):
 
     def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:  # noqa: C901
         """Export autodetect results (detector hits)."""
-        # Scan all hits to determine which clip columns are present.
+        # Scan all hits to determine which optional columns are present.
         all_hits: list[tuple[str, Any, dict]] = []
         for det_result in results.get("results", {}).values():
             detector_name = det_result.get("detector_name", "unknown")
@@ -315,11 +315,16 @@ class ServerCsvResultsExporter(ResultsExporter):
             for hit in det_result.get("hits", []):
                 all_hits.append((detector_name, threshold, hit))
 
+        # A payload holding both sides of the threshold labels every hit
+        # (``export_find_results``); one side alone needs no column for it.
+        has_label = any(h.get("label") is not None for _, _, h in all_hits)
         has_clip_start = any(h.get("clip_start") is not None for _, _, h in all_hits)
         has_clip_end = any(h.get("clip_end") is not None for _, _, h in all_hits)
         has_clip_box = any(h.get("clip_box") is not None for _, _, h in all_hits)
 
         base_cols = ["detector", "threshold", "filename", "category", "score"]
+        if has_label:
+            base_cols.append("label")
         if has_clip_start:
             base_cols.append("clip_start")
         if has_clip_end:
@@ -347,6 +352,8 @@ class ServerCsvResultsExporter(ResultsExporter):
                     _sanitize_csv_cell(hit.get("category", "")),
                     hit.get("score", ""),
                 ]
+                if has_label:
+                    row.append(_sanitize_csv_cell(hit.get("label", "")))
                 if has_clip_start:
                     row.append(hit.get("clip_start", ""))
                 if has_clip_end:

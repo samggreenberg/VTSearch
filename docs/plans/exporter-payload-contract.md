@@ -30,8 +30,6 @@ Two constraints shaped it, and both still bind anything built on top:
 
 <!-- item-sep -->
 
-- [ ] #5283 — Decide what find-results `negative_hits` means to an exporter
-
 <!-- item-sep -->
 
 <!-- item-sep -->

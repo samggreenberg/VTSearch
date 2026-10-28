@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The find-results contract says an exporter exports `hits` and treats `negative_hits` as informational**
+  (issue #5283). `ResultsExporter.export_find_results` now says how the two sides of the threshold reach an
+  exporter. Whoever builds the payload picks the side: the Find Results dialog moves the side it lists into
+  `hits`, and a CLI or background AutoFind run sends the above-threshold side. When `hits` holds both sides,
+  each hit carries `label` (`"good"` / `"bad"`), like a streamed run's records. An exporter should not export
+  `negative_hits` too. The old text said the CLI fills `negative_hits` only under `--keep-negatives`, which
+  was wrong: a non-streamed run always fills it. `total_hits` is `len(hits)`. No signature changes; an
+  exporter that ignores `negative_hits` already follows the contract.
+- **`server_csv_file` writes a `label` column for a find-results payload whose hits carry one** (issue
+  #5283), after `score`, where the streamed CSV puts it. Before, a GUI **Both** export to CSV lost which rows
+  were good and which were bad. A payload with only one side has no labels, so its CSV is unchanged.
+
 - **The labeling-session analyzer replays the label history on top of the restored labels** (issue #5358).
   `DetectorContext.label_history_base` holds the good and bad ids in force before `label_history[0]`;
   `restore_labels_from_detector` records it, and a `_ProgressCache`'s running label sets start from it, so a
