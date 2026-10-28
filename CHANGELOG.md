@@ -31,6 +31,14 @@ what is on `dev` but not yet on `main`; each release dates that section
   `max_results:`. It cannot be combined with `--resume`. See
   [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
+### Fixed
+
+- **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
+  emailed the Good and Bad rows as one list with nothing to tell them apart, and so did a `--stream-results
+  --keep-negatives` run. Each row now carries its label: a `[good]` / `[bad]` tag in the plain text and a Label
+  column in the HTML table. An export of one side looks as it did, except that a detector with nothing to send now
+  says "No hits." where it said "No positive hits found.", which was wrong for a **Bad** export.
+
 ## 2026-10-28
 
 ### Changed
