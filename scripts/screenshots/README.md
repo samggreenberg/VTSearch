@@ -171,7 +171,13 @@ stub randomness the UI exposes (never rely on unseeded draws).
   so a near miss stays visible. Without ImageMagick it compares bytes. The
   tolerance covers rasterisation, not typefaces, which `capture.ts` pins
   (above). Its defaults were measured between two Linux Chromiums, not yet
-  against a Mac's rasteriser.
+  against a Mac's rasteriser. What the app computes in floating point moves
+  with the CPU (the Browse map's layout, the training-domain percentages, which
+  picture a near tie serves), so a shot names those regions in its manifest
+  `computed`; the render writes their boxes beside it and `check.sh` blanks
+  them in both images before comparing, and lists the shot as `masked`
+  (#5378). `SHOT_MASK=0` compares them too, which only the container that made
+  the baselines can pass.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the user-facing
   docs (the guide, its how-to pages, README.md and demos.md) has a matching
