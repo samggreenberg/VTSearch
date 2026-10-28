@@ -95,15 +95,20 @@ def resolve_labelset_local_state(labelset, snap):
 
 
 def model_matches_local_votes(labelset, has_cross_dataset, local_good, local_bad, good, bad) -> bool:
-    """Decide whether the trained model maps cleanly onto current-dataset votes.
+    """Decide whether the trained model belongs under the current-dataset votes' key.
 
-    The progress cache is keyed on local cids, so we only inject when the
-    training set is fully representable there; otherwise we'd return a
-    cross-dataset model on a local-only replay.
+    The progress cache keys a model by the votes it was trained on, so it is
+    injected when the labelset's labels on this dataset are those votes.
+    Labels the dataset does not hold (*has_cross_dataset*: a detector carried
+    over from another dataset, or an example that never resolved here) no
+    longer keep it out (#5358): they are in every model the detector serves on
+    this dataset, and Smart and Stable measure the served detector (#3757).
+    Keeping it out left such a detector with no Smart or Stable at all, so
+    Autopilot never got past Refine Boundary.  The argument is still accepted.
     """
     if labelset is None:
         return True
-    return not has_cross_dataset and local_good == set(good) and local_bad == set(bad)
+    return local_good == set(good) and local_bad == set(bad)
 
 
 def update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, training_medias, snap, good, bad) -> None:

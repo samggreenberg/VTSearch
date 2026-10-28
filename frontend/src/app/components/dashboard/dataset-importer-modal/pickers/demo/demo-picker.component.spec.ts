@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { DemoPickerComponent } from './demo-picker.component';
 import { provideZoneless } from '../../../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../../../testing/test-providers';
+import { settleZoneless } from '../../../../../testing/settle-resource';
 
 describe('DemoPickerComponent', () => {
   let component: DemoPickerComponent;
@@ -57,8 +58,33 @@ describe('DemoPickerComponent', () => {
 
     component.selectDemo(mockDemos[0] as any);
     expect(component.selectedDemo()).toBe(mockDemos[0] as any);
-    expect(component.demoDatasetName).toBe('GTZAN');
+    expect(component.demoDatasetName()).toBe('GTZAN');
     expect(emitted).toBe(false);
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): the parent calls these
+  // from listeners on a sibling component, so nothing marks this view dirty
+  // but its own signal writes (#5300).
+  it('paints the picked row\'s name, and a tab switch clearing it, without a forced render', async () => {
+    openAndFlush();
+    await settleZoneless(fixture);
+    const name = () => fixture.nativeElement.querySelector('#demo-dataset-name') as HTMLInputElement;
+
+    component.selectDemo(mockDemos[0] as any);
+    await settleZoneless(fixture);
+    expect(name().value).toBe('GTZAN');
+
+    // Asserted before the tab's option lists answer, whose signal writes
+    // would repaint the view on their own.
+    component.selectDemoTabWithEmbedder('audio');
+    await settleZoneless(fixture);
+    expect(name().value).toBe('');
+
+    httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'audio').flush({ embedders: [{ name: 'clap' }] });
+    httpMock.expectOne(req => req.url === '/api/clippers' && req.params.get('media_type') === 'audio').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners' && req.params.get('media_type') === 'audio').flush({ cleaners: [] });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'audio').flush({ converters: [] });
   });
 
   it('submit() emits demoDatasetSelected with the composed payload', () => {

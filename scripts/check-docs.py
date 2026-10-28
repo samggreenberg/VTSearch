@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Documentation drift gate — links, anchors, code-path references, path leaks.
 
-Seven invariants over the docs. All of them are *pure*: they compare the docs
+Nine invariants over the docs. All of them are *pure*: they compare the docs
 against the repo as it exists right now, so there is nothing to re-pin and no
 maintenance beyond the allowlists at the top of this file.
 
@@ -23,7 +23,15 @@ maintenance beyond the allowlists at the top of this file.
   7. STUDY   every ``docs/experiments/`` study directory is named
              ``YYYY-MM-DD-<slug>``, so ``ls`` alone sorts the archive
              chronologically. There is deliberately no index file to keep in
-             step (#4138).
+             step (#4138);
+  8. GATES   the stage tables in ``docs/TESTING.md`` list exactly the gates
+             ``run-tests.sh`` runs, each in the stage and lane the script puts
+             it in. The table is a hand-written restatement of the script, and
+             nothing else ties the two together;
+  9. LINENO  no doc cites code by line number, in either spelling: a file name
+             with a ``:NNN`` suffix, or a parenthesised ``(line NNN)``. A line
+             number is wrong by the next edit to the file it points into, so
+             cite the module and the symbol instead (#5290).
 
 Dependency-free, imports nothing from the app, and reads each file once, so it
 costs well under a second and can sit early in ``run-tests.sh``.
@@ -128,6 +136,16 @@ PLAN_SELF_REFERENCE = frozenset(
     }
 )
 
+# Documents allowed to cite code by line number (only LINENO; every other check
+# still applies). Matching is on the document's repo-relative path; a trailing
+# `/` exempts the whole subtree.
+ALLOWED_LINE_ANCHORS: dict[str, str] = {
+    "docs/experiments/": (
+        "a study record describes the code as it was at the commit it ran on, so its "
+        "line numbers are pinned to that commit, not to the moving tree"
+    ),
+}
+
 # Absolute-path leaks that are legitimate: experiment reports record the cluster
 # directory a run actually lived in, which is provenance, not a leaked checkout.
 ALLOWED_LEAKS: dict[str, str] = {
@@ -185,6 +203,13 @@ PLAN_REF_RE = re.compile(r"docs/plans/[A-Za-z0-9_.-]+\.md")
 LEAK_RE = re.compile(r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+)/\S*")
 # A `:NNN` or `:NNN-MMM` (or comma-separated) line-number suffix on a path.
 LINE_SUFFIX_RE = re.compile(r":\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
+# A line-number anchor, in either spelling. The first is a repo file name with a
+# `:NNN` suffix; the second a parenthesised `(line NNN)`, `(lines NNN-MMM)` or
+# `(~line NNN)`, which the old vtscore-only check let through.
+LINE_ANCHOR_RES = (
+    re.compile(r"[\w./-]*\.(?:" + "|".join(re.escape(s[1:]) for s in PATH_SUFFIXES) + r"):\d+"),
+    re.compile(r"\(\s*~?\s*lines?\s+\d+", re.IGNORECASE),
+)
 # Markdown emphasis/links inside heading text, stripped before slugging.
 HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
@@ -194,6 +219,26 @@ HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 # without one.
 EXPERIMENTS_DIR = "docs/experiments"
 STUDY_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+# The gate chain, stated twice: once as code in `run-tests.sh`, once as the
+# stage tables under `### The stages` in `docs/TESTING.md`. Every gate from
+# stage 2 on is started through `_start_lane <kind> "<name>" <function>`, so
+# those calls are the script's own list, and the name is what the run prints
+# for the gate. A table row's Gate cell carries that name; a stage-3 row's Lane
+# cell opens with the kind. Stage 1 runs outside the lanes, so its rows are
+# matched on the script they run.
+RUN_TESTS = "run-tests.sh"
+TESTING_DOC = "docs/TESTING.md"
+STAGES_HEADING = "The stages"
+LANE_STAGE = {"gate": 2, "gating": 3, "free": 3}
+START_LANE_RE = re.compile(r'^\s*_start_lane\s+(?P<kind>\S+)\s+"(?P<name>[^"]*)"')
+# A shell expansion inside a lane name (`pyright ($_pyright_threads thread(s))`)
+# is written `N` in the table, as the table's commands already do.
+SHELL_EXPANSION_RE = re.compile(r"\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*")
+SCRIPT_STAGE_RE = re.compile(r"^#\s*Stage (\d+):")
+SCRIPT_PY_RE = re.compile(r"\bpython3?\s+(\S+\.py)\b")
+DOC_STAGE_RE = re.compile(r"^\*\*Stage (\d+)\b")
+TABLE_SEPARATOR_RE = re.compile(r"^:?-+:?$")
 
 
 class Failure:
@@ -348,10 +393,15 @@ def is_external(target: str) -> bool:
     return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target)) or target.startswith("//")
 
 
-def allowed_path(token: str) -> bool:
-    if token in ALLOWED_PATHS:
+def allowlisted(key: str, table: dict[str, str]) -> bool:
+    """True if `key` is in `table`, or falls under one of its `/`-ending prefixes."""
+    if key in table:
         return True
-    return any(prefix.endswith("/") and token.startswith(prefix) for prefix in ALLOWED_PATHS)
+    return any(prefix.endswith("/") and key.startswith(prefix) for prefix in table)
+
+
+def allowed_path(token: str) -> bool:
+    return allowlisted(token, ALLOWED_PATHS)
 
 
 def link_base(rel: str, doc: Path) -> Path:
@@ -467,6 +517,24 @@ def check_markdown(
                 )
             )
 
+    # (9) LINENO — a citation by line number. Fenced blocks are skipped like
+    # every prose check: quoted tool output (a pytest failure line, a
+    # traceback) carries line numbers of its own and is not a pointer to follow.
+    if not allowlisted(rel, ALLOWED_LINE_ANCHORS):
+        for lineno, line in prose:
+            for pattern in LINE_ANCHOR_RES:
+                anchor = pattern.search(line)
+                if anchor:
+                    failures.append(
+                        Failure(
+                            "LINENO",
+                            doc,
+                            lineno,
+                            f"line-number anchor '{anchor.group(0)}'; cite the module and symbol instead, "
+                            "since a line number rots on the next edit",
+                        )
+                    )
+
     return failures
 
 
@@ -550,6 +618,212 @@ def check_study_dirs(dirs: frozenset[str]) -> list[Failure]:
     return failures
 
 
+def gate_key(name: str) -> str:
+    """How a gate's name is compared: shell expansions read as `N`, case and spacing ignored."""
+    return " ".join(SHELL_EXPANSION_RE.sub("N", name).replace("`", "").lower().split())
+
+
+def script_lanes(script_text: str) -> dict[str, tuple[str, set[str], int]]:
+    """Every lane ``run-tests.sh`` starts, as key -> (name, kinds, first line).
+
+    A lane started from two places (Vitest starts either beside the build or
+    once the build is green) is one gate.
+    """
+    lanes: dict[str, tuple[str, set[str], int]] = {}
+    for lineno, line in enumerate(script_text.splitlines(), 1):
+        match = START_LANE_RE.match(line)
+        if not match:
+            continue
+        name = SHELL_EXPANSION_RE.sub("N", match.group("name"))
+        lanes.setdefault(gate_key(name), (name, set(), lineno))[1].add(match.group("kind"))
+    return lanes
+
+
+def script_stage1(script_text: str) -> dict[str, int] | None:
+    """The Python scripts ``run-tests.sh`` runs in its stage-1 block, as path -> line.
+
+    None when the script has no ``# Stage 1:`` block to read.
+    """
+    scripts: dict[str, int] = {}
+    stage: int | None = None
+    found = False
+    for lineno, line in enumerate(script_text.splitlines(), 1):
+        header = SCRIPT_STAGE_RE.match(line.strip())
+        if header:
+            stage = int(header.group(1))
+            found = found or stage == 1
+            continue
+        if stage != 1 or line.lstrip().startswith("#"):
+            continue
+        for path in SCRIPT_PY_RE.findall(line):
+            scripts.setdefault(path, lineno)
+    return scripts if found else None
+
+
+def table_cells(line: str) -> list[str]:
+    """A markdown table row's cells. GFM splits on every unescaped pipe, code spans included."""
+    cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", line.strip())]
+    if cells and not cells[0]:
+        cells = cells[1:]
+    if cells and not cells[-1]:
+        cells = cells[:-1]
+    return cells
+
+
+def doc_gate_rows(doc_text: str) -> list[tuple[int | None, int, dict[str, str]]] | None:
+    """Every row of the tables under ``### The stages``, as (stage, line, cells by column).
+
+    A table belongs to the ``**Stage N`` paragraph above it. None when the
+    section is missing.
+    """
+    prose, _code = split_fences(doc_text)
+    rows: list[tuple[int | None, int, dict[str, str]]] = []
+    in_section = found = False
+    stage: int | None = None
+    header: list[str] | None = None
+    for lineno, line in prose:
+        heading = ATX_HEADING_RE.match(line)
+        if heading:
+            if in_section and len(heading.group(2)) <= 3:
+                break
+            if heading.group("text") == STAGES_HEADING:
+                in_section = found = True
+            continue
+        if not in_section:
+            continue
+        marker = DOC_STAGE_RE.match(line)
+        if marker:
+            stage = int(marker.group(1))
+        if not line.lstrip().startswith("|"):
+            header = None
+            continue
+        cells = table_cells(line)
+        if header is None:
+            header = [cell.lower() for cell in cells]
+        elif not all(TABLE_SEPARATOR_RE.match(cell) for cell in cells):
+            rows.append((stage, lineno, dict(zip(header, cells))))
+    return rows if found else None
+
+
+def check_gate_tables(
+    script_text: str,
+    doc_text: str,
+    script_path: Path = ROOT / RUN_TESTS,
+    doc_path: Path = ROOT / TESTING_DOC,
+) -> list[Failure]:
+    """(8) GATES — the stage tables in docs/TESTING.md list the gates run-tests.sh runs.
+
+    Matched by name, which is what a reader holds: the run prints a gate's
+    name in its per-gate report and its ``TESTS BLOCKED`` / ``RUN FAILED``
+    lines, and the table is where they look it up.
+    """
+    lanes = script_lanes(script_text)
+    stage1 = script_stage1(script_text)
+    rows = doc_gate_rows(doc_text)
+    failures: list[Failure] = []
+    if not lanes:
+        failures.append(Failure("GATES", script_path, 0, "starts no `_start_lane` gate, so there is nothing to check"))
+    if stage1 is None:
+        failures.append(Failure("GATES", script_path, 0, "has no '# Stage 1:' block to read stage-1 gates from"))
+    if rows is None:
+        failures.append(Failure("GATES", doc_path, 0, f"has no '### {STAGES_HEADING}' section to read the gates from"))
+    if stage1 is None or rows is None or failures:
+        return failures
+
+    for name, kinds, lineno in lanes.values():
+        unknown = sorted(kinds - LANE_STAGE.keys())
+        if unknown:
+            failures.append(
+                Failure(
+                    "GATES",
+                    script_path,
+                    lineno,
+                    f"'{name}' is started as a '{unknown[0]}' lane, which check-docs.py does not place in a stage",
+                )
+            )
+
+    documented: dict[str, int] = {}
+    documented_stage1: set[str] = set()
+    for stage, lineno, cells in rows:
+        gate = cells.get("gate", "")
+        row = f"stage-{stage} row '{gate}'" if stage is not None else f"row '{gate}'"
+        if stage == 1:
+            command = INLINE_CODE_RE.search(cells.get("command it runs", ""))
+            script = command.group(1).split()[0] if command else ""
+            if script in stage1:
+                documented_stage1.add(script)
+            else:
+                failures.append(
+                    Failure(
+                        "GATES", doc_path, lineno, f"{row} runs `{script}`, which {RUN_TESTS} does not run in stage 1"
+                    )
+                )
+            continue
+        key = gate_key(gate)
+        if key in documented:
+            failures.append(Failure("GATES", doc_path, lineno, f"{row} repeats the row on line {documented[key]}"))
+            continue
+        documented[key] = lineno
+        if key not in lanes:
+            failures.append(
+                Failure(
+                    "GATES",
+                    doc_path,
+                    lineno,
+                    f"{row} names no gate {RUN_TESTS} starts; the Gate cell is the name the run prints for it",
+                )
+            )
+            continue
+        name, kinds, _first = lanes[key]
+        stages = sorted({LANE_STAGE[kind] for kind in kinds if kind in LANE_STAGE})
+        if stages and stage not in stages:
+            failures.append(
+                Failure("GATES", doc_path, lineno, f"{row} is in stage {stages[0]} in {RUN_TESTS}, not stage {stage}")
+            )
+            continue
+        if stage == 3:
+            word = re.match(r"[a-z]+", cells.get("lane", "").lower())
+            lane = word.group(0) if word else ""
+            if {lane} != kinds:
+                started = " and ".join(sorted(kinds))
+                failures.append(
+                    Failure(
+                        "GATES",
+                        doc_path,
+                        lineno,
+                        f"{row} gives its lane as '{lane}', but {RUN_TESTS} starts it as {started}",
+                    )
+                )
+
+    for key, (name, kinds, lineno) in lanes.items():
+        if key not in documented:
+            kind = " and ".join(sorted(kinds))
+            failures.append(
+                Failure(
+                    "GATES",
+                    script_path,
+                    lineno,
+                    f"gate '{name}' ({kind} lane) has no row in {TESTING_DOC}'s stage tables",
+                )
+            )
+    for script, lineno in stage1.items():
+        if script not in documented_stage1:
+            failures.append(
+                Failure("GATES", script_path, lineno, f"stage 1 runs `{script}`, which has no row in {TESTING_DOC}")
+            )
+    return failures
+
+
+def check_gate_tables_in_repo() -> list[Failure]:
+    script_path, doc_path = ROOT / RUN_TESTS, ROOT / TESTING_DOC
+    try:
+        script_text = script_path.read_text(encoding="utf-8")
+        doc_text = doc_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [Failure("GATES", ROOT, 0, str(exc))]
+    return check_gate_tables(script_text, doc_text, script_path, doc_path)
+
+
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
@@ -586,6 +860,7 @@ def main(argv: list[str] | None = None) -> int:
         failures.extend(check_markdown(doc, text, files, dirs, top_level, anchor_cache))
     failures.extend(check_plan_refs(files))
     failures.extend(check_study_dirs(dirs))
+    failures.extend(check_gate_tables_in_repo())
 
     if failures:
         print("check-docs FAILED:")
@@ -596,7 +871,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.verbose:
         print(f"check-docs: scanned {len(docs)} markdown files, {len(files)} tracked paths")
-    print(f"check-docs OK: {len(docs)} markdown files, 7 invariants, no drift.")
+    print(f"check-docs OK: {len(docs)} markdown files, 9 invariants, no drift.")
     return 0
 
 

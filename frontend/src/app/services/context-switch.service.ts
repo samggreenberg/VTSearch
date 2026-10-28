@@ -124,12 +124,11 @@ export class ContextSwitchService {
    * {@link applyActivePair}, or completes without emitting if a load fails or
    * a switch supersedes it.
    *
-   * Two differences from a switch. Both halves are asked for whatever the
+   * One difference from a switch: both halves are asked for whatever the
    * registry says, because its snapshot predates the loss and still reads
-   * `loaded`; the backend answers a half it does hold with a no-op. And the
-   * dataset loads first: the detector load resolves its dataset from the
-   * request's `X-Dataset-Id`, which here names the dataset being reloaded,
-   * and that answers 409 until the dataset is back in (#3139).
+   * `loaded`; the backend answers a half it does hold with a no-op. As in a
+   * switch, the dataset loads first: the detector load names it in its
+   * `X-Dataset-Id`, and that answers 409 until the dataset is back in (#3139).
    */
   reloadActivePair(): Observable<void> {
     return this.flipAndLoad(this.activeContext.datasetId, this.activeContext.modelId, true);
@@ -210,8 +209,9 @@ export class ContextSwitchService {
       if (pending <= 0) this.finishIfCurrent(current);
     };
 
-    if (reload && needsDatasetLoad && needsDetectorLoad && dataset && detector) {
-      // In sequence, not in parallel; see `reloadActivePair`.
+    if (needsDatasetLoad && needsDetectorLoad && dataset && detector) {
+      // In sequence, not in parallel: the detector load names this dataset
+      // (`runDetectorLoad`), which answers 409 until it is loaded (#3139).
       pending += 1;
       this.runDatasetLoad(current, dataset.id)
         .pipe(switchMap(() => (current.failed ? of(undefined) : this.runDetectorLoad(current, detector.id))))
@@ -266,12 +266,25 @@ export class ContextSwitchService {
     });
   }
 
+  /**
+   * Load *detectorId* for the dataset this switch is going to.
+   *
+   * The pair is not active yet, so the interceptor would name the previous
+   * one, and the backend restores the detector's labels and seeds its
+   * examples against whatever dataset the load names. Naming none (a switch
+   * from the Dashboard) or the old one left the votes to be re-derived when
+   * the new pair's first request arrived, which leaves the example a new Face
+   * detector starts from out of the session's history (#5358); naming the old
+   * one also seeded the examples into that dataset. A dataset the registry
+   * does not list yet is not named: the load would answer 409 for it.
+   */
   private runDetectorLoad(current: ActiveSwitch, detectorId: string): Observable<void> {
     return new Observable<void>((sub) => {
       // See runDatasetLoad.
       const leftovers = settledRowKeys(this.progressEvents.detectorLoadingTasks());
+      const datasetId = this.datasetState.datasetById().has(current.datasetId) ? current.datasetId : '';
       this.detectorsRegistryApi
-        .loadDetector(detectorId)
+        .loadDetector(detectorId, datasetId)
         .pipe(
           takeUntil(current.cancellable),
           catchError(() => {

@@ -3087,6 +3087,20 @@ def production_spot_check(clips_dict: dict[int, dict[str, Any]]) -> str:
     return "weak" if weak_check_prompts(media_type) else "end"
 
 
+def production_centroid_line(clips_dict: dict[int, dict[str, Any]]) -> str:
+    """The rule the app draws these medias' centroid line by, as a ``centroid_line`` value (#5325).
+
+    :func:`~vtscore.detectors.centroid_head.centroid_line_rule` of the first
+    media's ``media_type``, as :func:`production_spot_check` reads it: face
+    crops' own rule, else the app's
+    (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
+    """
+    from vtscore.detectors.centroid_head import centroid_line_rule  # noqa: PLC0415
+
+    first = next(iter(clips_dict.values()), None) if clips_dict else None
+    return centroid_line_rule(first.get("media_type") if isinstance(first, dict) else None)
+
+
 def _fits_from_typed_query(fn: Any) -> Any:
     """Run *fn* (the session) with every head fit starting from its ``query_vector`` too (#4859).
 
@@ -3381,8 +3395,9 @@ def simulate_voting_iterations(  # noqa: C901
         centroid_line: The rule the Goods' centroid's line is drawn by under
             the quota (#4732), one of
             :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULES`, at
-            the run's *beta*.  ``None`` - the default - is the app's
-            (:data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
+            the run's *beta*.  ``None`` - the default - is the app's for
+            these medias (:func:`production_centroid_line`: face crops' own
+            rule, else :data:`~vtscore.detectors.centroid_head.CENTROID_LINE_RULE`).
             Inert without the quota.
         centroid_line_variants: Extra centroid rows to price other lines on
             the same session (#4732): each ``"<rule>@<beta>"`` adds, at every
@@ -4551,6 +4566,8 @@ def simulate_voting_iterations(  # noqa: C901
 
     if spot_check is None:
         spot_check = production_spot_check(clips_dict)
+    if centroid_line is None:
+        centroid_line = production_centroid_line(clips_dict)
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     if weak_phase not in ("any", "learned"):

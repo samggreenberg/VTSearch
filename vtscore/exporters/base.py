@@ -24,7 +24,11 @@ For the CLI ``--stream-results`` path (scoring a media source larger than RAM),
 an exporter can write hits incrementally instead of buffering the whole result
 set: set :attr:`~ResultsExporter.supports_streaming` to ``True`` and implement
 :meth:`~ResultsExporter.export_cli_streaming`.  See that method's docstring and
-``docs/plans/cli-stream-massive-images.md`` for details.
+``docs/plans/cli-stream-massive-images.md`` for details.  The same run with
+``--as-labelset`` streams the hits as label entries instead, through
+:meth:`~ResultsExporter.export_labelset_streaming`.  A streamed run started with
+``--resume`` writes through :meth:`~ResultsExporter.export_cli_streaming_resumable`
+instead, so an interrupted run can continue from its last completed chunk.
 
 Example – a minimal SFTP exporter skeleton::
 
@@ -67,20 +71,47 @@ verifies that every imported package is declared there.
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterator
+from dataclasses import dataclass
+from typing import Any, Callable, Iterable, Iterator, TypeVar
 
 from vtscore.plugins import PluginBase, PluginField
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 __all__ = [
     "PAYLOAD_KINDS",
     "LabelsetExporter",
     "PluginField",
     "ResultsExporter",
+    "StreamResume",
     "UnsupportedPayloadError",
+    "iter_stream_batches",
     "resolve_stream_batch_size",
 ]
+
+
+@dataclass(frozen=True)
+class StreamResume:
+    """Where a resumable streamed export picks up, and how it reports progress.
+
+    Handed to :meth:`ResultsExporter.export_cli_streaming_resumable` by the CLI's
+    ``--resume`` run, which owns the checkpoint file; the exporter owns its
+    destination and never reads or writes the checkpoint itself.
+    """
+
+    #: ``None`` for a fresh run: write the destination from scratch, header
+    #: first.  Otherwise the value this exporter last passed to :attr:`commit`
+    #: in an earlier, interrupted run: roll the destination back to it (anything
+    #: past it is a chunk that never finished) and append, without a header.
+    position: Any
+    #: Call with a JSON-serialisable position once everything written so far
+    #: is durable - after the header, and after each chunk.  The CLI records it
+    #: as the point the next run resumes from, so call it only once the writes
+    #: before it would survive the process being killed.
+    commit: Callable[[Any], None]
+
 
 #: Every payload kind an exporter can be handed, in the order they are
 #: documented.  ``find_results`` is a scored run (hit lists); ``labelset`` is a
@@ -118,6 +149,28 @@ def resolve_stream_batch_size(value: Any, default: int = 500) -> int:
     except (TypeError, ValueError):
         return default
     return n if n > 0 else default
+
+
+def iter_stream_batches(items: Iterable[_T], batch_size: int) -> Iterator[list[_T]]:
+    """Group a streamed *items* iterator into lists of at most *batch_size*.
+
+    How the delivery-style streamers bound their memory: each batch is handed
+    out, delivered and dropped before the next is filled.  At least one batch
+    is always yielded - an empty list for an empty stream - so a receiver
+    learns the run happened even when nothing matched.  *batch_size* is
+    expected to be positive; pass it through :func:`resolve_stream_batch_size`
+    first.
+    """
+    batch: list[_T] = []
+    yielded = False
+    for item in items:
+        batch.append(item)
+        if len(batch) >= batch_size:
+            yield batch
+            yielded = True
+            batch = []
+    if batch or not yielded:
+        yield batch
 
 
 class ResultsExporter(PluginBase):
@@ -171,8 +224,17 @@ class ResultsExporter(PluginBase):
     Exporters that can write a scored run incrementally (for the CLI
     ``--stream-results`` path on a media source larger than RAM) override
     :attr:`supports_streaming` to return ``True`` and implement
-    :meth:`export_cli_streaming`.  Streaming is a ``find_results`` mode only;
-    there is no labelset equivalent.
+    :meth:`export_cli_streaming`.  The same run with ``--as-labelset`` streams
+    its hits as label entries, re-importable and stripped of every score, to
+    :meth:`export_labelset_streaming`; :attr:`supports_labelset_streaming` is
+    derived from overriding it.  Neither is a payload kind: they are delivery
+    modes the CLI alone calls, so :attr:`supported_payloads` and the GUI
+    pickers never see them.  An exporter whose destination can be rolled back
+    and appended to (a file) can also implement
+    :meth:`export_cli_streaming_resumable` and :meth:`resumable_stream_path`,
+    which a ``--stream-results --resume`` run writes through instead, so it can
+    continue from its last completed chunk after being interrupted;
+    :attr:`supports_resumable_streaming` is derived from overriding the former.
     """
 
     #: Abstract family base: no auto-derived metadata, and concrete
@@ -622,6 +684,138 @@ class ResultsExporter(PluginBase):
             NotImplementedError: If the exporter does not support streaming.
         """
         raise NotImplementedError(f"{type(self).__name__} does not support streaming export")
+
+    @property
+    def supports_labelset_streaming(self) -> bool:
+        """Whether this exporter can write a streamed labelset.
+
+        Derived from overriding :meth:`export_labelset_streaming`, never
+        declared, for the reason :attr:`supported_payloads` is: a flag is a
+        second place to forget.  ``--stream-results --as-labelset`` routes only
+        to exporters that report ``True`` and rejects the rest with the list of
+        those that do.
+        """
+        return type(self).export_labelset_streaming is not ResultsExporter.export_labelset_streaming
+
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write a labelset incrementally, one entry at a time, as scored chunks stream in.
+
+        The labelset twin of :meth:`export_cli_streaming`, for
+        ``--stream-results --as-labelset``: the run's hits arrive as label
+        entries, so the export reads back in through a label importer the way
+        an :meth:`export_labelset` file does.  As there, write each entry as it
+        arrives and never buffer the whole set (a delivery exporter batches;
+        see :func:`iter_stream_batches`).
+
+        Args:
+            header: Metadata known before any entry streams: ``"media_type"``
+                (str), ``"detectors"`` (the names of the detectors whose labels
+                stream, as a list of str) and ``"keep_negatives"`` (bool -
+                whether ``"bad"`` entries are included).  A run that makes
+                several datasets from one import (#4707) calls this once per
+                dataset and adds ``"dataset"``, as in
+                :meth:`export_cli_streaming`.  No threshold and no balance
+                state: those are numbers the head measured, and a labelset
+                carries none (#5131).
+            elements: Yields serialised
+                :class:`~vtscore.datasets.labelset.LabeledElement` dicts in
+                chunk order: ``md5`` and ``label`` (``"good"`` above the
+                detector's threshold, ``"bad"`` below) always, ``origin`` /
+                ``origin_name`` / ``filename`` / ``category`` / ``metadata``
+                where present, plus a ``"detector"`` key naming the detector
+                that labelled it.  A media every detector scores appears once
+                per detector.  No ``score`` and no media ``id``; each entry has
+                been through
+                :func:`~vtscore.datasets.labelset.label_entry_for_export`.
+            field_values: Mapping of :attr:`PluginField.key` → value.
+
+        Returns:
+            A status dict with a ``"message"`` key (and optionally
+            ``"filepath"``), like :meth:`export`.
+
+        Raises:
+            NotImplementedError: If the exporter does not stream labelsets
+                (the default).
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support streaming a labelset")
+
+    @property
+    def supports_resumable_streaming(self) -> bool:
+        """Whether a ``--stream-results --resume`` run can write through this exporter.
+
+        Derived from overriding :meth:`export_cli_streaming_resumable`, never
+        declared, like :attr:`supports_labelset_streaming`.  ``--resume`` routes
+        only to exporters that report ``True`` and rejects the rest with the
+        list of those that do.
+        """
+        return type(self).export_cli_streaming_resumable is not ResultsExporter.export_cli_streaming_resumable
+
+    def resumable_stream_path(self, field_values: dict[str, Any]) -> str:
+        """The file a resumable stream with these *field_values* writes to.
+
+        The CLI keeps its checkpoint beside it, so a re-run of the same command
+        finds the checkpoint of the run it continues.  *field_values* have been
+        through :meth:`~vtscore.plugins.PluginBase.validate_cli_field_values`,
+        so templates are already filled in.  An exporter that implements
+        :meth:`export_cli_streaming_resumable` overrides this too; the default
+        ``""`` says there is no such file, and a ``--resume`` run refuses it.
+        """
+        return ""
+
+    def export_cli_streaming_resumable(
+        self,
+        header: dict[str, Any],
+        chunks: Iterator[list[tuple[str, dict[str, Any]]]],
+        field_values: dict[str, Any],
+        resume: StreamResume,
+    ) -> dict[str, Any]:
+        """Stream a scored run so that an interrupted run can be resumed (``--resume``).
+
+        The resumable twin of :meth:`export_cli_streaming`, with the same
+        *header* and the same hits, grouped by chunk: each item of *chunks* is
+        one chunk's ``(detector_name, hit)`` pairs, possibly empty.  The CLI
+        keeps a checkpoint of how many chunks have been written; this method
+        keeps the destination in step with it:
+
+        - When ``resume.position`` is ``None``, write the destination afresh,
+          header first, then call ``resume.commit(position)``.
+        - Otherwise do not write the header again.  Roll the destination back
+          to ``resume.position`` (the CLI hands back exactly what this method
+          committed last time), discarding a chunk that was only partly
+          written, and append from there.
+        - After writing each chunk, make it durable and call
+          ``resume.commit(position)``.  Never commit a chunk only partly
+          written: the run then resumes after it and the rest is lost.
+
+        Write in place rather than through :func:`~vtscore.io.atomic_write_stream`,
+        so what was committed outlives the process.
+        :func:`~vtscore.io.resumable_write_stream` and
+        :func:`~vtscore.io.commit_write_stream` do both halves for a text file,
+        with the position a byte offset.
+
+        Args:
+            header: As for :meth:`export_cli_streaming`.
+            chunks: One list per chunk, in chunk order.  On a resumed run the
+                chunks already committed are not repeated.
+            field_values: Mapping of :attr:`PluginField.key` → value.
+            resume: Where to pick up, and the callback that records progress.
+
+        Returns:
+            A status dict with a ``"message"`` key (and optionally
+            ``"filepath"``), like :meth:`export`.
+
+        Raises:
+            NotImplementedError: If the exporter cannot resume a stream (the
+                default).
+            ValueError: If the destination no longer holds what was committed,
+                so appending to it would not continue the earlier run.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support resuming a streamed export")
 
 
 #: Backwards-compatible alias for the pre-payload-kinds class name.

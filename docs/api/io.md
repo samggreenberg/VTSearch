@@ -93,7 +93,9 @@ the Settings › AutoFind results exporter.
 **Streaming support** (CLI `--autodetect --tempimport --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
 incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches
-(one POST / one email per batch) so they too stay bounded. This applies to the
+(one POST / one email per batch) so they too stay bounded. With `--as-labelset`
+the same five stream the hits as re-importable label entries instead
+(`export_labelset_streaming`). This applies to the
 CLI streaming path only — the `POST /api/exporters/export` route above always
 receives a fully-materialised results dict. See [CLI.md](../CLI.md) and
 `docs/plans/cli-stream-massive-images.md`.
@@ -120,6 +122,25 @@ POST /api/label-importers/field-options/{importer_name}
 
 Options for a dynamic-options field on a label importer, for the dependent
 selects in the importer form (contract in the note at the top).
+
+### Label importer suggested detector name
+
+```
+POST /api/label-importers/suggested-name/{importer_name}
+```
+
+**Body:** `{"values": {...}}` (the current form snapshot, optional; a `file`
+field carries the chosen file's name).
+
+Calls the importer's `default_detector_name(values)` and returns the name it
+would give a detector created from those values, so the New Detector ›
+Trained form can prefill its Detector name box — including a label the
+importer resolved from an opaque selection. See
+[Naming the created detector](../EXTENDING-plugins.md#naming-the-created-detector).
+
+→ `{"detector_name": "Q1 Field Survey"}`
+
+404 (unknown importer), 502 (the importer raised).
 
 ### Run label import
 
@@ -162,172 +183,6 @@ dataset and applies their labels. Entries are label-export entries (`origin`,
 `origin_name`, `md5`, `label`, …).
 
 → `{ingested, applied, failed_count, failed, message}`
-
----
-
-## Pregen Processors
-
-Pregen processors are the built-in autorun processors VTSearch ships with: an
-OCR extractor (PaddleOCR), a Speech extractor (Whisper Tiny), and a Face
-localizer (MTCNN). Adding them registers each into the autorun
-extractors / localizers stores, from which `POST /api/auto-extract` and
-`POST /api/auto-localize` run them over the loaded medias. They do **not**
-create detectors.
-
-### List pregen processors
-
-```
-GET /api/pregen-processors
-```
-
-→ `{"processors": [{name, kind, processor_type, media_type, config}, ...]}`,
-`kind` being `extractor` or `localizer`.
-
-### Add all pregen processors
-
-```
-POST /api/pregen-processors/add
-```
-
-Registers every bundled pregen processor (OCR extractor, Speech extractor,
-Face localizer) into the autorun extractor / localizer stores.
-
-→ `{success, added}`, `added` naming the processors registered.
-
----
-
-## Autorun Extractors
-
-Autorun extractors pull free-form metadata records out of each media (e.g. OCR
-text, speech transcripts, image classes). Registering one stores its type and
-config; `POST /api/auto-extract` is what builds and runs every stored extractor
-matching the loaded medias' type. The store is in-memory and does not survive
-a restart.
-
-Which extractor types exist is fixed in app code (`ocr`, `speech`,
-`image_class`); adding a new one means editing the factory dict in
-`vtsearch/routes/processors/crud.py` — see
-[EXTENDING-processors.md](../EXTENDING-processors.md#registering-a-processor-with-the-app).
-
-### List autorun extractors
-
-```
-GET /api/autorun-extractors
-```
-
-→ `{"extractors": [...]}`
-
-### Add an autorun extractor
-
-```
-POST /api/autorun-extractors
-```
-
-**Body:** `{"name": "...", "extractor_type": "ocr"|"speech"|"image_class", "media_type": "image", "config": {...}}`
-
-→ `{"success": true, "name": "..."}` (400 if the config can't be built).
-
-### Delete an autorun extractor
-
-```
-DELETE /api/autorun-extractors/{name}
-```
-
-→ `{"success": true}` (404 if not found).
-
-### Rename an autorun extractor
-
-```
-PUT /api/autorun-extractors/{name}/rename
-```
-
-**Body:** `{"new_name": "..."}`
-
-→ `{"success": true, "new_name": "..."}` (400 if not found or name taken).
-
----
-
-## Autorun Localizers
-
-Autorun localizers find `(box, confidence)` regions inside each media (e.g.
-face detection). As with extractors, registering one only stores its type and
-config in an in-memory store; `POST /api/auto-localize` builds and runs them.
-`face` is the only localizer type in the factory dict.
-
-### List autorun localizers
-
-```
-GET /api/autorun-localizers
-```
-
-→ `{"localizers": [...]}`
-
-### Add an autorun localizer
-
-```
-POST /api/autorun-localizers
-```
-
-**Body:** `{"name": "...", "localizer_type": "face", "media_type": "image", "config": {...}}`
-
-→ `{"success": true, "name": "..."}` (400 if the config can't be built).
-
-### Delete an autorun localizer
-
-```
-DELETE /api/autorun-localizers/{name}
-```
-
-→ `{"success": true}` (404 if not found).
-
-### Rename an autorun localizer
-
-```
-PUT /api/autorun-localizers/{name}/rename
-```
-
-**Body:** `{"new_name": "..."}`
-
-→ `{"success": true, "new_name": "..."}` (400 if not found or name taken).
-
----
-
-## Running extractors & localizers
-
-These run against every media in the **active** dataset (`X-Dataset-Id`) and
-return results inline (synchronously); nothing is stored. A media with no hits
-is omitted from `results`.
-
-```
-POST /api/extract
-POST /api/localize
-```
-
-One-off run of a single processor built from the body:
-
-**Body:** `{"extractor_type": "ocr", "config": {...}, "name": "optional"}`
-(`localizer_type` for `/api/localize`).
-
-→ `{extractor_name, media_type, total_medias_with_hits, results}`, each
-result row carrying `extractions`. `/api/localize` answers `localizer_name` and per-media `localizations`
-instead. Each result row is the media's display info plus the hits. 400 if no
-medias are loaded, the config can't be built, or the processor's media type
-differs from the dataset's.
-
-```
-POST /api/auto-extract
-POST /api/auto-localize
-```
-
-No body. Runs every stored autorun extractor (or localizer) whose media type
-matches the loaded dataset, in parallel.
-
-→ `{media_type, extractors_run, results}`, `results` keyed by extractor name,
-each `{extractor_name, total_medias_with_hits, results}` (`localizers_run` /
-`localizer_name` for `/api/auto-localize`). A stored
-processor whose config no longer builds is skipped silently, so
-`extractors_run` can be smaller than the number stored. 400 if no medias are
-loaded or none are registered for the media type.
 
 ---
 

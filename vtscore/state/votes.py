@@ -42,6 +42,7 @@ def clear_votes() -> None:
         ctx.good_votes.clear()
         ctx.bad_votes.clear()
         ctx.label_history.clear()
+        ctx.label_history_base = (frozenset(), frozenset())
         ctx.textsort_suggestions.clear()
         ctx.vote_click_times.clear()
         ctx.vote_region_boxes.clear()

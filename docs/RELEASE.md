@@ -72,6 +72,16 @@ GUI-changing sessions don't re-render the app's screenshots; they queue the shot
 
 A harness that won't run at all doesn't block the release: stale screenshots are a docs defect, not a reason to hold shipped fixes back. Leave the queue as it is, file an issue for the harness failure, and carry on with step 5.
 
+## 4c. Date the changelog
+
+`CHANGELOG.md` keeps what is on `dev` but not yet on `main` under `## Unreleased`, and this release ships it. Rename that heading to `## YYYY-MM-DD`, the date step 5 puts in the release PR's title, and put a new, empty `## Unreleased` above it. If `## Unreleased` holds no entries, skip this step.
+
+- **Merge repeated subsection headings.** Parallel PRs each add their own `### Changed` or `### Fixed`, so one section can carry the same heading twice. Fold each repeat into a single heading, in the order Changed, Added, Deprecated, Removed, Fixed, and keep every entry in its existing order. Do the same inside `vtscore/CHANGELOG.md`'s `[Unreleased]`.
+- **Leave `vtscore/CHANGELOG.md`'s `[Unreleased]` heading alone.** The library uses semver, and that section closes only when a `vtscore` version is cut (CLAUDE.md, "Versioning"), which this runbook does not do.
+- **A second release on the same date** folds its entries into the existing `## YYYY-MM-DD` section rather than adding a second one.
+
+Commit it alongside step 4's punch card.
+
 ## 5. Open the release PR
 
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.
@@ -112,8 +122,8 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 - Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
-- **Strip the `solved` label in the same write.** `solved` means "the development is done; only merges remain" (see CLAUDE.md), and this close is the moment the last merge lands — so the label has nothing left to say. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `solved`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `solved` or omits the array. If you close through `gh` instead, the same hook looks the issue's labels up and blocks the close when `solved` is really on it — strip it in the same motion (`gh issue edit <n> --remove-label solved && gh issue close <n> --reason completed`), and clear the assignee too (`--remove-assignee samggreenberg`). The lookup allows whenever it cannot reach GitHub, so step 6b's audit is still the thing that guarantees the strip.
-- **Clear the assignee in the same write.** Pass `assignees: []`. An assignee means "somebody is working this right now" (see CLAUDE.md), which a closed issue cannot be. Unlike `labels`, there is nothing to preserve here — the empty array is always the right value on a close.
+- **Strip the `solved` label in the same write.** `solved` means "the development is done; only merges remain" (see [`docs/ISSUES.md`](ISSUES.md#solved-no-problem-solving-left)), and this close is the moment the last merge lands — so the label has nothing left to say. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `solved`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `solved` or omits the array. If you close through `gh` instead, the same hook looks the issue's labels up and blocks the close when `solved` is really on it — strip it in the same motion (`gh issue edit <n> --remove-label solved && gh issue close <n> --reason completed`), and clear the assignee too (`--remove-assignee samggreenberg`). The lookup allows whenever it cannot reach GitHub, so step 6b's audit is still the thing that guarantees the strip.
+- **Clear the assignee in the same write.** Pass `assignees: []`. An assignee means "somebody is working this right now" (see [`docs/ISSUES.md`](ISSUES.md#the-assignee-is-somebody-on-it-right-now)), which a closed issue cannot be. Unlike `labels`, there is nothing to preserve here — the empty array is always the right value on a close.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
   in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
@@ -121,9 +131,9 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 ## 6b. Audit the `solved` and `experiment` labels
 
-`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
+`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md, "Issue lifecycle"; the reasons are in [`docs/ISSUES.md`](ISSUES.md#solved-no-problem-solving-left)). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
 
-It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body (CLAUDE.md). That half only ever adds. `.claude/hooks/require-issue-labels.py` blocks the writes that would drop the label, but only where `gh` works and only for a label the issue already has, so this audit is what notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue anyway.
+It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body ([`docs/ISSUES.md`](ISSUES.md#experiment-a-scheduling-gate)). That half only ever adds. `.claude/hooks/require-issue-labels.py` blocks the writes that would drop the label, but only where `gh` works and only for a label the issue already has, so this audit is what notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue anyway.
 
 Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 
@@ -213,8 +223,8 @@ reached `main`.
 
 1. **Land everything first.** This step comes last so that every commit this run
    made reaches `dev` before the merge: step 2's triage, step 4's punch card,
-   step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
-   commit left on a branch misses this release.
+   step 4b's screenshots, step 4c's changelog date and step 7's prunes, each
+   through a PR into `dev`. A commit left on a branch misses this release.
 2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
    full `VTSEARCH_FRESH=1 ./run-tests.sh` on it, unless this run already ran one on
    exactly that SHA. `VTSEARCH_FRESH=1` makes the run stand on its own — the full
@@ -226,8 +236,9 @@ reached `main`.
 3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A
    PR it lists that step 6 never saw landed on `dev` during this run, and this
    merge would ship it with its issue still open, after which no release window
-   would ever contain it again. Take any such PR through steps 4, 6 and 7, then
-   repeat this step.
+   would ever contain it again. Take any such PR through steps 4, 4c, 6 and 7
+   (for 4c, move its entries out of `## Unreleased` into this release's
+   section), then repeat this step.
 4. **Merge it** with `merge_pull_request`, `merge_method: "merge"`, and
    `expectedHeadSha` set to the SHA you gated. **Never squash or rebase.** `dev`'s commits
    must stay ancestors of `main`, or the next release's `origin/main..origin/dev`

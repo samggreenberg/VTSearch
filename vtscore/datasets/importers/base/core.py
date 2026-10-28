@@ -19,10 +19,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Iterator
 
+from vtscore.datasets.chunks import DeferredChunk
 from vtscore.plugins import FieldOption, PluginBase, PluginField
 
 from .naming import derive_display_name
-from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_value
+from .origin import _dataset_name_field, _origin_params, _serialise_origin_value
 from .outputs import OutputSpec
 
 
@@ -469,6 +470,36 @@ class ImporterBase(PluginBase):
         self.run_cli(field_values, medias, thin=thin)
         yield medias
 
+    def run_chunked_cli_deferred(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[DeferredChunk]:
+        """:meth:`run_chunked_cli`'s chunks, each walked but not built (#5314).
+
+        A resumed CLI run (``--stream-results --resume``) reaches the chunks an
+        interrupted run already wrote through this hook, and needs only to
+        check that each is still the chunk it wrote, not its media.  Each
+        :class:`~vtscore.datasets.chunks.DeferredChunk` says how many media
+        its ``build`` makes (the ids of the chunks after it depend on that)
+        and, through its optional ``key``, what it holds; a chunk whose
+        ``key`` the caller can check is never built.  The default wraps each
+        chunk :meth:`run_chunked_cli` yields, already built and with no key,
+        so the caller checks it by its media.
+
+        Override it when building a chunk (reading, hashing, thumbnailing its
+        files) is what costs, and the walk can list a chunk's items without
+        it, as the ``server_folder`` importer does.  The override must yield
+        the chunks :meth:`run_chunked_cli` yields, in its order and at its
+        boundaries; ``count`` must equal the size of what ``build`` returns;
+        and ``key`` must not read any file's contents.  Chunks it cannot list
+        without reading (a PDF's pages, say) are yielded built, with
+        :meth:`DeferredChunk.built <vtscore.datasets.chunks.DeferredChunk.built>`.
+        """
+        for chunk in self.run_chunked_cli(field_values, chunk_size, thin=thin):
+            yield DeferredChunk.built(chunk)
+
     # ------------------------------------------------------------------
     # Multi-dataset imports: one run, several datasets (#4703)
     # ------------------------------------------------------------------
@@ -640,20 +671,7 @@ class ImporterBase(PluginBase):
         if self.origin_suppressed:
             return {"importer": self.name, "params": {}}
 
-        params: dict[str, str] = {}
-        for f in self.fields:
-            if not _field_in_origin(f):
-                continue
-            if f.field_type == "checkbox":
-                val = field_values.get(f.key, str(f.default).lower() == "true")
-                truthy = val if isinstance(val, bool) else str(val).lower() == "true"
-                params[f.key] = "true" if truthy else "false"
-                continue
-            raw = field_values.get(f.key, "")
-            serialised = _serialise_origin_value(raw, f.origin_serializer)
-            if serialised:
-                params[f.key] = serialised
-
+        params = _origin_params(self.fields, field_values)
         for key in self._effective_extra_origin_keys():
             raw = field_values.get(key, "")
             serialised = _serialise_origin_value(raw, None)

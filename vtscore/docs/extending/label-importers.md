@@ -34,7 +34,7 @@ This guide focuses on the library API.
 |-----------|---------|
 | One-shot import of an existing label file / query | **`LabelImporter`** - `run()` returns a list of label dicts; the user triggers it manually |
 | Auto-export as labels change, auto-import on detector load | **`LabelsetSource`** - `load()` / `save()` for bidirectional sync; can also surface detector metadata |
-| Both - manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<name>/labelset-source/sync`) |
+| Both - manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<detector_ref>/labelset-source/sync`) |
 
 Importers are simpler - no push pacing, no merging pulls, no atexit
 flush. Reach for the source only when ongoing sync is the
@@ -58,8 +58,18 @@ Optional:
 |--------|---------|---------|
 | `icon: str` | `"🏷️"` | Emoji in the UI |
 | `run_cli(field_values)` | delegates to `run()` | Override only when CLI values need different handling |
+| `default_detector_name(field_values)` | the first `file` field's filename stem, else `"<display_name> detector"` | The name a detector created from this importer gets by default; the app prefills the New Detector › Trained form's name box with it, live. Keep it cheap: it runs on every form change |
 
 Expose `LABEL_IMPORTER = YourImporter()` at module level.
+
+A detector your importer creates (the Dashboard's New Detector › Trained, or
+the CLI's `--import-labels-into … --create-detector`) keeps a record of the run
+on its registry entry: your `name`, the field values it ran with, and the time
+(`vtscore.detectors.import_record.build_import_record`). The fields kept follow
+a dataset origin's policy: `"file"` and `"password"` fields are left out, and
+`PluginField.include_in_origin` / `origin_serializer` tune any field as they do
+for a dataset importer. Set `include_in_origin=False` on a field whose value
+should not be written to disk.
 
 ## The returned label format
 

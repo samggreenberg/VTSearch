@@ -1,20 +1,23 @@
-"""Tests for the Face convert-in half media type, its FaceNet embedder, and
-the image2face converter.
+"""Tests for the Face convert-in half media type, its embedder, and the image2face converter.
 
 Face is the mirror of document in the half-media-type model: embeddable but
 not importable (faces only ever arise from converting an image via
-``image2face``).  These tests exercise the type's capability flags, the moved
-FaceNet embedder, and the converter's crop logic against a stubbed MTCNN
-detector (no model weights, no facenet-pytorch install required).
+``image2face``).  These tests exercise the type's capability flags, the face
+embedder's identity, and the converter's crop logic against a fake face
+provider installed on the bridge (no model weights).  The provider contract
+itself (vectors riding with the crops, the compat guard) is
+``tests_lib/converters/test_image2face_imagekit.py``'s.
 """
 
 from __future__ import annotations
 
 import io
-from unittest.mock import MagicMock, patch
-
 import numpy as np
+import pytest
 from PIL import Image
+
+from imagekit.face.records import FaceDetection as ProviderDetection, FaceRecord
+from vtscore.media.face import imagekit_bridge as bridge
 
 
 # ---------------------------------------------------------------------------
@@ -110,166 +113,38 @@ class TestFaceMediaType:
 
 
 # ---------------------------------------------------------------------------
-# FaceNet embedder (moved from the image type to the face type)
+# The face embedder
 # ---------------------------------------------------------------------------
 
 
 class TestFaceEmbedder:
-    def test_name_and_media_type(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
+    def test_it_is_the_face_types_one_embedder_and_its_default(self):
+        from vtscore.media import embedders_for_type, get_embedder
 
-        emb = FaceEmbedder()
-        assert emb.name == "face"
-        assert emb.media_type_id == "face"
-
-    def test_not_default_and_no_text(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        emb = FaceEmbedder()
-        assert emb.is_default is False
-        assert emb.supports_text is False
-        assert emb.supports_patch_regions is False
+        (emb,) = embedders_for_type("face")
+        assert emb is get_embedder("face")
+        assert emb.name == "face" and emb.media_type_id == "face"
+        assert emb.is_default is True
+        assert emb.supports_text is False and emb.supports_patch_regions is False
 
     def test_to_dict(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        assert FaceEmbedder().to_dict() == {
-            "name": "face",
-            "display_name": "FaceNet (face identity, 512d)",
-            "model_id": None,
-            "media_type_id": "face",
-            "is_default": False,
-            "supports_text": False,
-            "supports_patch_regions": False,
-            "supports_geometric_verification": False,
-            "license_notice": None,
-        }
-
-    def test_registered_under_face_type(self):
         from vtscore.media import get_embedder
 
-        emb = get_embedder("face")
-        assert emb.media_type_id == "face"
+        d = get_embedder("face").to_dict()
+        assert {k: d[k] for k in ("name", "display_name", "model_id", "media_type_id", "is_default")} == {
+            "name": "face",
+            "display_name": "Face identity (512d)",
+            "model_id": None,
+            "media_type_id": "face",
+            "is_default": True,
+        }
+        assert d["license_notice"]
 
     def test_embed_text_returns_none(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
+        # A fresh instance: the conftest stubs the registered singletons' embed calls.
+        from vtscore.media.face.embedder_imagekit import ImagekitFaceEmbedder
 
-        assert FaceEmbedder().embed_text("a face") is None
-
-    def test_l2_normalises_output(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        emb = FaceEmbedder()
-        out = emb._l2_normalise(np.array([3.0, 4.0, 0.0], dtype=np.float32))
-        assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-6
-        z = emb._l2_normalise(np.zeros(3, dtype=np.float32))
-        assert not np.isnan(z).any()
-
-    def test_embed_media_returns_none_when_not_loaded(self):
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        emb = FaceEmbedder()
-        with patch.object(emb, "load_models"):
-            assert emb.embed_media({"media_path": "/nonexistent.jpg"}) is None
-
-    def test_weight_load_does_not_leak_progress_bar_to_console(self, capsys, monkeypatch):
-        """facenet-pytorch downloads VGGFace2 weights via torch.hub, printing a
-        tqdm bar. The embedder must wrap that in intercept_tqdm_progress so the
-        bar is forwarded to the progress callback and never leaks to the console.
-
-        See the "progress-bar-stdout-leak" fix: the ~107MB download bar used to
-        print straight to stdout when starting the app.
-        """
-        import sys
-
-        import tqdm.auto
-
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        class _FakeInceptionResnetV1:
-            """Stub whose construction emits a determinate tqdm bar, mimicking
-            facenet-pytorch's torch.hub weight download."""
-
-            def __init__(self, pretrained=None):
-                bar = tqdm.auto.tqdm(total=107, desc="20180402-114759-vggface2.pt")
-                bar.update(107)
-                bar.close()
-
-            def eval(self):
-                return self
-
-            def to(self, _device):
-                return self
-
-        fake_module = MagicMock()
-        fake_module.InceptionResnetV1 = _FakeInceptionResnetV1
-
-        calls: list[tuple] = []
-        emb = FaceEmbedder()
-        emb._on_progress = lambda status, message, current, total: calls.append((status, message, current, total))
-
-        # ``setitem`` undoes only this one key.  ``patch.dict(sys.modules, …)``
-        # restored the whole table on exit, so it also evicted the real
-        # ``torch`` that ``_load_models_impl`` imports when this test was the
-        # first to load it, and the next ``import torch`` re-initialised
-        # ``torch._C`` and segfaulted the run.
-        monkeypatch.setitem(sys.modules, "facenet_pytorch", fake_module)
-        emb._load_models_impl()
-
-        captured = capsys.readouterr()
-        assert "vggface2" not in captured.out
-        assert "vggface2" not in captured.err
-        # The bar's progress should have been forwarded to the callback instead.
-        assert any(c[3] == 107 for c in calls)
-
-    @staticmethod
-    def _torch_home_at_weight_load(monkeypatch) -> str | None:
-        """Run ``_load_models_impl`` against a stub; return ``TORCH_HOME`` as the weights load."""
-        import os
-        import sys
-
-        from vtscore.media.face.embedder_facenet import FaceEmbedder
-
-        seen: dict = {}
-
-        class _FakeInceptionResnetV1:
-            def __init__(self, pretrained=None):
-                seen["torch_home"] = os.environ.get("TORCH_HOME")
-
-            def eval(self):
-                return self
-
-            def to(self, _device):
-                return self
-
-        fake_module = MagicMock()
-        fake_module.InceptionResnetV1 = _FakeInceptionResnetV1
-        monkeypatch.setitem(sys.modules, "facenet_pytorch", fake_module)
-        FaceEmbedder()._load_models_impl()
-        return seen["torch_home"]
-
-    def test_weights_cache_in_the_models_dir(self, monkeypatch):
-        """The VGGFace2 checkpoint lands in $TORCH_HOME/checkpoints (issue #4886).
-
-        Unset, that is under $HOME, unless the EUPE or speech-clipper loader
-        happened to run first and point it at the model cache. The embedder
-        sets it the same way itself, so where the weights go no longer depends
-        on load order, and a Docker image keeps them with every other model.
-        """
-        from pathlib import Path
-
-        from vtscore.config import MODELS_CACHE_DIR
-
-        # setenv first so the undo restores the original state even if the
-        # variable was unset: a bare delenv of a missing key records nothing,
-        # and the embedder's setdefault would leak into later tests.
-        monkeypatch.setenv("TORCH_HOME", "placeholder")
-        monkeypatch.delenv("TORCH_HOME")
-        assert self._torch_home_at_weight_load(monkeypatch) == str(Path(MODELS_CACHE_DIR).expanduser())
-
-    def test_an_explicit_torch_home_wins(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("TORCH_HOME", str(tmp_path))
-        assert self._torch_home_at_weight_load(monkeypatch) == str(tmp_path)
+        assert ImagekitFaceEmbedder().embed_text("a face") is None
 
 
 # ---------------------------------------------------------------------------
@@ -277,16 +152,38 @@ class TestFaceEmbedder:
 # ---------------------------------------------------------------------------
 
 
-def _fake_mtcnn(boxes, probs, points=None):
-    """Build a stub MTCNN whose ``detect(img, landmarks=True)`` returns ``(boxes, probs, points)``.
+class _Provider:
+    """A fake face provider: the same faces for every photo, recording the image it saw."""
 
-    ``boxes`` is a list of ``[x1, y1, x2, y2]`` pixel boxes (or ``None`` for
-    "no faces"); ``probs`` the matching per-face confidences; ``points`` the
-    five landmarks per face, or ``None`` for none.
-    """
-    detector = MagicMock()
-    detector.detect.return_value = (boxes, probs, points)
-    return detector
+    def __init__(self, boxes, probs, points=None):
+        self.faces = list(zip(boxes, probs, points or [None] * len(boxes)))
+        self.seen: list[tuple[int, ...]] = []
+
+    def process(self, image, *, confidence_threshold=None, media_id=""):
+        self.seen.append(tuple(image.shape))
+        rng = np.random.default_rng(42)
+        return [
+            FaceRecord.from_detection(
+                ProviderDetection(tuple(box), pts, prob), rng.standard_normal(512), "fake:1", media_id, i
+            )
+            for i, (box, prob, pts) in enumerate(self.faces)
+        ]
+
+    def compatibility(self):
+        return "fake:1"
+
+
+@pytest.fixture
+def provider(monkeypatch):
+    """Install a fake provider on the bridge; call the result with ``(boxes, probs, points=None)``."""
+
+    def install(boxes, probs, points=None) -> _Provider:
+        pipe = _Provider(boxes, probs, points)
+        monkeypatch.setattr(bridge, "_pipeline", pipe)
+        monkeypatch.setattr(bridge, "_compat", "fake:1")
+        return pipe
+
+    return install
 
 
 def _png_bytes(w=100, h=100):
@@ -311,60 +208,48 @@ class TestImage2FaceConverter:
         names = {c.name for c in list_converters_for_target("face")}
         assert "image2face" in names
 
-    def test_emits_one_crop_per_detection(self):
+    def test_emits_one_crop_per_detection(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
         # Two faces on a 100x100 image, in pixel [x1, y1, x2, y2] coordinates.
-        detector = _fake_mtcnn(
-            boxes=[[10, 10, 40, 40], [50, 50, 80, 80]],
-            probs=[0.9, 0.8],
-        )
+        provider([[10, 10, 40, 40], [50, 50, 80, 80]], [0.8, 0.9])
         media = {"filename": "group.png", "media_bytes": _png_bytes()}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+        out = Image2FaceMediaConverter().convert_normalized(media, {"padding": "0", "min_size": "1"})
         assert len(out) == 2
         for o in out:
             assert o["media_bytes"]
             assert o["width"] > 0 and o["height"] > 0
             assert o["filename"].endswith(".png")
         # Highest-confidence face is first.
-        assert "Detection Confidence" in out[0]["custom_metadata"]
+        assert [o["custom_metadata"]["Detection Confidence"] for o in out] == [0.9, 0.8]
 
-    def test_no_faces_yields_no_output(self):
+    def test_no_faces_yields_no_output(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
-        # MTCNN returns ``None`` for boxes when it finds no faces.
-        detector = _fake_mtcnn(boxes=None, probs=[None])
+        provider([], [])
         media = {"filename": "empty.png", "media_bytes": _png_bytes()}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {})
-        assert out == []
+        assert Image2FaceMediaConverter().convert_normalized(media, {}) == []
 
-    def test_min_size_drops_tiny_detections(self):
+    def test_min_size_drops_tiny_detections(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
         # A 2px-wide box on a 100px image is below a 32px min size.
-        detector = _fake_mtcnn(boxes=[[10, 10, 12, 12]], probs=[0.95])
+        provider([[10, 10, 12, 12]], [0.95])
         media = {"filename": "tiny.png", "media_bytes": _png_bytes()}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {"padding": "0", "min_size": "32"})
-        assert out == []
+        assert Image2FaceMediaConverter().convert_normalized(media, {"padding": "0", "min_size": "32"}) == []
 
-    def test_below_threshold_detections_dropped(self):
+    def test_below_threshold_detections_dropped(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
         # A high-confidence face and a low-confidence one; only the first survives.
-        detector = _fake_mtcnn(boxes=[[10, 10, 60, 60], [20, 20, 70, 70]], probs=[0.95, 0.2])
+        provider([[10, 10, 60, 60], [20, 20, 70, 70]], [0.95, 0.2])
         media = {"filename": "mixed.png", "media_bytes": _png_bytes()}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {"threshold": "0.5", "padding": "0", "min_size": "1"})
+        out = Image2FaceMediaConverter().convert_normalized(
+            media, {"threshold": "0.5", "padding": "0", "min_size": "1"}
+        )
         assert len(out) == 1
 
-    def test_path_only_media_is_read_from_disk(self, tmp_path):
+    def test_path_only_media_is_read_from_disk(self, provider, tmp_path):
         """Reference (*thin*) mode passes only ``{filename, media_path}``.
 
         The runner's thin path hands the converter no ``media_bytes`` at all,
@@ -375,73 +260,55 @@ class TestImage2FaceConverter:
 
         src = tmp_path / "group.png"
         src.write_bytes(_png_bytes())
-
-        conv = Image2FaceMediaConverter()
-        detector = _fake_mtcnn(boxes=[[10, 10, 40, 40]], probs=[0.9])
+        provider([[10, 10, 40, 40]], [0.9])
         media = {"filename": "group.png", "media_path": str(src)}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+        out = Image2FaceMediaConverter().convert_normalized(media, {"padding": "0", "min_size": "1"})
         assert len(out) == 1
         assert out[0]["media_bytes"]
 
     def test_missing_path_yields_no_output(self, tmp_path):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
         media = {"filename": "gone.png", "media_path": str(tmp_path / "gone.png")}
-        out = conv.convert_normalized(media, {})
-        assert out == []
+        assert Image2FaceMediaConverter().convert_normalized(media, {}) == []
 
 
 class TestImage2FaceSourceBox:
     """Each crop records where it sat in its photo, as a fraction of the frame (#4748)."""
 
-    def test_each_crop_records_its_box_normalised_to_the_photo(self):
+    def test_each_crop_records_its_box_normalised_to_the_photo(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
         # A wide photo, so x and y normalise against different sides.
-        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40], [100, 50, 160, 90]], probs=[0.9, 0.8])
+        provider([[20, 10, 80, 40], [100, 50, 160, 90]], [0.9, 0.8])
         media = {"filename": "group.png", "media_bytes": _png_bytes(200, 100)}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            out = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+        out = Image2FaceMediaConverter().convert_normalized(media, {"padding": "0", "min_size": "1"})
 
         assert [o["source_box"] for o in out] == [[0.1, 0.1, 0.4, 0.4], [0.5, 0.5, 0.8, 0.9]]
 
-    def test_the_box_is_the_padded_crop(self):
+    def test_the_box_is_the_padded_crop(self, provider):
         """The box outlines what the crop shows, padding included, clamped to the photo."""
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        conv = Image2FaceMediaConverter()
-        detector = _fake_mtcnn(boxes=[[10, 40, 30, 60]], probs=[0.9])
+        provider([[10, 40, 30, 60]], [0.9])
         media = {"filename": "edge.png", "media_bytes": _png_bytes(100, 100)}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            (face,) = conv.convert_normalized(media, {"padding": "0.75", "min_size": "1"})
+        (face,) = Image2FaceMediaConverter().convert_normalized(media, {"padding": "0.75", "min_size": "1"})
 
         # 20 px face + 15 px a side: x runs -5..45 and clamps to 0..45.
         assert face["source_box"] == [0.0, 0.25, 0.45, 0.75]
         assert (face["width"], face["height"]) == (45, 50)
 
-    def test_a_downsampled_decode_still_gives_the_photo_fraction(self, monkeypatch):
+    def test_a_downsampled_decode_still_gives_the_photo_fraction(self, provider, monkeypatch):
         """Detection runs on a bounded decode, so the box must not be read as original pixels."""
         from vtscore.converters.image2face import Image2FaceMediaConverter
         from vtscore.media.image import decode
 
         monkeypatch.setattr(decode, "MAX_DECODE_PIXELS", 200 * 100)
-        seen: dict[str, tuple[int, int]] = {}
-
-        def detect(img, landmarks=False):
-            seen["size"] = img.size
-            return [[20, 10, 60, 50]], [0.9], None
-
-        detector = MagicMock()
-        detector.detect.side_effect = detect
-        conv = Image2FaceMediaConverter()
+        pipe = provider([[20, 10, 60, 50]], [0.9])
         media = {"filename": "big.png", "media_bytes": _png_bytes(400, 200)}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            (face,) = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+        (face,) = Image2FaceMediaConverter().convert_normalized(media, {"padding": "0", "min_size": "1"})
 
-        assert seen["size"] == (200, 100)
+        assert pipe.seen == [(100, 200, 3)]
         # Over the 400x200 original these pixels would read 0.05..0.15 wide.
         assert face["source_box"] == [0.1, 0.1, 0.3, 0.5]
 
@@ -453,34 +320,30 @@ class TestImage2FaceThroughTheRunner:
     importer-hook and clipper-chain paths, which keep the whole dict.
     """
 
-    def test_folder_conversion_keeps_source_box_and_confidence(self, tmp_path):
-        from vtscore.converters.image2face import CONVERTER
+    def test_folder_conversion_keeps_source_box_and_confidence(self, provider, tmp_path):
         from vtscore.converters.runner import run_converters_on_folder
 
         (tmp_path / "group.png").write_bytes(_png_bytes(200, 100))
-        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40]], probs=[0.9])
+        provider([[20, 10, 80, 40]], [0.9])
         medias: dict[int, dict] = {}
-        with patch.object(CONVERTER, "_make_detector", return_value=detector):
-            run_converters_on_folder(
-                tmp_path,
-                target_media_type="face",
-                medias=medias,
-                converter_specs=[{"converter": "image2face", "params": {"padding": "0", "min_size": "1"}}],
-            )
+        run_converters_on_folder(
+            tmp_path,
+            target_media_type="face",
+            medias=medias,
+            converter_specs=[{"converter": "image2face", "params": {"padding": "0", "min_size": "1"}}],
+        )
 
         (face,) = medias.values()
         assert face["media_type"] == "face"
         assert face["source_box"] == [0.1, 0.1, 0.4, 0.4]
-        assert face["custom_metadata"] == {"Detection Confidence": 0.9}
+        assert face["custom_metadata"]["Detection Confidence"] == 0.9
 
-    def test_demo_conversion_keeps_source_box(self):
-        from vtscore.converters.image2face import CONVERTER
+    def test_demo_conversion_keeps_source_box(self, provider):
         from vtscore.converters.runner import apply_converter_to_demo
 
         medias = {1: {"id": 1, "filename": "photo.png", "media_bytes": _png_bytes(200, 100), "category": "c"}}
-        detector = _fake_mtcnn(boxes=[[20, 10, 80, 40]], probs=[0.9])
-        with patch.object(CONVERTER, "_make_detector", return_value=detector):
-            apply_converter_to_demo("image2face", "demo_photos", medias)
+        provider([[20, 10, 80, 40]], [0.9])
+        apply_converter_to_demo("image2face", "demo_photos", medias)
 
         (face,) = medias.values()
         # The demo path runs at the converter's defaults, so the 0.25 padding
@@ -489,7 +352,7 @@ class TestImage2FaceThroughTheRunner:
 
 
 class TestImage2FaceAlign:
-    """``align`` turns each crop upright by its five landmarks; it changes pixels only (#4777)."""
+    """``align`` turns each stored crop upright by its five landmarks; it changes pixels only (#4777)."""
 
     COLOURS = ((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255))
 
@@ -503,11 +366,15 @@ class TestImage2FaceAlign:
             draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill=colour)
         return img
 
+    def _template(self, side):
+        """The ArcFace template scaled into a *side*-px box, upright, relative to the box's corner."""
+        from imagekit.face.face_align import ARCFACE_TEMPLATE, TEMPLATE_SIZE
+
+        return np.asarray(ARCFACE_TEMPLATE, dtype=np.float64) / TEMPLATE_SIZE * side
+
     def _landmarks(self, side, angle_deg, centre):
         """The template in a *side*-px box centred on *centre*, turned clockwise (y down) by *angle_deg*."""
-        from vtscore.converters.image2face import FACE_TEMPLATE
-
-        t = (np.asarray(FACE_TEMPLATE) - 0.5) * side
+        t = self._template(side) - side / 2
         th = np.radians(angle_deg)
         rot = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
         return t @ rot.T + np.asarray(centre)
@@ -535,17 +402,17 @@ class TestImage2FaceAlign:
         plain = img.crop((80, 80, 160, 160))
         with_pts = FaceDetection((80, 80, 160, 160), 0.9, (80.0, 80.0, 160.0, 160.0), pts)
         without = with_pts._replace(landmarks=None)
-        for det, align in ((with_pts, "none"), (without, "roll"), (without, "similarity")):
+        for det, align in ((with_pts, "none"), (without, "roll")):
             assert crop_face(img, det, align, 0.0).tobytes() == plain.tobytes()
 
     def test_roll_turns_the_box_upright_about_its_centre(self):
-        from vtscore.converters.image2face import FACE_TEMPLATE, FaceDetection, crop_face
+        from vtscore.converters.image2face import FaceDetection, crop_face
 
         pts = self._landmarks(80, 35, (120, 120))
         det = FaceDetection((80, 80, 160, 160), 0.9, (80.0, 80.0, 160.0, 160.0), pts)
         crop = crop_face(self._face(pts), det, "roll", 0.0)
         assert crop.size == (80, 80)
-        self._assert_dots_at(crop, np.asarray(FACE_TEMPLATE) * 80)
+        self._assert_dots_at(crop, self._template(80))
 
     def test_roll_of_an_upright_face_is_the_plain_crop(self):
         from vtscore.converters.image2face import FaceDetection, crop_face
@@ -556,171 +423,38 @@ class TestImage2FaceAlign:
         diff = np.abs(np.asarray(crop_face(img, det, "roll", 0.0), int) - np.asarray(img.crop((80, 80, 160, 160)), int))
         assert diff.max() <= 1
 
-    def test_similarity_frames_the_template_whatever_the_box(self):
-        from vtscore.converters.image2face import FACE_TEMPLATE, FaceDetection, crop_face
-
-        # A face 60 px across, turned 50 degrees, inside a loose, off-centre MTCNN box.
-        pts = self._landmarks(60, 50, (110, 130))
-        det = FaceDetection((60, 70, 170, 180), 0.9, (60.0, 70.0, 170.0, 180.0), pts)
-        crop = crop_face(self._face(pts), det, "similarity", 0.25)
-        # 60 px of face, padded 0.25 a side: a 90 px square, the template at (u + 0.25) / 1.5 of it.
-        assert crop.size == (90, 90)
-        self._assert_dots_at(crop, (np.asarray(FACE_TEMPLATE) + 0.25) / 1.5 * 90)
-
-    def test_alignment_changes_pixels_not_faces(self):
+    def test_alignment_changes_pixels_not_faces(self, provider):
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
         pts = self._landmarks(80, 40, (120, 120))
         buf = io.BytesIO()
         self._face(pts).save(buf, format="PNG")
         media = {"filename": "tilted.png", "media_bytes": buf.getvalue()}
+        provider([[80, 80, 160, 160]], [0.95], [pts])
         conv = Image2FaceMediaConverter()
-        detector = _fake_mtcnn(boxes=[[80, 80, 160, 160]], probs=[0.95], points=[pts])
-        out = {}
-        with patch.object(conv, "_make_detector", return_value=detector):
-            for align in ("none", "roll", "similarity"):
-                out[align] = conv.convert_normalized(media, {"align": align})
+        out = {align: conv.convert_normalized(media, {"align": align}) for align in ("none", "roll")}
         assert all(len(o) == 1 for o in out.values())
-        assert out["roll"][0]["source_box"] == out["none"][0]["source_box"] == out["similarity"][0]["source_box"]
+        assert out["roll"][0]["source_box"] == out["none"][0]["source_box"]
         assert out["roll"][0]["media_bytes"] != out["none"][0]["media_bytes"]
-        # roll keeps the padded box's size; similarity is square at the face's own scale (80 px x 1.5).
+        # roll keeps the padded box's size.
         assert (out["roll"][0]["width"], out["roll"][0]["height"]) == (
             out["none"][0]["width"],
             out["none"][0]["height"],
         )
-        assert (out["similarity"][0]["width"], out["similarity"][0]["height"]) == (120, 120)
+        # The vector is the provider's, from the full photo, whatever the crop's turn.
+        np.testing.assert_array_equal(out["roll"][0]["embeddings"]["face"], out["none"][0]["embeddings"]["face"])
 
     def test_the_default_is_roll(self):
         """``roll`` won on the FHIBE face bench (#4777), so it is what a conversion gets unasked."""
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        assert Image2FaceMediaConverter()._resolve_params(None)[3] == "roll"
+        assert Image2FaceMediaConverter()._resolve_params(None).align == "roll"
 
     def test_an_unknown_mode_is_refused(self):
-        import pytest
-
         from vtscore.converters.image2face import Image2FaceMediaConverter
 
-        with pytest.raises(ValueError):
-            Image2FaceMediaConverter().convert_normalized(
-                {"filename": "x.png", "media_bytes": _png_bytes()}, {"align": "tilt"}
-            )
-
-
-class TestImage2FaceSideways:
-    """``sideways`` takes each face's landmarks from the quarter turn MTCNN is most confident of (#4788)."""
-
-    COLOURS = TestImage2FaceAlign.COLOURS
-
-    def _scene(self):
-        """A 200x160 photo holding a face turned 90 degrees clockwise (y down), coloured dots at its landmarks.
-
-        Returns ``(img, true_points, wrong_points, template)``: the landmarks where they are, where an
-        MTCNN that took the face for upright would put them (in the same box), and the template.
-        """
-        from vtscore.converters.image2face import FACE_TEMPLATE
-
-        helper = TestImage2FaceAlign()
-        true_pts = helper._landmarks(80, 90, (100, 80))
-        wrong_pts = helper._landmarks(80, 0, (100, 80))
-        return helper._face(true_pts, size=(200, 160)), true_pts, wrong_pts, np.asarray(FACE_TEMPLATE)
-
-    def _detector(self, img, true_pts, wrong_pts, turned_conf=0.999, fail_turns=False):
-        """Plain pass: the box with upright-looking landmarks at 0.8. The 90-degree copy: the same face, its
-        true landmarks in that copy's frame, at *turned_conf*. The 270-degree copy: nothing."""
-        w, h = img.size
-        box = [60.0, 40.0, 140.0, 120.0]
-        calls = []
-
-        def to_turned_90(pts):  # stored -> turned 90 CCW: (x, y) -> (y, w - x)
-            pts = np.asarray(pts, dtype=float)
-            return np.stack([pts[:, 1], w - pts[:, 0]], axis=1)
-
-        def detect(im, landmarks=False):
-            calls.append(im.size)
-            if im.size == (w, h):
-                return [box], [0.8], [wrong_pts]
-            if fail_turns:
-                raise RuntimeError("no turned pass")
-            if len(calls) == 2:  # the 90-degree copy (h x w)
-                corners = to_turned_90([[box[0], box[1]], [box[2], box[3]]])
-                tbox = [*corners.min(axis=0), *corners.max(axis=0)]
-                return [tbox], [turned_conf], [to_turned_90(true_pts)]
-            return None, [None], None
-
-        det = MagicMock()
-        det.detect.side_effect = detect
-        det.calls = calls
-        return det
-
-    def test_the_frame_mapping_matches_pil_transposes(self):
-        from vtscore.converters.image2face import to_stored_frame
-
-        img = Image.new("L", (40, 30))
-        img.putpixel((7, 3), 255)  # centre (7.5, 3.5)
-        ops = {90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_270}
-        for turn, op in ops.items():
-            y, x = np.argwhere(np.asarray(img.transpose(op)) == 255)[0]
-            assert np.allclose(to_stored_frame([[x + 0.5, y + 0.5]], turn, 40, 30), [[7.5, 3.5]])
-
-    def test_a_sideways_face_is_turned_upright(self):
-        from vtscore.converters.image2face import Image2FaceMediaConverter
-
-        img, true_pts, wrong_pts, tmpl = self._scene()
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        media = {"filename": "lying.png", "media_bytes": buf.getvalue()}
-        conv = Image2FaceMediaConverter()
-        out = {}
-        for sideways in ("false", "true"):
-            with patch.object(conv, "_make_detector", return_value=self._detector(img, true_pts, wrong_pts)):
-                out[sideways] = conv.convert_normalized(
-                    media, {"align": "roll", "sideways": sideways, "padding": "0", "min_size": "1"}
+        for mode in ("tilt", "similarity"):
+            with pytest.raises(ValueError):
+                Image2FaceMediaConverter().convert_normalized(
+                    {"filename": "x.png", "media_bytes": _png_bytes()}, {"align": mode}
                 )
-        (plain,), (turned,) = out["false"], out["true"]
-        crop = Image.open(io.BytesIO(turned["media_bytes"])).convert("RGB")
-        TestImage2FaceAlign()._assert_dots_at(crop, tmpl * 80)
-        assert plain["media_bytes"] != turned["media_bytes"]
-        # The face, its box and its confidence are the plain pass's either way.
-        assert plain["source_box"] == turned["source_box"]
-        assert plain["custom_metadata"] == turned["custom_metadata"] == {"Detection Confidence": 0.8}
-
-    def test_a_less_confident_turn_changes_nothing(self):
-        from vtscore.converters.image2face import Image2FaceMediaConverter
-
-        img, true_pts, wrong_pts, _ = self._scene()
-        conv = Image2FaceMediaConverter()
-        detector = self._detector(img, true_pts, wrong_pts, turned_conf=0.7)
-        faces = conv._kept_faces(detector.detect(img, landmarks=True), *img.size, 0.5, 0.0, 1)
-        again = conv._sideways_landmarks(detector, img, faces)
-        assert again[0].landmarks is not None and faces[0].landmarks is not None
-        assert np.array_equal(again[0].landmarks, faces[0].landmarks)
-
-    def test_only_quarter_turns_are_searched(self):
-        from vtscore.converters.image2face import SIDEWAYS_TURNS, Image2FaceMediaConverter
-
-        assert SIDEWAYS_TURNS == (90, 270)
-        img, true_pts, wrong_pts, _ = self._scene()
-        detector = self._detector(img, true_pts, wrong_pts)
-        conv = Image2FaceMediaConverter()
-        with patch.object(conv, "_make_detector", return_value=detector):
-            conv._detect_faces(img, 0.5, 0.0, 1, sideways=True)
-        # The plain photo, then one copy turned each quarter way: (200, 160), (160, 200), (160, 200).
-        assert detector.calls == [(200, 160), (160, 200), (160, 200)]
-
-    def test_a_failed_search_keeps_the_plain_landmarks(self):
-        from vtscore.converters.image2face import Image2FaceMediaConverter
-
-        img, true_pts, wrong_pts, _ = self._scene()
-        conv = Image2FaceMediaConverter()
-        with patch.object(
-            conv, "_make_detector", return_value=self._detector(img, true_pts, wrong_pts, fail_turns=True)
-        ):
-            (face,) = conv._detect_faces(img, 0.5, 0.0, 1, sideways=True)
-        assert face.landmarks is not None
-        assert np.allclose(face.landmarks, wrong_pts)
-
-    def test_the_search_is_off_by_default(self):
-        from vtscore.converters.image2face import Image2FaceMediaConverter
-
-        assert Image2FaceMediaConverter()._resolve_params(None).sideways is False

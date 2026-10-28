@@ -78,6 +78,41 @@ describe('HintsService', () => {
     expect(hints.isShown('offline')).toBe(false);
   });
 
+  it('knows no feature as used until the user tries it (#5360)', async () => {
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(false);
+    await loadSettings({ used_features: ['browse-select'] });
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(false);
+    expect(hints.hasUsed('browse-select')).toBe(true);
+  });
+
+  it('records a first use once, keeping the uses already stored (#5360)', async () => {
+    await loadSettings({ used_features: ['browse-select'] });
+    hints.markUsed('browse-pan-zoom');
+    hints.markUsed('browse-pan-zoom');
+    hints.markUsed('browse-select');
+    const req = httpMock.expectOne('/api/settings');
+    expect(req.request.body).toEqual({ used_features: ['browse-select', 'browse-pan-zoom'] });
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(true);
+
+    req.flush({ used_features: ['browse-select', 'browse-pan-zoom'] });
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(true);
+    hints.markUsed('browse-pan-zoom');
+    httpMock.expectNone('/api/settings');
+  });
+
+  it('records no use before the settings load, which would overwrite the stored ones', () => {
+    hints.markUsed('browse-pan-zoom');
+    httpMock.expectNone('/api/settings');
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(false);
+  });
+
+  it('forgets a use whose write fails, so its hint comes back', async () => {
+    await loadSettings({});
+    hints.markUsed('browse-pan-zoom');
+    httpMock.expectOne('/api/settings').flush('down', { status: 500, statusText: 'Server Error' });
+    expect(hints.hasUsed('browse-pan-zoom')).toBe(false);
+  });
+
   it('lets Show All in Settings bring a hidden hint back', async () => {
     await loadSettings({});
     hints.hideAll();

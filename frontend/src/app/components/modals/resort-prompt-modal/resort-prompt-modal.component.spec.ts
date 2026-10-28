@@ -108,9 +108,9 @@ describe('ResortPromptModalComponent', () => {
     const el = renderPrompt({ currentExampleDisplay: 'dog barking' });
 
     // A ring on the keep button read as the recommended answer, and the next
-    // Space or Enter took it.
+    // Space or Enter took it. showModal() focuses the first `autofocus` element.
     const box = el.querySelector('.modal-content')!;
-    expect(box.hasAttribute('cdkFocusInitial')).toBe(true);
+    expect(box.hasAttribute('autofocus')).toBe(true);
     expect(box.getAttribute('tabindex')).toBe('-1');
   });
 

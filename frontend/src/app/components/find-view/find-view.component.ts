@@ -19,6 +19,7 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
+import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { LineTestSessionService } from '../../services/line-test-session.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { ToastService } from '../../services/toast.service';
@@ -95,6 +96,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
   private detectorsFindApi = inject(DetectorsFindApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private autofindSetup = inject(AutoFindSetupService);
   private router = inject(Router);
   private loadingTasksSvc = inject(DashboardLoadingTasksService);
   private toast = inject(ToastService);
@@ -995,7 +997,8 @@ export class FindViewComponent implements OnInit, OnDestroy {
   /**
    * The verdict's reason to exist: put the detector on the AutoFind list, so
    * every dataset it runs over ships its matches unchecked at this balance,
-   * and head to the Dashboard, where the AutoFind tab reads the result.
+   * and head to the Dashboard, where the AutoFind tab reads the result. A
+   * user's first AutoFind detector asks where its results should go (#5344).
    */
   onMoveToAutoFind(): void {
     const modelId = this.activeContext.modelId;
@@ -1012,6 +1015,7 @@ export class FindViewComponent implements OnInit, OnDestroy {
             dedupKey: 'find-move-to-autofind',
           });
           void this.router.navigate(['/dashboard']);
+          void this.autofindSetup.offerAfterMove({ id: modelId, name });
         },
         error: (err: { error?: { message?: string } }) => {
           this.toast.error({ message: err?.error?.message || 'Could not move the detector to AutoFind', dedupKey: 'find-move-to-autofind-error' });

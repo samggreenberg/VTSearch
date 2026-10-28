@@ -138,7 +138,9 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
 The completed feature's contract. Kept below the open work because it mostly
 documents shipped mechanics; retained because it is the living spec a
-future contributor needs when picking up the open follow-ups.
+future contributor needs when picking up the open follow-ups. When those ship,
+this section moves to `docs/ARCHITECTURE.md` (or `vtscore/docs/`) and the plan
+is deleted.
 
 ### What Browse reuses / does not use
 
@@ -156,11 +158,15 @@ replaces both). It is a browser, not a trainable searcher.
 ### API surface
 
 - **`POST /api/projection/build`** — kicks the background UMAP + pyramid job for
-  the loaded dataset; reports progress.
+  the loaded dataset (or, with `ids`, a subset of it); reports progress.
+- **`POST /api/projection/subset/remove`** — drops ids from the current subset
+  browse without re-fitting.
 - **`GET /api/projection/meta`** — bounds, zoom levels, per-level hex sizing,
   point count, build status, media type, resolved `bin_shape`.
 - **`GET /api/projection/tiles/<level>/<tx>/<ty>`** — the bin aggregates for one
   tile at one level.
+- **`GET /api/projection/labels`** — the region signposts lettered over the map
+  (see [`vtsbrowse-toponymy.md`](vtsbrowse-toponymy.md)).
 
 Shape is derived server-side from the dataset's media type, so no endpoint takes
 a `shape` parameter. Existing media endpoints are reused as-is for hover preview.
@@ -239,7 +245,7 @@ viewport.
 | Canvas point | **Item (clip for audio), not file** | Sibling clips land independently. |
 | Product scope (v1) | **Browse-only** | Pan/zoom/hover-preview. No voting/training/ranking (handoff cut). |
 | Bin color | **Density (count)** | Log/sqrt-scaled; aggregated by the pyramid for free. |
-| UMAP seeding | **Unseeded (fast)** | Safe only because the projection is frozen at ingest. |
+| UMAP seeding | **Unseeded (fast)** | Safe only because the projection is frozen at ingest. `VTSEARCH_PROJECTION_SEED` opts into a seeded, single-threaded fit (the screenshot harness uses it). |
 | Projection lifetime | **Frozen at ingest, persisted** | Carve-out from "No Persisted Vectors/MLPs" (coords + pyramid only). Dissolves tile-cache invalidation. |
 | Bin shape | **Fixed by media type** | Square for image/video/document/face/audio, hex for text; no user toggle. |
 

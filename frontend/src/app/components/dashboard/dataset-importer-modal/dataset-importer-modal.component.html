@@ -49,10 +49,11 @@
       <vt-demo-picker
         [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
-        [buildProjection]="buildProjection"
-        (buildProjectionChange)="buildProjection = $event"
-        [mergeNearDuplicates]="mergeNearDuplicates"
-        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [buildProjection]="buildProjection()"
+        (buildProjectionChange)="onBuildProjectionChange($event)"
+        [mergeNearDuplicates]="mergeNearDuplicates()"
+        (mergeNearDuplicatesChange)="onMergeNearDuplicatesChange($event)"
+        (typeDefaultsApplied)="onTypeDefaultsApplied($event)"
         [autofind]="autofindFlag"
         (demoDatasetSelected)="onDemoDatasetSelected($event)"
       ></vt-demo-picker>
@@ -64,7 +65,7 @@
           mediaTypeFieldId="sf-media-type"
           [mediaType]="serverFolderPicker().mediaType()"
           (mediaTypeChange)="serverFolderPicker().onMediaTypeChange($event)"
-          [mediaTypeOptions]="serverFolderPicker().mediaTypeOptions"
+          [mediaTypeOptions]="serverFolderPicker().mediaTypeOptions()"
           [mediaTypeOptionLabels]="serverFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="serverFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="serverFolderPicker().detectionHint()"
@@ -80,10 +81,11 @@
         [mediaTypes]="mediaTypes()"
         [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
-        [buildProjection]="buildProjection"
-        (buildProjectionChange)="buildProjection = $event"
-        [mergeNearDuplicates]="mergeNearDuplicates"
-        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [buildProjection]="buildProjection()"
+        (buildProjectionChange)="onBuildProjectionChange($event)"
+        [mergeNearDuplicates]="mergeNearDuplicates()"
+        (mergeNearDuplicatesChange)="onMergeNearDuplicatesChange($event)"
+        (typeDefaultsApplied)="onTypeDefaultsApplied($event)"
         [autofind]="autofindFlag"
         (importStarted)="importStarted.emit()"
       ></vt-server-folder-picker>
@@ -103,9 +105,9 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="lf-media-type"
-          [mediaType]="localFolderPicker().mediaType"
+          [mediaType]="localFolderPicker().mediaType()"
           (mediaTypeChange)="localFolderPicker().onMediaTypeChange($event)"
-          [mediaTypeOptions]="localFolderPicker().mediaTypeOptions"
+          [mediaTypeOptions]="localFolderPicker().mediaTypeOptions()"
           [mediaTypeOptionLabels]="localFolderPicker().mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="localFolderPicker().mediaTypeOptionIcons"
           [detectionHint]="localFolderPicker().detectionHint()"
@@ -121,10 +123,11 @@
         [mediaTypes]="mediaTypes()"
         [guessedMediaType]="guessedMediaType()"
         [guessedMediaEmbedder]="guessedMediaEmbedder()"
-        [buildProjection]="buildProjection"
-        (buildProjectionChange)="buildProjection = $event"
-        [mergeNearDuplicates]="mergeNearDuplicates"
-        (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [buildProjection]="buildProjection()"
+        (buildProjectionChange)="onBuildProjectionChange($event)"
+        [mergeNearDuplicates]="mergeNearDuplicates()"
+        (mergeNearDuplicatesChange)="onMergeNearDuplicatesChange($event)"
+        (typeDefaultsApplied)="onTypeDefaultsApplied($event)"
         [autofind]="autofindFlag"
         (importStarted)="importStarted.emit()"
       ></vt-local-folder-picker>
@@ -137,10 +140,11 @@
     [mediaTypes]="mediaTypes()"
     [guessedMediaType]="guessedMediaType()"
     [guessedMediaEmbedder]="guessedMediaEmbedder()"
-    [buildProjection]="buildProjection"
-    (buildProjectionChange)="buildProjection = $event"
-    [mergeNearDuplicates]="mergeNearDuplicates"
-    (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+    [buildProjection]="buildProjection()"
+    (buildProjectionChange)="onBuildProjectionChange($event)"
+    [mergeNearDuplicates]="mergeNearDuplicates()"
+    (mergeNearDuplicatesChange)="onMergeNearDuplicatesChange($event)"
+    (typeDefaultsApplied)="onTypeDefaultsApplied($event)"
     [autofind]="autofindFlag"
     (importStarted)="importStarted.emit()"
   ></vt-generic-form-picker>
@@ -185,7 +189,7 @@
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit">
+      <button class="btn btn--primary" (click)="genericFormPicker().submit()" [disabled]="genericFormPicker().submitting() || !genericFormPicker().canSubmit()">
         @if (genericFormPicker().submitting()) {
           Importing…
         } @else {

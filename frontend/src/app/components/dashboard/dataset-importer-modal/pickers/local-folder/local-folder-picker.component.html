@@ -5,7 +5,7 @@
         <input
           id="lf-recursive"
           type="checkbox"
-          [ngModel]="recursive"
+          [ngModel]="recursive()"
           (ngModelChange)="onRecursiveChange($event)"
         />
         Include subfolders
@@ -19,12 +19,12 @@
       id="lf-dataset-name"
       type="text"
       class="form-input"
-      [ngModel]="datasetName"
+      [ngModel]="datasetName()"
       (ngModelChange)="onDatasetNameInput($event)"
       placeholder="Leave blank to use a default name"
     />
     @if (multiDataset()) {
-      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ datasetName || 'upload' }} – Image”.</p>
+      <p class="info-text">Each dataset is named after this and its kind of media, like “{{ datasetName() || 'upload' }} – Image”.</p>
     }
   </div>
 
@@ -38,7 +38,7 @@
     [selectedCleaners]="selectedCleaners()"
     (selectedCleanersChange)="selectedCleaners.set($event)"
     [showSourceSpecs]="true"
-    [sourceSpecs]="sourceSpecs"
+    [sourceSpecs]="sourceSpecs()"
     (sourceSpecsChange)="onSpecsChange($event)"
     [selectedEmbedder]="selectedEmbedder()"
     (selectedEmbedderChange)="selectedEmbedder.set($event)"
@@ -46,7 +46,7 @@
     (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
     [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
     (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
-    [lockedEmbedder]="lockedEmbedderFor(mediaType, embedders())"
+    [lockedEmbedder]="lockedEmbedderFor(mediaType(), embedders())"
     [selectedClipper]="selectedClipper()"
     [selectedClipperParams]="clipperParamValues()"
     (clipperChooserRequested)="openClipperChooser()"
@@ -80,8 +80,8 @@
 </div>
 
 <vt-clipper-chooser
-  [open]="clipperChooserOpen"
-  [clippers]="clipperChooserClippers"
+  [open]="clipperChooserOpen()"
+  [clippers]="clipperChooserClippers()"
   (selected)="onClipperChooserSelected($event)"
   (cancelled)="onClipperChooserCancelled()"
 />

@@ -18,7 +18,7 @@ The largest package in the library. Every module, grouped by role.
 | Module | Concern |
 |--------|---------|
 | `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
-| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export` |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key`, `labelset_for_export`, `label_entry_for_export`, `elements_for_media` |
 | `vtscore/datasets/metadata.py` | Per-media metadata extraction |
 | `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
 | `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
@@ -33,7 +33,8 @@ The largest package in the library. Every module, grouped by role.
 |--------|---------|
 | `vtscore/datasets/loader.py` | `export_dataset_to_file` and the loader re-export façade |
 | `vtscore/datasets/loader_common.py` | Helpers shared by the three loader modules (leaf; no cycles) |
-| `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked) |
+| `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked, and the deferred chunk walk) |
+| `vtscore/datasets/chunks.py` | `DeferredChunk`, a chunk walked but not built (a resumed CLI run's skip) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
 | `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
@@ -192,6 +193,14 @@ means nothing to a receiver that trains its own (#5131): `threshold` from
 `detector_meta`, and `rank_at_vote` / `score_at_vote` from each element's
 `vt:provenance` (`vote_provenance.NON_PORTABLE_FIELDS`). The rest of the
 payload passes through, and the detector's own JSON keeps every field.
+`label_entry_for_export(entry)` is its per-entry half, for an export that never
+holds the whole labelset (`ResultsExporter.export_labelset_streaming`).
+
+`elements_for_media(media, label)` (same module) is the conversion the label
+export applies to a voted media: the `LabeledElement` s it records, a dupe
+set expanded to one per member. A `build_media_hit` hit works as *media* too,
+which is how the CLI's `--stream-results --as-labelset` labels hits without
+their medias.
 
 ```python
 from vtscore.datasets import LabelSet, LabeledElement
@@ -233,6 +242,7 @@ of the file instead of at the bottom to dodge a cycle.
 |---------------------------------|---------------------------|------------------------------------------------------|
 | `load_dataset_from_folder`      | `loader_folder.py`    | Populates `medias` in-place; returns `None`.         |
 | `load_dataset_from_folder_chunked` | `loader_folder.py` | Iterator of chunk dicts.                             |
+| `iter_folder_chunks_deferred`   | `loader_folder.py`    | Iterator of `DeferredChunk`s: the same chunks, unbuilt, each keyed by its files' path, size and mtime. |
 | `load_dataset_from_pickle`      | `loader_pickle.py`    | Populates `medias` in-place; returns the cached `coverage_atlas` payload, or `None`. |
 | `load_dataset_from_pickle_chunked` | `loader_pickle.py` | Iterator of chunk dicts.                             |
 | `load_demo_dataset`             | `loader_demo.py`       | Populates `medias` in-place; returns `None`.         |
@@ -491,7 +501,7 @@ each `get_source_for_origin` call returns a fresh instance; call
 `vtscore/datasets/registry.py` maintains a JSON manifest at
 `<DATA_DIR>/dataset_registry.json` listing every dataset the user has
 *saved* to disk (one `.pkl` per dataset, in `get_saved_datasets_dir()`,
-which reads `CoreConfig.from_settings().saved_datasets_dir`).
+which reads `get_setting("saved_datasets_dir")`).
 
 ```python
 from vtscore.datasets.registry import (

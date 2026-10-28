@@ -98,6 +98,31 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
         --prefer-binary \
         -r "requirements/$REQUIREMENTS"
 
+# ---------- onnxruntime-gpu for the face models ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_onnxruntime_gpu` by hand (issue #5363). The imagekit face path
+# (image2face, provider oss) runs its detector and embedder on onnxruntime, and
+# pyproject.toml declares the CPU build, which the layer above installed; without
+# this swap the face models stay on the CPU under VTSEARCH_DEVICE=cuda. The GPU
+# build still carries the CPU provider, so a container with no GPU is unchanged.
+#
+# Both wheels install the same `onnxruntime` module, so the CPU build is
+# uninstalled FIRST: uninstalling it afterwards would delete files the GPU build
+# shares. For the same reason no later layer may pip-install the project with
+# its dependencies, which would put the CPU build back over this one.
+#
+# 1.26.0 is the newest release built for CUDA 12. From 1.27.0 on, the PyPI wheels
+# are CUDA 13 builds (their `cuda` extra names the nvidia-*-cu13 libraries): the
+# cu129 torch above brings CUDA 12.9 libraries, and the base admits drivers too
+# old for CUDA 13. install.sh pins the same release for its own reason (the
+# newest that runs on a V100), so the two pins can move independently.
+#
+# Unlike install.sh, a failure here does not fall back to the CPU build: as
+# with cuML below, a build-once-ship image should fail loudly rather than
+# quietly ship face models that never use the GPU.
+RUN pip uninstall -y onnxruntime && \
+    pip install --no-cache-dir "onnxruntime-gpu==1.26.0"
+
 # ---------- VTSBrowse signpost naming (toponymy) ----------
 # Docker builds never run scripts/install.sh, so this step mirrors its
 # `vts_install_toponymy` by hand. Without it the image ships without
@@ -108,20 +133,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # rejects the flag inside a requirements file): toponymy 0.5.2 pins
 # `transformers<5.0.0`, which a plain install would honour by downgrading the
 # image's transformers stack. That pin is empirically unnecessary for our
-# usage -- see docs/plans/vtsbrowse-toponymy.md -- so the package goes in bare
+# usage -- see docs/SETUP.md -- so the package goes in bare
 # and its real dependencies (fast_hdbscan, vectorizers, apricot-select,
 # tenacity, jinja2) come from `requirements/$REQUIREMENTS`, which declares
 # them on toponymy's behalf through pyproject.toml.
 RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
-
-# ---------- FaceNet (image2face, the face localizer, the face embedder) ----------
-# Docker builds never run scripts/install.sh, so this step mirrors its
-# `vts_install_face_deps` by hand (issue #4886). facenet-pytorch's torch<2.3 /
-# numpy<2 / Pillow<10.3 pins would downgrade the stack and are empirically
-# unnecessary, so it goes in `--no-deps` on the torch, torchvision, numpy,
-# Pillow, requests and tqdm already installed. MTCNN's weights ship inside the
-# wheel; FaceNet's checkpoint downloads into the models cache on first use.
-RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 # ---------- cuML / RAPIDS layer (GPU UMAP + k-means) ----------
 # cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means
@@ -140,7 +156,7 @@ RUN pip install --no-cache-dir --no-deps facenet-pytorch
 # downgrade pandas here, #4390), and it requires nvidia-nvjitlink-cu12>=12.9,
 # which the cu129 torch pinned above satisfies with the same 12.9.x libraries
 # RAPIDS is built on. `pandas>=3` is repeated so a RAPIDS that could not take it
-# fails this layer instead of quietly moving pandas. See docs/DEPLOYMENT.md
+# fails this layer instead of quietly moving pandas. See docs/TROUBLESHOOTING.md
 # "cuML crashes compiling a kernel".
 RUN pip install --no-cache-dir \
         --extra-index-url https://pypi.nvidia.com \

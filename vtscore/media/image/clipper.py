@@ -203,9 +203,7 @@ class ImageObjectClipper(MediaClipper):
     pipeline keeps them as the original (single-element) media; the
     ``MediaClipper.clip`` contract requires at least one element.
 
-    The default ``model_id`` of ``"yolo11n.pt"`` matches
-    :class:`~vtscore.media.image.extractor.ImageClassExtractor` so a single
-    YOLO weight serves both detection-as-metadata and detection-as-clips.
+    The default ``model_id`` is ``"yolo11n.pt"``, the smallest YOLO11 weight.
     """
 
     def __init__(

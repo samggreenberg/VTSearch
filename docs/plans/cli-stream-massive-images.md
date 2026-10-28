@@ -1,6 +1,6 @@
 # CLI streaming for massive media sources
 
-**Status:** Lazy enumeration, streaming export, and per-chunk embed are in place; remaining work is the open follow-ups below (global ordering, resume/checkpoint).
+**Status:** Lazy enumeration, streaming export, per-chunk embed and `--resume` are in place; remaining work is the open follow-ups below (global ordering, a faster resume for folders).
 
 **Parent:** [`scalability.md`](scalability.md) — the brainstorm that defines the
 `S#` IDs. This plan implements the CLI-specific pieces (S15 enumeration, S20
@@ -17,14 +17,12 @@ python app.py --autodetect --tempimport --importer server_folder --path /data/im
 
 <!-- item-sep -->
 
-- **Global ordering for streamed results.** External merge-sort of the NDJSON,
-  or a bounded top-K heap mode (`--max-results N`) that keeps the best N hits
-  globally sorted at `O(K)` RAM. (Streamed output is currently chunk-ordered —
-  an accepted Phase 1 tradeoff.)
+- [ ] #5279 — Global ordering for streamed results (top-K heap or external merge-sort)
 
 <!-- item-sep -->
 
-- **Resume / checkpoint** for multi-hour billion-image runs (record the last
-  completed chunk so an interrupted run can restart mid-tree).
+
+<!-- item-sep -->
+
 
 <!-- item-sep -->

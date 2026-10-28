@@ -9,9 +9,7 @@ Architecture](#shared-plugin-architecture) below.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-media.md](EXTENDING-media.md) (media types,
-embedders, clippers, converters, sources) ·
-[EXTENDING-processors.md](EXTENDING-processors.md) (detectors, localizers,
-extractors).
+embedders, clippers, converters, sources).
 
 ## Contents
 
@@ -41,7 +39,7 @@ extractors).
 - [Adding a Settings Importer](#adding-a-settings-importer) (app tier)
 - [Adding a Settings Exporter](#adding-a-settings-exporter) (app tier)
 - [Adding a Settings Source](#adding-a-settings-source) (app tier), with
-  [How the sync engine works](#how-the-sync-engine-works)
+  [what the sync engine expects of a source](#what-the-sync-engine-expects-of-a-source)
 - [Adding a Labelset Source](#adding-a-labelset-source)
 
 ---
@@ -66,7 +64,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
-| `cleaners` | library | Media cleaners | 7 |
+| `cleaners` | library | Media cleaners | 8 |
 | `settings_importers` | app | Settings importers | 2 |
 | `settings_exporters` | app | Settings exporters | 2 |
 | `settings_sources` | app | Settings sources | 1 |
@@ -113,8 +111,9 @@ other parameter is optional.
 | `step`        | `str`       | `""`     | For `"number"` fields: step increment. The CLI parses the value as `int` only when `step`, `default`, `min` and `max` all lack a decimal point; otherwise (e.g. `step="0.05"`) as `float` |
 | `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 | `hidden`      | `bool`      | `False`  | When `True`, no GUI form renders a widget for this field: the value is yours to fix via `default`, not the user's to type. Pair the two — the framework fills a hidden field in from its default like any other blank field, so your `run()` / `export()` reads it exactly as if the user had typed it. A plugin whose fields are *all* hidden presents as a bare action button. Hiding is a **GUI affordance only** (the field-level sibling of `PluginBase.hidden_from_picker`): the field keeps its CLI flag, stays on the wire, and is validated and normalised like any other, so it is never a place to put a secret — use `field_type="password"` for that |
+| `visible_when` | `dict[str, str \| bool \| list]` | `{}` | Show this field only while other fields hold given values, e.g. `{"enable_email": True}` (see [Conditional fields](#conditional-fields)). While the condition fails the field is not rendered, not required, and reaches your `run()` / `export()` as its default (or blank) rather than as whatever was typed before it disappeared |
 | `opened_in_browser` | `bool` | `False` | For `"url"` fields: the URL is opened by the user's browser (e.g. an exporter's `open_url`) and never fetched by the server, so it is validated with `validate_browser_url` (scheme allowlist; `localhost` and LAN hosts pass) instead of the SSRF guard `validate_url`. Leave it `False` for any URL your plugin fetches itself |
-| `include_in_origin` | `bool \| None` | `None` | Whether to copy this field's value into the persisted origin dict. `None` means "use the field-type default": `False` for `"file"` and `"password"`, `True` otherwise |
+| `include_in_origin` | `bool \| None` | `None` | Whether to copy this field's value into the persisted origin dict (a dataset importer's), or into the import record of a detector a label importer creates. `None` means "use the field-type default": `False` for `"file"` and `"password"`, `True` otherwise |
 | `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Converts the value to the string persisted in the origin. Use for list/dict values whose `str(...)` isn't round-trip safe. Ignored when `include_in_origin` resolves to `False` |
 | `template_vars` | `tuple[str, ...]` | `()` | Template variables the framework substitutes into this field's value before your `run()` / `export()` sees it — see [Framework-side field normalization](#framework-side-field-normalization). An empty tuple (the default) means **no substitution happens** |
 
@@ -197,60 +196,32 @@ don't pick one get a letter instead of inheriting yours), and its
 
 **Do not write input-handling boilerplate in your plugin body.** Before
 `field_values` reaches your `run()` / `export()` / `_do_load()` /
-`_do_save()`, the framework runs it through
-`normalize_field_values()` (`vtscore/plugins/normalize.py`). One pass
-applies to **every** non-`file` field:
+`_do_save()`, the framework runs it through `normalize_field_values()`
+(`vtscore/plugins/normalize.py`), which, for every declared non-`file`
+field:
 
-1. **Declared defaults fill in blanks.** A field that arrives missing,
-   empty, or whitespace-only takes its `default`, so you never have to
-   write `field_values.get(key) or MY_DEFAULT`. This runs first, which is
-   why a declared default satisfies `required`.
+1. fills a missing / blank value from the field's `default` (so a
+   declared default satisfies `required`);
+2. strips whitespace, then raises `ValueError("<Label> is required.")`
+   for a required field that is still empty;
+3. substitutes the field's declared `template_vars` (see below);
+4. runs the field-type security check: `url` through the SSRF guard
+   `validate_url` (or `validate_browser_url` when `opened_in_browser=True`),
+   `server_path` / `folder` through `confine_server_filepath()` at the
+   per-user data dir, with the **approved path written back** into
+   `field_values`. Consume `field_values[key]`, never a raw value from
+   elsewhere: re-deriving the path yourself can resolve into another
+   user's directory even though the check passed.
 
-The remaining three apply to every text-like field (`text`, `url`,
-`email`, `password`, `folder`, `server_path`, `select`):
-
-2. **Whitespace strip.** `field_values[key]` is already trimmed — no
-   `.strip()` in your body. A required field that is still empty (or
-   missing) after stripping — meaning it declares no default either —
-   raises `ValueError("<Label> is required.")`, so no
-   `if not foo: raise` boilerplate either.
-3. **Template-variable substitution**, for fields that declare
-   `template_vars` (see below).
-4. **Field-type-driven security validation.** A `url` field is passed
-   through `vtscore.security.url_validation.validate_url` (the SSRF
-   guard), unless it declares `opened_in_browser=True`, in which case it
-   gets the browser-side scheme guard `validate_browser_url` instead. A `server_path` or `folder` field is passed through
-   `confine_server_filepath()` anchored at the per-user data dir, and
-   the **approved, canonicalised path is written back** into
-   `field_values` — so your body must consume `field_values[key]`, not
-   the raw value it saw elsewhere. That write-back is the point: under
-   multi-user confinement the validator resolves a relative path against
-   the user's data dir while your plugin would resolve it against the
-   process CWD, so re-deriving the path yourself can read another user's
-   directory even though the check passed.
-
-Both ingress points run the pass, so HTTP and CLI behave identically:
-
-| Path | Where it runs |
-|------|---------------|
-| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_plugins.py`, after the marshmallow load and file-upload population |
-| HTTP, nested `{"..._name", "field_values"}` body | `validate_exporter_field_values()` in the same module |
-| CLI  | `PluginBase.validate_cli_field_values()`, after the presence check |
-| Saved settings | The AutoFind results exporter is handed its persisted `field_values` map with no schema in the loop, so this pass is the only one that runs |
-| Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a **copy** of `field_values` before dispatching to your `_do_*` hook (`vtscore/sync/__init__.py`) |
-
-Calling `validate_url()` or `validate_server_filepath()` by hand still
-works — re-validation is idempotent — but it is redundant for anything
-that arrives as a declared field. You still need them for a URL or path
-your plugin *constructs* (e.g. a second endpoint derived from a
-configured base URL, or a path joined from a field plus a filename).
-
-**Two families are not covered**, because their values ride in as
-pass-through payloads rather than plugin form bodies: media converters
-(`params`, validated by `convert_normalized()` against the `fields`
-schema — types and ranges, but no URL/path guard) and media clipper
-`parameters`. A converter that accepts a URL or a server path must
-validate it itself.
+The pass runs on every ingress (HTTP flat and nested bodies in
+`vtsearch/routes/_plugins.py`, the CLI, AutoFind's saved exporter config,
+and the `SyncSource` wrappers), so HTTP and CLI behave identically. It
+does **not** cover media converter `params` or clipper `parameters`, and
+it cannot vet a URL or path your plugin *constructs*; validate those
+yourself. The full rules, the per-ingress table and the security
+rationale are in
+[`vtscore/docs/extending/README.md` § Framework-side normalization](../vtscore/docs/extending/README.md#framework-side-normalization),
+the canonical statement of this contract.
 
 #### Template variables (`template_vars`)
 
@@ -269,20 +240,13 @@ PluginField(
 
 With `template_vars` omitted (the default `()`), a user's
 `{detector_name}` reaches your plugin as that literal string — a silent
-no-op that looks like a plugin bug. Supported names:
-
-| Variable | Resolves to |
-|----------|-------------|
-| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp — unique per run, so consecutive exports don't overwrite each other |
-| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs (`results_{YYYY}.{MM}.{DD}.csv`) |
-| `{detector_name}` / `{detector_id}` | The active `DetectorContext`'s name / id |
-| `{username}` | The current user (single-user installs: `"default"`) |
-
-Declaring a name that isn't on this list raises `ValueError` on the
-first request, so a typo fails fast rather than shipping a literal
-placeholder into a filename. Every substituted value is run through
-`sanitize_template_value()`, so a detector named `../../etc/passwd`
-cannot escape the directory implied by an admin-configured template.
+no-op that looks like a plugin bug. The supported names are
+`{YYYYMMDD-HHMMSS}`, `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` (UTC),
+`{detector_name}` / `{detector_id}` (the active detector) and
+`{username}`; an unknown name raises `ValueError` on the first request,
+and every value is sanitised so it cannot escape the templated directory.
+The resolution table is in the
+[library guide](../vtscore/docs/extending/README.md#template-variables).
 
 **Declaring the variable is also what makes the GUI show the value.**
 Run-now plugin forms (the Export modal, the Find Results export)
@@ -349,7 +313,7 @@ def run(self, field_values):
 
 Your `display_name` is attached automatically as the notification's source,
 so the toast says which plugin spoke. Code that isn't a `PluginBase`
-subclass (an embedder, a processor, a route helper) calls the underlying
+subclass (an embedder, a clipper, a route helper) calls the underlying
 function directly and passes its own label:
 
 ```python
@@ -435,14 +399,11 @@ name on the left. After `pip install` of the third-party package, the
 plugin appears in `list_importers()`, the relevant `/api/...` endpoint, and
 `python app.py --list-plugins` without any changes to the core repo.
 
-Built-in plugins take precedence: if an entry point's plugin `name` clashes
-with a name already registered by the package scan, it is skipped and a
-warning is emitted. An entry point with no `name` attribute warns and is
-skipped. One whose own import raises (typically a missing optional
-dependency) warns and is registered as a *tombstone* under the entry-point
-name: it is left out of listings, but a by-name lookup still resolves and
-re-raises the original error (as `ImportError`) on first use. Neither case blocks discovery of other
-plugins.
+Built-in plugins win a `name` clash (the entry point is skipped with a
+warning), and an entry point whose own import raises is kept as a
+*tombstone* that re-raises on first use, so one broken plugin cannot break
+discovery of the rest. Packaging and the failure modes are covered in
+[`vtscore/docs/extending/README.md` § Entry-point registration](../vtscore/docs/extending/README.md#entry-point-registration-in-pyprojecttoml).
 
 ### Listing every registered plugin
 
@@ -668,14 +629,17 @@ to the framework.
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default wraps `file` field paths as `CliUploadedFile` and delegates to `run()`. Override only when CLI behaviour genuinely diverges |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
 | `default_display_name()` | `(field_values: dict) -> str` | Name the datasets this importer produces. Shown live in the form's Dataset Name box and used verbatim when the user leaves it blank. Default derives a name from your URL / path / upload fields. See [Naming the imported dataset](#naming-the-imported-dataset) |
-| `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
+| `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Also override the `supports_chunked` property to return `True` |
 | `run_outputs()` | `(field_values, outputs: list[OutputSpec], thin) -> Iterator[tuple[OutputSpec, dict]]` | **Multi-dataset import:** produce every dataset in `outputs` from one run, yielding `(output, medias)`. Default runs `run()` once per output. Override to acquire the source once. See [Multi-dataset imports](#multi-dataset-imports) |
 | `run_outputs_chunked()` | `(field_values, outputs, chunk_size, thin) -> Iterator[tuple[OutputSpec, dict]]` | Chunked twin of `run_outputs()`; the hook the pipeline drives when `supports_chunked` is `True`. Default runs `run_chunked()` once per output |
 | `multi_output` | `bool` (class attribute, default `True`) | Whether one run may produce several datasets. Set `False` on an importer fixed to one dataset (the demo importer); the form then never offers **Multi-Dataset** and the API refuses `outputs` |
 | `category` | `str` (class attribute, default `"services"`) | The Add Dataset picker tab: `"services"`, `"server"`, `"local"`, `"demo"`, or `""` (left out of the tabbed picker). A new tab id can be given a label and icon with `vtscore.datasets.importers.tabs.register_picker_tab()` |
 | `origin_suppressed` | `bool` (class attribute, default `False`) | `True` makes `build_origin()` return empty `params`; for importers that set a per-media origin on every record (see [Direct media dict construction](#direct-media-dict-construction)) |
 | `extra_origin_keys` | `tuple[str, ...]` (class attribute, default `()`) | Non-field `field_values` keys to copy into the origin `params`; `source_specs` is always added |
+| `handles_own_clipping` | `bool` (class attribute, default `False`) | `True` when `run()` applies the clipper itself (the demo importer), so the pipeline skips its own clipper stage instead of clipping twice |
+| `picker_view` | `str` (class attribute, default `"form"`) | Which Add Dataset widget renders the importer; the other values (`"local_folder"`, `"local_files"`, `"server_folder"`, `"demo"`) select built-in UI sections, so a new importer keeps `"form"` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
+| `run_chunked_cli_deferred()` | `(field_values, chunk_size, thin) -> Iterator[DeferredChunk]` | `run_chunked_cli()`'s chunks walked but not built, so a resumed `--resume` run passes the ones it already wrote without reading them. Default wraps `run_chunked_cli()`'s built chunks. See [Deferred chunks](#deferred-chunks-for-a-resumed-cli-run) |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
 | `build_cli_args()` | `(field_values: dict) -> str` | Reconstruct CLI arguments from field values |
 | `origin_display()` | `(origin: dict) -> str` | Human-readable string for an origin dict |
@@ -907,6 +871,41 @@ The default `run()`:
 Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
 
+### Conditional fields
+
+Show a field only when it applies by naming the field that controls it.
+The canonical case is a checkbox that switches on the inputs it needs:
+
+```python
+fields = [
+    PluginField("enable_email", "Send e-mail", "checkbox", default="false"),
+    PluginField("email", "Address", "email", visible_when={"enable_email": True}),
+    PluginField("source", "Source", "select", options=["s3", "gcs", "local"]),
+    PluginField("bucket", "Bucket", "text", visible_when={"source": ["s3", "gcs"]}),
+]
+```
+
+Every entry in `visible_when` must match. Several values under one key
+mean "any of these". Any field type can be conditional, and any can
+control: a checkbox, a static or dynamic select, a text box. A blank
+controller counts as its `default`, and so does a controller that is
+itself switched off.
+
+While its condition fails the field is *inactive*, and every form, the
+HTTP routes, the CLI and `normalize_field_values` agree on what that means:
+
+- **Not rendered.** It reappears with what the user typed if they switch it
+  back on.
+- **Not required.** `required=True` applies only while the field is shown,
+  so `email` above blocks nothing while the box is unticked.
+- **Reset before your plugin runs.** Your body receives the field's
+  `default`, or blank (`None` for a file), never a stale value. Still read
+  the controller first (`if parse_checkbox(field_values["enable_email"])`),
+  because a field that has a default carries it even while switched off.
+
+`vtscore.plugins.inactive_field_keys(self.fields, field_values)` returns
+the switched-off keys, if your body wants the same answer.
+
 ### Dynamic field options
 
 When a `"select"` field's options must be computed at runtime; for
@@ -949,7 +948,12 @@ submit an opaque id while displaying a friendly name:
 Pair `dynamic_options` (or a plain static `"select"`) with
 `allow_free_text=True` to let the user type an arbitrary value the option
 list doesn't include; the field renders as a combobox instead of a strict
-dropdown.
+dropdown. Either way the user sees labels and your plugin receives values:
+each row of the list leads with the label, with the value beneath it when
+the two differ, and picking a row puts the label in the box and submits the
+value, so two options sharing a label stay distinct. Typed text is
+submitted as typed, except that a label exactly one option carries submits
+that option's value.
 
 The frontend wiring is fully automatic:
 
@@ -1074,6 +1078,52 @@ python app.py --autodetect --importer s3 --bucket my-data --prefix audio/ \
 CLI arguments are auto-generated from `fields`. A `file` field takes a path
 on the command line and reaches `run()` wrapped as a `CliUploadedFile`, so
 the same body serves both paths.
+
+### Deferred chunks for a resumed CLI run
+
+A `--stream-results --resume` run ([CLI.md](CLI.md#large-datasets-chunking-and-streaming))
+that was interrupted walks your chunks again from the start to reach where it
+stopped. It needs only to check that each chunk it already wrote is the chunk it
+wrote, not the chunk's media, so it reads them through
+`run_chunked_cli_deferred()`, which yields one
+`vtscore.datasets.importers.base.DeferredChunk` per chunk:
+
+- `count`: how many media the chunk holds. The ids of every later chunk depend
+  on it, so it must equal the size of what `build` returns.
+- `build`: a zero-argument callable that builds the chunk's medias dict, as
+  `run_chunked_cli()` would have yielded it. It is called at most once, before
+  the next chunk is pulled, and a chunk that is only checked is never built.
+- `key` (optional): a zero-argument callable returning what the chunk holds,
+  without reading any file's contents, as JSON-serialisable data that changes
+  when the chunk's items do (paths, sizes and mtimes, say). A chunk with no
+  `key` is built so it can be checked by its media.
+
+The default wraps each chunk `run_chunked_cli()` yields, already built and with
+no key, so a resumed run re-reads your completed chunks. Override it when
+building a chunk is the expensive part and your walk knows a chunk's items
+before reading them. Yield the same chunks, in the same order and at the same
+boundaries, as `run_chunked_cli()`; yield a chunk you cannot list without
+reading its sources with `DeferredChunk.built(medias)`. The built-in
+`server_folder` importer does this for its folder and archive chunks
+(`vtscore.datasets.loader.iter_folder_chunks_deferred` walks a folder this way),
+and yields its PDF-page and converter chunks built:
+
+```python
+from vtscore.datasets.importers.base import DeferredChunk
+
+def run_chunked_cli_deferred(self, field_values, chunk_size, thin=False):
+    for paths in self._walk(field_values, chunk_size):     # cheap: listing, no reads
+        yield DeferredChunk(
+            count=len(paths),
+            build=lambda paths=paths: self._build(paths, thin),
+            key=lambda paths=paths: [[p.name, p.stat().st_size, p.stat().st_mtime_ns] for p in paths],
+        )
+```
+
+A chunk's fingerprint in the checkpoint comes from its `key` when it has one,
+so a resumed run checks a keyed chunk only as far as the key reaches: a file
+rewritten with its size and mtime unchanged passes. That chunk's results are
+already written, so nothing the run outputs depends on it.
 
 ### Wiring up dependencies
 
@@ -1635,6 +1685,11 @@ find-results pickers by construction.
 | `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export_find_results()` |
 | `supports_streaming` | `property -> bool` | Whether this exporter can write results incrementally. Default `False`. |
 | `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
+| `export_labelset_streaming()` | `(header: dict, elements: Iterator[dict], field_values: dict) -> dict` | Write a labelset incrementally, one label entry at a time (`--stream-results --as-labelset`). Default raises `NotImplementedError`. |
+| `supports_labelset_streaming` | `property -> bool` | Derived: `True` when `export_labelset_streaming()` is overridden. Not declared, and not a payload kind. |
+| `export_cli_streaming_resumable()` | `(header: dict, chunks: Iterator[list[tuple[str, dict]]], field_values: dict, resume: StreamResume) -> dict` | Write hits a chunk at a time so an interrupted run can continue (`--stream-results --resume`). Default raises `NotImplementedError`. |
+| `resumable_stream_path()` | `(field_values: dict) -> str` | The file a resumable stream writes to; the CLI keeps its checkpoint beside it. Default `""`. Override alongside `export_cli_streaming_resumable()`. |
+| `supports_resumable_streaming` | `property -> bool` | Derived: `True` when `export_cli_streaming_resumable()` is overridden. |
 
 #### Streaming exports (`--stream-results`)
 
@@ -1679,8 +1734,83 @@ incremental mode at all leaves `supports_streaming` at `False`, and requesting
 `--stream-results` with it is rejected with a clear error. File-based streamers
 should write to a sibling `.tmp` path and `os.replace` on success so a crash
 mid-stream can't leave a half-written file at the destination. Open
-follow-ups (globally sorted output, resume) are tracked in
+follow-ups (globally sorted output) are tracked in
 `docs/plans/cli-stream-massive-images.md`.
+
+#### Resumable streams (`--resume`)
+
+An atomic stream shows nothing at its destination until it completes, so a
+run killed after hours of work leaves nothing to continue from. A
+`--stream-results --resume` run writes through
+`export_cli_streaming_resumable()` instead, which receives the same hits
+grouped by chunk plus a `vtscore.exporters.base.StreamResume`. The CLI owns the
+checkpoint (beside the path `resumable_stream_path()` returns); the exporter
+keeps its destination in step with it:
+
+```python
+from vtscore.io import commit_write_stream, resumable_write_stream
+
+def resumable_stream_path(self, field_values):
+    return str(field_values["filepath"])
+
+def export_cli_streaming_resumable(self, header, chunks, field_values, resume):
+    # resume.position is None for a fresh run, else the position this method
+    # last committed; resumable_write_stream cuts the file back to it (dropping
+    # a chunk that was only partly written) and appends from there.
+    path = Path(field_values["filepath"])
+    with resumable_write_stream(path, resume.position) as f:
+        if resume.position is None:
+            f.write(json.dumps({"_meta": header}) + "\n")   # header once, on a fresh run
+            resume.commit(commit_write_stream(f))
+        for chunk in chunks:                                 # one list per chunk, maybe empty
+            for detector_name, hit in chunk:
+                f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
+            resume.commit(commit_write_stream(f))            # fsync, then record the offset
+    return {"message": f"Streamed to {path}"}
+```
+
+Commit only once the writes before it are durable, and never in the middle of
+a chunk: the next run resumes after whatever was last committed. The position
+can be any JSON value; `commit_write_stream` returns the file's byte length.
+`supports_resumable_streaming` is derived from the override. `server_json_file`
+and `server_csv_file` implement it; an exporter that leaves it alone is refused
+by `--resume` with the list of those that do.
+
+#### Streaming a labelset (`--as-labelset`)
+
+`--stream-results --as-labelset` streams the same run's hits as **label
+entries**, so the export reads back in through a label importer. Override
+`export_labelset_streaming()` and `supports_labelset_streaming` follows
+(it is derived from the override, like `supported_payloads`):
+
+```python
+def export_labelset_streaming(self, header, elements, field_values):
+    # header = {"media_type": str,
+    #           "detectors": [str, ...],   # names only: no threshold, no balance
+    #           "keep_negatives": bool,
+    #           "dataset": {...}}          # as for export_cli_streaming
+    # elements yields serialised LabeledElement dicts in chunk order: md5 and
+    # label always; origin / origin_name / filename / category / metadata where
+    # present; and "detector", naming the detector that labelled the entry.
+    # Every detector's entries arrive in the one stream, so an item two
+    # detectors score appears twice. No score and no media id.
+    path = Path(field_values["filepath"])
+    with atomic_write_stream(path) as f:
+        f.write('{"labels": [')
+        for i, entry in enumerate(elements):
+            f.write(("" if i == 0 else ",") + json.dumps(entry))
+        f.write("]}")
+    return {"message": f"Streamed to {path}"}
+```
+
+Each entry has already been through
+`vtscore.datasets.labelset.label_entry_for_export`, so it carries no number
+this server's head measured (#5131). A delivery exporter can group the stream
+with `vtscore.exporters.base.iter_stream_batches(items, batch_size)`, which
+yields lists of at most `batch_size` and always at least one, an empty list
+for an empty stream. All five built-in streamers implement it:
+`server_json_file` writes a labels JSON file and `server_csv_file` a labels CSV,
+each readable by the label importer of the same name.
 
 **Default class attributes:**
 
@@ -1864,12 +1994,52 @@ LABEL_IMPORTER = PostgresLabelImporter()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run_cli()` | `(field_values: dict) -> list[dict[str, str]]` | CLI variant; default delegates to `run()` |
+| `default_detector_name()` | `(field_values: dict) -> str` | Name a detector created from this importer. Shown live in the New Detector › Trained form's Detector name box. Default: the uploaded file's stem, else `"<display_name> detector"`. See [Naming the created detector](#naming-the-created-detector) |
 
 **Default class attributes:**
 
 | Attribute | Default | Description |
 |-----------|---------|-------------|
 | `icon` | `"🏷️"` | Emoji shown in the UI |
+
+### Naming the created detector
+
+The Dashboard's **New Detector › Trained** tab creates a detector from a
+label importer. As the user fills in your importer's form, the modal asks
+your importer what it would call that detector and prefills the
+**Detector name** box with the answer (numbered past any detector that
+already has the name), until the user types a name of their own. The
+answer comes from `default_detector_name(field_values)`, the label-importer
+counterpart of a dataset importer's
+[`default_display_name()`](#naming-the-imported-dataset).
+
+The base implementation names the detector after the first `file` field
+holding a value (the filename without its extension), and otherwise falls
+back to `"<display_name> detector"`. Override it when your form holds
+something only your importer can turn into words:
+
+```python
+class SavedQueryLabelImporter(LabelImporter):
+    name = "saved_query"
+    fields = [
+        PluginField("query_id", "Query", "select", dynamic_options=True),
+    ]
+
+    def default_detector_name(self, field_values):
+        query = _lookup_query(field_values.get("query_id", ""))
+        # Fall back to the base derivation when there is nothing to resolve.
+        return query.title if query else super().default_detector_name(field_values)
+```
+
+The same constraints as the dataset hook apply: it runs on every form
+change (debounced), so keep it cheap and side-effect free, and cache any
+remote lookup. A `file` field's value arrives as the chosen file's name,
+not the upload, which is only sent with the import.
+
+API contract: `POST /api/label-importers/suggested-name/<name>` with body
+`{"values": {...}}` returns `{"detector_name": "..."}`. An exception from
+your `default_detector_name()` comes back as a 502; the form treats any
+failure as "no suggestion" and falls back to its own default.
 
 ### How it gets invoked
 
@@ -1902,10 +2072,6 @@ classifier:
    the CLI's `--autodetect` flow.
 3. The trained head itself lives only in RAM; it's trained on demand
    from the labelset's origins each time the model is loaded or scored.
-
-For ready-made classifiers without labels (e.g. an OCR or face-detector
-heuristic), build an Extractor or Localizer plugin instead; see
-[EXTENDING-processors.md](EXTENDING-processors.md).
 
 ---
 
@@ -2170,7 +2336,7 @@ stripping, no template substitution, no URL / path validation).
 `_do_peek_version` is optional — the
 default returns `None` — but without it the source is imported once per
 process and never auto-refreshed; see [the freshness
-probe](#the-freshness-probe-and-its-cost).
+probe](#what-the-sync-engine-expects-of-a-source).
 
 ### Template variables
 
@@ -2193,7 +2359,7 @@ consulted on an ongoing basis from three places:
 1. **On every settings read**, through `_ensure_user_loaded`
    (`vtsearch/settings.py`) and the `UserSettingsStore.ensure_user_loaded`
    it delegates to (`vtsearch/settings_store.py`) — rate-limited, see [the freshness
-   probe](#the-freshness-probe-and-its-cost) below. This is what makes a
+   probe](#what-the-sync-engine-expects-of-a-source) below. This is what makes a
    source pick up an out-of-band edit without a restart, and it is also
    what performs the *first* import: the first settings access after a
    process starts pulls from the source, so the source's values take
@@ -2202,7 +2368,7 @@ consulted on an ongoing basis from three places:
    settings dict (minus the excluded keys below) is pushed to `save()`
    after the local file is written.
 3. **On demand**, via `POST /api/settings-sources/sync` — see
-   [the dirty-key contract](#the-dirty-key-contract) for how this differs
+   [the dirty-key contract](ARCHITECTURE.md#the-dirty-key-contract) for how this differs
    from an automatic pull.
 
 **There is no boot-time sync**, and that is deliberate: a settings source
@@ -2215,155 +2381,44 @@ touches settings, not before.
 The endpoints that manage the binding itself are listed under
 [the REST surface](#the-settings-source-rest-surface).
 
-### How the sync engine works
+### What the sync engine expects of a source
 
-The engine lives in `UserSettingsStore` (`vtsearch/settings_store.py`).
-Everything below is contract a new source binds to, not implementation
-detail you may ignore: a source that violates it will appear to work and
-then lose a user's edits under load.
+The engine that drives a settings source is app-internal (`UserSettingsStore`
+in `vtsearch/settings_store.py`), and its internals — binding precedence, the
+freshness tiers, dirty keys, the `.syncmark` marker, lock ordering — are
+documented in [ARCHITECTURE.md § The settings sync engine](ARCHITECTURE.md#the-settings-sync-engine).
+What a source must honor, because one that violates it will appear to work
+and then lose a user's edits under load:
 
-#### Which source a user is bound to
-
-`resolve_settings_source` is the single precedence resolver — every sync
-path (initial load, freshness check, pull, push, and the active-source
-route) reads it, so they cannot disagree about which source a user is on:
-
-1. the user's own `settings_source` key, when it names a source;
-   `{"source_name": "none"}` is an explicit opt-out that wins even over a
-   deployment default;
-2. otherwise the deployment-wide `default_settings_source` server setting,
-   which the user *inherits* (the `inherited` flag on
-   `GET /api/settings-sources/active` reports this);
-3. otherwise no source.
-
-Two keys are never exported to a source: `settings_source` and
-`default_settings_source` (`_EXCLUDE_FROM_SOURCE_EXPORT` in
-`vtsearch/settings.py`). Pushing the binding through the binding would
-let a source rewrite which source is active.
-
-#### The freshness probe and its cost
-
-Sync-from-source sits on the hot path of *every* settings read, so the
-engine is built around making the common case not touch your source at
-all. A read walks three tiers:
-
-| Tier | When | Cost |
-|---|---|---|
-| Fast path | A sync succeeded within the freshness window (`_FRESHNESS_CHECK_INTERVAL`, **1.0 s**) | No probe, no per-user lock — an in-memory dict read |
-| Probe | Window elapsed | One `peek_version()` call; on an unchanged token, refresh the timestamp and return |
-| Full sync | `peek_version()` reports a *different* token, or this process has never synced this user | `load()` + `_apply_settings` |
-
-This is why **`peek_version()` must be cheap and must not raise for
-transient reasons.** It is the only thing standing between a busy read
-path and a full `load()`. The built-in `server_json_file` source returns
-`st_mtime_ns` from a single `stat()`. A network-backed source should use
-an ETag, a `Last-Modified` header, or a HEAD request — never a full GET.
-
-Three `peek_version()` return values have distinct meanings:
-
-- **A token that differs from the last one** — the source changed; a full
-  re-sync is due.
-- **The same token** — unchanged; skip the load.
-- **`None`** — "I cannot cheaply tell." The engine treats this as *no
-  re-sync* and keeps serving the local cache. A source that returns
-  `None` unconditionally is therefore imported once per process and then
-  never auto-refreshed. That is a legitimate choice for a write-mostly
-  target, but it must be a deliberate one.
-
-A `peek_version()` that *raises* is treated as unchanged and backs off
-until the next window, so a source outage degrades to "serve local" rather
-than hammering a dead endpoint.
-
-#### The dirty-key contract
-
-The engine has to reconcile two writers: the user clicking a toggle, and
-an upstream value arriving from `load()`. `dirty_keys` on `UserSyncState`
-is what arbitrates.
-
-**What marks a key dirty:** any local write through `mutate_user_locked`
-registers the keys it touched (minus the excluded ones above) as dirty —
-*inside the cross-process file lock*, before it is released. That
-ordering is the point: a syncing thread can never observe a key as
-"written but not yet dirty" and clobber it.
-
-**What a source may overwrite** depends on which pull it is:
-
-| Pull | Honors `dirty_keys`? | Rationale |
-|---|---|---|
-| Automatic re-sync (version bump on the source) | **Yes** — dirty keys are skipped | A freshly clicked local toggle must not be silently reverted by an upstream value |
-| Explicit `POST /api/settings-sources/sync` | **No** — everything is overwritten and the dirty set is cleared | The user pressed "Sync now" precisely to take the source's values |
-
-**When dirty keys clear:** on a successful `sync_to_source` push (the
-source now matches local, so there is nothing left to protect) or on an
-explicit manual pull. They deliberately survive an automatic re-sync.
-
-The skip set handed to `_apply_settings` is a **live view**
-(`_LiveDirtyKeys`), not a snapshot taken before `load()` — because
-`load()` may be a slow network round-trip, and a user write landing
-mid-flight must still be honored. `mutate_user_locked` re-checks it under
-the file lock, which is where the decision actually becomes atomic against
-the racing write.
-
-#### The cross-process dedup marker
-
-After any successful sync the engine stamps a `<user_settings>.syncmark`
-sibling file recording the `peek_version` token it applied. A later
-process whose first read finds the source unchanged at that token adopts
-it and skips the load entirely — the values are already on disk.
-
-Because `_sync_state` is in-memory but the marker is not, this is what
-makes a **container restart** cheap: the data directory is a persistent
-volume, so a restart against an unchanged source costs one `peek_version`
-instead of a full `load()`. It dedups a second process sharing the data
-directory (a `python app.py --autodetect` CLI run, a dev server) the same
-way. It is *not* primarily about concurrent gunicorn workers —
-`gunicorn.conf.py` pins `workers = 1` — and it should not be read as dead
-code on that basis; see the comment above `_sync_marker_path`.
-
-The marker is best-effort: every read, write, and serialisation failure is
-swallowed and the caller falls back to the full load. It is a performance
-hint, never a correctness input. It is deleted when the user's source is
-cleared, so a later re-configure cannot consult a stale token.
-
-#### Lock ordering a new source must respect
-
-The store has three locks, and the canonical order is
-**cross-process `file_lock` → in-process `settings_lock`**, with the
-per-user sync `RLock` taken outside both:
-
-| Lock | Guards |
-|---|---|
-| `file_lock(path)` | Cross-process (`flock`) exclusion on one settings file; also serialises threads in this process |
-| `settings_lock` | The in-memory caches (`_user_caches`, `_sync_state`, `_syncing`) — held briefly, never across I/O |
-| `per_user_sync_lock(username)` | Serialises the whole probe + `load()` + apply sequence for one user |
-
-What this means for a source author:
-
-- **Your `load()` / `save()` / `peek_version()` are called with no settings
-  file lock held.** `sync_to_source` runs *outside* the file lock on
-  purpose, so a slow target (NFS, a webhook, a cold S3 bucket) cannot block
-  unrelated settings writes. Do not assume you are in a critical section.
+- **`_do_peek_version()` is on the hot path of every settings read**, once
+  per freshness window (1.0 s), and it is all that stands between that read
+  and a full `_do_load()`. Make it cheap and do not raise for transient
+  reasons: return an ETag, a `Last-Modified` header or a HEAD request's
+  answer, never a full GET (the built-in `server_json_file` source returns
+  `st_mtime_ns` from one `stat()`). A token that differs from the last one
+  means a full re-sync is due; the same token means unchanged. `None` means
+  "I cannot cheaply tell" and is treated as unchanged, so a source that
+  always returns `None` is imported once per process and never
+  auto-refreshed — a legitimate choice for a write-mostly target, if a
+  deliberate one. A raise is treated as unchanged and backs off until the
+  next window.
+- **Your methods run with no settings file lock held**, on an arbitrary
+  thread, concurrently for different users; calls for one user are
+  serialised. Do not assume you are in a critical section, and a slow target
+  blocks no other settings write.
 - **Never call back into `vtsearch.settings` from a source method.** A
-  setter re-enters `_ensure_user_loaded`, which re-enters the sync path.
-  The `_syncing` set is a re-entrancy guard for the engine's own
-  `_apply_settings` pass, not a general licence to recurse.
-- **`settings_lock` is reentrant**, so an ordering inversion will *not*
-  fail locally — it deadlocks later against a concurrent writer. This is
-  why `resolve_settings_source` is documented as "must not be called while
-  holding `settings_lock`": the deployment-default read may take the
-  server file lock.
-- **Assume you are on an arbitrary thread**, called concurrently for
-  different users. Per-user serialisation is guaranteed; cross-user is not.
-
-#### Failure semantics
-
-A source that raises is never fatal. `load()` failures log and leave
-`last_sync_succeeded` untouched, so a transient outage after a previous
-success does not erase the success flag or invalidate the local cache; the
-slow path retries once the rate-limit window elapses. `save()` failures
-log and return, leaving the keys dirty so the next successful push carries
-them. This is deliberate: settings sync is an availability-sensitive side
-channel, and the local file is always the fallback.
+  setter re-enters the sync path.
+- **A local edit outranks an automatic pull.** Keys the user wrote since the
+  last successful push are skipped when a version bump re-syncs, even when
+  they land while a slow `_do_load()` is in flight; only an explicit
+  `POST /api/settings-sources/sync` overwrites them
+  ([the dirty-key contract](ARCHITECTURE.md#the-dirty-key-contract)).
+- **Raising is never fatal.** A failed load leaves the local cache serving
+  and is retried after the window; a failed save leaves the keys dirty for
+  the next push. The local file is always the fallback.
+- **Two keys never reach your source:** `settings_source` and
+  `default_settings_source`, so a source cannot rewrite which source is
+  active.
 
 ### The settings-source REST surface
 
@@ -2390,8 +2445,8 @@ without a product reason.
 
 `settings_source` is a per-user key, so a user is bound to your source in
 their own `user_settings.json` (`data/user_settings.json` for the
-single-user default; see [DEPLOYMENT.md § Settings file
-schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
+single-user default; see [SETTINGS.md](SETTINGS.md)), not in the server
+file:
 
 ```json
 {
@@ -2407,7 +2462,7 @@ schema](DEPLOYMENT.md#settings-file-schema)), not in the server file:
 
 To bind every user who has not chosen otherwise, put the same object under
 `default_settings_source` in the server file `data/settings.json` instead
-(see [Which source a user is bound to](#which-source-a-user-is-bound-to)).
+(see [ARCHITECTURE.md § Which source a user is bound to](ARCHITECTURE.md#which-source-a-user-is-bound-to)).
 
 Or set the current user's binding via the API:
 
@@ -2430,7 +2485,7 @@ per-user tier, so a source that round-trips what it was given never meets one.
 
 If the source is unavailable (file missing, network error) the import is
 logged and skipped, and the local settings file is used as the fallback —
-see [Failure semantics](#failure-semantics).
+see [what the sync engine expects of a source](#what-the-sync-engine-expects-of-a-source).
 
 ---
 
@@ -2442,7 +2497,7 @@ plugin. Each detector can link to a source that auto-exports its labels
 as they change and imports them back on load or on sync. A deployment
 can link every detector to one source at once (the
 `default_labelset_source` server setting; see
-[DEPLOYMENT.md](DEPLOYMENT.md)), so a copy of every detector's labels
+[SETTINGS.md](SETTINGS.md#server-tier--datasettingsjson)), so a copy of every detector's labels
 stays current outside the server.
 
 Use a **Label Importer** (above) for one-shot label import. Use a
@@ -2559,7 +2614,7 @@ run](../vtscore/docs/extending/labelset-sources.md#when-your-_do_save-and-_do_lo
 has the details a source author needs.
 
 The same "a sync target is a side channel" stance as
-[settings sources](#failure-semantics) holds: a source that raises is
+[settings sources](ARCHITECTURE.md#failure-semantics) holds: a source that raises is
 logged and retried on the next change, and the detector file stays the
 record.
 

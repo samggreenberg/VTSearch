@@ -1,7 +1,8 @@
 """Pre-registered grid for the calibration study (issue #2781).
 
 One place the prepare stage, the SLURM array indexer, and the analyzer all agree
-on.  See ``docs/plans/calibration-experiment.md`` for the design.
+on.  The design and the results are in
+``docs/experiments/2026-07-31-calibration/REPORT.md``.
 
 Arms (each an ``(embedder, style)`` pair).  An embedder is either a single
 registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`),
@@ -424,9 +425,14 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     "o365_better": os.environ.get("CALIB_O365_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # FHIBE (#4699): one identity per cell, the person's one-person photos as
     # its positives. The photo arms are whole images at two stored sizes; the
-    # face arms are `image2face` crops of those copies, embedded by FaceNet. The
-    # pile pairs embedders with datasets by media type, so a face roster names
-    # face embedders only. No region arm: no patch cell is built.
+    # face arms are `image2face` crops of those copies. The pile pairs embedders
+    # with datasets by media type, so a face roster names face embedders only.
+    # No region arm: no patch cell is built.
+    #
+    # The MTCNN + FaceNet arms (`fhibe_faces_*`, `_roll_`, `_sim_`, `_side_`) are
+    # retired (#5320): no longer built, but their cells are read by path, so their
+    # rosters stay. `face` there is FaceNet's vectors, under the name the face
+    # provider's embedder now carries.
     #
     # FHIBE has no names to type, so these cells open on example photos
     # (`CALIB_SEED_EXAMPLES`), never on a text sort.
@@ -440,6 +446,8 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
         for tag in ("roll", "sim", "side")
         for size in (1024, 640)
     },
+    # The face path as the app ships it, through the face provider (#5321).
+    **{f"fhibe_faces_ik_{size}": os.environ.get("CALIB_FHIBE_IK_EMBEDDERS", "face").split(",") for size in (1024, 640)},
     # Apptitude (#4356): whole app screens, one genre each, opening on the
     # genre's text. No boxes, so no region arm.
     "apptitude": os.environ.get("CALIB_APPTITUDE_EMBEDDERS", "siglip").split(","),
@@ -511,7 +519,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "fhibe_640": True,
     "fhibe_faces_1024": False,
     "fhibe_faces_640": False,
-    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side") for size in (1024, 640)},
+    **{f"fhibe_faces_{tag}_{size}": False for tag in ("roll", "sim", "side", "ik") for size in (1024, 640)},
     # A screen's genre is the whole screen (#4356).
     "apptitude": False,
 }
@@ -548,12 +556,13 @@ SINGLE_STYLES = ["whole_image"]
 #: The style whose per-node scores get re-pooled into the remedial arms.
 REPOOL_STYLE = "max_patch_pca_hac"
 #: The #2781 re-pool arms, **off by default: the question is closed.**  Both
-#: pre-registered fixed re-pools failed (``docs/plans/set-scorer-experiment.md``:
-#: ``topk`` made regret worse, sign-corrected ``pnorm`` closed ~21% of the gap),
-#: and every analyzer filters ``pool_variant`` back down to the base rows
-#: (``_cells_io.BASE_POOL_VARIANTS``), so the arms cost a re-calibration and a
-#: re-pool per step per cell to produce rows nothing reads.  The live version of
-#: the question is learned set-pooling, not another fixed rule.
+#: pre-registered fixed re-pools failed (``docs/experiments/2026-07-31-calibration/REPORT.md``
+#: Finding 3: ``topk`` made regret worse, sign-corrected ``pnorm`` closed ~21% of
+#: the gap), and every analyzer filters ``pool_variant`` back down to the base
+#: rows (``_cells_io.BASE_POOL_VARIANTS``), so the arms cost a re-calibration and
+#: a re-pool per step per cell to produce rows nothing reads.  The gap itself is
+#: gone on today's line: the trees now sit closer to their oracle than
+#: ``max_patch`` does (#4711), which retired learned set-pooling as well (#5260).
 REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "").split(",") if v]
 REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
 
@@ -813,8 +822,8 @@ def exclusion_arm_name() -> str:
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "1") == "1"
 MEDIA_TYPE = "image"
 
-#: The #2852 anchored-mixture study (design + pre-registered decision rules:
-#: ``docs/plans/population-anchored-calibration.md``) flips this on via
+#: The #2852 anchored-mixture study (results + decision rules:
+#: ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``) flips this on via
 #: ``CALIB_ANCHORED=1``; every step then additionally emits the label-anchored,
 #: fold-anchored ("cross-LabeledGMM"), and rank-transfer arm rows.  Requires
 #: ``CALIB_SAFE_THRESHOLDS=1`` (the anchored arms ride the variant-row path).
@@ -963,7 +972,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: head the app-pipeline trainer fits, not a choice of pipeline: these studies
 #: always run ``trainer="app"`` (issue #3764).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
-#: the head the live detector actually trains — ``linear_svm``.  That is the
+#: the head the live detector actually trains — ``linear_svm_prior``
+#: (``vtscore.eval.step_model.PRODUCTION_HEAD``).  That is the
 #: only setting a study's headline numbers can be read off, because questions
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``

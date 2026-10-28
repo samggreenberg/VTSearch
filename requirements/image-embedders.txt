@@ -119,7 +119,7 @@ ftfy
 # `transformers>=5.18.0` floor backwards, and the pin is empirically
 # unnecessary for our usage — so both Dockerfiles install it in a dedicated
 # `--no-deps` step, exactly as scripts/install.sh does for a host install
-# (see docs/plans/vtsbrowse-toponymy.md). A requirements file cannot express
+# (see docs/SETUP.md). A requirements file cannot express
 # that: pip rejects `--no-deps` inside one.
 #
 # What DOES belong here are toponymy's real dependencies, declared on its

@@ -15,6 +15,7 @@ import {
   SourceSpec,
 } from '../../../../../models/api.models';
 import { defaultSpecListFor, getTabLabel, toTypeId } from './media-type.util';
+import { OutputDraft, categoryLabel } from './multi-output.util';
 
 /** Shallow-equality check for clipper-param dicts - both are flat
  *  ``{string: string|number}`` maps. */
@@ -74,9 +75,22 @@ function cleanerChoicesEqual(
   return true;
 }
 
+/** Order-insensitive equality for saved Multi-Dataset kinds. */
+function kindsEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  const sa = new Set(a || []);
+  const sb = new Set(b || []);
+  return sa.size === sb.size && [...sa].every((k) => sb.has(k));
+}
+
+/** Join a list as prose: ``"a"``, ``"a and b"``, ``"a, b and c"``. */
+function proseList(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 /** Per-user "sticky" import config: solo mediaType/embedder locks, saved
- *  embedder/clipper/converter/cleanup defaults per media type, and the
- *  post-import "save these as default?" toast offer.
+ *  embedder/clipper/converter/cleanup/ingest-toggle/Multi-Dataset defaults per
+ *  media type, and the post-import "save these as default?" toast offer.
  *
  *  Shared by every picker view (generic form / server-folder /
  *  local-folder / demo) of the Add Dataset modal - each view used to
@@ -229,9 +243,69 @@ export class ImportDefaultsService {
     return filtered;
   }
 
+  /** The Include-media rows saved for *mediaType*, verbatim.  For a flow
+   *  with no Include-media picker of its own (the demo) to carry into its
+   *  snapshot, so that saving from it leaves them as they were. */
+  savedSourceSpecs(mediaType: string, mediaTypes: MediaTypeInfo[]): SourceSpec[] | undefined {
+    return this.importDefaultsForFolderOrTypeId(mediaType, mediaTypes)?.source_specs;
+  }
+
+  /** The two whole-import toggles ("Build Browse map now", "Merge
+   *  near-duplicates") saved for *mediaType*; both off when nothing is saved. */
+  ingestTogglesFor(
+    mediaType: string,
+    mediaTypes: MediaTypeInfo[],
+  ): { buildProjection: boolean; mergeNearDuplicates: boolean } {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType, mediaTypes);
+    return { buildProjection: !!saved?.build_projection, mergeNearDuplicates: !!saved?.merge_near_duplicates };
+  }
+
+  /** *drafts* (a picker's fresh Multi-Dataset rows) with exactly the kinds
+   *  saved for *mediaType* ticked, or ``null`` when there is no saved
+   *  Multi-Dataset default, or none of its kinds is a row here (a server
+   *  without the face models, say), so the picker stays on the single form. */
+  savedMultiDatasetDrafts(mediaType: string, mediaTypes: MediaTypeInfo[], drafts: OutputDraft[]): OutputDraft[] | null {
+    const kinds = new Set(this.importDefaultsForFolderOrTypeId(mediaType, mediaTypes)?.multi_dataset || []);
+    if (!drafts.some((d) => kinds.has(d.category))) return null;
+    return drafts.map((d) => ({ ...d, checked: kinds.has(d.category) }));
+  }
+
+  /** The two whole-import toggles as saved defaults: a key only for a box
+   *  that is ticked, so an untouched pair adds nothing. */
+  snapshotIngestToggles(buildProjection: boolean, mergeNearDuplicates: boolean): ImportDefaultsForMediaType {
+    const out: ImportDefaultsForMediaType = {};
+    if (buildProjection) out.build_projection = true;
+    if (mergeNearDuplicates) out.merge_near_duplicates = true;
+    return out;
+  }
+
+  /** Snapshot of a Multi-Dataset import as *typeId*'s default: the kinds it
+   *  ticked and the two toggles.  Each row's embedder / clipper / cleanup is
+   *  not part of it (rows seed those from their own type's defaults), and the
+   *  type's saved single-dataset settings ride along unchanged, for when the
+   *  user turns Multi-Dataset back off. */
+  snapshotMultiDatasetConfig(
+    typeId: string,
+    mediaTypes: MediaTypeInfo[],
+    drafts: OutputDraft[],
+    buildProjection: boolean,
+    mergeNearDuplicates: boolean,
+  ): ImportDefaultsForMediaType {
+    const single: ImportDefaultsForMediaType = { ...(this.importDefaultsForFolderOrTypeId(typeId, mediaTypes) || {}) };
+    delete single.build_projection;
+    delete single.merge_near_duplicates;
+    delete single.multi_dataset;
+    return {
+      ...single,
+      multi_dataset: drafts.filter((d) => d.checked).map((d) => d.category),
+      ...this.snapshotIngestToggles(buildProjection, mergeNearDuplicates),
+    };
+  }
+
   /** Snapshot of the per-view import-config (embedder/clipper/specs/cleanup)
    *  the user submitted, normalised to the same shape as the persisted
-   *  defaults. */
+   *  defaults.  The two ingest toggles are added by the caller, through
+   *  :meth:`snapshotIngestToggles`. */
   snapshotImportConfig(
     typeId: string,
     embedder: string,
@@ -292,7 +366,10 @@ export class ImportDefaultsService {
       cfg.embedder ||
       cfg.clipper ||
       (cfg.source_specs && cfg.source_specs.length > 0) ||
-      (cfg.cleaners && Object.keys(cfg.cleaners).length > 0)
+      (cfg.cleaners && Object.keys(cfg.cleaners).length > 0) ||
+      cfg.build_projection ||
+      cfg.merge_near_duplicates ||
+      (cfg.multi_dataset && cfg.multi_dataset.length > 0)
     );
   }
 
@@ -302,22 +379,50 @@ export class ImportDefaultsService {
     if (!shallowParamsEqual(a.clipper_params, b.clipper_params)) return false;
     if (!shallowSpecsEqual(a.source_specs, b.source_specs)) return false;
     if (!cleanerChoicesEqual(a.cleaners, b.cleaners)) return false;
+    if (!!a.build_projection !== !!b.build_projection) return false;
+    if (!!a.merge_near_duplicates !== !!b.merge_near_duplicates) return false;
+    if (!kindsEqual(a.multi_dataset, b.multi_dataset)) return false;
     return true;
+  }
+
+  /** What saving *cfg* would make the next import start with, for the
+   *  offer's detail line.  A Multi-Dataset config names its kinds but not the
+   *  single-dataset settings it carries over unchanged; *dropsMulti* says the
+   *  saved default it replaces opened in Multi-Dataset mode. */
+  private describeImportDefaults(cfg: ImportDefaultsForMediaType, dropsMulti: boolean, mediaTypes: MediaTypeInfo[]): string {
+    const parts: string[] = [];
+    if (cfg.multi_dataset && cfg.multi_dataset.length > 0) {
+      parts.push(`Multi-Dataset (${cfg.multi_dataset.map((k) => categoryLabel(mediaTypes, k)).join(', ')})`);
+    } else {
+      if (dropsMulti) parts.push('one dataset, not Multi-Dataset');
+      const picks: string[] = [];
+      if (cfg.embedder) picks.push('embedder');
+      if (cfg.clipper) picks.push('clipper');
+      if (cfg.source_specs && cfg.source_specs.length > 0) picks.push('included media');
+      if (cfg.cleaners && Object.keys(cfg.cleaners).length > 0) picks.push('cleanup');
+      if (picks.length > 0) parts.push(`your ${proseList(picks)} picks`);
+    }
+    if (cfg.build_projection) parts.push('Build Browse map now');
+    if (cfg.merge_near_duplicates) parts.push('Merge near-duplicates');
+    return `Next time it starts with ${proseList(parts)}.`;
   }
 
   /** After a successful import, offer to save the user's advanced
    *  settings as the default for this output mediaType. Skipped silently
    *  when the user accepted the importer's natural defaults or already
-   *  has the same config saved. */
+   *  has the same config saved - except that a one-dataset import of a type
+   *  whose saved default opens Multi-Dataset is offered too, since the user
+   *  turned Multi-Dataset off to make it. */
   maybeOfferSaveImportDefaults(typeId: string, cfg: ImportDefaultsForMediaType, mediaTypes: MediaTypeInfo[]): void {
     if (!typeId) return;
-    if (!this.hasMeaningfulOverrides(cfg)) return;
     const saved = this.importDefaultsForFolderOrTypeId(typeId, mediaTypes) || {};
+    const dropsMulti = !!saved.multi_dataset?.length && !cfg.multi_dataset?.length;
+    if (!this.hasMeaningfulOverrides(cfg) && !dropsMulti) return;
     if (this.importDefaultsEqual(saved, cfg)) return;
     const typeLabel = getTabLabel(mediaTypes, typeId) || typeId;
     this.toastService.success({
       message: `Save these as default for ${typeLabel} imports?`,
-      detail: 'Your embedder, clipper, converter, and cleanup picks will be auto-filled next time.',
+      detail: this.describeImportDefaults(cfg, dropsMulti, mediaTypes),
       action: {
         label: 'Save as Default',
         onClick: () => this.persistImportDefaults(typeId, cfg, mediaTypes),
@@ -334,7 +439,11 @@ export class ImportDefaultsService {
       'import_defaults_by_media_type'
     ] as Record<string, ImportDefaultsForMediaType> | undefined;
     const next: Record<string, ImportDefaultsForMediaType> = { ...(current || {}) };
-    next[typeId] = cfg;
+    if (Object.keys(cfg).length > 0) {
+      next[typeId] = cfg;
+    } else {
+      delete next[typeId];
+    }
     this.settingsState.update({ import_defaults_by_media_type: next } as Record<string, unknown>).subscribe({
       next: () => {
         this.toastService.success({

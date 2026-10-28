@@ -22,7 +22,7 @@ processors, OCR, face detection) never see one.
 Two decode postures, and which one a call site wants depends on whether it
 reasons in pixel coordinates:
 
-* **Bounded** — thumbnails, embedders, extractors, converters.  These
+* **Bounded** — thumbnails, embedders, converters.  These
   resize to a few hundred pixels anyway, so decoding a full gigapixel
   bitmap first is pure waste.  Call sites that report pixel coordinates
   multiply them back by ``1 / scale`` to stay in original-image space.

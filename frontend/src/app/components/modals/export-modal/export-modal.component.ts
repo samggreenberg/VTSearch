@@ -40,6 +40,7 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 
 export interface ColumnDef {
   key: string;
@@ -52,7 +53,7 @@ export interface ColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ToastyHintComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -543,10 +544,11 @@ export class ExportModalComponent implements OnInit {
 
   /** The subset of `exporterFieldsOf` a form should render: a `hidden`
    *  field's value is fixed by the plugin author, so there is nothing to
-   *  ask the user for. An exporter whose fields are *all* hidden therefore
-   *  presents as a bare action button (issue #4078). */
+   *  ask the user for, and a field whose `visible_when` fails on the current
+   *  `formValues` does not apply. An exporter whose fields are *all* hidden
+   *  therefore presents as a bare action button (issue #4078). */
   private visibleExporterFieldsOf(exporter: ExporterEntry): ImporterField[] {
-    return visibleFields(this.exporterFieldsOf(exporter));
+    return visibleFields(this.exporterFieldsOf(exporter), this.formValues);
   }
 
   /** Initial form value for *field*: its declared default, or the first
@@ -654,17 +656,16 @@ export class ExportModalComponent implements OnInit {
   /** Start exporter flow: if there is nothing to ask the user, export
    *  immediately. Hidden fields still need seeding first — their defaults
    *  are what the export runs on — so the values go through
-   *  `initFormValues` rather than being skipped as `{}`. */
+   *  `initFormValues` rather than being skipped as `{}`, and seeding comes
+   *  before the check because a `visible_when` field is judged on them. */
   startExporter(exporter: ExporterEntry): void {
+    this.initFormValues(exporter);
+    this.applyDefaultFilename(exporter);
     if (this.visibleExporterFieldsOf(exporter).length === 0) {
-      this.initFormValues(exporter);
-      this.applyDefaultFilename(exporter);
       this.exportLabelsWith(exporter, { ...this.formValues });
       return;
     }
     this.selectedExporter = exporter;
-    this.initFormValues(exporter);
-    this.applyDefaultFilename(exporter);
     this.actionError.set('');
     this.status.set('');
   }

@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 
 from tests.helpers import setup_trainable_model_in_registry
-from vtscore.media.processors import Extractor
 from vtsearch.state import snapshot_medias
 
 
@@ -45,21 +44,6 @@ def _assert_sanitised(custom: dict, where: str) -> None:
     assert "embedding" not in custom, f"a pre-computed vector leaked into {where}"
 
 
-class _StubExtractor(Extractor):
-    """Audio extractor that fires on every media, so no dataset is needed."""
-
-    @property
-    def name(self) -> str:
-        return "stub-ext"
-
-    @property
-    def media_type(self) -> str:
-        return "audio"
-
-    def extract(self, media: dict) -> list[dict]:
-        return [{"confidence": 0.9, "label": "found"}]
-
-
 class TestAutoDetectHits:
     """``POST /api/auto-detect`` — ``media_info_for_response`` builds each hit."""
 
@@ -81,34 +65,6 @@ class TestAutoDetectHits:
         hits = [h for h in result["hits"] + result["negative_hits"] if h["id"] == media_with_nested_vector]
         assert hits, "the seeded media should be scored into one of the two hit lists"
         _assert_sanitised(hits[0]["custom_metadata"], "an auto-detect hit")
-
-
-class TestProcessorScoringHits:
-    """``POST /api/extract`` — the same helper, via the processor routes.
-
-    Two gates stack here, and only the inner one is this change's: the route
-    builds each row with ``media_info_for_response`` (pinned directly in
-    :class:`TestMediaInfoForResponse`), and ``_ProcessorHitSchema`` then dumps
-    only ``id`` / ``extractions`` / ``localizations``, so the row a client
-    receives carries no importer metadata at all.  Assert the observable
-    outcome — the route serializes at all, and nothing vector-shaped survives
-    — so a later widening of that schema can't quietly reopen the leak.
-    """
-
-    def test_extract_serializes_and_carries_no_vector(self, client, monkeypatch, media_with_nested_vector):
-        from vtsearch.routes.processors import scoring as scoring_mod
-
-        monkeypatch.setattr(scoring_mod, "_build_extractor", lambda name, extractor_type, config: _StubExtractor())
-
-        resp = client.post(
-            "/api/extract",
-            json={"name": "stub-ext", "extractor_type": "any", "config": {}},
-        )
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        rows = [r for r in resp.get_json()["results"] if r["id"] == media_with_nested_vector]
-        assert rows, "the seeded media should have produced an extraction hit"
-        assert "embedding" not in rows[0].get("custom_metadata", {})
-        assert "embedding" not in rows[0]
 
 
 class TestMediaBatch:

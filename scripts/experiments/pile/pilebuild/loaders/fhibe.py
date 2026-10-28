@@ -7,20 +7,24 @@ verification: a person can appear there under a second subject id), with
 that subject's other photos, ~5 of them, and everyone else is a negative.
 
 **The stored size is a dataset parameter, not a detail.** The supply census
-(``docs/experiments/2026-10-09-fhibe-supply-4699``) found MTCNN's recall is flat
-at ~95% for any face of 24 px or more and falls off a cliff below, so how small
+(``docs/experiments/2026-10-09-fhibe-supply-4699``) found MTCNN's recall flat
+at ~95% for any face of 24 px or more and falling off a cliff below, so how small
 the build stores a photo decides how hard *finding* the face is. ``long_side``
 in :data:`pile_config.DATASETS` sets it; the owner chose to build 1024 and 640.
 The originals (14 MB PNGs, 140 GB) are read once per size and staged as JPEG q90
 beside the release (:func:`stage`), so every cell of a size reads one copy.
 
 **Two arms per size.** ``fhibe_<size>`` is the photo, ``boxed`` with the annotated
-face box as its region, for the image embedders. ``fhibe_faces_<size>`` is the
-app's own ``image2face`` output on that copy, embedded with FaceNet. Crop labels
-are **assigned, not inherited**: ``apply_converter_to_demo`` would stamp the
-subject on every face it found, bystanders and texture false positives
-included. Here a crop is matched to the annotated face box by IoU on the
-detector's raw box (padding is applied after, exactly as ``image2face`` does):
+face box as its region, for the image embedders. ``fhibe_faces_ik_<size>`` is the
+app's own ``image2face`` output on that copy: the face provider
+(``IMAGEKIT_FACE_PROVIDER`` / ``IMAGEKIT_FACE_CONFIG``) finds the faces, boxes and
+landmarks and embeds each from the full photo, and each crop leaves the loader
+with that vector under the ``face`` embedder, as the converter hands it over, so
+the build's embed pass finds nothing missing. Crop labels are **assigned, not
+inherited**: ``apply_converter_to_demo`` would stamp the subject on every face
+it found, bystanders and texture false positives included. Here a crop is
+matched to the annotated face box by IoU on the detector's raw box (padding is
+applied after, exactly as ``image2face`` does):
 
 * the best kept detection at IoU >= :data:`SUBJECT_IOU` is the subject's crop
   and takes the photo's id, so the photo and crop arms pair;
@@ -30,14 +34,14 @@ detector's raw box (padding is applied after, exactly as ``image2face`` does):
   scoring it as a negative would be wrong.
 
 **Alignment is a dataset parameter too** (#4777): ``align`` in the spec is
-``image2face``'s own ``align`` (``none`` when unset), so ``fhibe_faces_roll_*``
-and ``fhibe_faces_sim_*`` are the same detections, ids and labels as
-``fhibe_faces_*``, cropped turned upright. Only the pixels differ, so the arms
-pair cell for cell. ``sideways`` (#4788) is ``image2face``'s too: each face's
-landmarks may come from a quarter-turned copy, while the faces and boxes stay
-the plain pass's, so ``fhibe_faces_side_*`` pairs the same way.
+``image2face``'s own ``align`` (``none`` when unset). It turns the stored crop
+only; the vector is the provider's, from the full photo.
 
-A photo whose subject MTCNN missed yields no subject crop, so the crop arm's
+The MTCNN + FaceNet arms (``fhibe_faces_*``, ``_roll_``, ``_sim_``, ``_side_``)
+were retired with that path (#5320): their cells, built before it, are read by
+path, and nothing here can rebuild them.
+
+A photo whose subject the detector missed yields no subject crop, so the crop arm's
 identity scores are conditional on finding the face. The census's per-band hit
 rate is the localization stage; the two multiply to end-to-end.
 
@@ -54,6 +58,7 @@ import io
 import json
 import multiprocessing
 import os
+import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
@@ -243,53 +248,46 @@ def photo_media(p: Photo, data: bytes, size: tuple[int, int], embedder_name: str
     }
 
 
-def face_crops(
-    converter, img, p: Photo, scale: float, align: str = "none", sideways: bool = False
-) -> tuple[dict | None, list[tuple[bytes, int, int]], int]:
+def face_crops(converter, img, p: Photo, scale: float, align: str = "none") -> tuple[tuple | None, list[tuple], int]:
     """``(subject_crop, extra_crops, n_dropped)`` from the app's ``image2face`` on *img*.
 
-    Each crop is ``(png_bytes, width, height)``. Detection, threshold, padding,
-    minimum size and the crop itself (turned as *align* says) are the
-    converter's own (its private helpers, so a change to the shipped rule is a
-    change here); only the labelling is this loader's. MTCNN is called here
-    rather than through the converter's ``_detect_faces``, which returns no faces
-    on an error: a build must fail loudly instead.
+    Each crop is ``(png_bytes, width, height, extra)``, *extra* being the output
+    fields the converter hands over with it (the provider's vector, quality and
+    compat tag). Detection, threshold, padding, minimum size and the crop itself
+    (turned as *align* says) are the converter's own (its private helpers, so a
+    change to the shipped rule is a change here); only the labelling is this
+    loader's. The provider is called with ``strict``, since the converter
+    returns no faces when one photo fails: a build must fail loudly.
     """
     from vtscore.converters.image2face import crop_face  # noqa: PLC0415
 
-    params = converter._resolve_params({"align": align, "sideways": "true" if sideways else "false"})
-    threshold, padding, min_size, align = params.threshold, params.padding, params.min_size, params.align
-    detector = converter._make_detector()
-    if detector is None:
-        raise SystemExit("fhibe: image2face has no MTCNN (facenet-pytorch missing); refusing to build an empty arm")
-    w, h = img.size
-    kept = converter._kept_faces(detector.detect(img, landmarks=True), w, h, threshold, padding, min_size)
-    if not kept:
+    params = converter._resolve_params({"align": align})
+    padding, align = params.padding, params.align
+    found = converter._find_faces(img, params, p.uid, strict=True)
+    if not found:
         return None, [], 0
-    if params.sideways:
-        kept = converter._sideways_landmarks(detector, img, kept)
     face = [c * scale for c in p.face]
-    scored = [(iou(face, list(k.raw)), k) for k in kept]
+    scored = [(iou(face, list(k.raw)), k, extra) for k, extra in found]
     scored.sort(key=lambda t: (-t[0], -t[1].conf))
 
-    def crop(k) -> tuple[bytes, int, int]:
+    def crop(k, extra) -> tuple[bytes, int, int, dict]:
         im = crop_face(img, k, align, padding)
         buf = io.BytesIO()
         im.save(buf, format="PNG")  # image2face saves a decoded image as PNG
-        return buf.getvalue(), im.width, im.height
+        return buf.getvalue(), im.width, im.height, extra
 
     subject = None
     if scored and scored[0][0] >= SUBJECT_IOU:
-        subject = crop(scored[0][1])
+        subject = crop(scored[0][1], scored[0][2])
         scored = scored[1:]
-    extras = [crop(k) for v, k in scored if v < ELSEWHERE_IOU]
-    dropped = sum(1 for v, _ in scored if v >= ELSEWHERE_IOU)
+    extras = [crop(k, extra) for v, k, extra in scored if v < ELSEWHERE_IOU]
+    dropped = sum(1 for v, _, _ in scored if v >= ELSEWHERE_IOU)
     return subject, extras, dropped
 
 
-def face_media(mid: int, crop: tuple[bytes, int, int], subject: str, source: Photo, embedder_name: str) -> dict:
-    data, w, h = crop
-    return {
+def face_media(mid: int, crop: tuple, subject: str, source: Photo, embedder_name: str) -> dict:
+    data, w, h, extra = crop
+    media = {
         **_base(mid, "face", data, f"{source.uid}_face.png", embedder_name, f"fhibe:{source.uid}"),
         "width": w,
         "height": h,
@@ -297,6 +295,16 @@ def face_media(mid: int, crop: tuple[bytes, int, int], subject: str, source: Pho
         "categories": [subject] if subject else [],
         "source_photo_id": source.pid,
     }
+    if extra.get("embeddings"):
+        # The provider embedded the face from the full photo; the build keeps that vector.
+        if set(extra["embeddings"]) != {embedder_name}:
+            raise SystemExit(
+                f"fhibe: the provider filed its vector under {sorted(extra['embeddings'])}, "
+                f"but this cell is {embedder_name!r}; build it with that embedder"
+            )
+        media["embeddings"] = dict(extra["embeddings"])
+        media["custom_metadata"] = dict(extra.get("custom_metadata", {}))
+    return media
 
 
 def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
@@ -310,12 +318,12 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     copies = stage(root, photos, long_side)
     faces = spec.get("media_type") == "face"
     align = spec.get("align", "none")
-    sideways = bool(spec.get("sideways", False))
     converter = None
     if faces:
         from vtscore.converters.image2face import CONVERTER as converter  # noqa: PLC0415, N811
 
     found = missed = extra = dropped = 0
+    detect_s = 0.0
     for p in photos:
         data = (copies / f"{p.uid}.jpg").read_bytes()
         with Image.open(io.BytesIO(data)) as im:
@@ -324,7 +332,9 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
             if not faces:
                 medias[p.pid] = photo_media(p, data, size, embedder_name)
                 continue
-            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width, align, sideways)
+            t0 = time.perf_counter()
+            subject, extras, n_drop = face_crops(converter, im, p, size[0] / p.width, align)
+            detect_s += time.perf_counter() - t0
         if subject is not None:
             medias[p.pid] = face_media(p.pid, subject, p.subject, p, embedder_name)
             found += 1
@@ -336,8 +346,13 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         dropped += n_drop
     if faces:
         log(
-            f"  fhibe: {dataset} (align {align}{', sideways' if sideways else ''}): subject found in {found:,} of {len(photos):,} photos "
+            f"  fhibe: {dataset} (align {align}): "
+            f"subject found in {found:,} of {len(photos):,} photos "
             f"({missed:,} missed), {extra:,} other faces kept as negatives, {dropped:,} ambiguous dropped"
+        )
+        # Detection and embedding plus cropping, over every photo: the face path's cost.
+        log(
+            f"  fhibe: {dataset}: image2face took {detect_s:.0f}s over {len(photos):,} photos, {found + extra:,} faces kept"
         )
     else:
         log(f"  fhibe: {dataset}: {len(medias):,} photos at long side {long_side}")

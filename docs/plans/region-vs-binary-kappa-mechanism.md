@@ -4,16 +4,15 @@
 bench (`scripts/experiments/calibration/theory_kappa_bench.py`) with
 preliminary results**
 
-**Rescoped (owner, 2026-10-10).** Since #4452 a trained head's line is the
-labels line, which never reads κ. κ now shapes only the fused cut, which on the
-app's balanced path draws the line, and steers Autopilot's acquisition, only when
-no labels line can be drawn at all (see
-[`population-anchored-calibration.md`](population-anchored-calibration.md)), so
-the practical payoff below, a run-time gate, applies only there. The **theory**
-items stand on their own and cost no GPU. The real-data items wait on that plan's
-gate item: if the fallback barely decides anything on the shipped path, they are
-dropped. Any real-data measurement is priced on F-beta at the balance, not cost
-at Inclusion.
+**Rescoped (owner, 2026-10-10); real-data items dropped (2026-10-26, #5261).**
+Since #4452 a trained head's line is the labels line, which never reads κ. κ
+shapes only the fused cut, and #5261 counted how often that cut decides on the
+app's balanced path: on no click (0 of 14.06M trained-head clicks, binary and
+region; [`REPORT.md`](../experiments/2026-10-26-fallback-gate-5261/REPORT.md)).
+So the real-data items this plan carried, a run-time curvature gate for the
+fallback and the re-pooling causal test, are dropped: neither could move a line
+the app draws. The **theory** items below stand on their own and cost no GPU;
+they are what is owed.
 
 ## Background — the observation that has no explanation yet
 
@@ -171,32 +170,6 @@ bench checkpoints per configuration, so a rerun resumes.
 
 <!-- item-sep -->
 
-- **Curvature as the fallback's gate, if it survives (waits on run 2 and on
-  population-anchored-calibration's gate item).** The practical payoff of
-  the mechanism is a gate that is *measurable at run time*. `L''(τ*)` is not
-  observable, but the fitted mixture is: the two components' separation and
-  the density at the cut are both available from `GmmFit1D` at zero extra
-  cost, and either is a candidate proxy. This would replace #2864's
-  recommendation 3 ("gate on positives") with a gate on the quantity the
-  positives were standing in for — and unlike the positive count, it does not
-  need labels to evaluate. Only worth designing after run 2 says whether
-  curvature is the right axis.
-
-<!-- item-sep -->
-
-- **The causal test on real data.** The synthetic bench can only show the
-  mechanism is *sufficient* in a model. To show it operates in production,
-  vary `m` while holding the dataset, embedder and votes fixed: re-pool an
-  existing patch-embedder region environment at `m` ∈ {1, 4, 24} (top-1 vs
-  top-k vs all regions — the harness already has `segment_topk_mean_pool` and
-  the `repool_variants` machinery in `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
-  A real-data κ\* that falls with `m` on the *same* images is the causal claim;
-  #2864's cross-dataset comparison cannot make it. This is the expensive one
-  (GPU prepare + a full cell array). It waits on run 2, and runs only if the
-  fallback gate says the fused cut still decides enough of the shipped path.
-
-<!-- item-sep -->
-
 - **Separate the acquisition-bias mechanism from the cut rule.** Run 1's hard
   mode moved κ\* the *opposite* way #2864's mechanism predicts, but only the
   `mid` rule was examined closely. Compare `mid` and `rate` under matched
@@ -204,6 +177,8 @@ bench checkpoints per configuration, so a rerun resumes.
   under hard acquisition while `mid` improves, and the κ\* crossover should
   move with it. Cheap — it is a re-analysis of run 2's existing rows, since
   both rules are already emitted per cell.
+
+<!-- item-sep -->
 
 ## Reproduction
 

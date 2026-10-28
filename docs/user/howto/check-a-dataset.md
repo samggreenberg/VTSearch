@@ -66,6 +66,11 @@ marked *out of date* is from before the detector was last retrained; *Untested*
 means no test has finished yet (see
 [Decide how far to trust a detector](trust-a-detector.md)).
 
+A detector made from imported labels (**New Detector › Trained**) also shows
+**Import**: the importer that brought the labels in, the fields you filled in
+for it (such as the file's path), and when. A password or an uploaded file is
+never kept.
+
 A detector with few answers of one kind is worth more training before you rely
 on it; one whose answers are mostly about pictures elsewhere was trained on a
 different collection (see [Decide how far to trust a detector](trust-a-detector.md)).

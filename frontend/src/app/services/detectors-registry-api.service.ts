@@ -29,6 +29,7 @@ import { renameRegisteredDetector } from '../generated/api-client/fn/detectors-r
 import { setDetectorAutofind } from '../generated/api-client/fn/detectors-registry/set-detector-autofind';
 import { updateDetectorReaders } from '../generated/api-client/fn/detectors-registry/update-detector-readers';
 import { unloadDetectorRoute } from '../generated/api-client/fn/detectors-registry/unload-detector-route';
+import { DATASET_OVERRIDE } from '../interceptors/active-context.interceptor';
 
 /** Detector registry: list / load / unload / rename / cancel / autofind /
  *  labelset-move / from-labelset. */
@@ -94,10 +95,16 @@ export class DetectorsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
-  loadDetector(detectorId: string | null): Observable<DetectorRegistryLoadResponse> {
+  /** Load a detector. ``datasetId`` names the dataset it is loaded for, with
+   *  no detector (`DATASET_OVERRIDE`): the load restores the detector's labels
+   *  and seeds its examples against the request's dataset, so a pair switch
+   *  names the dataset it is switching to rather than the one still active
+   *  (#5358). Without it the request carries the active pair. */
+  loadDetector(detectorId: string | null, datasetId = ''): Observable<DetectorRegistryLoadResponse> {
+    const context = datasetId ? new HttpContext().set(DATASET_OVERRIDE, datasetId) : undefined;
     return loadDetectorRoute(this.http, this.config.rootUrl, {
       body: { detector_id: detectorId },
-    }).pipe(map((r) => r.body));
+    }, context).pipe(map((r) => r.body));
   }
 
   unloadDetector(detectorId: string): Observable<DetectorRegistryUnloadResponse> {

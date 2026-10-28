@@ -17,8 +17,14 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_stream, atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
+from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
+from vtscore.io import (
+    atomic_write_stream,
+    atomic_write_text,
+    commit_write_stream,
+    resumable_write_stream,
+    sanitize_csv_cell as _sanitize_csv_cell,
+)
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -35,6 +41,45 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     writer = csv.writer(buf)
     write_rows(writer)
     atomic_write_text(path, buf.getvalue())
+
+
+def _label_cell(val: Any) -> str:
+    """One label entry's value as a CSV cell that survives the round-trip.
+
+    Dicts (``origin``) and lists (``region_box``) are written as JSON, which is
+    what the CSV label importer parses them back from; anything else is text,
+    guarded against formula injection.
+    """
+    if isinstance(val, (dict, list)):
+        return json.dumps(val, sort_keys=True)
+    return _sanitize_csv_cell(str(val if val is not None else ""))
+
+
+def _stream_thresholds(header: dict[str, Any]) -> dict[str, Any]:
+    """Each streamed detector's threshold, by name, for the ``threshold`` column."""
+    return {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
+
+
+def _stream_hit_row(detector_name: str, hit: dict[str, Any], thresholds: dict[str, Any]) -> list[Any]:
+    """One streamed hit as a row in :attr:`ServerCsvResultsExporter._STREAM_COLUMNS` order."""
+    from vtscore.datasets.origin import Origin  # noqa: PLC0415
+
+    origin = hit.get("origin")
+    origin_str = Origin.from_dict(origin).display() if origin else ""
+    clip_box = hit.get("clip_box")
+    return [
+        _sanitize_csv_cell(str(detector_name)),
+        thresholds.get(detector_name, ""),
+        _sanitize_csv_cell(hit.get("filename", "")),
+        _sanitize_csv_cell(hit.get("category", "")),
+        hit.get("score", ""),
+        _sanitize_csv_cell(hit.get("label", "")),
+        hit.get("clip_start", ""),
+        hit.get("clip_end", ""),
+        ",".join(str(v) for v in clip_box) if clip_box else "",
+        _sanitize_csv_cell(origin_str),
+        _sanitize_csv_cell(hit.get("origin_name", "")),
+    ]
 
 
 class ServerCsvResultsExporter(ResultsExporter):
@@ -119,41 +164,99 @@ class ServerCsvResultsExporter(ResultsExporter):
         no half-written export and two concurrent exports to the same path
         can't clobber each other's temp file.
         """
-        from vtscore.datasets.origin import Origin  # noqa: PLC0415
-
         filepath = Path(field_values["filepath"])
-
-        thresholds = {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
+        thresholds = _stream_thresholds(header)
 
         total_hits = 0
         with atomic_write_stream(filepath) as f:
             writer = csv.writer(f)
             writer.writerow(self._STREAM_COLUMNS)
             for detector_name, hit in records:
-                origin = hit.get("origin")
-                origin_str = Origin.from_dict(origin).display() if origin else ""
-                clip_box = hit.get("clip_box")
-                writer.writerow(
-                    [
-                        _sanitize_csv_cell(str(detector_name)),
-                        thresholds.get(detector_name, ""),
-                        _sanitize_csv_cell(hit.get("filename", "")),
-                        _sanitize_csv_cell(hit.get("category", "")),
-                        hit.get("score", ""),
-                        _sanitize_csv_cell(hit.get("label", "")),
-                        hit.get("clip_start", ""),
-                        hit.get("clip_end", ""),
-                        ",".join(str(v) for v in clip_box) if clip_box else "",
-                        _sanitize_csv_cell(origin_str),
-                        _sanitize_csv_cell(hit.get("origin_name", "")),
-                    ]
-                )
+                writer.writerow(_stream_hit_row(detector_name, hit, thresholds))
                 total_hits += 1
 
         return {
             "message": (
                 f"Streamed {total_hits} hit(s) across "
                 f"{len(header.get('detectors', []))} detector(s) to {filepath.resolve()}."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
+    def resumable_stream_path(self, field_values: dict[str, Any]) -> str:
+        return str(field_values["filepath"])
+
+    def export_cli_streaming_resumable(
+        self,
+        header: dict[str, Any],
+        chunks: Iterator[list[tuple[str, dict[str, Any]]]],
+        field_values: dict[str, Any],
+        resume: StreamResume,
+    ) -> dict[str, Any]:
+        """Write the same CSV as :meth:`export_cli_streaming`, in place, a chunk at a time.
+
+        The header row is written once, by the run that starts the file; each
+        chunk's rows are ``fsync``\\ ed before the chunk is committed, so a
+        resumed run cuts the file back to the last whole chunk and appends.
+        """
+        filepath = Path(field_values["filepath"])
+        thresholds = _stream_thresholds(header)
+
+        total_hits = 0
+        with resumable_write_stream(filepath, resume.position) as f:
+            writer = csv.writer(f)
+            if resume.position is None:
+                writer.writerow(self._STREAM_COLUMNS)
+                resume.commit(commit_write_stream(f))
+            for chunk in chunks:
+                for detector_name, hit in chunk:
+                    writer.writerow(_stream_hit_row(detector_name, hit, thresholds))
+                    total_hits += 1
+                resume.commit(commit_write_stream(f))
+
+        verb = "Streamed" if resume.position is None else "Appended"
+        return {
+            "message": (
+                f"{verb} {total_hits} hit(s) across "
+                f"{len(header.get('detectors', []))} detector(s) to {filepath.resolve()}."
+            ),
+            "filepath": str(filepath.resolve()),
+        }
+
+    #: Fixed column order for a streamed labelset: the label export's base
+    #: columns, led by the detector that labelled each row and ending in
+    #: ``origin`` (JSON) as every label CSV does, so the CSV label importer
+    #: reads the file back.  No ``region_box``: a scored run draws no regions.
+    _LABEL_STREAM_COLUMNS = ["detector", "label", "md5", "origin_name", "filename", "category", "origin"]
+
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write one CSV row per label entry, flushed as they stream.
+
+        The columns are fixed (:attr:`_LABEL_STREAM_COLUMNS`) because a
+        streaming writer cannot look ahead, and they are the ones the
+        ``server_csv_file`` label importer reads, which ignores the extra
+        ``detector`` column.  Written through
+        :func:`~vtscore.io.atomic_write_stream`, as the hit stream is.
+        """
+        filepath = Path(field_values["filepath"])
+
+        total = 0
+        with atomic_write_stream(filepath) as f:
+            writer = csv.writer(f)
+            writer.writerow(self._LABEL_STREAM_COLUMNS)
+            for entry in elements:
+                writer.writerow([_label_cell(entry.get(col, "")) for col in self._LABEL_STREAM_COLUMNS])
+                total += 1
+
+        return {
+            "message": (
+                f"Streamed {total} label(s) from {len(header.get('detectors', []))} detector(s) "
+                f"to {filepath.resolve()}."
             ),
             "filepath": str(filepath.resolve()),
         }
@@ -186,14 +289,7 @@ class ServerCsvResultsExporter(ResultsExporter):
                 row = []
                 for col in columns:
                     if col in entry:
-                        val = entry[col]
-                        # Serialize dicts (origin) and lists (region_box) as
-                        # JSON so they survive the CSV round-trip.
-                        if isinstance(val, (dict, list)):
-                            row.append(json.dumps(val, sort_keys=True))
-                        else:
-                            cell = str(val if val is not None else "")
-                            row.append(_sanitize_csv_cell(cell))
+                        row.append(_label_cell(entry[col]))
                     elif col in meta:
                         cell = str(meta[col] if meta[col] is not None else "")
                         row.append(_sanitize_csv_cell(cell))

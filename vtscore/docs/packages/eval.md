@@ -62,6 +62,7 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/arms_anchored.py`, `arms_cut_total.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_line_counts.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
 | `vtscore/eval/arms_query_prior.py`, `arms_set_overlap.py`, `arms_split_rounding.py` | Per-study arms beside the threshold: the typed-query prior's scale (#4384), where the typed query's set and the head's disagree (#4816), the calibration split before #4864 |
 | `vtscore/eval/arms_handover.py` | #4776's hand-over shadow: past the label quota, the Goods' centroid's Test as tagged rows (`handover:centroid`) and `HandoverJudge`, the evidence a centroid-to-head hand-over rule may read (held-out Goods' ranks in the unvoted pool under each detector) |
+| `vtscore/eval/find_corpus.py`           | Find on a second corpus at every click, with the app's two domain-shift flags beside the objective (#4960) |
 | `vtscore/eval/fit_quality.py`           | Goodness-of-fit diagnostics for the score-mixture fits    |
 | `vtscore/eval/live_threshold_rules.py`  | Retired app threshold rules, kept as live arms            |
 | `vtscore/eval/scale_bands.py`           | Scale-banded cells: test across sizes, train on a size mix |
@@ -440,42 +441,12 @@ python -m vtscore.eval.label_curve_main \
 torch runtime, parses argparse args, runs `run_eval`, and optionally
 writes a JSON dump and matplotlib plots.
 
-```bash
-# Default: text-sort + learned-sort on every registered eval dataset
-python -m vtscore.eval
-
-# Subset
-python -m vtscore.eval --datasets esc50_s caltech101_s --mode both
-
-# Custom split + JSON output
-python -m vtscore.eval --mode learned --train-fraction 0.6 --output results.json
-
-# Generate visualisations
-python -m vtscore.eval --plot-dir eval_plots
-
-# List available eval datasets
-python -m vtscore.eval --list
-```
-
-Notable flags:
-
-| Flag                     | Meaning                                                      |
-|--------------------------|--------------------------------------------------------------|
-| `--datasets ID [ID ...]` | Restrict to these eval dataset ids                           |
-| `--mode {text,learned,both}` | Which evaluation to run                                  |
-| `--k K [K ...]`          | k values for P@k / R@k                                       |
-| `--train-fraction F`     | Fraction of learned-sort's simulation half that is voted     |
-| `--seed N`               | Random seed                                                  |
-| `--enrich-descriptions`  | Wrapper-averaged text embeddings                             |
-| `--calibrate-count K`    | Cross-cal folds                                              |
-| `--calibration-fraction F` | Cross-cal calibration split                                |
-| `--embedder NAME`        | Evaluate with this embedder                                  |
-| `--region-voting`        | Train on region votes                                        |
-| `--beta B`               | Learned-sort balance in `[0.25, 4]`, or `off` (default: the app's) |
-| `--output FILE`          | Write JSON results to `FILE`                                 |
-| `--plot-dir DIR`         | Generate visualisation PNGs in `DIR`                         |
-| `--no-plot`              | Disable plots even when `--plot-dir` is set                  |
-| `--list`                 | Print the eval-dataset registry and exit                     |
+The flags mirror `run_eval`'s arguments (above): `--datasets`, `--mode`,
+`--k`, `--train-fraction`, `--seed`, `--enrich-descriptions`,
+`--calibrate-count`, `--calibration-fraction`, `--embedder`,
+`--region-voting`, `--beta`, plus `--output`, `--plot-dir`, `--no-plot` and
+`--list`. The flag reference and examples are in
+[`docs/EVAL.md`](../../../docs/EVAL.md#cli-reference).
 
 The full user guide - including how the demo datasets are sourced,
 what each metric means in practice, and how to interpret the output -
@@ -552,8 +523,10 @@ from liblinear, scored and thresholded exactly as production does.
   after scoring; no detector files are written.
 - **Deterministic.** Every function that produces randomness takes a
   `seed` argument; `np.random.RandomState(seed)` controls splits and
-  vote order, `train_model` uses its own thread-safe RNG (see
-  [`training.md`](training.md)).
+  vote order. The shipped head's liblinear primal solve reads no seed at
+  all; the BCE / MLP eval heads draw from `train_model`'s own thread-safe
+  RNG (see [`training.md`](training.md#thread-safety-and-reproducibility)
+  and the pinned-seeds table in [`docs/ML.md`](../../../docs/ML.md)).
 - **Pure computation.** `eval_text_sort`, `eval_learned_sort` and the
   voting-iterations functions take pre-loaded medias dicts as input.
   Only `run_eval`, `run_voting_iterations_eval_from_pickles` and the

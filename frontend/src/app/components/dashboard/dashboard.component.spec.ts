@@ -10,6 +10,7 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { AutoFindSetupService } from '../../services/autofind-setup.service';
 import { ConnectionStateService } from '../../services/connection-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
@@ -224,6 +225,22 @@ describe('DashboardComponent', () => {
       TestBed.tick();
       expect(component.autofindDetectors.map((d) => d.id).sort()).toEqual(['m1', 'm2']);
       expect(component.selectedDetectorIds.has('m1')).toBe(false);
+    });
+
+    it('asks where AutoFind results go after a move to AutoFind, never after a move back (#5344)', () => {
+      const offer = vi.spyOn(TestBed.inject(AutoFindSetupService), 'offerAfterMove').mockResolvedValue();
+      flushInitialRequests([], mixed);
+      component.setDetectorAutofind(component.detectors[1], false);
+      httpMock.expectOne('/api/detectors/registry/m2/autofind').flush({ ok: true, autofind: false });
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: mixed });
+      expect(offer).not.toHaveBeenCalled();
+
+      component.setDetectorAutofind(component.detectors[0], true);
+      httpMock.expectOne('/api/detectors/registry/m1/autofind').flush({ ok: true, autofind: true });
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: mixed });
+      expect(offer).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }));
     });
 
     it('switches back to the Drafts tab when a new detector is registered', () => {

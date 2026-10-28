@@ -13,6 +13,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { EMPTY, Subject } from 'rxjs';
+import { catchError, debounceTime, map, switchMap } from 'rxjs/operators';
 
 import { NgTemplateOutlet } from '@angular/common';
 
@@ -74,6 +77,7 @@ import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 import {
   fieldsComplete,
   LabelsetSourceFieldsComponent,
@@ -89,6 +93,10 @@ type ModalView = 'main' | 'media-picker' | 'dataset-picker';
 /** What the Create button's tooltip and the error line say while an
  *  auto-export field still needs a value. */
 const AUTO_EXPORT_HINT = 'Fill in where this detector’s labels are auto-exported';
+/** How long the Trained form settles before asking the label importer to name
+ *  the detector (#5342). ``default_detector_name`` may resolve a label from a
+ *  remote service, so keystrokes must not each cost a round trip. */
+const SUGGESTED_NAME_DEBOUNCE_MS = 250;
 type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
@@ -124,7 +132,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, BalanceComponent, LabelsetSourceFieldsComponent, DatasetExamplePickerComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, ToastyHintComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent, PluginComboboxComponent, BalanceComponent, LabelsetSourceFieldsComponent, DatasetExamplePickerComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -362,9 +370,44 @@ export class NewDetectorModalComponent implements OnInit {
   /** Option lists for the Trained tab's label-importer form, mirroring
    *  label-importer-modal so plugins with dynamic_options / depends_on /
    *  allow_free_text render with full parity here too. */
-  readonly labelImporterFieldOptions = new DynamicFieldOptions((key, values) =>
-    this.labelImportersApi.getFieldOptions(this.selectedLabelImporter!.name, key, values),
+  readonly labelImporterFieldOptions = new DynamicFieldOptions(
+    (key, values) => this.labelImportersApi.getFieldOptions(this.selectedLabelImporter!.name, key, values),
+    // An auto-selected option is a form change like any other, and the case
+    // the importer's own naming exists for: only it can turn an opaque option
+    // value back into a readable name.
+    () => this.requestTrainedSuggestedName(),
   );
+  /** The name the selected label importer gives a detector made from the
+   *  current form values (its ``default_detector_name``, #5342), or '' until
+   *  one arrives, or when the request failed. */
+  readonly trainedSuggestedName = signal('');
+  /** Debounces the ``suggested-name`` round trip; ``switchMap`` drops the
+   *  reply to any request the user has already typed past. */
+  private readonly trainedSuggestedNameRequests = new Subject<void>();
+
+  constructor() {
+    this.trainedSuggestedNameRequests
+      .pipe(
+        debounceTime(SUGGESTED_NAME_DEBOUNCE_MS),
+        switchMap(() => {
+          const importer = this.selectedLabelImporter;
+          if (!importer) return EMPTY;
+          return this.labelImportersApi.getSuggestedName(importer.name, this.trainedSuggestedNameValues()).pipe(
+            map((res) => ({ importer, suggested: res.detector_name || '' })),
+            // A name hint is never worth an error line: on failure the form
+            // keeps its own default.
+            catchError(() => EMPTY),
+          );
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe(({ importer, suggested }) => {
+        // The user may have picked another importer while this was in flight.
+        if (importer !== this.selectedLabelImporter) return;
+        this.trainedSuggestedName.set(this.sanitizeName(suggested));
+        this.refreshAutoName();
+      });
+  }
 
   /** Type_id of the server's solo-mediaType restriction, or ``null`` when
    *  off. When non-null, the mediaType form-group is hidden in the
@@ -567,15 +610,18 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   /** What a blank Name resolves to: the name the example suggests, or on the
-   *  Trained tab the imported file's name (else the importer's), falling back
+   *  Trained tab the name the label importer suggests (#5342), falling back
    *  to "New detector". Numbered past any detector that already has the name,
    *  since names must be unique. */
   get defaultName(): string {
     let base = '';
     if (this.tab === 'trained') {
+      base = this.trainedSuggestedName();
+      // Until the importer's suggestion arrives, or when it failed: what the
+      // stock importers would suggest, the imported file's name else theirs.
       const imp = this.selectedLabelImporter;
-      if (this.labelImporterFile) base = this.sanitizeName(this.nameFromFilename(this.labelImporterFile.name));
-      else if (imp) base = `${imp.display_name || imp.name} detector`;
+      if (!base && this.labelImporterFile) base = this.sanitizeName(this.nameFromFilename(this.labelImporterFile.name));
+      else if (!base && imp) base = `${imp.display_name || imp.name} detector`;
     } else {
       base = this.nameFromExample();
     }
@@ -590,6 +636,20 @@ export class NewDetectorModalComponent implements OnInit {
     let n = 2;
     while (taken.has(`${base} ${n}`.toLowerCase())) n++;
     return `${base} ${n}`;
+  }
+
+  /** While the user hasn't typed a name, keep the Name box showing what the
+   *  active tab would call the detector: the picked example's name on the
+   *  Blank tab, the label importer's suggestion on the Trained tab (#5342).
+   *  Switching tabs swaps one for the other, so a name auto-filled for one
+   *  tab never rides along into a detector made on the other. */
+  private refreshAutoName(): void {
+    if (this.nameTouched) return;
+    if (this.tab === 'trained') {
+      this.name.set(this.trainedSuggestedName() ? this.defaultName : '');
+    } else {
+      this.name.set(this.nameFromExample());
+    }
   }
 
   onPendingTextInput(value: string): void {
@@ -814,6 +874,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (this.submitting()) return;
     this.tab = tab;
     this.error.set('');
+    this.refreshAutoName();
   }
 
   /** Switch between the Text, media, and seed-importer tabs in the
@@ -1328,9 +1389,15 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Typed view of the selected label importer's plugin fields for the
    *  template (the generated LabelImporterEntry types `fields` as an open
-   *  dict because plugin field schemas aren't part of the OpenAPI client). */
+   *  dict because plugin field schemas aren't part of the OpenAPI client),
+   *  less any whose ``visible_when`` fails on `labelImporterValues`. */
   get selectedLabelImporterFields(): ImporterField[] {
-    return visibleFields((this.selectedLabelImporter?.fields ?? []) as ImporterField[]);
+    return visibleFields(this.allLabelImporterFields, this.labelImporterValues);
+  }
+
+  /** Every field the selected label importer declares, rendered or not. */
+  private get allLabelImporterFields(): ImporterField[] {
+    return (this.selectedLabelImporter?.fields ?? []) as ImporterField[];
   }
 
   selectLabelImporter(importer: LabelImporterEntry): void {
@@ -1355,15 +1422,25 @@ export class NewDetectorModalComponent implements OnInit {
     }
     this.labelImporterFieldOptions.refreshAll(fields, this.labelImporterValues);
     this.trainedView = 'form';
+    // Defaults may already describe a detector (a preselected select); the
+    // rest just get the importer's own fallback name back.
+    this.trainedSuggestedName.set('');
+    this.refreshAutoName();
+    this.requestTrainedSuggestedName();
   }
 
+  /** Called whenever a Trained-form field's value changes: refreshes the
+   *  dynamic options that depend on it and re-asks the importer for a name. */
   onLabelImporterFieldChanged(changedKey: string): void {
     if (!this.selectedLabelImporter?.fields) return;
+    // Every field, so one a condition hides now doesn't reappear with a
+    // list fetched for the old value.
     this.labelImporterFieldOptions.refreshDependentsOf(
       changedKey,
-      this.selectedLabelImporterFields,
+      this.allLabelImporterFields,
       this.labelImporterValues,
     );
+    this.requestTrainedSuggestedName();
   }
 
   backToImporterPicker(): void {
@@ -1371,6 +1448,30 @@ export class NewDetectorModalComponent implements OnInit {
     this.selectedLabelImporter = null;
     this.error.set('');
     this.labelImporterFieldOptions.reset();
+    this.trainedSuggestedName.set('');
+    this.refreshAutoName();
+  }
+
+  /** Ask the selected label importer to name the detector its form describes.
+   *  Computed server-side by the importer's ``default_detector_name``, so an
+   *  importer that maps an opaque selection (an id, a saved-query key) onto a
+   *  readable label can surface it here, which no client-side derivation
+   *  could work out. */
+  private requestTrainedSuggestedName(): void {
+    this.trainedSuggestedNameRequests.next();
+  }
+
+  /** The form snapshot sent to ``suggested-name``: the selected importer's
+   *  declared field values, skipping blanks. A file field carries the chosen
+   *  file's name, set by {@link onLabelImporterFileSelected}. */
+  private trainedSuggestedNameValues(): Record<string, unknown> {
+    const values: Record<string, unknown> = {};
+    for (const field of (this.selectedLabelImporter?.fields ?? []) as ImporterField[]) {
+      const raw = this.labelImporterValues[field.key];
+      if (raw === undefined || raw === null || raw === '') continue;
+      values[field.key] = raw;
+    }
+    return values;
   }
 
   onLabelImporterFileSelected(event: Event, fieldName: string): void {
@@ -1379,6 +1480,7 @@ export class NewDetectorModalComponent implements OnInit {
       this.labelImporterFile = input.files[0];
       this.labelImporterFileFieldKey = fieldName;
       this.labelImporterValues[fieldName] = input.files[0].name;
+      this.onLabelImporterFieldChanged(fieldName);
     }
   }
 

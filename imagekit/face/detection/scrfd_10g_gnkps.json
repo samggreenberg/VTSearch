@@ -1,0 +1,23 @@
+{
+  "model": {
+    "name": "scrfd_10g_gnkps",
+    "feat_stride": [8, 16, 32],
+    "num_anchors": 2,
+    "score_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "nms_pre": 1000,
+    "max_nms": 30000,
+    "topk": 400,
+    "min_image_size": 12,
+    "max_image_size": 2048,
+    "transforms": [
+      {"name": "Normalize",
+       "args": {"mean_vals": [127.5, 127.5, 127.5],
+                "scale_vals": [0.0078125, 0.0078125, 0.0078125]}},
+      {"name": "Resize",
+       "args": {"height": 640, "width": 640,
+                "preserve_aspect": true, "pad": 1}},
+      {"name": "ToTensor"}
+    ]
+  }
+}

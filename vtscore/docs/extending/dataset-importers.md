@@ -33,6 +33,7 @@ on the library API and third-party packaging.
 - [Pre-computed embeddings, MD5s, and metadata](#pre-computed-embeddings-md5s-and-metadata)
 - [Multi-media imports](#multi-media-imports)
 - [Multi-dataset imports](#multi-dataset-imports)
+- [Chunked loading and resumed CLI runs](#chunked-loading-and-resumed-cli-runs)
 - [Reporting progress](#reporting-progress)
 - [Entry-point registration](#entry-point-registration)
 - [Testing pattern](#testing-pattern)
@@ -49,6 +50,15 @@ implement one of two flow shapes:
 | `display_name: str` | Human-readable label |
 | `description: str` | One-sentence subtitle |
 | `fields: list[PluginField]` | User-configurable inputs (rendered into a form / CLI flags / validation schema) |
+
+Optional class attributes worth knowing (all on `ImporterBase` in
+`base/core.py`): `picker_view` (`"form"` by default, which builds a
+generic form from `fields`; the other values select a dedicated widget in
+the app's Add Dataset modal), `category` (picker tab, default
+`"services"`), `handles_own_clipping` (set `True` only if your `run()`
+applies the clipper itself, so the load pipeline must not clip a second
+time), `multi_output` (see [Multi-dataset imports](#multi-dataset-imports)),
+and the origin knobs covered under [Origins](#origins).
 
 Then either:
 
@@ -146,8 +156,10 @@ keep `origin.params` round-trippable through your `fields`.
 ## Pre-computed embeddings, MD5s, and metadata
 
 Importers that already have vectors or hashes shouldn't waste compute
-re-deriving them. The base class provides three instance attributes to
-populate during `run()`:
+re-deriving them. Call `self.yield_precomputed(filename, embedding=...,
+md5=..., metadata=...)` once per file during `run()`; it writes the three
+instance attributes below in one motion (writing them directly still
+works):
 
 | Attribute | Purpose |
 |-----------|---------|
@@ -162,7 +174,17 @@ relative-path entry. When a bare basename would match multiple files
 in the folder (e.g. `class_a/foo.wav` and `class_b/foo.wav` with a
 single `"foo.wav"` key) without an explicit relative-path entry for
 every match, the loader raises `ValueError`; supply the full
-relative path for each file to disambiguate. Don't persist vectors
+relative path for each file to disambiguate.
+
+Supplied vectors are validated once, at ingestion, by
+`vtscore.embedding.precomputed.normalize_vector`: a ragged, non-1-D,
+empty or non-finite vector, or one whose width disagrees with the
+embedder it is filed under, raises `MismatchedVectorError` (a
+`ValueError` subclass) naming the file. A `(1, D)` row is flattened and
+any float dtype becomes `float32`. A *nameless* vector (a
+`custom_metadata_map` `"embedding"`, or `content_vectors` with no
+embedder name) is stamped with the load's embedder by the embed stage,
+which checks its width then. Don't persist vectors
 or model weights to disk on your own; the library re-derives them
 from origins.
 
@@ -248,6 +270,40 @@ fixed to one dataset; `to_dict()` then reports
 `media_type` field) and the app offers no multi-dataset mode for it.
 The worked override and what the app's pipeline does per output are in
 [`docs/EXTENDING-plugins.md` § Multi-dataset imports](../../../docs/EXTENDING-plugins.md#multi-dataset-imports).
+
+## Chunked loading and resumed CLI runs
+
+An importer that can load a source too big to hold at once overrides
+`run_chunked(field_values, chunk_size, thin)` (and `run_chunked_cli`
+when its CLI path differs), yielding medias dicts of at most
+`chunk_size` items with ids from 1, and returns `True` from the
+`supports_chunked` property. The defaults run `run()` / `run_cli()`
+once and yield the result as one chunk.
+
+A resumed CLI run (`--stream-results --resume`) walks the chunks again
+from the start to reach the ones it has not written, and needs only to
+check that each one it did write is unchanged. It reaches them through
+`run_chunked_cli_deferred(field_values, chunk_size, thin)`, which
+yields one `DeferredChunk` (`vtscore.datasets.importers.base`) per
+chunk: its `count` (the size of what `build` returns; every later
+chunk's ids depend on it), a `build()` callable that makes the chunk,
+called at most once and before the next chunk is pulled, and an
+optional `key()` callable that returns what the chunk holds without
+reading any file's contents (paths, sizes, mtimes), as
+JSON-serialisable data. A chunk with a `key` is checked by it and never
+built unless the run needs its media; one without is built and checked
+by its media. The default wraps each chunk `run_chunked_cli` yields,
+built and keyless.
+
+Override it when building is what costs and the walk knows a chunk's
+items before reading them: yield the chunks `run_chunked_cli` yields,
+in its order and at its boundaries, and wrap one you cannot count
+without reading (a PDF's pages) as `DeferredChunk.built(medias)`. The
+`server_folder` importer is the in-tree example; its folder walk is
+`vtscore.datasets.loader.iter_folder_chunks_deferred`, which keys each
+chunk by a `[relative path, size, mtime_ns]` row per file. A worked
+override is in
+[`docs/EXTENDING-plugins.md` § Deferred chunks](../../../docs/EXTENDING-plugins.md#deferred-chunks-for-a-resumed-cli-run).
 
 ## Reporting progress
 

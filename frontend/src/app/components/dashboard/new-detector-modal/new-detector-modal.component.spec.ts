@@ -10,7 +10,7 @@ import { provideHttpTesting } from '../../../testing/test-providers';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { DATASET_OVERRIDE } from '../../../interceptors/active-context.interceptor';
-import { settleResource } from '../../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 
 describe('NewDetectorModalComponent', () => {
   let component: NewDetectorModalComponent;
@@ -891,6 +891,134 @@ describe('NewDetectorModalComponent', () => {
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     expect(component.labelImporterFieldOptions.error()['q']).toBe('boom');
     expect(component.labelImporterFieldOptions.optionsFor(field)).toEqual([]);
+  });
+
+  // --- Trained tab: the importer names the detector (#5342) ---
+
+  describe('importer-suggested detector name (#5342)', () => {
+    // The suggestion round trip is debounced, so each assertion steps past
+    // SUGGESTED_NAME_DEBOUNCE_MS before the request exists.
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const queryField = { key: 'query_id', field_type: 'select', options: ['q-8f31', 'q-2b07'] } as any;
+
+    function pickImporter(fields: any[] = [queryField]): void {
+      component.setTab('trained');
+      component.selectLabelImporter({ name: 'saved_query', display_name: 'Saved Query', fields } as any);
+    }
+
+    function expectSuggestion() {
+      vi.advanceTimersByTime(300);
+      return httpMock.expectOne('/api/label-importers/suggested-name/saved_query');
+    }
+
+    it('prefills the Detector name box with the name the importer suggests', () => {
+      pickImporter();
+      const req = expectSuggestion();
+      expect(req.request.method).toBe('POST');
+      // The preselected static option is part of the form the importer sees.
+      expect(req.request.body.values).toEqual({ query_id: 'q-8f31' });
+      req.flush({ detector_name: 'Q1 Field Survey' });
+
+      expect(component.name()).toBe('Q1 Field Survey');
+      expect(component.effectiveName).toBe('Q1 Field Survey');
+    });
+
+    it('numbers the suggestion past a detector that already has it', () => {
+      vi.spyOn(TestBed.inject(DatasetStateService), 'detectors', 'get').mockReturnValue([
+        { id: 'a', name: 'Q1 Field Survey' },
+      ] as any);
+      pickImporter();
+      expectSuggestion().flush({ detector_name: 'Q1 Field Survey' });
+      expect(component.name()).toBe('Q1 Field Survey 2');
+    });
+
+    it('re-asks when a field changes, sending a chosen file by its name', () => {
+      pickImporter([{ key: 'file', field_type: 'file' } as any]);
+      expectSuggestion().flush({ detector_name: 'Saved Query detector' });
+      expect(component.name()).toBe('Saved Query detector');
+
+      const file = new File(['{}'], 'barking dogs.json');
+      component.onLabelImporterFileSelected({ target: { files: [file] } } as any, 'file');
+      const req = expectSuggestion();
+      expect(req.request.body.values).toEqual({ file: 'barking dogs.json' });
+      req.flush({ detector_name: 'barking dogs' });
+      expect(component.name()).toBe('barking dogs');
+    });
+
+    it('re-asks once a dynamic select resolves, so an opaque id can become a name', () => {
+      const field = { key: 'query_id', field_type: 'select', dynamic_options: true, required: true } as any;
+      pickImporter([field]);
+      httpMock
+        .expectOne('/api/label-importers/field-options/saved_query')
+        .flush({ options: [{ value: 'q-8f31', label: 'Q1 Field Survey' }] });
+
+      const req = expectSuggestion();
+      expect(req.request.body.values).toEqual({ query_id: 'q-8f31' });
+      req.flush({ detector_name: 'Q1 Field Survey' });
+      expect(component.name()).toBe('Q1 Field Survey');
+    });
+
+    it('leaves a typed name alone, while a blank box still resolves to the suggestion', () => {
+      pickImporter();
+      component.onNameInput('My survey');
+      expectSuggestion().flush({ detector_name: 'Q1 Field Survey' });
+      expect(component.name()).toBe('My survey');
+      expect(component.effectiveName).toBe('My survey');
+
+      component.onNameInput('');
+      expect(component.effectiveName).toBe('Q1 Field Survey');
+    });
+
+    it('falls back to its own default, without an error, when the importer fails', () => {
+      pickImporter();
+      expectSuggestion().flush({ message: 'query service down' }, { status: 502, statusText: 'Bad Gateway' });
+      expect(component.name()).toBe('');
+      expect(component.effectiveName).toBe('Saved Query detector');
+      expect(component.error()).toBe('');
+    });
+
+    it('keeps a name auto-filled on one tab out of a detector made on the other', () => {
+      component.onPendingTextInput('large books');
+      expect(component.name()).toBe('Large books detector');
+
+      pickImporter();
+      expect(component.name()).toBe('');
+      expectSuggestion().flush({ detector_name: 'Q1 Field Survey' });
+      expect(component.name()).toBe('Q1 Field Survey');
+
+      component.setTab('blank');
+      expect(component.name()).toBe('Large books detector');
+      component.setTab('trained');
+      expect(component.name()).toBe('Q1 Field Survey');
+    });
+
+    it('drops a reply meant for an importer the user has since left', () => {
+      pickImporter();
+      const req = expectSuggestion();
+      component.backToImporterPicker();
+      req.flush({ detector_name: 'Q1 Field Survey' });
+      expect(component.name()).toBe('');
+      expect(component.trainedSuggestedName()).toBe('');
+    });
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): no forced render, so a
+  // write that notifies nothing shows up as stale DOM.
+  it('paints the suggested detector name into the name box (#5342)', async () => {
+    component.setTab('trained');
+    component.selectLabelImporter({ name: 'saved_query', display_name: 'Saved Query', fields: [] } as any);
+    await settleZoneless(fixture);
+    const box = fixture.nativeElement.querySelector('#detector-name') as HTMLInputElement;
+    expect(box.value).toBe('');
+
+    // The suggestion arrives from a debounced HTTP reply, outside any
+    // template event.
+    const req = await vi.waitFor(() => httpMock.expectOne('/api/label-importers/suggested-name/saved_query'));
+    req.flush({ detector_name: 'Q1 Field Survey' });
+    await settleZoneless(fixture);
+    expect(box.value).toBe('Q1 Field Survey');
   });
 
   // --- Create & Import: the background labelset-media ingest (#2703) ---

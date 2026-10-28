@@ -13,6 +13,13 @@ from typing import Callable
 from flask import request
 from flask_smorest import abort
 
+#: ``alt_response`` descriptions of the 400 the guards below return.  A route
+#: that takes a guard declares its 400 (``tests/api/test_openapi_error_codes.py``
+#: checks); one that has its own 400 already need not.
+MISSING_DATASET_HEADER = "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+MISSING_DETECTOR_HEADER = "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+MISSING_CONTEXT_HEADERS = "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+
 
 def _has_context_id(header_name: str, query_param: str) -> bool:
     """Return True iff *header_name* or *query_param* identifies a context.

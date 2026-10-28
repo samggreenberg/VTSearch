@@ -180,8 +180,12 @@ class TestPathCheck:
         assert run("Sources live under `vtscore/datasets/sources/`.") == []
 
     def test_line_number_suffix_is_stripped(self):
-        assert run("See `vtscore/state/core.py:42`.") == []
-        assert checks("See `vtscore/state/gone.py:42`.") == ["PATH"]
+        # Only an experiment report may carry a line suffix at all (LINENO
+        # refuses one everywhere else), so that is where the PATH check still
+        # has to see through it to the file.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        assert run("See `vtscore/state/core.py:42`.", doc) == []
+        assert checks("See `vtscore/state/gone.py:42`.", doc) == ["PATH"]
 
     def test_glob_reference_resolves(self):
         assert run("Embedders are `vtscore/media/*/embedder_*.py`.") == []
@@ -262,6 +266,60 @@ class TestFenceCheck:
         assert run("```python\nx = 1\n```\n") == []
 
 
+class TestLineAnchorCheck:
+    """A line number is wrong by the next edit to the file it points into (#5290)."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Scored in `vtscore/state/core.py:42`.",
+            "Scored in vtscore/state/core.py:42, unquoted.",
+            "The guard lives in `browse-canvas.component.ts:120`.",
+            "A range: `vtscore/state/core.py:42-60`.",
+            "See the guard (line 42).",
+            "See the guard (lines 42-60).",
+            "See the guard (Line 42 of `vtscore/state/core.py`).",
+            "pyproject.toml (~line 127) pins it.",
+        ],
+    )
+    def test_both_spellings_fire(self, text):
+        assert checks(text) == ["LINENO"]
+
+    def test_message_names_the_anchor(self):
+        assert run("See `vtscore/state/core.py:42`.") == [
+            "LINENO:line-number anchor 'vtscore/state/core.py:42'; cite the module and symbol instead, "
+            "since a line number rots on the next edit"
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Cite `vtscore/state/core.py::DatasetContext` by symbol.",
+            "Run `pytest tests_lib/meta/test_docs_gate.py::TestLineAnchorCheck`.",
+            "The app listens on `localhost:5000`; the job starts at 10:30.",
+            "Write `file.py:NNN` and `(line NNN)` when describing the rule itself.",
+            "A one-line 2x speedup, on line two (of three).",
+        ],
+    )
+    def test_legitimate_shapes_are_quiet(self, text):
+        assert run(text) == []
+
+    def test_fenced_tool_output_is_ignored(self):
+        # Quoted output carries line numbers of its own; it is not a pointer.
+        text = '```text\ntests/test_x.py:42: AssertionError\n  File "x.py", line 199 in f (line 199)\n```\n'
+        assert run(text) == []
+
+    def test_plans_and_readmes_are_held_to_it(self):
+        # The old check only looked under vtscore/docs/; these are the docs it missed.
+        for rel in ("docs/plans/__synthetic__.md", "README.md", "scripts/screenshots/__synthetic__.md"):
+            assert checks("See `vtscore/state/core.py:42`.", REPO_ROOT / rel) == ["LINENO"], rel
+
+    def test_experiment_reports_are_exempt(self):
+        # A study record describes the code at the commit it ran on.
+        doc = REPO_ROOT / "docs" / "experiments" / "2026-01-01-x" / "REPORT.md"
+        assert run("Scored in `vtscore/state/core.py:42` (line 42).", doc) == []
+
+
 class TestPlanRefCheck:
     def test_repo_has_no_dangling_plan_citations(self):
         assert gate.check_plan_refs(FILES) == []
@@ -272,7 +330,7 @@ class TestPlanRefCheck:
         assert [f.check for f in failures] == ["PLAN"]
 
     def test_live_plan_citation_is_quiet(self):
-        text = "See docs/plans/documentation-accuracy.md for the audit.\n"
+        text = "See docs/plans/codebase-audit-2026-08.md for the audit.\n"
         assert gate.check_plan_refs_in(REPO_ROOT / "vtscore" / "__synthetic__.py", text, FILES) == []
 
     def test_non_markdown_sources_are_scanned(self):
@@ -313,6 +371,151 @@ class TestStudyDirCheck:
         assert gate.check_study_dirs(frozenset(dirs)) == []
 
 
+# A run-tests.sh and a docs/TESTING.md cut down to the shapes the GATES check
+# reads: a commented stage-1 block, lanes of all three kinds (one started from
+# two places, one with a shell expansion in its name), a row whose case differs
+# from the lane's, and a table after the section that must not be read.
+GATE_SCRIPT = """\
+# Stage 1: the stale-tree check, alone.
+# See scripts/check-phantom-base.py for both signals.
+if ! python scripts/check-phantom-base.py ; then
+    _blocked "stale tree"
+fi
+# Stage 2: the cheap gates.
+_start_lane gate "ruff check" _gate_ruff_check
+_start_lane gate "documentation" _gate_check_docs
+# Stage 3: the heavy gates.
+_start_lane gating "pyright ($_pyright_threads thread(s))" _lane_pyright
+_start_lane free "pip-audit" _lane_pip_audit
+if $_late; then
+    _start_lane free "pip-audit" _lane_pip_audit
+fi
+"""
+
+GATE_DOC = """\
+# Testing
+
+### The stages
+
+**Stage 1 — the stale-tree check, alone:**
+
+| Gate | Command it runs | Notes |
+|------|-----------------|-------|
+| Stale tree | `scripts/check-phantom-base.py` | |
+
+**Stage 2 — cheap gates, concurrently:**
+
+| Gate | Command it runs | Notes |
+|------|-----------------|-------|
+| ruff check | `ruff check .` | |
+| Documentation | `scripts/check-docs.py` | |
+
+**Stage 3 — heavy gates:**
+
+| Gate | Command it runs | Lane | When | Notes |
+|------|-----------------|------|------|-------|
+| pyright (N thread(s)) | `scripts/pyright-incremental.py --threads N` | gating | Full run | |
+| pip-audit | `pip-audit` | free, collected after pytest | As pyright | |
+
+**Stage 4 — pytest, alone.**
+
+## Test Groups
+
+| Group | Tier | Description |
+|-------|------|-------------|
+| `core` | both | A table outside the section, so not a gate. |
+"""
+
+
+def gate_failures(script: str = GATE_SCRIPT, doc: str = GATE_DOC) -> list[str]:
+    """GATES failures as `<file>:<message>`, so a test can say which side fired."""
+    return [f"{f.path.name}:{f.message}" for f in gate.check_gate_tables(script, doc)]
+
+
+class TestGateTableCheck:
+    """docs/TESTING.md's stage tables list the gates run-tests.sh runs (#5289)."""
+
+    def test_repo_tables_match_run_tests(self):
+        assert gate.check_gate_tables_in_repo() == []
+
+    def test_matching_fixture_is_quiet(self):
+        # Case aside, `N` for a shell expansion, and a lane started twice is
+        # one gate.
+        assert gate_failures() == []
+
+    def test_gate_without_a_row_fires_on_the_script(self):
+        script = GATE_SCRIPT + '_start_lane gate "deptry" _gate_deptry\n'
+        [failure] = gate_failures(script=script)
+        assert failure.startswith("run-tests.sh:") and "'deptry'" in failure
+
+    def test_row_without_a_gate_fires_on_the_doc(self):
+        doc = GATE_DOC.replace("| ruff check |", "| Spelling | `codespell` | |\n| ruff check |")
+        [failure] = gate_failures(doc=doc)
+        assert failure.startswith("TESTING.md:") and "'Spelling'" in failure
+
+    def test_a_row_that_labels_the_gate_differently_fires_both_ways(self):
+        # The shape of the drift this check found on its first run: a table
+        # that said "Lint" for the gate the run prints as "ruff check".
+        doc = GATE_DOC.replace("| ruff check |", "| Lint |")
+        failures = gate_failures(doc=doc)
+        assert len(failures) == 2
+        assert any(f.startswith("TESTING.md:") and "'Lint'" in f for f in failures)
+        assert any(f.startswith("run-tests.sh:") and "'ruff check'" in f for f in failures)
+
+    def test_row_in_the_wrong_stage_fires(self):
+        script = GATE_SCRIPT.replace('gate "documentation"', 'free "documentation"')
+        [failure] = gate_failures(script=script)
+        assert "'Documentation'" in failure and "stage 3" in failure
+
+    def test_row_with_the_wrong_lane_kind_fires(self):
+        doc = GATE_DOC.replace("| free, collected after pytest |", "| gating |")
+        [failure] = gate_failures(doc=doc)
+        assert "'pip-audit'" in failure and "'gating'" in failure and "free" in failure
+
+    def test_repeated_row_fires(self):
+        doc = GATE_DOC.replace(
+            "| ruff check | `ruff check .` | |", "| ruff check | `ruff check .` | |\n| Ruff check | x | |"
+        )
+        [failure] = gate_failures(doc=doc)
+        assert "repeats" in failure
+
+    def test_unknown_lane_kind_fires(self):
+        script = GATE_SCRIPT.replace('gate "documentation"', 'eager "documentation"')
+        failures = gate_failures(script=script)
+        assert any("'eager'" in f for f in failures)
+
+    def test_commented_out_lane_is_not_a_gate(self):
+        script = GATE_SCRIPT + '# _start_lane gate "retired" _gate_retired\n'
+        assert gate_failures(script=script) == []
+
+    def test_stage1_script_without_a_row_fires(self):
+        script = GATE_SCRIPT.replace(
+            "fi\n# Stage 2", "fi\nif ! python scripts/check-something-new.py ; then exit 1; fi\n# Stage 2"
+        )
+        [failure] = gate_failures(script=script)
+        assert failure.startswith("run-tests.sh:") and "scripts/check-something-new.py" in failure
+
+    def test_stage1_row_the_script_does_not_run_fires(self):
+        doc = GATE_DOC.replace("`scripts/check-phantom-base.py`", "`scripts/check-retired.py`")
+        failures = gate_failures(doc=doc)
+        assert any(f.startswith("TESTING.md:") and "scripts/check-retired.py" in f for f in failures)
+        assert any(f.startswith("run-tests.sh:") and "scripts/check-phantom-base.py" in f for f in failures)
+
+    def test_missing_stages_section_fails_loudly(self):
+        # A renamed heading must not read as "no rows, so nothing to compare".
+        doc = GATE_DOC.replace("### The stages", "### How the run is staged")
+        [failure] = gate_failures(doc=doc)
+        assert "The stages" in failure
+
+    def test_script_without_lanes_fails_loudly(self):
+        script = "\n".join(line for line in GATE_SCRIPT.splitlines() if "_start_lane" not in line)
+        failures = gate_failures(script=script)
+        assert any("_start_lane" in f for f in failures)
+
+    def test_escaped_pipe_stays_inside_its_cell(self):
+        assert gate.table_cells(r"| a | `x \| y` | c |") == ["a", r"`x \| y`", "c"]
+
+
 class TestAllowlistsStayHonest:
     """An allowlist entry that no longer describes reality is dead weight."""
 
@@ -327,6 +530,10 @@ class TestAllowlistsStayHonest:
     def test_leak_allowlist_entries_point_at_real_files(self):
         for rel in gate.ALLOWED_LEAKS:
             assert (REPO_ROOT / rel).exists(), f"{rel} is allowlisted for path leaks but no longer exists"
+
+    def test_line_anchor_allowlist_entries_point_at_real_paths(self):
+        for rel in gate.ALLOWED_LINE_ANCHORS:
+            assert (REPO_ROOT / rel).exists(), f"{rel} may cite line numbers but no longer exists"
 
     def test_plan_self_reference_entries_point_at_real_files(self):
         for rel in gate.PLAN_SELF_REFERENCE:

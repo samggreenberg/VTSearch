@@ -22,7 +22,7 @@ class ServerFileSettingsImporter(SettingsImporter):
     fields = [
         PluginField(
             key="filepath",
-            label="Path or URL",
+            label="Server path",
             field_type="server_path",
             description="A VTSearch settings JSON file on the server to load settings from.",
             placeholder="data/settings.json",

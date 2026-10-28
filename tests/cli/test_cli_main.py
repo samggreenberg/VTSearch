@@ -250,6 +250,8 @@ class TestPipeline:
         [
             (["--stream-results"], "--stream-results"),
             (["--keep-negatives"], "--keep-negatives"),
+            (["--as-labelset"], "--as-labelset"),
+            (["--resume"], "--resume"),
             (["--label-importer", "server_csv_file"], "--label-importer"),
         ],
     )
@@ -431,6 +433,22 @@ class TestAutodetectWiring:
         args, _ = rec.calls["autodetect_importer_main_chunked"]
         assert args[2] == 25
 
+    def test_resume_reaches_the_chunked_entry_point(self, monkeypatch):
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(
+            monkeypatch,
+            ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results", "--resume"],
+        )
+        _, kwargs = rec.calls["autodetect_main_chunked"]
+        assert kwargs["resume"] is True
+
+    def test_no_resume_is_not_passed(self, monkeypatch):
+        """Only a chunked entry point takes ``resume``; a run without the flag passes none."""
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl"])
+        _, kwargs = rec.calls["autodetect_main"]
+        assert "resume" not in kwargs
+
     def test_exporter_field_values_flow_through(self, monkeypatch):
         rec = _AutodetectRecorder(monkeypatch)
         _run_main(
@@ -477,6 +495,25 @@ class TestAutodetectValidation:
             _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--keep-negatives"])
         assert exc.value.code == 2
         assert "--keep-negatives only applies with --stream-results" in capsys.readouterr().err
+
+    def test_as_labelset_requires_stream_results(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--as-labelset"])
+        assert exc.value.code == 2
+        assert "--as-labelset only applies with --stream-results" in capsys.readouterr().err
+
+    def test_resume_requires_stream_results(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "10", "--resume"])
+        assert exc.value.code == 2
+        assert "--resume only applies with --stream-results" in capsys.readouterr().err
+
+    def test_resume_refuses_a_labelset_stream(self, monkeypatch, capsys):
+        argv = ["--tempimport", "--dataset", "x.pkl", "--chunk-size", "10", "--stream-results"]
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, [*argv, "--as-labelset", "--resume"])
+        assert exc.value.code == 2
+        assert "--resume cannot resume a labelset stream" in capsys.readouterr().err
 
     def test_unknown_importer_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:

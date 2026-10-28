@@ -30,7 +30,7 @@ set -euo pipefail
 # reports whether the result is kernel-update-proof or still kernel-pinned. If the
 # driver is already up but NOT DKMS-managed, the installer OFFERS to convert it in
 # place (reinstall via .run --dkms); VTSEARCH_AUTO_DKMS=1 converts unattended and
-# VTSEARCH_SKIP_DKMS=1 skips the offer. See docs/DEPLOYMENT.md, "Making the GPU
+# VTSEARCH_SKIP_DKMS=1 skips the offer. See docs/TROUBLESHOOTING.md, "Making the GPU
 # driver survive reboots and kernel updates".
 #
 # Override the auto-detection by passing an argument:
@@ -80,7 +80,7 @@ set -euo pipefail
 #   VTSEARCH_NO_AGPL=1 bash scripts/install.sh
 #
 # That installs requirements/{base,gpu}-no-agpl.txt instead of the default
-# requirements/{base,gpu}.txt. The YOLO image extractor and clipper, the PDF
+# requirements/{base,gpu}.txt. The YOLO image clipper, the PDF
 # importer, and the document converters then fail with a message naming the
 # missing package instead of working; nothing else changes. See NOTICE.
 
@@ -461,8 +461,8 @@ vts_report_driver_persistence() {
   loading, and nvidia-smi will go dark until you re-run this installer. To make it
   set-and-forget: install `dkms` and re-run this script (so the module auto-rebuilds
   for new kernels), pin the kernel so it stops changing, or bake a custom AMI / use
-  the AWS Deep Learning AMI. See docs/DEPLOYMENT.md, "Making the GPU driver survive
-  reboots and kernel updates".
+  the AWS Deep Learning AMI. See docs/TROUBLESHOOTING.md, "Making the GPU driver
+  survive reboots and kernel updates".
 EOF
     return 0
 }
@@ -550,7 +550,7 @@ vts_convert_driver_to_dkms() {
         echo "  Could not install dkms on this host (e.g. an unregistered RHEL box" >&2
         echo "  where EPEL is unreachable), so a DKMS conversion isn't possible. The" >&2
         echo "  current driver is untouched; pin the kernel instead so it keeps" >&2
-        echo "  matching. See docs/DEPLOYMENT.md, \"Making the GPU driver survive...\"." >&2
+        echo "  matching. See docs/TROUBLESHOOTING.md, \"Making the GPU driver survive...\"." >&2
         return 1
     fi
 
@@ -610,12 +610,12 @@ vts_maybe_convert_driver_to_dkms() {
             else
                 echo "warning: DKMS conversion did not complete; the driver still works but" >&2
                 echo "         stays kernel-pinned. See the output above, retry later, or use" >&2
-                echo "         the manual steps in docs/DEPLOYMENT.md." >&2
+                echo "         the manual steps in docs/TROUBLESHOOTING.md." >&2
             fi
             ;;
         *)
             echo "  Leaving the driver kernel-pinned. Set VTSEARCH_AUTO_DKMS=1 on a later" >&2
-            echo "  run to convert it, or see docs/DEPLOYMENT.md for the manual steps." >&2
+            echo "  run to convert it, or see docs/TROUBLESHOOTING.md for the manual steps." >&2
             ;;
     esac
 }
@@ -847,7 +847,7 @@ vts_requirements_file() {
     local flavour="$1"
     if [ "${VTSEARCH_NO_AGPL:-0}" = "1" ]; then
         echo "  (VTSEARCH_NO_AGPL=1 -> skipping ultralytics + PyMuPDF; the YOLO" >&2
-        echo "   extractor/clipper, PDF import, and document converters stay unavailable)" >&2
+        echo "   clipper, PDF import, and document converters stay unavailable)" >&2
         echo "$REPO_ROOT/requirements/${flavour}-no-agpl.txt"
     else
         echo "$REPO_ROOT/requirements/${flavour}.txt"
@@ -870,7 +870,8 @@ vts_install_precommit() {
 # `--extra-index-url <cpu wheel index>` + `-e .[dev,agpl]` (or the
 # `base-no-agpl.txt` mirror under VTSEARCH_NO_AGPL=1).
 # --- toponymy (VTSBrowse signpost naming) ------------------------------------
-# Two quirks force a dedicated step (see docs/plans/vtsbrowse-toponymy.md):
+# Two quirks force a dedicated step (see docs/SETUP.md, "Packages installed
+# without their dependency pins"):
 #   - apricot-select (a real toponymy dep, declared in pyproject.toml) ships a
 #     legacy setup.py sdist. It must be installed BEFORE the main requirements
 #     pass so its build quirks stay contained to this step. Do NOT wrap it in
@@ -892,21 +893,6 @@ vts_install_toponymy() {
     pip install --no-deps "toponymy==0.5.2" --progress-bar on
 }
 
-# --- facenet-pytorch (FaceNet face-identity embedder) ------------------------
-# The `face` embedder (vtscore.media.face.embedder_facenet) loads FaceNet's
-# InceptionResnetV1 via facenet-pytorch. facenet-pytorch 2.6.0 hard-pins
-# torch<2.3, torchvision<0.18, numpy<2.0 and Pillow<10.3 -- a plain install
-# would honor those by DOWNGRADING the app's entire torch/numpy/Pillow stack.
-# Those pins are empirically unnecessary: the model builds and runs a correct
-# forward pass on the app's modern stack (verified on torch 2.13 / numpy 2.x /
-# Pillow 12). So install it --no-deps -- exactly the toponymy pattern -- and let
-# the app's own torch, torchvision, numpy, Pillow, requests and tqdm (all
-# already present) satisfy it at runtime. Pretrained weights are lazy-downloaded
-# from GitHub on first model use, not here.
-vts_install_face_deps() {
-    pip install --no-deps facenet-pytorch --progress-bar on
-}
-
 # --- setuptools (PYSEC-2026-3447) --------------------------------------------
 # setuptools < 83 carries PYSEC-2026-3447 and fails run-tests.sh's pip-audit
 # gate. This used to be a flat "setuptools<82" pin, added because torch 2.12.0
@@ -924,7 +910,7 @@ vts_upgrade_setuptools() {
 }
 
 vts_install_cpu() {
-    vts_progress_init 6 "Installing VTSearch CPU dependencies"
+    vts_progress_init 5 "Installing VTSearch CPU dependencies"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
@@ -943,9 +929,6 @@ vts_install_cpu() {
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
     pip install -r "$(vts_requirements_file base)" --progress-bar on
     vts_upgrade_setuptools  # torch arrived with base; follow its setuptools pin
-
-    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
-    vts_install_face_deps
 
     vts_progress_step "Wiring up pre-commit git hook"
     vts_install_precommit
@@ -973,7 +956,7 @@ vts_install_cpu() {
 #     kernels against mismatched headers ("cuda_fp8.hpp: this declaration has no
 #     storage class" at fit time). So cuML is installed on cu129 (and cu13x)
 #     only; on cu118..cu128 this step is SKIPPED with a message and the app
-#     uses the CPU fallback. See docs/DEPLOYMENT.md "cuML crashes compiling a
+#     uses the CPU fallback. See docs/TROUBLESHOOTING.md "cuML crashes compiling a
 #     kernel".
 #   - RAPIDS ships linux-only wheels for a fixed Python range; on an unsupported
 #     platform/Python this step just warns and the app uses the CPU fallback.
@@ -1125,6 +1108,34 @@ PY
 # tarballs for packages like numpy and scipy, so we pre-install them as
 # binary-only wheels before the full requirements pass, avoiding the need for a
 # C++ compiler.
+# --- onnxruntime-gpu for the face models (#5332) -----------------------------
+# The imagekit face path (image2face, provider oss) runs its SCRFD detector and
+# ArcFace embedder through onnxruntime, and pyproject.toml declares the CPU
+# build, so on a GPU install VTSEARCH_DEVICE=cuda could not reach them. This
+# step swaps it for onnxruntime-gpu, which still carries the CPU provider, so a
+# CPU-only process is unchanged. Both wheels install the same `onnxruntime`
+# module: the CPU one is uninstalled FIRST, because uninstalling it after would
+# delete files the GPU build shares. A later plain `pip install -e .[dev]`
+# reinstalls the CPU build over it; re-run this step after one.
+#   - 1.26.0 is the newest release that runs on a V100 (sm_70): 1.27 and later
+#     fail creating a CUDA session there (cuda_call.cc, at initialization).
+#   - The CUDA 12 / cuDNN 9 libraries come from torch's nvidia-* wheels, which
+#     torch loads before the face models start.
+# Override with VTS_ONNXRUNTIME_GPU_SPEC; skip with VTSEARCH_SKIP_ORT_GPU=1.
+vts_install_onnxruntime_gpu() {
+    if [ "${VTSEARCH_SKIP_ORT_GPU:-0}" = "1" ]; then
+        echo "  (skipped: VTSEARCH_SKIP_ORT_GPU=1; the face models run on the CPU)"
+        return 0
+    fi
+    local spec="${VTS_ONNXRUNTIME_GPU_SPEC:-onnxruntime-gpu==1.26.0}"
+    pip uninstall -y onnxruntime || true
+    if ! pip install "$spec" --progress-bar on; then
+        echo "warning: ${spec} failed to install; putting the CPU onnxruntime back." >&2
+        echo "         The face models will run on the CPU." >&2
+        pip install onnxruntime --progress-bar on
+    fi
+}
+
 vts_install_gpu() {
     local cuda_tag="$1"
     local extra_index="https://download.pytorch.org/whl/${cuda_tag}"
@@ -1194,8 +1205,8 @@ vts_install_gpu() {
       -r "$(vts_requirements_file gpu)" \
       --progress-bar on
 
-    vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
-    vts_install_face_deps
+    vts_progress_step "Swapping in onnxruntime-gpu for the face models"
+    vts_install_onnxruntime_gpu
 
     vts_progress_step "Installing optional cuML/RAPIDS accelerator (best-effort; CUDA tag: ${cuda_tag})"
     vts_install_cuml "$cuda_tag"

@@ -58,8 +58,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from vtscore.plugins import inactive_field_keys
+
 if TYPE_CHECKING:
-    from vtscore.plugins import PluginBase
+    from vtscore.plugins import PluginBase, PluginField
 
 _TEXT_LIKE_TYPES = frozenset({"text", "url", "email", "password", "folder", "server_path", "select"})
 
@@ -169,6 +171,18 @@ def _is_blank(value: Any) -> bool:
     return isinstance(value, str) and not value.strip()
 
 
+def _reset_inactive(f: PluginField, field_values: dict[str, Any]) -> None:
+    """Discard what the caller sent for a field its ``visible_when`` switches off.
+
+    A file becomes ``None``; anything else is blanked, so the default fill in
+    :func:`normalize_field_values` treats it as untouched.
+    """
+    if f.field_type == "file":
+        field_values[f.key] = None
+    elif f.key in field_values:
+        field_values[f.key] = "" if f.field_type in _TEXT_LIKE_TYPES else None
+
+
 def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> dict[str, Any]:
     """Normalize *field_values* against *plugin*'s declared fields.
 
@@ -183,10 +197,21 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
     runs, so the default is templated, security-validated and
     required-checked exactly like a typed value.
 
+    A field switched off by its
+    :attr:`~vtscore.plugins.PluginField.visible_when` condition loses
+    whatever the caller sent for it and carries what an untouched field
+    would - its default, else blank (``None`` for a file upload) - and is
+    exempt from ``required``.  The plugin never acts on a value the user
+    could no longer see.
+
     Idempotent: running the pass twice on the same dict produces the
     same result and never raises differently the second time.
     """
+    inactive = inactive_field_keys(plugin.fields, field_values)
     for f in plugin.fields:
+        off = f.key in inactive
+        if off:
+            _reset_inactive(f, field_values)
         if f.field_type == "file":
             continue
 
@@ -213,7 +238,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
             # - leave it alone and let the plugin handle it.
             continue
 
-        if not value and f.required:
+        if not value and f.required and not off:
             raise ValueError(f"{f.label} is required.")
 
         if value:

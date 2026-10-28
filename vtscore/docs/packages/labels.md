@@ -98,6 +98,12 @@ LABEL_IMPORTER = PostgresLabelImporter()
 CLI and a web upload. `add_cli_arguments(parser)` is auto-derived from
 `fields`, so most importers work from the CLI with no extra code.
 
+`default_detector_name(field_values)` names a detector created from the
+importer: the first `file` field's filename without its extension, else
+`"<display_name> detector"`. Override it to turn an opaque selection into
+a readable name; the app prefills the New Detector › Trained form's name
+box with it as the form is filled.
+
 ---
 
 ## Labelset sources
@@ -292,3 +298,13 @@ plugin families operate on (or produce) that type:
 - A `LabelImporter` returns `list[{"md5", "label"}]` for compatibility with the legacy label format. Wrapping that into a `LabelSet` is `LabelSet.from_dict({"labels": result})`.
 - A `LabelsetSource.save` consumes a `LabelSet`; its `load` returns the same raw list shape for symmetry with importers, while `load_full` returns the full `LabelSet` for sources that carry richer metadata.
 - The on-disk JSON format both built-ins use is the dict produced by `LabelSet.to_dict()` - a superset of the legacy `{"labels": [{"md5", "label"}]}` shape, with optional `origin`, `origin_name`, `filename`, `category`, `metadata`, `region_box` per element and an optional top-level `detector_meta` block.
+
+---
+
+## Cross-references
+
+- [`sync.md`](sync.md) - the `SyncSource` ABC (the public / hook split, `peek_version`) that `LabelsetSource` extends.
+- [`datasets.md`](datasets.md#domain-objects) - `LabelSet`, `LabeledElement` and `Origin`, the types both families read and produce.
+- [`detectors.md`](detectors.md#sync-helpers) - `label_sync_write_lock`, which a pull merges under, and the vote-to-labelset persist whose detector-file write schedules a push.
+- [`config.md`](config.md#the-coreconfig-dataclass) - `default_labelset_source` and `labelset_source_push_interval`, the deployment-wide binding and pacing.
+- [`../extending/label-importers.md`](../extending/label-importers.md) and [`../extending/labelset-sources.md`](../extending/labelset-sources.md) - writing a `LabelImporter` or a `LabelsetSource`; [`docs/EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md#adding-a-labelset-source) has the app-side route and UI wiring.

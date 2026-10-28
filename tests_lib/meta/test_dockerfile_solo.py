@@ -90,15 +90,41 @@ def test_a_type_the_server_warms_nothing_for_has_nothing_to_bake(preload, env, c
 
 
 def test_half_types_bake_what_they_embed_as(preload, env, calls):
-    """document's pages embed as images; face crops embed with the face model."""
+    """document's pages embed as images."""
     assert preload.main(["document"]) == 0
+    assert calls["calls"] == [["document"]]
+
+
+def test_a_face_image_without_face_models_has_nothing_to_bake(preload, env, calls, capsys):
+    """The app downloads no face models (#5320): the deployment mounts its own, so the build passes."""
     assert preload.main(["face"]) == 0
-    assert calls["calls"] == [["document"], ["face"]]
+    assert calls["calls"] == []
+    assert "no face models to bake" in capsys.readouterr().out
+
+
+def test_face_models_present_at_build_time_are_loaded(preload, env, calls, monkeypatch):
+    from vtscore.media.face import imagekit_bridge
+
+    monkeypatch.setattr(imagekit_bridge, "face_models", lambda: imagekit_bridge.FaceModels(True, "", None, "oss"))
+    assert preload.main(["face"]) == 0
+    assert calls["calls"] == [["face"]]
 
 
 def test_bakes_through_the_server_preload(preload, env, calls):
     assert preload.main(["audio"]) == 0
     assert calls["calls"] == [["audio"]]
+
+
+def test_bakes_several_types_in_one_preload(preload, env, calls):
+    """An all-types LabBench image (docker/Dockerfile.labbench with no MEDIA_TYPE) bakes each type."""
+    assert preload.main(["image", "audio"]) == 0
+    assert calls["calls"] == [["image", "audio"]]
+
+
+@pytest.mark.parametrize("argv", [["image", "vidoe"], ["image", ""]], ids=["unknown", "blank"])
+def test_one_bad_type_among_several_fails_before_any_download(preload, env, calls, argv):
+    assert preload.main(argv) == 2
+    assert calls["calls"] == []
 
 
 def test_a_preload_that_loads_nothing_fails_the_build(preload, env, calls, capsys):

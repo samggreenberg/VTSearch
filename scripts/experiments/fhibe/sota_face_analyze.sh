@@ -15,15 +15,18 @@
 # Env: SOTA_FACE_DATE (default today), SOTA_FACE_SIZES (default "1024 640"), SOTA_FACE_ARM
 # (an arm sota_face.sh ran under the same variable, #4777) and SOTA_FACE_TAG (the run dirs' tag,
 # as sota_face.sh took it; default `sota`) and SOTA_FACE_BETAS (the presets it ran; default "0.25 1 4").
+# The arm defaults to `ik` (#5321), the face provider's cells: the face path as it ships since #5320.
+# SOTA_FACE_ARM= (empty) and the other retired MTCNN arms read FaceNet's cells, filed under `face` too.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOTA="$HERE/../state_of_app"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
-ARM="${SOTA_FACE_ARM:-}"
+ARM="${SOTA_FACE_ARM-ik}"
 SET="$D-${SOTA_FACE_TAG:-sota}${ARM:+-$ARM}"
 FACES="fhibe_faces${ARM:+_$ARM}"
+EMBEDDER=face PATH_NAME=face
 OUT="${1:?usage: sota_face_analyze.sh OUT [K ...]}"
 shift
 KS=("${@:-1 4}")
@@ -61,7 +64,7 @@ for k in "${KS[@]}"; do
         source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
         eval "$ENVX"
         cd "$SOTA/../calibration"
-        python "$SOTA/analyze.py" --exp "$exp" --baseline "$base" --path face --dataset "${FACES}_$size" --out "$a" |
+        python "$SOTA/analyze.py" --exp "$exp" --baseline "$base" --path "$PATH_NAME" --dataset "${FACES}_$size" --out "$a" |
           tail -1
       )
       runs+=(--run "$b=$a")
@@ -70,7 +73,7 @@ for k in "${KS[@]}"; do
       source "$HERE/../../../gridenv.sh" >/dev/null 2>&1
       cd "$SOTA/../calibration"
       python "$SOTA/perp.py" --kind balance "${runs[@]}" --out "$OUT/k$k-$size-perp" | tail -1
-      python "$SOTA/by_click.py" "${runs[@]}" --baseline "$base" --embedder face --dataset "${FACES}_$size" \
+      python "$SOTA/by_click.py" "${runs[@]}" --baseline "$base" --embedder "$EMBEDDER" --dataset "${FACES}_$size" \
         --out "$OUT/k$k-$size-objective_by_click.csv" | tail -1
     )
   done

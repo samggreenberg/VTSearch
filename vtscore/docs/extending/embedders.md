@@ -23,6 +23,7 @@ batch / bulk hooks.
 - [Where the file goes](#where-the-file-goes)
 - [Lazy model loading](#lazy-model-loading)
 - [Embedding hooks: single, bulk, patch](#embedding-hooks-single-bulk-patch)
+- [Decoding audio: use `decode_audio`, never `librosa.load`](#decoding-audio-use-decode_audio-never-librosaload)
 - [Capability flags](#capability-flags)
 - [Worked example](#worked-example)
 - [Testing pattern](#testing-pattern)
@@ -163,6 +164,33 @@ DINOv3, EUPE). Set `supports_patch_regions = True` and implement
 dataset loader gates on the flag - single-vector embedders leave the
 default in place and the patch pipeline skips their datasets entirely.
 
+## Decoding audio: use `decode_audio`, never `librosa.load`
+
+Any plugin that turns audio into samples - an embedder, a clipper, a
+converter, a captioner - must go through
+[`vtscore.media.audio.decode.decode_audio`](../../media/audio/decode.py):
+
+```python
+from vtscore.media.audio.decode import decode_audio
+
+samples, sr = decode_audio(source, sr=MY_SAMPLE_RATE, mono=True)
+```
+
+*source* may be a path, raw `bytes`, or a file-like object; the return is a
+C-contiguous `float32` array in [-1, 1], mono-downmixed by channel mean, at
+`sr` (or the native rate when `sr=None`). `offset` / `duration` (seconds)
+select a window before any resampling. Failure raises `AudioDecodeError`.
+
+Do **not** call `librosa.load`. It falls back to `audioread` for every
+container `libsndfile` can't parse - which is all of AAC/M4A/MP4 - and that
+fallback is removed in librosa 1.0, so those codecs would break silently.
+`decode_audio` uses `soundfile` for the native formats and pipes everything
+else through the bundled ffmpeg over `stdin`; only a container that needs a
+seekable input (an MP4/M4A with a trailing `moov` atom) spills to a temp
+file. librosa is still the right tool for *analysis*
+(`librosa.effects.split`, `librosa.feature.melspectrogram`, `librosa.cqt`);
+it is only `load` that is off-limits.
+
 ## Capability flags
 
 These flags on the subclass change framework behaviour:
@@ -172,11 +200,12 @@ These flags on the subclass change framework behaviour:
 | `supports_text` | `True` | Set `False` for vision-only or patch-only encoders that don't have a text tower. The frontend hides text-search affordances for datasets using them. |
 | `supports_patch_regions` | `False` | Set `True` for patch-based image encoders that implement `_patch_forward_impl`. The dataset loader runs the patch pass after the standard CLS pass. |
 | `supports_geometric_verification` | `False` | Set `True` for structural (local-feature) encoders that implement `_local_features_forward_impl`. The dataset loader then stores per-image local features for the geometric re-rank. |
+| `supports_tiled_stage1` | `False` | Set `True` only for structural document-page encoders whose datasets should carry `media["tile_vectors"]` (`vtscore/media/structural_tiles.py`); you must then override `tile_vectors_forward_bulk`. |
 | `license_notice` | `None` | Non-`None` when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend surfaces this as a warning chip in the picker. |
 | `eval_only` | `False` | Set `True` for a research arm: still resolvable by name through `get_embedder()`, but withheld from every picker, from the per-media-type default and from `GET /api/embedders`. |
 
-All but `eval_only` appear in `MediaEmbedder.to_dict()` and the
-`GET /api/embedders` payload.
+All but `eval_only` and `supports_tiled_stage1` appear in
+`MediaEmbedder.to_dict()` and the `GET /api/embedders` payload.
 
 ## Worked example
 

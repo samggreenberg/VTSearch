@@ -30,6 +30,16 @@ nothing in the log to name the test.  Two faults, both in the plugins:
 The conftests call both from two-line hooks (``pytest_xdist_make_scheduler``,
 ``pytest_timeout_set_timer``); each returns ``None`` where it does not apply,
 which hands the hook back to the plugin's own implementation.
+
+A third fault left ``--dist loadgroup`` grouping nothing at all (issues #5356,
+#5352).  pytest-xdist 3.8.0 groups a test by appending ``@<group>`` to its
+nodeid in the worker, by writing ``item._nodeid``.  pytest 9.2 computes
+``nodeid`` from a structured ``item._id`` instead, so that write lands in an
+attribute nothing reads, and every ``xdist_group`` test became its own unit.
+Tests that share files under the session data dir then ran on several workers at
+once, and one test's cleanup removed the files another was reading.  The
+conftests' ``pytest_collection_modifyitems`` calls
+:func:`restore_xdist_group_suffix`, which writes the suffix where pytest reads it.
 """
 
 from __future__ import annotations
@@ -91,6 +101,32 @@ class CrashSafeLoadGroupScheduling(LoadGroupScheduling):
             for node in self.nodes:
                 if node in self.registered_collections:
                     self._reschedule(node)
+
+
+def restore_xdist_group_suffix(config, items) -> None:
+    """Give each ``xdist_group`` test the ``@<group>`` nodeid suffix ``--dist loadgroup`` schedules by.
+
+    In an xdist worker, pytest-xdist's own ``pytest_collection_modifyitems`` runs
+    before the conftests' and appends the suffix itself on pytest < 9.2, so an
+    item that already carries it is left alone.  That keeps this a no-op there,
+    and once a pytest-xdist release writes the suffix where pytest 9.2 reads it.
+    The name is built the way pytest-xdist 3.8.0 builds it: every group the test
+    is marked with, sorted and joined with ``_``.  Call it before anything that
+    matches items by nodeid (the pass cache records the suffixed form).
+    """
+    if not getattr(config.option, "loadgroup", False):
+        return
+    for item in items:
+        names = {
+            str(m.args[0] if m.args else m.kwargs.get("name", "default")) for m in item.iter_markers("xdist_group")
+        }
+        if not names:
+            continue
+        suffix = "@" + "_".join(sorted(names))
+        if item.nodeid.endswith(suffix):
+            continue
+        # pytest 9.2's ``nodeid`` is ``str(self._id)``; ``parse`` keeps the exact string.
+        item._id = type(item._id).parse(item.nodeid + suffix)
 
 
 def make_crash_safe_scheduler(config, log):

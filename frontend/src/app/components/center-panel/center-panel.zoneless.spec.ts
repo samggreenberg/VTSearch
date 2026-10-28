@@ -317,7 +317,7 @@ describe('CenterPanelComponent', () => {
       expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
     });
 
-    it('offers no region drawing on a face, whose FaceNet would drop the box', () => {
+    it('offers no region drawing on a face, whose embedder would drop the box', () => {
       fixture.componentRef.setInput('media', faceMedia);
       (component as unknown as { embedderInfos: EmbedderInfo[] }).embedderInfos = [
         { name: 'face', media_type_id: 'face', supports_patch_regions: false },

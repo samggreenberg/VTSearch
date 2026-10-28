@@ -303,6 +303,19 @@ class ImporterFieldSchema(Schema):
             )
         }
     )
+    visible_when = fields.Dict(
+        keys=fields.String(),
+        values=fields.List(fields.String()),
+        metadata={
+            "description": (
+                "Show this field only while each named field holds one of the listed values (every entry must "
+                'match). Values are compared as strings after trimming; a checkbox controller reads ``"true"`` / '
+                '``"false"``, and a blank or itself-hidden controller counts as its ``default``. While the '
+                "condition fails the field is not rendered and not required, and the server resets it to its "
+                "default. Empty means always shown."
+            )
+        },
+    )
     template_vars = fields.List(
         fields.String(),
         metadata={
@@ -1045,7 +1058,11 @@ class ImporterFieldOptionsResponseSchema(Schema):
 
 
 class ImporterSuggestedNameRequestSchema(Schema):
-    """Body for ``POST /api/dataset/import/<importer_name>/suggested-name``."""
+    """Body for ``POST /api/dataset/import/<importer_name>/suggested-name``.
+
+    Shared by ``POST /api/label-importers/suggested-name/<importer_name>``,
+    which names a detector rather than a dataset.
+    """
 
     values = fields.Dict(load_default=dict)
 

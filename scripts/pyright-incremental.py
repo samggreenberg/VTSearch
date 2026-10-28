@@ -2,10 +2,12 @@
 """Run pyright on the files whose diagnostics could have changed since the last green run.
 
 A full ``pyright`` over this repository is the longest serial gate in
-``run-tests.sh``: 239s on two threads of a 4-vCPU box, against ~410s for the
-whole of pytest. Pyright's own statistics say where that goes. Of a 283s
-single-thread run, ~65s parses and binds the 6,400-file import closure
-(transformers and torch included) and ~215s *checks* the 1,208 files that
+``run-tests.sh``: ~85s on four threads of a 4-vCPU box (2026-10-26; ~125s
+with the frontend lanes beside it), against ~410s for the whole of pytest.
+Pyright's own statistics say where that goes.
+Of a 283s single-thread run, before the local ``transformers`` stub (#5077)
+shrank the import closure, ~65s parsed and bound the 6,400-file import closure
+(transformers and torch included) and ~215s *checked* the 1,208 files that
 ``pyrightconfig.json`` includes. Checking is per file, and pyright binds only
 what the files it is asked to check reach, so ``pyright <one changed test
 file>`` takes about 3s. A session's second and later full runs usually change

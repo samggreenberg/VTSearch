@@ -239,6 +239,104 @@ sends one email per `--batch-size` hits. Both default to 500 hits per batch and
 always deliver at least once (even for a zero-hit run), so the receiver learns
 the run happened.
 
+**Resuming an interrupted run** (`--resume`, with `--stream-results`): a
+streamed run over a very large source can take hours, and a plain one that is
+interrupted (a preempted node, an OOM kill, Ctrl-C) leaves nothing behind: the
+export only lands at `--filepath` once it completes. Add `--resume` and the run
+writes the file in place and records a checkpoint beside it,
+`<filepath>.resume.json`, after every chunk it writes. Run the **same command**
+again and it continues after the last chunk the checkpoint records, so a SLURM
+job can simply be requeued:
+
+```bash
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --resume --exporter server_json_file --filepath hits.ndjson
+```
+
+What a resumed run guarantees:
+
+- **The file is the one an uninterrupted run writes.** No chunk is written
+  twice and none is dropped, and the header is written once. A process killed
+  partway through a chunk leaves a partial chunk after the last checkpoint;
+  the resumed run cuts the file back to the checkpoint and writes that chunk
+  again, whole.
+- **Completed chunks are not scored again.** The resumed run walks the source
+  from the start to reach where it stopped, checking each completed chunk but
+  not embedding or scoring it. For `server_folder`, the check needs only the
+  walk: each file's path, size and modification time, read without opening
+  the file, so the files already done are not hashed or thumbnailed again.
+  That covers the folder's own files and those of an archive (`--path` an
+  archive, or `--dig-archives`), whose members are checked by the archive's
+  own size and time. Its PDF-page and converter chunks, and every other
+  importer's or dataset's chunks, are re-read to be checked. The first chunk
+  is the exception throughout: the detectors are retrained on it, as the
+  first run's were, so it is read and embedded again.
+- **A different run is refused, not appended.** The checkpoint records the
+  run's identity: the source and its parameters, the chunk size, each
+  detector's labels, the settings, `--keep-negatives` / `--override-clipper`,
+  and the exporter and its fields. A resume with any of them changed fails
+  with an error naming what changed. So does one whose source changed in the
+  part already done (a file added, removed or rewritten there, which would
+  shift every chunk after it; a folder walk sees a rewrite by the file's size
+  or modification time), one whose output file is missing or shorter than the
+  checkpoint says, and one whose retrained detector lands on a noticeably
+  different threshold. Files added *after* the part already done
+  are fine: they are scored as usual. A retrained threshold that differs only
+  by floating-point noise (a requeue on a different GPU) is set back to the
+  recorded one, so every chunk is judged by one cut, with a
+  `resume_threshold_kept` event. To start over instead, delete the checkpoint.
+- **One run at a time.** While a resumable run is writing, it holds
+  `<filepath>.resume.lock`; a second `--resume` run on the same file is
+  refused rather than interleaving its chunks. The lock dies with the
+  process, so a killed run never blocks the next one.
+- **The checkpoint is removed when the run completes**, along with the lock.
+  Running the same command after that starts a fresh run, as it would without
+  `--resume`.
+
+`--resume` needs a `--filepath` that names the same file on every run, so a
+date or time template (`{YYYYMMDD-HHMMSS}`, the default) is refused; it works
+with `server_json_file` and `server_csv_file`, and not with `--as-labelset` or
+`--outputs`. The checkpoint holds digests, byte offsets and thresholds only,
+never an importer's field values in the clear. In `--progress-format json` a
+resumable run reports `resume_start` (`resumed: false` on a fresh start), a
+`chunk_skipped` per completed chunk it passes (`read: false` when the walk
+alone checked it), and `resume_complete` at the end. A checkpoint written
+before checks were made from the walk (format `v1`) cannot be resumed: delete
+it to start over.
+
+**Streaming as a labelset** (`--as-labelset`, with `--stream-results`): stream the
+hits as label entries instead, so the export reads back in through a label
+importer (`--import-labels-into`, or a label import in the app):
+
+```bash
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --as-labelset --exporter server_csv_file --filepath labels.csv
+```
+
+Each entry is what a labelset export records for the item (`md5`, `label`,
+`origin`, `origin_name`, `filename`, `category`, and the importer's metadata),
+plus a `detector` field naming the detector that labelled it. Every detector the
+run scores streams into the one export, so an item two detectors score appears
+twice, once per detector. No score, threshold or balance leaves, since those
+were measured by this run's head (#5131). `--keep-negatives` adds the
+below-threshold items as `bad` labels. The same five exporters support it:
+
+- `server_json_file` writes a labels JSON file (`{"labels": [...]}`, with
+  `detector_meta`, `detectors`, `keep_negatives` and `format:
+  "vtsearch-labelset-stream/v1"` beside it), not NDJSON. The `server_json_file`
+  label importer reads it as it stands.
+- `server_csv_file` writes `detector,label,md5,origin_name,filename,category,origin`
+  rows, which the `server_csv_file` label importer reads (it ignores `detector`).
+- `gui` prints each entry with its label and detector; `webhook` POSTs
+  `labels` batches (`format: "vtsearch-labelset-batch/v1"`); `email_smtp` sends
+  one email per batch, listed per detector.
+
+Reading the file back in is not streamed: a label importer returns the whole
+list, and training on it needs every label's embedding. Use it to get a huge
+set of predictions out of the CLI, not to train on millions of labels.
+
 ### Exporting results
 
 By default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
@@ -323,6 +421,31 @@ the granularity the detector expects. The per-clip scores fold back to the sourc
 media by the same **max** rule as converter fan-out. A dataset already loaded
 with the matching clipper is scored as-is (no redundant re-clip), and a detector
 with no `input_spec.clipper` scores whole media.
+
+**Scoring at another granularity (`--override-clipper`).** A niche escape
+hatch: the re-clip above is what a normal run wants, but a power user can score
+at a granularity the detector was not trained on, say 5-second tiles for a
+detector trained on 2-second ones. `--override-clipper NAME` takes the place of
+every detector's `input_spec` for the run, and `--override-clipper-param
+KEY=VALUE` (repeatable) sets the clipper's parameters; the rest keep its
+defaults:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+  --override-clipper sound_tiling --override-clipper-param duration=5
+```
+
+The dataset is re-clipped to that clipper unless it is already clipped to match,
+and the run prints a `detector_reclip` line naming the override (the JSON event
+carries it as `override_input_spec`). A `*_default` clipper (`sound_default`,
+`image_default`, …) scores each media as it was loaded. The clipper has to clip
+the media type each detector scores: an image clipper beside an audio detector
+stops the run with an error naming both types and the audio clippers there are,
+while a detector the run skips for its type is not held to it. An unknown
+clipper, a parameter it doesn't take (the error lists the ones it does) or a
+value it refuses is a usage error before anything is imported; `python app.py
+--list-clippers` lists the clippers. A pipeline file sets it as
+`override_clipper:` (see [Pipeline file](#pipeline-file)).
 
 **The line's prevalence is estimated on whatever the run ends up scoring.** The
 line itself comes from the labels: the class model the calibration folds'
@@ -451,9 +574,21 @@ line per entry (its category, media type, source rows and any per-dataset
 options), under `Datasets (2; one importer run, one dataset per entry):`; the
 JSON `dry_run_plan` event's `source` carries them as `outputs`.
 
+With `--override-clipper`, the plan adds a `Clipper override: 'sound_tiling'
+(duration=5.0, min_overlap=1.0) (in place of each detector's input_spec)` line
+under the detectors, showing every parameter the clipper will take; the JSON
+`dry_run_plan` event carries the same spec as `override_clipper` (`null`
+without one).
+
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
-under the source (noting whether negatives are dropped or included), so a
-streaming run can be sanity-checked before it starts. The `Save to dashboard`
+under the source (noting whether negatives are dropped or included; `yes, as a
+labelset (...)` with `--as-labelset`), so a streaming run can be sanity-checked
+before it starts. The dry run also fails, as the run would, when the exporter
+cannot stream that way. With `--resume` it adds `Resume: yes (checkpoint
+<path>: ...)`, saying how many chunks an existing checkpoint has already
+written, or that there is none yet; it fails when the exporter cannot resume
+or the output path has a date template, but it does not check the checkpoint
+against the run (the run does that before loading anything). The `Save to dashboard`
 line says whether the run would keep the dataset; a dry run never saves it.
 With the `autofind_cli_delete_dataset` setting on, it reads `Save to dashboard:
 until detection has run (…)`, and the JSON `dry_run_plan` event's `source`
@@ -476,7 +611,7 @@ came from: `autofind` (the settings file) or `override` (`--import-labels-into`)
 `--import-labels-into` merges an external label file into a detector's labelset
 *before* the run trains and scores, so a batch of labels produced elsewhere
 (another VTSearch instance, an annotation tool, a script) can be folded in
-headlessly. Three flags work together:
+headlessly. These flags work together:
 
 | Flag | Meaning |
 |------|---------|
@@ -656,7 +791,7 @@ python app.py --pipeline pipeline.yaml
 ```
 
 The YAML covers the source, settings file, detectors, chunking, streaming,
-label import and exporter. The flags for those cannot be combined with
+label import, clipper override and exporter. The flags for those cannot be combined with
 `--pipeline`: the run is refused with an error naming the flag, so declare them
 in the file. `--dry-run` has no pipeline form and is refused too. Like the
 flags, a pipeline run saves its dataset to the dashboard unless the file sets
@@ -688,7 +823,8 @@ importer:
   # one mapping per dataset, in the shape the web API's `outputs` entries take
   # (media_type, source_specs, category, dataset_name, embedder, embedders,
   # clipper, clipper_params, clipper_chain, cleaners). Replaces
-  # `fields.media_type`; each dataset is saved, scored and exported on its own.
+  # `fields.media_type` and `fields.source_specs` (setting either is refused);
+  # each dataset is saved, scored and exported on its own.
   # outputs:
   #   - media_type: audio
   #   - media_type: image
@@ -724,6 +860,16 @@ stream_results: false
 # Same as --keep-negatives. Off by default.
 keep_negatives: false
 
+# Optional. With stream_results, stream the hits as re-importable label
+# entries, each naming its detector, through the exporter's labelset
+# streaming mode (same as --as-labelset). Off by default.
+as_labelset: false
+
+# Optional. With stream_results, checkpoint after every chunk so running the
+# same file again after an interruption continues where it stopped (same as
+# --resume; see "Resuming an interrupted run" above). Off by default.
+resume: false
+
 # Optional. One-shot merge of external labels into a detector before
 # scoring (same as --import-labels-into / --label-importer /
 # --label-importer-field). `importer` takes the same name + fields shape
@@ -737,6 +883,14 @@ import_labels:
       filepath: new_labels.json
   create: false                    # true = create the detector if missing (--create-detector)
   # media_type: audio              # with create: the new detector's type (--detector-media-type)
+
+# Optional. Score every detector at this clipper's granularity in place of
+# its own input_spec (same as --override-clipper / --override-clipper-param;
+# see "Scoring at another granularity" above). `params` is optional.
+# override_clipper:
+#   name: sound_tiling
+#   params:
+#     duration: 5
 
 # Optional. Where results go. Defaults to the `gui` exporter (console).
 exporter:
@@ -754,6 +908,9 @@ message, and the list is rejected for an importer that makes one dataset per
 run. The run then behaves as [`--outputs`](#sources) does: one dataset per
 entry, each exported to its own file (`{dataset_name}` in `exporter.fields`
 names it; a `filepath` without it gains the name before the extension).
+
+`override_clipper` is checked at load time too, by the same rules as the flags:
+an unknown clipper or parameter, or a value the clipper refuses, fails the file.
 
 The shorter `import_labels` form is still accepted: `importer: <name>` given as
 a plain string, with `file: <path>` as shorthand for the importer's `filepath`
@@ -783,7 +940,7 @@ is there; each one is intended.
 | `--local` | Changes the mode banner | Ignored | Banner text only. |
 | `--progress-format`, plugin notifications | Progress goes to the SSE stream; notifications become toasts | `text` or `json` on stdout; notifications are printed | No browser is watching a headless run. |
 
-These are the same on both paths, including the ones that once differed:
+These are the same on both paths:
 
 - **Native thread count, OpenBLAS kernels, logging** (`VTSEARCH_TORCH_THREADS`,
   `OPENBLAS_CORETYPE`, `VTSEARCH_LOG_LEVEL`, `VTSEARCH_LOG_FORMAT`,
@@ -1070,7 +1227,7 @@ override** that can only turn the lock on: there is no
 on too, and neither is editable via the Settings dialog or the settings
 API (the Settings ▸ Server tab reports it). The env-var equivalent is
 `VTSEARCH_AUTOPILOT_ONLY`; an explicit flag wins over it. See
-[`autopilot_only`](DEPLOYMENT.md#server-tier--datasettingsjson) for what
+[`autopilot_only`](SETTINGS.md#server-tier--datasettingsjson) for what
 it means for Tune's Review actions, and for a detector Autopilot can't
 start.
 

@@ -20,11 +20,13 @@ import {
 } from '../../../dashboard/clipper-chooser/clipper-chooser.component';
 
 /** The Settings › Import pane's defaults: lets the user pick a
- *  per-mediaType default embedder, clipper, and converter-row set.
- *  Mirrors the Add Dataset modal's "Advanced ▾" block but standalone,
- *  always expanded, and not tied to a specific importer.  Whatever the
- *  user picks here is silently auto-filled the next time they open an
- *  importer whose output is the matching mediaType.
+ *  per-mediaType default embedder, clipper, converter-row set and the two
+ *  ingest toggles.  Mirrors the Add Dataset modal's "Advanced ▾" block but
+ *  standalone, always expanded, and not tied to a specific importer.
+ *  Whatever the user picks here is silently auto-filled the next time they
+ *  open an importer whose output is the matching mediaType.  A Multi-Dataset
+ *  default (only the post-import "Save as default" offer makes one, since its
+ *  kinds depend on the importer) is shown with a Clear button.
  *
  *  The component owns the per-mediaType caches for embedders, clippers,
  *  and converters so switching tabs is instant after the first fetch.
@@ -179,9 +181,9 @@ export class ImportDefaultsSettingsComponent {
   }
 
   /** The embedder select: offered when there is more than one to pick from.
-   *  With neither this nor the picker above (Document: no embedder of its
-   *  own, one clipper, nothing converts into it) the tab says it has nothing
-   *  to set rather than showing a blank body (#5225). */
+   *  A type with neither this nor the picker above (Document: no embedder of
+   *  its own, one clipper, nothing converts into it) still has the two
+   *  ingest toggles, so its tab is never blank (#5225). */
   get showEmbedderPicker(): boolean {
     return this.activeEmbedders.length > 1;
   }
@@ -252,6 +254,20 @@ export class ImportDefaultsSettingsComponent {
     return found?.license_notice ?? null;
   }
 
+  get currentBuildProjection(): boolean {
+    return !!this.currentDefaults.build_projection;
+  }
+
+  get currentMergeNearDuplicates(): boolean {
+    return !!this.currentDefaults.merge_near_duplicates;
+  }
+
+  /** The saved Multi-Dataset kinds, named (``"Image, Face"``), or ``''``
+   *  when imports of the active type start on the one-dataset form. */
+  get currentMultiDatasetSummary(): string {
+    return (this.currentDefaults.multi_dataset || []).map((k) => this.typeLabels[k] || k).join(', ');
+  }
+
   /** True when the user has at least one saved override for the active
    *  mediaType, used to gate the "Reset" button so it doesn't appear
    *  when there's nothing to reset. */
@@ -264,6 +280,8 @@ export class ImportDefaultsSettingsComponent {
     if (d.source_specs && d.source_specs.length > 0) return true;
     // Cleanup choices have no editor here, but only Reset can clear them.
     if (d.cleaners && Object.keys(d.cleaners).length > 0) return true;
+    if (d.build_projection || d.merge_near_duplicates) return true;
+    if (d.multi_dataset && d.multi_dataset.length > 0) return true;
     return false;
   }
 
@@ -326,6 +344,20 @@ export class ImportDefaultsSettingsComponent {
 
   onClipperChooserCancelled(): void {
     this.clipperChooserOpen = false;
+  }
+
+  // An unticked toggle is stored as no key at all, as the import dialog's
+  // "Save as default" writes it.
+  onBuildProjectionChange(on: boolean): void {
+    this.updateActive({ build_projection: on || undefined });
+  }
+
+  onMergeNearDuplicatesChange(on: boolean): void {
+    this.updateActive({ merge_near_duplicates: on || undefined });
+  }
+
+  clearMultiDataset(): void {
+    this.updateActive({ multi_dataset: undefined });
   }
 
   resetActiveType(): void {

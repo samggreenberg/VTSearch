@@ -148,7 +148,7 @@
                       <vt-plugin-checkbox
                         [inputId]="'nmm-' + field.key"
                         [value]="labelImporterValues[field.key]"
-                        (valueChange)="labelImporterValues[field.key] = $event"
+                        (valueChange)="labelImporterValues[field.key] = $event; onLabelImporterFieldChanged(field.key)"
                         [title]="field.description || field.label || field.key"
                       ></vt-plugin-checkbox>
                     }
@@ -168,6 +168,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                     />
                   } @else if (field.field_type === 'file') {
@@ -187,6 +188,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -198,6 +200,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -209,29 +212,22 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
                     />
                   } @else if (field.field_type === 'select' && field.allow_free_text) {
-                    <input
-                      [id]="'nmm-' + field.key"
-                      type="text"
-                      class="form-input"
+                    <vt-plugin-combobox
+                      [inputId]="'nmm-' + field.key"
+                      [options]="labelImporterFieldOptions.optionsFor(field)"
+                      [value]="labelImporterValues[field.key]"
+                      (valueChange)="labelImporterValues[field.key] = $event; onLabelImporterFieldChanged(field.key)"
                       [required]="!!field.required"
-                      [attr.list]="'nmm-' + field.key + '-list'"
-                      [(ngModel)]="labelImporterValues[field.key]"
-                      [name]="'nmm-' + field.key"
                       [disabled]="!!labelImporterFieldOptions.loading()[field.key]"
                       [placeholder]="labelImporterFieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
                       [title]="field.description || field.label || field.key"
-                      (ngModelChange)="onLabelImporterFieldChanged(field.key)"
-                    />
-                    <datalist [id]="'nmm-' + field.key + '-list'">
-                      @for (opt of labelImporterFieldOptions.optionsFor(field); track opt.value) {
-                        <option [value]="opt.value">{{ opt.label }}</option>
-                      }
-                    </datalist>
+                    ></vt-plugin-combobox>
                     @if (field.dynamic_options && labelImporterFieldOptions.error()[field.key]) {
                       <p class="error-text">{{ labelImporterFieldOptions.error()[field.key] }}</p>
                     }
@@ -265,6 +261,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"
@@ -279,6 +276,7 @@
                       class="form-input"
                       [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
+                      (change)="onLabelImporterFieldChanged(field.key)"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                       [title]="field.description || field.label || field.key"

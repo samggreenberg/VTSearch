@@ -39,15 +39,14 @@ path, one per radio: the document-logo review at beta 1
 the recall end (#4458) and the precision end (#4479).
 
 The face slide, Face Value, draws the left panel alone, from one starting photo:
-FHIBE's 562 people, FaceNet on aligned crops, 150 votes. It reads the end-check
-arm of the weak-check study (`2026-10-11-weak-check-faces-4778`), not the face
-review of 2026-10-10: that arm is the face path as it ships (crops turned upright,
-the head started from the Goods' centroid, no prompted check), which the review
-predates, and the face-gap study re-ran today's app and reproduced it exactly
-(`2026-10-12-face-gap-4780`). Its committed `curves.csv` is the objective at every
-vote and `ab.csv` the set after the end-of-run check. Neither carries the
-precision-recall path, so the slide has no right panel; the notes quote the set at
-50 clicks, which `ab.csv` does carry.
+FHIBE's 562 people, 150 votes, on the face path as it ships: the imagekit
+provider on InsightFace `buffalo_s`, SCRFD `det_500m` plus ArcFace `w600k_mbf`
+(the GRID default since #5341), with the centroid's face-only line at z 5.5
+(#5325). It reads `2026-10-28-face-value-5348`, #5325's shipped arm, charted alone:
+the owner wants no buffalo_l or buffalo_m comparison (2026-10-27). Its committed
+`curves.csv` is the objective at every vote and `ab.csv` the set at 50 clicks and
+after the end-of-run check. Neither carries the precision-recall path, so the slide
+has no right panel; the notes quote the set at 50 clicks, which `ab.csv` does carry.
 
 **Nothing here is a guess**, as in `make-logo-line-fig.py`: `EXPECT` pins the
 numbers the presenter notes quote, and `main` fails if the reports or CSVs say
@@ -97,10 +96,10 @@ TEXT_QUERY = "typed query"
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
 REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
 
-#: The face path as it ships (module docstring): the weak-check study's end-check arm.
-FACE_REPORT = EXPERIMENTS / "2026-10-11-weak-check-faces-4778"
-#: Per starting-photo count and radio, the objective at every vote, today's app (`control`) and the
-#: arm; and the arm's set after the end-of-run check and at 25 and 50 clicks.
+#: The face path as it ships (module docstring): #5325's buffalo_s sessions, #5348.
+FACE_REPORT = EXPERIMENTS / "2026-10-28-face-value-5348"
+#: Per starting-photo count and radio, the objective at every vote; and the set after the end-of-run
+#: check and at 25 and 50 clicks.
 FACE_CURVES, FACE_AB = FACE_REPORT / "curves.csv", FACE_REPORT / "ab.csv"
 #: The slide's sessions start from one photo, as FHIBE's card says the job does.
 FACE_K = 1
@@ -174,18 +173,21 @@ EXPECT = {
     ("regions", 4.0, "kept"): 94,
     ("regions", 0.25, "precision"): 0.79,
     ("regions", 4.0, "recall"): 0.80,
-    ("faces", 0.25, "text"): 0.32,
-    ("faces", 1.0, "text"): 0.53,
-    ("faces", 4.0, "text"): 0.64,
-    ("faces", 0.25, "at50"): 0.90,
-    ("faces", 1.0, "at50"): 0.81,
-    ("faces", 4.0, "at50"): 0.83,
-    ("faces", 0.25, "after"): 0.92,
-    ("faces", 1.0, "after"): 0.82,
-    ("faces", 4.0, "after"): 0.84,
-    ("faces", 0.25, "precision"): 0.95,
-    ("faces", 4.0, "recall"): 0.86,
-    ("faces", 0.25, "kept"): 2,
+    ("faces", 0.25, "text"): 0.89,
+    ("faces", 1.0, "text"): 0.85,
+    ("faces", 4.0, "text"): 0.84,
+    ("faces", 0.25, "at50"): 0.96,
+    ("faces", 1.0, "at50"): 0.92,
+    ("faces", 4.0, "at50"): 0.92,
+    ("faces", 0.25, "after"): 0.96,
+    ("faces", 1.0, "after"): 0.92,
+    ("faces", 4.0, "after"): 0.92,
+    ("faces", 0.25, "precision"): 0.97,
+    ("faces", 1.0, "precision"): 0.93,
+    ("faces", 1.0, "recall"): 0.93,
+    ("faces", 4.0, "recall"): 0.96,
+    ("faces", 0.25, "kept"): 3,
+    ("faces", 1.0, "kept"): 4,
     ("faces", 4.0, "kept"): 7,
 }
 
@@ -332,7 +334,7 @@ def doc_data() -> dict[float, dict]:
 
 
 def face_data(curves: Path = FACE_CURVES, ab: Path = FACE_AB) -> dict[float, dict]:
-    """Per radio, from `FACE_K` photos: the arm's objective at every vote, at 50 clicks and after the check.
+    """Per radio, from `FACE_K` photos: the objective at every vote, at 50 clicks and after the check.
 
     Shaped as `photo_data`'s, so the slide draws with `photo_figure`'s left panel: ``text`` is the
     example sort's own set, which the session shows from the starting photo until the app shows a
@@ -343,7 +345,7 @@ def face_data(curves: Path = FACE_CURVES, ab: Path = FACE_AB) -> dict[float, dic
     with curves.open() as f:
         for row in csv.DictReader(f):
             if int(row["K"]) == FACE_K:
-                by_vote.setdefault(float(row["beta"]), {})[int(row["vote"])] = float(row["arm"])
+                by_vote.setdefault(float(row["beta"]), {})[int(row["vote"])] = float(row["fbeta"])
     ends: dict[float, dict[str, str]] = {}
     with ab.open() as f:
         for row in csv.DictReader(f):
@@ -366,10 +368,10 @@ def face_data(curves: Path = FACE_CURVES, ab: Path = FACE_AB) -> dict[float, dic
             "clicks": list(PHOTO_CLICKS),
             "f": [curve[c] for c in PHOTO_CLICKS],
             "at50": curve[50],
-            "after": float(row["arm_after_check"]),
-            "precision": float(row["arm_precision_50"]),
-            "recall": float(row["arm_recall_50"]),
-            "kept": int(round(float(row["arm_returned_50"]))),
+            "after": float(row["after_check"]),
+            "precision": float(row["precision_50"]),
+            "recall": float(row["recall_50"]),
+            "kept": int(round(float(row["returned_50"]))),
         }
     return out
 

@@ -10,6 +10,7 @@ import { ExportersApiService } from '../../../../services/exporters-api.service'
 import { DynamicFieldOptions } from '../../../../utils/dynamic-field-options';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
 import { PluginCheckboxComponent } from '../../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../../plugin-combobox/plugin-combobox.component';
 
 /** The selected exporter + its per-exporter field-value map, emitted to the
  *  parent so it can persist both onto the settings object. */
@@ -37,7 +38,7 @@ export interface AutoFindExporterChange {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [FormsModule, IconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, IconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
@@ -140,11 +141,25 @@ export class AutoFindSettingsComponent implements OnInit {
 
   /** Renderable fields of the active exporter, or ``[]`` for the "None"
    *  tab. ``hidden`` fields are dropped: their values are fixed by the
-   *  plugin author and the framework fills them in server-side. */
+   *  plugin author and the framework fills them in server-side. So is any
+   *  field whose ``visible_when`` fails on the active exporter's values. */
   get activeFields(): ImporterField[] {
+    return visibleFields(this.declaredFields, this.fieldValues[this.activeExporter] ?? {});
+  }
+
+  /** The active exporter's fields the user can ever reach: everything but
+   *  ``hidden``, whatever the current values make of each ``visible_when`` —
+   *  the set to seed defaults into and fetch option lists for, so a field a
+   *  condition brings back arrives filled in and with a current list. */
+  private get reachableFields(): ImporterField[] {
+    return visibleFields(this.declaredFields);
+  }
+
+  /** Every field the active exporter declares, ``[]`` for the "None" tab. */
+  private get declaredFields(): ImporterField[] {
     if (!this.activeExporter) return [];
     const exp = this.exporters().find((e) => e.name === this.activeExporter);
-    return visibleFields((exp?.fields ?? []) as ImporterField[]);
+    return (exp?.fields ?? []) as ImporterField[];
   }
 
   /** Current value for a field of the active exporter. */
@@ -158,7 +173,7 @@ export class AutoFindSettingsComponent implements OnInit {
   setFieldValue(key: string, value: string): void {
     if (!this.activeExporter) return;
     this.workingValues[key] = value;
-    this.fieldOptions.refreshDependentsOf(key, this.activeFields, this.workingValues);
+    this.fieldOptions.refreshDependentsOf(key, this.reachableFields, this.workingValues);
     this.commitWorkingValues();
   }
 
@@ -201,7 +216,7 @@ export class AutoFindSettingsComponent implements OnInit {
     // opening this tab doesn't PUT the settings back unchanged.
     const seeded = this.seedDefaults();
     if (seeded) this.commitWorkingValues();
-    this.fieldOptions.refreshAll(this.activeFields, this.workingValues);
+    this.fieldOptions.refreshAll(this.reachableFields, this.workingValues);
     return seeded;
   }
 
@@ -222,7 +237,7 @@ export class AutoFindSettingsComponent implements OnInit {
    *  than disagreeing about what a blank means. */
   private seedDefaults(): boolean {
     let changed = false;
-    for (const field of this.activeFields) {
+    for (const field of this.reachableFields) {
       if (!field.default) continue;
       const current = this.workingValues[field.key];
       if (current !== undefined && String(current).trim() !== '') continue;

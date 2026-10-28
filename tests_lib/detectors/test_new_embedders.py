@@ -1106,7 +1106,7 @@ class TestAllEmbeddersRegistration:
         embedders = all_embedders()
         # 7 original + 11 image embedders (clip, clip_l, siglip2, siglip2_l,
         # siglip_l, plus single/patch variants for dinov2, dinov3, eupe)
-        # + 1 face embedder
+        # + 1 face embedder (face: the imagekit provider seam; FaceNet retired in #5320)
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
@@ -1233,11 +1233,11 @@ class TestAllEmbeddersRegistration:
         }
 
     def test_embedders_for_face(self):
-        """The FaceNet embedder belongs to the ``face`` media type, not image."""
+        """The face embedder belongs to the ``face`` media type, not image, and is its default."""
         from vtscore.media import embedders_for_type
 
-        names = {e.name for e in embedders_for_type("face")}
-        assert names == {"face"}
+        (face,) = embedders_for_type("face")
+        assert face.name == "face" and face.is_default is True
 
     def test_siglip_is_still_default_image_embedder(self):
         """SigLIP must remain the first (default) image embedder so callers
@@ -1301,6 +1301,7 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
         # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
+        #   (face: the imagekit provider seam)
         # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
         #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
@@ -1321,7 +1322,7 @@ class TestEmbedderSentinelDiscovery:
     """Verify built-in embedder modules expose the ``EMBEDDER`` sentinel
     so that auto-discovery picks them up with no edits to any
     ``__init__.py``; the same pattern used by exporters, dataset
-    importers, label importers, processor importers, settings importers /
+    importers, label importers, settings importers /
     exporters, and sync sources.
     """
 

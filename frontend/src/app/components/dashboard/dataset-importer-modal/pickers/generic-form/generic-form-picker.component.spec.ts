@@ -50,15 +50,40 @@ describe('GenericFormPickerComponent', () => {
 
   it('pre-populates field defaults and requires the required field before submit', () => {
     openAndFlush();
-    expect(component.formValues['media_type']).toBe('audio');
-    expect(component.canSubmit).toBe(false);
-    component.formValues['path'] = '/data/sounds';
-    expect(component.canSubmit).toBe(true);
+    expect(component.formValues()['media_type']).toBe('audio');
+    expect(component.canSubmit()).toBe(false);
+    component.setFormValue('path', '/data/sounds');
+    expect(component.canSubmit()).toBe(true);
+  });
+
+  it('requires a visible_when field only while its condition holds (#5343)', () => {
+    const conditional = {
+      ...importer,
+      fields: [
+        importer.fields[0],
+        { key: 'remote', field_type: 'checkbox', label: 'Remote', default: 'false' },
+        { key: 'path', field_type: 'text', label: 'Path', required: true, visible_when: { remote: ['true'] } },
+      ],
+    };
+    component.open(conditional);
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
+
+    expect(component.visibleImporterFields.map((f) => f.key)).not.toContain('path');
+    expect(component.canSubmit()).toBe(true);
+
+    component.setFormValue('remote', 'true');
+    expect(component.visibleImporterFields.map((f) => f.key)).toContain('path');
+    expect(component.canSubmit()).toBe(false);
+
+    component.setFormValue('path', '/data/sounds');
+    expect(component.canSubmit()).toBe(true);
   });
 
   it('submits via runImporter and reports success through importStarted', () => {
     openAndFlush();
-    component.formValues['path'] = '/data/sounds';
+    component.setFormValue('path', '/data/sounds');
 
     let started = false;
     component.importStarted.subscribe(() => (started = true));
@@ -86,7 +111,7 @@ describe('GenericFormPickerComponent', () => {
       fields: [{ key: 'q', field_type: 'select', options: ['a', 'b'], allow_free_text: true }],
     } as any;
     component.open(freeTextImporter);
-    expect(component.formValues['q']).toBeUndefined();
+    expect(component.formValues()['q']).toBeUndefined();
   });
 
   it('does not auto-select the first option for a required free-text combobox once options load', () => {
@@ -97,34 +122,53 @@ describe('GenericFormPickerComponent', () => {
       required: true,
       allow_free_text: true,
     } as any;
-    component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-    component.fieldOptions.refresh(field, component.formValues);
+    component.open({ name: 'imp', fields: [field] } as any);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
-    expect(component.formValues['q']).toBeUndefined();
+    expect(component.formValues()['q']).toBeUndefined();
   });
+
+  // The two below type while the options request is still in flight: the
+  // response has to judge the value typed since, not the one it was sent with.
 
   it('keeps a typed free-text value the refreshed options omit', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
-    component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-    component.formValues['q'] = 'hand-typed';
-    component.fieldOptions.refresh(field, component.formValues);
+    component.open({ name: 'imp', fields: [field] } as any);
+    component.setFormValue('q', 'hand-typed');
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
-    expect(component.formValues['q']).toBe('hand-typed');
+    expect(component.formValues()['q']).toBe('hand-typed');
   });
 
   it('clears a strict-select value the refreshed options omit', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
-    component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-    component.formValues['q'] = 'stale';
-    component.fieldOptions.refresh(field, component.formValues);
+    component.open({ name: 'imp', fields: [field] } as any);
+    component.setFormValue('q', 'stale');
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
-    expect(component.formValues['q']).toBe('');
+    expect(component.formValues()['q']).toBe('');
+  });
+
+  it('blanks a dependent field when the field it depends on changes', () => {
+    const fields = [
+      { key: 'bucket', field_type: 'text' },
+      { key: 'prefix', field_type: 'select', dynamic_options: true, depends_on: ['bucket'] },
+    ] as any;
+    component.open({ name: 'imp', fields } as any);
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
+      .flush({ options: [{ value: 'a/', label: 'a/' }] });
+    component.setFormValue('prefix', 'a/');
+
+    component.setFormValue('bucket', 'other');
+    component.onFieldChanged('bucket');
+    expect(component.formValues()['prefix']).toBe('');
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
+      .flush({ options: [{ value: 'b/', label: 'b/' }] });
   });
 
   describe('importer-suggested dataset name', () => {
@@ -135,7 +179,7 @@ describe('GenericFormPickerComponent', () => {
 
     it('prefills the Dataset Name box with the name the importer would use', () => {
       openAndFlush();
-      component.formValues['path'] = '/data/field-recordings';
+      component.setFormValue('path', '/data/field-recordings');
       component.onFieldChanged('path');
       vi.advanceTimersByTime(300);
 
@@ -145,41 +189,40 @@ describe('GenericFormPickerComponent', () => {
       expect(req.request.body.values['dataset_name']).toBeUndefined();
       req.flush({ dataset_name: 'Field Recordings' });
 
-      expect(component.formValues['dataset_name']).toBe('Field Recordings');
+      expect(component.formValues()['dataset_name']).toBe('Field Recordings');
     });
 
     it('re-asks once a dynamic select resolves, so an opaque id can become a label', () => {
       const field = { key: 'query_id', field_type: 'select', dynamic_options: true, required: true } as any;
-      component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-      component.fieldOptions.refresh(field, component.formValues);
+      component.open({ name: 'imp', fields: [field] } as any);
       httpMock
         .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
         .flush({ options: [{ value: 'q-8f31', label: 'Q1 Field Survey' }] });
-      expect(component.formValues['query_id']).toBe('q-8f31');
+      expect(component.formValues()['query_id']).toBe('q-8f31');
 
       vi.advanceTimersByTime(300);
       const req = httpMock.expectOne('/api/dataset/import/imp/suggested-name');
       expect(req.request.body.values['query_id']).toBe('q-8f31');
       req.flush({ dataset_name: 'Q1 Field Survey' });
 
-      expect(component.formValues['dataset_name']).toBe('Q1 Field Survey');
+      expect(component.formValues()['dataset_name']).toBe('Q1 Field Survey');
     });
 
     it('stops asking once the user names the dataset themselves', () => {
       openAndFlush();
       component.onDatasetNameInput('My Corpus');
-      component.formValues['path'] = '/data/sounds';
+      component.setFormValue('path', '/data/sounds');
       component.onFieldChanged('path');
       vi.advanceTimersByTime(300);
 
       httpMock.expectNone((req) => req.url.endsWith('/suggested-name'));
-      expect(component.formValues['dataset_name']).toBe('My Corpus');
+      expect(component.formValues()['dataset_name']).toBe('My Corpus');
     });
 
     it('keeps the current name and stays silent when the importer errors', () => {
       openAndFlush();
-      component.formValues['dataset_name'] = 'Earlier Suggestion';
-      component.formValues['path'] = '/data/sounds';
+      component.setFormValue('dataset_name', 'Earlier Suggestion');
+      component.setFormValue('path', '/data/sounds');
       component.onFieldChanged('path');
       vi.advanceTimersByTime(300);
 
@@ -187,31 +230,65 @@ describe('GenericFormPickerComponent', () => {
         .expectOne('/api/dataset/import/generic_form/suggested-name')
         .flush({ message: 'upstream down' }, { status: 502, statusText: 'Bad Gateway' });
 
-      expect(component.formValues['dataset_name']).toBe('Earlier Suggestion');
+      expect(component.formValues()['dataset_name']).toBe('Earlier Suggestion');
       expect(component.error()).toBe('');
     });
 
     it('keeps suggesting after a failed request', () => {
       openAndFlush();
-      component.formValues['path'] = '/data/one';
+      component.setFormValue('path', '/data/one');
       component.onFieldChanged('path');
       vi.advanceTimersByTime(300);
       httpMock
         .expectOne('/api/dataset/import/generic_form/suggested-name')
         .flush({ message: 'upstream down' }, { status: 502, statusText: 'Bad Gateway' });
 
-      component.formValues['path'] = '/data/two';
+      component.setFormValue('path', '/data/two');
       component.onFieldChanged('path');
       vi.advanceTimersByTime(300);
       httpMock.expectOne('/api/dataset/import/generic_form/suggested-name').flush({ dataset_name: 'Two' });
 
-      expect(component.formValues['dataset_name']).toBe('Two');
+      expect(component.formValues()['dataset_name']).toBe('Two');
     });
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): no forced render, so a
+  // write that notifies nothing shows up as stale DOM.
+
+  it('paints the suggested name into the Dataset Name box (#5300)', async () => {
+    const named = { ...importer, fields: [...importer.fields, { key: 'dataset_name', field_type: 'text', label: 'Dataset name' }] };
+    component.open(named);
+    httpMock.expectOne((req) => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne((req) => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne((req) => req.url === '/api/cleaners').flush({ cleaners: [] });
+    await settleZoneless(fixture);
+    const box = fixture.nativeElement.querySelector('#field-dataset_name') as HTMLInputElement;
+    expect(box.value).toBe('');
+
+    // The suggestion arrives from a debounced HTTP reply, outside any
+    // template event.
+    const req = await vi.waitFor(() => httpMock.expectOne('/api/dataset/import/generic_form/suggested-name'));
+    req.flush({ dataset_name: 'Field Recordings' });
+    await settleZoneless(fixture);
+    expect(box.value).toBe('Field Recordings');
+  });
+
+  it('keeps the typed value in the box and the form', async () => {
+    openAndFlush();
+    await settleZoneless(fixture);
+    const path = fixture.nativeElement.querySelector('#field-path') as HTMLInputElement;
+    path.value = '/data/typed';
+    path.dispatchEvent(new Event('input'));
+    await settleZoneless(fixture);
+    expect(component.formValues()['path']).toBe('/data/typed');
+    expect(component.canSubmit()).toBe(true);
+    expect(path.value).toBe('/data/typed');
+    httpMock.match((r) => r.url.endsWith('/suggested-name')).forEach((r) => r.flush({ dataset_name: 's' }));
   });
 
   it('surfaces a server error without emitting importStarted', () => {
     openAndFlush();
-    component.formValues['path'] = '/data/sounds';
+    component.setFormValue('path', '/data/sounds');
     component.submit();
 
     httpMock.expectOne('/api/dataset/import/generic_form').flush(
@@ -261,18 +338,18 @@ describe('GenericFormPickerComponent', () => {
 
     it('needs a ticked row before it can submit, then posts the outputs list', async () => {
       openAndFlush();
-      component.formValues['path'] = '/data/mixed';
+      component.setFormValue('path', '/data/mixed');
       component.setMultiDataset(true);
       await settleZoneless(fixture);
       flushTypeOptions('audio');
-      expect(component.canSubmit).toBe(true);
+      expect(component.canSubmit()).toBe(true);
 
       component.onOutputDraftsChange(component.outputDrafts().map((d) => ({ ...d, checked: false })));
-      expect(component.canSubmit).toBe(false);
+      expect(component.canSubmit()).toBe(false);
       component.onOutputDraftsChange(component.outputDrafts().map((d) => (d.category === 'image' ? { ...d, checked: true } : d)));
       await settleZoneless(fixture);
       flushTypeOptions('image');
-      expect(component.canSubmit).toBe(true);
+      expect(component.canSubmit()).toBe(true);
 
       component.submit();
       const req = httpMock.expectOne('/api/dataset/import/generic_form');

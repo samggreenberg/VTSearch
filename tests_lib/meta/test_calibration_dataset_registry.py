@@ -156,17 +156,21 @@ class TestO365BetterIsRunnable:
 class TestFhibeIsRunnable:
     """#4699: every FHIBE cell is a roster the harness can enumerate.
 
-    The photos and the face crops at both sizes (#4699), the crops turned upright by their
-    landmarks, `roll` and `similarity` (#4777), and `roll` with the sideways search (#4788).
+    The photos at both sizes (#4699), and the crops the face provider finds and embeds (#5321).
+    The MTCNN + FaceNet crop arms (#4699, #4777, #4788) were retired with that path (#5320):
+    no longer built, still rostered, so the studies on their cells keep running.
     """
 
-    FHIBE = (
-        "fhibe_1024",
-        "fhibe_640",
+    FHIBE = ("fhibe_1024", "fhibe_640", "fhibe_faces_ik_1024", "fhibe_faces_ik_640")
+    RETIRED = (
         "fhibe_faces_1024",
         "fhibe_faces_640",
         *(f"fhibe_faces_{tag}_{size}" for tag in ("roll", "sim", "side") for size in (1024, 640)),
     )
+
+    def test_the_retired_crop_arms_keep_their_rosters(self, cfg, pc):
+        for ds in self.RETIRED:
+            assert ds not in pc.DATASETS and cfg.DATASET_EMBEDDERS[ds] == ["face"], ds
 
     def test_every_fhibe_pile_dataset_has_a_roster(self, cfg, pc):
         built = {ds for ds, spec in pc.DATASETS.items() if spec.get("kind") == "fhibe"}
@@ -175,7 +179,7 @@ class TestFhibeIsRunnable:
             assert cfg.DATASET_EMBEDDERS[ds], ds
 
     def test_each_roster_names_embedders_the_pile_builds_for_it(self, cfg, pc):
-        """Media type pairs them: FaceNet for the crops, an image embedder for the photos."""
+        """Media type pairs them: the face embedder for the crops, an image embedder for the photos."""
         for ds in self.FHIBE:
             for emb in cfg.DATASET_EMBEDDERS[ds]:
                 assert pc.embeds(cfg.learn_embedder(emb), ds), f"{ds} x {emb} is never built"

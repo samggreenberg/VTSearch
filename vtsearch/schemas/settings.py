@@ -90,6 +90,7 @@ class AppSettingsSchema(Schema):
     show_metadata = fields.Boolean()
     hide_all_hints = fields.Boolean()
     hidden_hints = fields.List(fields.String())
+    used_features = fields.List(fields.String())
     autopilot_enabled = fields.Boolean()
     hide_left_panel = fields.Boolean()
     hide_right_panel = fields.Boolean()
@@ -300,6 +301,7 @@ class SettingsUpdateSchema(Schema):
     show_metadata = fields.Boolean()
     hide_all_hints = fields.Boolean()
     hidden_hints = fields.List(fields.String())
+    used_features = fields.List(fields.String())
 
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()

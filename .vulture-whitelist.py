@@ -211,7 +211,6 @@ _pool_connections  # noqa: F821 - the three attributes that make a requests adap
 _pool_maxsize  # noqa: F821
 _pool_block  # noqa: F821
 __getattr__  # noqa: F821 - PEP 562 module-level hook in ``vtsearch/settings.py``
-__wrapped__  # noqa: F821 - functools convention, read by ``inspect.unwrap``
 create_module  # noqa: F821 - importlib Loader protocol, called by the import machinery
 trust_env  # noqa: F821 - requests.Session attribute, read by requests when sending
 
@@ -231,8 +230,6 @@ _cache_tile  # noqa: F821
 # ---------------------------------------------------------------------------
 stub_run_eval  # noqa: F821
 stub_pipeline  # noqa: F821
-stub_extractor_factory  # noqa: F821
-stub_localizer_factory  # noqa: F821
 stubbed_resolver  # noqa: F821
 reset_state  # noqa: F821
 fake_caps  # noqa: F821 - monkeypatches the embedder capability table
@@ -255,6 +252,7 @@ scratch_dir  # noqa: F821 - points the detector registry at a per-test scratch d
 tenth_of_the_balance  # noqa: F821 - pins every sort line to a tenth of the balance
 quiet_forever  # noqa: F821 - holds the evidence-baseline draw waiting so only a read lands it
 quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the sort ends
+label_files  # noqa: F821 - writes the labels' origin files and points the resolver at them
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
@@ -263,7 +261,6 @@ quiet_now  # noqa: F821 - lets the evidence-baseline draw fire the moment the so
 # ---------------------------------------------------------------------------
 repo_type  # noqa: F821 - huggingface_hub.snapshot_download(repo_id, repo_type=..., ...)
 ignore_patterns  # noqa: F821 - same call's file filter
-pretrained  # noqa: F821 - facenet-pytorch InceptionResnetV1(pretrained=...)
 
 # ---------------------------------------------------------------------------
 # Test-local names that exist only to document the shape of an unpacked
@@ -278,12 +275,13 @@ cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
 # ---------------------------------------------------------------------------
 # Autouse fixtures imported for side effects in both conftests (the ``import``
 # is what registers them with pytest). The local alias goes through ``as
-# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir``) so a reader immediately sees ``F401`` and knows the
+# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir`` and ``_no_face_models``) so a reader immediately sees ``F401`` and knows the
 # import is deliberate; the ``noqa: F401`` at the import site silences ruff,
 # and this entry silences vulture.
 # ---------------------------------------------------------------------------
 _allow_test_tmp_paths  # noqa: F821
 _isolated_example_media_dir  # noqa: F821
+_no_face_models  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream

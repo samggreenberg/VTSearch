@@ -237,6 +237,34 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--as-labelset",
+        action="store_true",
+        dest="as_labelset",
+        help=(
+            "With --stream-results, stream the hits as a labelset instead: one "
+            "label entry per hit (md5, label, origin, ...; no scores), each naming "
+            "the detector that labelled it, so the export reads back in through a "
+            "label importer. The exporter must support it (server_json_file writes "
+            "a labels JSON file, server_csv_file a labels CSV; gui, webhook and "
+            "email_smtp also stream labelsets)."
+        ),
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        dest="resume",
+        help=(
+            "With --stream-results, make the run resumable: a checkpoint beside the "
+            "output (<filepath>.resume.json) records each chunk once it is written, and "
+            "running the same command again after an interruption continues after the "
+            "last one, appending to the output without repeating or dropping a chunk. A "
+            "checkpoint from a different run (source, chunk size, detectors, settings or "
+            "exporter fields changed) is refused. Needs a fixed --filepath (no date "
+            "template) and server_json_file or server_csv_file; not with --as-labelset "
+            "or --outputs. The checkpoint is removed when the run completes."
+        ),
+    )
+    parser.add_argument(
         "--import-labels-into",
         type=str,
         default=None,
@@ -296,6 +324,34 @@ def _build_parser() -> argparse.ArgumentParser:
             "differ from the source's (e.g. image, to score video frames through "
             "a converter) or the source declares none. Unused when the detector "
             "already exists."
+        ),
+    )
+    parser.add_argument(
+        "--override-clipper",
+        type=str,
+        default=None,
+        dest="override_clipper",
+        metavar="NAME",
+        help=(
+            "Score every detector at this clipper's granularity instead of the one "
+            "its input_spec records (e.g. sound_tiling, with "
+            "--override-clipper-param duration=5, for a detector trained on 2 s "
+            "tiles). The dataset is re-clipped to it unless already clipped to match; "
+            "a *_default clipper scores each media as loaded. The clipper must clip "
+            "the media type each detector scores. Niche: the run already re-clips "
+            "to each detector's own input_spec. Used with --autodetect."
+        ),
+    )
+    parser.add_argument(
+        "--override-clipper-param",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        dest="override_clipper_params",
+        help=(
+            "Set one of --override-clipper's parameters (repeatable); the rest keep "
+            "the clipper's defaults. A key the clipper does not take is refused, "
+            "with the names of the ones it does."
         ),
     )
     parser.add_argument(
@@ -374,6 +430,13 @@ def _maybe_list_plugins(args, parser) -> None:
         sys.exit(0)
 
 
+#: The repeatable flags, whose list-valued dest is not the flag's own spelling.
+_REPEATABLE_FLAGS = {
+    "label_importer_fields": "--label-importer-field",
+    "override_clipper_params": "--override-clipper-param",
+}
+
+
 def _check_pipeline_flags(args, parser, remaining) -> None:
     """Refuse ``--pipeline FILE`` beside a flag the YAML file declares instead.
 
@@ -399,16 +462,20 @@ def _check_pipeline_flags(args, parser, remaining) -> None:
         "chunk_size",
         "stream_results",
         "keep_negatives",
+        "as_labelset",
+        "resume",
         "import_labels_into",
         "label_importer_file",
         "label_importer_fields",
         "create_detector",
         "detector_media_type",
+        "override_clipper",
+        "override_clipper_params",
         "dry_run",
         "tempimport",
     ):
         if getattr(args, conflicting, None):
-            cli_flag = f"--{conflicting.replace('_', '-')}"
+            cli_flag = _REPEATABLE_FLAGS.get(conflicting) or f"--{conflicting.replace('_', '-')}"
             parser.error(f"--pipeline cannot be combined with {cli_flag}; declare it in the YAML file instead.")
     # --label-importer always has a value (its default), so test for a change.
     if args.label_importer != parser.get_default("label_importer"):
@@ -752,6 +819,32 @@ def _given_on_command_line(parser, dests: list[str]) -> list[str]:
     return [dest for dest in dests if getattr(given, dest, _NOT_GIVEN) is not _NOT_GIVEN]
 
 
+def _override_clipper(args, parser) -> dict[str, Any] | None:
+    """The ``--override-clipper`` / ``--override-clipper-param`` pair as an ``input_spec``, or ``None``.
+
+    Checked here, at startup, by the same resolver the run uses
+    (:func:`~vtscore.detectors.input_spec.resolve_clipper_spec`): an unknown
+    clipper, a key it does not take, or a value it refuses is a usage error
+    before anything is imported.
+    """
+    params: dict[str, str] = {}
+    for item in args.override_clipper_params or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            parser.error(f"--override-clipper-param expects KEY=VALUE, got {item!r}")
+        params[key.strip()] = value
+    if not args.override_clipper:
+        if params:
+            parser.error("--override-clipper-param only applies with --override-clipper <name>")
+        return None
+    from vtscore.detectors.input_spec import resolve_clipper_spec
+
+    try:
+        return resolve_clipper_spec(args.override_clipper, params)
+    except ValueError as exc:
+        parser.error(f"--override-clipper: {exc}")
+
+
 def _label_importer_field_values(args, parser) -> dict[str, str]:
     """Collect ``--label-importer-file`` / ``--label-importer-field`` into field values."""
     field_values: dict[str, str] = {}
@@ -781,12 +874,18 @@ def _dispatch_autodetect(
     stream_results,
     keep_negatives,
     save_dataset,
+    as_labelset=False,
+    override_clipper=None,
+    resume=False,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path.
 
     ``--import-labels-into NAME`` makes NAME the run's only detector, in place
     of the settings file's AutoFind list, so a labelled detector can be run
     headlessly without first moving it to AutoFind in the UI (#4235).
+    *override_clipper* is ``--override-clipper``'s ``input_spec``
+    (:func:`_override_clipper`).  *resume* is ``--resume``, which only a
+    chunked run takes (``--stream-results`` already requires ``--chunk-size``).
     """
     from vtscore.cli import (
         autodetect_importer_main,
@@ -820,6 +919,8 @@ def _dispatch_autodetect(
             entry_point, source_args = autodetect_main, (args.dataset,)
     else:
         parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
+    if resume:
+        source_kwargs["resume"] = True
 
     entry_point(
         *source_args,
@@ -829,8 +930,10 @@ def _dispatch_autodetect(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        as_labelset=as_labelset,
         save_dataset=save_dataset,
         override_detectors=[args.import_labels_into] if args.import_labels_into else None,
+        override_clipper=override_clipper,
         **source_kwargs,
     )
 
@@ -891,10 +994,18 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
     stream_results = bool(getattr(args, "stream_results", False))
     keep_negatives = bool(getattr(args, "keep_negatives", False))
+    as_labelset = bool(getattr(args, "as_labelset", False))
     if stream_results and not chunk_size:
         parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
     if keep_negatives and not stream_results:
         parser.error("--keep-negatives only applies with --stream-results")
+    if as_labelset and not stream_results:
+        parser.error("--as-labelset only applies with --stream-results")
+    resume = bool(getattr(args, "resume", False))
+    if resume and not stream_results:
+        parser.error("--resume only applies with --stream-results (it checkpoints the stream after each chunk)")
+    if resume and as_labelset:
+        parser.error("--resume cannot resume a labelset stream (--as-labelset); it resumes hit streams only")
     # The imported dataset is saved to the dashboard unless --tempimport says
     # otherwise (#4226). Streaming exists for sources too big to hold, and
     # saving means holding the whole dataset, so the two cannot be combined.
@@ -903,6 +1014,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         from vtscore.cli import _STREAM_CANNOT_SAVE
 
         parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
+    override_clipper = _override_clipper(args, parser)
 
     _maybe_import_labels(args, parser, settings_path, dry_run, importer)
 
@@ -918,6 +1030,9 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         stream_results,
         keep_negatives,
         save_dataset,
+        as_labelset=as_labelset,
+        override_clipper=override_clipper,
+        resume=resume,
     )
 
 

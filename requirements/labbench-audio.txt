@@ -4,7 +4,8 @@
 # the audio media type and its default embedder, CLAP General, need. CLAP
 # itself is a transformers model, so the core already carries it.
 #
-# Used by docker/Dockerfile.labbench with MEDIA_TYPE=audio.
+# Used by docker/Dockerfile.labbench with MEDIA_TYPE=audio, and by its
+# all-types build (MEDIA_TYPE unset).
 
 -r labbench.txt
 

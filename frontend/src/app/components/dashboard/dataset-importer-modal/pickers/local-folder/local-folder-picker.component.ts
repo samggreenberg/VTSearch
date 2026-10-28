@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -70,7 +70,6 @@ export class LocalFolderPickerComponent {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
-  private cdr = inject(ChangeDetectorRef);
 
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
@@ -95,6 +94,10 @@ export class LocalFolderPickerComponent {
   readonly autofind = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
+  /** Fired with the dataset type whose Import Defaults the picker has just
+   *  applied, so the modal, which owns the two toggles above, can apply that
+   *  type's saved ones. */
+  readonly typeDefaultsApplied = output<string>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -112,12 +115,14 @@ export class LocalFolderPickerComponent {
   readonly detection = signal<DetectMediaTypeResponse | null>(null);
   readonly submitting = signal(false);
   readonly error = signal('');
-  recursive = true;
-  datasetName = '';
+  readonly recursive = signal(true);
+  /** Follows the picked folder's (or paths file's) name until the user types
+   *  a name of their own (``datasetNameDirty``). */
+  readonly datasetName = signal('');
   private datasetNameDirty = false;
 
-  mediaType = '';
-  mediaTypeOptions: string[] = [];
+  readonly mediaType = signal('');
+  readonly mediaTypeOptions = signal<string[]>([]);
   readonly embedders = signal<EmbedderInfo[]>([]);
   readonly selectedEmbedder = signal('');
   readonly selectedPatchEmbedder = signal('');
@@ -128,10 +133,14 @@ export class LocalFolderPickerComponent {
   readonly cleaners = signal<CleanerInfo[]>([]);
   readonly selectedCleaners = signal<CleanerSelection[]>([]);
   readonly selectedClipper = signal('');
-  clipperParams: ClipperParameter[] = [];
+  /** The selected clipper's parameters, whichever way it was picked (the
+   *  type's default, or the clipper chooser). */
+  readonly clipperParams = computed<ClipperParameter[]>(
+    () => this.clippers().find((c) => c.name === this.selectedClipper())?.parameters || [],
+  );
   readonly clipperParamValues = signal<Record<string, number | string>>({});
 
-  sourceSpecs: SourceSpec[] = [];
+  readonly sourceSpecs = signal<SourceSpec[]>([]);
 
   /** Multi-Dataset mode (#4703): one dataset per ticked category of
    *  :prop:`outputDrafts`, all from the one upload.  Read by the parent modal
@@ -142,8 +151,8 @@ export class LocalFolderPickerComponent {
    *  single-dataset Advanced block did. */
   private clipperChooserCategory: string | null = null;
 
-  clipperChooserOpen = false;
-  clipperChooserClippers: ClipperInfo[] = [];
+  readonly clipperChooserOpen = signal(false);
+  readonly clipperChooserClippers = signal<ClipperInfo[]>([]);
 
   get effectiveSoloMediaType(): string | null {
     return this.importDefaults.effectiveSoloMediaType;
@@ -190,50 +199,41 @@ export class LocalFolderPickerComponent {
     this.detection.set(null);
     this.error.set('');
     this.submitting.set(false);
-    this.recursive = readRecursiveDefault(importer);
-    this.datasetName = '';
+    this.recursive.set(readRecursiveDefault(importer));
+    this.datasetName.set('');
     this.datasetNameDirty = false;
     this.multiDataset.set(false);
     this.outputDrafts.set([]);
 
     const folderImporter = this.importers().find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
-    this.mediaTypeOptions = singleDatasetMediaTypes(this.mediaTypes(), mtField?.options || []);
+    const options = singleDatasetMediaTypes(this.mediaTypes(), mtField?.options || []);
+    this.mediaTypeOptions.set(options);
 
     const guessedFolder = toFolderName(this.mediaTypes(), this.guessedMediaType());
-    if (guessedFolder && this.mediaTypeOptions.includes(guessedFolder)) {
-      this.mediaType = guessedFolder;
+    if (guessedFolder && options.includes(guessedFolder)) {
+      this.mediaType.set(guessedFolder);
     } else {
-      this.mediaType = mtField?.default || this.mediaTypeOptions[0] || 'audio';
+      this.mediaType.set(mtField?.default || options[0] || 'audio');
     }
 
-    if (this.effectiveSoloFolderName && this.mediaTypeOptions.includes(this.effectiveSoloFolderName)) {
-      this.mediaType = this.effectiveSoloFolderName;
+    if (this.effectiveSoloFolderName && options.includes(this.effectiveSoloFolderName)) {
+      this.mediaType.set(this.effectiveSoloFolderName);
     }
 
-    this.loadEmbedders(this.mediaType);
-    this.loadClippers(this.mediaType);
-    this.loadCleaners(this.mediaType);
+    this.loadEmbedders(this.mediaType());
+    this.loadClippers(this.mediaType());
+    this.loadCleaners(this.mediaType());
     this.resetSourceSpecs();
-
-    // `open()` is invoked imperatively from the parent's importer-selection
-    // handler (a listener bound on a sibling `<vt-source-picker>`), so this
-    // component's own OnPush view is not on the ancestor-marked dirty path
-    // that call produces; force a check so the reset form actually paints.
-    this.cdr.markForCheck();
+    this.applyTypeDefaults();
   }
 
   /** Invoked via a listener bound on the sibling `<vt-source-picker>`
    *  in the parent's template (the drop-zone lives in its rendered
    *  chrome), so this component isn't on the ancestor-marked dirty
-   *  path; `markForCheck()` covers the plain `datasetName` field
-   *  alongside the signal writes below. */
+   *  path; every field it writes is a signal, which repaints this view
+   *  on its own. */
   onFilesDropped(files: File[]): void {
-    this.acceptFiles(files);
-    this.cdr.markForCheck();
-  }
-
-  private acceptFiles(files: File[]): void {
     if (files.length === 0) {
       this.files.set([]);
       this.detection.set(null);
@@ -244,23 +244,23 @@ export class LocalFolderPickerComponent {
       this.detection.set(null);
       this.error.set('');
       if (!this.datasetNameDirty) {
-        this.datasetName = this.derivedDatasetName();
+        this.datasetName.set(this.derivedDatasetName());
       }
       return;
     }
     this.files.set(files);
     this.error.set('');
     if (!this.datasetNameDirty) {
-      this.datasetName = this.derivedDatasetName();
+      this.datasetName.set(this.derivedDatasetName());
     }
-    this.detection.set(detectFromFiles(this.mediaTypes(), this.files(), this.recursive));
+    this.detection.set(detectFromFiles(this.mediaTypes(), this.files(), this.recursive()));
     this.applyDetection();
   }
 
   onRecursiveChange(recursive: boolean): void {
-    this.recursive = recursive;
+    this.recursive.set(recursive);
     if (this.files().length > 0) {
-      this.detection.set(detectFromFiles(this.mediaTypes(), this.files(), this.recursive));
+      this.detection.set(detectFromFiles(this.mediaTypes(), this.files(), recursive));
       this.applyDetection();
     }
   }
@@ -271,17 +271,18 @@ export class LocalFolderPickerComponent {
     if (this.multiDataset()) {
       this.outputDrafts.set(tickDetectedCategories(this.outputDrafts(), detection));
     }
-    const { mediaType, sourceSpecs } = autofillFromDetection(this.mediaTypes(), detection, this.mediaTypeOptions, (typeId) =>
+    const { mediaType, sourceSpecs } = autofillFromDetection(this.mediaTypes(), detection, this.mediaTypeOptions(), (typeId) =>
       availableConvertersFor(this.importers(), 'server_folder', typeId),
     );
-    if (mediaType && mediaType !== this.mediaType) {
-      this.mediaType = mediaType;
-      this.loadEmbedders(this.mediaType);
-      this.loadClippers(this.mediaType);
-      this.loadCleaners(this.mediaType);
+    if (mediaType && mediaType !== this.mediaType()) {
+      this.mediaType.set(mediaType);
+      this.loadEmbedders(mediaType);
+      this.loadClippers(mediaType);
+      this.loadCleaners(mediaType);
+      this.applyTypeDefaults();
     }
     if (sourceSpecs) {
-      this.sourceSpecs = sourceSpecs;
+      this.sourceSpecs.set(sourceSpecs);
     }
   }
 
@@ -299,16 +300,35 @@ export class LocalFolderPickerComponent {
   }
 
   onDatasetNameInput(value: string): void {
-    this.datasetName = value;
+    this.datasetName.set(value);
     this.datasetNameDirty = true;
   }
 
   onMediaTypeChange(mediaType: string): void {
-    this.mediaType = mediaType;
+    this.mediaType.set(mediaType);
     this.loadEmbedders(mediaType);
     this.loadClippers(mediaType);
     this.loadCleaners(mediaType);
     this.resetSourceSpecs();
+    this.applyTypeDefaults();
+  }
+
+  /** Apply what the current type's Import Defaults say outside the single
+   *  dataset's fields (those load with their option lists): open the
+   *  Multi-Dataset editor on the saved kinds, plus whatever the dropped files
+   *  were found to be, and hand the type to the modal for the two
+   *  whole-import toggles. */
+  private applyTypeDefaults(): void {
+    const typeId = this.outputTypeId;
+    if (!this.multiDataset() && this.supportsMultiOutput && !this.effectiveSoloMediaType) {
+      const fresh = buildOutputDrafts(this.mediaTypes(), this.convertersByType);
+      const drafts = this.importDefaults.savedMultiDatasetDrafts(typeId, this.mediaTypes(), fresh);
+      if (drafts) {
+        this.multiDataset.set(true);
+        this.outputDrafts.set(tickDetectedCategories(drafts, this.detection()));
+      }
+    }
+    this.typeDefaultsApplied.emit(typeId);
   }
 
   private loadEmbedders(mediaType: string): void {
@@ -358,7 +378,6 @@ export class LocalFolderPickerComponent {
         const chosen = this.importDefaults.chooseClipperForType(clippers, mediaType, this.mediaTypes());
         this.selectedClipper.set(chosen.name);
         if (chosen.params !== null) {
-          this.clipperParams = clippers.find((c) => c.name === chosen.name)?.parameters || [];
           this.clipperParamValues.set(chosen.params);
         } else {
           this.resetClipperParams();
@@ -373,17 +392,15 @@ export class LocalFolderPickerComponent {
   }
 
   private resetClipperParams(): void {
-    const clipper = this.clippers().find((c) => c.name === this.selectedClipper());
-    this.clipperParams = clipper?.parameters || [];
     const next: Record<string, number | string> = {};
-    for (const param of this.clipperParams) {
+    for (const param of this.clipperParams()) {
       next[param.key] = param.default;
     }
     this.clipperParamValues.set(next);
   }
 
   get outputTypeId(): string {
-    return toTypeId(this.mediaTypes(), this.mediaType);
+    return toTypeId(this.mediaTypes(), this.mediaType());
   }
 
   get availableConverters(): ConverterInfo[] {
@@ -414,7 +431,6 @@ export class LocalFolderPickerComponent {
       const seeded = tickCategory(buildOutputDrafts(this.mediaTypes(), this.convertersByType), this.outputTypeId);
       this.outputDrafts.set(tickDetectedCategories(seeded, this.detection()));
     }
-    this.cdr.markForCheck();
   }
 
   onOutputDraftsChange(drafts: OutputDraft[]): void {
@@ -435,28 +451,28 @@ export class LocalFolderPickerComponent {
   }
 
   private resetSourceSpecs(): void {
-    this.sourceSpecs = this.importDefaults.specsListWithDefaultsFor(this.mediaTypes(), this.outputTypeId, this.availableConverters);
+    this.sourceSpecs.set(this.importDefaults.specsListWithDefaultsFor(this.mediaTypes(), this.outputTypeId, this.availableConverters));
   }
 
   onSpecsChange(specs: SourceSpec[]): void {
-    this.sourceSpecs = specs;
+    this.sourceSpecs.set(specs);
   }
 
   openClipperChooser(): void {
     this.clipperChooserCategory = null;
-    this.clipperChooserClippers = this.clippers();
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(this.clippers());
+    this.clipperChooserOpen.set(true);
   }
 
   /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
   openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
     this.clipperChooserCategory = request.category;
-    this.clipperChooserClippers = request.clippers;
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(request.clippers);
+    this.clipperChooserOpen.set(true);
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
       this.clipperChooserCategory = null;
@@ -467,13 +483,13 @@ export class LocalFolderPickerComponent {
   }
 
   onClipperChooserCancelled(): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       // The row keeps the clipper it had.
       this.clipperChooserCategory = null;
       return;
     }
-    const clippers = this.clipperChooserClippers;
+    const clippers = this.clipperChooserClippers();
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedClipper.set(defaultClipper?.name || '');
     this.resetClipperParams();
@@ -497,7 +513,7 @@ export class LocalFolderPickerComponent {
 
   private submitFolder(): void {
     let filesToUpload = this.files();
-    if (!this.recursive) {
+    if (!this.recursive()) {
       filesToUpload = filesToUpload.filter((file) => {
         const rel = ((file as any).webkitRelativePath as string | undefined) || '';
         return rel.split('/').length <= 2;
@@ -512,15 +528,15 @@ export class LocalFolderPickerComponent {
     this.error.set('');
 
     const formData = new FormData();
-    formData.append('media_type', this.mediaType);
-    formData.append('recursive', this.recursive ? 'true' : 'false');
+    formData.append('media_type', this.mediaType());
+    formData.append('recursive', this.recursive() ? 'true' : 'false');
     this.appendCommonFormFields(formData);
     for (const file of filesToUpload) {
       const rel = (file as any).webkitRelativePath as string | undefined;
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
     }
-    if (!this.multiDataset() && this.sourceSpecs.length > 0) {
-      formData.append('source_specs', JSON.stringify(this.sourceSpecs));
+    if (!this.multiDataset() && this.sourceSpecs().length > 0) {
+      formData.append('source_specs', JSON.stringify(this.sourceSpecs()));
     }
 
     this.runUpload(this.datasetsCrudApi.importLocalFolder(formData));
@@ -532,11 +548,11 @@ export class LocalFolderPickerComponent {
 
     const pathsFile = this.files()[0];
     const formData = new FormData();
-    formData.append('media_type', this.mediaType);
+    formData.append('media_type', this.mediaType());
     formData.append('paths_file', pathsFile, pathsFile.name);
     this.appendCommonFormFields(formData);
-    if (!this.multiDataset() && this.sourceSpecs.length > 0) {
-      formData.append('source_specs', JSON.stringify(this.sourceSpecs));
+    if (!this.multiDataset() && this.sourceSpecs().length > 0) {
+      formData.append('source_specs', JSON.stringify(this.sourceSpecs()));
     }
 
     this.runUpload(this.datasetsCrudApi.importLocalFiles(formData));
@@ -557,7 +573,7 @@ export class LocalFolderPickerComponent {
   }
 
   private appendCommonFormFields(formData: FormData): void {
-    const name = (this.datasetName || '').trim();
+    const name = this.datasetName().trim();
     if (name) {
       formData.append('dataset_name', name);
     }
@@ -575,7 +591,7 @@ export class LocalFolderPickerComponent {
       }
       if (this.selectedClipper()) {
         formData.append('clipper', this.selectedClipper());
-        if (this.clipperParams.length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
+        if (this.clipperParams().length > 0 && Object.keys(this.clipperParamValues()).length > 0) {
           formData.append('clipper_params', JSON.stringify(this.clipperParamValues()));
         }
       }
@@ -590,21 +606,29 @@ export class LocalFolderPickerComponent {
   }
 
   private offerSaveImportDefaults(): void {
-    // A multi-dataset import has no single configuration to offer as the
-    // type's default.
-    if (this.multiDataset()) return;
     const typeId = this.outputTypeId;
-    const cfg = this.importDefaults.snapshotImportConfig(
-      typeId,
-      this.selectedEmbedder(),
-      this.selectedClipper(),
-      this.clipperParamValues(),
-      this.sourceSpecs,
-      this.embedders(),
-      this.clippers(),
-      this.selectedCleaners(),
-      this.cleaners(),
-    );
+    const cfg = this.multiDataset()
+      ? this.importDefaults.snapshotMultiDatasetConfig(
+          typeId,
+          this.mediaTypes(),
+          this.outputDrafts(),
+          this.buildProjection(),
+          this.mergeNearDuplicates(),
+        )
+      : {
+          ...this.importDefaults.snapshotImportConfig(
+            typeId,
+            this.selectedEmbedder(),
+            this.selectedClipper(),
+            this.clipperParamValues(),
+            this.sourceSpecs(),
+            this.embedders(),
+            this.clippers(),
+            this.selectedCleaners(),
+            this.cleaners(),
+          ),
+          ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
+        };
     this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }

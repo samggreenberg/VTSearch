@@ -111,11 +111,11 @@ have run; see [cli.md](cli.md#behaviour)), `projection_n_neighbors` (`int`,
 `signpost_vocab` (`dict[str, list[str]]`, `{}`), `default_labelset_source`
 (`dict[str, Any] | None`, `None` - the deployment-wide labelset source every
 detector syncs its labels to unless it has a binding of its own),
-`labelset_source_push_interval` (`float`, `60.0` seconds - the shortest gap
+`labelset_source_push_interval` (`float`, `DEFAULT_LABELSET_SOURCE_PUSH_INTERVAL` = `60.0` seconds - the shortest gap
 between two pushes of one detector's labels to its source), `hide_ingest_eta`
 (`bool`, `False` - **deprecated and ignored** (#4667): ingest progress bars
 never publish an ETA now; see [concurrency.md](concurrency.md#progresstracker)),
-and `beta` (`float`,
+and `beta` (`float | None`,
 `DEFAULT_BETA` = `1.0` - the user's balance, F-beta's beta, which seeds each
 detector's own; see [state.md](state.md#setting-persistence-hooks)).
 

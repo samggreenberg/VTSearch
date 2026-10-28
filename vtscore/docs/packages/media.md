@@ -3,8 +3,8 @@
 Everything media-format-specific lives here: the `MediaType` plugin that
 describes a content kind (audio, image, text, video, document, face), the
 `MediaEmbedder` that turns one media item into a vector, the `MediaClipper`
-that splits one media into sub-items of the same type, and the `Processor`
-ABCs (`Detector` / `Localizer` / `Extractor`) that score or annotate media.
+that splits one media into sub-items of the same type, and the `MediaCleaner`
+that tidies one media before it is embedded.
 Each media-type sub-package self-registers at import time through sentinel
 attributes - adding a new format is "drop a folder into `vtscore/media/`",
 not "edit an `__init__.py`". This package has no Flask or settings imports
@@ -23,7 +23,6 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/torch_ops.py` | Torch tensor/device adapters shared by every embedder |
 | `vtscore/media/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
 | `vtscore/media/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
-| `vtscore/media/processors.py` | The `Processor` / `Detector` / `Localizer` / `Extractor` ABCs |
 | `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
 | `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
 | `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
@@ -38,16 +37,16 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 **Media types** - one self-registering sub-package each. Every one holds a
 `media_type.py` (the `MediaType`), plus whichever of `clipper.py`,
-`cleaner.py`, `decode.py`, `embedder_*.py` and processor modules it needs.
+`cleaner.py`, `decode.py` and `embedder_*.py` modules it needs.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, speech extractor, synthetic audio generator |
-| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
+| `vtscore/media/audio/` | CLAP (general / music / base), AST, BEATs, ParaSpeechCLAP, Whisper, EmbeddingGemma 2 (audio half) | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), container sniffing by magic bytes (`sniff.py`), silence detection, synthetic audio generator |
+| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, CLIP-L (eval-only), EmbeddingGemma 2 (image half, eval-only), DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD (+ `_doc` variant) | clipper, cleaner, decode, edge trim, thumbnail, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (auto / tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
 | `vtscore/media/document/` | none - a *convert-out* half type (converted to image or text before embedding) | clipper |
-| `vtscore/media/face/` | FaceNet | clipper - a *convert-in* half type: never imported, only produced by the `image2face` converter |
+| `vtscore/media/face/` | the `imagekit` face provider | clipper, the provider bridge - a *convert-in* half type: never imported, only produced by the `image2face` converter |
 
 Underscore-prefixed modules (`_clap_shared.py`, `_dinov3_shared.py`,
 `_frame_sampling.py`, `vtscore/media/_toponymy_demo.py`, …) are internal
@@ -55,8 +54,7 @@ helpers, not public surface. `vtscore/media/assets/` holds bundled data
 files (the SIFT-VLAD codebook).
 
 The package root re-exports the ABCs (`MediaType`, `MediaEmbedder`,
-`MediaClipper`, `MediaCleaner`, `Processor`, `Detector`, `Localizer`,
-`Extractor`), the support types (`MediaResponse`, `DemoDataset`,
+`MediaClipper`, `MediaCleaner`), the support types (`MediaResponse`, `DemoDataset`,
 `ProgressCallback`) and every registry accessor below.
 
 ---
@@ -238,22 +236,6 @@ a step's params from `to_dict()`, so without it a replay runs the cleaner at
 its defaults. Cleaners have their own registry so they never appear in a
 clipper chooser; registration order is run order.
 
-### `Processor` / `Detector` / `Localizer` / `Extractor`
-
-`vtscore/media/processors.py`. Every processor declares `name` and
-`media_type`, may override `load_model()` (default no-op), and implements
-`process(media)` via a typed method:
-
-| ABC | Typed method | Returns |
-|-----|--------------|---------|
-| `Detector` | `detect(media) -> bool` | "does this media match?" |
-| `Localizer` | `localize(media) -> list[dict]` | regions; each **must** include `"confidence"` (float in `[0, 1]`) and `"bbox"` (media-specific) |
-| `Extractor` | `extract(media) -> list[dict]` | per-occurrence metadata; each **must** include `"confidence"` |
-
-Which processors run automatically on load is decided by the host
-application; the library only ships the ABCs and the in-tree
-implementations. See [`docs/EXTENDING-processors.md`](../../../docs/EXTENDING-processors.md).
-
 ---
 
 ## Support types
@@ -315,12 +297,12 @@ startup.
 
 | Type | Default embedder | Other embedders | Clippers | Cleaners |
 |------|------------------|-----------------|----------|----------|
-| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder`, `embeddinggemma2_audio` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim` |
+| `audio` | `clap_general` (`laion/larger_clap_general`) | `clap`, `clap_music`, `ast`, `beats`, `paraspeechclap`, `whisper_encoder`, `embeddinggemma2_audio` | `sound_tiling`, `sound_default`, `sound_silence`, `sound_speech_activity` | `audio_silence_trim`, `audio_loudness_normalize` |
 | `image` | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip_l`, `siglip2`, `siglip2_l`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `sift_vlad`, `sift_vlad_doc`; `clip_l` and `embeddinggemma2` are `eval_only` | `image_default`, `image_tiling`, `image_object` | `image_exif_orient`, `image_edge_trim` |
 | `text` | `e5` (`intfloat/e5-base-v2`) | `bge` | `text_default`, `text_paragraph`, `text_sentence` | `text_markup_strip`, `text_whitespace` |
 | `video` | `xclip` (`microsoft/xclip-base-patch32`) | `languagebind`, `videomae` | `video_auto`, `video_default`, `video_tiling`, `video_scene` | `video_letterbox_crop`, `video_blank_trim` |
 | `document` | none (convert-out: `converts_to = ["image", "text"]`) | - | `document_default` | - |
-| `face` | none flagged default; `face` (FaceNet) is the only embedder | - | `face_default` | - |
+| `face` | `face` (the server's `imagekit` face provider) | - | `face_default` | - |
 
 `face` declares no file extensions and `importable = False`: face crops
 come only from the `image2face` converter (see
@@ -342,7 +324,7 @@ CLIPPERS = [
     SoundSilenceClipper(),
     SoundSpeechActivityClipper(),
 ]
-CLEANERS = [AudioSilenceTrimCleaner()]
+CLEANERS = [AudioSilenceTrimCleaner(), AudioLoudnessNormalizeCleaner()]
 ```
 
 ---

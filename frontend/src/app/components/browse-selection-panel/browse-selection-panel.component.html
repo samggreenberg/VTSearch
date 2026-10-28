@@ -54,7 +54,7 @@
     </div>
   }
 
-  <div class="bsp-toolbar">
+  <div class="bsp-toolbar" #toolbar>
     <div class="bsp-sort">
       <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
       <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
@@ -81,7 +81,7 @@
   <div
     class="bsp-list"
     [style.--grid-goal-width]="gridGoalWidth() + 'px'">
-    @if (count() === 0) {
+    @if (count() === 0 && !emptyNoteHidden()) {
       <p class="bsp-empty">Nothing selected. Click bins on the canvas to add items.</p>
     }
     @for (entry of sortedEntries(); track trackById($index, entry)) {

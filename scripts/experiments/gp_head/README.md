@@ -1,5 +1,9 @@
 # GP head pilot (issue #3954) — runner
 
+> **Concluded; a re-run measures today's app, not the report.**
+> The numbers and the verdict are in
+> [`docs/experiments/2026-09-17-gp-head-3954/REPORT.md`](../../../docs/experiments/2026-09-17-gp-head-3954/REPORT.md).
+
 CPU-box study: does a Gaussian process conditioned on the votes rank, cut and
 calibrate better than the shipped linear-SVM head — and does its posterior give
 a better *next question* than the app's rank-nearest-cut Hard pick? The design,
@@ -24,7 +28,7 @@ grid and the arm table.
 
 | Arm | Trainer | Hard pick | Threshold |
 |---|---|---|---|
-| `app` | the shipped pipeline (linear-SVM head) | rank-nearest-cut | fold-anchored fusion (shipped) |
+| `app` | the shipped pipeline (the plain linear-SVM head when the study ran; a re-run gets today's `linear_svm_prior`) | rank-nearest-cut | fold-anchored fusion (shipped) |
 | `app_xcal` | the shipped pipeline | rank-nearest-cut | plain cross-calibration, raw score — the parity control |
 | `gp_rbf` | `GaussianProcessClassifier`, RBF kernel, ML-II | rank-nearest-cut | plain cross-calibration, raw score |
 | `gp_rbf_rank` | RBF GP | rank-nearest-cut | cross-calibration carried by rank (`standalone_cut="rank"`) |

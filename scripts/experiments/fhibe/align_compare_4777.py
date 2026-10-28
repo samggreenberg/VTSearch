@@ -24,6 +24,7 @@ Per K x size x beta, for each arm against the plain one:
 (``k<K>-b<tag>-<size>/{cells,curves}.csv``); the baseline dirs hold ``example_baseline_k<K>.csv``.
 ``--plain-tag`` names the control's own arm when it is not the plain crop (#4788 pairs its
 ``side`` arm against #4777's ``roll``: ``--plain-tag roll``).
+#5321 pairs its ``ik`` arm (the imagekit provider's crops and vectors) against ``roll`` the same way.
 ``--watch`` names subject-id prefixes (the review's 12 failures) to list run by run. Writes
 ``compare.csv`` (aggregates) and ``failures.csv`` (runs that failed in either arm, by subject id:
 owner-only, never committed).
@@ -55,7 +56,9 @@ def session_set(analysis: Path, baseline: Path, k: int, size: str, beta: float, 
     curves = pd.read_csv(d / "curves.csv")
     base = pd.read_csv(baseline / f"example_baseline_k{k}.csv")
     base = base[base["dataset"] == f"{faces}_{size}"]
-    filled, _ = filled_runs(curves, cells, typed_query(base, "face", beta))
+    # The imagekit arm's sessions are filed under its own embedder (#5321); every other arm is FaceNet's.
+    embedder = "imagekit_face" if faces.endswith("_ik") else "face"
+    filled, _ = filled_runs(curves, cells, typed_query(base, embedder, beta))
     clicks = [t for t in filled.columns if 1 <= int(t) <= HORIZON]
     out = cells.set_index(RUN)[["text_thr_fbeta", "text_ap", "thr_fbeta_final", "final_ap", "ceiling_ap"]].copy()
     out["session_mean"] = filled[clicks].mean(axis=1).reindex(out.index)

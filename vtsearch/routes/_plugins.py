@@ -210,13 +210,19 @@ def _populate_file_fields(
 
     Required file fields surface as a 422 with the standard ``errors``
     envelope (matching schema-level rejects); optional missing fields
-    land in *validated* as ``None``.
+    land in *validated* as ``None``, and so does any file field its
+    ``visible_when`` condition switches off, whatever was uploaded for it.
     """
+    from vtscore.plugins import inactive_field_keys  # noqa: PLC0415
     from vtscore.plugins.uploads import BytesIOUploadedFile  # noqa: PLC0415
 
+    inactive = inactive_field_keys(plugin.fields, validated)
     missing_files: list[str] = []
     for f in plugin.fields:
         if f.field_type != "file":
+            continue
+        if f.key in inactive:
+            validated[f.key] = None
             continue
         storage = request.files.get(f.key) if has_file_fields else None
         if storage is None or not getattr(storage, "filename", None):

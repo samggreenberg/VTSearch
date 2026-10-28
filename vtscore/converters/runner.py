@@ -144,15 +144,22 @@ def _build_converted_media_dict(
     ``embeddings`` is left empty; the framework
     :func:`~vtscore.datasets.stages.embedding.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
-    importer returns.
+    importer returns.  The one exception is a converter whose conversion *is*
+    an embedding - ``image2face`` through the imagekit provider seam detects
+    and embeds each face in one pass - and hands the vector over as
+    ``output["embeddings"] = {embedder_name: vector}`` (naming the primary in
+    ``output["embedder"]``); that vector is adopted here, so the embed stage
+    finds nothing missing and the face is never embedded twice.
     """
+    attached = output.get("embeddings")
+    embeddings = {str(k): v for k, v in attached.items()} if isinstance(attached, dict) and attached else {}
     media_data: dict[str, Any] = {
         "id": media_id,
         "media_type": target_type,
-        "embedder": "",
+        "embedder": str(output.get("embedder") or (next(iter(embeddings)) if embeddings else "")),
         "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
         "md5": _compute_md5(output),
-        "embeddings": {},
+        "embeddings": embeddings,
         "filename": origin_name,
         "category": category,
         "origin": origin,

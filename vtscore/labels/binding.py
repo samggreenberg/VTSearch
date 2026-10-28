@@ -161,10 +161,16 @@ def stored_labelset_source(entry: dict[str, Any] | None) -> dict[str, Any] | Non
 
 
 def _missing_required(source: LabelsetSource, values: dict[str, Any]) -> tuple[str, ...]:
-    """Keys of *source*'s required fields with no value and no declared default."""
+    """Keys of *source*'s required fields with no value and no declared default.
+
+    A field its ``visible_when`` condition switches off is never missing.
+    """
+    from vtscore.plugins import inactive_field_keys  # noqa: PLC0415
+
+    inactive = inactive_field_keys(source.fields, values)
     missing = []
     for f in source.fields:
-        if f.field_type == "file" or not f.required or f.default:
+        if f.field_type == "file" or not f.required or f.default or f.key in inactive:
             continue
         value = values.get(f.key)
         if value is None or str(value).strip() == "":

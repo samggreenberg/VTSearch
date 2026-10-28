@@ -11,6 +11,7 @@ import { visibleFields } from '../../utils/plugin-fields';
 import { FieldHintIconComponent } from '../field-hint-icon/field-hint-icon.component';
 import { FileBrowserComponent } from '../file-browser/file-browser.component';
 import { PluginCheckboxComponent } from '../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../plugin-combobox/plugin-combobox.component';
 
 /** The two calls this form makes against whichever plugin family backs it.
  *
@@ -51,7 +52,7 @@ export interface PluginImportApi {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-plugin-import-form',
   standalone: true,
-  imports: [FormsModule, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
+  imports: [FormsModule, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './plugin-import-form.component.html',
   styleUrl: './plugin-import-form.component.scss',
 })
@@ -96,9 +97,15 @@ export class PluginImportFormComponent {
 
   /** Typed view of the plugin's renderable fields for the template.
    *  ``hidden`` fields are omitted — still seeded in `resetFor`, just not
-   *  offered for editing. */
+   *  offered for editing — and so is any field whose ``visible_when`` fails
+   *  on the current values, which also takes it out of `canSubmit`. */
   get importerFields(): ImporterField[] {
-    return visibleFields((this.importer().fields ?? []) as ImporterField[]);
+    return visibleFields(this.allFields, this.values);
+  }
+
+  /** Every declared field, the ones the form doesn't render included. */
+  private get allFields(): ImporterField[] {
+    return (this.importer().fields ?? []) as ImporterField[];
   }
 
   private resetFor(importer: ImporterInfo): void {
@@ -125,7 +132,9 @@ export class PluginImportFormComponent {
   }
 
   onFieldChanged(changedKey: string): void {
-    this.fieldOptions.refreshDependentsOf(changedKey, this.importerFields, this.values);
+    // Every field, so one a condition hides now doesn't reappear with a
+    // list fetched for the old value.
+    this.fieldOptions.refreshDependentsOf(changedKey, this.allFields, this.values);
   }
 
   onFileSelected(event: Event, fieldKey: string): void {

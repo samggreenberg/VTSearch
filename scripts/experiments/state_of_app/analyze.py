@@ -177,17 +177,18 @@ import stopping  # noqa: E402
 ARMS = {
     ("siglip", "whole_image"): "SigLIP binary",
     ("siglip+dinov3_patch", "max_patch"): "DINOv3 region",
-    ("face", "whole_image"): "FaceNet face crop",
+    ("face", "whole_image"): "face crop",
     ("embeddinggemma2", "whole_image"): "EmbeddingGemma 2 binary",
     ("siglip2_l", "whole_image"): "SigLIP 2 L binary",
 }
 #: The State of the App reports are one per production path (owner, 2026-09-24):
-#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo"). "Face" is FaceNet on
-#: FHIBE's face crops (#4762), opened on the example sort; its two stored sizes share the path,
-#: so a face analysis also names its dataset (``--dataset``).
+#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo"). "Face" is the face
+#: embedder on FHIBE's face crops (#4762), opened on the example sort; its two stored sizes share
+#: the path, so a face analysis also names its dataset (``--dataset``).
 PATHS = {
     "binary": ("siglip", "whole_image"),
     "region": ("siglip+dinov3_patch", "max_patch"),
+    # The face provider's crops (#5321) since #5320; FaceNet's before it, on the retired MTCNN cells.
     "face": ("face", "whole_image"),
     # Not a production path: the #4837 A/B's arm, the Binary path in EmbeddingGemma 2's space.
     "eg2": ("embeddinggemma2", "whole_image"),

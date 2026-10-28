@@ -90,7 +90,7 @@ dependencies = [
     "torch>=2.7",
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
-    "dnspython>=2.0.0",
+    "dnspython>=2.9.0",
     "librosa",
     "soundfile",
     # Resampler behind ``vtscore.media.audio.decode``. It arrives with librosa
@@ -115,6 +115,11 @@ dependencies = [
     # MLP (vtscore.detectors.portable_bundle). Pure-Python protobuf builder; no
     # torch.onnx dependency (the graph is hand-assembled via onnx.helper).
     "onnx",
+    # The imagekit face package runs its SCRFD / RetinaFace detector and its
+    # ArcFace / MagFace embedder on ONNX Runtime (CPU by default; the CUDA
+    # execution provider when a deployment installs onnxruntime-gpu instead).
+    # Also loads the emitted graph in the portable-detector export test.
+    "onnxruntime",
     # Extract the Clotho audio demo, which ships as a single .7z archive on
     # Zenodo (vtscore.datasets.downloader.core._extract_7z). Imported lazily so
     # a missing install still surfaces an actionable error, but declared here so
@@ -124,10 +129,10 @@ dependencies = [
     # vtscore.projection.signpost_build). toponymy itself is installed
     # `--no-deps` by scripts/install.sh / ensure-test-deps.sh because its
     # transformers<5 pin would downgrade the app's transformers and is
-    # empirically unnecessary for our usage — see docs/plans/vtsbrowse-toponymy.md
-    # (decision 1) — so its real deps are declared here instead. apricot-select
-    # ships a legacy setup.py that needs the stdlib-distutils shim to build;
-    # the install scripts pre-install it before the main requirements pass.
+    # empirically unnecessary for our usage — see docs/SETUP.md, "Packages
+    # installed without their dependency pins" — so its real deps are declared
+    # here instead. apricot-select ships a legacy setup.py sdist; the install
+    # scripts pre-install it before the main requirements pass.
     "fast_hdbscan",
     "vectorizers",
     "apricot-select",
@@ -150,8 +155,7 @@ agpl = [
     # PDF page rendering + document text extraction: vtscore.datasets.pdf,
     # vtscore.converters.document2image / document2text.
     "PyMuPDF",
-    # YOLO object detection: the image extractor (vtscore.media.image.extractor)
-    # and the image clipper (vtscore.media.image.clipper).
+    # YOLO object detection: the image object clipper (vtscore.media.image.clipper).
     "ultralytics",
 ]
 dev = [
@@ -165,10 +169,6 @@ dev = [
     "codespell",
     "vulture",
     "pip-audit",
-    # Used only by the portable-detector export test to load the emitted ONNX
-    # graph and confirm it scores identically to the trained torch model
-    # (imported via importorskip, so deptry sees it as declared-but-unused).
-    "onnxruntime",
     # `pyright` is the Python wrapper around the Node-based pyright CLI.
     # The wrapper lazy-downloads the binary on first invocation; the
     # exact binary version is pinned via PYRIGHT_PYTHON_FORCE_VERSION
@@ -177,12 +177,16 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["vtsearch*", "vtscore*"]
+include = ["vtsearch*", "vtscore*", "imagekit*"]
 
 [tool.setuptools.package-data]
 # Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
 # by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
 "vtscore.media" = ["assets/*.npy", "assets/*.json"]
+# The imagekit face models' JSON configs: the SCRFD defaults the detector falls
+# back to, and the reference configs a deployment copies beside its weights.
+"imagekit.face.detection" = ["*.json"]
+"imagekit.face.extraction" = ["*.json"]
 # Zero-shot tag vocabularies for the signpost text providers (AudioSet-527 /
 # OpenImages-600 class names; see vtscore.projection.signpost_texts).
 "vtscore.projection" = ["assets/*.txt"]
@@ -263,6 +267,9 @@ extend_exclude = [
 # imports as third-party). Everything else under slides/, .claude/ and
 # docs/ is still checked.
 known_first_party = [
+    # The face package: a third top-level package beside vtsearch and vtscore
+    # (see imagekit/README.md), so its imports are first-party, not missing.
+    "imagekit",
     "coco_fixture",
     "data_card",
     "dataset_samples",
@@ -315,7 +322,6 @@ DEP001 = [
     "paddleocr",
     "rarfile",
     "whisper",
-    "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
@@ -325,7 +331,7 @@ DEP001 = [
     # opt-in only (users install ``lightglue`` to enable structural matching).
     "lightglue",
     # Installed `--no-deps` by the install scripts (its transformers<5 pin is
-    # empirically unnecessary; see docs/plans/vtsbrowse-toponymy.md), so it
+    # empirically unnecessary; see docs/SETUP.md), so it
     # cannot be declared here — declaring it would put its pins back in the
     # resolver. Its real deps ARE declared (fast_hdbscan et al.); the smoke
     # test in tests_lib/projection guards the --no-deps bypass.
@@ -356,12 +362,6 @@ DEP003 = [
     # (via the scripts' --no-deps step) deptry reclassifies the import from
     # DEP001 (missing) to DEP003 (transitive/undeclared). See the DEP001 note.
     "toponymy",
-    # facenet-pytorch (FaceNet embedder + MTCNN face detector) is installed
-    # --no-deps by the install scripts because its torch<2.3 / numpy<2 pins
-    # would downgrade the app's stack. Once installed, deptry reclassifies the
-    # import from DEP001 (missing) to DEP003 (present/undeclared), so it needs
-    # ignoring under both rules. See the DEP001 note.
-    "facenet_pytorch",
     # Same dual classification again: on a venv where lightglue IS installed
     # (pulled in transitively, e.g. alongside the GRID GPU stack) deptry
     # reclassifies the guarded structural-SPLG import from DEP001 to DEP003.
@@ -392,9 +392,6 @@ DEP002 = [
     # imports them; our code never does, so they are declared-but-not-imported.
     "timm",
     "ftfy",
-    # Loaded via importorskip in the portable-export test; never imported
-    # statically, so deptry can't see the use.
-    "onnxruntime",
     # toponymy's real dependencies, declared on its behalf because it is
     # installed --no-deps (see the DEP001 note on "toponymy"); our code never
     # imports them directly.
@@ -423,13 +420,14 @@ markers = [
     "api: API contracts, error handling, dashboard",
     "sorting: text sort, learned sort, diversity, safe thresholds",
     "datasets: dataset loading, splitting, combining, origins, dedup",
-    "io: importers, exporters, labels, processors",
-    "detectors: detectors, extractors, processors, clippers, eval",
+    "io: importers, exporters, labels",
+    "detectors: detectors, clippers, eval",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
+    "imagekit: the imagekit face package (ONNX detector/embedder on synthetic graphs, the provider seam, the CLIs)",
     "meta: repo/tooling meta-tests (packaging, Dockerfiles, docs, scripts/, .claude/hooks/, the run-tests.sh gates, the test harness); no vtsearch/vtscore behaviour",
     "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
     "slides: slide-deck gate (ruff, codespell, check-docs, deck preflight); has no Python tests, runs via ./run-tests.sh slides",

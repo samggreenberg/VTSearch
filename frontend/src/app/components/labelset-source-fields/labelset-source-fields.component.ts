@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { FormsModule } from '@angular/forms';
 
 import { ImporterField } from '../../models/api.models';
-import { visibleFields } from '../../utils/plugin-fields';
+import { inactiveFieldKeys, visibleFields } from '../../utils/plugin-fields';
 import { PluginCheckboxComponent } from '../plugin-checkbox/plugin-checkbox.component';
 
 /** True when *field* must be filled in before the source can be used: it is
@@ -11,9 +11,11 @@ export function needsValue(field: ImporterField): boolean {
   return !!field.required && !field.default && field.field_type !== 'file';
 }
 
-/** Whether every field that {@link needsValue} has a non-blank value. */
+/** Whether every field that {@link needsValue} has a non-blank value. A
+ *  field its ``visible_when`` switches off on *values* needs none. */
 export function fieldsComplete(fields: readonly ImporterField[], values: Record<string, string>): boolean {
-  return fields.every((f) => !needsValue(f) || !!(values[f.key] ?? '').trim());
+  const inactive = inactiveFieldKeys(fields, values);
+  return fields.every((f) => inactive.has(f.key) || !needsValue(f) || !!(values[f.key] ?? '').trim());
 }
 
 /**
@@ -24,7 +26,10 @@ export function fieldsComplete(fields: readonly ImporterField[], values: Record<
  * Deliberately narrow: labelset sources declare static fields (no
  * ``dynamic_options``), so this renders text-like inputs, number inputs,
  * static selects and checkboxes, and emits a fresh values object on every
- * edit. ``hidden`` fields are dropped, as in every plugin form.
+ * edit. ``hidden`` fields are dropped, as in every plugin form, and so is a
+ * field whose ``visible_when`` fails on the values. A condition naming a
+ * field the server left out of *fields* (admin-fixed, or ``hidden``) is
+ * ignored here; the server, which sees that field's value, still applies it.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,7 +49,7 @@ export class LabelsetSourceFieldsComponent {
   readonly valuesChange = output<Record<string, string>>();
 
   get shownFields(): ImporterField[] {
-    return visibleFields(this.fields());
+    return visibleFields(this.fields(), this.values());
   }
 
   value(key: string): string {

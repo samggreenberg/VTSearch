@@ -26,6 +26,7 @@ and third-party packaging.
 - [Template-variable interpolation](#template-variable-interpolation)
 - [Server-path and URL validation](#server-path-and-url-validation)
 - [Opening a URL in the browser](#opening-a-url-in-the-browser)
+- [Streaming from the CLI](#streaming-from-the-cli)
 - [Entry-point registration](#entry-point-registration)
 - [Worked example](#worked-example)
 - [Testing pattern](#testing-pattern)
@@ -50,6 +51,9 @@ Optional overrides:
 | `opens_url: bool` | `False` | Set `True` when your export method always returns an `"open_url"` - see [Opening a URL in the browser](#opening-a-url-in-the-browser) |
 | `export(results, field_values)` | raises | Legacy single-method form. The named methods delegate here when unoverridden, which keeps pre-existing plugins working; prefer the named methods in new code |
 | `export_cli(results, field_values)` | delegates to `export_find_results()` | Override only when CLI-supplied values need different handling (rare) |
+| `supports_streaming` / `export_cli_streaming(header, records, field_values)` | `False` / raises | Write a scored run hit by hit for `--stream-results`; see [Streaming from the CLI](#streaming-from-the-cli) |
+| `export_labelset_streaming(header, elements, field_values)` | raises | Write the run's hits as label entries for `--stream-results --as-labelset`; `supports_labelset_streaming` is derived from overriding it |
+| `export_cli_streaming_resumable(header, chunks, field_values, resume)` / `resumable_stream_path(field_values)` | raises / `""` | Write a scored run a chunk at a time so an interrupted `--stream-results --resume` run can continue; `supports_resumable_streaming` is derived from overriding it. See [Resumable streams](#resumable-streams) |
 
 Expose `EXPORTER = YourExporter()` at module level so the registry
 picks it up. The sentinel must be an already-instantiated object, not
@@ -97,10 +101,13 @@ deliver an empty export.
             "threshold": 0.5,
             "balance": {...},  # may be absent or None
             "total_hits": 15,  # positives only
-            "hits": [{"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "...", ...}, ...],
+            "hits": [
+                {"id": 1, "filename": "...", "category": "...", "score": 0.82, "md5": "..."},  # + more keys
+                ...,
+            ],
             "negative_hits": [...],
         },
-        ...
+        # ... one entry per detector run
     },
     "missing_detectors": [...],
 }
@@ -115,8 +122,8 @@ Each hit is built by `vtscore.utils.hits.build_media_hit`; the
 ```python
 {
     "labels": [
-        {"md5": "...", "label": "good", "filename": "...", "custom_metadata": {...}, ...},
-        ...
+        {"md5": "...", "label": "good", "filename": "...", "custom_metadata": {...}},  # + more keys
+        ...,
     ],
     "selected_columns": ["md5", "label", "Catalogue ID"],
 }
@@ -305,6 +312,64 @@ and carried as an `open_url` field on the `export_complete` event under
 `--progress-format json`, where a wrapping script can open it. Don't
 `print()` the URL yourself - that duplicates the line and puts prose in
 the middle of the NDJSON stream.
+
+## Streaming from the CLI
+
+`python app.py --autodetect --tempimport --chunk-size N --stream-results` scores
+a source larger than RAM chunk by chunk, so it never has a whole payload to hand
+over. It calls one of two streaming methods instead, each taking a header and a
+lazy iterator:
+
+| Run | Method | The iterator yields |
+|-----|--------|---------------------|
+| `--stream-results` | `export_cli_streaming(header, records, field_values)` | `(detector_name, hit)` tuples: each hit as in `export_find_results`, plus a `"label"` |
+| `--stream-results --as-labelset` | `export_labelset_streaming(header, elements, field_values)` | label entries: `LabeledElement` dicts, each with a `"detector"` key |
+
+Write each record as it arrives; never collect them. A file exporter writes
+through `vtscore.io.atomic_write_stream`, and a delivery exporter (a POST, an
+email) groups the stream with `iter_stream_batches(items, batch_size)` from
+`vtscore.exporters.base`, after `resolve_stream_batch_size` has coerced its
+`batch_size` field.
+
+The labelset stream is the one to implement if what you deliver should read
+back in as labels. Its header carries `media_type`, the `detectors` names and
+`keep_negatives`, and none of the head's numbers. Each entry has been through
+`label_entry_for_export`, with no score and no media id, so an export can
+rebuild the detector under another embedder (#5131). Every detector's entries
+arrive in the one stream, an item two detectors score once per detector, so
+keep the `detector` key if your format groups by it. The built-in file
+exporters' output re-imports through the label importer of the same name:
+`server_json_file` writes `{"labels": [...]}` with the metadata beside it, and
+`server_csv_file` writes the label CSV's columns after a leading `detector`.
+
+Neither method is a payload kind. The GUI never streams, so
+`supported_payloads` and the pickers ignore both; `supports_streaming` is
+declared, and `supports_labelset_streaming` is derived from your override.
+
+### Resumable streams
+
+A `--stream-results --resume` run can be killed and run again, continuing
+after the last chunk it wrote. It calls
+`export_cli_streaming_resumable(header, chunks, field_values, resume)` in place
+of `export_cli_streaming`: the same header and hits, but `chunks` yields one
+list of `(detector_name, hit)` tuples per chunk (possibly empty), and `resume`
+is a `vtscore.exporters.base.StreamResume`. The CLI keeps a checkpoint beside
+the file `resumable_stream_path(field_values)` names and never asks the
+exporter to read it; the exporter's side is three rules:
+
+- `resume.position is None`: write the destination afresh, header first, then
+  call `resume.commit(position)`.
+- Otherwise do not write the header. Roll the destination back to
+  `resume.position`, which is what this method last committed, and append.
+- After each chunk is durable, call `resume.commit(position)`. Never commit a
+  chunk only partly written.
+
+For a text file, `vtscore.io.resumable_write_stream(path, position)` opens the
+file (truncating a fresh one, or cutting a resumed one back to `position`) and
+`vtscore.io.commit_write_stream(f)` flushes, `fsync`s and returns the byte
+offset to commit. The built-in `server_json_file` and `server_csv_file` are
+both under thirty lines on top of them. Write in place, not through
+`atomic_write_stream`: an atomic stream leaves nothing behind to resume.
 
 ## Entry-point registration
 

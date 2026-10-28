@@ -196,6 +196,8 @@ pick it up.
   auto-sync engine in `vtscore/labels/sync.py`.
 - `vtsearch.settings_io.sources` (app tier) - the `SettingsSource`
   subclass with per-user template variables (`{username}`) and lazy,
-  per-user auto-import. Its engine (freshness probing, the dirty-key
-  contract, lock ordering) is documented in
-  [EXTENDING-plugins.md § How the sync engine works](../../../docs/EXTENDING-plugins.md#how-the-sync-engine-works).
+  per-user auto-import. What a source must honor is in
+  [EXTENDING-plugins.md § What the sync engine expects of a source](../../../docs/EXTENDING-plugins.md#what-the-sync-engine-expects-of-a-source);
+  the engine itself (freshness probing, the dirty-key contract, lock
+  ordering) is documented in
+  [ARCHITECTURE.md § The settings sync engine](../../../docs/ARCHITECTURE.md#the-settings-sync-engine).

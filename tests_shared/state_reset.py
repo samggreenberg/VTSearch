@@ -4,8 +4,8 @@ Both suites run thousands of tests in a handful of long-lived xdist worker
 processes, so every module-level cache, registry and progress tracker in
 ``vtscore`` is shared between tests and has to be put back before each one.
 The sequence below is the whole of that reset for the library tier; each
-conftest wraps it with its own tier-specific extras (the app tier's autorun
-processors, login provider and settings isolation; the library tier's
+conftest wraps it with its own tier-specific extras (the app tier's AutoFind
+runs, import hooks, login provider and settings isolation; the library tier's
 ``CoreConfig`` builder and temp registry paths).
 """
 
@@ -271,6 +271,18 @@ def reset_shared_state(medias_snapshot) -> None:
     reset_dataset_registry()
     reset_detector_registry()
 
+    # The imagekit face-provider registry is process-global too: a test that
+    # registers a fake provider (or loads a fake entry point) must not leak it
+    # into the next test's ``get_pipeline()``.
+    from imagekit.face.pipeline import reset_for_tests as reset_face_providers
+
+    reset_face_providers()
+
+    # ...and the app's cached, initialised pipeline over that registry.
+    from vtscore.media.face.imagekit_bridge import reset_for_tests as reset_face_bridge
+
+    reset_face_bridge()
+
 
 @pytest.fixture(autouse=True)
 def allow_test_tmp_paths(monkeypatch):
@@ -327,3 +339,24 @@ def isolated_example_media_dir(tmp_path, monkeypatch):
         return original()
 
     monkeypatch.setattr(paths_mod, "example_media_dir", _isolated)
+
+
+@pytest.fixture(autouse=True)
+def no_face_models(tmp_path, monkeypatch):
+    """Start every test on a server without face models, whatever this machine has (#5320).
+
+    Face is on exactly when face models are on disk
+    (:func:`vtscore.media.face.imagekit_bridge.face_models`): ``IMAGEKIT_FACE_CONFIG``,
+    else ``imagekit/face.json`` in the models folder, which the session keeps
+    pointing at a developer's real one (:mod:`tests_shared.data_dir`).  Either
+    would turn Face on for one machine's run and not another's.  A test that
+    wants Face on points ``IMAGEKIT_FACE_CONFIG`` at a config of its own, or
+    installs a fake pipeline on the bridge.
+    """
+    from vtscore.media.face import imagekit_bridge
+
+    monkeypatch.delenv(imagekit_bridge.CONFIG_ENV_VAR, raising=False)
+    monkeypatch.delenv("IMAGEKIT_FACE_PROVIDER", raising=False)
+    monkeypatch.delenv("IMAGEKIT_EXT_BACKEND", raising=False)
+    absent = tmp_path / "no-face-models" / imagekit_bridge.DEFAULT_CONFIG_RELPATH
+    monkeypatch.setattr(imagekit_bridge, "default_config_path", lambda: absent)

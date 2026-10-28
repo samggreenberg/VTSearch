@@ -248,6 +248,27 @@ class TestThinMatchesFull:
         np.testing.assert_array_equal(media_embedding(thin, later.name), media_embedding(full, later.name))
 
 
+class TestLoudnessNormalizedThinImport:
+    def test_a_normalized_clip_keeps_only_a_recipe_that_replays_it_exactly(self, tmp_path):
+        """A gain rewrites every sample, so the recipe holds only if the cleaner is
+        deterministic: the dry run must rebuild the normalized bytes exactly."""
+        sr = 16000
+        quiet = np.sin(2 * np.pi * 440.0 * np.arange(sr) / sr) * 300  # about -41 dBFS
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        path = folder / "quiet.wav"
+        path.write_bytes(_wav(quiet, sr))
+
+        (full,) = _import(folder, "audio", "audio_loudness_normalize", thin=False).values()
+        (thin,) = _import(folder, "audio", "audio_loudness_normalize", thin=True).values()
+
+        assert has_original_payload(thin)
+        assert thin["media_bytes"] is None and recipe_is_exclusive(thin)
+        assert _served(thin) == _served(full) != path.read_bytes()
+        assert thin["md5"] == full["md5"]
+        assert lazy_original_bytes(thin) == _stored_original(full) == path.read_bytes()
+
+
 class TestEmbedView:
     def test_inline_and_whole_file_media_are_handed_over_as_is(self, tmp_path):
         src = tmp_path / "a.txt"

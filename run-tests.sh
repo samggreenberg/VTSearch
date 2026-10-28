@@ -16,7 +16,7 @@
 #                   scripts/, .claude/hooks/, the gates themselves, the test
 #                   harness — nothing that ships as vtsearch/vtscore code),
 #                   frontend (build + audit + Vitest, no Python tests),
-#                   slides (the four gates a deck can trip, no Python
+#                   slides (only the gates a deck can trip, no Python
 #                   tests — see the note below),
 #                   docs (markdown-only: every cheap gate, plus the few tests
 #                   that read a doc — see the note below), gpu
@@ -77,7 +77,8 @@
 #      file's diagnostics depend on its text, its transitive imports, the
 #      installed packages and the config, and nothing else). A fresh clone, a
 #      changed config or environment, or VTSEARCH_FRESH=1 gets the full check.
-#      Measured: 239s full, ~3s for one changed test file.
+#      Measured: ~85s full on four threads (~125s with the frontend lanes
+#      beside it; 2026-10-26), ~3s for one changed test file.
 #   4. pytest, alone on the box. Tests that already passed on this identical
 #      working tree -- in a group run a minute ago, or in a full run nothing
 #      has changed since -- are not re-run (tests_shared/pass_cache.py keys
@@ -102,9 +103,9 @@
 # to slides/ cannot reach anything else in the repo: nothing imports
 # slides/build.py (it is a standalone script), pyrightconfig.json does not
 # include it, and no test in either tree touches a deck. So the group runs
-# only the four gates that can actually observe a deck -- ruff (build.py),
-# codespell (slide prose), check-docs.py (fragments are tracked markdown), and
-# build.py --check -- and skips pytest and every whole-repo gate. The group
+# only the gates that can actually observe a deck -- the stale-tree check, ruff
+# check and ruff format (build.py), codespell (slide prose), check-docs.py
+# (fragments are tracked markdown), and build.py --check -- and skips pytest and every whole-repo gate. The group
 # refuses to run when the branch touches anything outside slides/, so the
 # exemption cannot be taken by mistake.
 #
@@ -155,9 +156,11 @@ _self="$(pwd)/$(basename "$0")"
 # Memory headroom check.
 #
 # The gates in this script are the memory-hungry part of the repo, not pytest:
-# `pyright` runs under node and peaks around 5.4G RSS on one thread (it takes
-# a second thread only when 12G is free; see stage 3), and the Angular
-# `build:prod` is node too and also memory-hungry. On a small machine the run does not
+# `pyright` runs under node and peaks around 4G RSS on one thread (it takes
+# more threads only when 11G or 13G is free; see stage 3), and the Angular
+# `build:prod` is node too and also memory-hungry. On one thread, a full run
+# with the frontend lanes peaked ~6.2G above where it started (2026-10-26),
+# which is the ~6G below. On a small machine the run does not
 # fail cleanly — node aborts with "Ineffective mark-compacts near heap limit",
 # or the kernel's OOM killer takes whatever it likes, including the shell that
 # launched the run. That is not hypothetical either: a 3 GB box died this way
@@ -173,7 +176,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
         echo "============================================================"
         echo "LOW MEMORY: ${_mem_avail_gb}G available; a full run wants ~6G"
         echo ""
-        echo "pyright (node, ~5.4G peak) and the Angular build are what need"
+        echo "pyright (node, ~4G peak) and the Angular build are what need"
         echo "it. Below this they tend to die as an OOM kill rather than a"
         echo "test failure, and can take the session with them."
         echo ""
@@ -639,6 +642,11 @@ fi
 #   free    a heavy check pytest need not wait for; collected after pytest
 # -- so that one pass of the box reports everything that is broken, and a run
 # that dies takes its children with it.
+#
+# A lane's name is what the run prints for it, and docs/TESTING.md's stage
+# tables list every lane by that name, in its stage and kind. Adding, removing,
+# renaming or re-kinding a lane fails scripts/check-docs.py until the table
+# says the same.
 # ---------------------------------------------------------------------------
 _lane_log_dir=$(mktemp -d)
 _ln_kind=(); _ln_name=(); _ln_pid=(); _ln_log=(); _ln_start=()
@@ -747,9 +755,10 @@ _gate_ruff_format() {
 }
 _gate_codespell() { codespell --toml pyproject.toml && echo "codespell OK" ; }
 # Documentation drift: relative links, in-page anchors, backticked repo paths,
-# leaked absolute machine paths, plan-file citations anywhere in the tree, and
-# broken code fences. Pure invariants against the current tree — nothing to
-# re-pin.
+# leaked absolute machine paths, plan-file citations anywhere in the tree,
+# broken code fences, undated study directories, docs/TESTING.md's stage
+# tables against the gates this script runs, and line-number anchors. Pure
+# invariants against the current tree — nothing to re-pin.
 _gate_check_docs() { python scripts/check-docs.py ; }
 _gate_deptry() { python -m deptry . ; }
 # OpenAPI snapshot drift: regenerate the flask-smorest spec from the live app
@@ -785,11 +794,11 @@ _gate_doc_inventories() {
 _gate_dockerfiles() { python scripts/check-dockerfiles.py ; }
 # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
 # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
-# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+# browser-free (see scripts/screenshots/README.md); the pixel-diff
 # (check.sh) needs chromium and stays a manual chore.
 _gate_screenshot_wiring() { python scripts/screenshots/wiring-check.py ; }
 # vtscore package docs: every top-level module / sub-package of vtscore/ is
-# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor.
+# covered by a packages/ doc. (Line-number anchors are check-docs.py's, repo-wide.)
 _gate_vtscore_docs() { python scripts/check-vtscore-docs.py ; }
 # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
 # contract for the same plugin ABCs in their own words; this holds both to the
@@ -954,13 +963,33 @@ _lane_frontend_build() {
 # clone), when pyrightconfig.json, pyproject.toml or the installed packages
 # changed, or when VTSEARCH_FRESH=1 asks for it. Scope is `pyrightconfig.json`.
 #
-# Two threads when there is memory for them, one otherwise. On a 4-vCPU box a
-# full check took ~283s on one thread, ~239s on two and ~340s on four (each
-# thread holds its own copy of the program, so more threads re-parse more), so
-# two is the most worth having. Peak RSS was ~5.4G on one thread and ~9.6G on
-# two. Below 12G available a second thread risks an OOM kill (see the memory
-# check at the top), and a slow pass beats a dead one. Measured, not derived;
-# re-measure before changing either number.
+# Four threads when there are the memory and the CPUs for them, two with less
+# memory, one otherwise. Measured with VTSEARCH_FRESH=1 on a warm 4-vCPU, 15G
+# box (2026-10-26): two runs per two- and four-thread cell, in ABBA order, and
+# one on one thread. "pytest at" is when pytest started; "peak" is system
+# memory in use above where the run began. Nothing runs beside pytest on a
+# backend-only branch, so its start is the whole difference; those runs, and
+# the one-thread run, were stopped there and have no total:
+#
+#                       backend-only branch      frontend-touched branch
+#   threads  pyright    pytest at   peak         pytest at   peak     total
+#   1        ~4.2G      -           -            202s        6.2G     -
+#   2        ~5.5G      116s        ~5.5G        146s        8.3G     472s
+#   4        ~7.6G      97s         ~7.5G        137s        10.6G    462s
+#
+# Four wins both ways. On a backend-only branch nothing else competes, pytest's
+# start is the run's critical path, and four saves ~19s. On a frontend-touched
+# branch the frontend build and Vitest take CPU from pyright, and four saves
+# ~9s. Each thread holds its own copy of the program, so every added thread
+# costs CPU-seconds (251 / 324 / 383 standalone on one / two / four), and four
+# is not taken on fewer than four CPUs. Before the transformers stub (#5077),
+# four lost to two (~340s against ~239s).
+#
+# Each memory gate sits ~2.4G above its frontend-touched peak: 13G for four,
+# 11G for two. That is the margin the old 12G gate left over the old ~9.6G
+# two-thread peak, on the rule that a slow pass beats an OOM-killed one (see
+# the memory check at the top). Measured, not derived; re-measure before
+# changing any of these numbers.
 #
 # The PYRIGHT_PYTHON_FORCE_VERSION pin keeps everyone on the same underlying
 # pyright binary regardless of what the `pyright` PyPI wrapper would otherwise
@@ -969,16 +998,20 @@ _pyright_threads=1
 _pyright_heap_mb=""
 if [[ -r /proc/meminfo ]]; then
     _mem_avail_mb=$(awk '/^MemAvailable:/ {printf "%d", $2/1024}' /proc/meminfo)
-    if [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge $(( 12 * 1024 )) ]]; then
+    _cpus=$(nproc 2>/dev/null || echo 1)
+    if [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge $(( 13 * 1024 )) && "$_cpus" -ge 4 ]]; then
+        _pyright_threads=4
+    elif [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge $(( 11 * 1024 )) ]]; then
         _pyright_threads=2
     fi
     # pyright's cache manager (getUsedHeapRatio in its bundle) divides the heap
     # used by ALL its worker processes together by ONE process's V8 heap limit
     # -- node's default is about half of physical memory -- and empties its
     # type cache whenever that ratio nears 1, after which it re-derives every
-    # type it threw away. Two workers at ~3.5-4.8G each sit on that edge on a
-    # 16G box, so give each process a limit sized to what the box can spare:
-    # three quarters of what is available. V8 only grows a heap as far as it
+    # type it threw away. Before the transformers stub, two workers at
+    # ~3.5-4.8G each sat on that edge on a 16G box, and four workers now
+    # reach ~7.6G RSS together, so give each process a limit sized to what
+    # the box can spare: three quarters of what is available. V8 only grows a heap as far as it
     # needs, so this raises a ceiling, not the usage. Read off pyright's source
     # rather than measured as a speedup; a box under 6G keeps node's default.
     if [[ -n "$_mem_avail_mb" && "$_mem_avail_mb" -ge 6144 ]]; then

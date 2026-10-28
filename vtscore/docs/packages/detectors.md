@@ -22,6 +22,7 @@ Every module in the package, grouped by what it is for.
 | Module                                       | Concern                                                             |
 |----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
+| `vtscore/detectors/import_record.py`         | The record of the label importer that created a detector            |
 | `vtscore/detectors/store.py`                 | Low-level per-detector JSON file I/O                                |
 | `vtscore/detectors/embedder_type.py`         | Resolve and validate a detector's immutable embedder *type*         |
 | `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
@@ -77,7 +78,7 @@ is imported from the submodule it lives in.
 ## What a detector is
 
 A detector on disk is a JSON file at
-`<CoreConfig.from_settings().detectors_dir>/<slug>.json` containing:
+`<get_setting("detectors_dir")>/<slug>.json` containing:
 
 ```json
 {
@@ -124,8 +125,9 @@ see [`concepts.md`](../concepts.md) - which is also why
 `vtscore.config.DATA_DIR / "detector_registry.json"` (`REGISTRY_PATH`).
 Each entry is a flat dict with `id` (uuid hex), `name`, `media_type`,
 `num_training`, `text_query`, `media_example`, `examples`, `created_by`,
-`created_at`, `embedder`, `embedder_type`, `readers`; once its labels
-change it also carries `last_trained_at` and `trained_on`, the ids of the
+`created_at`, `embedder`, `embedder_type`, `readers`, and `imported` (how a
+label importer created it, or `None`; built by `import_record.py`); once its
+labels change it also carries `last_trained_at` and `trained_on`, the ids of the
 datasets it holds labels from. `record_detector_training(detector_id,
 num_training, *, dataset_id="", labeled_in_dataset=True)` stamps all
 three: a writer that composed its labels against one dataset passes its
@@ -176,7 +178,7 @@ and request-missing sentinel contexts have no labelset to protect.
 ## Store
 
 `vtscore/detectors/store.py` is the on-disk detector layer.
-`get_detectors_dir()` reads `CoreConfig.from_settings().detectors_dir`.
+`get_detectors_dir()` reads `get_setting("detectors_dir")`.
 
 The public pair is `save_detector` / `load_detector`:
 
@@ -707,6 +709,10 @@ active dataset, and apply matching votes silently
    detector trained on dataset A still restores labels when you load
    dataset B if both share the same underlying files.
 
+The votes it leaves are recorded as the detector's `label_history_base`:
+the history records none of them, but every learned sort trains on them,
+so the labeling-session analyzer replays the history on top of them.
+
 Returns the number of labels restored.
 
 ### `dataset_sync.ensure_votes_match_active_dataset()`
@@ -714,7 +720,8 @@ Returns the number of labels restored.
 Rehydrate per-dataset detector state on dataset switch. No-op unless
 the dataset id or labelset file mtime has changed since the detector
 last saw it. When triggered, clears `good_votes` / `bad_votes` /
-`label_history` / etc., replays `restore_labels_from_detector`, and
+`label_history` / etc., replays `restore_labels_from_detector`, drops the
+pair's labeling-session cache (`drop_progress_cache`), and
 caches the parsed labelset + mtime so subsequent requests within the
 same `(dataset_id, file_mtime)` tuple are no-ops.
 
@@ -755,7 +762,9 @@ LRU map keyed by `(dataset_id, detector_id)` and bounded at
 `_MAX_CACHED_PAIRS` (3). Each cache carries
 `steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
-`good_ids` / `bad_ids` (running label sets), `prev_snapshot` and `prev_beta`
+`good_ids` / `bad_ids` (running label sets, starting from `base`, the detector's
+`label_history_base`: the labels restored from its labelset, which the history
+does not record), `prev_snapshot` and `prev_beta`
 (the last model-bearing step's scores over the unlabeled pool with its cut and
 ambiguity band, and the balance that cut was drawn at: the Stable baseline),
 `coverage_atlas` (the per-step replay of coverage evidence),
@@ -775,6 +784,7 @@ Every entry point resolves its cache through the active
 | Function                                        | Behaviour                                                              |
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
+| `drop_progress_cache(dataset_id, detector_id)`  | Drop one pair's cache, as a rehydrate does when it restarts that pair's label history |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold, *, smart_threshold=None, beta=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `beta` is the balance `threshold` was drawn at, so Stable never compares detectors across two balances' lines; `smart_threshold` is deprecated and ignored (#5134) |
 | `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
@@ -817,7 +827,7 @@ Every entry point resolves its cache through the active
   in `vtscore.detectors.stability`, which the eval harness calls too.
 - **Span** - coverage-atlas coverage: the number of consecutive
   evidence-bearing nodes in BFS order. Green at
-  `CoreConfig.from_settings().autopilot_goal_diversity` nodes (capped at
+  `get_setting("autopilot_goal_diversity")` nodes (capped at
   the atlas's total node count; the app's default setting is 40), yellow
   at 10, red below. Computed from the `span_info` the caller passes in
   rather than from the per-step model cache, so it stays cheap.
@@ -844,6 +854,7 @@ def extract_input_spec_from_medias(medias) -> dict | None: ...
 def build_detector_meta(detector_data, *, threshold=None) -> dict: ...  # threshold: deprecated, ignored
 def apply_detector_meta(detector_data, detector_meta) -> bool: ...
 def clipper_matches(detector_spec, dataset_spec) -> bool: ...
+def resolve_clipper_spec(name, params=None) -> dict: ...
 ```
 
 An `input_spec` is `{"clipper": "sound_tiling", "clipper_params": {"duration": "2.0"}}`
@@ -857,6 +868,14 @@ embedder's space and one trained head that means nothing to a receiver,
 which trains its own; `build_detector_meta`'s `threshold` keyword is
 accepted with a `DeprecationWarning` and ignored. `apply_detector_meta`
 still ignores a `threshold` arriving from an older server.
+
+`resolve_clipper_spec` turns a clipper choice into an input spec, the way the
+CLI's clipper override (`--override-clipper`, #5282) takes one. It refuses an
+unknown clipper, a parameter the clipper does not declare, and a value its
+`with_params` rejects, each with a `ValueError` naming the problem. The spec it
+returns carries every effective parameter as a string, the shape
+`extract_input_spec_from_medias` reads off a dataset clipped with the same
+settings, so `clipper_matches` compares the two exactly.
 
 ---
 

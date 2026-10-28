@@ -12,6 +12,7 @@ import type { SettingsImporterEntry } from '../../../generated/api-client/models
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
+import { PluginComboboxComponent } from '../../plugin-combobox/plugin-combobox.component';
 
 type ModalView = 'picker' | 'form';
 
@@ -19,7 +20,7 @@ type ModalView = 'picker' | 'form';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-importer-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent, PluginComboboxComponent],
   templateUrl: './settings-importer-modal.component.html',
   styleUrl: './settings-importer-modal.component.scss',
 })
@@ -75,9 +76,15 @@ export class SettingsImporterModalComponent implements OnDestroy {
 
   /** Typed view of the selected importer's plugin fields for the template
    *  (the generated SettingsImporterEntry types `fields` as an open dict
-   *  because plugin field schemas aren't part of the OpenAPI client). */
+   *  because plugin field schemas aren't part of the OpenAPI client), less
+   *  any whose ``visible_when`` fails on the current `formValues`. */
   get selectedImporterFields(): ImporterField[] {
-    return visibleFields((this.selectedImporter?.fields ?? []) as ImporterField[]);
+    return visibleFields(this.allFields, this.formValues);
+  }
+
+  /** Every declared field, the ones the form doesn't render included. */
+  private get allFields(): ImporterField[] {
+    return (this.selectedImporter?.fields ?? []) as ImporterField[];
   }
 
   selectImporter(importer: SettingsImporterEntry): void {
@@ -109,7 +116,9 @@ export class SettingsImporterModalComponent implements OnDestroy {
    *  edited, so a ``depends_on`` chain stays consistent. */
   onFormFieldChanged(changedKey: string): void {
     if (!this.selectedImporter?.fields) return;
-    this.fieldOptions.refreshDependentsOf(changedKey, this.selectedImporterFields, this.formValues);
+    // Every field, so one a condition hides now doesn't reappear with a
+    // list fetched for the old value.
+    this.fieldOptions.refreshDependentsOf(changedKey, this.allFields, this.formValues);
   }
 
   back(): void {

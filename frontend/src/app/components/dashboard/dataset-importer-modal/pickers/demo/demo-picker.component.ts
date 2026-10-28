@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -35,7 +35,6 @@ import { demoSortValue } from '../shared/demo-sort';
 export class DemoPickerComponent {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
-  private cdr = inject(ChangeDetectorRef);
 
   /** This view's "Advanced" block. The Add Dataset modal reads it to render
    *  the block's toggle in its footer row (#4305). */
@@ -61,6 +60,10 @@ export class DemoPickerComponent {
    *  Import footer button; the parent forwards the payload to its own
    *  ``demoSelected`` output and closes the modal. */
   readonly demoDatasetSelected = output<DemoDatasetEntry & Record<string, unknown>>();
+  /** Fired with the dataset type whose Import Defaults the picker has just
+   *  applied, so the modal, which owns the two toggles above, can apply that
+   *  type's saved ones. */
+  readonly typeDefaultsApplied = output<string>();
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
@@ -104,8 +107,9 @@ export class DemoPickerComponent {
    *  queries and the load payload. */
   readonly selectedDemoConverter = signal('');
   /** Optional user-supplied dataset name.  Empty means "use the demo
-   *  entry's label". */
-  demoDatasetName = '';
+   *  entry's label".  Follows the selected row's label until the user types
+   *  a name of their own (``demoDatasetNameDirty``). */
+  readonly demoDatasetName = signal('');
   private demoDatasetNameDirty = false;
   /** Currently-selected demo row.  Bound (via the parent) onto the
    *  sibling ``<vt-source-picker>``'s row-highlight input and read by
@@ -131,24 +135,24 @@ export class DemoPickerComponent {
   static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'description', 'status'];
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
-  clipperChooserOpen = false;
-  clipperChooserClippers: ClipperInfo[] = [];
+  readonly clipperChooserOpen = signal(false);
+  readonly clipperChooserClippers = signal<ClipperInfo[]>([]);
 
   openClipperChooser(): void {
     this.clipperChooserCategory = null;
-    this.clipperChooserClippers = this.demoClippers();
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(this.demoClippers());
+    this.clipperChooserOpen.set(true);
   }
 
   /** A Multi-Dataset row asked for the chooser: open it on that row's clippers. */
   openClipperChooserFor(request: { category: string; clippers: ClipperInfo[] }): void {
     this.clipperChooserCategory = request.category;
-    this.clipperChooserClippers = request.clippers;
-    this.clipperChooserOpen = true;
+    this.clipperChooserClippers.set(request.clippers);
+    this.clipperChooserOpen.set(true);
   }
 
   onClipperChooserSelected(selection: ClipperSelection): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       this.multiOutputConfig()?.setClipper(this.clipperChooserCategory, selection.name, selection.params);
       this.clipperChooserCategory = null;
@@ -161,13 +165,13 @@ export class DemoPickerComponent {
   }
 
   onClipperChooserCancelled(): void {
-    this.clipperChooserOpen = false;
+    this.clipperChooserOpen.set(false);
     if (this.clipperChooserCategory !== null) {
       // The row keeps the clipper it had.
       this.clipperChooserCategory = null;
       return;
     }
-    const clippers = this.clipperChooserClippers;
+    const clippers = this.clipperChooserClippers();
     const defaultClipper = clippers.find((c) => c.name.endsWith('_default')) || clippers[0];
     this.selectedDemoClipper.set(defaultClipper?.name || '');
     this.demoClipperParamValues.set({});
@@ -217,7 +221,7 @@ export class DemoPickerComponent {
     this.demos.set([]);
     this.demoTabs.set([]);
     this.activeTab.set('');
-    this.demoDatasetName = '';
+    this.demoDatasetName.set('');
     this.demoDatasetNameDirty = false;
     this.selectedDemo.set(null);
     this.multiDataset.set(false);
@@ -232,12 +236,6 @@ export class DemoPickerComponent {
         this.fetchDemos();
       },
     });
-
-    // `open()` is invoked imperatively from the parent's importer-selection
-    // handler (a listener bound on a sibling `<vt-source-picker>`), so this
-    // component's own OnPush view is not on the ancestor-marked dirty path
-    // that call produces; force a check so the reset picker actually paints.
-    this.cdr.markForCheck();
   }
 
   private fetchDemos(embedder?: string): void {
@@ -311,6 +309,7 @@ export class DemoPickerComponent {
       this.activeTabConvertsTo.set(convertsTo);
       this.activeTabConvertsToOptional.set(false);
       this.applyConverterTarget(mediaType, convertsTo.length ? convertsTo[0] : '');
+      this.applySavedMultiDataset();
       return;
     }
     // A directly embeddable tab (e.g. image) may still have registered
@@ -320,10 +319,28 @@ export class DemoPickerComponent {
     this.applyConverterTarget(mediaType, '');
     this.datasetsListingsApi.getConvertersForSource(mediaType).subscribe({
       next: (converters) => {
+        // The user has moved to another tab while this was in flight.
+        if (this.activeTab() !== mediaType) return;
         const targets = Array.from(new Set(converters.map((c) => c.target_type))).filter((t) => t !== mediaType);
         this.activeTabConvertsTo.set(targets);
+        this.applySavedMultiDataset();
       },
     });
+  }
+
+  /** Open the Multi-Dataset editor on the kinds saved for the active tab's
+   *  type, once its rows (its own type and the types it converts into) are
+   *  known.  A tab with a saved Multi-Dataset default takes the whole-import
+   *  toggles from that type too, as its Save as default filed them there. */
+  private applySavedMultiDataset(): void {
+    if (this.multiDataset() || !this.supportsMultiOutput || this.effectiveSoloMediaType) return;
+    const tab = this.activeTab();
+    const fresh = demoOutputDrafts(this.mediaTypes(), tab, this.activeTabConvertsTo());
+    const drafts = this.importDefaults.savedMultiDatasetDrafts(tab, this.mediaTypes(), fresh);
+    if (!drafts) return;
+    this.multiDataset.set(true);
+    this.outputDrafts.set(drafts);
+    this.typeDefaultsApplied.emit(tab);
   }
 
   /** Set the convert-on-load target for the active tab and (re)load the
@@ -333,11 +350,16 @@ export class DemoPickerComponent {
     this.selectedConverterTarget.set(target);
     this.selectedDemoConverter.set(target ? `${sourceType}2${target}` : '');
     const embeddableType = target || sourceType;
+    this.typeDefaultsApplied.emit(embeddableType);
+    // The demos' readiness depends on both picks: the embedder list re-asks
+    // for it, and so does the clipper list if it lands second with a clipper.
+    let embeddersLoaded = false;
     this.datasetsListingsApi.getEmbedders(embeddableType).subscribe({
       next: (embedders) => {
+        embeddersLoaded = true;
         this.demoEmbedders.set(embedders);
         this.selectedDemoEmbedder.set(
-          this.importDefaults.pickInitialEmbedder(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
+          this.importDefaults.chooseEmbedderForType(embedders, embeddableType, this.mediaTypes(), this.guessedMediaEmbedder()),
         );
         this.updateDemoStatuses();
         if (this.selectedDemoEmbedder()) {
@@ -348,8 +370,14 @@ export class DemoPickerComponent {
     this.datasetsListingsApi.getClippers(embeddableType).subscribe({
       next: (clippers) => {
         this.demoClippers.set(clippers);
-        this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
-        this.demoClipperParamValues.set({});
+        const chosen = this.importDefaults.chooseClipperForType(clippers, embeddableType, this.mediaTypes());
+        this.selectedDemoClipper.set(chosen.name);
+        this.demoClipperParamValues.set(chosen.params ?? {});
+        // A saved clipper changes which demos are ready, as picking it would.
+        if (embeddersLoaded && this.effectiveDemoClipper() && this.selectedDemoEmbedder()) {
+          this.updateDemoStatuses();
+          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
+        }
       },
     });
     this.datasetsListingsApi.getCleaners(embeddableType).subscribe({
@@ -363,7 +391,6 @@ export class DemoPickerComponent {
   /** Handler for the "Convert to" selector on a non-embeddable tab. */
   onConverterTargetChange(target: string): void {
     this.applyConverterTarget(this.activeTab(), target);
-    this.cdr.markForCheck();
   }
 
   /** The demo clipper the user actually chose, or ``''`` when it is a
@@ -458,7 +485,6 @@ export class DemoPickerComponent {
         demoOutputDrafts(this.mediaTypes(), this.activeTab(), this.activeTabConvertsTo(), this.selectedConverterTarget()),
       );
     }
-    this.cdr.markForCheck();
   }
 
   onOutputDraftsChange(drafts: OutputDraft[]): void {
@@ -480,19 +506,18 @@ export class DemoPickerComponent {
 
   /** Invoked via a listener bound on the sibling `<vt-source-picker>`
    *  in the parent's template, so this component isn't on the
-   *  ancestor-marked dirty path; `markForCheck()` covers the plain
-   *  `demoDatasetName` field. */
+   *  ancestor-marked dirty path; every field it resets is a signal, which
+   *  repaints this view on its own. */
   selectDemoTabWithEmbedder(tab: string): void {
     this.selectDemoTab(tab);
     this.selectedDemo.set(null);
     if (!this.demoDatasetNameDirty) {
-      this.demoDatasetName = '';
+      this.demoDatasetName.set('');
     }
-    this.cdr.markForCheck();
   }
 
   onDemoDatasetNameInput(value: string): void {
-    this.demoDatasetName = value;
+    this.demoDatasetName.set(value);
     this.demoDatasetNameDirty = true;
   }
 
@@ -504,9 +529,8 @@ export class DemoPickerComponent {
   selectDemo(demo: DemoDatasetEntry): void {
     this.selectedDemo.set(demo);
     if (!this.demoDatasetNameDirty) {
-      this.demoDatasetName = demo.label || '';
+      this.demoDatasetName.set(demo.label || '');
     }
-    this.cdr.markForCheck();
   }
 
   /** Commit the currently-selected demo.  Bound to the Import footer
@@ -515,7 +539,8 @@ export class DemoPickerComponent {
   submit(): void {
     const demo = this.selectedDemo();
     if (!demo) return;
-    const userName = (this.demoDatasetName || '').trim();
+    this.offerSaveImportDefaults();
+    const userName = this.demoDatasetName().trim();
     if (this.multiDataset()) {
       // One dataset per ticked row, each with its own settings; the
       // single-dataset embedder / clipper / cleanup / Convert to stay home.
@@ -544,5 +569,42 @@ export class DemoPickerComponent {
       merge_near_duplicates: this.mergeNearDuplicates(),
       ...(this.autofind() !== null ? { autofind: this.autofind() } : {}),
     } as any);
+  }
+
+  /** Offer this import's settings as the default.  A Multi-Dataset import is
+   *  filed under the demo's own type; a one-dataset import under the type it
+   *  makes (the "Convert to" target, if any), whose defaults seeded it. */
+  private offerSaveImportDefaults(): void {
+    if (this.multiDataset()) {
+      const tab = this.activeTab();
+      const cfg = this.importDefaults.snapshotMultiDatasetConfig(
+        tab,
+        this.mediaTypes(),
+        this.outputDrafts(),
+        this.buildProjection(),
+        this.mergeNearDuplicates(),
+      );
+      this.importDefaults.maybeOfferSaveImportDefaults(tab, cfg, this.mediaTypes());
+      return;
+    }
+    const typeId = this.selectedConverterTarget() || this.activeTab();
+    const cfg = {
+      ...this.importDefaults.snapshotImportConfig(
+        typeId,
+        this.selectedDemoEmbedder(),
+        this.selectedDemoClipper(),
+        this.demoClipperParamValues(),
+        [],
+        this.demoEmbedders(),
+        this.demoClippers(),
+        this.selectedCleaners(),
+        this.cleaners(),
+      ),
+      ...this.importDefaults.snapshotIngestToggles(this.buildProjection(), this.mergeNearDuplicates()),
+    };
+    // A demo has no Include-media rows to pick; keep the saved ones.
+    const savedSpecs = this.importDefaults.savedSourceSpecs(typeId, this.mediaTypes());
+    if (savedSpecs) cfg.source_specs = savedSpecs;
+    this.importDefaults.maybeOfferSaveImportDefaults(typeId, cfg, this.mediaTypes());
   }
 }

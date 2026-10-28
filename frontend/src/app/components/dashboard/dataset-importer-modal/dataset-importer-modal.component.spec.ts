@@ -7,6 +7,7 @@ import { settleResource, settleZoneless } from '../../../testing/settle-resource
 import { getTabLabel } from './pickers/shared/media-type.util';
 import { provideHttpTesting } from '../../../testing/test-providers';
 import type { ImporterInfo } from '../../../models/api.models';
+import { ImportDefaultsService } from './pickers/shared/import-defaults.service';
 
 describe('DatasetImporterModalComponent', () => {
   let component: DatasetImporterModalComponent;
@@ -199,7 +200,11 @@ describe('DatasetImporterModalComponent', () => {
   /** Flush the embedder + clipper fetches and the embedder-aware demo-list
    *  refetch that fire when a demo media-type tab is selected (either via
    *  the auto-select inside ``buildDemoTabs`` or an explicit user pick). */
-  function flushDemoTabRequests(tab: string, embedders: typeof mockEmbedders): void {
+  function flushDemoTabRequests(
+    tab: string,
+    embedders: typeof mockEmbedders,
+    converters: Array<Record<string, unknown>> = [],
+  ): void {
     httpMock.expectOne(req =>
       req.url === '/api/embedders' && req.params.get('media_type') === tab,
     ).flush({ embedders });
@@ -216,7 +221,7 @@ describe('DatasetImporterModalComponent', () => {
     }
     httpMock.expectOne(req =>
       req.url === '/api/converters' && req.params.get('source') === tab,
-    ).flush({ converters: [] });
+    ).flush({ converters });
   }
 
   /** Open the demo picker and flush the always-issued requests.  Opening
@@ -514,7 +519,7 @@ describe('DatasetImporterModalComponent', () => {
     const file = new File(['contents'], 'a.wav');
     Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
     component.localFolderPicker().files.set([file]);
-    component.localFolderPicker().mediaType = 'audio';
+    component.localFolderPicker().mediaType.set('audio');
     component.localFolderPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import-local-folder');
@@ -540,7 +545,7 @@ describe('DatasetImporterModalComponent', () => {
 
     const pathsFile = new File(['/a.wav\n/b.wav\n'], 'list.txt');
     component.localFolderPicker().files.set([pathsFile]);
-    component.localFolderPicker().mediaType = 'audio';
+    component.localFolderPicker().mediaType.set('audio');
     component.localFolderPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import-local-files');
@@ -570,7 +575,7 @@ describe('DatasetImporterModalComponent', () => {
   it('should pre-populate default values', () => {
     flushImporters();
     component.selectImporter(genericForm());
-    expect(component.genericFormPicker().formValues['media_type']).toBe('audio');
+    expect(component.genericFormPicker().formValues()['media_type']).toBe('audio');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
@@ -600,7 +605,7 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
-    component.genericFormPicker().formValues['path'] = '/data/sounds';
+    component.genericFormPicker().setFormValue('path', '/data/sounds');
     component.genericFormPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/import/generic_form');
@@ -610,6 +615,94 @@ describe('DatasetImporterModalComponent', () => {
 
     expect(component.genericFormPicker().submitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): a picker is opened, and fed
+  // rows and dropped files, from listeners on the sibling <vt-source-picker>,
+  // so nothing marks the picker's own view dirty but its signal writes. No
+  // forced render here, so a write that notifies nothing is stale DOM (#5300).
+  describe('picker forms repaint without a forced render', () => {
+    const el = () => fixture.nativeElement as HTMLElement;
+    const input = (id: string) => el().querySelector(`#${id}`) as HTMLInputElement;
+
+    function clickSubtab(label: string): void {
+      const tabs = Array.from(el().querySelectorAll('.importer-subtab')) as HTMLButtonElement[];
+      tabs.find((b) => (b.textContent || '').includes(label))!.click();
+    }
+
+    function flushTypeLists(): void {
+      httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+      httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+      httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
+    }
+
+    it('resets the server-folder form when the user switches importers and back', async () => {
+      flushImporters();
+      await settleZoneless(fixture);
+      expect(component.activeImporterTab()).toBe('server');
+
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      const path = input('sf-path-input');
+      path.value = '/data/my-photos';
+      path.dispatchEvent(new Event('input'));
+      await settleZoneless(fixture);
+      expect(input('sf-dataset-name').value).toBe('my-photos');
+
+      clickSubtab('Files');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+      expect(input('sf-path-input').value).toBe('');
+      expect(input('sf-dataset-name').value).toBe('');
+    });
+
+    it("enables the generic form's Import button once its required field is typed", async () => {
+      flushImporters();
+      component.selectImporter(genericForm());
+      flushTypeLists();
+      await settleZoneless(fixture);
+      const importButton = () =>
+        (Array.from(el().querySelectorAll('.form-actions .btn--primary')) as HTMLButtonElement[]).find((b) =>
+          (b.textContent || '').includes('Import'),
+        )!;
+      expect(importButton().disabled).toBe(true);
+
+      const path = input('field-path');
+      path.value = '/data/sounds';
+      path.dispatchEvent(new Event('input'));
+      await settleZoneless(fixture);
+      expect(importButton().disabled).toBe(false);
+    });
+
+    it("paints a clicked demo row's name into the demo form", async () => {
+      flushImporters();
+      openAndFlushDemoPicker();
+      await settleZoneless(fixture);
+      expect(input('demo-dataset-name').value).toBe('');
+
+      (el().querySelector('.demo-row') as HTMLElement).click();
+      await settleZoneless(fixture);
+      expect(input('demo-dataset-name').value).toBe('GTZAN');
+    });
+
+    it("paints a dropped folder's name into the local-folder form", async () => {
+      flushImporters();
+      component.selectImporterTab('local');
+      await settleZoneless(fixture);
+      clickSubtab('Folder');
+      flushTypeLists();
+      await settleZoneless(fixture);
+
+      const file = new File(['contents'], 'a.wav');
+      Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
+      component.localFolderPicker().onFilesDropped([file]);
+      await settleZoneless(fixture);
+      expect(input('lf-dataset-name').value).toBe('mydir');
+    });
   });
 
   describe('Advanced toggle in the footer row (#4305)', () => {
@@ -747,6 +840,111 @@ describe('DatasetImporterModalComponent', () => {
     });
   });
 
+  // #5355: what "Save as default" saved for a type - the whole-import toggles
+  // and Multi-Dataset with its kinds - comes back when an import of it starts.
+  describe('saved Import Defaults beyond the Advanced fields', () => {
+    const image2face = { name: 'image2face', source_type: 'image', target_type: 'face' };
+
+    /** Answer whatever embedder / clipper / cleaner lists are open for *type*. */
+    function flushOptionLists(type: string): void {
+      const empty: Record<string, Record<string, unknown[]>> = {
+        '/api/embedders': { embedders: [] },
+        '/api/clippers': { clippers: [] },
+        '/api/cleaners': { cleaners: [] },
+      };
+      httpMock
+        .match((req) => req.url in empty && req.params.get('media_type') === type)
+        .forEach((req) => req.flush(empty[req.request.url]));
+    }
+
+    it("applies the type's saved toggles as the picker lands on it", async () => {
+      flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      await settleResource();
+      openAndFlushDemoPicker();
+      expect(component.buildProjection()).toBe(false); // nothing saved for audio
+      selectDemoTabAndFlush('image', mockImageEmbedders);
+      expect(component.buildProjection()).toBe(true);
+      expect(component.mergeNearDuplicates()).toBe(false);
+      selectDemoTabAndFlush('audio', mockEmbedders);
+      expect(component.buildProjection()).toBe(false);
+    });
+
+    it('leaves the toggles as the user set them', async () => {
+      flushImporters({ import_defaults_by_media_type: { image: { build_projection: true } } });
+      await settleResource();
+      openAndFlushDemoPicker();
+      component.onMergeNearDuplicatesChange(true);
+      selectDemoTabAndFlush('image', mockImageEmbedders);
+      expect(component.buildProjection()).toBe(false);
+      expect(component.mergeNearDuplicates()).toBe(true);
+    });
+
+    it('opens an image demo in Multi-Dataset mode on the saved kinds, and offers the changed kinds as the default', async () => {
+      flushImporters({
+        import_defaults_by_media_type: { image: { multi_dataset: ['image', 'face'], build_projection: true } },
+      });
+      await settleResource();
+      openAndFlushDemoPicker();
+      const demo = component.demoPicker();
+      demo.selectDemoTabWithEmbedder('image');
+      flushDemoTabRequests('image', mockImageEmbedders, [image2face]);
+
+      expect(demo.multiDataset()).toBe(true);
+      const ticked = () => demo.outputDrafts().filter((d) => d.checked).map((d) => d.category);
+      expect(ticked()).toEqual(['image', 'face']);
+      expect(component.buildProjection()).toBe(true);
+
+      // Render, so the picker reads the modal's toggles and the editor loads
+      // each ticked row's option lists.
+      TestBed.tick();
+      flushOptionLists('image');
+      flushOptionLists('face');
+
+      const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
+      demo.onOutputDraftsChange(demo.outputDrafts().map((d) => (d.category === 'face' ? { ...d, checked: false } : d)));
+      demo.selectDemo(mockDemos[1] as any);
+      demo.submit();
+      expect(offer).toHaveBeenCalledWith('image', { multi_dataset: ['image'], build_projection: true }, expect.anything());
+    });
+
+    it('offers a one-dataset demo import as the default too, and starts from a saved embedder', async () => {
+      flushImporters({ import_defaults_by_media_type: { image: { embedder: 'siglip' } } });
+      await settleResource();
+      openAndFlushDemoPicker();
+      const demo = component.demoPicker();
+      demo.selectDemoTabWithEmbedder('image');
+      httpMock.expectOne(req => req.url === '/api/embedders' && req.params.get('media_type') === 'image')
+        .flush({ embedders: mockImageEmbedders });
+      expect(demo.selectedDemoEmbedder()).toBe('siglip');
+      httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'siglip')
+        .flush({ datasets: mockDemos });
+      flushOptionLists('image');
+      httpMock.expectOne(req => req.url === '/api/converters' && req.params.get('source') === 'image')
+        .flush({ converters: [] });
+
+      component.onBuildProjectionChange(true);
+      TestBed.tick();
+      const offer = vi.spyOn(TestBed.inject(ImportDefaultsService), 'maybeOfferSaveImportDefaults');
+      demo.selectDemo(mockDemos[1] as any);
+      demo.submit();
+      expect(offer).toHaveBeenCalledWith('image', { embedder: 'siglip', build_projection: true }, expect.anything());
+    });
+
+    it('opens a folder import in Multi-Dataset mode once its type has a saved Multi-Dataset default', async () => {
+      flushImporters({ import_defaults_by_media_type: { image: { multi_dataset: ['image'] } } });
+      await settleResource();
+      component.openServerFolderBrowser(component.importers().find((i) => i.name === 'server_folder'));
+      flushOptionLists('audio');
+      const picker = component.serverFolderPicker();
+      expect(picker.multiDataset()).toBe(false); // lands on audio: nothing saved
+
+      picker.onMediaTypeChange('image');
+      flushOptionLists('image');
+      expect(picker.multiDataset()).toBe(true);
+      expect(picker.outputDrafts().filter((d) => d.checked).map((d) => d.category)).toEqual(['image']);
+    });
+  });
+
   it('should show error on import failure', () => {
     flushImporters();
     component.selectImporter(genericForm());
@@ -777,7 +975,7 @@ describe('DatasetImporterModalComponent', () => {
 
     component.selectImporter(pickleImp());
     const mockFile = new File(['data'], 'test.pkl');
-    component.genericFormPicker().selectedFile = mockFile;
+    component.genericFormPicker().selectedFile.set(mockFile);
     component.genericFormPicker().submit();
 
     const req = httpMock.expectOne('/api/dataset/load-file');
@@ -884,7 +1082,7 @@ describe('DatasetImporterModalComponent', () => {
     component.demoPicker().selectDemo(mockDemos[0] as any);
     expect(component.demoPicker().selectedDemo()).toBe(mockDemos[0] as any);
     // Auto-populates the Dataset Name from the chosen demo's label.
-    expect(component.demoPicker().demoDatasetName).toBe(mockDemos[0].label);
+    expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
     // No emit/close until the Import footer button is clicked.
     expect(component.demoSelected.emit).not.toHaveBeenCalled();
     expect(component.closed.emit).not.toHaveBeenCalled();
@@ -931,11 +1129,11 @@ describe('DatasetImporterModalComponent', () => {
 
     component.demoPicker().selectDemo(mockDemos[0] as any);
     expect(component.demoPicker().selectedDemo()).not.toBeNull();
-    expect(component.demoPicker().demoDatasetName).toBe(mockDemos[0].label);
+    expect(component.demoPicker().demoDatasetName()).toBe(mockDemos[0].label);
 
     selectDemoTabAndFlush('image', mockImageEmbedders);
     expect(component.demoPicker().selectedDemo()).toBeNull();
-    expect(component.demoPicker().demoDatasetName).toBe('');
+    expect(component.demoPicker().demoDatasetName()).toBe('');
   });
 
   it('should get correct tab label from media types', () => {

@@ -56,10 +56,13 @@ def extract_input_spec_from_medias(
         for key, value in params.items():
             if not isinstance(key, str) or not key.startswith("clipper_"):
                 continue
-            # Skip the bare ``clipper`` key itself (handled above) and
-            # per-clip boundary fields that are not clipper parameters.
+            # Skip the bare ``clipper`` key itself (handled above), per-clip
+            # boundary fields that are not clipper parameters, and the chain
+            # trail (``clipper_chain``): a per-clip JSON record whose bounds
+            # and content hash differ clip to clip, so read as a parameter it
+            # kept any two chain-clipped datasets from ever matching.
             inner = key[len("clipper_") :]
-            if inner in ("", "start", "end", "box", "index"):
+            if inner in ("", "start", "end", "box", "index", "chain"):
                 continue
             clipper_params[inner] = str(value)
         spec: dict[str, Any] = {"clipper": clipper_name}
@@ -162,3 +165,45 @@ def clipper_matches(
     # records ``{"duration": "2.0"}`` and we want a downstream dataset
     # loaded with the same params to match.
     return {str(k): str(v) for k, v in detector_params.items()} == {str(k): str(v) for k, v in dataset_params.items()}
+
+
+def resolve_clipper_spec(name: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Validate a clipper choice and return it as an ``input_spec``.
+
+    *name* must be a registered clipper, and every key of *params* one of its
+    declared :attr:`~vtscore.media.clipper.MediaClipper.parameters` (a typo
+    would otherwise be dropped by ``with_params`` without a word).  The values
+    go through the clipper's own ``with_params``, so a value it cannot take
+    (``duration=abc``, a zero-length tile) is refused here with its message.
+    Raises :class:`ValueError` naming the problem.
+
+    The spec carries the clipper's *effective* parameters, every one of them
+    as a string - the shape :func:`extract_input_spec_from_medias` reads off a
+    clipped dataset - so :func:`clipper_matches` compares it to one exactly:
+    ``duration=5`` and a dataset tiled at ``duration=5.0, min_overlap=0.0``
+    match.  Resolving a spec this returned gives the same spec back.
+    """
+    from vtscore.datasets.clipper_chain import _resolved_clipper_params  # noqa: PLC0415
+    from vtscore.media import all_clippers, get_clipper  # noqa: PLC0415
+
+    try:
+        clipper = get_clipper(name)
+    except KeyError:
+        available = ", ".join(sorted(c.name for c in all_clippers()))
+        raise ValueError(f"Unknown clipper {name!r}. Available: {available}.") from None
+    params = dict(params or {})
+    allowed = {p["key"] for p in clipper.parameters}
+    unknown = sorted(set(params) - allowed)
+    if unknown:
+        takes = f"Its parameters: {', '.join(sorted(allowed))}." if allowed else "It takes none."
+        raise ValueError(f"Clipper {name!r} has no parameter {', '.join(map(repr, unknown))}. {takes}")
+    if params:
+        try:
+            clipper = clipper.with_params(params)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Clipper {name!r} cannot take {params!r}: {exc}") from exc
+    spec: dict[str, Any] = {"clipper": name}
+    effective = {str(k): str(v) for k, v in _resolved_clipper_params(clipper).items()}
+    if effective:
+        spec["clipper_params"] = effective
+    return spec

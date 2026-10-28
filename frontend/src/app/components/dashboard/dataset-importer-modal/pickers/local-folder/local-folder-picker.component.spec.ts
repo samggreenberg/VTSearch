@@ -61,7 +61,7 @@ describe('LocalFolderPickerComponent', () => {
     const file = new File(['a'], 'a.wav');
     Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
     component.onFilesDropped([file]);
-    component.mediaType = 'audio';
+    component.mediaType.set('audio');
 
     let started = false;
     component.importStarted.subscribe(() => (started = true));
@@ -73,6 +73,25 @@ describe('LocalFolderPickerComponent', () => {
 
     expect(component.submitting()).toBe(false);
     expect(started).toBe(true);
+  });
+
+  // Zoneless oracle (docs/FRONTEND.md, *Testing*): the parent hands dropped
+  // files over from a listener on a sibling component, so nothing marks this
+  // view dirty but its own signal writes (#5300).
+  it('paints the dropped folder\'s name, and open() resetting it, without a forced render', async () => {
+    openAndFlush();
+    await settleZoneless(fixture);
+    const name = () => fixture.nativeElement.querySelector('#lf-dataset-name') as HTMLInputElement;
+
+    const file = new File(['a'], 'a.wav');
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
+    component.onFilesDropped([file]);
+    await settleZoneless(fixture);
+    expect(name().value).toBe('mydir');
+
+    openAndFlush();
+    await settleZoneless(fixture);
+    expect(name().value).toBe('');
   });
 
   describe('Multi-Dataset mode (#4703)', () => {

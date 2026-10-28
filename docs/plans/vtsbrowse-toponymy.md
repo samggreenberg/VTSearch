@@ -17,11 +17,8 @@
 > projection, stamped with a `labeler_signature`
 > (`namer|texts_provider:embedder|toponymy=version`) and served only over a
 > matching `projection_id` + signature. `toponymy==0.5.2` installs
-> `--no-deps` (its `transformers<5` pin is empirically unnecessary; real deps
-> declared in `pyproject.toml`; `apricot-select` builds as a plain sdist —
-> no SETUPTOOLS_USE_DISTUTILS shim, which setuptools >= 74 rejects at
-> import); the `slow`-marked smoke test in
-> `tests_lib/projection/test_toponymy_smoke.py` guards that bypass.
+> `--no-deps`; why, and what guards it, is in `docs/SETUP.md` ("Packages
+> installed without their dependency pins").
 > Decision evidence lives in the experiment reports:
 > **`docs/experiments/2026-07-12-toponymy-audio-signposts/`** and
 > **`docs/experiments/2026-07-12-toponymy-image-signposts/`**, with reusable
@@ -71,13 +68,10 @@
 
 <!-- item-sep -->
 
-> **Shipped (opt-in):** the image (`Qwen2.5-VL-3B`) and audio
-> (`MU-NLPC/whisper-small-audio-captioning`) captioner providers now exist in
-> `vtscore/projection/signpost_captioners.py`, wired per media type behind the
-> `browse_signpost_captioner` setting with the zero-shot tag provider retained
-> as a `FallbackTextProvider` (model-load or per-item decode failure degrades
-> to tags). Default stays **tags**; the items below are the validation still
-> owed before either captioner can become the *default*.
+The image (`Qwen2.5-VL-3B`) and audio (`MU-NLPC/whisper-small-audio-captioning`)
+captioners exist opt-in (`vtscore/projection/signpost_captioners.py`, behind the
+`browse_signpost_captioner` setting, falling back to tags); the items below are
+the validation owed before either becomes the default.
 
 <!-- item-sep -->
 

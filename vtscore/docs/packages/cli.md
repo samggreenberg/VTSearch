@@ -16,6 +16,7 @@ both modules use for status output (human prose or NDJSON).
 | `vtscore/cli.py` | The imperative autodetect pipeline - four entry points plus helpers |
 | `vtscore/cli_pipeline.py` | Parse a YAML pipeline file into the same call shape |
 | `vtscore/cli_progress.py` | Format-aware status emitter (human prose or NDJSON) |
+| `vtscore/cli_resume.py` | The checkpoint a resumable streamed run (`resume=True`) keeps beside its output |
 
 **See also:** [`docs/CLI.md`](../../../docs/CLI.md) for the user-facing
 `python app.py --autodetect` reference; the functions documented here
@@ -59,9 +60,11 @@ builds - i.e. in how it produces media chunks:
 
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`,
-`stream_results=False`, `keep_negatives=False`, `save_dataset=False` and
-`override_detectors=None`; the two importer variants also take
-`outputs=None` (several datasets from one import; see [Behaviour](#behaviour)).
+`stream_results=False`, `keep_negatives=False`, `save_dataset=False`,
+`override_detectors=None` and `override_clipper=None` (an `input_spec`,
+`{"clipper": name, "clipper_params": {...}}`, that every detector is scored
+at in place of its own; see [Behaviour](#behaviour)); the two importer
+variants also take `outputs=None` (several datasets from one import).
 They catch every
 exception, report it via `cli_progress.emit_error()`, and
 `sys.exit(1)` - i.e. they're meant to be called from a
@@ -80,8 +83,10 @@ def autodetect_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
@@ -94,8 +99,11 @@ def autodetect_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
+    override_clipper: dict[str, Any] | None = None,
+    resume: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
@@ -108,9 +116,11 @@ def autodetect_importer_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -124,9 +134,12 @@ def autodetect_importer_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    as_labelset: bool = False,
     save_dataset: bool = False,
     override_detectors: list[str] | None = None,
     outputs: list[OutputSpec] | None = None,
+    override_clipper: dict[str, Any] | None = None,
+    resume: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
@@ -138,28 +151,16 @@ def autodetect_importer_main_chunked(
   importer's `validate_cli_field_values`, then call `run_cli(...)` or
   `run_chunked_cli(...)` (thin when the importer's `reference_files`
   field asks for it) and embed whatever the load left unembedded.
-- **`save_dataset=True`** first imports the source through the GUI's load
-  pipeline and registers it, then scores the saved pickle; having no
-  applicable detector ends the run with a `detection_skipped` event instead of
-  an error. When the run's `CoreConfig.autofind_cli_delete_dataset` is on, the
-  dataset it imported is unregistered (pickle included) once its detectors have
-  scored it and the exporter has run, with a `dataset_deleted` event. A run
-  that detected nothing or failed keeps it, and so does a pickle that already
-  was a registered dataset, since the run did not import it.
-- **Several datasets from one import.** `outputs=[OutputSpec, ...]`
-  (`vtscore.datasets.importers.base`) makes the one importer run produce one
-  dataset per entry, the dashboard's multi-dataset import. Each dataset is
-  then its own pass of `_run_pipeline`: its own applicable AutoFind detectors,
-  its own results (carrying a `dataset` block) and its own exporter run. The
-  exporter's destination tells them apart: `{dataset_name}` in any field is
-  replaced by the dataset's name, and with no such placeholder a run of
-  several datasets inserts the name before a `filepath` field's extension. A
-  dataset whose import failed is reported (`dataset_failed`) and skipped, and
-  the run exits non-zero only once every other dataset is scored and
-  exported; a temporary run also fails when no detector applied to any
-  dataset. The importer must make several datasets per run (it declares a
-  `media_type` field and has not set `multi_output = False`). The pipeline
-  YAML's `importer.outputs:` list takes the same entries.
+- **`save_dataset=True`** imports the source through the GUI's load
+  pipeline, registers it, then scores the saved pickle (a `detection_skipped`
+  event when no detector applies; a `dataset_deleted` event when the
+  `autofind_cli_delete_dataset` setting removes it afterwards).
+  **`outputs=[OutputSpec, ...]`** (`vtscore.datasets.importers.base`) makes
+  one importer run produce one dataset per entry, each its own
+  `_run_pipeline` pass. The user-facing rules for both - what is kept, what
+  is deleted, how several datasets' exports are told apart, the exit code -
+  are in [`docs/CLI.md`](../../../docs/CLI.md#saving-the-dataset-to-the-dashboard---tempimport)
+  and its [Sources](../../../docs/CLI.md#sources) section.
 - **Chunked variants** stream the source in `chunk_size`-sized
   batches; peak RAM stays at roughly `chunk_size` medias regardless
   of total length. Detectors are trained **once** against the first
@@ -190,6 +191,28 @@ def autodetect_importer_main_chunked(
   key are narrower still: both also require a chunk size. The exporter must
   declare `supports_streaming`, or the run fails with the list of exporters
   that do.
+- **`as_labelset=True`** (with `stream_results`; refused without it) streams
+  the hits as label entries instead, through the exporter's
+  `export_labelset_streaming`: every detector's entries in one export, each
+  naming its `detector`, with no score, threshold or balance. The exporter must
+  report `supports_labelset_streaming`. The CLI flag is `--as-labelset`; the
+  pipeline-YAML key is `as_labelset:`.
+- **`resume=True`** (the two chunked entry points only, with `stream_results`;
+  refused with `as_labelset` or `outputs`) makes the stream resumable: the
+  exporter's `export_cli_streaming_resumable` writes in place, a checkpoint
+  beside its `resumable_stream_path` (`<path>.resume.json`) is saved after
+  every chunk, and a later call with the same arguments continues after the
+  last chunk it records instead of starting over. It checks the run is the
+  same one first (source, chunk size, detectors' labels, settings, what is
+  scored, exporter fields), walks the completed chunks to check them
+  against their fingerprints without embedding or scoring them (an importer
+  that overrides `run_chunked_cli_deferred`, as `server_folder` does, is not
+  asked to read their files), retrains on the same first chunk and keeps the
+  recorded thresholds; any mismatch raises
+  `vtscore.cli_resume.ResumeRefusedError` (a `ValueError`). The checkpoint is
+  removed when the run completes. The CLI flag is `--resume`; the
+  pipeline-YAML key is `resume:`. See `vtscore/cli_resume.py` for the
+  checkpoint's contents and guarantees.
 
 ```python
 from vtscore.cli import autodetect_main, autodetect_importer_main
@@ -222,29 +245,9 @@ validation), so a typo fails fast. The `Save to dashboard:` line follows
 `save_dataset`, which defaults to `False` here; `python app.py` passes `True`
 unless `--tempimport` is set.
 
-In `text` format the plan is printed as labelled sections:
-
-```
-DRY RUN - no media will be loaded, embedded, scored, or exported.
-
-Source:
-  Importer: server_folder
-  Params:
-    path: /srv/sounds
-    media_type: audio
-  Chunk size: whole dataset
-  Save to dashboard: no (--tempimport: the dataset is discarded after detection)
-
-Settings: data/settings.json
-AutoFind detectors (1):
-  - my-detector  [media_type=audio, labels=42, file=data/detectors/my-detector.json]
-
-Exporter: server_json_file
-  filepath: results.json
-```
-
-In `json` format the same information is emitted as a single
-`dry_run_plan` NDJSON event.
+In `text` format the plan is printed as labelled sections (an example is
+in [`docs/CLI.md`](../../../docs/CLI.md#dry-run-mode)); in `json` format
+it is a single `dry_run_plan` NDJSON event.
 
 ### One-shot label-import helpers
 
@@ -295,21 +298,33 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
 `save_dataset` is set; a multi-dataset source runs it once per dataset). The
 interesting steps:
 
-1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`
-   and resolve the exporter (explicit name, else `autofind_exporter`).
+1. Apply `settings_path` with `redirect_settings_path()`, read the
+   AutoFind list with `get_setting()`, and resolve the exporter (explicit
+   name, else `autofind_exporter`).
 2. If `dry_run`, validate + emit the plan and return without consuming
    the source.
 3. If `stream_results`, hand off to the streaming path
    (`_run_streaming_pipeline`): train on the first chunk, then pass the
    exporter a header plus a lazy `(detector_name, hit)` iterator via
-   `export_cli_streaming`.
+   `export_cli_streaming`, or, with `as_labelset`, a lazy iterator of label
+   entries via `export_labelset_streaming`. A resumable run
+   (`_run_resumable_streaming_pipeline`) passes one list of records per
+   chunk to `export_cli_streaming_resumable` and saves its checkpoint each
+   time the exporter commits.
 4. Otherwise iterate the source chunk by chunk. On the first non-empty
    chunk, train each AutoFind (or `override_detectors`) detector via
    `_load_and_train_detectors`. A detector whose `media_type` has no
    direct or one-hop converter route from the dataset's types is
    *skipped* with a `detector_skipped` event; one whose
    `input_spec.clipper` doesn't match the dataset is *re-clipped* at
-   scoring time (a `detector_reclip` event), not skipped. Nobody can
+   scoring time (a `detector_reclip` event), not skipped. An
+   `override_clipper` takes the place of every detector's `input_spec`
+   (#5282): it is validated with
+   `vtscore.detectors.input_spec.resolve_clipper_spec` before anything is
+   loaded, re-clips unless the dataset already matches it (a `*_default`
+   clipper never does), and raises `ValueError` for a detector whose media
+   type it does not clip; its `detector_reclip` event adds
+   `override_input_spec`. Nobody can
    vote in a headless run, so a detector's line is never spot-checked:
    it exports the set its line keeps, unchecked, and is announced with a
    `detector_unchecked` event; every result it produces carries the
@@ -353,43 +368,19 @@ def run_pipeline_file(path: str | Path) -> None:
 validates the shape, and returns a normalised config dict ready for
 `run_pipeline_file` to dispatch.
 
-**Top-level keys** (any combination, but exactly one of `dataset:` or
-`importer:` must be set):
-
-| Key             | Type                  | Meaning                                                                  |
-|-----------------|-----------------------|--------------------------------------------------------------------------|
-| `dataset`       | `str` path            | Path to a dataset pickle.                                                |
-| `importer`      | `{name, fields?, outputs?}` | Importer name + per-field values. Mutually exclusive with `dataset`. `outputs:` (one mapping per dataset, the keys an `OutputSpec` takes; each needs `media_type`) makes several datasets from one run, and excludes `fields.media_type` / `fields.source_specs`. |
-| `settings`      | `str` path            | Override settings file path.                                             |
-| `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only. Defaults to `[import_labels.detector]` when `import_labels` is set. |
-| `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
-| `tempimport`    | `bool`                | Discard the dataset after detection instead of saving it (`save_dataset=False`). Default `false`. |
-| `stream_results` | `bool`               | Stream hits to the exporter (see above). Requires `chunk_size` and `tempimport: true`. |
-| `keep_negatives` | `bool`               | Also stream below-threshold hits. Requires `stream_results`.             |
-| `import_labels` | `{detector, importer?, file?, create?, media_type?}` | Run a label importer + merge into a detector before scoring. `importer` is a `{name, fields?}` mapping or a bare name (default `server_json_file`); `file` is shorthand for its `filepath` field. `create: true` makes the detector if it is missing (`media_type` overrides the source's). |
-| `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
+The file's schema - exactly one of `dataset:` / `importer:`, plus
+`settings`, `detectors`, `chunk_size`, `tempimport`, `stream_results`,
+`keep_negatives`, `as_labelset`, `resume`, `import_labels`, `exporter` and
+`override_clipper` - is documented with an
+annotated example in [`docs/CLI.md`](../../../docs/CLI.md#pipeline-file).
+An `importer.outputs:` list takes the keys an `OutputSpec` takes (each
+entry needs `media_type`) and is mutually exclusive with both
+`importer.fields.media_type` and `importer.fields.source_specs`.
 
 Unknown top-level keys raise `ValueError`; a missing file raises
 `FileNotFoundError`. Field-key validation happens against the live
 plugin registry - a typo in `importer.name` or any `fields.*` key
 fails at parse time before media touches RAM.
-
-```yaml
-# pipeline.yaml
-importer:
-  name: server_folder
-  fields:
-    path: /srv/sounds
-    media_type: audio
-settings: data/settings.json
-detectors:
-  - my-detector
-chunk_size: 256
-exporter:
-  name: server_csv_file
-  fields:
-    filepath: out.csv
-```
 
 ```python
 from vtscore.cli_pipeline import load_pipeline_file, run_pipeline_file
@@ -413,6 +404,59 @@ a detector list inline without mutating `settings.json`. A
 `sys.exit(1)`. Its output follows the `cli_progress` format, so call
 `cli_progress.set_format("json")` first for an NDJSON stream; the label
 import is a `labels_imported` event, as it is for `--import-labels-into`.
+
+## `vtscore.cli_resume` - resume checkpoints
+
+Source: `vtscore/cli_resume.py`. The checkpoint a `resume=True` run (CLI
+`--resume`) saves beside its output, `<path>.resume.json`, after every chunk
+the exporter commits, and the checks a later run makes before it continues:
+
+```python
+class StreamCheckpoint:                    # path, identity, chunks_done, chunk_digests, thresholds, position
+    @classmethod
+    def load(cls, path: Path) -> StreamCheckpoint | None: ...
+    def save(self) -> None: ...
+    def clear(self) -> None: ...
+    def check_identity(self, identity: dict) -> None: ...
+    def check_chunk(self, position: int, fingerprint: str) -> None: ...
+    def check_reached(self, chunks_seen: int) -> None: ...
+    def pin_thresholds(self, detector_mlps: dict) -> dict[str, tuple[float, float]]: ...
+
+class ResumeRefusedError(ValueError): ...
+
+def run_identity(*, source, chunk_size, detectors, settings, scoring, output) -> dict: ...
+def detector_identity(det: dict | None) -> dict: ...
+def chunk_digest(chunk: dict[int, dict]) -> str: ...
+def key_digest(count: int, key: Any) -> str: ...
+def checkpoint_path_for(output_path) -> Path: ...
+def exclusive_run(output_path): ...        # context manager
+```
+
+- **Identity** is a SHA-256 digest per section (source and its parameters,
+  detectors' labels, settings, what is scored, exporter fields) plus the chunk
+  size as it stands, so an importer's field values never land in the file.
+  `check_identity` names every section that differs.
+- **Fingerprints** are 64 bits per chunk, taken before embedding. A chunk
+  the importer yields with a `key` (a `DeferredChunk` from
+  `run_chunked_cli_deferred`; for `server_folder`, each file's relative path,
+  size and mtime) is fingerprinted by `key_digest` over its media count and
+  that key, and a resumed run passes it without building it. Any other chunk
+  is built and fingerprinted by `chunk_digest`, over each media's `id`,
+  `filename`, `origin_name`, `md5` and clip bounds. A resumed run
+  `check_chunk`s each completed chunk, so a file added, removed or rewritten
+  in the part already done is refused at the first chunk it moved (a rewrite
+  that keeps a file's size and mtime goes unnoticed in a keyed chunk; its
+  results are already written). The checkpoint's `format` is
+  `vtsearch-stream-checkpoint/v2`; an older one is refused as unreadable.
+- **Thresholds**: `pin_thresholds` sets each retrained detector's cut back to
+  the recorded one and refuses a move past `THRESHOLD_DRIFT_LIMIT` (`1e-3`).
+- **The lock**: `exclusive_run` takes a non-blocking `flock` on
+  `<path>.resume.lock` for the run's length, so a second run on the same
+  output raises `ResumeRefusedError` instead of interleaving with the first.
+
+Every refusal is a `ResumeRefusedError`, a `ValueError`, whose message names
+the checkpoint to delete to start over. Only digests, byte offsets and
+thresholds are stored: no embedding and no model weight.
 
 ## `vtscore.cli_progress` - format-aware output
 
@@ -492,8 +536,12 @@ lists the extra fields.
 |--------------------|-------------------------------------------------------------------|---------------------------------------|
 | `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
+| `chunk_skipped`    | `chunk_num: int`, `chunk_size: int`, `read: bool` (a completed chunk a resumed run checked, not scored; `read` is `false` when its importer's walk checked it without reading its files) | `_ResumableChunks.records` in `cli.py` |
+| `resume_start`     | `checkpoint: str`, `chunks_done: int`, `resumed: bool` (`false` for a resumable run starting fresh) | `_run_resumable_streaming_pipeline` in `cli.py` |
+| `resume_threshold_kept` | `detector`, `retrained: float`, `recorded: float` (the retrained cut moved within noise; the recorded one is kept) | `_write_resumable_stream` in `cli.py` |
+| `resume_complete`  | `checkpoint: str` (now removed), `chunks: int`                    | `_run_resumable_streaming_pipeline` in `cli.py` |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
-| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
+| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`, plus `override_input_spec` when the clipper override did it | `_input_spec_reclip` / `_override_reclip` in `cli.py` |
 | `detector_unchecked` | `detector`, `beta`, `status` (`unchecked`), `count` (the exported set's size) | `_record_line_state` in `cli.py` |
 | `detector_centroid` | `detector`, `tier` (`centroid`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4643), `hold_labels`, `hold_owed` (`0`) | `_report_centroid` in `cli.py` |
 | `detector_query`   | `detector`, `query` (the typed query), `tier` (`query`), `n_good`, `n_bad`, `goods_owed`, `bads_owed`, `good_quota`, `bad_quota`, `dry_bad_quota` (#4758), `hold_labels`, `hold_owed` (past the quota, held on the query, #4889) | `_report_centroid` in `cli.py` |
@@ -506,7 +554,7 @@ lists the extra fields.
 | `dataset_deleted`  | `dataset_id`, `name`                                              | `_delete_after_detection` in `cli.py` |
 | `labels_imported`  | `detector`, `applied`, `skipped`, `created`                       | `_import_labels` in `cli_pipeline.py` |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
-| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
+| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `override_clipper` (the clipper override's `input_spec`, or `null`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`; `dataset` while a multi-dataset run imports | `progress_callback`, `_relay_import_progress` |
 | `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
@@ -537,8 +585,8 @@ events on stdout.
   [`docs/CLI.md`](../../../docs/CLI.md). The
   functions documented here are the underlying primitives those
   flags call.
-- [`config.md`](config.md) explains `CoreConfig.from_settings()`,
-  which the pipeline builds once per invocation.
+- [`config.md`](config.md) explains `get_setting()` and
+  `redirect_settings_path()`, which the pipeline reads its knobs through.
 - [`utils.md`](utils.md) documents `build_media_hit`, the helper
   every detector-score row goes through before the exporter sees
   it.

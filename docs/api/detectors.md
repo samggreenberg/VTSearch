@@ -390,7 +390,9 @@ Runs the label importer and creates a detector seeded with the labels it
 returns (entries labelled neither `good` nor `bad` are counted in `skipped`).
 The media type is inferred from the labels' origins; labels spanning more than
 one media type, or none whose origin names one, are rejected (400). A missing
-`name` is a 422; a taken one a 409.
+`name` is a 422; a taken one a 409. The new registry entry keeps how it was
+imported as `imported` (the importer, its fields, the time), which
+[the detector's stats](#detector-statistics) return.
 
 → (201)
 ```json
@@ -434,7 +436,7 @@ the GUI this is the Dashboard's Drafts ↔ AutoFind detector-tab move:
 Drafts. 403 if the caller cannot access the detector; 404 if it does not
 exist.
 
-### Load / unload detector
+### Load (or unload) the active detector
 
 ```
 POST /api/detectors/registry/load
@@ -457,7 +459,7 @@ Loading is async; subscribe to the `detector-loading-tasks` channel
 on [`/api/events`](events.md) (SSE) for progress. 403 if access is denied; 404
 if the detector is not in the registry.
 
-### Unload detector
+### Unload a registered detector
 
 ```
 POST /api/detectors/registry/{detector_id}/unload
@@ -557,6 +559,14 @@ one, else the one it last trained in), `embedder_type`, query and example,
 the `size` items scored), `labelled` (the picks the ranges rest on),
 `precision` / `recall` / `fbeta` as `{point, lo, hi}` ranges, a plain-language
 `found` line, and `stale`.
+
+`imported` says how a label importer created the detector (through
+[`from-labelset`](#register-detector-from-a-label-importer) or the CLI's
+`--import-labels-into … --create-detector`): `{"importer": "server_json_file",
+"params": {"filepath": "/data/labels/cats.json"}, "imported_at": 1761580800.0}`.
+`params` holds the fields the importer ran with, minus `file` and `password`
+fields, the policy a dataset origin follows. It is `null` for a detector made
+any other way. The Stats dialog's *Import* section reads it.
 
 403 if the caller cannot access the detector; 404 if it does not exist.
 

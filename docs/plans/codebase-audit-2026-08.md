@@ -1,39 +1,19 @@
 # Codebase audit — August 2026
 
-**Background.** A full-codebase inspection was run at `00664df5` (dev): fourteen
-specialist reviewers over disjoint areas (~118 k lines Python, ~44 k lines
-TypeScript), each reported finding then handed to an independent verifier
-prompted to *refute* it against the code and defaulting to "not real" when
-uncertain. 69 bugs survived that pass; 3 claims were refuted and dropped, and one
-more (#2972) was withdrawn after a second suite run disproved it. The
-repo's own gates were green throughout (7 860 tests, ruff, format, frontend
-build), so everything below came from reading code, not from a broken build.
-
-**What is still owed** is the improvement proposals below. The audit's confirmed
-defects were filed as GitHub issues and have all shipped. The proposals that turned
-out to be discrete defects were promoted to issues in October 2026 (#4972) and stay
-here only as pointer lines; the rest are design directions, whose bodies live here
-and nowhere else. Delete a proposal when it ships or is rejected.
-
----
+**Background.** A full-codebase review at `00664df5` (dev), with every finding
+checked by a verifier prompted to refute it. Its confirmed defects were filed as
+issues and have all shipped; the proposals that turned out to be discrete defects
+were promoted to issues in October 2026 (#4972). What is left are the design
+directions below, whose bodies live here and nowhere else. Delete a proposal when
+it ships or is rejected.
 
 ## Improvement proposals
 
-Design and architecture directions surfaced by the same review. The bodies here
-are deliberately **not** issues: each is a judgement call about direction rather
-than a defect with a right answer, and several are alternatives to one another.
-Promote one to an issue (and replace its body with a pointer line) when it becomes
+These are deliberately **not** issues: each is a judgement call about direction
+rather than a defect with a right answer. Promote one to an issue (and replace its body with a pointer line) when it becomes
 concrete enough to ship on its own.
 
 ### Flask API layer
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
 
 <!-- item-sep -->
 
@@ -49,78 +29,11 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
 - **Achievements persist a full settings-file RMW plus a source push on every single vote** — `vtsearch/achievements.py` (medium impact)
 
   `record_vote` runs `mutate_user(...)` per vote (achievements.py), and `mutate_user` is heavyweight by design: cross-process flock on the user settings file, fresh `_load_path` re-read, full-dict `json.dumps` + `fsync` + rename (`_atomic_write`, settings_store.py), then a dirty-marking pass over *every* exportable key and a `_sync_to_source` push (settings.py) — which for a configured source means a second full serialize/write (plus a `peek_version` stat and a `.syncmark` write). A user hand-labeling in the Train flow votes multiple times per second, so each click costs 3-4 fsync'd file writes and lock round-trips on the request path, and the achievement counters share a file (and its lock) with every other settings read/write, amplifying contention on the settings lock. The `days_seen`/`docs_read_ids`/`trained_detector_ids` lists also use O(n) `in` checks on every vote (achievements.py), which grows linearly with days active. Benefit: batching (e.g. accumulate credits in-process and flush on a short timer or every N votes, as the counters are approximate milestones anyway) or moving `achievement_state` to its own small file outside the settings-sync machinery would remove the per-click fsync+push cost and cut settings-lock traffic substantially.
 
   *Direction:* Accumulate vote credits in a process-local per-user buffer and flush to disk on a debounce (e.g. 5s or on get_full_state), and/or store achievement_state in a dedicated per-user file excluded from settings-source export.
-
-<!-- item-sep -->
-
-### State & concurrency
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-### Training & detectors
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-### Media & embedding
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-### Datasets & IO
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-### Eval harness
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-### Projection, plugins & security utils
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 
 <!-- item-sep -->
 
@@ -130,7 +43,7 @@ concrete enough to ship on its own.
 
 - **Three near-identical dynamic plugin-field form engines should collapse into one shared component** — `frontend/src/app/components/modals/label-importer-modal/label-importer-modal.component.ts` (medium impact)
 
-  The plugin-field form machinery — default seeding (`field.default`, first static option for strict selects), dynamic-options fetching with per-key loading/error maps, `depends_on` cascades, free-text datalist vs strict select rendering, file-field capture, and the full template branch ladder for server_path/file/password/email/url/select/number/text — is implemented three times with only cosmetic differences: label-importer-modal.component.ts, new-detector-modal.component.ts (the trained tab, with `nmm-` id prefixes in its template), and plugin-import-form.component.ts. new-detector-modal's own comment admits it exists "mirroring label-importer-modal ... with full parity". Divergence has already crept in (plugin-import-form validates required fields in `canSubmit`; the trained tab does not, so a missing required file only fails server-side), though the stale-response guard for dynamic options is already shared (`frontend/src/app/utils/dynamic-field-options.ts`). A single `vt-plugin-fields-form` component taking `fields` + an options-fetch fn and emitting `{values, file, fileFieldKey}` would delete roughly 600 lines and make future field types land once.
+  The plugin-field form machinery — default seeding (`field.default`, first static option for strict selects), dynamic-options fetching with per-key loading/error maps, `depends_on` cascades, free-text combobox vs strict select rendering, file-field capture, and the full template branch ladder for server_path/file/password/email/url/select/number/text — is implemented three times with only cosmetic differences: label-importer-modal.component.ts, new-detector-modal.component.ts (the trained tab, with `nmm-` id prefixes in its template), and plugin-import-form.component.ts. new-detector-modal's own comment admits it exists "mirroring label-importer-modal ... with full parity". Divergence has already crept in (plugin-import-form validates required fields in `canSubmit`; the trained tab does not, so a missing required file only fails server-side), though the stale-response guard for dynamic options is already shared (`frontend/src/app/utils/dynamic-field-options.ts`). A single `vt-plugin-fields-form` component taking `fields` + an options-fetch fn and emitting `{values, file, fileFieldKey}` would delete roughly 600 lines and make future field types land once.
 
   *Direction:* Extract a shared standalone component (fields input, getFieldOptions fn input, values/file outputs); adopt it in all three call sites. Backwards-compat breakage is acceptable per repo policy.
 
@@ -144,13 +57,7 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-
-<!-- item-sep -->
-
 ### Frontend — services & views
-
-<!-- item-sep -->
-
 
 <!-- item-sep -->
 
@@ -162,26 +69,7 @@ concrete enough to ship on its own.
 
 <!-- item-sep -->
 
-
-<!-- item-sep -->
-
 ### Frontend — styles & templates
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
 
 <!-- item-sep -->
 
@@ -190,24 +78,5 @@ concrete enough to ship on its own.
   The repo's own `.claude/scripts/style-check.py` still reports un-annotated raw px/rem spacing/font hits, raw z-indexes, raw decorative-dim opacities and a heading restyle — i.e. the guide is drifting despite the tooling existing. Concrete examples verified by reading the code: this file's `gap: 0.35rem` (the token `--space-sm` is 0.375rem) and `opacity: 0.7` on `.help-icon` at rest (the exact "dimmed icon" case §1.10 created `--opacity-dim` for; center-panel.component.scss and autopilot-panel.component.scss have the same raw 0.7); `gap: 2px` in browse-legend.component.scss and label-list.component.scss (`--space-2xs`); and label-list.component.scss restyling `h3` to `--font-sm`/regular weight — anti-pattern 7, where the element is really a small section label, not an h3. Unlike ruff/codespell, this checker runs only when someone remembers `/style-check`, so violations land silently in PRs whose authors never open the guide.
 
   *Direction:* Sweep the current curated hits (most are one-line token swaps; the intentional off-scale ones already carry `// kept exact` annotations the script honors), then wire `style-check.py` into run-tests.sh as a gate the way the screenshots wiring-check already is, with an annotation/whitelist mechanism for the deliberate exceptions.
-
-<!-- item-sep -->
-
-### Security
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-### Tests & tooling
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
-
-
-<!-- item-sep -->
 
 <!-- item-sep -->

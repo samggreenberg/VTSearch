@@ -14,7 +14,7 @@ import { DialogHostComponent } from './components/dialog-host/dialog-host.compon
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
 import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
-import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { SettingsModalComponent, type SettingsTabId } from './components/modals/settings-modal/settings-modal.component';
 import { AchievementsModalComponent } from './components/modals/achievements-modal/achievements-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
 import { LoginComponent } from './components/login/login.component';
@@ -36,6 +36,7 @@ import { AuthService } from './services/auth.service';
 import { HuggingFaceAuthService } from './services/huggingface-auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { SettingsStateService } from './services/settings-state.service';
+import { SettingsPanelService } from './services/settings-panel.service';
 import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
@@ -44,6 +45,7 @@ import { TrainingDomainAlertService } from './services/training-domain-alert.ser
 import { AutoFindService } from './services/autofind.service';
 import { AutopilotStateService } from './services/autopilot-state.service';
 import { ToastyHintComponent } from './components/toasty-hint/toasty-hint.component';
+import { AboveDialogsDirective } from './directives/above-dialogs.directive';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -73,6 +75,7 @@ import { isPairCompatible } from './utils/context-compat';
     NewDetectorModalComponent,
     AutoDetectResultsModalComponent,
     ToastyHintComponent,
+    AboveDialogsDirective,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
@@ -87,6 +90,7 @@ export class AppComponent {
   auth = inject(AuthService);
   achievements = inject(AchievementsService);
   private settingsState = inject(SettingsStateService);
+  private settingsPanel = inject(SettingsPanelService);
   private themeService = inject(ThemeService);
   private newThingFlows = inject(NewThingFlowsService);
   private hfAuth = inject(HuggingFaceAuthService);
@@ -101,7 +105,8 @@ export class AppComponent {
 
   title = 'VTSearch';
   menuOpen = false;
-  showSettings = false;
+  // Signals: also opened from the `settingsPanel.requests$` subscribe (async).
+  readonly showSettings = signal(false);
   // Written from the `achievements.openPanelRequest$` subscribe (async) as well
   // as bound click handlers, so a signal so the panel opens under zoneless.
   readonly showAchievements = signal(false);
@@ -114,7 +119,11 @@ export class AppComponent {
   // Written from the router-events subscribe (async); template-bound.
   readonly isOnLabelView = signal(false);
   private readonly isOnBrowseView = signal(false);
-  settingsViewTab = '';
+  readonly settingsViewTab = signal('');
+  /** The rail tab, and whether the importer is up, that a
+   *  `SettingsPanelService` request opens Settings with (#5344). */
+  readonly settingsTab = signal<SettingsTabId | ''>('');
+  readonly settingsImporter = signal(false);
   /** True when the current route consumes the active pair (label / find)
    *  and the pair is not compatible, so the explainer takes over the
    *  router-outlet area in that state.
@@ -164,6 +173,11 @@ export class AppComponent {
       );
     });
     this.achievements.refresh();
+    this.settingsPanel.requests$.subscribe((request) => {
+      this.onSettings();
+      this.settingsTab.set(request.tab);
+      this.settingsImporter.set(!!request.importer);
+    });
     this.achievements.openPanelRequest$.subscribe(() => {
       this.showAchievements.set(true);
       this.achievements.acknowledgeAll();
@@ -335,13 +349,23 @@ export class AppComponent {
   onSettings(): void {
     this.menuOpen = false;
     this.gearClosing = false;
-    this.settingsViewTab = this.inferMediaType();
-    this.showSettings = true;
+    this.settingsViewTab.set(this.inferMediaType());
+    this.settingsTab.set('');
+    this.settingsImporter.set(false);
+    this.showSettings.set(true);
   }
 
   onSettingsClosed(): void {
-    this.showSettings = false;
+    this.showSettings.set(false);
     this.gearClosing = true;
+    this.settingsPanel.closed();
+  }
+
+  onSettingsImported(): void {
+    this.settingsPanel.noteImported();
+    // The modal reloads only its own copy; every other reader of the
+    // settings would keep the values from before the import.
+    this.settingsState.load();
   }
 
   onAchievements(): void {

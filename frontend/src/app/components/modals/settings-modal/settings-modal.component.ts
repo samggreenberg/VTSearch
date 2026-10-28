@@ -90,7 +90,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   readonly hfStatus = this.hfAuth.status;
 
   readonly preselectedViewTab = input('');
+  /** The rail tab to open on ('' = General), for a caller that opens Settings
+   *  for one purpose (#5344's AutoFind prompt). */
+  readonly initialTab = input<SettingsTabId | ''>('');
+  /** Open the settings importer over the modal straight away. */
+  readonly startWithImporter = input(false);
   readonly closed = output<void>();
+  /** A settings import was applied. */
+  readonly imported = output<void>();
 
   readonly settings = signal<AppSettings>({ volume: 50 });
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
@@ -146,6 +153,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    if (this.initialTab()) this.activeSettingsTab.set(this.initialTab() as SettingsTabId);
+    if (this.startWithImporter()) this.showImporterModal = true;
     this.hfAuth.refresh();
 
     // Keep the "Browser motion" status line live if the user flips their OS
@@ -237,10 +246,14 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   /** Toasty's hints (#4680): Hide All has nothing to do once "Hide all
-   *  hints" is on, and Show All has nothing to do while no hint is hidden. */
+   *  hints" is on, and Show All has nothing to do while no hint is hidden,
+   *  by hand or by a first use of the feature it teaches (#5360). */
   readonly allHintsHidden = computed(() => this.settings().hide_all_hints === true);
   readonly noHintsHidden = computed(
-    () => !this.settings().hide_all_hints && (this.settings().hidden_hints ?? []).length === 0,
+    () =>
+      !this.settings().hide_all_hints &&
+      (this.settings().hidden_hints ?? []).length === 0 &&
+      (this.settings().used_features ?? []).length === 0,
   );
 
   /** Hide All: the same switch as a hint's "Hide all hints" box. */
@@ -249,9 +262,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Show All: every hint back, including ones hidden one at a time. */
+  /** Show All: every hint back, including ones hidden one at a time and ones
+   *  a feature's first use retired. */
   onShowAllHints(): void {
-    this.settings.update((s) => ({ ...s, hide_all_hints: false, hidden_hints: [] }));
+    this.settings.update((s) => ({ ...s, hide_all_hints: false, hidden_hints: [], used_features: [] }));
     this.save();
   }
 
@@ -615,6 +629,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   onImportComplete(): void {
+    // Applied server-side already, so say so now: closing before the reload
+    // below lands would cancel it.
+    this.imported.emit();
     // Reload settings from the server after import
     this.settingsApi
       .getSettings()

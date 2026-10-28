@@ -467,6 +467,12 @@
             ],
             "type": "string"
           },
+          "used_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "volume": {
             "type": "number"
           }
@@ -538,29 +544,6 @@
           "detectors_run",
           "media_type",
           "missing_detectors",
-          "results"
-        ],
-        "type": "object"
-      },
-      "AutoExtractResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "extractors_run": {
-            "type": "integer"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "results": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/_AutoExtractPerProcessor"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "extractors_run",
-          "media_type",
           "results"
         ],
         "type": "object"
@@ -659,172 +642,6 @@
           "results",
           "run_id",
           "trigger"
-        ],
-        "type": "object"
-      },
-      "AutoLocalizeResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "localizers_run": {
-            "type": "integer"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "results": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/_AutoLocalizePerProcessor"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "localizers_run",
-          "media_type",
-          "results"
-        ],
-        "type": "object"
-      },
-      "AutorunExtractorCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "extractor_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "media_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "name": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "extractor_type",
-          "media_type",
-          "name"
-        ],
-        "type": "object"
-      },
-      "AutorunExtractorsListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "extractors": {
-            "items": {
-              "$ref": "#/components/schemas/_AutorunExtractorEntry"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "extractors"
-        ],
-        "type": "object"
-      },
-      "AutorunLocalizerCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "localizer_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "media_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "name": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "localizer_type",
-          "media_type",
-          "name"
-        ],
-        "type": "object"
-      },
-      "AutorunLocalizersListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "localizers": {
-            "items": {
-              "$ref": "#/components/schemas/_AutorunLocalizerEntry"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "localizers"
-        ],
-        "type": "object"
-      },
-      "AutorunProcessorCreateResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "success"
-        ],
-        "type": "object"
-      },
-      "AutorunProcessorDeleteResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success"
-        ],
-        "type": "object"
-      },
-      "AutorunProcessorRenameRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "new_name": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "new_name"
-        ],
-        "type": "object"
-      },
-      "AutorunProcessorRenameResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "new_name": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "new_name",
-          "success"
         ],
         "type": "object"
       },
@@ -2930,6 +2747,31 @@
         ],
         "type": "object"
       },
+      "DetectorImportRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "imported_at": {
+            "description": "Unix time of the import.",
+            "type": "number"
+          },
+          "importer": {
+            "description": "Name of the label importer.",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "imported_at",
+          "importer",
+          "params"
+        ],
+        "type": "object"
+      },
       "DetectorLabelVoteRequest": {
         "properties": {
           "provenance": {
@@ -3354,6 +3196,10 @@
           "embedder_type": {
             "type": "string"
           },
+          "imported": {
+            "$ref": "#/components/schemas/DetectorImportRecord",
+            "nullable": true
+          },
           "last_trained_at": {
             "nullable": true
           },
@@ -3401,6 +3247,7 @@
           "created_by",
           "embedder",
           "embedder_type",
+          "imported",
           "media_example",
           "media_type",
           "name",
@@ -3912,55 +3759,6 @@
           "opens_url",
           "supported_payloads",
           "ui_mode"
-        ],
-        "type": "object"
-      },
-      "ExtractRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "extractor_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "name": {
-            "default": "",
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "extractor_type"
-        ],
-        "type": "object"
-      },
-      "ExtractResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "extractor_name": {
-            "type": "string"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/_ProcessorHit"
-            },
-            "type": "array"
-          },
-          "total_medias_with_hits": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "extractor_name",
-          "media_type",
-          "results",
-          "total_medias_with_hits"
         ],
         "type": "object"
       },
@@ -4684,6 +4482,16 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "visible_when": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Show this field only while each named field holds one of the listed values (every entry must match). Values are compared as strings after trimming; a checkbox controller reads ``\"true\"`` / ``\"false\"``, and a blank or itself-hidden controller counts as its ``default``. While the condition fails the field is not rendered and not required, and the server resets it to its default. Empty means always shown.",
+            "type": "object"
           }
         },
         "required": [
@@ -4989,6 +4797,18 @@
           "icon",
           "name",
           "ui_mode"
+        ],
+        "type": "object"
+      },
+      "LabelImporterSuggestedNameResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detector_name"
         ],
         "type": "object"
       },
@@ -5951,55 +5771,6 @@
         ],
         "type": "object"
       },
-      "LocalizeRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "localizer_type": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "name": {
-            "default": "",
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "localizer_type"
-        ],
-        "type": "object"
-      },
-      "LocalizeResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "localizer_name": {
-            "type": "string"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/_ProcessorHit"
-            },
-            "type": "array"
-          },
-          "total_medias_with_hits": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "localizer_name",
-          "media_type",
-          "results",
-          "total_medias_with_hits"
-        ],
-        "type": "object"
-      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6640,40 +6411,6 @@
         },
         "required": [
           "votes"
-        ],
-        "type": "object"
-      },
-      "PregenProcessorsAddResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "added": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "added",
-          "success"
-        ],
-        "type": "object"
-      },
-      "PregenProcessorsListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "processors": {
-            "items": {
-              "$ref": "#/components/schemas/_PregenProcessorEntry"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "processors"
         ],
         "type": "object"
       },
@@ -7439,6 +7176,12 @@
             ],
             "type": "string"
           },
+          "used_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "volume": {
             "type": "number"
           }
@@ -8084,29 +7827,6 @@
         ],
         "type": "object"
       },
-      "_AutoExtractPerProcessor": {
-        "additionalProperties": false,
-        "properties": {
-          "extractor_name": {
-            "type": "string"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/_ProcessorHit"
-            },
-            "type": "array"
-          },
-          "total_medias_with_hits": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "extractor_name",
-          "results",
-          "total_medias_with_hits"
-        ],
-        "type": "object"
-      },
       "_AutoFindExportStatus": {
         "additionalProperties": true,
         "properties": {
@@ -8132,87 +7852,6 @@
         "required": [
           "exporter",
           "success"
-        ],
-        "type": "object"
-      },
-      "_AutoLocalizePerProcessor": {
-        "additionalProperties": false,
-        "properties": {
-          "localizer_name": {
-            "type": "string"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/_ProcessorHit"
-            },
-            "type": "array"
-          },
-          "total_medias_with_hits": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "localizer_name",
-          "results",
-          "total_medias_with_hits"
-        ],
-        "type": "object"
-      },
-      "_AutorunExtractorEntry": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "created_at": {
-            "type": "number"
-          },
-          "extractor_type": {
-            "type": "string"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "created_at",
-          "extractor_type",
-          "media_type",
-          "name"
-        ],
-        "type": "object"
-      },
-      "_AutorunLocalizerEntry": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "created_at": {
-            "type": "number"
-          },
-          "localizer_type": {
-            "type": "string"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "created_at",
-          "localizer_type",
-          "media_type",
-          "name"
         ],
         "type": "object"
       },
@@ -8696,65 +8335,6 @@
         ],
         "type": "object"
       },
-      "_PregenProcessorEntry": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "additionalProperties": {},
-            "type": "object"
-          },
-          "kind": {
-            "enum": [
-              "extractor",
-              "localizer"
-            ],
-            "type": "string"
-          },
-          "media_type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "processor_type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "config",
-          "kind",
-          "media_type",
-          "name",
-          "processor_type"
-        ],
-        "type": "object"
-      },
-      "_ProcessorHit": {
-        "additionalProperties": true,
-        "properties": {
-          "extractions": {
-            "items": {
-              "additionalProperties": {},
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "id": {
-            "type": "integer"
-          },
-          "localizations": {
-            "items": {
-              "additionalProperties": {},
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
       "_ServerMediaFileEntry": {
         "additionalProperties": false,
         "properties": {
@@ -8884,9 +8464,15 @@
     },
     "/api/achievements/docs/{doc_id}/raw": {
       "get": {
-        "description": "Plain-text response, intentionally undecorated so it stays out of\nthe OpenAPI spec (the spec is for JSON APIs).",
+        "description": "Plain-text response, so the spec gives it no response schema.",
         "operationId": "get_doc_raw",
         "responses": {
+          "404": {
+            "description": "Unknown doc id."
+          },
+          "500": {
+            "description": "The doc's file is missing, or resolves outside the repository."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -9142,60 +8728,6 @@
         ]
       }
     },
-    "/api/auto-extract": {
-      "post": {
-        "operationId": "auto_extract",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoExtractResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "No medias loaded, or no autorun extractors for active media type."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run all autorun extractors for the current media type and return extraction results.",
-        "tags": [
-          "processors_scoring"
-        ]
-      }
-    },
-    "/api/auto-localize": {
-      "post": {
-        "operationId": "auto_localize",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoLocalizeResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "No medias loaded, or no autorun localizers for active media type."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run all autorun localizers for the current media type.",
-        "tags": [
-          "processors_scoring"
-        ]
-      }
-    },
     "/api/autofind/runs/{run_id}": {
       "get": {
         "description": "``run_id`` is the ``task_id`` of the AutoFind task (``autofind.run_id`` on\nits ``loading-tasks`` row).  Runs are kept in memory only, and only the\nmost recent few, so an old or pre-restart run answers 404 like one that\nnever existed.",
@@ -9274,308 +8806,6 @@
         ]
       }
     },
-    "/api/autorun-extractors": {
-      "get": {
-        "operationId": "get_autorun_extractors_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunExtractorsListResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Get all autorun extractors.",
-        "tags": [
-          "processors_crud"
-        ]
-      },
-      "post": {
-        "operationId": "add_autorun_extractor_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutorunExtractorCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorCreateResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Unbuildable extractor config."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Add a new autorun extractor.",
-        "tags": [
-          "processors_crud"
-        ]
-      }
-    },
-    "/api/autorun-extractors/{name}": {
-      "delete": {
-        "operationId": "delete_autorun_extractor_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorDeleteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "description": "Extractor not found."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Delete a autorun extractor.",
-        "tags": [
-          "processors_crud"
-        ]
-      },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ]
-    },
-    "/api/autorun-extractors/{name}/rename": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "put": {
-        "operationId": "rename_autorun_extractor_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutorunProcessorRenameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorRenameResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Extractor not found, or new name already exists."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Rename a autorun extractor.",
-        "tags": [
-          "processors_crud"
-        ]
-      }
-    },
-    "/api/autorun-localizers": {
-      "get": {
-        "operationId": "get_autorun_localizers_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunLocalizersListResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Get all autorun localizers.",
-        "tags": [
-          "processors_crud"
-        ]
-      },
-      "post": {
-        "operationId": "add_autorun_localizer_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutorunLocalizerCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorCreateResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Unbuildable localizer config."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Add a new autorun localizer.",
-        "tags": [
-          "processors_crud"
-        ]
-      }
-    },
-    "/api/autorun-localizers/{name}": {
-      "delete": {
-        "operationId": "delete_autorun_localizer_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorDeleteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "description": "Localizer not found."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Delete a autorun localizer.",
-        "tags": [
-          "processors_crud"
-        ]
-      },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ]
-    },
-    "/api/autorun-localizers/{name}/rename": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "put": {
-        "operationId": "rename_autorun_localizer_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutorunProcessorRenameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutorunProcessorRenameResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Localizer not found, or new name already exists."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Rename a autorun localizer.",
-        "tags": [
-          "processors_crud"
-        ]
-      }
-    },
     "/api/balance": {
       "get": {
         "operationId": "get_balance_route",
@@ -9622,6 +8852,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "``beta`` is rejected by the balance setting's validator."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -10541,6 +9774,15 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.\n\nAn ``outputs`` list (one ``{media_type, source_specs, embedder, clipper,\n\u2026}`` object per dataset) turns the request into a **multi-dataset**\nimport (#4703): the importer runs once and every output lands as its own\ndataset, each with its own task id in ``task_ids``.  Without it the body's\n``media_type`` / ``source_specs`` describe the one dataset to build and\n``task_ids`` holds that single task.",
         "operationId": "import_dataset",
         "responses": {
+          "400": {
+            "description": "Invalid request body, field value, ``outputs`` or ``clipper_params``; ``outputs`` sent to an importer that makes one dataset; or an embedder the Semantic-only lock forbids."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -10943,6 +10185,15 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "stage_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body, or a field value fails validation."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -11295,6 +10546,9 @@
           "404": {
             "description": "Dataset not found, or saved pkl file is missing."
           },
+          "410": {
+            "description": "The dataset has expired and been removed."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -11558,6 +10812,21 @@
         "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
         "operationId": "run_datasource_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the fetch."
+          },
+          "404": {
+            "description": "Unknown datasource importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "501": {
+            "description": "Importer does not implement fetch."
+          },
+          "502": {
+            "description": "The source behind the importer failed, or returned no data."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -11890,6 +11159,21 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "register_detector_from_labelset",
         "responses": {
+          "400": {
+            "description": "Invalid request body, field value, ``beta`` or ``embedder_type``; an embedder type the Semantic-only lock forbids; the importer rejected the run; or the labels carry no media type, or more than one."
+          },
+          "404": {
+            "description": "Unknown label importer name."
+          },
+          "409": {
+            "description": "A detector with this name already exists."
+          },
+          "422": {
+            "description": "``name`` or a required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12242,7 +11526,7 @@
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).",
+        "description": "Counts/metadata only \u2014 no embeddings or head weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).  ``imported`` is how a label importer created the\ndetector (#5334), or ``None``.",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {
@@ -12627,6 +11911,18 @@
         "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh head is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "import_labels_into_detector",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Detector not found, or unknown label importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -12899,6 +12195,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "Empty name after stripping."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -12922,6 +12221,15 @@
       "post": {
         "operationId": "embed",
         "responses": {
+          "400": {
+            "description": "Missing ``embedder``, ``text`` or ``file``; text for an embedder without text support; or a file of another media type, or one the embedder could not embed."
+          },
+          "404": {
+            "description": "Unknown embedder name."
+          },
+          "500": {
+            "description": "The embedder raised, or returned no vector for the text."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -13404,46 +12712,6 @@
         ]
       }
     },
-    "/api/extract": {
-      "post": {
-        "operationId": "run_extract",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExtractRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExtractResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "No medias loaded, bad config, or media-type mismatch."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a single extractor on all medias and return per-media extraction results.",
-        "tags": [
-          "processors_scoring"
-        ]
-      }
-    },
     "/api/find": {
       "post": {
         "description": "For each dataset: loads it from its saved pkl, then for each detector runs\ndetection.  Returns a merged results table.",
@@ -13583,6 +12851,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -13708,6 +12979,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -13773,6 +13047,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14046,6 +13323,18 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_label_import",
         "responses": {
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header, an invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown label importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a list of label dicts."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -14080,6 +13369,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -14088,6 +13380,61 @@
           }
         },
         "summary": "Re-ingest missing medias from their origins, then apply their labels.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
+    "/api/label-importers/suggested-name/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Calls the importer's ``default_detector_name(field_values)`` with a\nsnapshot of the current form, so the New Detector \u203a Trained form can\nprefill its Detector name box with something human-readable --\nincluding a label a plugin resolved from an opaque internal selection,\nwhich no client-side derivation could produce.  The caller decides for\nitself whether to overwrite what the user typed.\n\nErrors from the plugin are surfaced as a 502 with the original\nmessage; the frontend treats any failure as \"no suggestion\", since a\nname hint is never worth blocking an import.",
+        "operationId": "label_importer_suggested_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterSuggestedNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelImporterSuggestedNameResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "502": {
+            "description": "default_detector_name raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the name the importer would give a detector created from these values.",
         "tags": [
           "label_importers"
         ]
@@ -14275,8 +13622,14 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "The labels could not be written to the detector store."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -14311,6 +13664,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` or ``X-Detector-Id`` header (or matching query param)."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14542,6 +13898,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -14566,6 +13925,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "500": {
             "description": "The detector file could not be rewritten."
@@ -14594,6 +13956,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "409": {
             "description": "No Find pass to test: score the dataset first."
@@ -14692,46 +14057,6 @@
         "summary": "Record votes on the running test's picks.",
         "tags": [
           "line_test"
-        ]
-      }
-    },
-    "/api/localize": {
-      "post": {
-        "operationId": "run_localize",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocalizeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocalizeResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "No medias loaded, bad config, or media-type mismatch."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a single localizer on all clips and return per-clip localization results.",
-        "tags": [
-          "processors_scoring"
         ]
       }
     },
@@ -14894,6 +14219,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
+          },
           "409": {
             "description": "A requested id's source dataset is registered but not loaded (``error_code: source_not_loaded``); ``dataset_id`` names it."
           },
@@ -14940,6 +14268,9 @@
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "The votes could not be written to the detector store."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -15176,6 +14507,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
           },
           "404": {
             "description": "Media not found; or it is no converter output (``error_code: not_derived``); or no readable dataset of its import holds its source type (``no_source_dataset``); or the source dataset has no matching item (``source_not_found``)."
@@ -15415,6 +14749,9 @@
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
+          "500": {
+            "description": "The vote could not be written to the detector store."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -15463,6 +14800,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -15487,6 +14827,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
           },
           "409": {
             "description": "No ranking to draw from, nothing unvoted in it, or the same list as the last check."
@@ -15535,6 +14878,9 @@
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
+          "500": {
+            "description": "The votes could not be written to the detector store."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -15542,55 +14888,6 @@
         "summary": "Record votes on the running check's picks.",
         "tags": [
           "precision_check"
-        ]
-      }
-    },
-    "/api/pregen-processors": {
-      "get": {
-        "operationId": "list_pregen_processors",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PregenProcessorsListResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Return the list of available pregen processors.",
-        "tags": [
-          "processors_crud"
-        ]
-      }
-    },
-    "/api/pregen-processors/add": {
-      "post": {
-        "description": "Registers the OCR extractor, Speech extractor, and Face localizer\ninto the autorun extractors and localizers stores.",
-        "operationId": "add_pregen_processors",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PregenProcessorsAddResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Add all pregen processors as autorun entries.",
-        "tags": [
-          "processors_crud"
         ]
       }
     },
@@ -15853,6 +15150,21 @@
         "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  Every returned item's bytes are saved into\nthe per-user ``example_media/`` directory; the response lists one\n``{filename, original_name, origin}`` entry per saved seed.\n\nA run that returns more than the importer's ``max_items`` is truncated\nto that cap rather than filling the directory, and the response says\nso via ``truncated``.  An empty batch is a valid answer (``count: 0``),\nnot an error: \"nothing matched\" is something the user should see rather\nthan a failure that hides which field was too narrow.",
         "operationId": "run_seed_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown seed importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "501": {
+            "description": "Importer does not implement run."
+          },
+          "502": {
+            "description": "The source behind the importer failed, or the run did not return a list."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16451,6 +15763,18 @@
         "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/settings-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_settings_import",
         "responses": {
+          "400": {
+            "description": "Invalid request body or field value, or the importer rejected the run."
+          },
+          "404": {
+            "description": "Unknown settings importer name."
+          },
+          "422": {
+            "description": "A required field is missing, or a field value is invalid."
+          },
+          "500": {
+            "description": "The importer failed, or did not return a settings dict."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16688,6 +16012,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "No ``X-Dataset-Id`` header (or ``dataset_id`` query param)."
           },
           "404": {
             "description": "Unknown or expired sort token; re-run the sort."
@@ -16955,6 +16282,9 @@
             },
             "description": "OK"
           },
+          "400": {
+            "description": "No ``X-Detector-Id`` header (or ``detector_id`` query param)."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -16985,6 +16315,9 @@
         "description": "The plain favicon is Toasty's resting smile, so there is no separate\n``smile`` variant.",
         "operationId": "favicon_variant",
         "responses": {
+          "404": {
+            "description": "Unknown favicon variant."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -17116,6 +16449,9 @@
         "description": "The Angular build output (main.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded; unmatched API routes should\nreturn 404, not the SPA page.",
         "operationId": "catch_all",
         "responses": {
+          "404": {
+            "description": "An ``/api/`` path no route matches."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -17201,14 +16537,6 @@
     {
       "description": "Recent (dataset, detector) labelling sessions per user.",
       "name": "sessions"
-    },
-    {
-      "description": "Manage autorun extractors / localizers and the bundled pregen-processor list.",
-      "name": "processors_crud"
-    },
-    {
-      "description": "Run extractors / localizers against the active dataset, either one-off or via autorun.",
-      "name": "processors_scoring"
     },
     {
       "description": "Read-only listings: media types, embedders, clippers, cleaners, converters, importers.",

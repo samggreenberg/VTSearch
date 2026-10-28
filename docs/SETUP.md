@@ -12,13 +12,12 @@ frontend build) Node.js 20.19+, 22.12+ or 24+.
 
 - [Prerequisites](#prerequisites)
 - [Getting the code](#getting-the-code)
-  - [Setting up an SSH key](#setting-up-an-ssh-key)
-  - [Clone the repository](#clone-the-repository)
 - [Setting up a virtual environment](#setting-up-a-virtual-environment)
 - [Installing dependencies](#installing-dependencies)
   - [How auto-detection decides](#how-auto-detection-decides)
   - [Picking the CUDA tag](#picking-the-cuda-tag)
   - [What gets installed](#what-gets-installed)
+  - [Packages installed without their dependency pins](#packages-installed-without-their-dependency-pins)
 - [Building the frontend](#building-the-frontend)
 - [Running the app](#running-the-app)
 - [Docker](#docker)
@@ -31,10 +30,6 @@ frontend build) Node.js 20.19+, 22.12+ or 24+.
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
 - [Running on a SLURM GPU cluster](#running-on-a-slurm-gpu-cluster)
-  - [One-time setup on the cluster](#one-time-setup-on-the-cluster)
-  - [One-time setup on your local machine](#one-time-setup-on-your-local-machine)
-  - [Daily workflow](#daily-workflow)
-  - [Tuning the allocation](#tuning-the-allocation)
 - [Running the tests](#running-the-tests)
 - [Environment variables](#environment-variables)
 - [Next steps](#next-steps)
@@ -107,55 +102,16 @@ brew install git
 
 ## Getting the code
 
-We recommend cloning over SSH so you don't have to enter your password on every push/pull.
-
-### Setting up an SSH key
-
-1. **Generate a key** (skip this if you already have one at `~/.ssh/id_ed25519`):
-
-   ```bash
-   ssh-keygen -t ed25519 -C "your_email@example.com"
-   ```
-
-   Press Enter to accept the default file location, then choose a passphrase (or leave it empty).
-
-2. **Start the SSH agent and add your key**:
-
-   ```bash
-   eval "$(ssh-agent -s)"
-   ssh-add ~/.ssh/id_ed25519
-   ```
-
-3. **Copy the public key** to your clipboard:
-
-   Linux:
-
-   ```bash
-   cat ~/.ssh/id_ed25519.pub
-   ```
-
-   macOS:
-
-   ```bash
-   pbcopy < ~/.ssh/id_ed25519.pub
-   ```
-
-4. **Add the key to GitHub**: Go to [github.com/settings/ssh/new](https://github.com/settings/ssh/new), paste the public key, give it a title, and click **Add SSH key**.
-
-5. **Verify the connection**:
-
-   ```bash
-   ssh -T git@github.com
-   ```
-
-   You should see a message like *"Hi username! You've successfully authenticated…"*.
-
-### Clone the repository
-
 ```bash
-git clone git@github.com:samggreenberg/VTSearch.git
+git clone https://github.com/samggreenberg/VTSearch.git    # read-only, no account needed
 cd VTSearch
 ```
+
+If you will push changes, clone over SSH instead
+(`git clone git@github.com:samggreenberg/VTSearch.git`), which needs an SSH key
+registered with GitHub; GitHub's
+[SSH guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
+walks through generating and adding one.
 
 ## Setting up a virtual environment
 
@@ -236,7 +192,7 @@ explicitly, which skips the check entirely. The installer's other switches
 (DKMS conversion, a pinned driver `.run` file, verbose output) are listed under
 [DEPLOYMENT.md § Install-time](DEPLOYMENT.md#install-time-scriptsinstallsh),
 and install problems on GPU boxes are covered in
-[DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#troubleshooting).
+[TROUBLESHOOTING.md § GPU installs](TROUBLESHOOTING.md#gpu-installs-driver-cuda-and-cuml).
 
 ### Picking the CUDA tag
 
@@ -258,11 +214,11 @@ floor in `pyproject.toml`. On torch 2.6, transformers 5.18 and later cannot
 import a model class when no GPU is visible (#4838). Rule of thumb: pick the
 newest tag your driver supports that still covers your GPU. `cu129` is what
 the auto-detect picks for Turing through Blackwell on a driver at CUDA 12.9 or
-later, and it is the **only tag that gets cuML** (GPU UMAP / k-means): its
-torch pins the CUDA 12.9 libraries that RAPIDS ≥ 26.8 is built on, and RAPIDS
-≥ 26.8 is the first whose cudf takes the pandas 3 that `pyproject.toml` pins
-(#4390). A Volta card, or an older driver, steps down to `cu126` (or older),
-where the installer skips cuML and the app runs UMAP / k-means on the CPU.
+later, and it is the **only tag that gets cuML** (GPU UMAP / k-means). A
+Volta card, or an older driver, steps down to `cu126` (or older), where the
+installer skips cuML and the app runs UMAP / k-means on the CPU; why, and the
+by-hand escape hatch, are in
+[TROUBLESHOOTING.md § GPU install's cuML step](TROUBLESHOOTING.md#gpu-installs-cuml-step-skipped-on-every-tag-but-cu129).
 A mismatched wheel imports fine and then raises
 `cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
 runtime and falls back to CPU (with a warning) rather than crashing, but you
@@ -274,9 +230,11 @@ Both paths install every runtime and dev dependency from `pyproject.toml`
 (through `requirements/base.txt` or `requirements/gpu.txt`, which forward to
 `-e .[dev,agpl]`), editable-install the `vtsearch` package itself, and add a few
 packages that need special handling: `toponymy` (names regions on the Browse
-map) and `facenet-pytorch` (the face embedder), both installed without their
-over-strict dependency pins. In a git checkout they also install the
-`pre-commit` git hook.
+map), installed without its over-strict dependency pins (see
+[below](#packages-installed-without-their-dependency-pins)). In a git checkout they also install the
+`pre-commit` git hook. Neither path installs face models: Face turns on when a
+deployment supplies its own (see
+[DEPLOYMENT.md](DEPLOYMENT.md#face-models)).
 
 The **GPU** path additionally:
 
@@ -298,10 +256,45 @@ step, below.
 **Skipping the AGPL dependencies.** Two dependencies are AGPL-3.0-or-later —
 `ultralytics` (YOLO) and `PyMuPDF` — and a default install includes them. To
 install without them, set `VTSEARCH_NO_AGPL=1` on the install command (or
-install `requirements/base-no-agpl.txt` directly); the YOLO extractor/clipper,
+install `requirements/base-no-agpl.txt` directly); the YOLO clipper,
 PDF import, and the document converters then report themselves as unavailable
 and everything else works unchanged. See
 [DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
+
+### Packages installed without their dependency pins
+
+Two packages pin old versions of the libraries every embedder sits on, and a
+plain `pip install` would honour those pins by downgrading the app's stack. The
+pins are empirically unnecessary for the parts VTSearch uses, so both packages
+go in with `--no-deps`, in a dedicated step of each install path.
+
+**`toponymy`** (VTSBrowse signpost naming, `vtscore.projection.signpost_build`)
+pins `transformers<5.0.0`. VTSearch runs it on transformers 5.x, validated end
+to end. So:
+
+- `toponymy==0.5.2` is installed `--no-deps` by `scripts/install.sh`
+  (`vts_install_toponymy`), `.claude/hooks/ensure-test-deps.sh`, and every
+  Dockerfile under `docker/`. It cannot live in a requirements file, because
+  pip rejects `--no-deps` there. It cannot be declared in `pyproject.toml`
+  either, because that would put its pins back in the resolver.
+- Its real dependencies (`fast_hdbscan`, `vectorizers`, `apricot-select`,
+  `tenacity`, `jinja2`) are declared in `pyproject.toml` on its behalf. The
+  slim images install the package itself `--no-deps -e .`, so
+  pyproject's declarations never reach them; their requirements files list the
+  dependencies that nothing else already pulls in.
+- `apricot-select` ships a legacy `setup.py` sdist and is installed in the same
+  dedicated step, before the main requirements pass. Do **not** wrap it in
+  `SETUPTOOLS_USE_DISTUTILS=stdlib`: pip's isolated build env gets the latest
+  setuptools, setuptools >= 74 refuses to import with that value set, and
+  Python >= 3.12 has no stdlib distutils for the shim to point at.
+- Nothing in the resolver checks the bypass any more, so two tests do:
+  `tests_lib/projection/test_toponymy_smoke.py` (marked `slow`) runs the real
+  library end to end, and `tests_lib/meta/test_dockerfile_toponymy.py` checks
+  that every install path uses `--no-deps` and pins the same version.
+
+An environment that skipped the toponymy step still draws the Browse map but
+names no region; see
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md#browse-maps-render-unlettered-vtsbrowse-signposts-are-disabled).
 
 ## Building the frontend
 
@@ -450,13 +443,14 @@ accepted driver branches.
 ### LabBench (slim, image or audio)
 
 `docker/Dockerfile.labbench` is the streamlined image for the LabBench
-deployment: one media type, searched with that type's default embedder, and
-nothing else installed. Pick the type with the `MEDIA_TYPE` build arg: `image`
-(the default, searched with SigLIP) or `audio` (CLAP General). The build
-installs only that type's dependencies (`requirements/labbench.txt` plus
-`requirements/labbench-<type>.txt`) and **bakes the embedder's weights into the
-image**, so the container is ready to serve immediately on first run (no
-Hugging Face download).
+deployment: each media type searched with its default embedder, and nothing
+else installed. The supported types are `image` (searched with SigLIP) and
+`audio` (CLAP General). With no `MEDIA_TYPE` build arg the image carries both;
+`--build-arg MEDIA_TYPE=image` or `=audio` builds an image of that one type,
+locked to it. The build installs only its types' dependencies
+(`requirements/labbench.txt` plus each `requirements/labbench-<type>.txt`) and
+**bakes their embedders' weights into the image**, so the container is ready to
+serve immediately on first run (no Hugging Face download).
 
 ```bash
 docker compose -f docker/compose/docker-compose.labbench.yml up          # image (SigLIP)
@@ -466,33 +460,39 @@ docker compose -f docker/compose/docker-compose.labbench-audio.yml up    # audio
 Or with plain Docker:
 
 ```bash
-docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
+docker build -f docker/Dockerfile.labbench -t vtsearch:labbench-all .                                   # image + audio
+docker build -f docker/Dockerfile.labbench --build-arg MEDIA_TYPE=image -t vtsearch:labbench .
 docker build -f docker/Dockerfile.labbench --build-arg MEDIA_TYPE=audio -t vtsearch:labbench-audio .
-docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
+docker run -p 5000:5000 -v vtsearch-labbench-all-data:/app/data vtsearch:labbench-all
 ```
 
 Any other `MEDIA_TYPE` fails the build with the list of supported ones;
 [`docker/Dockerfile.solo`](#single-media-type-audio-only-video-only) builds the
-full image for any media type. Whichever type it is built for, a LabBench
-container is streamlined the same way:
+full image for any media type. Whatever it is built for, a LabBench container
+is streamlined the same way:
 
-- **The media type is locked** (`VTSEARCH_SOLO_MEDIA_TYPE`): the importer and
-  new-detector flows hide their mediaType pickers, and converters are limited
-  to ones that output the type. The lock is an environment variable, so it
-  holds when the image is redeployed onto an existing volume.
-- **The embedder is locked to the baked one**: the type's other embedders are
-  not installed, so the importer hides its embedder dropdown.
+- **A one-type image is locked to its type** (`VTSEARCH_SOLO_MEDIA_TYPE`): the
+  importer and new-detector flows hide their mediaType pickers, and converters
+  are limited to ones that output the type. The lock is an environment
+  variable, so it holds when the image is redeployed onto an existing volume.
+  The all-types image has no lock: its pickers offer image and audio, and the
+  media types it does not install (video, text, document) are hidden instead.
+  Its embedders load from the baked weights on first use, not at startup.
+- **Each type's embedder is locked to the baked one**: the type's other
+  embedders are not installed, so the importer hides its embedder dropdown.
 - **Datasets age off after 14 days** (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`).
 - **Plugins that cannot work are hidden**: the Downloaded Demo Media importer
   (it needs outbound network access) and anything the slim dependencies cannot
   run (for `image`, the Aud2Img spectrogram converter).
 
-The embedder lock and the hidden plugins are seeded into the `/app/data`
-volume (by `scripts/seed_labbench_settings.py`), and Docker only seeds a fresh
-volume, so a volume an earlier LabBench image populated keeps that image's
-values. That is why `docker-compose.labbench-audio.yml` mounts its own
-`vtsearch-labbench-audio-data` volume rather than the `vtsearch-data` the other
-compose files share.
+The embedder lock and the hidden plugins (the all-types image's hidden media
+types among them) are seeded into the `/app/data` volume (by
+`scripts/seed_labbench_settings.py`), and Docker only seeds a fresh volume, so
+a volume an earlier LabBench image populated keeps that image's values. That is
+why each LabBench variant needs its own volume: `docker-compose.labbench-audio.yml`
+mounts `vtsearch-labbench-audio-data` rather than the `vtsearch-data` the other
+compose files share, and the all-types image above runs on
+`vtsearch-labbench-all-data`.
 
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
 so the baked weights are not masked when `/app/data` is mounted as a volume.
@@ -533,8 +533,9 @@ pipeline rather than an embedding space:
 - **`document`**: document input, converted to page images by `document2image`.
   The build bakes the image default (SigLIP), which is what the pages embed with.
   The converter needs PyMuPDF, so do not combine it with `REQUIREMENTS=base-no-agpl.txt`.
-- **`face`**: image input, with the faces cropped out by `image2face` and
-  embedded in FaceNet identity space. The build bakes FaceNet.
+- **`face`**: image input, with the faces cropped out and embedded by `image2face`.
+  The build bakes nothing: the app downloads no face models, so mount the
+  deployment's own ([DEPLOYMENT.md](DEPLOYMENT.md#face-models)), or Face stays off.
 
 The lock does not yet force that pipeline in every import flow, or give the
 new-detector flow the embedded type (#4891).
@@ -589,267 +590,11 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
 ## Running on a SLURM GPU cluster
 
-VTSearch is happiest with a GPU (for embedding and detector training). On a
-shared SLURM cluster — like the JHU HLTCOE "Grid" — you don't run heavy work on
-the login nodes; you ask SLURM for a GPU compute node and run the app there,
-then forward its port back to your local machine so you can use the browser UI.
-
-Two helper scripts in [`scripts/slurm/`](../scripts/slurm/) automate the loop:
-
-- **`vtsearch-slurm.sh`** runs *on the cluster*. It allocates a GPU node with
-  `srun`, activates the virtualenv, and runs `app.py` on the node — printing
-  which node and port it landed on. It holds the allocation until you quit.
-- **`vtsearch-tunnel.sh`** runs *on your local machine*. It finds your running
-  VTSearch job, SSH-forwards your local port to that compute node, and drops
-  you into the project directory for git/edits.
-
-Both scripts are parameterized entirely by environment variables (no hard-coded
-usernames, hostnames, or paths), so they should adapt to most SLURM clusters
-with a shared filesystem.
-
-> **Why a per-user port?** GPU nodes usually hold several GPUs, so SLURM can
-> pack multiple users' single-GPU jobs onto one physical node — where a single
-> shared `:5000` would collide (the second app can't bind it, and a naive
-> tunnel would forward you into someone else's session). So the scripts derive
-> a port from your UID (`10000 + UID % 20000`); both compute the same value, so
-> the tunnel finds your app with no extra coordination. `app.py` honors this
-> via `VTSEARCH_PORT` (or `--port`). Override with `VTS_PORT` on *both* scripts
-> if you ever need to.
-
-### One-time setup on the cluster
-
-1. **SSH in** to a login node and clone VTSearch onto the cluster's shared
-   filesystem. Many clusters give each user a large scratch/experiment area
-   (the HLTCOE Grid uses `/exp/$USER`); the helper scripts default to
-   `/exp/$USER/projects/VTSearch`, but you can put it anywhere and set
-   `VTS_DIR` (see [Tuning](#tuning-the-allocation)).
-
-   ```bash
-   mkdir -p /exp/$USER/projects && cd /exp/$USER/projects
-   git clone git@github.com:samggreenberg/VTSearch.git
-   cd VTSearch
-   ```
-
-2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
-   wheel to your cluster's drivers and cards (a node whose driver reports CUDA
-   12.6 takes `cu126`; a Turing-or-newer card on a driver at CUDA 12.9 or
-   later takes `cu129`, the one tag that also gets cuML; a V100 takes `cu126`
-   on any driver from CUDA 12.6 up):
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   bash scripts/install.sh cu129         # or cu118 / cu126 / cu128 to match your node's GPU and driver
-   ```
-
-   The scripts default to a venv named `.venv` in the project dir; override with
-   `VTS_VENV` if yours differs.
-
-   > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
-   > only via environment modules, and the system `python3` may be too old
-   > (VTSearch needs 3.11+). Load a recent one first, and build the venv with
-   > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
-   > shadow it:
-   >
-   > ```bash
-   > module avail python                 # find an available 3.11+ module
-   > module load python/3.12.3
-   > which python3.12                     # should be the module's, not a pyenv shim
-   > python3.12 -m venv .venv
-   > source .venv/bin/activate
-   > python --version                     # confirm 3.12.x before installing
-   > bash scripts/install.sh cu126
-   > ```
-   >
-   > A venv built this way is **not** self-contained — its `python` needs the
-   > module's `libpython` at runtime — so the launcher must load the module
-   > before activating the venv. Set `VTS_MODULE` (see
-   > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
-   > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
-
-3. **Build the frontend** (needs Node.js 20.19+, 22.12+ or 24+; see [Building the
-   frontend](#building-the-frontend)):
-
-   ```bash
-   cd frontend && npm install && npm run build:prod && cd ..
-   ```
-
-4. **Install the launcher on your PATH** so you can just type `vtsearch`:
-
-   ```bash
-   mkdir -p ~/.local/bin
-   cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch
-   chmod +x ~/.local/bin/vtsearch
-   ```
-
-   > **Tip:** caches (HuggingFace, pip, etc.) can be large; on clusters where
-   > `/home` is small, redirect them onto your scratch area in `~/.bashrc`
-   > (e.g. `export HF_HOME=/exp/$USER/.cache/huggingface`). Setting `HF_TOKEN`
-   > there too avoids anonymous Hugging Face rate limits on a shared egress IP.
-
-### One-time setup on your local machine
-
-1. **Add an SSH host entry** for the cluster login node so the tunnel script
-   can reach it by a short name. In `~/.ssh/config`:
-
-   ```sshconfig
-   Host cluster
-       HostName login.your-cluster.edu     # e.g. login1.hltcoe.jhu.edu
-       User your-cluster-username
-       IdentityFile ~/.ssh/id_ed25519
-   ```
-
-   Verify it works: `ssh cluster true` should connect without prompting. If your
-   cluster is only reachable through a VPN or campus network, connect to that
-   first.
-
-2. **Install the tunnel script** on your PATH:
-
-   ```bash
-   mkdir -p ~/.local/bin
-   cp scripts/slurm/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
-   chmod +x ~/.local/bin/vtsearch-tunnel
-   ```
-
-   (Clone VTSearch on your local machine too, or just copy the one script — it only
-   needs SSH access to the cluster.) If you named your SSH host something other
-   than `cluster`, point the script at it with `CLUSTER_HOST=mycluster vtsearch-tunnel`.
-
-### Daily workflow
-
-1. **On the cluster**, start VTSearch and leave the terminal running:
-
-   ```bash
-   ssh cluster
-   vtsearch
-   ```
-
-   This queues a GPU allocation; once it lands, the app starts and the terminal
-   prints the compute node it got. Keep this terminal open — closing it releases
-   the node.
-
-2. **On your local machine**, in a second terminal, open the tunnel:
-
-   ```bash
-   vtsearch-tunnel
-   ```
-
-   It finds the running job automatically (no need to know the node name or
-   port), forwards your local port to it, and drops you into the project
-   directory on the login node for git pulls / edits. It prints the URL to
-   browse — **http://localhost:&lt;port&gt;** (the per-user port, see above).
-
-3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
-   terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
-   press **Enter** to restart the app. Type **i** then Enter first to rerun
-   `scripts/install.sh` when dependencies changed; **q** then Enter releases
-   the node and quits.
-
-> Interactive SLURM jobs don't persist — you re-allocate each session. Only run
-> **one** `app.py` per allocation; VTSearch keeps all model/dataset state in one
-> process, and a second copy would double the memory and can OOM the job.
-
-### Tuning the allocation
-
-`vtsearch-slurm.sh` reads these environment variables (defaults shown). Set them
-inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Path to the VTSearch checkout on the cluster |
-| `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
-| `VTS_MODULE` | (none) | Environment module(s) to `module load` before activating the venv (space-separated). Needed when your venv is built from a module-provided Python, e.g. `VTS_MODULE="python/3.12.3"` |
-| `VTS_PART` | `gpu` | SLURM partition |
-| `VTS_GPU` | (auto-picked) | GPU type requested via `--gres=gpu:<type>:1`. Unset, the type is chosen from what is free (see below); set it to pin one |
-| `VTS_GPU_TYPES` | `a100 l40s v100` | Candidate types for the auto-pick, **fastest first** |
-| `VTS_GPU_FALLBACK` | `l40s` | Type to request when the scheduler can't be queried |
-| `VTS_CPUS` | `8` | CPU cores |
-| `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
-| `VTS_TIME` | `8:00:00` | Walltime |
-| `VTS_PORT` | `10000 + UID % 20000` | Port the app binds (passed as `VTSEARCH_PORT`); per-user by default so co-located jobs don't collide |
-
-`vtsearch-tunnel.sh` reads:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `CLUSTER_HOST` | `cluster` | SSH host alias for the cluster login node |
-| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
-| `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
-| `VTS_BIND` | (unset — loopback only) | Address the forwarded port is bound to *locally*. Unset, only this machine can reach it. Set it to serve the app to another device through this one — see below |
-
-It also takes one flag, `--no-shell`, which holds the forward open and nothing
-else (`ssh -N`, no TTY, no login shell) instead of dropping you into the login
-node. That is the mode a service unit wants; the interactive default is the mode
-a human wants.
-
-#### Relaying the app to another device
-
-If the machine running the tunnel is a always-on box that holds the VPN — and
-the device you actually browse from is a different one — the two knobs above are
-what bridge them. `VTS_BIND` binds the forwarded port to an address that other
-device can reach:
-
-```bash
-VTS_BIND=$(tailscale ip -4) vtsearch-tunnel
-# → ssh -L 100.x.y.z:PORT:NODE:PORT cluster
-# → browse http://100.x.y.z:PORT from any device on the same private mesh
-```
-
-**Bind to that specific address, not `0.0.0.0`.** The wildcard also serves the
-app to everything else on the local network, which on a home or campus Wi-Fi is
-a larger audience than intended.
-
-To keep the tunnel up without a terminal, install
-[`scripts/slurm/vtsearch-tunnel.service`](../scripts/slurm/vtsearch-tunnel.service)
-as a systemd **user** unit — it runs the script with `--no-shell` under
-`Restart=always`:
-
-```bash
-mkdir -p ~/.config/systemd/user
-cp scripts/slurm/vtsearch-tunnel.service ~/.config/systemd/user/
-# set Environment=VTS_BIND=... in the copy, then:
-systemctl --user daemon-reload
-systemctl --user enable --now vtsearch-tunnel
-loginctl enable-linger "$USER"   # keeps it running with nobody logged in
-```
-
-That last line is the one that gets missed: without lingering, a user unit stops
-when your last session ends — precisely when an unattended box needed it to keep
-going.
-
-The unit supervises the **script**, not a bare `ssh`, and that distinction
-matters. SLURM re-picks the GPU node on every allocation, so a reconnect aimed
-at the previous node forwards to nothing while still looking healthy. Re-running
-the script re-queries `squeue` and rediscovers node and port, which is also why
-no `autossh` is needed here.
-
-#### Which GPU type gets requested
-
-Many clusters (HLTCOE's included) reject an untyped `--gres=gpu:1`, so a type
-has to be named — and any single name is a pin that goes stale. Pinning the slow
-type costs a multiple on every embed (a V100 embeds `siglip2_l` **2.3×** slower
-than an L40S on identical fp32 code); pinning a scarce fast type has meant
-multi-day queue waits. So the launcher doesn't pin: it runs
-[`scripts/slurm/pick_gpu.py`](../scripts/slurm/pick_gpu.py), which reads
-`scontrol show node` and requests the **fastest type in `VTS_GPU_TYPES` that has
-a free GPU right now**, falling back to whatever is most available, then to the
-largest pool, then to `VTS_GPU_FALLBACK`. Run it by hand to see the reasoning:
-
-```bash
-python3 scripts/slurm/pick_gpu.py --explain
-```
-
-Set `VTS_GPU` to override it outright (nothing is queried then). Set
-`VTS_GPU_TYPES` to match your own hardware and QOS — the default omits
-`h100`/`h200` because the HLTCOE `4gpu_tier` QOS caps them at 0, and a job
-requesting a type your QOS forbids pends forever.
-
-Adjust `VTS_GPU_TYPES`, `VTS_PART`, and the CUDA wheel passed to `install.sh` to
-match your cluster's hardware. To find the exact GPU type strings, check a node's
-gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8` → use
-`v100`) or list partition gres with `sinfo -o '%P %G'`. Note these variables take
-just the type (`v100`), not the full `gpu:v100:8` spec — the launcher adds the
-`gpu:` prefix and `:1` count itself.
+On a shared SLURM cluster (like the JHU HLTCOE "Grid"), run the app on a GPU
+compute node and forward its port back to your local machine.
+[`scripts/slurm/README.md`](../scripts/slurm/README.md) is the walkthrough:
+the one-time setup on the cluster and on your local machine, the daily
+workflow, and the launcher's tuning knobs.
 
 ## Running the tests
 
@@ -872,31 +617,10 @@ are in [TESTING.md § Test Groups](TESTING.md#test-groups). A bare
 `./run-tests.sh` on a branch that changes only markdown narrows itself to the
 `docs` gate automatically.
 
-You can also run pytest directly:
-
-```bash
-python -m pytest tests/ tests_lib/ -v
-```
-
-This runs fast CPU tests only. Additional test modes:
-
-**Full CPU tests** (adds the `slow`-marked tests: a CLI subprocess run and the toponymy fit tests):
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m 'not gpu'
-```
-
-**GPU tests** (requires CUDA):
-
-```bash
-python -m pytest tests_lib/gpu/test_gpu.py -v -m gpu
-```
-
-**All tests**:
-
-```bash
-python -m pytest tests/ tests_lib/ -v -m ''
-```
+You can also run pytest directly: `python -m pytest tests/ tests_lib/` runs the
+fast CPU tests (the `pyproject.toml` default deselects the `slow` and `gpu`
+markers). How to add those back, and what each marker covers, is in
+[TESTING.md § Test Markers](TESTING.md#test-markers).
 
 ## Environment variables
 
@@ -921,14 +645,16 @@ The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_
   of loading a dataset, labeling with Autopilot, and exporting results.
 - **Run tests**: See [Running the tests](#running-the-tests) above.
 - **Learn the codebase**: See [ARCHITECTURE.md](ARCHITECTURE.md#key-concepts)
-  for the core vocabulary (media items, votes, media types, processors,
-  origins) and the package-level map, and
+  for the core vocabulary (media items, votes, media types, origins) and the
+  package-level map, and
   [FRONTEND.md](FRONTEND.md) for the Angular SPA.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
   exporters from the command line.
 - **Evaluate sorting quality**: `python -m vtscore.eval --plot-dir eval_output`
   runs the evaluation suite over the demo datasets; see [EVAL.md](EVAL.md).
 - **Deploy**: See [DEPLOYMENT.md](DEPLOYMENT.md) for production, offline /
-  air-gapped, and GPU deployments.
+  air-gapped, and GPU deployments, [SETTINGS.md](SETTINGS.md) for the
+  settings files, and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) when something
+  goes wrong.
 - **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media
   types, importers, or exporters.

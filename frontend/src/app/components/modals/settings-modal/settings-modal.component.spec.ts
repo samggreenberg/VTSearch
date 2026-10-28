@@ -244,14 +244,23 @@ describe('SettingsModalComponent', () => {
     req.flush(mockSettings);
     expect(component.allHintsHidden()).toBe(true);
 
-    // Show All also brings back the hints hidden one at a time.
-    component.settings.update((s) => ({ ...s, hidden_hints: ['train'] }));
+    // Show All also brings back the hints hidden one at a time, and the ones
+    // a feature's first use retired (#5360).
+    component.settings.update((s) => ({ ...s, hidden_hints: ['train'], used_features: ['browse-pan-zoom'] }));
     component.onShowAllHints();
     req = httpMock.expectOne('/api/settings');
     expect(req.request.body.hide_all_hints).toBe(false);
     expect(req.request.body.hidden_hints).toEqual([]);
+    expect(req.request.body.used_features).toEqual([]);
     req.flush(mockSettings);
     expect(component.noHintsHidden()).toBe(true);
+  });
+
+  it('enables Show All once a tried feature has retired its hint (#5360)', async () => {
+    await flushInit();
+    expect(component.noHintsHidden()).toBe(true);
+    component.settings.update((s) => ({ ...s, used_features: ['browse-pan-zoom'] }));
+    expect(component.noHintsHidden()).toBe(false);
   });
 
   it("disables Show All while no hint is hidden and Hide All once they all are (#4680)", async () => {
@@ -429,6 +438,38 @@ describe('SettingsModalComponent', () => {
     await flushInit();
     expect(component.activeViewTab()).toBe('image');
     expect(component.activeSettingsTab()).toBe('general');
+  });
+
+  describe('opened for a purpose (#5344)', () => {
+    it('opens on initialTab', async () => {
+      fixture.componentRef.setInput('initialTab', 'autofind');
+      await flushInit();
+      expect(component.activeSettingsTab()).toBe('autofind');
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-auto-find-settings')).toBeTruthy();
+      // The AutoFind pane lists the exporters it offers.
+      httpMock.expectOne('/api/exporters').flush([]);
+    });
+
+    it('opens with the settings importer up when startWithImporter is set', async () => {
+      fixture.componentRef.setInput('startWithImporter', true);
+      // The importer's list is a resource, which holds the fixture unstable
+      // until it lands, so answer it before flushInit settles.
+      TestBed.tick();
+      httpMock.expectOne('/api/settings-importers').flush([]);
+      await flushInit();
+      expect(component.showImporterModal).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-settings-importer-modal')).toBeTruthy();
+    });
+
+    it('emits imported as soon as an import is applied', async () => {
+      await flushInit();
+      const imported = vi.fn();
+      component.imported.subscribe(imported);
+      component.onImportComplete();
+      expect(imported).toHaveBeenCalledTimes(1);
+      // No theme in the reload, so it doesn't save one back.
+      httpMock.expectOne('/api/settings').flush({ volume: 50 });
+    });
   });
 
   it('should ignore preselectedViewTab when not in mediaTypes', async () => {

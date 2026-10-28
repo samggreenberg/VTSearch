@@ -12,7 +12,7 @@ workers) and its reset fixture never dropped
 
 This package is the single source for those pieces.  What stays in each
 conftest is what is genuinely tier-specific: the app tier's Flask ``client``,
-settings isolation and autorun-processor reset; the library tier's Flask
+settings isolation and app-tier registry resets; the library tier's Flask
 blocker, native-thread caps and library-only ``CoreConfig`` builder.
 
 **Contract:** nothing here may import ``flask``, ``werkzeug``,

@@ -11,7 +11,7 @@ Most extension points are documented **twice**, on purpose, for two
 different readers:
 
 - **These `docs/EXTENDING-*.md` guides are the in-repo front door.** They
-  are self-contained: interface contract, where the file goes, how
+  cover the interface contract, where the file goes, how
   discovery works, app-tier wiring (routes, forms, the pickers the
   frontend renders), and a complete worked example. Read these if you are
   adding a plugin *to this repository*.
@@ -21,6 +21,13 @@ different readers:
   out-of-tree author needs: `importlib.metadata` entry-point registration,
   packaging, and the Flask-free import rules. Read these if you are
   shipping a plugin as a **separate distribution**.
+
+**Which side owns what.** A mechanism implemented in `vtscore` (field
+normalization and template variables, entry-point packaging, the
+`MediaType` thumbnail hooks, `FetchedItem`) is stated canonically in the
+library guide; the app guide summarises it and links there. App-tier
+wiring (routes, the SPA's forms and pickers, settings sync, auth) lives
+only here. Each side keeps its own contract table per ABC.
 
 Where the two overlap, they describe one class, so they can contradict
 each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)
@@ -35,7 +42,6 @@ ABC, update both sides and let the gate confirm it.
 |-------|----------------|------------------|
 | [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory and the entry-point group table live there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md), [media-sources](../vtscore/docs/extending/media-sources.md) |
-| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. | — (app tier only; processors are not auto-discovered) |
 
 Each guide explains the interface contract, where files go, how
 discovery/registration works, and includes a complete example. The
@@ -264,7 +270,8 @@ To let `docker/Dockerfile.labbench` build another media type, add a
 dependencies) and an entry for the type in `HIDDEN_BY_TYPE` in
 `scripts/seed_labbench_settings.py`, naming any plugin the slim file leaves
 without its dependencies. `tests_lib/meta/test_dockerfile_labbench.py` checks
-that the two agree.
+that the two agree. The all-types build (no `MEDIA_TYPE`) picks the new type up
+from its requirements file, with no edit to the Dockerfile.
 
 ### For a new media type, importer, or exporter
 
@@ -322,6 +329,7 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)`: return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
+- [ ] If your form holds opaque values (ids, query keys), override `default_detector_name(field_values)` so a new detector's name box shows a readable name — see [Naming the created detector](EXTENDING-plugins.md#naming-the-created-detector)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 
@@ -330,9 +338,9 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source).
 Unlike the one-shot families, a source stays bound to a user and is
 consulted on every settings read and write, so read
-[§ How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works)
+[§ What the sync engine expects of a source](EXTENDING-plugins.md#what-the-sync-engine-expects-of-a-source)
 before you start — it carries the contracts (cheap freshness probe,
-dirty-key protection, lock ordering) that the base class cannot express.
+dirty-key protection, no lock held) that the base class cannot express.
 
 - [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
 - [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`
@@ -442,36 +450,6 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 - [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
 - [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid
-
-### New Localizer / Extractor Checklist
-
-See [EXTENDING-processors.md](EXTENDING-processors.md).
-
-- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
-- [ ] Implement `name` (from a constructor argument, **not** hardcoded),
-      `media_type`, and the type-specific method (`localize` or `extract`)
-- [ ] Optionally override `load_model()`, and call it (idempotently) at the
-      top of `localize` / `extract`: nothing in the app calls it for you
-- [ ] Add a `from_config(name, config)` classmethod, and a `to_dict()` that
-      reports the matching `extractor_type` / `localizer_type` + `config`
-- [ ] **Wire it into the hardcoded factory dict** in
-      `vtsearch/routes/processors/crud.py` (`_ensure_extractor_factories` or
-      `_ensure_localizer_factories`) — processors are *not* auto-discovered,
-      and an unregistered type is a 400 from every endpoint
-- [ ] Optionally add it to `_PREGEN_PROCESSORS` in the same file
-- [ ] Register as autorun via `POST /api/autorun-extractors` or
-      `POST /api/autorun-localizers`, then run it with `POST /api/auto-extract`
-      / `POST /api/auto-localize`
-- [ ] Test: build it via `_build_extractor` / `_build_localizer` and assert a
-      bad config raises (see `tests/detectors/test_processors.py`)
-
-Note that `Detector` (the `Processor` subtype) has no factory dict and no
-endpoint; it is not registrable. The ML classifiers users actually train are
-detectors in a different sense, covered below.
-
-For ML classifiers, create a detector instead: register it via
-`POST /api/detectors/registry`, label items in the right pane, and toggle
-its AutoFind flag with `PUT /api/detectors/registry/<id>/autofind`.
 
 ### New Login Provider Checklist
 

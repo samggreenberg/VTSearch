@@ -464,6 +464,12 @@ class UserSettings(BaseModel):
     # is kept rather than rejected. Settings' Show All clears both.
     hide_all_hints: bool = False
     hidden_hints: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
+    # The features the user has tried at least once (#5360), by the ids the
+    # frontend owns (``FEATURE_IDS`` in ``hints.service.ts``). A hint that
+    # teaches a feature stays up until the feature's first use, and the next
+    # hint takes over, as on the Browse map. Settings' Show All clears this
+    # with the two above, so those hints teach again.
+    used_features: Annotated[list[str], BeforeValidator(_dedupe_strings)] = Field(default_factory=list)
     autopilot_enabled: bool = True
     # Whether Train and Tune open with each side panel folded to a thin
     # strip (#4673). The left folds only on the Autopilot tab, where the
@@ -668,13 +674,13 @@ class UserSettings(BaseModel):
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
     # Per-media-type default settings for the Add Dataset advanced panel -
-    # the embedder, clipper (+ params), source-spec converter rows and
-    # cleanup gates the user wants applied automatically every time they
-    # import a dataset of that output mediaType. Set from the Settings > Data
-    # Imports tab (cleanup gates only via the post-import "Save as default"
-    # offer) and silently auto-filled into the importer form when an importer is
-    # selected. Keys are canonical media-type ids; each value is a
-    # free-form dict shaped like:
+    # the embedder, clipper (+ params), source-spec converter rows, cleanup
+    # gates, ingest toggles and Multi-Dataset kinds the user wants applied
+    # automatically every time they import a dataset of that output mediaType.
+    # Set from the Settings > Data Imports tab (cleanup gates and Multi-Dataset
+    # kinds only via the post-import "Save as default" offer) and silently
+    # auto-filled into the importer form when an importer is selected. Keys
+    # are canonical media-type ids; each value is a free-form dict shaped like:
     #     {
     #       "embedder": "<embedder name>" | "",
     #       "clipper": "<clipper name>" | "",
@@ -683,7 +689,12 @@ class UserSettings(BaseModel):
     #                         "params": {...}}, ...],
     #       "cleaners": {"<cleaner name>": {"enabled": true|false,
     #                                       "params": {...}}, ...},
+    #       "build_projection": true,        # only present when on
+    #       "merge_near_duplicates": true,   # only present when on
+    #       "multi_dataset": ["<media type id>", ...],
     #     }
+    # ``multi_dataset`` opens the dialog in Multi-Dataset mode with those kinds
+    # ticked; a Multi-Dataset import is filed under the type it started from.
     # Any missing sub-key falls back to the importer's existing default.
     import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
 

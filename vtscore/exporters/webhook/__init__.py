@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-from vtscore.exporters.base import PluginField, ResultsExporter, resolve_stream_batch_size
+from vtscore.exporters.base import PluginField, ResultsExporter, iter_stream_batches, resolve_stream_batch_size
 from vtscore.security.url_validation import guarded_session
 
 
@@ -120,7 +120,6 @@ class WebhookResultsExporter(ResultsExporter):
         happened.
         """
         url = field_values["url"]
-        headers = self._headers(field_values)
         batch_size = resolve_stream_batch_size(field_values.get("batch_size"))
 
         meta = {
@@ -129,37 +128,70 @@ class WebhookResultsExporter(ResultsExporter):
             "detectors": header.get("detectors", []),
             "keep_negatives": bool(header.get("keep_negatives", False)),
         }
-
-        total_hits = 0
-        batches = 0
-
-        # One session for the whole run so connections are reused across
-        # batches; each new socket it opens is still peer-checked.
-        with guarded_session() as session:
-
-            def _post(hits: list[dict[str, Any]]) -> None:
-                nonlocal batches
-                payload = {**meta, "batch_index": batches, "hits": hits}
-                resp = session.post(url, json=payload, headers=headers, timeout=30, allow_redirects=False)
-                resp.raise_for_status()
-                batches += 1
-
-            batch: list[dict[str, Any]] = []
-            for detector_name, hit in records:
-                batch.append({"detector": detector_name, **hit})
-                total_hits += 1
-                if len(batch) >= batch_size:
-                    _post(batch)
-                    batch = []
-            # Flush the trailing partial batch; also fire once for an empty run
-            # so the receiver always gets at least one POST.
-            if batch or batches == 0:
-                _post(batch)
+        hits = ({"detector": detector_name, **hit} for detector_name, hit in records)
+        total_hits, batches = self._post_batches(meta, "hits", hits, batch_size, field_values)
 
         return {
             "message": (f"Streamed {total_hits} hit(s) to {url} in {batches} batch(es)."),
             "url": url,
         }
+
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """POST label entries in fixed-size batches as scored chunks stream in.
+
+        The labelset twin of :meth:`export_cli_streaming`: each batch body
+        carries the run metadata, a zero-based ``batch_index`` and a ``labels``
+        array of entries, each naming its ``detector``.  Bounded by
+        ``batch_size`` the same way, and one POST is sent even for an empty run.
+        """
+        url = field_values["url"]
+        batch_size = resolve_stream_batch_size(field_values.get("batch_size"))
+
+        meta: dict[str, Any] = {
+            "format": "vtsearch-labelset-batch/v1",
+            "media_type": header.get("media_type", "unknown"),
+            "detectors": list(header.get("detectors", [])),
+            "keep_negatives": bool(header.get("keep_negatives", False)),
+        }
+        if header.get("dataset"):
+            meta["dataset"] = header["dataset"]
+        total, batches = self._post_batches(meta, "labels", elements, batch_size, field_values)
+
+        return {
+            "message": f"Streamed {total} label(s) to {url} in {batches} batch(es).",
+            "url": url,
+        }
+
+    def _post_batches(
+        self,
+        meta: dict[str, Any],
+        key: str,
+        items: Iterator[dict[str, Any]],
+        batch_size: int,
+        field_values: dict[str, Any],
+    ) -> tuple[int, int]:
+        """POST *items* under *key* in ``batch_size`` groups; return ``(items sent, batches)``.
+
+        One session for the whole run so connections are reused across
+        batches; each new socket it opens is still peer-checked.
+        """
+        url = field_values["url"]
+        headers = self._headers(field_values)
+        total = 0
+        batches = 0
+        with guarded_session() as session:
+            for batch in iter_stream_batches(items, batch_size):
+                payload = {**meta, "batch_index": batches, key: batch}
+                resp = session.post(url, json=payload, headers=headers, timeout=30, allow_redirects=False)
+                resp.raise_for_status()
+                total += len(batch)
+                batches += 1
+        return total, batches
 
 
 EXPORTER = WebhookResultsExporter()

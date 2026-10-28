@@ -36,10 +36,15 @@ from tests_shared.pass_cache import (
     record_pass_report,
 )
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit
-from tests_shared.xdist_plumbing import make_crash_safe_scheduler, set_worker_timeout_timer
+from tests_shared.xdist_plumbing import (
+    make_crash_safe_scheduler,
+    restore_xdist_group_suffix,
+    set_worker_timeout_timer,
+)
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
+    no_face_models as _no_face_models,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
     freeze_collected_heap,
     freeze_startup_heap,
@@ -53,7 +58,7 @@ from tests_shared.state_reset import (
 # fixture, the bulk of the reset fixture and the end-of-run summary printer —
 # lives in ``tests_shared``.
 # What stays here is app-tier only: the Flask ``client``, settings isolation,
-# the Angular bundle fixture and the autorun-processor reset.
+# the Angular bundle fixture and the app-tier run/hook registry resets.
 
 
 def pytest_configure(config):
@@ -62,8 +67,9 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(items, config):
-    """Auto-assign group markers based on the test file's parent directory, then drop recorded passes."""
+    """Auto-assign group markers, restore xdist's group suffix (#5356), then drop recorded passes."""
     add_group_markers(items, root_dir_name="tests")
+    restore_xdist_group_suffix(config, items)
     deselect_cached_passes(config, items)
 
 
@@ -193,10 +199,8 @@ def reset_state():
     suite calls too.  Only the app-tier extras are spelled out here.
     """
     from vtsearch.autofind import clear_autofind_runs
-    from vtsearch.autorun_processors import clear_all_autorun
     from vtsearch.import_hooks import clear_import_hooks
 
-    clear_all_autorun()
     clear_autofind_runs()
     clear_import_hooks()
 

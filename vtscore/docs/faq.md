@@ -158,7 +158,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `embeddinggemma2_audio` | `audio` | 768 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
-| `face` | `face` | 512 |
+| `face` | `face` (default) | 512 |
 | `siglip` | `image` (default) | 768 |
 | `clip` | `image` | 512 |
 | `clip_l` | `image` | 768 |
@@ -229,7 +229,7 @@ It improves through about 50 labels. Above 100 the gains are mostly noise. The
 production head is linear (a single `Linear(D, 1)` fitted as a maximum-margin
 SVM), which is what makes it usable that low: with 3-5 positives an MLP is
 under-determined and its scores wobble from retrain to retrain. See
-[docs/ML.md](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
+[docs/ML.md](../../docs/ML.md#the-heads-which-one-is-shipped-and-why).
 
 ### Is training deterministic?
 
@@ -509,7 +509,7 @@ import of 64 files or more. Embedding itself is one bulk call per embedder,
 with forward passes serialised by the shared embed lock (see
 [Is the embedder cache thread-safe?](#is-the-embedder-cache-thread-safe)).
 `cap_workers_by_memory()` sizes the detector-scoring fan-out instead
-(auto-detect and processor scoring), where each worker holds a whole
+(auto-detect), where each worker holds a whole
 `(N, D)` embedding matrix.
 
 ## Threading and concurrency

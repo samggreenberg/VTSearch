@@ -147,8 +147,8 @@ for your first search.
 ## Step by step: your first search
 
 This walkthrough assumes VTSearch is already running and open in your
-browser; if it isn't, see [SETUP.md](../SETUP.md) (or ask whoever runs
-your server for its address).
+browser; if it isn't, see the setup guide, `docs/SETUP.md` (or ask
+whoever runs your server for its address).
 
 Four steps take you from a folder of pictures to a detector that finds what
 you are looking for in pictures it has never seen. The red numbers in each
@@ -387,9 +387,9 @@ VTSearch ships two populated categories, which boil down to two choices:
     **per-media-type dropdown** so you can filter to just audio, just
     images, and so on. Each demo downloads on first use (from a few MB
     to over 10 GB depending on the dataset and size; see
-    [the demo catalogue](../demos.md)) and is cached, so subsequent loads
+    the demo catalogue, `docs/demos.md`) and is cached, so subsequent loads
     are instant.
-  - **🏭 Synthetic Media** - fabricates images, audio, or video on the
+  - **Synthetic Media** - fabricates images, audio, or video on the
     fly. This is the quickest way to try VTSearch, since nothing is
     downloaded at all. Its images are the cartoon faces, shapes and scenes
     this guide's screenshots are taken on. **Seed** picks which set it
@@ -413,8 +413,8 @@ There is also a **Services** tab, which is an extension point rather than a
 feature: it is where an installed plugin's service importers appear (a
 corporate media archive, a third-party search API). Nothing in the stock
 install registers one, so on a default deployment the tab reads *"No
-importers in this category."* See `docs/EXTENDING-plugins.md` if you want to
-add one.
+importers in this category."* Developers adding one should see the
+plugin guide, `docs/EXTENDING-plugins.md`.
 
 The **Downloaded Media** catalogue is a table: pick a media type from the
 dropdown, click the dataset you want to choose it, then click **Import**.
@@ -461,10 +461,11 @@ a fork on a dining table, a distant chair.
 - **What it gains.** Its typed-query search and its detectors are better at
   every object size. It also cut by about two thirds how often a search for a
   small object turned up fewer than three examples in its first 150 votes
-  ([the measurements](../experiments/2026-10-14-siglip2l-4874/REPORT.md)).
+  (the measurements are in
+  `docs/experiments/2026-10-14-siglip2l-4874/REPORT.md`).
 - **What it costs on a GPU.** Analysis takes about 10× as long as SigLIP's, or
-  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see
-  [Deployment](../DEPLOYMENT.md)).
+  about 3× with half precision (`VTSEARCH_EMBED_PRECISION=fp16`, see the
+  deployment guide, `docs/DEPLOYMENT.md`).
 - **Not on a CPU-only machine.** There it is about 19× slower, so keep SigLIP.
 
 The choice is made once, at import: a dataset's detectors are trained in its
@@ -525,6 +526,19 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
+#### Save as default
+
+The **Advanced** section starts from your saved defaults for the kind of media
+being imported. When an import's settings differ from them, the notification
+that follows it offers **Save as Default**: click it, and the next import of
+that kind starts the same way. It covers the embedder, clipper, included media
+and cleanup, **Build Browse map now** and **Merge near-duplicates**, and, for a
+[Multi-Dataset](#multi-dataset-import-several-datasets-from-one-folder) import,
+**Multi-Dataset** itself with the rows you ticked. A Multi-Dataset import is
+saved under the kind you started from: a demo's own kind, or the importer's
+*Dataset media type*. Nothing is remembered unless you click it; the saved
+defaults are under **Import** in Settings, where you can change or reset them.
+
 ### Multi-Dataset import: several datasets from one folder
 
 A folder (or archive) often holds more than one kind of media: photos, the
@@ -544,7 +558,8 @@ Dashboard while it loads, its own **Cancel**, and its own AutoFind run.
   cropped out of the images, so it has no files of its own to find. This list
   is the only place Face is offered: the *Dataset media type* dropdown leaves
   it out, because a Face dataset made on its own could not show the photo any
-  of its faces came from.
+  of its faces came from. Face appears only on a server with face models
+  installed; if the row is missing, ask whoever runs the server.
 - Each ticked row's **Details ▾** opens that dataset's own settings
   (*Include media*, embedders, clipper, cleanup). *Build Browse map now* and
   *Merge near-duplicates* apply to every dataset of the import and sit once,
@@ -570,6 +585,10 @@ into, so an Image demo offers **Image**, **Face** and **Text**. Every row reads
 the demo's own files, so the datasets are linked just as a folder's are. A
 row's **Details ▾** has its embedder, clipper and cleanup; a conversion runs
 with its default settings.
+
+**Every time.** To have imports of a kind of media open in Multi-Dataset mode
+with the same rows ticked, click **Save as Default** on the notification that
+follows one such import (see [Save as default](#save-as-default)).
 
 ### Faces: find a person in a set of photos
 
@@ -1054,7 +1073,7 @@ and **Browse** all act on the items above it. An AutoFind or command-line run
 has nobody to vote, so it can't be checked: it exports the line your labels
 draw for that collection and records it as unchecked, with a line in the run's log and a
 `balance` entry beside the threshold in exports that carry the full results
-(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+(see "Auto-detect" in the command-line guide, `docs/CLI.md`).
 
 ---
 
@@ -1351,8 +1370,11 @@ It has two tabs:
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**). A name left
-  blank comes from the imported file's name. It takes files
+  the imported labels (the button reads **Create & Import**). As you fill
+  the form, **Detector name** fills in with the name the source suggests:
+  an uploaded file's name, else the source's own (*Server JSON File
+  detector*), or whatever a plugin source names after what you picked.
+  Type over it to choose your own. It takes files
   exported from VTSearch, which record where each item came from (see
   [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
   labels made elsewhere, use **Import Labels** on an existing detector
@@ -1579,11 +1601,12 @@ items to verify by hand, each reported as a percentage chip with a one-line
 verdict and a line of supporting numbers:
 
 - **Training-domain overlap** - how much of *this* dataset looks unlike
-  the dataset the detector was trained on. VTSearch can't infer which
-  dataset that was (a detector handed to you may not travel with its
-  haystack), so you pick it from the **Compare against** dropdown, which
-  lists every *other* loaded dataset sharing this one's embedder - the
-  section is hidden entirely when there is no such candidate. A high
+  the dataset the detector was trained on. VTSearch compares against the
+  loaded dataset holding most of the detector's labelled examples (else the
+  first candidate); if that is the wrong one, pick another from the
+  **Compare against** dropdown, which lists every *other* loaded dataset
+  sharing this one's embedder - the section is hidden entirely when there
+  is no such candidate. A high
   atypical share means domain shift: the detector is scoring media unlike
   anything it ever saw, and that share is the part to check yourself.
 - **Evidence coverage** - how much of the dataset sits farther from the
@@ -1653,10 +1676,9 @@ Settings modal's **Server** tab. Once set:
 - The chosen type's default embedder is warmed at startup so the
   first detector run is fast.
 
-Operators set it by passing `--solo-media-type image` (or any type id)
-on the command line, or by writing `"solo_media_type": "image"` into
-`data/settings.json`. It applies to every user, and there is no
-per-user override.
+Operators set it when starting the server (see `solo_media_type` in the
+deployment guide, `docs/DEPLOYMENT.md`). It
+applies to every user, and there is no per-user override.
 
 ---
 
@@ -1681,15 +1703,16 @@ server's own values:
 - **Panels** - the metadata panel, the **Hide left panel** / **Hide right
   panel in Train and Tune** toggles, and per-media-type Scroll Style (focus
   mode and thumbnail size for each side of Train, Tune and Find).
-- **Import** - default embedder, clipper, and converters per
-  media type. On a server set up to tell you when an import finishes
+- **Import** - default embedder, clipper, converters, **Build Browse map
+  now** and **Merge near-duplicates** per media type, and a saved
+  Multi-Dataset default with a **Clear** button (see
+  [Save as default](#save-as-default)). On a server set up to tell you when an import finishes
   (often by email), **Alert me when an import finishes** is here too:
   untick it to ask the server not to.
 - **Browse Map** - per-media-type look of the spatial Browse view
   (signposts, signpost text, colormap, cell size, thumbnail border,
-  popup thumbnail size, mouse-zooms per level; the tile shape is chosen
-  automatically from the media type — squares for browsable thumbnails,
-  audio's waveform included, hexagons for text — and is not a setting), plus a
+  popup thumbnail size, mouse-zooms per level; the tile shape is not a
+  setting, see [Navigating](#navigating)), plus a
   **Graphics** control that applies to every media type. Leave Graphics
   on **Auto** and VTSearch picks for you: browsers without hardware
   acceleration get the cheaper
@@ -1772,6 +1795,15 @@ with bulk-action and per-card controls.
   and move it back to Drafts later if it needs more tuning. Until you
   have a detector at all, both tabs are dimmed and the grid stays on
   Drafts, where a new detector lands.
+
+  Your first detector on the AutoFind tab asks where its results should
+  go, if you haven't picked a results exporter on the Settings
+  **AutoFind** tab. **Set up AutoFind…** opens that tab. **Import
+  settings…** opens it with the settings importer up, for a new server
+  your saved settings haven't reached yet; the detector you just moved
+  stays on AutoFind whatever the file says. **Not now** keeps the results
+  in the app. **Move to AutoFind** on the [test verdict](#the-result) asks
+  the same.
 
   Only detectors on the tab you're looking at can be selected, so
   **Train**, **Tune** and **Find** always act on rows you can see. Switching
@@ -1859,6 +1891,13 @@ workflow](#autopilot-the-guided-workflow)). In the Tune view he explains the
 first pick, the verdict once the test is done, and the **Review** tab the
 first time you open it.
 
+On the [Browse](#browse-exploring-a-dataset-spatially) map he shows you round
+one feature at a time: how to move around, the thumbnail-size buttons,
+right-clicking a tile to see everything in it, clicking a tile to select it,
+and, on a map opened from Tune, **Verified Bad**. Each of these stays up until
+the first time you use what it shows, on any visit, and then the next one
+takes over, so once you know your way around the map he says nothing there.
+
 The dialogs on that path have hints too: **Add Dataset**, **New Detector**,
 **Use This Example?**, **Find Results** and **Export Results**. Toasty stands
 below the dialog box, or beside its top corner when the box fills the window.
@@ -1876,7 +1915,8 @@ away.
 Each hint goes away as soon as you take its step. Tick **Hide this hint** in a
 bubble to stop seeing that one, or **Hide all hints** to stop seeing any;
 **Settings → General → Toasty's hints** has **Hide All** and **Show All**,
-which brings back every hint, including ones you hid one at a time. Toasty
+which brings back every hint, including ones you hid one at a time and the
+Browse map's, even for features you have already tried. Toasty
 also turns up on the notifications at the top of the screen: happy on good
 news, surprised on a warning, sad on an error.
 
@@ -1976,7 +2016,8 @@ install without the optional naming dependency.
 The control cluster at the top right of the canvas gives you:
 
 - **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
-  zoom directly on the canvas.
+  zoom directly on the canvas. The arrow keys pan and `+` / `-` zoom too,
+  and `Ctrl`+`A` selects every tile fully in view.
 - **Thumbnail size** - smaller or bigger tiles.
 - **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
   you drag a box to select every item inside it.
@@ -1984,9 +2025,9 @@ The control cluster at the top right of the canvas gives you:
   map has no names.
 
 The tiles are **squares** for media with browsable thumbnails (images,
-video, documents) so the thumbnails pack edge-to-edge, and **hexagons**
-for audio and text, where the tile is a density cell rather than a
-picture. The shape is chosen automatically from the dataset's media type -
+video, documents, faces, and audio by its waveform) so the thumbnails pack
+edge-to-edge, and **hexagons** for text, where the tile is a density cell
+rather than a picture. The shape is chosen automatically from the dataset's media type -
 there's nothing to set.
 
 Top-left, **Rebuild Map** shuffles the items into a fresh layout
@@ -2141,12 +2182,11 @@ two ways:
 
 - **From the API**, against a loaded dataset:
   `POST /api/detectors/{detector_id}/portable-bundle` (see
-  [`docs/api/detectors.md`](../api/detectors.md#export-portable-bundle)),
+  "Export portable bundle" in `docs/api/detectors.md`),
   which streams the zip back.
 - **From the CLI**, as part of an autodetect run: the
   `portable_detector` exporter, which writes one bundle per detector the
-  run trained (see
-  [`docs/CLI.md`](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+  run trained (see "Auto-detect" in `docs/CLI.md`).
 
 Both paths behave the same way. This is the one place VTSearch writes a
 trained ranker to disk - it normally keeps them in memory only. The

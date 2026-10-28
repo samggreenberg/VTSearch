@@ -1,19 +1,16 @@
 """Check that the vtscore package docs still cover the vtscore package tree.
 
-Two invariants, both cheap (no imports, no parsing beyond a regex sweep):
+One invariant, cheap (no imports; a directory listing and a substring search):
+**every top-level module and sub-package of ``vtscore/`` is documented.**
+Each maps to exactly one file under ``vtscore/docs/packages/`` via
+:data:`DOC_FOR`, and that file must mention it. This is what stops a new
+subpackage from shipping with no doc at all — the failure mode that left
+``projection``, ``timing``, ``io``, ``gpu_backends``, ``single_instance`` and
+``datasource_importers`` undocumented (issue #2999).
 
-1. **Every top-level module and sub-package of ``vtscore/`` is documented.**
-   Each maps to exactly one file under ``vtscore/docs/packages/`` via
-   :data:`DOC_FOR`, and that file must mention it. This is what stops a new
-   subpackage from shipping with no doc at all — the failure mode that left
-   ``projection``, ``timing``, ``io``, ``gpu_backends``, ``single_instance``
-   and ``datasource_importers`` undocumented (issue #2999).
-
-2. **No ``file.py:NNN`` line anchors anywhere in ``vtscore/docs/``.** Every
-   such anchor in the doc set had rotted, most by hundreds of lines, because
-   nothing ties a code edit to the prose that cites it. The policy is to
-   reference module-and-symbol instead: stable, greppable, and correct after
-   any edit that doesn't move the symbol.
+This script used to refuse ``file.py:NNN`` line anchors in ``vtscore/docs/``
+too. That rule now lives in ``scripts/check-docs.py`` (its LINENO check),
+which holds every tracked doc to it, in both spellings (#5290).
 
 What this deliberately does *not* check: that the prose is accurate, or that
 every function is described. Those need a reader. This checks the mechanical
@@ -25,7 +22,6 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -42,6 +38,7 @@ DOC_FOR: dict[str, str] = {
     "cli.py": "cli.md",
     "cli_pipeline.py": "cli.md",
     "cli_progress.py": "cli.md",
+    "cli_resume.py": "cli.md",
     "concurrency": "concurrency.md",
     "config": "config.md",
     "converters": "converters.md",
@@ -82,8 +79,6 @@ EXEMPT: dict[str, str] = {
     "docs": "the documentation itself",
 }
 
-LINE_ANCHOR = re.compile(r"\.py:\d+")
-
 
 def _top_level_entries() -> list[str]:
     """Names of every top-level module / sub-package under ``vtscore/``."""
@@ -123,21 +118,8 @@ def _check_coverage() -> list[str]:
     return errors
 
 
-def _check_line_anchors() -> list[str]:
-    errors: list[str] = []
-    for doc in sorted((PKG / "docs").rglob("*.md")):
-        for lineno, line in enumerate(doc.read_text().splitlines(), 1):
-            if LINE_ANCHOR.search(line):
-                rel = doc.relative_to(ROOT)
-                errors.append(
-                    f"{rel}:{lineno}: line-number anchor ({LINE_ANCHOR.search(line).group()}). "
-                    f"Cite the module and symbol instead — line numbers rot on the next edit."
-                )
-    return errors
-
-
 def main() -> int:
-    errors = _check_coverage() + _check_line_anchors()
+    errors = _check_coverage()
     if errors:
         print("vtscore docs check failed:\n", file=sys.stderr)
         for err in errors:

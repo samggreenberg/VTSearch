@@ -53,7 +53,7 @@
  */
 
 const ACCENT = '#e8453c';
-const LAYER_ID = '__shot_callouts';
+export const LAYER_ID = '__shot_callouts';
 
 /**
  * The hand-drawn loop's shape (`ring`): how far past the target's ends and
@@ -127,7 +127,13 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
       Object.assign(layer.style, {
         position: 'fixed', inset: '0', zIndex: '2147483647', pointerEvents: 'none',
       });
-      document.body.appendChild(layer);
+      // A modal <dialog> draws in the browser's top layer, over any z-index on
+      // the page (#5297), so a layer on <body> would sit under it. So the layer
+      // goes in the topmost open dialog, as the app's AboveDialogsDirective
+      // does with its toasts. A dialog fills the window, so the element at the
+      // corner is the topmost one or something inside it.
+      const dialog = document.elementFromPoint(0, 0)?.closest('dialog');
+      (dialog?.open ? dialog : document.body).appendChild(layer);
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));

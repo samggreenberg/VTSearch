@@ -11,11 +11,6 @@ process-wide registries that map IDs to contexts. Everything is
 protected by a single re-entrant lock; there is no implicit global
 "active" pointer.
 
-Related docs: [architecture.md](../architecture.md#resolution-chain-for-active-context)
-for the resolution chain in context; [`concurrency.md`](concurrency.md)
-for the job/progress infrastructure that drives long-running operations
-on these contexts.
-
 ## Contents
 
 | Module | Concern |
@@ -52,6 +47,7 @@ line and balance helpers in `core` (`recut_detector_threshold`,
 - [Current user](#current-user)
 - [Setting-persistence hooks](#setting-persistence-hooks)
 - [Thread-safety invariants](#thread-safety-invariants)
+- [Cross-references](#cross-references)
 
 ---
 
@@ -114,6 +110,7 @@ canonical persisted form.
 | `embedder_type` | `str` | Immutable embedder *type* (single-vector / patch / structural) the detector was created against |
 | `good_votes` / `bad_votes` | `dict[int, None]` | Set-shaped vote dicts |
 | `label_history` | `list[tuple[int, str, float]]` | `(media_id, label, timestamp)` events |
+| `label_history_base` | `tuple[frozenset[int], frozenset[int]]` | Good and bad ids in force before the first event: the labels restored silently from the labelset |
 | `vote_click_times` | `dict[int, int]` | Ordinal assigned at vote time |
 | `vote_region_boxes` | `dict[int, tuple[float, float, float, float]]` | Optional box per good vote |
 | `vote_provenance` | `dict[int, dict]` | Optional surfacing context per vote (see `vtscore/datasets/vote_provenance.py`) |
@@ -623,7 +620,8 @@ user-pref values that a **host** owns. The library exposes the hook
 surface; the host installs the persistence callbacks. With none installed,
 `set_beta` moves only the in-memory balance (and a registered detector's
 JSON, below), and `set_calibrate_count` / `set_calibration_fraction` change
-nothing their getters read, since those read `CoreConfig.from_settings()`.
+nothing their getters (`get_calibrate_count()`, `get_calibration_fraction()`)
+read, since those read `get_setting()`.
 
 ```python
 # vtscore/state/__init__.py
@@ -647,7 +645,7 @@ register_setting_persister("beta", my_settings.save_beta)
 `[0.25, 4]` (#4413), and `detector_beta(ctx)` any context's. Each seeds its
 first read from the balance the detector keeps on its JSON (#4665;
 [`vtscore.detectors.balance`](detectors.md): `stored_beta(data)`, top-level
-`beta`), else from `CoreConfig.from_settings()` (see [config.md](config.md)),
+`beta`), else from `get_setting("beta")` (see [config.md](config.md)),
 the user's balance. A context the registry cannot name (a throwaway that
 trains a cold detector, the CLI's name-keyed one) is seeded by its caller
 from the JSON it holds, `seed_detector_beta(ctx, data)`, and
@@ -670,7 +668,7 @@ deprecated and always returns `0`; `set_inclusion()` accepts only `0`, with a
 `DeprecationWarning`, and raises `ValueError` for anything else, as does
 `recompute_detector_thresholds_for_inclusion()`. Registering an `"inclusion"`
 persister warns and never fires. Inclusion survives as the internal unit the
-threshold machinery measures cuts in (`recut_detector_threshold(ctx, k)`).
+threshold machinery measures cuts in (`recut_detector_threshold(ctx, inclusion_value)`).
 
 Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 (shallow copy under the lock), `get_media(cid)`, `clear_medias()`,
@@ -702,3 +700,13 @@ Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 
 For the long-running-operation progress trackers used while these
 contexts are being mutated, see [`concurrency.md`](concurrency.md).
+
+---
+
+## Cross-references
+
+- [`architecture.md`](../architecture.md#resolution-chain-for-active-context) - the resolution chain in context.
+- [`concurrency.md`](concurrency.md) - the job and progress infrastructure that drives long-running operations on these contexts.
+- [`detectors.md`](detectors.md#training) - `train_and_threshold`, which caches fold orderings, the fitted estimator and the labels line on a `DetectorContext`.
+- [`../integration.md`](../integration.md#the-three-integration-hooks) - installing the context resolvers and setting persisters from a host app.
+- [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md#state-management) - the app-tier proxy objects, settings tiers and `X-Dataset-Id` / `X-Detector-Id` routing layered over these contexts.

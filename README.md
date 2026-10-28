@@ -17,7 +17,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 ## Quick start
 
-You need **Python 3.11+**, **Node.js 20.19+** with npm, and Git. Then, from the repository root:
+You need **Python 3.11+**, **Node.js 20.19+, 22.12+ or 24+** with npm, and Git. Then, from the repository root:
 
 ```bash
 bash scripts/install.sh                            # install Python deps (auto-detects CPU vs GPU)
@@ -43,6 +43,21 @@ See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
 To load your own media, use the **Files** tab of the same dialog: point it at a folder (or a manifest of file paths) on the server.
 
+## Where to read next
+
+| You want to… | Start with |
+|---|---|
+| Use the app: load media, train and tune a detector, export matches | [User Guide](docs/user/USER_GUIDE.md), then [demo datasets](docs/demos.md) |
+| Run detectors from scripts or cron, without the web UI | [CLI.md](docs/CLI.md) |
+| Install on a new machine, a GPU box, Docker, or a SLURM cluster | [SETUP.md](docs/SETUP.md) |
+| Run it as a service: security, gunicorn, reverse proxy, offline hosts, environment variables, troubleshooting | [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| Work on the code | [SETUP.md](docs/SETUP.md), then [ARCHITECTURE.md](docs/ARCHITECTURE.md#key-concepts), [FRONTEND.md](docs/FRONTEND.md) and [TESTING.md](docs/TESTING.md) |
+| Add an importer, exporter, media type, embedder or detector | [EXTENDING.md](docs/EXTENDING.md) (see [Extending with plugins](#extending-with-plugins) below) |
+| Use the ML core as a Python library, without Flask | [`vtscore` docs](vtscore/docs/README.md) |
+| Call the HTTP API, or understand the model and its evaluation | [API.md](docs/API.md), [ML.md](docs/ML.md), [EVAL.md](docs/EVAL.md) |
+
+What changed between versions is in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Command-line interface
@@ -51,10 +66,11 @@ VTSearch's `python app.py` entry point also runs detectors over a dataset and ex
 
 ## Project structure
 
-VTSearch is split into two Python packages along an **app tier / library tier** line:
+VTSearch is split into two Python packages along an **app tier / library tier** line, plus a third that stands on its own:
 
 - **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
 - **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document, and the convert-in `face` type), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+- **`imagekit/`** — face localisation + embedding with a pluggable backend ("provider") seam: open SCRFD + ArcFace/MagFace weights on ONNX Runtime by default, a proprietary backend behind the same interface when a server selects it. Imports neither of the other two; the `face` media type reaches it through one bridge module. See [imagekit/README.md](imagekit/README.md).
 
 The remaining top level:
 
@@ -63,6 +79,7 @@ The remaining top level:
 ├── gunicorn.conf.py  # Gunicorn WSGI config (single worker + threads)
 ├── vtsearch/         # App tier (Flask routes, auth, settings, CLI entry point)
 ├── vtscore/          # Library tier (ML, embedding, media, datasets, plugins, projection)
+├── imagekit/         # Face localisation + embedding with a pluggable provider seam
 ├── frontend/         # Angular SPA source (TypeScript, SCSS); builds into static/
 ├── static/           # Angular build output (HTML, JS, CSS, assets)
 ├── tests/            # App-tier test suite (pytest); grouped by folder (core, api, sorting, …)
@@ -79,19 +96,13 @@ The remaining top level:
 
 For the package-level directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. For the Angular SPA — feature areas, service layer, zoneless change detection, and the generated API client — see **[docs/FRONTEND.md](docs/FRONTEND.md)**.
 
-New to the codebase? Get it running with [docs/SETUP.md](docs/SETUP.md), then read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#key-concepts) for the vocabulary (media items, votes, media types, processors, origins) and the package map.
-
 ## HTTP API
 
 VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector CRUD and scoring, exporter and importer operations, and settings.
 
-## Deployment
-
-For production deployment, offline/air-gapped operation, Docker hardening, environment variables, network dependency details, and data directory management, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
 ## Machine learning
 
-VTSearch trains a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the class-balanced maximum-margin boundary, started from the Goods' centroid — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is a linear SVM and where the older logistic and MLP paths survive), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
+A detector is a **linear SVM head** trained on your votes over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is a linear SVM and where the older logistic and MLP paths survive), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 
@@ -110,12 +121,11 @@ This runs text-sort and learned-sort evaluations across every demo dataset regis
 
 ## Extending with plugins
 
-VTSearch has a plugin architecture built on auto-discovered plugin families — importers, exporters, converters, media types, embedders, and more. The authoritative family inventory is the generated table in [docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md#shared-plugin-architecture); `python app.py --list-plugins` enumerates every installed plugin. The extending guide is split into three topic-specific docs plus an index:
+VTSearch has a plugin architecture built on auto-discovered plugin families — importers, exporters, converters, media types, embedders, and more. The authoritative family inventory is the generated table in [docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md#shared-plugin-architecture); `python app.py --list-plugins` enumerates every installed plugin. The extending guide is split into two topic-specific docs plus an index:
 
 - **[docs/EXTENDING.md](docs/EXTENDING.md)**: index, authentication providers, dataset-import hooks, dependency management, and a one-stop checklist for every extension type.
 - **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)**: data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources.
 - **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)**: media types, embedders, clippers, cleaners, converters, media sources.
-- **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)**: detectors, localizers, extractors.
 
 ## License
 
@@ -124,7 +134,7 @@ VTSearch is licensed under the [Apache License 2.0](LICENSE). That covers the so
 Two things it does **not** cover:
 
 - **Model weights are separately licensed.** VTSearch downloads embedding models at runtime rather than vendoring them, and each publisher sets its own terms; some are more restrictive than this project's license. EUPE (Perception Encoder) is released under the FAIR Noncommercial Research License and cannot be used commercially; DINOv3 is gated on Hugging Face and requires accepting its license before download. Embedders with a usage restriction advertise it via their descriptor's `license_notice` field, which the UI shows as a warning on the embedder picker. Check the terms of any model you enable before deploying.
-- **Two dependencies are copyleft, and can be skipped.** `ultralytics` (used by the image extractor and clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. A default install pulls them in, so those features work out of the box. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. If that doesn't suit your deployment, install without them:
+- **Two dependencies are copyleft, and can be skipped.** `ultralytics` (used by the image object clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. A default install pulls them in, so those features work out of the box. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. If that doesn't suit your deployment, install without them:
 
   ```bash
   VTSEARCH_NO_AGPL=1 bash scripts/install.sh      # or: pip install -r requirements/base-no-agpl.txt

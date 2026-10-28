@@ -1,6 +1,6 @@
 ---
 name: state-of-the-app
-description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (FaceNet crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
+description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence; and the face path (the face provider's crops) on FHIBE. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
 ---
 
 # State of the App
@@ -12,15 +12,14 @@ studies that the review points at.
 
 ## The owner's standing decisions (#4159, 2026-09-23)
 
+Keep these unless the owner changes them, and record any change here in the
+same edit.
+
 - **The objective (owner, 2026-10-01, #4427):** the F-beta, at the session's beta, of the set the line keeps,
   scored on the WITHHELD test half. Found positives (Goods), the user's own unvoted corpus ("positives in
   hand", the `Diagnostic` section, `pools.csv` / `pool_steps.csv` / `in_hand.png`) and the share of the best
   cut explain a line's position; they are never the goal, and a ship decision cites the withheld F-beta at the
   line first.
-
-Keep these unless the owner changes them, and record any change here in the
-same edit.
-
 - **The eval's horizon is not the user's (owner, 2026-10-04, #4482):** the
   review runs 150 clicks as a computational compromise. Users stop when they
   are bored or the app stops them, before 150 or after it. Never frame a
@@ -62,8 +61,9 @@ same edit.
   headline is, per beta at the app's presets (1/4 precision-leaning, 1
   balanced, 4 recall-leaning: the owner's pick of 2026-10-03 on #4448; they
   were 0.5 / 1 / 2) over clicks, the returned set's **F-beta as a share of
-  the best F-beta any cut of the same ranking reaches** (`returned_at_beta.png`,
-  the "returned set at each balance" table), with its precision and recall
+  the best F-beta any cut of the same ranking reaches** (`perp.py --kind
+  balance`'s `returned_at_own_beta.png`, the "returned set at each balance"
+  table), with its precision and recall
   beside it, and the share of runs whose line keeps nothing (`empty`).
   Sessions run at `SOTA_BETA=0.25|1|4` (the eval's `CALIB_BETA` arm): this is
   the standing recipe. The analyzer's betas follow the app's presets
@@ -387,8 +387,8 @@ differs from the photo paths, and the owner settled how its review works:
 
 ## Face (FHIBE): standing decisions (owner, 2026-10-10, #4762)
 
-The face path is FaceNet on `image2face` crops, benchmarked on FHIBE (#4699). The owner set it up as
-follows:
+The face path is the face provider's `image2face` crops and vectors (FaceNet's on MTCNN's crops before
+#5320), benchmarked on FHIBE (#4699). The owner set it up as follows:
 
 - **Bench:** the #4699 baseline's 562 people (`<release>-derived/runs/2026-10-09-k4/identities.txt`),
   all of whom can start from 4 photos on every arm. People are the replication; one seed.
@@ -399,12 +399,14 @@ follows:
   typed query. The report's opening rule is the same: the session shows the example sort until
   Autopilot shows a detector.
 - **Paths:** both stored sizes. They share one path (`--path face`), so each analysis also names its
-  `--dataset`. **Since #4777 the app aligns its face crops (`image2face` `align="roll"`), so the
-  review runs `fhibe_faces_roll_1024` and `fhibe_faces_roll_640`:** pass `SOTA_FACE_ARM=roll` to
-  `sota_face.sh` and `sota_face_analyze.sh` (run dirs `<date>-sota-roll-k<K>-b<beta>`; `sota_face.sh
-  prepare` first, since the arm has its own prepared grids). The plain `fhibe_faces_*` cells are the
-  app before #4777 (#4762's review). #4777's roll sessions (`2026-10-10-sota-roll-*`) are the last
-  review's numbers for the shipped crops.
+  `--dataset`. **Since #5320 the app's face path is the face provider's, so the review runs
+  `fhibe_faces_ik_1024` and `fhibe_faces_ik_640`**, the default arm of `sota_face.sh` and
+  `sota_face_analyze.sh` (`SOTA_FACE_ARM=ik`; run dirs `<date>-sota-ik-k<K>-b<beta>`; `sota_face.sh
+  prepare` first, since the arm has its own prepared grids). Building those cells needs the face
+  models on the GRID (`IMAGEKIT_FACE_CONFIG`). #5321's sessions (`2026-10-26-5321-ik-*`) are the
+  last review's numbers for the shipped path. The MTCNN + FaceNet arms are retired but still run on
+  their cells: `SOTA_FACE_ARM=roll` (the app from #4777 to #5320) and `SOTA_FACE_ARM=` (before
+  #4777, #4762's review).
 - **Presets:** one session set per beta (1/4, 1, 4), as for the photo reviews: six run dirs
   (`<date>-sota-k<K>-b<beta>`) and 6,744 runs a seed. Run them with `fhibe/sota_face.sh`
   (`dirs`, `tasks`, `pack`; claiming V100 pack jobs, since FHIBE cells take a few minutes each;
@@ -518,8 +520,8 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
 1. **Headline: the returned set at each balance, from its own sessions**
    (#4413): per beta at the app's presets (1/4 / 1 / 4, #4448) over clicks, the returned set's F-beta as
    a share of the best F-beta any cut of the same ranking reaches
-   (`returned_at_beta.png`, the "returned set at each balance" table), with
-   its precision and recall beside it, text → 25 → 50 → final → ceiling. A
+   (`perp.py --kind balance`'s `returned_at_own_beta.png`, the "returned set
+   at each balance" table), with its precision and recall beside it, text → 25 → 50 → final → ceiling. A
    report from before #4421 also carried the floor-era control (#4408): precision against P and recall
    against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
    `perp_summary.md`; per run, `returned_at_p.png`), with the share of

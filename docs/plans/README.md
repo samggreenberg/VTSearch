@@ -20,7 +20,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 - [`angular-22-upgrade.md`](angular-22-upgrade.md)
 - [`httpresource-migration.md`](httpresource-migration.md)
-- [`user-docs-screenshots.md`](user-docs-screenshots.md)
 
 ## Browse / projection
 
@@ -33,19 +32,14 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`structural-embedder.md`](structural-embedder.md)
 - [`half-media-types.md`](half-media-types.md)
 - [`media-cleaners.md`](media-cleaners.md)
-- [`visual-genome-dataset.md`](visual-genome-dataset.md)
 
 ## Thresholds and calibration
 
-- [`population-anchored-calibration.md`](population-anchored-calibration.md)
-- [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
-- [`calibration-experiment.md`](calibration-experiment.md)
 - [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
 
 ## Scoring and eval
 
 - [`max-patch-experiment.md`](max-patch-experiment.md)
-- [`set-scorer-experiment.md`](set-scorer-experiment.md)
 - [`coverage-atlas.md`](coverage-atlas.md)
 
 ## Platform / CLI
@@ -61,4 +55,3 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 ## Cross-cutting audits
 
 - [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md)
-- [`documentation-accuracy.md`](documentation-accuracy.md)

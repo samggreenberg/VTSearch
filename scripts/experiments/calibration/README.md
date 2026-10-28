@@ -5,7 +5,8 @@ Measures **calibration regret** — the extra `FPR + FNR` cost the trained
 same ranking — across the region-voting and binary-voting arms, decomposes it
 into rule inefficiency vs calibration→test shift, hunts the runaway-threshold
 bug, tests whether re-pooling can save the raw-patch tree, and checks the
-Inclusion budget under grouped calibration. Design: `docs/plans/calibration-experiment.md`.
+Inclusion budget under grouped calibration. Design and results:
+[`docs/experiments/2026-07-31-calibration/REPORT.md`](../../../docs/experiments/2026-07-31-calibration/REPORT.md).
 
 ## Which file belongs to which study
 
@@ -47,6 +48,7 @@ a report's committed-figure requirement points at.
 | `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader the analyzers share (`analyze_spikes.py` re-exports the name). `load_arm` sets a run's end-of-run spot-check rows (`phase == "check"`, past `max_steps`) apart unless called with `keep_check=True` (#4364). Re-exports `_cells_paths`' discovery functions. |
 | `gzip_cells.py` | Converts a finished run's plain cell frames to `task_NNNN.csv.gz` in place (#5092): one frame at a time, each read back before its plain copy is removed, so no cell is left in both spellings; empty (failed) frames and npz archives stay as they are. Dry run unless `--apply`. Cells are gzipped as they are written by default since #5092 (`CALIB_CELLS_GZIP=0` to write text); this is for runs from before it. |
 | `_rank_metrics.py` | A line read off where the positives sit in a ranking (#4357): the top-*K* set each precision floor keeps, its precision, shortfall and recall, the best cut's recall at the floor, and AP; and the balance's line at each preset with its F-beta against the best cut's (`frame_beta_k`, `balance_metrics`, #4471). The one definition the click-0 text baseline and the State of the App analyzer both read with, over a cell's rank frames (`task_NNNN__rankframes.csv`, `CALIB_RANK_FRAME_STEPS`) or a text sort's scores. |
+| `sam3_scores.py` | SAM3's zero-shot scores per cell, read from the #5213 scorer's shards (#5213, #5241): an image's score for a class is its best detection over the class's prompts. Shared by the text baseline's `--sam3` mode (the zero-shot sort graded as a vote-0 anchor) and the cell runner under `CALIB_SEED_SAM3` (the sort a session opens on), so both read one image's score for one class the same way. |
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
 | `study_paths.py` | `require_study_dir` — the check an **analyzer** owes its `--exp` (#4001). The finished study output dirs were deleted on 2026-09-18, so a stale default now dies on whatever file it opens first; this names the directory and the record instead. Readers only: a launcher `mkdir -p`s its study dir, and requiring one would break the re-run that made the delete acceptable. |
@@ -163,7 +165,7 @@ study that wants either adds it back explicitly (and declares the divergence to
 - `topk` / `pnorm` (`CALIB_REPOOL_VARIANTS`) — the **remedial re-pools** of that
   arm's own per-node scores (`topk` k=4, `pnorm` extreme-value normalisation),
   each with its own recalibrated threshold, tagged in the `pool_variant` column.
-  Both failed (`docs/plans/set-scorer-experiment.md`), and every analyzer filters
+  Both failed (the study's Finding 3), and every analyzer filters
   `pool_variant` back down to the base rows, so the arms produced rows nothing
   reads.
 
@@ -253,8 +255,9 @@ alongside them), and writes all study output under
 prefix.
 
 #2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
-head. Both now follow the app instead: the head is the shipped linear SVM
-(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+head. Both now follow the app instead: the head is the shipped centroid-started
+linear SVM (`linear_svm_prior`, #4785; `CALIB_HEAD` unset, `CALIB_HEAD=linear_svm`
+the plain SVM before it, `CALIB_HEAD=mlp` the historical arm), and the
 fraction resolves per space through `production_split_for` (0.3 single-vector,
 0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it. The line follows the app
 too: an unset `CALIB_BETA` draws it at the app's default balance (beta 1), so
@@ -301,8 +304,8 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 `CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
 `analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
 `python selftest_analyze_anchored.py`. Results land under
-`/expscratch/$USER/calibration-anchored`. Design and pre-registered decision rules:
-`docs/plans/population-anchored-calibration.md`.
+`/expscratch/$USER/calibration-anchored`. Results and decision rules:
+`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`.
 
 Cost note: the fold-anchored arms score the sim set once per calibration fold
 per step (`calibrate_count=2` → two extra scoring passes); disable them with

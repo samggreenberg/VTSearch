@@ -70,7 +70,7 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
 
 
 def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
-    """Settings JSON that activates *tm_names* but defines no autorun processors.
+    """Settings JSON that activates *tm_names* as AutoFind detectors.
 
     Includes ``detectors_dir`` so ``set_settings_path`` doesn't reset
     the directory to the production default after conftest redirected it.
@@ -92,7 +92,7 @@ def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
 class TestAutofindDetectorsCLI:
     def test_settings_drives_trainable_model_scoring(self, client, tmp_path, monkeypatch):
         """A settings file with autofind_detectors scores the dataset
-        with each named detector.  No autorun_processors needed."""
+        with each named detector."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
 
@@ -484,6 +484,11 @@ class TestCreateDetectorOnImport:
         assert entry["media_type"] == "audio"
         assert entry["num_training"] == 2
         assert entry["created_by"] == "default"
+        # How it was imported: the importer, the field it ran with, when (#5334).
+        assert entry["imported"]["importer"] == "server_json_file"
+        assert set(entry["imported"]["params"]) == {"filepath"}
+        assert Path(entry["imported"]["params"]["filepath"]).resolve() == labels.resolve()
+        assert entry["imported"]["imported_at"] > 0
 
     def test_created_detector_belongs_to_the_run_user(self, tmp_path):
         from vtscore.cli import import_labels_into_detector

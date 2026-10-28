@@ -22,7 +22,8 @@ component conventions.
 8. [State management](#state-management) (includes [Multi-dataset support](#multi-dataset-support))
 9. [Embedder binding and routing](#embedder-binding-and-routing)
 10. [Authentication and multi-user support](#authentication-and-multi-user-support)
-11. [Element-level origin tracking](#element-level-origin-tracking)
+11. [The settings sync engine](#the-settings-sync-engine)
+12. [Element-level origin tracking](#element-level-origin-tracking)
 
 ---
 
@@ -88,7 +89,7 @@ detector training and label export.
 |---|---|---|---|
 | `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `embeddinggemma2_audio`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
-| `face` | `face` (FaceNet (face identity, 512d)) | — | — |
+| `face` | `face` (Face identity (512d)) | — | — |
 | `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `embeddinggemma2`, `eupe_patch`, `eupe_single`, `sift_vlad`, `sift_vlad_doc`, `siglip2`, `siglip2_l`, `siglip_l` |
 | `text` | `e5` (E5 (text)) | `intfloat/e5-base-v2` | `bge` |
 | `video` | `xclip` (X-CLIP (video)) | `microsoft/xclip-base-patch32` | `languagebind`, `videomae` |
@@ -103,13 +104,6 @@ in [ML.md § Embedding Models](ML.md#embedding-models); the converter roster is
 in [EXTENDING-media.md § Built-in
 converters](EXTENDING-media.md#built-in-converters).
 
-### Processors
-
-A **detector** scores every item by how well it matches; an **extractor**
-groups items into categories; a **localizer** finds regions of interest inside
-an item (e.g. faces).  All three are **processors** (ABCs in
-`vtscore/media/processors.py`) and can be exported and imported as JSON.
-
 ### Origin tracking
 
 Every item carries its own provenance, so datasets assembled from several
@@ -123,7 +117,11 @@ from.  See [Element-level origin tracking](#element-level-origin-tracking).
 The codebase is split into two top-level Python packages: **`vtscore/`**
 (the Flask-free library tier; everything ML, media, dataset, and
 plugin-related) and **`vtsearch/`** (the Flask app tier; routes,
-settings, auth, and the app-side state shim).
+settings, auth, and the app-side state shim). A third, **`imagekit/`**, is
+the face localisation + embedding package with the pluggable provider seam
+([`imagekit/README.md`](../imagekit/README.md)); it imports neither of the
+other two, and `vtscore` reaches it through
+`vtscore/media/face/imagekit_bridge.py` alone.
 
 This map stops at the package level and names only the files you need to find
 your way in. Each module's docstring says what it is for, so read the directory
@@ -142,10 +140,10 @@ VTSearch/
 │   │                       cli_progress.py: text / NDJSON progress)
 │   ├── io.py, gpu_backends.py, single_instance.py
 │   │                       Runtime modules: plugin file I/O, cuML routing, the port lock
-│   ├── media/              MediaType, MediaEmbedder, MediaClipper, MediaCleaner and Processor
-│   │                       ABCs (base.py, embedder.py, clipper.py, cleaner.py, processors.py),
-│   │                       plus one subpackage per media type (audio/, image/, text/, video/,
-│   │                       document/, face/) holding its embedders, clippers and processors
+│   ├── media/              MediaType, MediaEmbedder, MediaClipper and MediaCleaner ABCs
+│   │                       (base.py, embedder.py, clipper.py, cleaner.py), plus one
+│   │                       subpackage per media type (audio/, image/, text/, video/,
+│   │                       document/, face/) holding its embedders and clippers
 │   ├── converters/         MediaConverter ABC (base.py) + one module per converter;
 │   │                       runner.py stamps converter provenance
 │   ├── embedding/          Embedder façades, per-media vectors, the cached embedding matrix
@@ -184,7 +182,7 @@ VTSearch/
 │   │                       env var, validator, /api/settings key)
 │   ├── cli_main.py         `python app.py` argparse + dispatch
 │   ├── autofind.py         Runs a user's AutoFind detectors on a dataset
-│   ├── auth/               Flask-side login providers and the g.user resolver
+│   ├── auth/               Flask-side login providers, the g.user resolver, session-secret checks
 │   ├── state/, state_proxies.py  App-side state shim and the active-context proxies
 │   ├── shim/               Flask glue: context resolvers, persistence hooks, achievement
 │   │                       recorders, setting getters, app-only plugin families
@@ -192,6 +190,15 @@ VTSearch/
 │   ├── settings_io/        Settings import / export / sync plugins
 │   └── routes/             Flask blueprints; all HTTP handling (_context.py holds the
 │                           X-Dataset-Id / X-Detector-Id guards)
+│
+├── imagekit/               Face localisation + embedding behind a pluggable provider seam
+│   │                       (imagekit/README.md); imports neither vtscore nor vtsearch
+│   ├── face/               FaceRecord, the FacePipeline protocol + provider registry, the
+│   │   │                   compat guard, alignment, CSV/NPZ helpers
+│   │   ├── detection/      FaceDetector (SCRFD / RetinaFace on ONNX Runtime) + its JSON configs
+│   │   ├── extraction/     FaceEmbeddingExtractor (MagFace / ArcFace ONNX) + reference configs
+│   │   └── providers/      oss (this package's models) and ext (an external backend, lazy import)
+│   └── cli.py              detect_faces / process_faces (entry points under scripts/)
 │
 ├── frontend/               Angular SPA source (see docs/FRONTEND.md)
 ├── static/                 Angular build output (gitignored; only the favicons and logo art are tracked)
@@ -204,7 +211,8 @@ VTSearch/
 ├── docs/                   Developer + user docs (docs/user/ is shown in-app)
 ├── slides/                 Slide-deck sources (see slides/README.md)
 ├── docker/, gunicorn.conf.py  Container images and the production WSGI config
-├── requirements/           pip install sets: base, gpu, and an AGPL-free *-no-agpl mirror of each
+├── requirements/           pip install sets: base, gpu, an AGPL-free *-no-agpl mirror of each,
+│                           and the image-embedders / slim LabBench sets (docs/DEPLOYMENT.md)
 └── run-tests.sh            The test + gate runner (docs/TESTING.md)
 ```
 
@@ -316,8 +324,8 @@ modules on the right.
   `SyncSource[LoadT, SaveT]` in `vtscore/sync/`, which captures the
   shared `load()`/`save()` shape; each concrete source plugin is still
   pure I/O.  The *engine* driving settings sources is not — it lives in
-  `vtsearch/settings_store.py` and is documented in
-  [EXTENDING-plugins.md § How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works).
+  `vtsearch/settings_store.py` and is documented under
+  [The settings sync engine](#the-settings-sync-engine).
   The labelset-source engine is `vtscore/labels/sync.py`: every write of a
   detector file (`vtscore/detectors/store.py`) schedules a paced push of that
   file's whole labelset, so a deployment's `default_labelset_source` keeps a
@@ -533,7 +541,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 29 |
 | `clippers` | library | Media clippers | 16 |
-| `cleaners` | library | Media cleaners | 7 |
+| `cleaners` | library | Media cleaners | 8 |
 | `settings_importers` | app | Settings importers | 2 |
 | `settings_exporters` | app | Settings exporters | 2 |
 | `settings_sources` | app | Settings sources | 1 |
@@ -574,14 +582,9 @@ registries in `vtscore/media/__init__.py` rather than `PluginRegistry`.  The
 built-ins are still auto-discovered at import: each media-type sub-package
 (`audio/`, `image/`, …) exposes `MEDIA_TYPE`, `CLIPPERS` and `CLEANERS`
 sentinels, and every `embedder*.py` / `embedder*/` inside it exposes an
-`EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions:
-
-| Registry | Registration function | Lookup functions |
-|----------|----------------------|------------------|
-| Media types | `register(media_type)` | `get(type_id)`, `all_types()`, `get_by_folder_name()`, `get_by_extension()` |
-| Embedders | `register_embedder(embedder)` | `get_embedder(name)`, `all_embedders()`, `embedders_for_type(type_id)` |
-| Clippers | `register_clipper(clipper)` | `get_clipper(name)`, `all_clippers()`, `clippers_for_type(type_id)` |
-| Cleaners | `register_cleaner(cleaner)` | `get_cleaner(name)`, `all_cleaners()`, `cleaners_for_type(type_id)` |
+`EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions; the
+full registration and lookup API is the table in
+[`vtscore.media` § Registry API](../vtscore/docs/packages/media.md#registry-api).
 
 Cleaners (`MediaCleaner`, a `MediaClipper` subclass) get their own registry
 even though they share the clipper descriptor surface, because the UI treats
@@ -589,11 +592,6 @@ them differently: a clipper is a radio choice (one per import), a cleaner is a
 checkbox every item of that type passes through. Keeping them out of
 `_clipper_registry` is what stops them from appearing in a clipper chooser.
 See [EXTENDING-media.md § Adding a Media Cleaner](EXTENDING-media.md#adding-a-media-cleaner).
-
-**`type_id` and `folder_import_name`:** Each media type has a `type_id`
-(e.g. `"audio"`, `"image"`) and a `folder_import_name` which is the
-same value. Both `get(type_id)` and `get_by_folder_name(name)` accept
-the canonical type ID.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
 (sentinel: `CONVERTER`) in `vtscore/converters/__init__.py`, with
@@ -633,9 +631,7 @@ the line, #4413; kept on the detector JSON and asked for at creation, #4665,
 else seeded from the `beta` setting; `detector_beta(ctx)` reads any context's
 own), `line_knobs()`
 (`{"beta": b}`, what every retrain and re-cut passes on),
-`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
-only truly global (cross-dataset) state is `autorun_extractors` /
-`autorun_localizers` in `vtsearch/autorun_processors.py`.
+`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).
 
 Persistent settings live in `vtsearch/settings.py`, split across two tiers.
 The two Pydantic models in `vtsearch/settings_models.py` are the authoritative
@@ -682,8 +678,9 @@ than being re-plumbed per knob.
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
 What `achievement_state` holds is in [achievements.md](achievements.md#state).
-The AutoFind keys other than `autofind_on_import` read through to the server
-file for the built-in `default` user (CLI / single-user); see
+Four AutoFind keys (`autofind_detectors`, `autofind_exporter`,
+`autofind_exporter_field_values`, `autofind_cli_delete_dataset`) read through
+to the server file for the built-in `default` user (CLI / single-user); see
 `_DEFAULT_USER_FALLBACK_KEYS` in `vtsearch/settings.py`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
@@ -732,7 +729,7 @@ summary; the field-by-field tables are in
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
+| `DetectorContext` | Vote state (`good_votes`, `bad_votes`, `label_history`, `label_history_base`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`), sort and Find state (`last_learned_scores`, `textsort_suggestions`, `find_mode`, `find_initial_labels`, `find_scores`, `verified_ids`), the balance (`beta` / `beta_seeded`, #4413), in-memory training artefacts (`training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `structural_verification_cache`, `threshold`), the line's caches (`calibration_cache`, `anchored_cut_cache`, `labels_line`, `centroid_line`, and `line_ranking`, the ranking the line keeps a set of), Tune's test and the spot check (`line_test`, `precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted
@@ -1022,7 +1019,164 @@ sync-source exports — land in the right file. A single-file
 `data/settings.json` that pre-dates the split is **not** migrated: its
 per-user keys simply have no effect where they sit, and the file is left as
 written (the one exception is the AutoFind keys the built-in `default` user
-reads through to, above — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
+reads through to, above — see [Settings files](SETTINGS.md)).
+
+---
+
+## The settings sync engine
+
+The engine that drives a settings source (see
+[EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source))
+lives in `UserSettingsStore` (`vtsearch/settings_store.py`). This section is
+its internals: how a user is bound to a source, when a read touches the
+source, how local edits and upstream values are reconciled, and the lock
+order. The plugin guide carries the short form a source author must honor;
+everything here is still contract a source binds to, not implementation
+detail it may ignore: a source that violates it will appear to work and then
+lose a user's edits under load.
+
+### Which source a user is bound to
+
+`resolve_settings_source` is the single precedence resolver — every sync
+path (initial load, freshness check, pull, push, and the active-source
+route) reads it, so they cannot disagree about which source a user is on:
+
+1. the user's own `settings_source` key, when it names a source;
+   `{"source_name": "none"}` is an explicit opt-out that wins even over a
+   deployment default;
+2. otherwise the deployment-wide `default_settings_source` server setting,
+   which the user *inherits* (the `inherited` flag on
+   `GET /api/settings-sources/active` reports this);
+3. otherwise no source.
+
+Two keys are never exported to a source: `settings_source` and
+`default_settings_source` (`_EXCLUDE_FROM_SOURCE_EXPORT` in
+`vtsearch/settings.py`). Pushing the binding through the binding would
+let a source rewrite which source is active.
+
+### The freshness probe and its cost
+
+Sync-from-source sits on the hot path of *every* settings read, so the
+engine is built around making the common case not touch your source at
+all. A read walks three tiers:
+
+| Tier | When | Cost |
+|---|---|---|
+| Fast path | A sync succeeded within the freshness window (`_FRESHNESS_CHECK_INTERVAL`, **1.0 s**) | No probe, no per-user lock — an in-memory dict read |
+| Probe | Window elapsed | One `peek_version()` call; on an unchanged token, refresh the timestamp and return |
+| Full sync | `peek_version()` reports a *different* token, or this process has never synced this user | `load()` + `_apply_settings` |
+
+This is why **`peek_version()` must be cheap and must not raise for
+transient reasons.** It is the only thing standing between a busy read
+path and a full `load()`. The built-in `server_json_file` source returns
+`st_mtime_ns` from a single `stat()`. A network-backed source should use
+an ETag, a `Last-Modified` header, or a HEAD request — never a full GET.
+
+Three `peek_version()` return values have distinct meanings:
+
+- **A token that differs from the last one** — the source changed; a full
+  re-sync is due.
+- **The same token** — unchanged; skip the load.
+- **`None`** — "I cannot cheaply tell." The engine treats this as *no
+  re-sync* and keeps serving the local cache. A source that returns
+  `None` unconditionally is therefore imported once per process and then
+  never auto-refreshed. That is a legitimate choice for a write-mostly
+  target, but it must be a deliberate one.
+
+A `peek_version()` that *raises* is treated as unchanged and backs off
+until the next window, so a source outage degrades to "serve local" rather
+than hammering a dead endpoint.
+
+### The dirty-key contract
+
+The engine has to reconcile two writers: the user clicking a toggle, and
+an upstream value arriving from `load()`. `dirty_keys` on `UserSyncState`
+is what arbitrates.
+
+**What marks a key dirty:** any local write through `mutate_user_locked`
+registers the keys it touched (minus the excluded ones above) as dirty —
+*inside the cross-process file lock*, before it is released. That
+ordering is the point: a syncing thread can never observe a key as
+"written but not yet dirty" and clobber it.
+
+**What a source may overwrite** depends on which pull it is:
+
+| Pull | Honors `dirty_keys`? | Rationale |
+|---|---|---|
+| Automatic re-sync (version bump on the source) | **Yes** — dirty keys are skipped | A freshly clicked local toggle must not be silently reverted by an upstream value |
+| Explicit `POST /api/settings-sources/sync` | **No** — everything is overwritten and the dirty set is cleared | The user pressed "Sync now" precisely to take the source's values |
+
+**When dirty keys clear:** on a successful `sync_to_source` push (the
+source now matches local, so there is nothing left to protect) or on an
+explicit manual pull. They deliberately survive an automatic re-sync.
+
+The skip set handed to `_apply_settings` is a **live view**
+(`_LiveDirtyKeys`), not a snapshot taken before `load()` — because
+`load()` may be a slow network round-trip, and a user write landing
+mid-flight must still be honored. `mutate_user_locked` re-checks it under
+the file lock, which is where the decision actually becomes atomic against
+the racing write.
+
+### The cross-process dedup marker
+
+After any successful sync the engine stamps a `<user_settings>.syncmark`
+sibling file recording the `peek_version` token it applied. A later
+process whose first read finds the source unchanged at that token adopts
+it and skips the load entirely — the values are already on disk.
+
+Because `_sync_state` is in-memory but the marker is not, this is what
+makes a **container restart** cheap: the data directory is a persistent
+volume, so a restart against an unchanged source costs one `peek_version`
+instead of a full `load()`. It dedups a second process sharing the data
+directory (a `python app.py --autodetect` CLI run, a dev server) the same
+way. It is *not* primarily about concurrent gunicorn workers —
+`gunicorn.conf.py` pins `workers = 1` — and it should not be read as dead
+code on that basis; see the comment above `_sync_marker_path`.
+
+The marker is best-effort: every read, write, and serialisation failure is
+swallowed and the caller falls back to the full load. It is a performance
+hint, never a correctness input. It is deleted when the user's source is
+cleared, so a later re-configure cannot consult a stale token.
+
+### Lock ordering a new source must respect
+
+The store has three locks, and the canonical order is
+**cross-process `file_lock` → in-process `settings_lock`**, with the
+per-user sync `RLock` taken outside both:
+
+| Lock | Guards |
+|---|---|
+| `file_lock(path)` | Cross-process (`flock`) exclusion on one settings file; also serialises threads in this process |
+| `settings_lock` | The in-memory caches (`_user_caches`, `_sync_state`, `_syncing`) — held briefly, never across I/O |
+| `per_user_sync_lock(username)` | Serialises the whole probe + `load()` + apply sequence for one user |
+
+What this means for a source author:
+
+- **Your `load()` / `save()` / `peek_version()` are called with no settings
+  file lock held.** `sync_to_source` runs *outside* the file lock on
+  purpose, so a slow target (NFS, a webhook, a cold S3 bucket) cannot block
+  unrelated settings writes. Do not assume you are in a critical section.
+- **Never call back into `vtsearch.settings` from a source method.** A
+  setter re-enters `_ensure_user_loaded`, which re-enters the sync path.
+  The `_syncing` set is a re-entrancy guard for the engine's own
+  `_apply_settings` pass, not a general licence to recurse.
+- **`settings_lock` is reentrant**, so an ordering inversion will *not*
+  fail locally — it deadlocks later against a concurrent writer. This is
+  why `resolve_settings_source` is documented as "must not be called while
+  holding `settings_lock`": the deployment-default read may take the
+  server file lock.
+- **Assume you are on an arbitrary thread**, called concurrently for
+  different users. Per-user serialisation is guaranteed; cross-user is not.
+
+### Failure semantics
+
+A source that raises is never fatal. `load()` failures log and leave
+`last_sync_succeeded` untouched, so a transient outage after a previous
+success does not erase the success flag or invalidate the local cache; the
+slow path retries once the rate-limit window elapses. `save()` failures
+log and return, leaving the keys dirty so the next successful push carries
+them. This is deliberate: settings sync is an availability-sensitive side
+channel, and the local file is always the fallback.
 
 ---
 
@@ -1273,12 +1427,13 @@ exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
 top-of-list draw.
 
 Recording only — nothing reads these values back to change behaviour. The
-consumer (partitioning the conformal calibration set by trustworthy surfacing
-context) is gated on the experiment pre-registered in
-[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
-Two rules keep the record honest: it is written **only on a vote-state change**
-(an idempotent re-apply keeps what the original click recorded, so a stale tab
-cannot rewrite it), and `restore_labels_from_detector` carries it back into
+consumer it was recorded for, partitioning the conformal calibration set by
+trustworthy surfacing context, was retired before it ran once the precision-floor
+ruling chose random verification (#4267, #5260); the record stays as the only
+measure of real, not simulated, vote-order bias. Two rules keep the record
+honest: it is written **only on a vote-state change** (an idempotent
+re-apply keeps what the original click recorded, so a stale tab cannot rewrite
+it), and `restore_labels_from_detector` carries it back into
 vote state on load — without that, the next vote's labelset resync would erase
 every recorded vote's provenance.
 

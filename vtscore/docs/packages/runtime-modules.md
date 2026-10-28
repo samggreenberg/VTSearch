@@ -41,6 +41,10 @@ def desanitize_csv_cell(value: str) -> str: ...
 def atomic_write_stream(path, *, encoding="utf-8", newline="") -> Iterator[IO[str]]: ...
 
 @contextmanager
+def resumable_write_stream(path, position: int | None, *, encoding="utf-8", newline="") -> Iterator[IO[str]]: ...
+def commit_write_stream(f: IO[str]) -> int: ...
+
+@contextmanager
 def file_lock(path) -> Iterator[None]: ...
 ```
 
@@ -61,6 +65,16 @@ from a generator, an NDJSON export written row by row. It yields the open
 handle, `fsync`s and renames on a clean exit, and unlinks the tmp file if the
 block raises, so an export that dies halfway through its record iterator
 leaves the destination untouched rather than half-written.
+
+**Resumable writes.** `resumable_write_stream` is the opposite trade, for an
+export a later run must be able to continue (`--stream-results --resume`):
+it writes *in place*, so what was written outlives the process.
+`commit_write_stream(f)` flushes and `fsync`s the handle and returns its byte
+length, which the writer records somewhere durable. Passing that offset back
+as `position` cuts the file back to it - dropping anything a killed run wrote
+after its last commit - and appends; `position=None` starts the file afresh.
+A file that is missing or shorter than `position` raises `ValueError`, since
+what was committed is then gone. A reader can see the file mid-run.
 
 **CSV cells.** `sanitize_csv_cell` prefixes a value starting with `=`,
 `+`, `-`, `@`, tab or carriage return with a single quote, so a label
@@ -172,3 +186,13 @@ there is no "delete the pidfile and try again" recovery step.
 
 The lock lives in `VTSEARCH_RUNDIR` if set, else the system temp dir, as
 `vtsearch-<port>.lock` (`lock_path_for(port)`). POSIX only (`fcntl`).
+
+---
+
+## Cross-references
+
+- [`exporters.md`](exporters.md#writing-a-custom-exporter) and [`labels.md`](labels.md#built-in-label-importers) - the file exporters, label importers and JSON source that read and write through `vtscore.io`.
+- [`detectors.md`](detectors.md#registry) and [`datasets.md`](datasets.md#on-disk-dataset-registry) - the two registries whose index files are written with `atomic_write_json` under `file_lock`.
+- [`projection.md`](projection.md) and [`coverage.md`](coverage.md) - the UMAP and k-means fits that `vtscore.gpu_backends` routes to cuML.
+- [`config.md`](config.md#resolve_device) - `resolve_device()`, which `cuml_enabled()` consults before choosing the GPU path.
+- [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#environment-variables) - `VTSEARCH_DISABLE_CUML` and `VTSEARCH_RUNDIR`; the [cuML troubleshooting entry](../../../docs/TROUBLESHOOTING.md#cuml-crashes-compiling-a-kernel-cuda_fp8hpp--nvrtc-errors) covers the fit-time failures described above.

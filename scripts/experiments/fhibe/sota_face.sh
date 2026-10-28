@@ -4,7 +4,8 @@
 # The owner's settings (2026-10-10), the face review's standing recipe:
 #   * the #4699 baseline's 562 people (<release>-derived/runs/2026-10-09-k4/identities.txt);
 #   * sessions that start from 1 photo and from 4 (the example opening), two session sets;
-#   * FaceNet on image2face crops at both stored sizes: fhibe_faces_1024 and fhibe_faces_640;
+#   * the face path on image2face crops at both stored sizes: fhibe_faces_ik_1024 and fhibe_faces_ik_640
+#     (the face provider's, the arm `ik`, since #5320; FaceNet's fhibe_faces_{1024,640} before it);
 #   * one session set per preset (beta 1/4, 1, 4), 150 votes, the full-label ceiling, shipped
 #     defaults otherwise; one seed (people are the replication).
 # So a review is six run dirs, <date>-sota-k<K>-b<beta>, each 1,124 cells (562 people x 2 sizes),
@@ -28,8 +29,10 @@
 # #4776's `4776`), SOTA_FACE_CLAIMS_DIR (join an earlier `pack`'s task pool, say cpu packs beside the
 # V100 ones, so the two never run the same cell).
 #
-# SOTA_FACE_ARM=<tag> runs the same review on another face arm, fhibe_faces_<tag>_{1024,640}
-# (#4777: roll, sim, the crops turned upright). Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
+# SOTA_FACE_ARM=<tag> picks the face arm, fhibe_faces_<tag>_{1024,640}: `ik` (the default, #5321) is the
+# face provider's own faces and vectors, the path as it ships since #5320. The retired MTCNN + FaceNet
+# arms still run on their existing cells: SOTA_FACE_ARM= (empty) for the plain crops, and #4777's roll
+# and sim, the crops turned upright. Its run dirs are <date>-sota-<tag>-k<K>-b<beta>,
 # its grids are prepared on its own cells (`prepare`, then `dirs`), and it keeps the review's
 # identity file, so every session pairs with the plain arm's by person, size, K and beta.
 #
@@ -44,7 +47,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHIBE_ROOT="${VTS_FHIBE_ROOT:-/expscratch/$USER/fhibe}"
 RUNS="$FHIBE_ROOT/${VTS_FHIBE_RELEASE:-fhibe-full-resolution-674a7dcf}-derived/runs"
 D="${SOTA_FACE_DATE:-$(date +%Y-%m-%d)}"
-ARM="${SOTA_FACE_ARM:-}"
+ARM="${SOTA_FACE_ARM-ik}"
 TAG="${SOTA_FACE_TAG:-sota}"
 SET="$D-$TAG${ARM:+-$ARM}"  # the run dirs' common prefix
 # The prepared grids the run dirs link to: the #4699 baseline's for the plain arm, the arm's own otherwise.

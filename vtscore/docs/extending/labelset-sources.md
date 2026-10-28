@@ -342,7 +342,7 @@ s3 = "my_pkg.labelset_source:LABELSET_SOURCE"
 ```
 
 After `pip install`, link the source to a detector via `PUT
-/api/detectors/<name>/labelset-source` with body
+/api/detectors/<detector_ref>/labelset-source` with body
 `{"source_name": "s3", "field_values": {"bucket": "my-bucket", "key":
 "vtsearch/labels/{detector_name}.json"}}`, or make it every detector's
 target with the `default_labelset_source` server setting. Every change

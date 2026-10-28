@@ -37,7 +37,9 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "as_labelset": False,
             "save_dataset": False,
+            "resume": False,
         }
 
     def test_pickle_chunked_carries_chunk_size_and_flags(self):
@@ -48,7 +50,9 @@ class TestDescribe:
             "chunk_size": 250,
             "stream_results": True,
             "keep_negatives": True,
+            "as_labelset": False,
             "save_dataset": False,
+            "resume": False,
         }
 
     def test_importer_carries_params(self):
@@ -61,8 +65,19 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "as_labelset": False,
             "save_dataset": False,
+            "resume": False,
         }
+
+    def test_as_labelset_is_reported(self):
+        """``--dry-run`` says a streamed run writes label entries, not hits."""
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl", chunk_size=250)
+        assert spec.describe(stream_results=True, keep_negatives=False, as_labelset=True)["as_labelset"] is True
+
+    def test_resume_is_reported(self):
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl", chunk_size=10)
+        assert spec.describe(stream_results=True, keep_negatives=False, resume=True)["resume"] is True
 
     def test_save_dataset_is_reported(self):
         """``--dry-run`` reads whether the import would be kept from here (#4226)."""
@@ -118,6 +133,18 @@ class TestLoad:
         source = spec.load()
         with pytest.raises(ValueError, match="Unknown importer"):
             next(iter(source))
+
+    @pytest.mark.parametrize("chunk_size", [None, 10])
+    def test_load_deferred_is_lazy_too(self, chunk_size):
+        spec = _SourceSpec(kind="importer", importer_name="definitely_not_an_importer", chunk_size=chunk_size)
+        source = spec.load_deferred()
+        with pytest.raises(ValueError, match="Unknown importer"):
+            next(iter(source))
+
+    def test_a_pickle_chunk_needs_no_preparing(self):
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl")
+        chunk = {1: {"id": 1}}
+        assert spec.prepare(chunk) is chunk
 
 
 class TestOutputs:

@@ -1285,6 +1285,8 @@ class TestDetectorStats:
         assert "active_dataset_name" in data
         assert "created_by" in data
         assert isinstance(data["readers"], list)
+        # A detector no label importer created was not imported (#5334).
+        assert data["imported"] is None
 
     def test_stats_counts_positives_and_negatives(self, client):
         from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -2857,6 +2859,39 @@ class TestRegisterModelFromLabelset:
         assert tm_data["text_query"] == ""
         assert tm_data["media_example"] == ""
         assert tm_data["examples"] == []
+
+    def test_records_how_the_detector_was_imported(self, client, tmp_path):
+        """The importer, the fields it ran with and when, kept and shown in Stats (#5334)."""
+        from pathlib import Path
+
+        from vtscore.detectors.registry import get_detector
+
+        origin = self._audio_origin()
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(
+            json.dumps(
+                {"labels": [{"md5": medias[1]["md5"], "label": "good", "origin": origin, "origin_name": "a.wav"}]}
+            )
+        )
+
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Imported LS", "filepath": str(labels_path), "beta": 0.5},
+        )
+        assert res.status_code == 201, res.get_json()
+        detector_id = res.get_json()["detector"]["id"]
+
+        entry = get_detector(detector_id)
+        assert entry is not None
+        imported = entry["imported"]
+        assert imported["importer"] == "server_json_file"
+        # Only the importer's own fields: the route's name / beta are not import fields.
+        assert set(imported["params"]) == {"filepath"}
+        assert Path(imported["params"]["filepath"]).resolve() == labels_path.resolve()
+        assert imported["imported_at"] == pytest.approx(entry["created_at"], abs=60)
+
+        stats = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        assert stats["imported"] == imported
 
     def test_missing_name_returns_422(self, client, tmp_path):
         labels_path = tmp_path / "labels.json"

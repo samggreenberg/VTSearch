@@ -56,16 +56,7 @@ v22 breaking change is a no-op here (see the audit below).
 
 <!-- item-sep -->
 
-- **Angular Aria (now stable)** — headless, styleable a11y components. Directly
-  relevant: `vt-modal` hand-rolls focus management via CDK's `CdkTrapFocus`
-  across ~24 dialogs (the ~9 kB eager cost noted in the `angular.json` budget
-  comment). Evaluate whether Aria can replace some of that.
-
 <!-- item-sep -->
-
-- **Signal Forms (now stable)** — a signals-native forms story for the
-  settings/import/config forms. Was "low value, experimental" at 21; now stable,
-  so worth a re-look if forms churn.
 
 <!-- item-sep -->
 

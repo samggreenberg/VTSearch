@@ -142,5 +142,33 @@ class DisplayResultsExporter(ResultsExporter):
             "message": (f"Printed {total_hits} hit(s) across {detector_count} detector(s) to stdout."),
         }
 
+    def export_labelset_streaming(
+        self,
+        header: dict[str, Any],
+        elements: Iterator[dict[str, Any]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Print each label entry - its label, detector, origin and name - as it streams in.
+
+        Unlike the hit stream, ``bad`` entries print too: in a labelset the
+        label is the content, and they only stream when ``--keep-negatives``
+        asked for them.
+        """
+        detector_count = len(header.get("detectors", []))
+        total = 0
+        for entry in elements:
+            if total == 0:
+                print("Labels:\n")
+            origin_str = _format_origin(entry)
+            name = entry.get("origin_name") or entry.get("filename", "")
+            where = f"{origin_str}  {name}" if origin_str else name
+            print(f"  [{entry.get('label', '?')}] {entry.get('detector', '')}  {where}")
+            total += 1
+        if total == 0:
+            print("No labels to print.")
+        return {
+            "message": f"Printed {total} label(s) from {detector_count} detector(s) to stdout.",
+        }
+
 
 EXPORTER = DisplayResultsExporter()

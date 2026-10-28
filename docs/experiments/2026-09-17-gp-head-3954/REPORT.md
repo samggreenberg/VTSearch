@@ -338,8 +338,8 @@ the per-step fit cost.
   click 150, all of it FPR: the cut sinks as votes accumulate). This is the
   binary-voting fusion regression `docs/ML.md` already records on "an 838-image
   set, where `cap50` beats every fusion arm" — `caltech101_m` is that set — and
-  [`docs/plans/population-anchored-calibration.md`](../../plans/population-anchored-calibration.md)
-  owns it. It is reproduced here on the current code, five seeds, six
+  the population-anchored-calibration plan owned it until #5261 found the fused
+  cut decides no trained head's line on the app's balanced path. It is reproduced here on the current code, five seeds, six
   categories, not filed again.
 - **Cost.** A GP arm fits in ~40 ms per step plus ~45 ms for its two
   calibration folds against ~8 + 13 ms for the app's liblinear head, at n ≤
