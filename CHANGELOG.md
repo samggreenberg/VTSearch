@@ -73,6 +73,13 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Changed
 
+- **The GPU Docker image runs the face models on the GPU** (issue #5363). `docker/Dockerfile.gpu` now installs
+  `onnxruntime-gpu` 1.26.0 in place of the CPU `onnxruntime`, as a CUDA `scripts/install.sh` already did, so
+  Face's detector and embedder use the GPU there, with the same vectors as on the CPU (cosine at least 0.999999
+  per face in #5332's comparison), so face datasets built before need no re-import. 1.26.0 is the newest
+  `onnxruntime-gpu` built for CUDA 12; later releases need CUDA 13, which this image does not have. See
+  [Face models](docs/DEPLOYMENT.md#face-models).
+
 - **Save as Default remembers Multi-Dataset and the two ingest toggles, after a demo import too** (issue #5355).
   The **Save as Default** offer that follows an import now also saves **Build Browse map now**, **Merge
   near-duplicates** and, after a Multi-Dataset import, **Multi-Dataset** with the kinds it made, so the next import

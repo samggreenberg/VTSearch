@@ -98,6 +98,31 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
         --prefer-binary \
         -r "requirements/$REQUIREMENTS"
 
+# ---------- onnxruntime-gpu for the face models ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_onnxruntime_gpu` by hand (issue #5363). The imagekit face path
+# (image2face, provider oss) runs its detector and embedder on onnxruntime, and
+# pyproject.toml declares the CPU build, which the layer above installed; without
+# this swap the face models stay on the CPU under VTSEARCH_DEVICE=cuda. The GPU
+# build still carries the CPU provider, so a container with no GPU is unchanged.
+#
+# Both wheels install the same `onnxruntime` module, so the CPU build is
+# uninstalled FIRST: uninstalling it afterwards would delete files the GPU build
+# shares. For the same reason no later layer may pip-install the project with
+# its dependencies, which would put the CPU build back over this one.
+#
+# 1.26.0 is the newest release built for CUDA 12. From 1.27.0 on, the PyPI wheels
+# are CUDA 13 builds (their `cuda` extra names the nvidia-*-cu13 libraries): the
+# cu129 torch above brings CUDA 12.9 libraries, and the base admits drivers too
+# old for CUDA 13. install.sh pins the same release for its own reason (the
+# newest that runs on a V100), so the two pins can move independently.
+#
+# Unlike install.sh, a failure here does not fall back to the CPU build: as
+# with cuML below, a build-once-ship image should fail loudly rather than
+# quietly ship face models that never use the GPU.
+RUN pip uninstall -y onnxruntime && \
+    pip install --no-cache-dir "onnxruntime-gpu==1.26.0"
+
 # ---------- VTSBrowse signpost naming (toponymy) ----------
 # Docker builds never run scripts/install.sh, so this step mirrors its
 # `vts_install_toponymy` by hand. Without it the image ships without
