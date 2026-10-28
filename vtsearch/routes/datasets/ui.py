@@ -48,8 +48,18 @@ datasets_ui_bp = Blueprint(
 
 
 def _folder_has_content(folder) -> bool:
-    """Return True if *folder* exists and contains at least one entry."""
-    return folder is not None and folder.exists() and any(folder.iterdir())
+    """Return True if *folder* exists and contains at least one entry.
+
+    A folder that is missing, or is removed while it is being listed (a demo
+    download cleaned up mid-listing), reads as empty rather than raising, so one
+    vanishing folder cannot 500 the whole demo catalog (#5356).
+    """
+    if folder is None:
+        return False
+    try:
+        return any(folder.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return False
 
 
 def _initial_demo_status(has_pkl: bool, required_folder, has_source: bool) -> str:

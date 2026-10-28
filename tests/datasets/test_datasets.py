@@ -498,6 +498,41 @@ class TestStartupState:
         )
 
 
+class _VanishingFolder:
+    """A folder that exists when checked and is gone by the time it is listed."""
+
+    def exists(self):
+        return True
+
+    def iterdir(self):
+        raise FileNotFoundError("removed mid-listing")
+
+
+class TestFolderHasContent:
+    def test_folder_removed_mid_listing_reads_as_empty(self):
+        from vtsearch.routes.datasets.ui import _folder_has_content
+
+        assert _folder_has_content(_VanishingFolder()) is False
+
+    def test_missing_folder_and_plain_file_read_as_empty(self, tmp_path):
+        from vtsearch.routes.datasets.ui import _folder_has_content
+
+        a_file = tmp_path / "not-a-dir"
+        a_file.write_bytes(b"x")
+        assert _folder_has_content(None) is False
+        assert _folder_has_content(tmp_path / "missing") is False
+        assert _folder_has_content(a_file) is False
+
+    def test_folder_with_an_entry_has_content(self, tmp_path):
+        from vtsearch.routes.datasets.ui import _folder_has_content
+
+        folder = tmp_path / "source"
+        folder.mkdir()
+        assert _folder_has_content(folder) is False
+        (folder / "clip.wav").write_bytes(b"x")
+        assert _folder_has_content(folder) is True
+
+
 @pytest.mark.xdist_group("shared-demo-data-dir")
 class TestDemoDatasetReadiness:
     """Demo datasets report three-state status: ready / needs_embedding / needs_download.
@@ -564,6 +599,20 @@ class TestDemoDatasetReadiness:
                 EMBEDDINGS_DIR.rmdir()
             except OSError:
                 pass
+
+    def test_folder_vanishing_mid_listing_does_not_crash_demo_list(self, client, monkeypatch):
+        """A source folder removed between its check and its listing must not 500 the catalog (#5356).
+
+        The race this pins: ``exists()`` saw the folder, then a cleanup removed
+        it before ``iterdir()`` ran.  The demo reads as having no source.
+        """
+        from vtscore.datasets import DEMO_DATASETS
+
+        monkeypatch.setitem(DEMO_DATASETS["esc50_s"], "required_folder", _VanishingFolder())
+        resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200, "one vanishing source folder must not 500 the whole catalog"
+        ds = next(d for d in resp.get_json()["datasets"] if d["name"] == "esc50_s")
+        assert ds["status"] == "needs_download"
 
     def test_audio_pkl_with_empty_esc50_shows_needs_download(self, client):
         """Audio pkl exists and ESC-50 audio dir exists but is empty → needs_download."""
