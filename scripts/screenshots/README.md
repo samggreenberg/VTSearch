@@ -126,8 +126,13 @@ licence sits beside its fonts. The faces are
 built into the page from their bytes before its scripts run, and a shot fails if
 they are not loaded. Monospace is pinned through `--font-mono`, so a component
 that names a bare `monospace` (which the style guide already forbids) escapes
-it. What stays machine-specific is the rasteriser, which `check.sh` must
-tolerate, and emoji, which every platform draws from its own emoji font. Spell
+it. The callouts' labels and step discs name `system-ui` inline, so they are
+pinned by an `!important` rule on the callout layer. And Chromium on Linux
+hints text as the machine's fontconfig says, which rounds every advance to a
+whole pixel and widens each line, so the browser is launched with
+`--font-render-hinting=none`, as the container draws by default. What stays
+machine-specific is the rasteriser, which `check.sh` must tolerate, and emoji,
+which every platform draws from its own emoji font. Spell
 checking is off as well, so no path typed into a form carries a squiggle.
 
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
