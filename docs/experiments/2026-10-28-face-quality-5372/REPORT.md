@@ -48,7 +48,7 @@ head; at 640 px its face scores under 14 and is caught.
 One more pattern, for the record only: in four-photo sessions at β 4, a start set whose worst face is under
 14 reaches F 0.80 at 50 votes, against 0.93 for the rest (1024 px; 0.83 / 0.92 at 640 px). At β 1 the gap is
 gone (0.94 / 0.93). These people may simply be harder to find, so this is not a cost of the hard face, and
-the warning does not key on it.
+the warning does not key on it. Telling the two apart is #5376.
 
 The six 1024 px failures were checked in the full-size photos in #5348. Each shows the right person in a hard
 view: a full profile, two lying down, a bottle over the face, a cap and bowed head, a head turned away. The
