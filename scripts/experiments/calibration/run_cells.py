@@ -707,10 +707,11 @@ def main(argv: list[str] | None = None) -> int:
         # "shipped" on the default arm, so a pooled frame never reads a blank as
         # a rule.
         live_threshold = cfg.LIVE_THRESHOLD or "shipped"
-        # The centroid's line rule (#4732), named on the default arm too.
-        from vtscore.detectors.centroid_head import CENTROID_LINE_RULE
+        # The centroid's line rule (#4732), named on the default arm too: the rule the harness resolved for these
+        # medias (face crops draw their own, #5325).
+        from vtscore.eval.voting_iterations import production_centroid_line
 
-        centroid_line = cfg.CENTROID_LINE or CENTROID_LINE_RULE
+        centroid_line = cfg.CENTROID_LINE or production_centroid_line(medias)
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
