@@ -71,6 +71,31 @@ def test_a_trained_detectors_sorts_are_plotted(client):
     assert len(_history(client, "stable")) == 3
 
 
+def test_an_example_the_dataset_lacks_does_not_keep_the_sorts_out(client):
+    """A Good this dataset cannot resolve is in every model; the sorts still count.
+
+    The example's file is gone and nothing in the dataset matches it, so it
+    stays in the labelset without a vote here, as a Face example the provider
+    cannot embed does.  The learned sort refused to register any model trained
+    with such a label, so the indicators had nothing to read.
+    """
+    res = client.post(
+        "/api/detectors/registry",
+        json={"name": "foreign-example-5358", "media_type": "audio", "examples": [{"type": "media", "value": "gone.wav"}]},
+    )
+    assert res.status_code == 201
+    load_detector_and_wait(client, res.get_json()["detector"]["id"])
+    ctx = get_active_detector_context()
+    assert not ctx.good_votes and len(ctx.cached_labelset.elements) == 1
+
+    # A sort needs a Bad, so the first vote goes unsorted.
+    assert client.post("/api/medias/1/vote", json={"target": "good"}).status_code == 200
+    _vote_and_sort(client, [(18, "bad"), (2, "good"), (19, "bad"), (3, "good")])
+    _fresh_status(client)
+
+    assert len(_history(client, "smart")) == 4
+
+
 def test_a_rehydrate_starts_the_pair_over(client):
     """A dataset switch re-derives the votes: the base is the new restore, and the old steps go."""
     ctx = _load_trained_detector(client, "restored-rehydrate-5358")
