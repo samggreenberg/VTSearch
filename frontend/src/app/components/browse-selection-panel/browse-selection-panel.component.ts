@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -80,6 +80,15 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Emitted with the one selected item's id, whose photo the browse view opens. */
   readonly showInPhoto = output<number>();
+
+  /** Hides the empty list's "Click bins on the canvas" line while Toasty, at
+   *  the {@link header}, says the same (#5360). */
+  readonly emptyNoteHidden = input(false);
+
+  /** The panel's header and its Verified Bad button, for the browse view's
+   *  Toasty hints to stand at (#5360). */
+  readonly header = viewChild.required<ElementRef<HTMLElement>>('header');
+  readonly verifyBadButton = viewChild<ElementRef<HTMLElement>>('verifyBadButton');
 
   /**
    * Emitted when the header checkbox asks for a select-all-in-view (the [ ]/[-]

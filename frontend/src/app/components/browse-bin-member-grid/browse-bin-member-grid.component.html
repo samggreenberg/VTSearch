@@ -79,6 +79,6 @@
       }
     </div>
   </cdk-virtual-scroll-viewport>
-} @else if (docked()) {
+} @else if (docked() && !emptyHintHidden()) {
   <p class="bin-popup-empty-hint">Right-click a bin on the canvas to show it here.</p>
 }

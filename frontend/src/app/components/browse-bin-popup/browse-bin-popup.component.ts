@@ -224,6 +224,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Width (CSS px) of the docked panel, driven by the browse view's divider;
    *  the docked grid derives its column count from it. Unused when floating. */
   readonly availableWidth = input(0);
+  /** Docked: hide the empty panel's "Right-click a bin" line while Toasty
+   *  says the same over the map (#5360). */
+  readonly emptyHintHidden = input(false);
   /** The clip currently auditioning anywhere in the Browse view (canvas hover
    *  or this panel's own grid), fed back by the browse view. In docked audio
    *  mode the detail pane + metadata track it — the panel is the now-playing

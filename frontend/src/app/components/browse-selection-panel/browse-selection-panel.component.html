@@ -1,5 +1,5 @@
 <div class="bsp" vtNoFocusSteal animate.enter="drawer-enter-right" animate.leave="drawer-leave-right">
-  <div class="bsp-header">
+  <div class="bsp-header" #header>
     <h3 class="bsp-title" [title]="'Items you have selected on the canvas (' + count() + ')'">
       Selection ({{ count() | number }})
     </h3>
@@ -31,6 +31,7 @@
           Verified Good
         </button>
         <button
+          #verifyBadButton
           type="button"
           class="btn btn--sm bsp-verify-bad"
           [disabled]="count() === 0"
@@ -81,7 +82,7 @@
   <div
     class="bsp-list"
     [style.--grid-goal-width]="gridGoalWidth() + 'px'">
-    @if (count() === 0) {
+    @if (count() === 0 && !emptyNoteHidden()) {
       <p class="bsp-empty">Nothing selected. Click bins on the canvas to add items.</p>
     }
     @for (entry of sortedEntries(); track trackById($index, entry)) {
