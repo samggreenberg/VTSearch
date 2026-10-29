@@ -42,6 +42,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Fixed
 
+- **Find Results lists its hits on a laptop screen again.** The dialog's list took whatever height the rest of the
+  dialog left over, and on a laptop screen a crowded dialog (a note about the run, an auto-export line, an exporter
+  with several fields) left none: the summary said there were hundreds of Good results while the list under it was
+  zero pixels tall, and so was the progress bar Browse shows in its place while it builds the map. The list now keeps
+  room for a few rows and the dialog scrolls for the rest.
+
 - **A dataset with an item one embedder could not read can be browsed again** (issue #3798). An import that runs
   two embedders, or one embedder over vectors the importer shipped, kept an item one of them could not read as
   long as the other gave it a vector, so the dataset was saved with a hole in one of its spaces, and Browse, sort
