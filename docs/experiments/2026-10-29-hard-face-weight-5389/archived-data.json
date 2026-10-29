@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-29-hard-face-weight-5389.7ac859682408.tar.gz",
+   "source_commit": "7ac85968240825a277c6c9fad1c30ac5f981ac67",
+   "files": {
+    "paired.csv": {
+     "bytes": 71182,
+     "oid": "3666b496d9d200754c6747fa25ea3bfbdd1ba33a"
+    },
+    "summary.csv": {
+     "bytes": 21894,
+     "oid": "cba81d0e6cd24d8c5f124b574cd857ec742ccb2c"
+    }
+   }
+  }
+ ]
+}
