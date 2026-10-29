@@ -67,8 +67,8 @@ dependencies = [
     # turns on copy-on-write and the string dtype. The major is 3 since #4390,
     # which moved the GPU stack with it: every GPU install adds cuml-cu12>=26.8,
     # whose cudf-cu12 is the first to take pandas 3 (it pins pandas>=3,<3.0.4),
-    # and RAPIDS 26.x needs the CUDA 12.9 libraries only the cu129 torch wheel
-    # pins (scripts/install.sh, docker/Dockerfile.gpu). A later pandas minor is
+    # beside a cu129 or cu126 torch (scripts/install.sh, docker/Dockerfile.gpu,
+    # and the GRID venvs). A later pandas minor is
     # held by cudf the same way, so move the two together. Change the matching
     # pins in requirements/labbench.txt and requirements/image-embedders.txt in
     # the same commit (tests_lib/meta/test_requirements.py checks they agree).
