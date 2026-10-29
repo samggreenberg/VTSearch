@@ -31,6 +31,15 @@ what is on `dev` but not yet on `main`; each release dates that section
   `max_results:`. It cannot be combined with `--resume`. See
   [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
+### Changed
+
+- **The helper scripts moved into folders by purpose** (issue #5408). `scripts/install.sh` stays where it was; the
+  other scripts that were loose in `scripts/` now live in `scripts/gates/` (the `run-tests.sh` checks),
+  `scripts/release/` (release and publishing), `scripts/install/` (model downloads and Docker image setup) and
+  `scripts/data/` (dataset builders and the face CLIs). A deployment that calls one by its old path needs the new
+  one: `scripts/install/download_models.sh`, `scripts/install/cache_gated_models.sh` and
+  `scripts/data/link-demo-cache.sh`. The old paths were not kept.
+
 ### Fixed
 
 - **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
