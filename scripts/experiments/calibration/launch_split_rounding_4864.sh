@@ -133,7 +133,7 @@ link_prepare() {
 }
 
 grid_size() {
-  (cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1 && eval "$ENVX" && python run_cells.py --print-cells 2>/dev/null | tail -1)
+  (cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 && eval "$ENVX" && python run_cells.py --print-cells 2>/dev/null | tail -1)
 }
 
 run_preflight() { # n_array_tasks
@@ -153,7 +153,7 @@ submit_bundled() { # n_cells n_tasks array_spec
   local body="for k in \$(seq 0 $((BUNDLE - 1))); do i=\$((SLURM_ARRAY_TASK_ID + k * $T)); [ \$i -lt $n ] || continue; python run_cells.py --index \$i --outdir $CALIB_RESULTS/cells || echo \"cell \$i FAILED\"; done"
   sbatch --parsable --job-name="$CALIB_JOB_NAME" --array="$spec" --mem="$MEM" --cpus-per-task=1 \
     --time="$TIME" --partition=cpu --export=ALL --output="$CALIB_EXP/logs/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && $body"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && $body"
 }
 
 region_env() {
@@ -236,7 +236,7 @@ case "$MODE" in
     link_prepare
     J=$(sbatch --parsable --job-name=splitround4864-region-size --mem="$MEM" --cpus-per-task=1 --time="$TIME" \
       --partition=cpu --export=ALL --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index 0 --outdir $CALIB_RESULTS/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index 0 --outdir $CALIB_RESULTS/cells")
     require_jobid "$J" "region size"
     echo "region size job $J; then sacct -j $J --format=Elapsed,MaxRSS,State"
     ;;

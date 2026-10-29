@@ -29,7 +29,7 @@ editable-install finder so `import vtscore` resolves to *this* worktree.
 bash queue_all.sh 288        # 288 = safe upper bound on array cells
 
 # Or by hand, sized exactly:
-sbatch ... --wrap "source ../../../gridenv.sh && cd $PWD && python prepare_data.py caltech101_m caltech256_a visual_genome_m"
+sbatch ... --wrap "source ../../grid/gridenv.sh && cd $PWD && python prepare_data.py caltech101_m caltech256_a visual_genome_m"
 N=$(python stage_b_autopilot.py --print-cells)      # after prepare
 sbatch --array=0-$((N-1))%24 ... --wrap "... python stage_b_autopilot.py"
 ```

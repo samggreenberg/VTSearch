@@ -195,7 +195,7 @@ case "$MODE" in
     P=$(sbatch --parsable --job-name=blend3551-prep --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
     require_jobid "$P" "prepare"
     echo "prepare job: $P -> $CALIB_EXP/logs/prepare-$P.out"
     ;;
@@ -207,7 +207,7 @@ case "$MODE" in
     S=$(sbatch --parsable --job-name="blend3551-size-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_EXP/results/cells")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_EXP/results/cells")
     require_jobid "$S" "size"
     echo "size job: $S (cell $IDX) -> $CALIB_EXP/logs/size-$S.out"
     ;;
@@ -262,7 +262,7 @@ case "$MODE" in
     T=$(sbatch --parsable --job-name=blend3551-baseline --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/baseline-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $BASE/prepare/results --out $BASE/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $BASE/prepare/results --out $BASE/text_baseline.csv")
     require_jobid "$T" "text baseline"
     echo "baseline job: $T -> $BASE/text_baseline.csv"
     ;;
@@ -272,7 +272,7 @@ case "$MODE" in
     A=$(sbatch --parsable --job-name="$CALIB_JOB_NAME-analyze" --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $CALIB_ANALYZE --results $CALIB_RESULTS --out $CALIB_EXP/analysis --baseline $BASE/text_baseline.csv")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python $CALIB_ANALYZE --results $CALIB_RESULTS --out $CALIB_EXP/analysis --baseline $BASE/text_baseline.csv")
     require_jobid "$A" "analyze"
     echo "analyze job: $A"
     ;;

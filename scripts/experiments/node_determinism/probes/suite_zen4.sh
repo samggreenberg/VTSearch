@@ -19,7 +19,7 @@ run() {
   export PYTHONPATH="$NUMPY"
   unset OPENBLAS_L2_SIZE OPENBLAS_CORETYPE NPY_DISABLE_CPU_FEATURES
   [ "$arm" = bug ] && export OPENBLAS_L2_SIZE=
-  cd "$WT" && source gridenv.sh >/dev/null 2>&1
+  cd "$WT" && source scripts/grid/gridenv.sh >/dev/null 2>&1
   echo "host=$(hostname -s) cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)" \
     "numpy=$(python -c 'import numpy; print(numpy.__version__)')" \
     "CORETYPE=$OPENBLAS_CORETYPE L2=[${OPENBLAS_L2_SIZE-unset}]"

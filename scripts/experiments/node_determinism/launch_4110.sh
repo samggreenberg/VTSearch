@@ -143,7 +143,7 @@ link_prepare() {
 }
 
 grid_size() {
-  (cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1 && eval "$ENVX" && python run_cells.py --print-cells 2>/dev/null | tail -1)
+  (cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1 && eval "$ENVX" && python run_cells.py --print-cells 2>/dev/null | tail -1)
 }
 
 case "$MODE" in
@@ -186,7 +186,7 @@ case "$MODE" in
         J=$(sbatch --parsable --job-name="$CALIB_JOB_NAME" --array="0-$((T - 1))%$CONC" --mem="$MEM" --cpus-per-task=1 \
           --time="$TIME" --partition=cpu --constraint="$CONSTRAINT" --export=ALL \
           --output="$CALIB_EXP/logs/cells-%A_%a.out" \
-          --wrap="source $WT/gridenv.sh && $ENVX && $PINX && cd $HERE && $body")
+          --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && $PINX && cd $HERE && $body")
         require_jobid "$J" "$a"
         echo "$a: $M of $N cells (every $CELLS_EVERY) in $T tasks of $BUNDLE on $CONSTRAINT -> job $J"
       ) || exit 1
@@ -205,7 +205,7 @@ case "$MODE" in
   analyze)
     J=$(sbatch --parsable --job-name=det4110-analyze --partition=cpu --mem=8G --cpus-per-task=1 --time=1:00:00 \
       --output="$BASE/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && python $SELF/analyze_4110.py --base $BASE --out $BASE/analysis")
+      --wrap="source $WT/scripts/grid/gridenv.sh && python $SELF/analyze_4110.py --base $BASE --out $BASE/analysis")
     require_jobid "$J" "analyze"
     echo "analyze job $J -> $BASE/analysis"
     ;;

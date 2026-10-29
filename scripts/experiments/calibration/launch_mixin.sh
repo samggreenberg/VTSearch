@@ -85,7 +85,7 @@ CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQ
 
 cell_count() {
   local envx="$1"
-  (cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; eval "$envx"; \
+  (cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1; eval "$envx"; \
    python run_cells.py --print-cells 2>/dev/null | tail -1)
 }
 
@@ -152,7 +152,7 @@ PY
   j=$(sbatch --parsable --job-name="mix-$tag" --array="$spec"%"$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
     --output="$LOGS/$tag-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $envx && cd $HERE && python run_cells.py" 2>"$err")
+    --wrap="source $WT/scripts/grid/gridenv.sh && $envx && cd $HERE && python run_cells.py" 2>"$err")
   if [[ -z "$j" || ! "$j" =~ ^[0-9]+$ ]]; then
     echo "ERROR: sbatch refused arm $tag: $(cat "$err")" >&2
     rm -f "$err"
@@ -187,7 +187,7 @@ case "$MODE" in
     A=$(sbatch --parsable --dependency=afterany:"$J" --job-name=mix-analyze \
       --mem=16G --cpus-per-task=4 --time=0:40:00 --partition=cpu \
       --output="$LOGS/analyze-screen-%j.out" \
-      --wrap="source $WT/gridenv.sh && $BASE_ENV CALIB_RESULTS=$RESULTS && cd $HERE && python analyze_mixin.py --mode screen")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $BASE_ENV CALIB_RESULTS=$RESULTS && cd $HERE && python analyze_mixin.py --mode screen")
     echo "analyze: $A"
     ;;
   ab)
@@ -203,7 +203,7 @@ case "$MODE" in
     A=$(sbatch --parsable --dependency=afterany:"$DEP" --job-name=mix-analyze-ab \
       --mem=24G --cpus-per-task=4 --time=1:00:00 --partition=cpu \
       --output="$LOGS/analyze-ab-%j.out" \
-      --wrap="source $WT/gridenv.sh && $BASE_ENV CALIB_RESULTS=$CALIB_EXP/results-ab && cd $HERE && python analyze_mixin.py --mode ab --arms $(IFS=,; echo "$*")")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $BASE_ENV CALIB_RESULTS=$CALIB_EXP/results-ab && cd $HERE && python analyze_mixin.py --mode ab --arms $(IFS=,; echo "$*")")
     # Chained GRID-side on purpose: a local watcher dies with the VPN, this does not.
     echo "analyze: $A"
     ;;

@@ -318,7 +318,7 @@ def main() -> int:
     import vtscore
 
     assert str(Path(vtscore.__file__).resolve()).startswith(str(REPO)), (
-        f"vtscore resolved to {vtscore.__file__}, not this worktree {REPO} (source gridenv.sh)"
+        f"vtscore resolved to {vtscore.__file__}, not this worktree {REPO} (source scripts/grid/gridenv.sh)"
     )
     from vtscore.eval.labels import media_is_positive
 

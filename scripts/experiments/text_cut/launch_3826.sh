@@ -19,7 +19,7 @@ trap 'echo "ABORTED: $0 line $LINENO exited $? -- check what was submitted" >&2'
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 export VTS_REPO="$WT"
@@ -40,7 +40,7 @@ PAIRS=(
   visual_genome_m:siglip visual_genome_m:siglip2_l visual_genome_m:clip visual_genome_m:clip_l
   vg_scale:siglip vg_scale:siglip2_l vg_scale:clip vg_scale:clip_l
 )
-ENVX="source $WT/gridenv.sh && source $WT/scripts/experiments/pile/pile_env.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1"
+ENVX="source $WT/scripts/grid/gridenv.sh && source $WT/scripts/experiments/pile/pile_env.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1"
 DEPARG=()
 [[ -n "${DEP:-}" ]] && DEPARG=(--dependency="$DEP")
 

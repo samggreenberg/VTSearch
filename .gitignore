@@ -70,7 +70,7 @@ slurm-*.out
 slides/_build/
 slides/_out/
 
-# GRID editable-install shadow shim, created by `source gridenv.sh` (#2846).
+# GRID editable-install shadow shim, created by `source scripts/grid/gridenv.sh` (#2846).
 # A no-op `__editable___vtsearch_0_1_0_finder.py` that neutralises the venv's
 # editable-install finder, which would otherwise resolve `import vtscore` to the
 # MAIN checkout while PYTHONPATH looks correct. It is per-worktree venv glue,
