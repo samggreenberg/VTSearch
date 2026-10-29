@@ -7,7 +7,7 @@ return a single float threshold. Detector-specific glue (sourcing ``X_list`` / `
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across eleven submodules, layered so that each one
+The implementation is split across fourteen submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -35,7 +35,13 @@ only reads from those above it:
   (#4452): the class model the calibration folds' held-out votes imply, cut
   where the expected F-beta of the kept set peaks at the prevalence it
   estimates on the corpus being decided, and the head's count line while that
-  model is thin.  Reads nothing above it; numpy and SciPy.
+  model is thin.  Drawn from three modules below it (#5426):
+  :mod:`~vtscore.training.thresholds.class_model` (the class model),
+  :mod:`~vtscore.training.thresholds.corpus_model` (the corpus fits and the
+  cut) and :mod:`~vtscore.training.thresholds.head_count` (the head's count
+  line and the cues Autopilot reads beside the line).  Every public name of
+  the four stays importable from ``labels_line``.  Reads nothing above it;
+  numpy and SciPy.
 * :mod:`~vtscore.training.thresholds.spot_check` - the balance (its presets
   and the count rule a context with no trained head falls back to) and the spot
   check, a walk of uniform picks in rank bands that audits the line and
@@ -303,22 +309,31 @@ from vtscore.training.thresholds.precision_floor import (
     reporting_line,
     unpromised,
 )
-from vtscore.training.thresholds.labels_line import (
+from vtscore.training.thresholds.class_model import (
     ClassScoreModel,
-    LabelsLine,
     class_score_model,
+)
+from vtscore.training.thresholds.corpus_model import (
     CorpusNegatives,
     corpus_cut,
     corpus_expected_fbeta,
-    corpus_fit,
     corpus_posteriors,
-    corpus_prevalence,
     corpus_sigma_floor,
+    RELATIVE_SIGMA_FLOOR,
+    estimate_positives,
+    FOLD_SCALES,
+    fold_transfer_clipped,
+    fold_transfer_shift,
+    labels_line_threshold,
+    parametric_expected_fbeta,
+    target_precision_threshold,
+    transfer_fold_orderings,
+)
+from vtscore.training.thresholds.head_count import (
     HEAD_COUNT_BADS,
     HEAD_COUNT_GOODS,
     head_count_cut,
     head_count_serves,
-    RELATIVE_SIGMA_FLOOR,
     STOP_LEVEL,
     stop_level_met,
     stop_level_reading,
@@ -328,17 +343,14 @@ from vtscore.training.thresholds.labels_line import (
     WEAK_CHECK_REPEAT,
     WEAK_SEPARATION_D,
     done_check_due,
-    estimate_positives,
-    fit_labels_line,
-    FOLD_SCALES,
-    fold_transfer_clipped,
-    fold_transfer_shift,
-    labels_line_threshold,
-    parametric_expected_fbeta,
-    target_precision_threshold,
-    transfer_fold_orderings,
     weak_check_due,
     weak_check_prompts,
+)
+from vtscore.training.thresholds.labels_line import (
+    LabelsLine,
+    corpus_fit,
+    corpus_prevalence,
+    fit_labels_line,
 )
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_ARGMAX_FACTOR,

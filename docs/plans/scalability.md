@@ -177,7 +177,7 @@ false hit can't happen because `media_revision` bumps on every structural change
 
 ### S10: head scoring pass — O(N) inference on every retrain
 
-**File:** `vtscore/detectors/training.py` (`_score_all_media`, called on every retrain)
+**File:** `vtscore/detectors/training_scoring.py` (`_score_all_media`, called on every retrain)
 
 Scoring all media runs the head over every item after every vote (a matrix
 multiply for the shipped linear SVM), and the threshold fit repeats the pass once
@@ -193,7 +193,7 @@ votes and retrain once.
 
 ### S11: cross-dataset label population — serial I/O, O(N_labels)
 
-**File:** `vtscore/detectors/labelset_training.py` (`populate_label_embeddings`,
+**File:** `vtscore/detectors/labelset_embeddings.py` (`populate_label_embeddings`,
 serial `for idx, elem in …` loop)
 
 Resolves the file and embeds each LabelSet element serially — for uncached

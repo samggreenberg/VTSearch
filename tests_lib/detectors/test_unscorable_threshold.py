@@ -23,7 +23,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vtscore.detectors.training import _score_all_media, train_and_threshold
+from vtscore.detectors.training import train_and_threshold
+from vtscore.detectors.training_scoring import _score_all_media
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,

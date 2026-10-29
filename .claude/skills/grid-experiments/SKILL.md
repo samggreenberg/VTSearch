@@ -333,6 +333,14 @@ produced**: archives, not plans, and not pruned when the work they justified
 ships. (`docs/plans/` holds work still owed.) `scripts/check-docs.py` enforces
 the name shape.
 
+**A study's scripts never go in `scripts/experiments/calibration/`.** That
+directory holds the shared simulation pipeline and the studies already filed in
+it, and it takes no new study files (#5406; `scripts/check-calibration-index.py`
+fails on one). A study that drives the pipeline keeps its launchers and
+analyzers in its own `scripts/experiments/<study>/`, as `fhibe/` and
+`state_of_app/` do, and puts `calibration/` on `sys.path`. The calibration
+README shows the idiom.
+
 **A finished study's bulk data leaves the tree (#5404).** Cell CSVs, measurement
 tables, JSON dumps and figures no report embeds cost every checkout and every
 grep, and a reader on GitHub never opens them. So the last step before a study's
