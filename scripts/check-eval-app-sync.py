@@ -698,7 +698,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.fused_threshold",
-        app="py:vtscore.detectors.training._fused_threshold",
+        app="py:vtscore.detectors.training_calibration._fused_threshold",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
         kind="default",
         note=(
@@ -739,7 +739,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.calibration_score_rows",
-        app="py:vtscore.detectors.training._calibration_score_rows",
+        app="py:vtscore.detectors.training_calibration._calibration_score_rows",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
         kind="default",
         note=(
@@ -759,7 +759,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.blend_schedule_default",
-        app="py:vtscore.detectors.training._blend_schedule_for_snap",
+        app="py:vtscore.detectors.training_calibration._blend_schedule_for_snap",
         harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(
@@ -771,7 +771,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="training.split_fraction_default",
-        app="py:vtscore.detectors.training.resolve_calibration_fraction",
+        app="py:vtscore.detectors.training_calibration.resolve_calibration_fraction",
         harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(

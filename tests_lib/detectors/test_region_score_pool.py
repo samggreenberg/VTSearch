@@ -23,7 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from vtscore.detectors.training import _score_all_media
+from vtscore.detectors.training_scoring import _score_all_media
 from vtscore.embedding.matrix import (
     get_region_matrix_for_snap,
     invalidate_embedding_matrix,

@@ -666,7 +666,7 @@ def reporting_line(
     """The reporting cut at an operating point: a precision floor, or an inclusion when no floor is set.
 
     **The one definition of the no-floor line**, called by the app's retrain
-    (:func:`vtscore.detectors.training._fused_threshold`), its no-refit re-cut
+    (:func:`vtscore.detectors.training_calibration._fused_threshold`), its no-refit re-cut
     (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
     harness's default arm, so the three cannot drift apart.  All three pass
     ``min_precision=None``: under a balance they draw the labels' line
