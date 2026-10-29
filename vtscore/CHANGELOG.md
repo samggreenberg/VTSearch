@@ -23,8 +23,9 @@ instead, since every commit on `dev` is effectively a new app release.)
   **The old public paths are deprecated, not removed:** `from vtscore.media.clipper import MediaClipper`,
   `import vtscore.media.image.embedder_siglip` and the rest still work through the `_MOVED_MODULES`
   table in `vtscore/media/__init__.py`, each emitting a `DeprecationWarning` that names the new path,
-  and resolve to the very same module object. Embedder discovery now also scans a media type's
-  `embedders/` sub-package, so the name `embedders` is reserved for that container. A flat
+  and resolve to the very same module object. The alias is runtime-only, so a static type checker
+  (pyright, mypy) reports an old path as unresolved: move the import. Embedder discovery now also
+  scans a media type's `embedders/` sub-package, so the name `embedders` is reserved for that container. A flat
   `embedder_<name>.py` (or `embedder_<name>/` package) dropped straight into the media-type package is
   still discovered as before. See `packages/media.md`.
 

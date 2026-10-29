@@ -26,7 +26,8 @@ def test_old_path_resolves_to_the_moved_module(old, new):
 def test_from_import_through_an_old_path():
     sys.modules.pop("vtscore.media.clipper", None)
     with pytest.deprecated_call():
-        from vtscore.media.clipper import MediaClipper
+        # The alias is runtime-only: no file sits at the old path for a type checker to follow.
+        from vtscore.media.clipper import MediaClipper  # pyright: ignore[reportMissingImports]
 
     from vtscore.media import MediaClipper as root_export
 
