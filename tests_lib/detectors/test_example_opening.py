@@ -119,6 +119,25 @@ class TestExampleSort:
             v = vec[cid] / np.linalg.norm(vec[cid])
             assert scores[cid] == pytest.approx(float(v @ centre), abs=1e-5)
 
+    def test_a_hard_view_face_weighs_less_beside_clear_ones(self, monkeypatch):
+        """#5389: a hard-view example among clear ones takes the bridge's weight in the centroid."""
+        from vtscore.media.face import imagekit_bridge as bridge
+
+        monkeypatch.setattr(bridge, "HARD_VIEW_EXAMPLE_WEIGHT", 0.25)
+        medias = _medias()
+        ex = [0, 1, 2]
+        for cid, quality in zip(ex, (9.0, 20.0, 30.0)):
+            medias[cid]["custom_metadata"] = {
+                bridge.QUALITY_METADATA_KEY: quality,
+                bridge.COMPAT_METADATA_KEY: "oss-arcface-mbf:1",
+            }
+        vec = {c: medias[c]["embeddings"]["stub"] / np.linalg.norm(medias[c]["embeddings"]["stub"]) for c in medias}
+        centre = 0.25 * vec[0] + vec[1] + vec[2]
+        centre /= np.linalg.norm(centre)
+        scores = example_sort(medias, ex)
+        for cid in (0, 5, 50):
+            assert scores[cid] == pytest.approx(float(vec[cid] @ centre), abs=1e-5)
+
     def test_refuses_a_media_with_no_vector(self):
         medias = _medias()
         medias[9]["embeddings"] = {}

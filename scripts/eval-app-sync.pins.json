@@ -116,6 +116,10 @@
   "training.calibration_score_rows": {
     "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
   },
+  "training.example_centroid": {
+    "app": "4584c1f3b3c7332d3b9e689d2a087d1c62bf4f843ea47487caf84a85469a2c00",
+    "harness": "c3244efd5c394c3765e7dfd69bfed219b4458c86045d841ceb8726eb002d82d5"
+  },
   "training.fused_threshold": {
     "app": "7f6f1d6bbc35d0e3462aa9fd1feed6597e7f7a4abe748e1df225c9a911969a9a"
   },

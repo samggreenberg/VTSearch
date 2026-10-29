@@ -196,6 +196,17 @@ class TestHardView:
         assert bridge.media_hard_view({"custom_metadata": meta}) is True
         assert bridge.media_hard_view({}) is None
 
+    def test_a_hard_face_weighs_less_only_beside_a_clear_one(self, monkeypatch):
+        """#5389: the example centroid leans on the clear faces; with none clear, every face weighs the same."""
+        monkeypatch.setattr(bridge, "HARD_VIEW_EXAMPLE_WEIGHT", 0.25)
+        assert bridge.example_weights([True, False, None, False]) == [0.25, 1.0, 1.0, 1.0]
+        assert bridge.example_weights([True, True]) is None  # nothing clear to lean on
+        assert bridge.example_weights([True, None]) is None  # no verdict is not clear
+        assert bridge.example_weights([False, None]) is None  # nothing hard
+        assert bridge.example_weights([]) is None
+        monkeypatch.setattr(bridge, "HARD_VIEW_EXAMPLE_WEIGHT", 1.0)
+        assert bridge.example_weights([True, False]) is None
+
     def test_a_picture_is_read_by_the_provider(self, models_folder, tmp_path, monkeypatch):
         from PIL import Image
 
