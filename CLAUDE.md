@@ -42,11 +42,11 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 The number the user typed is not clickable, so hand them one that is. Right after step 1's assignment for an issue — or, for a pull request, which has no assignment step, as soon as the number resolves — write one line of text to the user linking the item:
 
 ```markdown
-Working on [#3421](https://github.com/samggreenberg/VTSearch/issues/3421): <title>
+Working on 🎫 [#3421](https://github.com/samggreenberg/VTSearch/issues/3421): <title>
 ```
 
 - **Now, not in the summary.** It goes out ahead of the evaluation, while you are still reading, so the user has the link from the first minute of the session; saved for the end-of-turn message, it is one link among many.
-- **Same form as every other reference** (see "Every `#N` you write to the user is a link" below): the `issues/N` URL serves a PR too, and the title is the GitHub title verbatim, from the lookup that resolved the number. Write it as prose, never inside a code span, where a link renders as literal brackets.
+- **Same form as every other reference** (see "Every `#N` you write to the user is a link" below): the `issues/N` URL serves a PR too, and the title is the GitHub title verbatim, from the lookup that resolved the number. That lookup also says which emoji leads the line: 🎫 for an issue, 🔧 for a PR (see "Status emojis in messages to the user" below). Write it as prose, never inside a code span, where a link renders as literal brackets.
 - **Every surface**, unlike the retitle below: a terminal renders the link as well as the web app does.
 - **Not a gate.** It is a line of text, not a tool call, and nothing waits on it.
 
@@ -81,7 +81,7 @@ When you mention a GitHub issue or PR in a message to the user, write it as a ma
 
 Keep `#3421` as the link text; the number is what the user reads and what they'd search for. Only the target is new.
 
-**You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N`, so the `issues` URL is correct for both; there is no lookup to do first, and "not sure which it is" never justifies leaving a reference bare.
+**You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N`, so the `issues` URL is correct for both; there is no lookup to do first, and "not sure which it is" never justifies leaving a reference bare. Only the emoji in front of the link depends on the type, and it is left off when you don't know (see "Status emojis in messages to the user" below).
 
 **Why every one, rather than the first mention.** The reference the user wants to click is rarely the first — it is the one in the summary table at the bottom, or the sentence saying *this is the issue that's still open* — and a mix of linked and bare copies implies a distinction that does not exist.
 
@@ -108,7 +108,30 @@ While you're at it, prefer the `#N` spelling over "PR 3984" or "issue 3421" in t
 
 ### Trip-wire: scan your turn before sending
 
-Before sending, scan the turn for `#` followed by digits. **Every hit outside a code span is a link** — not the first hit, every hit. If you find a bare one, fix it before sending; you are already in the message, and re-editing it costs nothing, whereas the user reaching for a URL bar costs a round-trip.
+Before sending, scan the turn for `#` followed by digits. **Every hit outside a code span is a link** — not the first hit, every hit. If you find a bare one, fix it before sending; you are already in the message, and re-editing it costs nothing, whereas the user reaching for a URL bar costs a round-trip. The same pass puts 🎫 or 🔧 in front of each link whose type you know (see the next section).
+
+## Status emojis in messages to the user
+
+Six emojis mark what the user scans a message for. Each goes **in front of** the existing words, never in place of them, and they follow the link rule's direction test: messages to the user get them; nothing bound for GitHub or git does (comments, PR titles and bodies, commit messages, branch names), and neither do code spans, code fences or a cloud session's title.
+
+| Emoji | Goes in front of | Only when |
+|---|---|---|
+| 🎫 | an issue link | this session already knows it is an issue |
+| 🔧 | a PR link | this session already knows it is a PR |
+| ⏱️ | an ETA | it estimates when something still running will finish |
+| 🟢 | a test verdict | the last `./run-tests.sh` on this tree printed a `RUN PASSED` banner other than `RUN PASSED, EXCEPT …` |
+| 🔴 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN FAILED` or `TESTS BLOCKED` |
+| 🔀 | the news that a PR merged into `dev` | GitHub reports it merged |
+
+```markdown
+🔧 [#4215](https://github.com/samggreenberg/VTSearch/issues/4215) fixes 🎫 [#4210](https://github.com/samggreenberg/VTSearch/issues/4210). 🟢 Full run passed. ⏱️ ~5 min until the eval finishes.
+```
+
+- **🎫 and 🔧: mark only what you already know.** The type is known when this session opened the item, read it, or ran a lookup that returned it. Otherwise leave the emoji off; never make a GitHub call just to pick one. An unmarked link only means its type wasn't checked. The emoji sits outside the link, so the link text stays `#N`.
+- **🟢 and 🔴 come from the verdict banner, not a judgement call.** 🟢 means a complete gate passed: the full run, or a `slides`, `docs`, markdown-only or frontend-only run, each complete for its scope. A group run's `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN`, or a single pytest or Vitest file, gets neither. An edit after the run voids its emoji until you run again.
+- **🔀 means merged, not opened.** An open PR is 🔧; 🔀 goes on only once GitHub shows the merge, whether you merged it or found it merged.
+- **⏱️ is for the future only.** "The run took 8 min" gets none.
+- **Reserved.** Never use these six for anything else (no decorative 🟢 in a table, no 🔧 meaning "fix"), or scanning for them stops working.
 
 ## Branch Policy (CRITICAL)
 
