@@ -28,6 +28,28 @@ session recovered (+0.10 / +0.11). Weighting hard Bads as well adds nothing, and
 
 Recall does not move (within 0.01 at every β).
 
+"Hard face out" is #5376's arm: the same sessions, with the hard starting photo swapped for another photo
+of the person, or dropped when there was none (most were dropped, so the session started from three
+photos). The face is then never voted Good. #5376 paired it with its own control and measured +0.11
+(+0.05, +0.17) and +0.10 (+0.06, +0.15). It is "not paired" only against this study's control, since it
+ran a day earlier at another commit. That control matches this one's level (0.80 / 0.83), so the gap to it
+is real.
+
+## Shipped
+
+The app weighs a hard-view Good at ¼ (`svm_prior.HARD_VIEW_GOOD_WEIGHT`), in the loss and in the centroid
+the head starts from, while some Good is clear. The rule lives in `centroid_prior_direction`, under
+`svm_prior.hard_view_rows`. Every fit of a training pass applies it, the calibration folds included.
+The app names its labelset's hard-view Goods (`labelset_training.hard_view_good_vectors`, at both training
+entry points). The harness names its pool's hard faces (`voting_iterations._fits_weigh_hard_views`), with
+an eval/app mirror (`training.hard_view_goods`). On a dataset with no Face Quality verdicts, which is every
+media type but faces, nothing is named and the head fits exactly as before.
+
+Checked against the study: three β 4 sessions rerun on the shipped code with no study runner (the
+largest gain, the largest loss and a clear session) match the "hard Goods ¼" cells in every row's F,
+precision, recall and vote counts. The threshold differs by at most 3e-5 in 28 of 444 rows, from float
+rounding: the app's centroid is float32 and the runner's was float64.
+
 ## What the weight does
 
 The detector from vote 10 on is the linear SVM started from the Goods' centroid
