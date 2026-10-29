@@ -3126,7 +3126,32 @@ def _fits_from_typed_query(fn: Any) -> Any:
     return run
 
 
+def _fits_weigh_hard_views(fn: Any) -> Any:
+    """Run *fn* (the session) with every head fit weighing a hard-view face's Good less (#5413).
+
+    The app names its voted hard-view Goods to the fit
+    (:func:`vtscore.detectors.labelset_training.hard_view_good_vectors`); a session
+    names every hard-view face of its pool, which is the same rule, since only a
+    voted Good is ever fitted on and :func:`~vtscore.training.svm_prior.hard_view_good_weights`
+    weighs Goods alone.  A pool with no Face Quality verdicts names none.
+    """
+    import functools  # noqa: PLC0415
+
+    @functools.wraps(fn)
+    def run(*args: Any, **kwargs: Any) -> Any:
+        from vtscore.media.face.imagekit_bridge import media_hard_view  # noqa: PLC0415
+        from vtscore.training.svm_prior import hard_view_rows  # noqa: PLC0415
+
+        clips = args[0] if args else kwargs.get("clips_dict", {})
+        hard = [v for m in clips.values() if media_hard_view(m) and (v := media_embedding(m)) is not None]
+        with hard_view_rows(hard):
+            return fn(*args, **kwargs)
+
+    return run
+
+
 @_fits_from_typed_query
+@_fits_weigh_hard_views
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,

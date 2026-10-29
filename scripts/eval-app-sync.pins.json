@@ -48,7 +48,7 @@
     "harness": "ce1c3abb4ce50db7c825c7791e64c0f7308073af9226ae125693979c1885aee4"
   },
   "detectors.label_quota_default": {
-    "app": "4d14903a40db804b6f13729d7f7ab34107c09094a09741be50badff5bb004f57"
+    "app": "e0fe13c3cfaa59155670b8d3038e0e9ab1bb28a063d5b3496f1a853f38faf799"
   },
   "detectors.label_quota_query": {
     "app": "bbf80a6c4b34058e5691919ad93859892487f72f2191e16264fe2436959ccc04",
@@ -122,6 +122,10 @@
   },
   "training.fused_threshold": {
     "app": "7f6f1d6bbc35d0e3462aa9fd1feed6597e7f7a4abe748e1df225c9a911969a9a"
+  },
+  "training.hard_view_goods": {
+    "app": "6a098d0d563b792d61143217389d6486469b6460a4cf521e1d42c1b82c104412",
+    "harness": "08666e414b986d080f63289a1c2b770cca4c23d86593bb470190397b3b9f778a"
   },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
