@@ -65,7 +65,7 @@ Gains are paired per run, and ± is one SE over classes.
 
 ## Result
 
-![F-beta over clicks per arm, and the paired gain over the app as shipped](figures/repeat_over_clicks.png)
+![F-beta over clicks per arm, and the paired gain over the app as shipped](figures/repeat_over_clicks.webp)
 
 *Top: mean F-beta of the returned set over clicks (circles: after the closing check). Bottom: each arm's paired gain
 over the app as shipped.*
@@ -80,7 +80,7 @@ over the app as shipped.*
   sessions with three or more weak checks, once gains +0.0017 (± 0.0008) / +0.0037 (± 0.0010) over clicks 0–200,
   and no weak check +0.0011 (± 0.0017) / +0.0069 (± 0.0024).
 
-![Clicks spent checking per arm, and each session's paired gain](figures/repeat_checks.png)
+![Clicks spent checking per arm, and each session's paired gain](figures/repeat_checks.webp)
 
 *Top: the clicks each arm spends checking in 200. Bottom: each session's paired gain in mean F-beta over clicks
 0–200, sessions that never left the shipped app omitted.*

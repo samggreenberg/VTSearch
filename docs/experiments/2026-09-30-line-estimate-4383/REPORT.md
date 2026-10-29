@@ -88,7 +88,7 @@ cut of the same ranking.
 | 0.1%, test half (11k) | 11 | 9 | 0.26 (17%) | **0.37** (35%) | 0.20 (17%) | 0.30 (24%) | 0.46 |
 | 0.1%, ×10 (113k) | 112 | 92 | 0.25 (55%) | **0.35** (41%) | 0.05 (3%) | 0.26 (20%) | 0.46 |
 
-![F1 of the returned set against corpus size](figures/f1_by_size_p50.png)
+![F1 of the returned set against corpus size](figures/f1_by_size_p50.webp)
 
 Paired against the fixed count on the same corpus draws (F1, ± cluster SE):
 
@@ -117,7 +117,7 @@ Paired against the fixed count on the same corpus draws (F1, ± cluster SE):
   5% (fixed: 35–96%). Its shortfall is the same or smaller than the fixed
   count's on every row except the two ×10 rows (+0.01 to +0.02).
 
-![Share of sessions at or above P](figures/meets_by_size_p50.png)
+![Share of sessions at or above P](figures/meets_by_size_p50.webp)
 
 - **The mixture's own estimate is wrong where it over-returns.** Its
   `est_gap` is 0.25 on the test half at 0.44%, 0.41 on the ×10 corpus and 0.47
@@ -133,7 +133,7 @@ Paired against the fixed count on the same corpus draws (F1, ± cluster SE):
   estimator's shape) is the worst rule everywhere, with or without audits.
   `min-fixed-gmm`, the no-vote line, is [below](#the-line-with-no-votes-the-smaller-of-todays-count-and-the-mixtures-4389).
 
-![Shortfall against votes on the test half](figures/shortfall_vs_votes_p50.png)
+![Shortfall against votes on the test half](figures/shortfall_vs_votes_p50.webp)
 
 ## The line at P = 10%
 
@@ -150,7 +150,7 @@ Here the objective is recall at ≥ 10% right, and a fixed 128 caps it.
 (A ratio above 1 means the rule kept more positives than the oracle by returning
 a set that is *below* P; read it with the `meets` share beside it.)
 
-![Recall against the oracle at P = 10%](figures/recall_share_by_size_p10.png)
+![Recall against the oracle at P = 10%](figures/recall_share_by_size_p10.webp)
 
 At 10% the mixture's over-return matters less, because the floor is low: at 5%
 it keeps the right count for 0 votes. At 0.44% and below it still returns 3–12×
@@ -231,7 +231,7 @@ F1 of the returned set at P = 50% (the share right), click 150:
   objective asks for.
 - It takes nothing from the band walk: the walk starts at this count.
 
-![F1 of the returned set against corpus size, with the no-vote line](figures/f1_by_size_p50.png)
+![F1 of the returned set against corpus size, with the no-vote line](figures/f1_by_size_p50.webp)
 
 ## What the band walk costs
 

@@ -64,7 +64,7 @@ The damage is concentrated in the first detectors, and there it is in the
 recovers everywhere, and the threshold recovers on `coco_val` but not on the
 other two ([`tables/ab_3826_deltas.csv`](tables/ab_3826_deltas.csv)).
 
-![Cost against votes](figures/cost_vs_votes.png)
+![Cost against votes](figures/cost_vs_votes.webp)
 
 *Mean cost over cells against votes cast, per dataset. Blue is the guarded line
 and red the shipped midpoint. The guarded arm starts behind on every dataset

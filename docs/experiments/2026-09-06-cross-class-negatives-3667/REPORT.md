@@ -41,7 +41,7 @@ were built on in August), with `vg_scale_any` pulled in automatically as a
 derived dataset, plus a second job for the CLIP pair and a third for
 `vg_scale_deep`.
 
-![Pile composition before and after](figures/pile-composition.png)
+![Pile composition before and after](figures/pile-composition.webp)
 
 *Averaged over the 36 `vg_scale` cells. The grey band is the part of the pile a
 given cell could not score at all: an image holding some **other** class. The
@@ -125,7 +125,7 @@ categories**, because that is all a cell pickle carries. `_evaluable` reads the
 **label read** — every class the image holds, designated or not. Those are
 different sets, so the two numbers were never going to agree.
 
-![Evaluable per cell: before, priced, rebuilt](figures/evaluable-per-cell.png)
+![Evaluable per cell: before, priced, rebuilt](figures/evaluable-per-cell.webp)
 
 *One panel per band, one triple per class. The price (orange) sits just above
 the outcome (blue) everywhere.*
@@ -139,7 +139,7 @@ the outcome (blue) everywhere.*
 The gap is **45 images per cell, 0.8%** — the price was good. But it is not
 uniform, and what it tracks is co-occurrence:
 
-![Priced minus rebuilt, per cell](figures/price-shortfall.png)
+![Priced minus rebuilt, per cell](figures/price-shortfall.webp)
 
 `backpack@medium` loses 121 of its priced negatives and `stop sign@medium` loses
 1. **589 of the 2,037 COCO-exhaustive positives (28.9%) hold at least one class
@@ -176,7 +176,7 @@ This is #3667's actual argument, and neither counting images nor the rebuild
 itself can test it. Two probes can, and the difference between them is the
 whole answer.
 
-![The scene-clutter shortcut](figures/scene-clutter-shortcut.png)
+![The scene-clutter shortcut](figures/scene-clutter-shortcut.webp)
 
 **The text probe** ranks each cell by the free text sort a user gets for typing
 the class name. A text query has no shortcut available to it — it cannot learn

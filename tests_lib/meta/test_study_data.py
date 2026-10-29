@@ -67,7 +67,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     study = tmp_path / "docs/experiments" / STUDY
     _write(
         study / "REPORT.md",
-        "# Demo\n\n![fig](figures/linked.png)\n\n[viewer](viewer.html)\n\n"
+        "# Demo\n\n![fig](figures/linked.png)\n\n[viewer](viewer.html)\n\n[`linked.png`](figures/linked.png)\n\n"
         f"The cut is in `docs/experiments/{STUDY}/cited.csv`. Cells are in `cells.csv`.\n",
     )
     _png(study / "figures/linked.png", (200, 10, 10))
@@ -170,7 +170,9 @@ def test_webp_converts_linked_figures_losslessly_and_repoints_links(repo: Path) 
         assert not (study / f"figures/{name}.png").exists()
         assert Image.open(study / f"figures/{name}.webp").convert("RGB").tobytes() == original
     assert (study / "figures/unlinked.png").exists(), "an unlinked figure is archived as it is, not converted"
-    assert "](figures/linked.webp)" in (study / "REPORT.md").read_text()
+    report = (study / "REPORT.md").read_text()
+    assert "![fig](figures/linked.webp)" in report
+    assert "[`linked.webp`](figures/linked.webp)" in report, "link text naming the old file follows it"
     assert 'src="figures/from_page.webp"' in (study / "viewer.html").read_text()
     staged = _git(repo, "status", "--porcelain")
     assert "D  docs/experiments/2026-01-01-demo/figures/linked.png" in staged

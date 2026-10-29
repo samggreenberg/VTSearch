@@ -195,7 +195,7 @@ one process on one GPU so node-load drift hits every arm equally):
 | `siglip2_l` | `tv_cpu` (shipped) | 42.55 s ± 0.28 | — |
 | `siglip2_l` | `tv_cuda` | 39.57 s ± 0.18 | 1.08× ± 0.01 |
 
-![End-to-end embed cost per arm](figures/cost_speedup.png)
+![End-to-end embed cost per arm](figures/cost_speedup.webp)
 
 *Bars are the median of 5 interleaved reps with the standard error; every
 individual rep is drawn as a dot. Read the dots, not just the bars: the reason
@@ -208,7 +208,7 @@ the processor runs on the CPU, and this node has 256 cores.*
 **The two denominators differ by a factor of five**, which is the whole reason
 the issue's projection and this measurement disagree:
 
-![Where a pile cell's wall clock goes](figures/cost_breakdown.png)
+![Where a pile cell's wall clock goes](figures/cost_breakdown.webp)
 
 *Stacked from the measured embed-path time and the measured processor time
 against the measured cell wall time (86.8 s and 182.4 s, from each arm's
@@ -242,9 +242,9 @@ Every arm against the shipped path, paired by media id, 4193 medias:
 2.4e-06; CUDA costs `siglip` 1.2e-04 and `siglip2_l` only 5.4e-08. A headline
 quoted from either model alone is wrong for the other. §4 explains the mechanism.
 
-![Vector drift by arm, siglip](figures/drift_siglip.png)
+![Vector drift by arm, siglip](figures/drift_siglip.webp)
 
-![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.png)
+![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.webp)
 
 *Bar is the median `1 − cos` against the shipped path, line runs to the p95, log
 axis. The floor arm has **no bar** on purpose: its median is exactly zero, and an
@@ -259,7 +259,7 @@ tower is untouched** — the maximum absolute difference between any two arms'
 query vectors is exactly 0, so every ranking change below is attributable to the
 gallery rather than assumed to be.
 
-![Input perturbation against output drift](figures/pixel_vs_vector.png)
+![Input perturbation against output drift](figures/pixel_vs_vector.webp)
 
 *Three of the four arm×model points sit at **exactly** one 8-bit level on the x
 axis (2/255 = 7.8e-03) and span **three orders of magnitude** on the y axis. That
@@ -273,7 +273,7 @@ reference ordering is 1 to five digits for every arm and both query sources
 (text query and exemplar), over 100 and 89 categories respectively. The
 user-visible quantity is coarser and more informative:
 
-![Top-1 and top-10 stability](figures/topk_and_top1.png)
+![Top-1 and top-10 stability](figures/topk_and_top1.webp)
 
 *Solid bars are the share of categories whose **first result is unchanged**;
 faded bars are mean top-10 overlap. The y axis starts at 90% because every arm is
@@ -431,9 +431,9 @@ neither can it certify them as *below* 0.005, which is what an adoption decision
 needs. Saying "no significant difference" here would be the false-null the
 report standard exists to prevent.
 
-![Paired cost trajectory, tv_cuda vs shipped](figures/paired_cost_tv_cuda_vs_tv_cpu.png)
+![Paired cost trajectory, tv_cuda vs shipped](figures/paired_cost_tv_cuda_vs_tv_cpu.webp)
 
-![Paired cost trajectory, pil_cpu vs shipped](figures/paired_cost_pil_cpu_vs_tv_cpu.png)
+![Paired cost trajectory, pil_cpu vs shipped](figures/paired_cost_pil_cpu_vs_tv_cpu.webp)
 
 *Left: mean `cost` over votes spent — the axis a user actually spends — one line
 per arm. Right: the **paired per-cell difference**, one thin line per cell, with
@@ -511,7 +511,7 @@ The threshold-agreement figure is unchanged at **99.9%** over 146,708 paired
 steps, and the split by embedder shows no crossover (cost 0.0018 ± 0.0032 on
 `siglip`, 0.0036 ± 0.0034 on `siglip2_l`).
 
-![Paired cost trajectory at 1013 cells](figures/power_paired_cost_tv_cuda_vs_tv_cpu.png)
+![Paired cost trajectory at 1013 cells](figures/power_paired_cost_tv_cuda_vs_tv_cpu.webp)
 
 *The same contrast as above with 10.7× the cells. The mean (black) is visibly
 tighter around zero than the 96-cell version, while the per-cell spread is

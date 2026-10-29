@@ -101,7 +101,7 @@ Class pairs fused, out of the pairs ruled different:
 | | before, members recorded | 0 | 0 | 0 | 0 | 0 |
 | | stored | 0 | 0 | 0 | 0 | 0 |
 
-![Class pairs fused against threshold scale, per source](figures/breaches.png)
+![Class pairs fused against threshold scale, per source](figures/breaches.webp)
 
 *Read each panel as one source. The red dashed line is the pre-#3837 form, the
 blue line is this change, and the grey `stored` line sits under the blue at 0.
@@ -116,7 +116,7 @@ members arm has 484 groups to the named-marks arm's 479. Its largest group is
 
 ## What fused, literally
 
-![The edge that first joined each fused pair](figures/bridges.png)
+![The edge that first joined each fused pair](figures/bridges.webp)
 
 *Each row is one bridging edge: the two crops whose closeness first connected
 the two classes named in red, at the smallest scale where it happens. A

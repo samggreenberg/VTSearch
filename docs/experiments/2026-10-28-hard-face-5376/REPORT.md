@@ -6,7 +6,7 @@ photo of the person, or left out, and F at 50 votes rises +0.11 (1024 px) and +0
 other people's level. Recall does not change. The hard face makes the β 4 line return about twice as
 much, so precision halves.** β ¼ and β 1 do not move.
 
-![F at 50 votes per β: as run, hard face out, other people](f50.png)
+![F at 50 votes per β: as run, hard face out, other people](f50.webp)
 
 | K = 4, F at 50 votes | 1024 px, 26 people | 640 px, 25 people |
 |---|---:|---:|
@@ -77,7 +77,7 @@ the centroid only, was not tested.
 - `paired.csv`: one row per person (the first 8 characters of the id), size and β, with both arms, the arm's
   K = 4 and K = 1 values, and what the swap did.
 - `k1.csv`: test 1, the one-photo check.
-- `f50.png`: the figure above.
+- `f50.webp`: the figure above.
 
 The runs, on a compute node with the app venv, from a frozen worktree:
 

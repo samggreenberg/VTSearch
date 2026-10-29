@@ -49,7 +49,7 @@ without one, which is the trade `anchor_to_coco` already makes.
 contaminated negative removed** — because a name acts on every image carrying
 it, and only the precision-weighted share of those was a wrong negative.
 
-![price per repair](figures/price-per-repair.png)
+![price per repair](figures/price-per-repair.webp)
 
 `sign` costs **12.7** images per repair; `wheel` 15.4, `awning` 23.5, `truck`
 (as a `bus` candidate) 24.3. `bike` costs 2.1, `books` 1.1, `duck` 1.4, `beak`
@@ -140,7 +140,7 @@ not the bird) fail the same way.
 
 ## The rule, and the two tables it fills
 
-![the decision plane](figures/evidence-plane.png)
+![the decision plane](figures/evidence-plane.webp)
 
 Three cuts, each of them a number this study measures. 626 candidate names were
 scored; 32 fold, 50 are withheld, 468 are refuted and 76 are unmeasurable.
@@ -202,7 +202,7 @@ the reading `SCALE_CLASS_RULES["book"]` already ships as *"book incl magazines"*
 
 ## What the tables do, and what they cost
 
-![repair by class](figures/repair-by-class.png)
+![repair by class](figures/repair-by-class.webp)
 
 On the **56,579** non-COCO VG images, where VG's silence is the only evidence of
 absence, the twelve classes could see 14,762 images between them. The tables

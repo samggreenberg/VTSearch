@@ -17,7 +17,7 @@ mark that barely clusters at all. None of it is roster-ready without the human
 passes. What it gives the audit is a slate worth reviewing, which `phash` never
 did.
 
-![sweep](fig_sweep.png)
+![sweep](fig_sweep.webp)
 
 ## What was run
 
@@ -81,9 +81,9 @@ wordmark, so SigLIP chains them.
 totalling ~1,600 bands. The largest is 920 of BATCO's 1,837. These are the 20%
 "no letterhead" of #3901, and they cluster *well*, because blank looks like blank.
 
-![Lorillard script, class 1](purity_lorillard_c1.png)
+![Lorillard script, class 1](purity_lorillard_c1.webp)
 
-![Philip Morris class 1: crest and typeset heading chained together](purity_philip_morris_c1.png)
+![Philip Morris class 1: crest and typeset heading chained together](purity_philip_morris_c1.webp)
 
 ## Three defects no threshold fixes
 

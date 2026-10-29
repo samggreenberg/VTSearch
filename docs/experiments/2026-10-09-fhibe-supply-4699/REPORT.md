@@ -17,7 +17,7 @@ off a cliff below that (Figure 1). The small band becomes a real localization te
 only if the benchmark stores downscaled copies: at a long side of **640 px**, 32% of
 small-band faces drop under 24 px, and MTCNN finds **70%** of them.
 
-![MTCNN recall vs face pixels, and where the small band sits at each resolution](fig_recall_by_px.png)
+![MTCNN recall vs face pixels, and where the small band sits at each resolution](fig_recall_by_px.webp)
 
 *Figure 1. Left: MTCNN's hit rate against the face box's short side, in the pixels the
 app sees, pooled over three resolutions (30,834 photo-resolution pairs). Right: the

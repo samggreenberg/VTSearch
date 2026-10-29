@@ -73,7 +73,7 @@ The candidate maps, each carrying fold *k*'s logit onto the final model's scale:
 
 ## The true map
 
-![Final minus fold logit on the same withheld images, the slope of final on fold, and how tight the map is](figures/true_map.png)
+![Final minus fold logit on the same withheld images, the slope of final on fold, and how tight the map is](figures/true_map.webp)
 
 *Left: the final model's logit minus fold *k*'s on the same withheld image, averaged over the folds. Middle: the
 OLS slope of final on fold within each class. Right: rank correlation and affine R² within the class. Bands are
@@ -100,7 +100,7 @@ OLS slope of final on fold within each class. Right: rank correlation and affine
 
 ### Per session
 
-![The positives' shift and today's Good-component error, one line per session](figures/per_session.png)
+![The positives' shift and today's Good-component error, one line per session](figures/per_session.webp)
 
 *Each thin line is one session (class@band, seed); black is the mean over classes. Left: the positives' final −
 fold shift. Right: today's Good component minus the withheld positives' mean.*
@@ -117,7 +117,7 @@ logit, and the selection term carries that spread.
 
 ## The candidate maps on the withheld images
 
-![Each map's error on the withheld positives and on the top negatives](figures/maps_on_withheld.png)
+![Each map's error on the withheld positives and on the top negatives](figures/maps_on_withheld.webp)
 
 *Mapped fold logit minus final logit on the same withheld images, averaged over the folds. Zero is a map that
 recovers the truth. The oracle is zero on its own fit by construction; it is drawn as the reference.*
@@ -149,7 +149,7 @@ recovers the truth. The oracle is zero on its own fit by construction; it is dra
 
 ## The Good component: selection, not scale
 
-![The Good component each map gives the line, and today's error split into selection and scale](figures/good_component.png)
+![The Good component each map gives the line, and today's error split into selection and scale](figures/good_component.webp)
 
 *Left: the Good component's mean (its held-out Goods, pooled over the folds, after each map) minus the withheld
 positives' mean on the final scale. Right: today's error split exactly. Selection is the held-out Goods against
@@ -173,7 +173,7 @@ onto the Goods, and the plain quantile goes 0.30 past the truth by vote 150.
 
 ## On the same heads: Find's F-beta
 
-![Find's F-beta on the withheld half from each map's Good component, same heads](figures/same_head_fbeta.png)
+![Find's F-beta on the withheld half from each map's Good component, same heads](figures/same_head_fbeta.webp)
 
 *Each map refits the labels line on the same head and draws Find's line on the withheld half. Today's line is the
 run's own. Left: F-beta (bands are ±1 SE over classes of the level). Right: each map's paired gain over today's
@@ -222,7 +222,7 @@ large bands by vote 150, where the held-out Goods are a fair sample of the posit
 
 ## Literal examples
 
-![Four sessions at vote 100: the final model's logit against fold 0's on the withheld half](figures/examples_vote100.png)
+![Four sessions at vote 100: the final model's logit against fold 0's on the withheld half](figures/examples_vote100.webp)
 
 *Each panel is one session at vote 100. Green: the withheld positives. Grey: the top 2% of the withheld negatives
 by fold 0's score. Brown ticks along the bottom: fold 0's held-out Goods, on fold 0's scale. Black: the identity,
@@ -255,9 +255,9 @@ small-band sessions found no Good. Region has no typed-query hold, and the repla
 (Find's F-beta and the quantile shadow to 5e-7). The grouped calibration path does not name its held-out votes, so
 the two vote shifts are blank here. Tables in `tables/region/`, figures in `figures/region/`.
 
-![The true map on Region Photo](figures/region/true_map.png)
+![The true map on Region Photo](figures/region/true_map.webp)
 
-![The Good component on Region Photo, and today's error split](figures/region/good_component.png)
+![The Good component on Region Photo, and today's error split](figures/region/good_component.webp)
 
 | vote | positives: final − fold | slope | rank corr. | top 1% negatives | Good mean − truth, today | of which selection | of which scale |
 |---|---|---|---|---|---|---|---|

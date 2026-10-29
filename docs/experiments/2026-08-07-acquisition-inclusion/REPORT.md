@@ -213,11 +213,11 @@ and they beat the constant 18 to 6.
 
 ## Figures
 
-![frontier](figures/fig1_frontier.png)
+![frontier](figures/fig1_frontier.webp)
 
-![lever verification](figures/fig2_lever_verification.png)
+![lever verification](figures/fig2_lever_verification.webp)
 
-![guardrails](figures/fig3_guardrails.png)
+![guardrails](figures/fig3_guardrails.webp)
 
 ## Reproducing
 

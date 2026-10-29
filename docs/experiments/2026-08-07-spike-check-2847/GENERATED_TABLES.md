@@ -80,8 +80,8 @@ Pairs are `(category, seed)` cells, not steps - the arms are separate trajectori
 
 ## Figures
 
-![fig1_cat_arms.png](figures/fig1_cat_arms.png)
+![fig1_cat_arms.webp](figures/fig1_cat_arms.webp)
 
-![fig2_cat_production.png](figures/fig2_cat_production.png)
+![fig2_cat_production.webp](figures/fig2_cat_production.webp)
 
-![fig3_incidence_and_magnitude.png](figures/fig3_incidence_and_magnitude.png)
+![fig3_incidence_and_magnitude.webp](figures/fig3_incidence_and_magnitude.webp)

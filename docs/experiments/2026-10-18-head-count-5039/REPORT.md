@@ -81,7 +81,7 @@ their sessions from 1 and from 4 photos and at both presets are averaged first.
 
 ## Below beta 4, the count is about right
 
-![The F-beta gain of every multiplier of what stands out, per bench and preset, in three corpora](figures/multiplier_grid.png)
+![The F-beta gain of every multiplier of what stands out, per bench and preset, in three corpora](figures/multiplier_grid.webp)
 
 *F-beta gain over today's line of keeping c times what stands out (the preset's gap floor kept), per bench (rows) and
 preset (columns), on the head's count line's snapshots. Dotted grey: today's multiplier, `beta ** 0.708`; dotted
@@ -125,7 +125,7 @@ and 1, every multiplier at or below today's keeps the same set.*
 
 ## Reaching down the tail, where the labels say to
 
-![Each candidate's F-beta gain over today's line at beta 4, by click](figures/b4_over_clicks.png)
+![Each candidate's F-beta gain over today's line at beta 4, by click](figures/b4_over_clicks.webp)
 
 *At beta 4, on the withheld half as it is, each candidate's gain over today's line per listed click (snapshots on the
 head's count line; mean over classes). 10x is off the scale (-0.03 to -0.21) and in the tables.*
@@ -173,7 +173,7 @@ The head's count line is Train's line too while it serves, so the rule can chang
 returns. Arms against the app, paired run for run (`tables/ab_*.csv` for Binary from `head_count_5039_ab.py`,
 `tables/faces_ab*.csv` for faces from #4776's `prior_4776.py --pair`).
 
-![Binary Photo at beta 4: F-beta of the returned set over clicks, and the paired gain](figures/ab_over_clicks.png)
+![Binary Photo at beta 4: F-beta of the returned set over clicks, and the paired gain](figures/ab_over_clicks.webp)
 
 | Binary Photo, beta 4, 720 sessions per arm | 1.3x + reach from z 3 | 1.3x + reach from z 2.75 |
 |---|---|---|
@@ -191,7 +191,7 @@ returns. Arms against the app, paired run for run (`tables/ab_*.csv` for Binary 
 - **The gain is the early clicks' and a deeper set later**, small per session because the line serves 15% of Binary's
   trained clicks. Both rules are ahead in every band, after the closing check and at Done.
 
-![FHIBE faces at beta 4: the paired F-beta gain over votes](figures/faces_ab_over_votes.png)
+![FHIBE faces at beta 4: the paired F-beta gain over votes](figures/faces_ab_over_votes.webp)
 
 | FHIBE faces, beta 4, 562 people per set | 1.3x + reach z 3: from 1 photo / from 4 | 1.3x + reach z 2.75: from 1 / from 4 |
 |---|---|---|
@@ -216,7 +216,7 @@ z 2.75) moves: the one it helps most, the median among those whose F-beta it cha
 bench (`head_count_5039.py examples --arm e13z275`; `tables/examples_e13z275.csv`). "What stands out" is the count at
 beta 1.
 
-![The examples' withheld halves, ranked, with today's cut, the rule's and the best cut](figures/examples_e13z275.png)
+![The examples' withheld halves, ranked, with today's cut, the rule's and the best cut](figures/examples_e13z275.webp)
 
 *Each row is one snapshot: the withheld half's head logits by rank (log scale), positives green; today's cut
 (black), the rule's (blue), the best cut (purple dashes) and the deepest held-out Good's rank (orange dots).*

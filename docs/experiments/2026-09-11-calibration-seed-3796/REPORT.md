@@ -103,7 +103,7 @@ Every block's ends, not only the four quoted: [`agg/worked_blocks.csv`](agg/work
 The last row is there because the first three are not the whole story: on `kite`
 the twenty draws span 0.025 and the question barely exists.
 
-![Twenty draws of one block](figures/draw_fan.png)
+![Twenty draws of one block](figures/draw_fan.webp)
 
 *Every calibration draw of the widest block of each geometry; the shipped draw in
 red. The data is identical in each panel — same medias, same order, same test
@@ -175,7 +175,7 @@ then falls.
 | `dinov3_patch/whole_image` | 0.081 | 0.073 | 0.047 | 0.036 |
 | `siglip/whole_image` | 0.050 | 0.042 | 0.037 | 0.029 |
 
-![The noise floor over a session](figures/spread_vs_votes.png)
+![The noise floor over a session](figures/spread_vs_votes.webp)
 
 *Median across 25 blocks per geometry, IQR shaded.*
 
@@ -235,7 +235,7 @@ averaged first (they are four readings of one trajectory pair):
 **0.52, SE 0.02, n = 75 blocks, z = 1.2.** Two SE bounds any bias at 0.04 in
 percentile terms.
 
-![Where the shipped draw sits](figures/pin_percentile.png)
+![Where the shipped draw sits](figures/pin_percentile.webp)
 
 Concretely: 42 is the *best* of twenty on `max_patch`·`fork`·seed 0 (0.108) and
 the *worst* of twenty on `dinov3/whole`·`knife`·seed 2 (0.608). It is a sample.

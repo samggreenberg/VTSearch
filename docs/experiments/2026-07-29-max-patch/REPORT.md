@@ -344,23 +344,23 @@ Paired over (category, seed); `delta = mean_A − mean_B` (negative ⇒ the firs
 
 ## Figures
 
-![figures/fig_cost.png](figures/fig_cost.png)
+![figures/fig_cost.webp](figures/fig_cost.webp)
 
 **Figure 1. ErrorCost (FPR + FNR) as votes accumulate.** One panel per dataset; each line is an arm, shaded band = bootstrap 95% CI across categories × seeds. Lower and earlier-dropping is better — fewer total mistakes for the same voting effort.
 
-![figures/fig_fnr.png](figures/fig_fnr.png)
+![figures/fig_fnr.webp](figures/fig_fnr.webp)
 
 **Figure 2. False-negative rate (missed matches) vs votes.** Lower is better. The CLS-only and SigLIP whole-image arms tend to sit high here — a single global vector under-recalls cluttered scenes where the object is a small part of the image.
 
-![figures/fig_ap.png](figures/fig_ap.png)
+![figures/fig_ap.webp](figures/fig_ap.webp)
 
 **Figure 3. Average precision (ranking quality) vs votes.** Higher is better. AP is threshold-free, so it isolates how well each strategy *orders* matches from how well it *places the decision threshold* (the latter shows up in ErrorCost/FPR/FNR).
 
-![figures/fig_bands.png](figures/fig_bands.png)
+![figures/fig_bands.webp](figures/fig_bands.webp)
 
 **Figure 4. ErrorCost by object-scale band.** Mean final-budget ErrorCost of each arm within each voted-box scale band (lower = better). MaxPatch is best or tied-best in every band; MaxHAC is worst on the small bands (no sub-leaf candidate) and closes the gap on the large ones; MaxPatchHAC tracks MaxPatch at the ends but lags on the mid band, where its extra nodes add cost a single patch already covers.
 
-![figures/fig_scale.png](figures/fig_scale.png)
+![figures/fig_scale.webp](figures/fig_scale.webp)
 
 **Figure 5. The scale story (MaxPatch vs the production tree).** Each point is a Visual Genome category: x = median **voted (union) box** area — the region a Good vote actually drags, not the area of a single annotated instance — (log scale), y = final ErrorCost(MaxPatch) − ErrorCost(MaxHAC). Shaded stripes are the scale bands categories were sampled from. Points below the dashed zero line are categories where the tree-free raw-patch strategy wins; the dotted line marks the HAC leaf scale (~8.3% area), the smallest candidate the tree can propose. Spearman ρ(log-area, MaxPatch−MaxHAC) = 0.50 (p = 0.016): positive ⇒ MaxPatch’s edge over MaxHAC grows as objects shrink.
 

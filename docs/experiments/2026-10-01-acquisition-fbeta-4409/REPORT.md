@@ -39,7 +39,7 @@ over 720 cells (702 trained):
 | 2 | × 1.0 | −0.012 ± 0.002 | −2.8 ± 0.3 | −0.025 ± 0.003 | −0.02 | −0.01 | +5 | −0.035 ± 0.007 |
 | 2 | **× 0.5** | **+0.020 ± 0.002** | **+8.8 ± 0.3** | **+0.007 ± 0.003** | +0.11 | −0.03 | −22 | −0.055 ± 0.009 |
 
-![beta 1: Goods, F1 at the line and its share over clicks](figures/acq_beta1.png)
+![beta 1: Goods, F1 at the line and its share over clicks](figures/acq_beta1.webp)
 
 - **The harvest diverges after click 50.** Goods at 25 / 50 / 100 / 150
   clicks under beta 1: 11.3 / 14.8 / 17.9 / 20.2 on the control, 11.3 / 15.4 /
@@ -77,8 +77,8 @@ to slightly down (beta 2: −0.013), where the share drop is largest. Small
 objects are where the ranking is weakest (AP 0.26), and a better ranking
 there moves the ceiling without moving what 32 kept items can hold.
 
-![beta 0.5 over clicks](figures/acq_beta0.5.png)
-![beta 2 over clicks](figures/acq_beta2.png)
+![beta 0.5 over clicks](figures/acq_beta0.5.webp)
+![beta 2 over clicks](figures/acq_beta2.webp)
 
 ## 3. What ships, and what it leaves
 

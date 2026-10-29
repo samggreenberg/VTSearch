@@ -26,7 +26,7 @@ the Bads' own scores when, and only when, the Bads are a random sample.
 
 ## What goes wrong
 
-![The Bads' held-out scores against the class model's normal, one cell](figures/tail_example.png)
+![The Bads' held-out scores against the class model's normal, one cell](figures/tail_example.webp)
 
 *traffic light@medium, seed 0. The class model's Bad normal (black) is fitted to ~6,900 Bads, almost all deep in
 the bulk. Its upper tail falls far below the Bads' own (aqua). The shipped cut (dashed) keeps 242 images, of which
@@ -45,7 +45,7 @@ the normal under-counts the wrong images there, and the line reads them as posit
 | wrong, as the class model's normal predicts | 2.6 | 20 | 129 |
 | wrong, as the Bads' own scores predict | 38 | 105 | 241 |
 
-![Wrong images above the shipped cut](figures/wrong_above_cut.png)
+![Wrong images above the shipped cut](figures/wrong_above_cut.webp)
 
 The line also believes the corpus holds too many positives: a median of 129 against a true 50, 2.6× (its two-part
 fit absorbs the same tail). A larger total makes depth cheaper in the F-beta it maximizes, so the cut runs deeper
@@ -102,7 +102,7 @@ The gap to the best cut closes from 0.25 / 0.14 / 0.085 to 0.091 / 0.055 / 0.045
 With every label known, Find's line now does at least as well as a session's line on the better ranking, at every
 preset; before the fix it lost at 1/4 and 1.
 
-![The session's line over clicks against the ceiling's](figures/ceiling_vs_session.png)
+![The session's line over clicks against the ceiling's](figures/ceiling_vs_session.webp)
 
 ## On the sessions
 

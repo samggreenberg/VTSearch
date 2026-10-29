@@ -51,7 +51,7 @@ same grid and seeds as #4523, output under
 | documents | 1 | 0.88 | **0.94** | 0.043 | 23 | 23 |
 | documents | 4 | 0.96 | **1.00** | 0 | 26 | 26 |
 
-![Coverage against picks, every grid point](figures/coverage_vs_picks.png)
+![Coverage against picks, every grid point](figures/coverage_vs_picks.webp)
 
 *Compare with #4523's figure of the same name: the worlds no longer sit on
 separate levels below the 95% line. The 0.30 / 20 point now covers 0.94–0.99

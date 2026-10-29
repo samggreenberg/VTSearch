@@ -19,11 +19,11 @@ Tier `s` (5k pages a pool), the app's CPU path: Stage 1 on the CPU, a 1,000-page
 - **Retrain times are from the pilot,** 18 tasks sharing two EPYC 7713 nodes. They are slower than `profile_retrain.py`'s 4.5 s Good on an idle node, but the ratios between arms hold.
 - Three ucsf classes (`logo_bw_oval_emblem`, `logo_p_lorillard_crest`, `logo_rjr_script`) have no session at tier `s`: the harness skips a class without a positive in each half.
 
-![Mean AP and F1 at the line over 50 clicks, one line per arm](figures/quality_over_clicks.png)
+![Mean AP and F1 at the line over 50 clicks, one line per arm](figures/quality_over_clicks.webp)
 
 *The mean over 66 sessions per arm; a session that ended early holds its last state. The dotted line is the decision click. Read the gaps between lines, not the levels: the levels are tier `s`'s, where pools are a tenth of tier `m`'s.*
 
-![Each class's AP change at 25 clicks, one row per cut](figures/per_class_ap25.png)
+![Each class's AP change at 25 clicks, one row per cut](figures/per_class_ap25.webp)
 
 *One dot per class (both replicates averaged); the bar is the mean, and the shaded strip the −0.01 margin. The largest-scale cut leaves most classes within a few hundredths of the control, but four classes lose 0.3-0.5. Every other cut loses 0.8-0.97 on many stamp classes.*
 

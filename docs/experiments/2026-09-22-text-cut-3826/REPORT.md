@@ -126,7 +126,7 @@ chosen with the labels.
 
 ## 1. Where the shipped line sits
 
-![Admitted fraction against prevalence](figures/admitted.png)
+![Admitted fraction against prevalence](figures/admitted.webp)
 
 *Each dot is one sort. The x axis is the fraction of the haystack that truly
 matches, and the y axis is the fraction the rule admits. On the dashed diagonal
@@ -166,7 +166,7 @@ annotation errors (Visual Genome's stuff classes are suspect). Each cell is
 | `coco_val` / clip / "a person" | 4,952 | **2,693** | 2,292 (1,393) | **6 (5)** | 248 (198) | 2,081 (1,291) |
 | `vg_scale` / clip / "a bottle" (small) | 12,099 | 100 | 5,393 (58) | 99 (**0**) | 605 (7) | 5,504 (60) |
 
-![Three worked sorts](figures/worked_cases.png)
+![Three worked sorts](figures/worked_cases.webp)
 
 *Score histograms, with negatives in grey and positives in aqua, on a log count
 axis, and each rule's line drawn over them. "A bear" is a clean case: every rule
@@ -223,7 +223,7 @@ three different ways:
   rules move much less. In proportion to what is painted green, they move about
   twice as much. No rule here wins on both measures.
 
-![Stability against quality](figures/tradeoff.png)
+![Stability against quality](figures/tradeoff.webp)
 
 *One point per rule. The y axis is the mean excess cost over the per-sort oracle
 line. The left panel's x axis is the bootstrap flip. The right panel's x axis is
@@ -232,7 +232,7 @@ stabilised mixtures (violet, pink) have the lowest cost but the highest data
 flip. The tail and quantile rules are 5-30× more stable, at the same or higher
 cost.*
 
-![Bootstrap flip per sort](figures/boot_ecdf.png)
+![Bootstrap flip per sort](figures/boot_ecdf.webp)
 
 *The per-sort distribution behind the stability means: the fraction of sorts
 whose bootstrap flip is at or below x.*
@@ -268,13 +268,13 @@ painting a quarter of the haystack green is close to right. Under a loss that
 cares whether the green items are matches, the shipped line is at 12% precision
 and the tail rules roughly double F1.
 
-![Excess cost per dataset](figures/by_dataset.png)
+![Excess cost per dataset](figures/by_dataset.webp)
 
 *Mean excess cost over the oracle line, by dataset. The stabilised mixtures are
 cheapest on FPR+FNR in every environment, and the tail rules come close to them
 only on `caltech101_m`.*
 
-![Per-sort cost difference](figures/per_sort.png)
+![Per-sort cost difference](figures/per_sort.webp)
 
 *The per-sort view behind the paired means: cost(rule) − cost(shipped) for
 every sort, sorted.*

@@ -26,7 +26,7 @@ On the centroid's own clicks with one example photo, the face line goes from kee
 1–150, the gain is **+0.006 to +0.008** on faces at beta 1. That is a short-session gain: the tier lasts
 5.6 to 7.9 votes on faces and COCO, and about 15 on whole photos from one example.
 
-![Each count's F-beta minus the count line's at every vote, per bench and balance](fig_centroid_count.png)
+![Each count's F-beta minus the count line's at every vote, per bench and balance](fig_centroid_count.webp)
 
 *Figure 1. Each candidate's mean F-beta minus #4732's count line, at every vote, over every run. Rows
 are beta ¼, 1 and 4; columns are FHIBE face crops from 1 and 4 example photos, whole photos from 1, and

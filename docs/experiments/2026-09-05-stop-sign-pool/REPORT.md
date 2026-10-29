@@ -35,7 +35,7 @@ negative-pool review that is already running and has already found 21 of them.**
 `measure_supply.py` runs the loader's own front half — read, anchor, correct,
 band — and reports what each cell can actually draw from:
 
-![supply against the design](figures/supply-vs-design.png)
+![supply against the design](figures/supply-vs-design.webp)
 
 *Log axis. Every bar of every class clears `SCALE_N_POS` (dashed) — the figure's
 job is to show that the floor is not close, not to compare classes, and the log
@@ -96,7 +96,7 @@ COCO is simply believed. Here the loader's own passes are run with
 the answer key. That is the same trade `anchor_to_coco` and `name_evidence.py`
 already make: measure on the half with a reference, apply to the half without.
 
-![contamination by class](figures/contamination-by-class.png)
+![contamination by class](figures/contamination-by-class.webp)
 
 *Bars are Wilson 95% intervals on the overlap sample; the top axis rescales the
 same quantity to the 3,900-image pool a cell actually draws. Read the **order**,
@@ -161,7 +161,7 @@ The cut is still right. §4 is why.
 
 Adding `sign` works, in the narrow sense:
 
-![what `sign` buys and costs](figures/sign-tradeoff.png)
+![what `sign` buys and costs](figures/sign-tradeoff.webp)
 
 *Left: contamination is a rate over pool-eligible images, so the three bars are
 comparable. Right: the dotted line is the 4,200 images the pool actually draws —
@@ -189,7 +189,7 @@ withheld images sit. **`bicycle`/`bike` runs as a positive control**, being the
 entry at the other end of the precision range (47%) that everyone agrees is
 right.
 
-![withheld difficulty](figures/withheld-difficulty.png)
+![withheld difficulty](figures/withheld-difficulty.webp)
 
 *Each series is normalised by its own base rate (12.1% for `sign`, 1.6% for the
 `bike` family), so the two are comparable in shape but **not** in how much they

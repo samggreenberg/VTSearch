@@ -93,7 +93,7 @@ described.
 
 ## 1. What the offset is worth: speed
 
-![the trajectory, not the endpoint](figures/fig6_3319_speed.png)
+![the trajectory, not the endpoint](figures/fig6_3319_speed.webp)
 
 Every previous report on this constant, this one's first draft included, reported
 `final_cost` — one point on a curve. Two arms can land in the same place having
@@ -147,7 +147,7 @@ own target in 100% of cells by construction while the arms miss in 8–22%
 
 ## 2. The frontier is a plateau — on every endpoint
 
-![the plateau, the guardrail, and the calibration gap](figures/fig4_3319_plateau_and_calibration.png)
+![the plateau, the guardrail, and the calibration gap](figures/fig4_3319_plateau_and_calibration.webp)
 
 Paired against `prod`, all 192 cells, 95% bootstrap CIs:
 
@@ -245,7 +245,7 @@ shows a real interior optimum.
 
 ## 4. The calibration debt, and what it explains
 
-![the deep regime and the replication](figures/fig5_3319_deep_and_replication.png)
+![the deep regime and the replication](figures/fig5_3319_deep_and_replication.webp)
 
 The plan pre-registered a landmark. At prevalence π the selector's picks become
 more likely Good than Bad only once the evidence clears the prior odds, at

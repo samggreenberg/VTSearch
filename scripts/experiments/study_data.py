@@ -71,6 +71,7 @@ import tarfile
 import tempfile
 import urllib.request
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
@@ -568,6 +569,19 @@ def to_webp(png: Path) -> Path | None:
     return webp
 
 
+LINK_TEXT_RE = re.compile(r"(!?\[)([^\]\n]*)(\]\(\s*<?)([^)\s>]+\.webp)")
+
+
+def relabel(match: re.Match[str], doc: str) -> str:
+    """Rename the old file in a study figure's link text: `![x.png](x.webp)` becomes `![x.webp](x.webp)`."""
+    target = unquote(match.group(4))
+    if not os.path.normpath(str(PurePosixPath(doc).parent / target)).startswith(f"{EXPERIMENTS}/"):
+        return match.group(0)
+    stem = PurePosixPath(target).stem
+    text = re.sub(rf"(?<![\w-]){re.escape(stem)}\.png\b", f"{stem}.webp", match.group(2))
+    return f"{match.group(1)}{text}{match.group(3)}{match.group(4)}"
+
+
 def repoint(text: str, doc: str, renamed: dict[str, str], pattern: re.Pattern[str], root_too: bool = False) -> str:
     """Rewrite each target `pattern` captures in `text` that resolves to a renamed file.
 
@@ -595,20 +609,24 @@ def cmd_webp(args: argparse.Namespace) -> int:
     tree = Tree.load()
     studies = [study_name(s) for s in args.studies]
     renamed: dict[str, str] = {}
-    skipped: list[str] = []
-    converted = 0
+    figures = [
+        p for study in studies for p in tree.by_study.get(study, []) if p.lower().endswith(".png") and p in tree.kept
+    ]
+    skipped = [p for p in figures if p in tree.read_by_code]
+    todo = [p for p in figures if p not in tree.read_by_code]
+    with ProcessPoolExecutor() as pool:
+        results = list(pool.map(to_webp, [ROOT / p for p in todo], chunksize=4))
+    for path, webp in zip(todo, results, strict=True):
+        if webp is None:
+            skipped.append(path)
+        else:
+            renamed[path] = webp.relative_to(ROOT).as_posix()
+    converted = len(renamed)
+    if renamed:
+        git("rm", "-q", "--cached", "--", *renamed)
+        git("add", "--", *renamed.values())
+    # A link a report generator wrote to a PNG that an earlier run already converted.
     for study in studies:
-        for path in tree.by_study.get(study, []):
-            if path.lower().endswith(".png") and path in tree.kept:
-                webp = None if path in tree.read_by_code else to_webp(ROOT / path)
-                if webp is None:
-                    skipped.append(path)
-                    continue
-                converted += 1
-                renamed[path] = webp.relative_to(ROOT).as_posix()
-                git("rm", "-q", "--cached", "--", path)
-                git("add", "--", renamed[path])
-        # A link a report generator wrote to a PNG that an earlier run already converted.
         for path in tree.by_study.get(study, []):
             if path.lower().endswith(".webp"):
                 renamed.setdefault(path[: -len(".webp")] + ".png", path)
@@ -622,6 +640,7 @@ def cmd_webp(args: argparse.Namespace) -> int:
         if doc.endswith(".md"):
             new = repoint(new, doc, renamed, HTML_REF_RE)
             new = repoint(new, doc, renamed, CODE_SPAN_RE, root_too=True)
+            new = LINK_TEXT_RE.sub(lambda m, doc=doc: relabel(m, doc), new)
         if new != text:
             (ROOT / doc).write_text(new, encoding="utf-8")
             edited += 1

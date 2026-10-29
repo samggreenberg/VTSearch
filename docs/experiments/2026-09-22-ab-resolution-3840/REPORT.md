@@ -122,14 +122,14 @@ if it cannot.
 | `baseline − native` (one fit, two studies' checkouts) | 114 | −0.0024 | 0.015 | 0.0014 | 30% | 48 |
 | **validation**: `ll1e-8 − baseline`, seeds 2–8 | **399** | +0.0010 | 0.038 | **0.0019** | 15% | 7 |
 
-![SE against paired cells](figures/se_vs_cells.png)
+![SE against paired cells](figures/se_vs_cells.webp)
 
 *One line per pair: σ/√k through its own σ. Dots are the empirical SE of
 k-cell subsamples, and they sit on the lines at every k. The green diamond is the
 validation grid, inside its pre-registered interval (grey bar). Dashed: the SE
 at which a δ of 0.01 / 0.004 / 0.002 is resolved at 2 SE.*
 
-![σ against when trajectories part](figures/sigma_vs_divergence.png)
+![σ against when trajectories part](figures/sigma_vs_divergence.webp)
 
 *Every arm pair parts within the first few votes and lands in one band of σ,
 whatever the arm does to the haystack. The only point outside the band is the
@@ -137,7 +137,7 @@ pair that parts at vote 48.*
 
 ### Every cell of #3825's pair
 
-![Per-cell Δ by environment](figures/cell_deltas.png)
+![Per-cell Δ by environment](figures/cell_deltas.webp)
 
 *Each dot is one cell's Δcost. The mean sits on a two-sided tail of
 ±0.1–0.2. #3825's +0.0049 was the 14 `coco_val`/`siglip` cells at seeds 0–1
@@ -156,7 +156,7 @@ Per environment on the validation grid (Δ = `ll1e-8` − `baseline`):
 | `visual_genome_m`/`dinov3_patch`/whole | 56 | −0.0007 | **0.067** | 74 s | **43%** |
 | `visual_genome_m`/`siglip`/whole | 56 | +0.0087 | 0.035 | 79 s | 12% |
 
-![σ by environment, per pair](figures/env_sigma.png)
+![σ by environment, per pair](figures/env_sigma.webp)
 
 *σ per environment for every pair, with each environment's cost per cell. The
 bars change order from pair to pair, so the recommended allocation uses cost,
@@ -177,7 +177,7 @@ A/Bs ask, a seed is as good as a category.
 
 ### Steps
 
-![SE at equal compute against trajectory length](figures/steps.png)
+![SE at equal compute against trajectory length](figures/steps.webp)
 
 *Each pair's SE at equal compute if every trajectory were cut at T steps,
 relative to running all 100. Compute is priced from the cells' own cumulative
@@ -198,11 +198,11 @@ The three same-commit cells that differ are `caltech101_m`/`dinov3_patch`
 
 ### The quality-over-clicks pair
 
-![Cost over clicks, validation grid](figures/cost_vs_clicks.png)
+![Cost over clicks, validation grid](figures/cost_vs_clicks.webp)
 
-Per run: [`caltech101_m`](figures/cost_vs_clicks_runs__caltech101_m.png) ·
-[`coco_val`](figures/cost_vs_clicks_runs__coco_val.png) ·
-[`visual_genome_m`](figures/cost_vs_clicks_runs__visual_genome_m.png). Interactive:
+Per run: [`caltech101_m`](figures/cost_vs_clicks_runs__caltech101_m.webp) ·
+[`coco_val`](figures/cost_vs_clicks_runs__coco_val.webp) ·
+[`visual_genome_m`](figures/cost_vs_clicks_runs__visual_genome_m.webp). Interactive:
 [`viewer.html`](viewer.html).
 
 *The two arms of the validation grid, averaged and per run, anchored at click 0

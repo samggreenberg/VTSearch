@@ -59,7 +59,7 @@ and a venv upgrade is under way.
 
 ## Figure 1: the objective at every click
 
-![Session objective by click, both embedders, each preset](figures/objective_by_click.png)
+![Session objective by click, both embedders, each preset](figures/objective_by_click.webp)
 
 The mean over all 720 runs at each click, filled as `by_click.py` fills it: each run shows its own typed query's
 set until the app shows its detector at vote 30 (#4736), then the detector's.
@@ -106,7 +106,7 @@ By size band, the session mean at β 1 (the other presets in `by_band.csv` look 
 
 ## Click 0: the typed query
 
-![Typed query's AP by class, EmbeddingGemma 2 minus SigLIP](figures/click0.png)
+![Typed query's AP by class, EmbeddingGemma 2 minus SigLIP](figures/click0.webp)
 
 **Typed-query AP over the 720 cell-seeds: 0.50 against SigLIP's 0.42, +0.085 ± 0.009.**
 - 45 of 49 classes gain. Laptop gains most: AP 0.27 → 0.53.
@@ -120,7 +120,7 @@ By size band, the session mean at β 1 (the other presets in `by_band.csv` look 
 
 ## Runtime
 
-![Images a second, both embedders, GPU and CPU](figures/runtime.png)
+![Images a second, both embedders, GPU and CPU](figures/runtime.webp)
 
 `timing.csv`; `scripts/experiments/embeddinggemma2/timing.py` runs both shipped embedders' `embed_media_bulk` on the same 512 COCO Better JPEGs,
 held in memory so neither pays the network read, with the arms interleaved over three repeats (spread under 2%).
@@ -160,7 +160,7 @@ These are one split each, with no SE. They agree in direction with the paired se
 
 ## The audio half
 
-![Typed-query mAP by audio set, CLAP-general vs EmbeddingGemma 2](figures/audio.png)
+![Typed-query mAP by audio set, CLAP-general vs EmbeddingGemma 2](figures/audio.webp)
 
 `audio.csv`.
 - **The sets:** ESC-50 through `vtscore.eval` (medium, text and learned sort). UrbanSound8K, GTZAN and Speech

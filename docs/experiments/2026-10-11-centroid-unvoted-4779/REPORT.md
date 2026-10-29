@@ -27,7 +27,7 @@ sessions keeping nothing new from 63% to 14%.
 This is the other half of #4783's decision. #4783 looks past a standout first photo only from beta 1 up,
 so at beta ¼ the labelled collection waited for this change. It now gets the gain.
 
-![The line over the unvoted media, and over the withheld half, minus the line over the whole pool](fig_centroid_unvoted.png)
+![The line over the unvoted media, and over the withheld half, minus the line over the whole pool](fig_centroid_unvoted.webp)
 
 *Figure 1. Mean F-beta of what a Find returns at every vote, minus the same line drawn over the whole pool
 (the app before #4779), over every run. Rows are beta ¼, 1 and 4; columns are FHIBE face crops from 1

@@ -32,14 +32,14 @@ No hold minus the shipped hold (30 labels), session mean, mean ± SE clustered o
 | app screens at 1%, the ten seeds, votes 1-150 | +0.002 to +0.027 | +0.017 to +0.034 | +0.011 to +0.030 |
 | app screens at 1%, sessions better / tied / worse with no hold (1-50) | 65% / 11% / 25% | 77% / 11% / 12% | 66% / 8% / 25% |
 
-![The gain over the shipped hold against the hold count](fig_hold.png)
+![The gain over the shipped hold against the hold count](fig_hold.webp)
 
 *Figure 1. The session mean at each hold count minus the shipped hold (30 labels), with two clustered SEs shaded.
 Top: votes 1-150. Bottom: votes 1-50. Blue: photos (COCO Better, Binary). Orange: app screens (Rico Suave at a
 common 1% prevalence). A count of 7 or less is the same as 0, because the hold starts at the label quota (3 Goods
 and 4 Bads). Every count lies within 0.003 of every other on photos. On screens every label held costs.*
 
-![The set on screen at every vote](fig_by_vote.png)
+![The set on screen at every vote](fig_by_vote.webp)
 
 *Figure 2. Mean F-beta of the set on screen at votes 1-50. Blue: the shipped hold, flat at the typed query's set
 until about vote 30. Orange: no hold, the head's set from the quota. Green, dashed: whichever of the two is better
@@ -48,7 +48,7 @@ query's at vote 8 at beta ¼, vote 11 at beta 1 (it stays ahead from vote 20) an
 Bottom: app screens. The head's set beats the typed query's from the
 quota on.*
 
-![No hold minus the shipped hold, one dot a seed](fig_seeds.png)
+![No hold minus the shipped hold, one dot a seed](fig_seeds.webp)
 
 *Figure 3. The gain from dropping the hold, one dot a seed (5 for photos, 10 for screens), with the mean as a black
 bar. Every photo seed lies within ±0.005 over votes 1-150. Every screen seed gains.*

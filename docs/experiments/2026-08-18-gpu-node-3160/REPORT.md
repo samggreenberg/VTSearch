@@ -128,7 +128,7 @@ same configuration as `rack8n05` and `rack10n07`, both of which were probed and
 sit at 2.1e-12. So the census covers 20 of 21 candidate nodes and 13 of 13
 `gpu:v100` nodes, which is the group the question is about.
 
-![Census: drift by node, coloured by CPU ISA](figures/census_by_isa.png)
+![Census: drift by node, coloured by CPU ISA](figures/census_by_isa.webp)
 
 Each point is one node's median 1−cos against `rack7n03` over the same 256
 images. Colour is the host's CPU ISA, shape is the GPU part. **The colours
@@ -147,7 +147,7 @@ forward there, so the *only* thing that differs is the machine.
 | its own pixels | **block 0**, rising to rel L2 9.2e-03 by the last block | differ |
 | `rack7n03`'s pixels | **none — all 27 identical** | **bit-identical** |
 
-![Per-block divergence, own pixels vs the reference node's pixels](figures/layer_divergence.png)
+![Per-block divergence, own pixels vs the reference node's pixels](figures/layer_divergence.webp)
 
 The red dashed line on the floor is the result. (`rack4n02`'s two lines coincide
 because its own pixels *are* the reference tensor — bit-identical preprocessing —
@@ -178,7 +178,7 @@ example: image `107899.jpg`, channel 0, position (8, 326) is **191** on the
 AVX-512 hosts and **192** on the AVX2 host. Every disagreement is a rounding
 boundary landing on the other side.
 
-![Pixel differences: one 8-bit level, in textured regions](figures/pixel_diff.png)
+![Pixel differences: one 8-bit level, in textured regions](figures/pixel_diff.webp)
 
 A caution on that statistic, which cost a neighbouring study a table of six
 identical numbers: **max |Δ| is saturated here.** Any 8-bit resampling
@@ -316,9 +316,9 @@ a fresh grid, treated embedder only, 256 seeds → ~2048 treated cells per arm,
 which is 2× this run's treated n and independent of it rather than pooled.
 §5.1 records the outcome.
 
-![Paired cost](figures/paired_cost_fp32_v100_vs_fp32_v100_rack7n03.png)
+![Paired cost](figures/paired_cost_fp32_v100_vs_fp32_v100_rack7n03.webp)
 
-![Paired average precision](figures/paired_average_precision_fp32_v100_vs_fp32_v100_rack7n03.png)
+![Paired average precision](figures/paired_average_precision_fp32_v100_vs_fp32_v100_rack7n03.webp)
 
 Left panel: the mean trajectory for both arms, which lie on top of each other.
 Right: **every cell's paired difference as a thin line**, the mean in black, the
@@ -371,9 +371,9 @@ average_precision). That is what noise looks like, and it is the same reading
 #3143's 6-seed grid earned when its per-embedder signs opposed and then agreed at
 16× the cells.
 
-![Replication: paired cost](figures/rep_paired_cost.png)
+![Replication: paired cost](figures/rep_paired_cost.webp)
 
-![Replication: paired average precision](figures/rep_paired_average_precision.png)
+![Replication: paired average precision](figures/rep_paired_average_precision.webp)
 
 The mechanism is unchanged and is the point: `cost` is bit-identical on **3.6%**
 of steps and `average_precision` on **0.0%**, while the threshold is chosen the
