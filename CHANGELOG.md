@@ -22,6 +22,12 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **An import alert can say what the import left out** (issue #5449). The event a server's
+  `--on-dataset-imported` functions receive now carries how many items the import brought in (`n_imported`) and the
+  items it dropped because they could not be read (`n_dropped`, and `dropped`: each item's name, grouped by
+  reason), so an alert email can tell you which files to look into. The
+  [extension guide](docs/EXTENDING.md#dataset-import-hooks) shows a mailer that lists them.
+
 - **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
   chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
   `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,

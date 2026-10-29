@@ -1513,6 +1513,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`DatasetImported` says how many items an import brought in and which it dropped** (issue #5449). Three new
+  fields, all defaulted so a hook that ignores them is unchanged: `n_imported` (the items that reached the finalize
+  stage: `n_media`, plus `n_dropped`, plus any merged away as duplicates), `n_dropped` (the items left out because
+  an embedder could not read them) and `dropped` (those items as the `DroppedGroup`s the registry entry keeps, a
+  copy). All three are empty on a failed import. A hook that emails the user can now list what to look into.
+
 - **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
   dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
   `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it
