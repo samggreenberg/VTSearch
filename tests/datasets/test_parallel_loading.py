@@ -1291,10 +1291,10 @@ class TestBackgroundLoadThreadContext:
     def test_load_fn_sees_in_flight_dataset_context(self):
         from vtscore.datasets.load_pipeline import _run_origin_load_in_background
         from vtscore.state.core import (
-            _empty_dataset_context,
             get_active_context,
             get_thread_dataset_context,
         )
+        from vtscore.state.dataset_registry import _empty_dataset_context
 
         from vtscore.state.core import DatasetContext
 

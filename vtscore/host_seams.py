@@ -31,9 +31,9 @@ The seams
 ======================================  ============================================
 Seam                                    Declared in
 ======================================  ============================================
-``request_context_predicate``           :mod:`vtscore.state.core`
-``dataset_context_resolver``            :mod:`vtscore.state.core`
-``detector_context_resolver``           :mod:`vtscore.state.core`
+``request_context_predicate``           :mod:`vtscore.state.resolution`
+``dataset_context_resolver``            :mod:`vtscore.state.resolution`
+``detector_context_resolver``           :mod:`vtscore.state.resolution`
 ``request_user_resolver``               :mod:`vtscore.state.current_user`
 ``core_config_builder``                 :mod:`vtscore.config.core_config`
 ``setting_getters`` (keyed)             :mod:`vtscore.config.core_config`
@@ -97,13 +97,13 @@ def capture_host_seams() -> HostSeams:
     import vtscore.config.core_config as core_config  # noqa: PLC0415
     import vtscore.datasets.load_pipeline as load_pipeline  # noqa: PLC0415
     import vtscore.state as state  # noqa: PLC0415
-    import vtscore.state.core as state_core  # noqa: PLC0415
     import vtscore.state.current_user as current_user  # noqa: PLC0415
+    import vtscore.state.resolution as resolution  # noqa: PLC0415
 
     return HostSeams(
-        request_context_predicate=state_core._request_context_predicate,
-        dataset_context_resolver=state_core._dataset_context_resolver,
-        detector_context_resolver=state_core._detector_context_resolver,
+        request_context_predicate=resolution._request_context_predicate,
+        dataset_context_resolver=resolution._dataset_context_resolver,
+        detector_context_resolver=resolution._detector_context_resolver,
         request_user_resolver=current_user._request_user_resolver,
         core_config_builder=core_config._core_config_builder,
         setting_getters=dict(core_config._setting_getters),
@@ -126,12 +126,12 @@ def restore_host_seams(seams: HostSeams) -> None:
     import vtscore.config.core_config as core_config  # noqa: PLC0415
     import vtscore.datasets.load_pipeline as load_pipeline  # noqa: PLC0415
     import vtscore.state as state  # noqa: PLC0415
-    import vtscore.state.core as state_core  # noqa: PLC0415
     import vtscore.state.current_user as current_user  # noqa: PLC0415
+    import vtscore.state.resolution as resolution  # noqa: PLC0415
 
-    state_core._request_context_predicate = seams.request_context_predicate
-    state_core._dataset_context_resolver = seams.dataset_context_resolver
-    state_core._detector_context_resolver = seams.detector_context_resolver
+    resolution._request_context_predicate = seams.request_context_predicate
+    resolution._dataset_context_resolver = seams.dataset_context_resolver
+    resolution._detector_context_resolver = seams.detector_context_resolver
     current_user._request_user_resolver = seams.request_user_resolver
     core_config._core_config_builder = seams.core_config_builder
     core_config._settings_path_redirect = seams.settings_path_redirect

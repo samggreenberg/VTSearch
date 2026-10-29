@@ -656,7 +656,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="acquisition.balance_cut",
-        app="py:vtscore.state.core.detector_acquisition_threshold",
+        app="py:vtscore.state.detector_lines.detector_acquisition_threshold",
         harness="vtscore/eval/voting_iterations.py::resolve_acquisition_factor",
         kind="default",
         note=(
@@ -677,7 +677,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="acquisition.target_precision",
-        app="py:vtscore.state.core.detector_acquisition_threshold",
+        app="py:vtscore.state.detector_lines.detector_acquisition_threshold",
         harness="vtscore/eval/voting_iterations.py::resolve_acquisition_target",
         kind="default",
         note=(

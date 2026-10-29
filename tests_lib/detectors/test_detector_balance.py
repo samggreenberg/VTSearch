@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 import vtscore.detectors.training as training
-import vtscore.state.core as core
+import vtscore.state.detector_lines as detector_lines
 from vtscore import config
 from vtscore.config import DEFAULT_BETA
 from vtscore.datasets.labelset import LabeledElement, LabelSet
@@ -168,7 +168,7 @@ class TestAThresholdPick:
             cuts[ctx.detector_id] = beta
             return None
 
-        monkeypatch.setattr(core, "recut_detector_threshold", _recut)
+        monkeypatch.setattr(detector_lines, "recut_detector_threshold", _recut)
         kept, _ = _registered("recut-kept", beta=0.25)
         bare, _ = _registered("recut-bare")
         seeded, _ = _registered("recut-seeded", beta=0.25)

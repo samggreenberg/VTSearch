@@ -400,7 +400,7 @@ detector. The main groups (the full field list is in
   (see [packages/labels.md](packages/labels.md#binding)).
 
 Both are `RLock`-protected by the single module-level lock in
-`vtscore/state/core.py`. Both use `__slots__` for memory efficiency
+`vtscore/state/primitives.py`. Both use `__slots__` for memory efficiency
 (typical apps load dozens to hundreds of context objects).
 
 Crucially, **neither is a global.** Library code never reaches for "the
