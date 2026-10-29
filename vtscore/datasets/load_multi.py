@@ -1,13 +1,13 @@
 """Multi-dataset imports: one importer run, several datasets (#4703).
 
-A single-dataset load (:func:`~vtscore.datasets.load_pipeline._run_origin_load_in_background`)
+A single-dataset load (:func:`~vtscore.datasets.load_origin._run_origin_load_in_background`)
 is one importer run feeding one :class:`~vtscore.state.DatasetContext` that
 one chain of post-import stages turns into one registry entry.  A
 **multi-dataset** load keeps the one importer run — the expensive acquire:
 downloading an archive, walking a folder, listing a bucket — and fans its
 output into N contexts, one per :class:`~vtscore.datasets.importers.base.OutputSpec`,
 each of which then goes through the same post-import stages
-(:func:`~vtscore.datasets.load_pipeline._finish_dataset_load`) on its own and
+(:func:`~vtscore.datasets.load_origin._finish_dataset_load`) on its own and
 lands as its own dataset, with its own dashboard row, its own
 :class:`~vtscore.datasets.import_event.DatasetImported` event and its own
 AutoFind run.
@@ -61,22 +61,23 @@ from vtscore.concurrency.progress import CancelledError, clear_thread_progress, 
 from vtscore.datasets.clipper_chain import append_cleaner_steps
 from vtscore.datasets.import_event import DatasetImported
 from vtscore.datasets.importers.base import OutputSpec, output_dataset_name
-from vtscore.datasets import load_pipeline as _pipeline
-from vtscore.datasets.load_pipeline import (
+from vtscore.datasets import load_workers as _workers
+from vtscore.datasets.load_origin import (
     _DatasetLoadSpec,
-    _LoadGateController,
     _LoadIds,
-    _describe_source,
     _finish_dataset_load,
+    _report_finished,
+    _run_post_load,
+)
+from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
+from vtscore.datasets.load_workers import (
+    _LoadGateController,
+    _describe_source,
     _handle_load_failure,
     _parse_bool,
     _parse_chain_field,
     _park_load_terminal,
-    _report_finished,
-    _run_post_load,
     _start_import_task,
-    auto_chunk_size,
-    consume_chunks_into,
 )
 from vtscore.datasets.stages._common import (
     _STATUS_TO_STEP,
@@ -158,7 +159,7 @@ class _FanoutTracker:
         """Importer-side progress callback for the shared acquire phase.
 
         The multi-dataset twin of
-        :func:`~vtscore.datasets.load_pipeline._make_stepped_progress`: maps the
+        :func:`~vtscore.datasets.load_workers._make_stepped_progress`: maps the
         status onto a load step, swaps the download gate for the embed gate on
         the first ``"embedding"`` status, and mirrors the update onto every
         live output's pacer.
@@ -211,9 +212,9 @@ def _build_jobs(
         origin = origin_for(output, narrowed) if origin_for is not None else importer.build_origin(narrowed)
 
         # Remember the pick per media type, as the single path does, so the
-        # next Add Dataset form pre-selects it.  Read off the pipeline module
+        # next Add Dataset form pre-selects it.  Read off the workers module
         # at call time: the app installs the hook after import.
-        hook = _pipeline._last_embedder_persistence_hook
+        hook = _workers._last_embedder_persistence_hook
         if output.media_type and output.embedder and hook is not None:
             try:
                 hook(output.media_type, output.embedder)
@@ -321,7 +322,7 @@ def _spawn_multi_worker(jobs: list[_OutputJob], request_user: str, body: Callabl
     """Run *body* on one daemon thread that owns every job's task; return the task ids.
 
     The multi-dataset twin of
-    :func:`~vtscore.datasets.load_pipeline._spawn_import_worker`: the same
+    :func:`~vtscore.datasets.load_workers._spawn_import_worker`: the same
     user replay and progress clean-up, but the one thread is registered as the
     worker of *every* output's task (so a cancel on any row can tell "still
     stopping" from "nobody here"), and every task is marked finished once the

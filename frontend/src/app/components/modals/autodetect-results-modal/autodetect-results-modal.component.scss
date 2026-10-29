@@ -19,7 +19,12 @@
   // the body's own scrollbar. The summary above and export controls below
   // stay at natural height; this table absorbs the slack.
   flex: 1;
-  min-height: 0;
+  // But never all of it: a crowded dialog (notes, an auto-export line, an
+  // exporter with several fields) on a laptop screen left no slack at all, and
+  // a zero floor let the list, or Browse's progress in its place, collapse to
+  // nothing under counts saying there were hundreds of hits. So keep a few
+  // rows; the body scrolls for the rest.
+  min-height: 12rem;
   overflow-y: auto;
   margin-bottom: var(--space-xl);
 }

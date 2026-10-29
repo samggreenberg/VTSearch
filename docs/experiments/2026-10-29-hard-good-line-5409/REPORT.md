@@ -32,7 +32,7 @@ The 30 clear person-sizes a size are identical in every metric at every β.
 ## The mechanism
 
 Faces are on the head's count line all session (fewer than 6 held-out Goods). Above β 1 that line
-(`labels_line.head_count_cut`) keeps 1.3× what stands out. #5039 added a reach on top: when the lowest of
+(`head_count.head_count_cut`) keeps 1.3× what stands out. #5039 added a reach on top: when the lowest of
 the class model's held-out Goods (`ClassScoreModel.pos_logits`) ranks below the β 1 count, the line keeps at
 least as deep as the head's excess curve peaks. A hard starting face is one of the session's ~4 Goods. Each
 calibration fold holds out about half the Goods, so the face is often held out. It then scores far down the
@@ -59,8 +59,8 @@ held-out Goods' scores, so the check needed a logging rerun of the control.
 
 ## Shipped
 
-`labels_line.REACH_SKIPS_HARD_VIEWS = True`. The calibration folds tag each held-out row that is a hard-view
-face (`conformal.FoldOrdering.hard_views`, from `svm_prior.hard_view_mask`, the same rows #5413 weighs).
+`class_model.REACH_SKIPS_HARD_VIEWS = True`. The calibration folds tag each held-out row that is a hard-view
+face (`fold_orderings.FoldOrdering.hard_views`, from `svm_prior.hard_view_mask`, the same rows #5413 weighs).
 The class model then builds `pos_logits`, which only the reach reads, from the clear held-out Goods. If every
 held-out Good is hard, nothing reaches. The hard Good still counts in the class model's mean, spread and
 Good count, and it is still fitted on at #5413's ¼. On a dataset with no Face Quality verdicts nothing is

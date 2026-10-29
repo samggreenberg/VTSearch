@@ -30,7 +30,7 @@ wiring (routes, the SPA's forms and pickers, settings sync, auth) lives
 only here. Each side keeps its own contract table per ABC.
 
 Where the two overlap, they describe one class, so they can contradict
-each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)
+each other. `scripts/gates/check-extension-docs.py` (a `./run-tests.sh` gate)
 holds them to the code: every member either set names in a contract table
 must exist, and neither may present a public wrapper as the override point
 when the class defines an `_impl` hook behind it. When you change a plugin
@@ -235,7 +235,7 @@ in force. There is deliberately no settings-file key for this: a
 settings file that could name code to run would let anyone who can
 import settings run code on the server. The wiring is
 `vtsearch/import_hooks.py`; the pipeline side is the `on_finished`
-callback in `vtscore/datasets/load_pipeline.py`.
+callback in `vtscore/datasets/load_origin.py`.
 
 ---
 
@@ -268,7 +268,7 @@ images) and do **not** flow through pyproject.
 To let `docker/Dockerfile.labbench` build another media type, add a
 `requirements/labbench-<type>.txt` (`-r labbench.txt` plus that type's
 dependencies) and an entry for the type in `HIDDEN_BY_TYPE` in
-`scripts/seed_labbench_settings.py`, naming any plugin the slim file leaves
+`scripts/install/seed_labbench_settings.py`, naming any plugin the slim file leaves
 without its dependencies. `tests_lib/meta/test_dockerfile_labbench.py` checks
 that the two agree. The all-types build (no `MEDIA_TYPE`) picks the new type up
 from its requirements file, with no edit to the Dockerfile.
@@ -414,7 +414,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Declare `embedding_dim` (and `model_id` when there is a downloadable checkpoint)
 - [ ] Leave `description_wrappers` empty unless you have *measured* that a prompt ensemble beats the typed query on your checkpoint (see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder))
 - [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; an `embedder_<name>/` sub-package and symlinked files/directories are supported too)
-- [ ] Run `python scripts/gen-docs-inventories.py` and commit the regenerated embedder tables
+- [ ] Run `python scripts/gates/gen-docs-inventories.py` and commit the regenerated embedder tables
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist

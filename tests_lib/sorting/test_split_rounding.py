@@ -20,7 +20,7 @@ from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
     PRODUCTION_SPLIT_BY_SPACE,
     compute_fold_orderings,
-    conformal,
+    fold_orderings,
     nearest_holdout,
 )
 
@@ -34,7 +34,7 @@ def _labelset(rng, n_pos, n_neg, dim=8):
 
 
 def _held_goods(n_pos, n_neg, fraction, labelset):
-    sizes = conformal._split_train_counts(n_pos + n_neg, n_pos, n_neg, fraction, labelset)
+    sizes = fold_orderings._split_train_counts(n_pos + n_neg, n_pos, n_neg, fraction, labelset)
     assert sizes is not None
     return n_pos - sizes[0]
 
@@ -81,8 +81,8 @@ class TestTheShippedSplit:
 
     def test_a_degenerate_fraction_is_too_small_to_split(self):
         """A share that would leave fewer than two votes to train gets the caller's sentinel."""
-        assert conformal._split_train_counts(4, 2, 2, 0.99, None) is None
-        assert conformal._split_train_counts(4, 2, 2, SINGLE, None) == (1, 1)
+        assert fold_orderings._split_train_counts(4, 2, 2, 0.99, None) is None
+        assert fold_orderings._split_train_counts(4, 2, 2, SINGLE, None) == (1, 1)
 
     def test_row_wise_folds_hold_out_the_nearest_count_of_each_class(self):
         rng = np.random.RandomState(1)
@@ -164,21 +164,21 @@ class TestTheDitherArm:
 
     def test_the_dither_needs_the_labelset(self):
         with split_rounding("dither"), pytest.raises(ValueError, match="labelset"):
-            conformal._split_train_counts(21, 8, 13, SINGLE, None)
+            fold_orderings._split_train_counts(21, 8, 13, SINGLE, None)
 
 
 class TestTheSwap:
     def test_nearest_is_the_app(self):
-        shipped = conformal._split_train_counts
+        shipped = fold_orderings._split_train_counts
         with split_rounding("nearest"):
-            assert conformal._split_train_counts is shipped
+            assert fold_orderings._split_train_counts is shipped
 
     def test_the_swap_is_undone_even_on_an_error(self):
-        shipped = conformal._split_train_counts
+        shipped = fold_orderings._split_train_counts
         with pytest.raises(RuntimeError), split_rounding("dither"):
-            assert conformal._split_train_counts is not shipped
+            assert fold_orderings._split_train_counts is not shipped
             raise RuntimeError
-        assert conformal._split_train_counts is shipped
+        assert fold_orderings._split_train_counts is shipped
 
     def test_an_unknown_rule_is_refused(self):
         with pytest.raises(ValueError, match="split_rounding"), split_rounding("round"):

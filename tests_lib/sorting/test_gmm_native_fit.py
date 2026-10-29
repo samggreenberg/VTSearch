@@ -34,7 +34,7 @@ from vtscore.training.thresholds import (
     fit_score_gmm_sklearn,
     gmm_fit_array,
 )
-from vtscore.training.thresholds import gmm as gmm_mod
+from vtscore.training.thresholds import gmm_em
 from vtscore.training.thresholds.gmm import (
     _anchored_em,
     _EM_LOGLIK_TOL,
@@ -134,8 +134,8 @@ class TestTheSameConvergence:
         tolerance buys is speed and *agreement with the incumbent*, not a fit
         that could not be found.
         """
-        monkeypatch.setattr(gmm_mod, "_EM_LOGLIK_TOL", 1e-12)
-        monkeypatch.setattr(gmm_mod, "_EM_MAX_ITER", 2000)
+        monkeypatch.setattr(gmm_em, "_EM_LOGLIK_TOL", 1e-12)
+        monkeypatch.setattr(gmm_em, "_EM_MAX_ITER", 2000)
         x = _bimodal(n=6000, prevalence=prevalence, separation=separation, seed=11)
         native, reference = fit_score_gmm(x), fit_score_gmm_sklearn(x)
         assert native is not None and reference is not None
@@ -145,8 +145,8 @@ class TestTheSameConvergence:
         # 2% prevalence at 0.3 separation: both default tolerances stop with the
         # high component still spread across the gap; the mixture is really
         # there, and a converged fit finds it.
-        monkeypatch.setattr(gmm_mod, "_EM_LOGLIK_TOL", 1e-12)
-        monkeypatch.setattr(gmm_mod, "_EM_MAX_ITER", 2000)
+        monkeypatch.setattr(gmm_em, "_EM_LOGLIK_TOL", 1e-12)
+        monkeypatch.setattr(gmm_em, "_EM_MAX_ITER", 2000)
         x = _bimodal(n=50_000, prevalence=0.02, separation=0.3, seed=13)
         native = fit_score_gmm(x)
         assert native is not None
@@ -227,7 +227,7 @@ class TestOneLoop:
         x = _bimodal(n=3000, seed=23)
         init = _two_means_init(np.sort(x))
         assert init is not None
-        direct = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, gmm_mod._EM_MAX_ITER, 1e-8, _EM_LOGLIK_TOL)
+        direct = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, gmm_em._EM_MAX_ITER, 1e-8, _EM_LOGLIK_TOL)
         via = _plain_em(x, init)
         assert direct is not None and via is not None
         assert (direct.w_lo, direct.mu_lo, direct.var_lo) == (via.w_lo, via.mu_lo, via.var_lo)

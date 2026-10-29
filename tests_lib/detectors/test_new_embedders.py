@@ -14,20 +14,20 @@ class TestImageSiglipEmbedderProperties:
     """Verify ImageSiglipEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         assert emb.name == "siglip"
 
     def test_media_type_id(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         assert emb.media_type_id == "image"
 
     def test_no_description_wrappers(self):
         """#3341: every wrapper measured below the typed query on SigLIP."""
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         assert ImageSiglipEmbedder().description_wrappers == []
 
@@ -46,7 +46,7 @@ class TestImageSiglipEmbedderProperties:
         assert "siglip" in names
 
     def test_to_dict(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         d = emb.to_dict()
@@ -63,7 +63,7 @@ class TestImageSiglipEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         # Simulate already-loaded model
@@ -75,7 +75,7 @@ class TestImageSiglipEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         # Patch load_models to not actually load anything
@@ -84,7 +84,7 @@ class TestImageSiglipEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         with patch.object(emb, "load_models"):
@@ -92,7 +92,7 @@ class TestImageSiglipEmbedderProperties:
         assert result is None
 
     def test_embed_pil_image_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         with patch.object(emb, "load_models"):
@@ -117,23 +117,23 @@ class TestImageSiglipLEmbedderProperties:
     """
 
     def test_name(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         assert ImageSiglipLEmbedder().name == "siglip_l"
 
     def test_media_type_id(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         assert ImageSiglipLEmbedder().media_type_id == "image"
 
     def test_is_not_default(self):
         """SigLIP (base) stays the default image embedder; SigLIP-L is opt-in."""
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         assert ImageSiglipLEmbedder().is_default is False
 
     def test_description_wrappers_non_empty(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         wrappers = ImageSiglipLEmbedder().description_wrappers
         assert len(wrappers) > 0
@@ -153,7 +153,7 @@ class TestImageSiglipLEmbedderProperties:
         assert "siglip_l" in names
 
     def test_to_dict(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         d = ImageSiglipLEmbedder().to_dict()
         assert d == {
@@ -169,7 +169,7 @@ class TestImageSiglipLEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         emb = ImageSiglipLEmbedder()
         # Simulate already-loaded model: a second load must be a no-op and must
@@ -181,7 +181,7 @@ class TestImageSiglipLEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         emb = ImageSiglipLEmbedder()
         with patch.object(emb, "load_models"):
@@ -189,7 +189,7 @@ class TestImageSiglipLEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         emb = ImageSiglipLEmbedder()
         with patch.object(emb, "load_models"):
@@ -197,7 +197,7 @@ class TestImageSiglipLEmbedderProperties:
         assert result is None
 
     def test_embed_pil_image_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         emb = ImageSiglipLEmbedder()
         with patch.object(emb, "load_models"):
@@ -212,13 +212,13 @@ class TestImageSiglipLEmbedderProperties:
 
     def test_is_media_embedder(self):
         from vtscore.media.embedder import MediaEmbedder
-        from vtscore.media.image.embedder_siglip_l import ImageSiglipLEmbedder
+        from vtscore.media.image.embedders.embedder_siglip_l import ImageSiglipLEmbedder
 
         assert issubclass(ImageSiglipLEmbedder, MediaEmbedder)
 
     def test_module_exposes_embedder_sentinel(self):
         from vtscore.media.embedder import MediaEmbedder
-        from vtscore.media.image import embedder_siglip_l
+        from vtscore.media.image.embedders import embedder_siglip_l
 
         assert isinstance(embedder_siglip_l.EMBEDDER, MediaEmbedder)
         assert embedder_siglip_l.EMBEDDER.name == "siglip_l"
@@ -233,28 +233,28 @@ class TestImageSiglip2LEmbedderProperties:
     """
 
     def test_name(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         assert ImageSiglip2LEmbedder().name == "siglip2_l"
 
     def test_media_type_id(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         assert ImageSiglip2LEmbedder().media_type_id == "image"
 
     def test_is_not_default(self):
         """SigLIP (base) stays the default image embedder; SigLIP2-L is opt-in."""
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         assert ImageSiglip2LEmbedder().is_default is False
 
     def test_supports_text(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         assert ImageSiglip2LEmbedder().supports_text is True
 
     def test_description_wrappers_non_empty(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         wrappers = ImageSiglip2LEmbedder().description_wrappers
         assert len(wrappers) > 0
@@ -274,7 +274,7 @@ class TestImageSiglip2LEmbedderProperties:
         assert "siglip2_l" in names
 
     def test_to_dict(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         d = ImageSiglip2LEmbedder().to_dict()
         assert d == {
@@ -290,7 +290,7 @@ class TestImageSiglip2LEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         emb = ImageSiglip2LEmbedder()
         # Simulate already-loaded model: a second load must be a no-op and must
@@ -301,7 +301,7 @@ class TestImageSiglip2LEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         emb = ImageSiglip2LEmbedder()
         with patch.object(emb, "load_models"):
@@ -309,7 +309,7 @@ class TestImageSiglip2LEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         emb = ImageSiglip2LEmbedder()
         with patch.object(emb, "load_models"):
@@ -330,13 +330,13 @@ class TestImageSiglip2LEmbedderProperties:
 
     def test_is_media_embedder(self):
         from vtscore.media.embedder import MediaEmbedder
-        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+        from vtscore.media.image.embedders.embedder_siglip2_l import ImageSiglip2LEmbedder
 
         assert issubclass(ImageSiglip2LEmbedder, MediaEmbedder)
 
     def test_module_exposes_embedder_sentinel(self):
         from vtscore.media.embedder import MediaEmbedder
-        from vtscore.media.image import embedder_siglip2_l
+        from vtscore.media.image.embedders import embedder_siglip2_l
 
         assert isinstance(embedder_siglip2_l.EMBEDDER, MediaEmbedder)
         assert embedder_siglip2_l.EMBEDDER.name == "siglip2_l"
@@ -1333,7 +1333,7 @@ class TestEmbedderSentinelDiscovery:
         from vtscore.media.audio import embedder_clap_music
         from vtscore.media.audio import embedder_paraspeechclap
         from vtscore.media.audio import embedder_whisper
-        from vtscore.media.image import embedder_siglip
+        from vtscore.media.image.embedders import embedder_siglip
         from vtscore.media.text import embedder_bge
         from vtscore.media.text import embedder_e5
         from vtscore.media.video import embedder_languagebind
@@ -1454,6 +1454,77 @@ class TestEmbedderSentinelDiscovery:
                 if key == package_name or key.startswith(package_name + "."):
                     sys.modules.pop(key, None)
 
+    def test_embedders_container_is_scanned(self, tmp_path):
+        """An ``embedders/`` sub-package is a container: its own
+        ``embedder_*.py`` modules are discovered, its ``_``-prefixed
+        helpers are skipped, and it is not loaded as one embedder.
+        """
+        import importlib.util
+        import sys
+        from pathlib import Path
+
+        from vtscore.media import _discover_embedders_in, _embedder_registry
+
+        fake_pkg = tmp_path / "fakemedia_container"
+        container = fake_pkg / "embedders"
+        container.mkdir(parents=True)
+        (fake_pkg / "__init__.py").write_text("")
+        (container / "__init__.py").write_text("EMBEDDER = 'the container is not an embedder'\n")
+        (container / "_helper.py").write_text("raise RuntimeError('helpers are not scanned')\n")
+        (container / "embedder_inner.py").write_text(
+            "from vtscore.media.embedder import MediaEmbedder\n"
+            "\n"
+            "class _InnerEmbedder(MediaEmbedder):\n"
+            "    @property\n"
+            "    def name(self):\n"
+            "        return 'inner_discoverable'\n"
+            "    @property\n"
+            "    def media_type_id(self):\n"
+            "        return 'fake'\n"
+            "    def _load_models_impl(self):\n"
+            "        pass\n"
+            "    def _embed_media_impl(self, media):\n"
+            "        return None\n"
+            "\n"
+            "EMBEDDER = _InnerEmbedder()\n"
+        )
+
+        package_name = "vtscore.media._fakemedia_container_test"
+        spec = importlib.util.spec_from_file_location(
+            package_name,
+            str(fake_pkg / "__init__.py"),
+            submodule_search_locations=[str(fake_pkg)],
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[package_name] = mod
+        try:
+            spec.loader.exec_module(mod)
+            saved = dict(_embedder_registry)
+            try:
+                _discover_embedders_in(Path(fake_pkg), package_name)
+                added = set(_embedder_registry) - set(saved)
+                assert added == {"inner_discoverable"}
+                assert type(_embedder_registry["inner_discoverable"]).__module__ == (
+                    f"{package_name}.embedders.embedder_inner"
+                )
+            finally:
+                _embedder_registry.clear()
+                _embedder_registry.update(saved)
+        finally:
+            for key in list(sys.modules):
+                if key == package_name or key.startswith(package_name + "."):
+                    sys.modules.pop(key, None)
+
+    def test_shipped_image_embedders_load_from_the_container(self):
+        """``vtscore/media/image/embedders/`` is where every built-in image embedder lives."""
+        from vtscore.media import all_embedders
+
+        image = [e for e in all_embedders() if e.media_type_id == "image"]
+        assert image
+        for emb in image:
+            assert type(emb).__module__.startswith("vtscore.media.image.embedders."), emb.name
+
     def test_custom_embedder_auto_discovered(self, tmp_path, monkeypatch):
         """A new ``embedder_*.py`` file dropped into a media-type package
         should be auto-discovered with no ``__init__.py`` edits.
@@ -1527,7 +1598,7 @@ class TestNewEmbeddersInheritance:
 
     def test_siglip_is_media_embedder(self):
         from vtscore.media.embedder import MediaEmbedder
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         assert issubclass(ImageSiglipEmbedder, MediaEmbedder)
 
@@ -1581,7 +1652,7 @@ class TestNewEmbeddersInheritance:
 
     def test_embed_text_enriched_works(self):
         """embed_text_enriched (inherited from base) should work with mocked embed_text."""
-        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedders.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         fake_vec = np.random.RandomState(42).randn(768).astype(np.float32)

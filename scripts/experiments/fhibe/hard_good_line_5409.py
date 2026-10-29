@@ -3,7 +3,7 @@
 #5376: one hard-view starting face (Face Quality under #5372's cut) costs a four-photo session about 0.1 F at
 50 votes at beta 4, and the line returns about twice the faces. #5389 and #5413 ruled out the example centroid
 and recovered a third through the trained head's fit. A face session is on the head's count line all session
-(:func:`vtscore.training.thresholds.labels_line.head_count_cut`), and above a balance of 1 that line reaches down
+(:func:`vtscore.training.thresholds.head_count.head_count_cut`), and above a balance of 1 that line reaches down
 to the head's excess-curve depth whenever one of the class model's held-out Goods ranks below the beta 1 count
 (#5039). A hard Good held out in a calibration fold scores low. This runner tags each held-out Good with its face
 and logs every beta > 1 cut: the held-out Goods, which are hard, the count without the reach, and the cut with
@@ -101,15 +101,15 @@ def main(argv: list[str] | None = None) -> int:
 
     import vtscore.training.thresholds as thresholds  # noqa: PLC0415
     from vtscore.eval import step_trainers, voting_iterations  # noqa: PLC0415
-    from vtscore.training.thresholds import conformal, labels_line  # noqa: PLC0415
+    from vtscore.training.thresholds import conformal, fold_orderings, labels_line  # noqa: PLC0415
 
     info = json.loads((common.RESULTS / "prepare_info.json").read_text())
     cell = cfg.array_cells(run_cells._categories_by_dataset(info))[args.index]
     tags = Tags(_hard_by_vector(cell["dataset"]))
     log = open(args.log, "w") if args.log else None  # noqa: SIM115
 
-    folds = tags.folds(conformal.compute_fold_orderings)
-    for mod in (conformal, thresholds, step_trainers):
+    folds = tags.folds(fold_orderings.compute_fold_orderings)
+    for mod in (fold_orderings, conformal, thresholds, step_trainers):
         if hasattr(mod, "compute_fold_orderings"):
             mod.compute_fold_orderings = folds
 

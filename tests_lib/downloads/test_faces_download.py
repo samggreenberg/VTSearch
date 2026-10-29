@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from vtscore.media.image._demo_categories import VGGFACE2_IDENTITIES
+from vtscore.media.image.demo._demo_categories import VGGFACE2_IDENTITIES
 
 
 # Two identities from the curated subset, used across the fixtures below.

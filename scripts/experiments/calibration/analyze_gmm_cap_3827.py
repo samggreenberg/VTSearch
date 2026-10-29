@@ -45,7 +45,7 @@ uncapped fit is one more arm, not the truth.  Each row records both shares.
 
 Arms (``CAPS``): the cap set to 5k, 10k, 25k, 50k (shipped), 100k, or no cap
 (``0``: every score).  Each arm runs the app's own code with the module's cap
-patched (``vtscore.training.thresholds.gmm._GMM_MAX_SAMPLES``), and asserts
+patched (``vtscore.training.thresholds.gmm_core._GMM_MAX_SAMPLES``), and asserts
 the fit array came out the size the arm says.  ``SIZES`` adds the bench half
 itself (``0``: no resample, ~11.6k items, the size every threshold study
 tuned at, where the shipped cap does not bind) as the reference.
@@ -109,9 +109,9 @@ CUT_FLOOR = 0.5
 
 def set_cap(cap: int) -> None:
     """Point the app's mixture fits at *cap* scores (0: every score)."""
-    import vtscore.training.thresholds.gmm as gmm  # noqa: PLC0415
+    import vtscore.training.thresholds.gmm_core as gmm_core  # noqa: PLC0415
 
-    gmm._GMM_MAX_SAMPLES = cap if cap else 1 << 62
+    gmm_core._GMM_MAX_SAMPLES = cap if cap else 1 << 62
 
 
 def fit_size(n: int, cap: int) -> int:

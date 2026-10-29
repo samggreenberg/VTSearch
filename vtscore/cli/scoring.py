@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from vtscore.cli import progress as cli_progress
 from vtscore.cli.detectors import _detector_group_key
-from vtscore.utils.hits import build_media_hit
+from vtscore.datasets.labelset import build_media_hit
 
 if TYPE_CHECKING:
     from vtscore.cli.datasets import _RunDataset

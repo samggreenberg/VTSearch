@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.plugins import _LEGACY_PLUGIN_NAME_SUFFIXES, _default_plugin_name, _snake_case
+from vtscore.plugins.base import _LEGACY_PLUGIN_NAME_SUFFIXES, _default_plugin_name, _snake_case
 
 #: ``(class name, derived plugin name)``.
 SUFFIX_CORPUS: tuple[tuple[str, str], ...] = (
@@ -48,8 +48,8 @@ SUFFIX_CORPUS: tuple[tuple[str, str], ...] = (
     # ``SyncSource`` and ``ImporterBase`` are abstract bases a third party
     # may subclass directly, but neither is in the suffix list, so a name
     # ending in one falls through to the generic tail (or to no match at
-    # all).  Making them strippable would rename these — see the module
-    # docstring of ``vtscore/plugins/__init__.py``.
+    # all).  Making them strippable would rename these — see the comment on
+    # ``_LEGACY_PLUGIN_NAME_SUFFIXES`` in ``vtscore/plugins/base.py``.
     ("AcmeSyncSource", "acme_sync"),
     ("AcmeImporterBase", "acme_importer_base"),
     ("AcmeSyncSourceImporter", "acme_sync_source"),

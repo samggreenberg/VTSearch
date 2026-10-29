@@ -63,7 +63,7 @@ export HF_TOKEN=hf_...   # required for the gated DINOv3 weights
 bash queue_all.sh [N_CELLS]
 
 # Or by hand, sized exactly:
-sbatch ... --wrap "source ../../../gridenv.sh && cd $PWD && python prepare_data.py"
+sbatch ... --wrap "source ../../grid/gridenv.sh && cd $PWD && python prepare_data.py"
 N=$(python run_cells.py --print-cells)      # after prepare
 sbatch --array=0-$((N-1))%24 ... --wrap "... python run_cells.py"
 python summarize.py

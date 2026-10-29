@@ -113,7 +113,7 @@ while IFS=$'\t' read -r wt br locked prunable; do
     [[ -n "$matched" ]] && { keep "$name" "--keep $matched"; continue; }
     # A tool whose DEFAULT reads this path breaks silently when it goes (vts-calib
     # is common.py's default VTS_REPO); a comment naming it also keeps it, on purpose.
-    if git -C "$SHARED" grep -qE "(projects|worktrees)/$name([^A-Za-z0-9_-]|\$)" origin/dev -- scripts gridenv.sh 2>/dev/null; then
+    if git -C "$SHARED" grep -qE "(projects|worktrees)/$name([^A-Za-z0-9_-]|\$)" origin/dev -- scripts 2>/dev/null; then
         keep "$name" "a script on origin/dev names its path"; continue
     fi
     if job_mentions "$real" "$name"; then keep "$name" "a queued/running job uses it"; continue; fi

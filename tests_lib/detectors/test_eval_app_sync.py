@@ -1,4 +1,4 @@
-"""The eval/app drift gate itself: `scripts/check-eval-app-sync.py`.
+"""The eval/app drift gate itself: `scripts/gates/check-eval-app-sync.py`.
 
 The gate's whole job is to notice when app code that `vtscore.eval` reproduces
 has moved.  If it stops noticing - or starts crying wolf over a reworded
@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "check-eval-app-sync.py"
+SCRIPT = REPO_ROOT / "scripts" / "gates" / "check-eval-app-sync.py"
 
 
 def _load_gate():
@@ -527,11 +527,11 @@ class TestTheFindCorpusFlagsArePinned:
 
     HARNESS = "vtscore/eval/find_corpus.py"
     APPS = {
-        "find.training_domain": "vtsearch/training_domain.py",
+        "find.training_domain": "vtsearch/domain_overlap.py",
         "find.evidence_coverage": "vtsearch/routes/detectors/scoring.py",
     }
     PROBES = [
-        ("find.training_domain", "app", "vtsearch/training_domain.py", "domain_shift_against"),
+        ("find.training_domain", "app", "vtsearch/domain_overlap.py", "domain_shift_against"),
         ("find.training_domain", "harness", HARNESS, "training_domain_flags"),
         ("find.training_domain", "harness", HARNESS, "FindCorpus.matrix"),
         ("find.training_domain", "harness", HARNESS, "FindCorpus.pool_matrix"),

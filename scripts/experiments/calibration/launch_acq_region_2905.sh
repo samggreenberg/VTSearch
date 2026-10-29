@@ -179,7 +179,7 @@ fi
 # --- how many cells, and which ---------------------------------------------
 # Count against the shared prepare dir: the per-arm dirs do not have their
 # prepare_info.json symlink until the arm loop below creates it.
-N=$(cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; \
+N=$(cd "$HERE" && source "$WT/scripts/grid/gridenv.sh" >/dev/null 2>&1; \
     export CALIB_RESULTS="$CALIB_EXP/results"; python run_cells.py --print-cells 2>/dev/null | tail -1)
 if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
   echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
@@ -245,7 +245,7 @@ for arm in $ARMS_TO_RUN; do
       --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" --time="$CALIB_TIME" \
       --partition="$CALIB_PARTITION" --export=ALL \
       --output="$LOGS/${arm}-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
+      --wrap="source $WT/scripts/grid/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
   # A submission is not a launch: --parsable returns an EMPTY id when the submit
   # filter refuses a job, and dependents then die with an unrelated message
   # ("Job dependency problem").  Both A/B arms of #2897 silently failed this way.

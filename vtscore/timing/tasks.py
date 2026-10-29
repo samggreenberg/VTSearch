@@ -205,7 +205,7 @@ TASKS: dict[str, TaskSpec] = {
     # hand-tuned vector. The shipped ``(0.30, 0.60, 0.10)`` budgeted 60 % of the
     # bar to a step that measured 0.000–0.002 s on every run ever recorded,
     # because the importer's embedding was landing under ``acquire``
-    # (``_STAGE_STATUS_TO_STEP`` in ``vtscore/datasets/load_pipeline.py`` is the
+    # (``_STAGE_STATUS_TO_STEP`` in ``vtscore/datasets/load_staging.py`` is the
     # fix). Re-derived from #3521 §5's image rows, reading the old ``acquire``
     # slope as the embed it actually was: embed ``0.0136 s/item``, serialize
     # ``~0.0042 s/item`` — 76:24, which is the 0.72:0.23 below. Acquire measured

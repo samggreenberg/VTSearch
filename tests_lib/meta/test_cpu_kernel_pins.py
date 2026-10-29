@@ -25,6 +25,7 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[2]
 _EXPERIMENTS = _ROOT / "scripts" / "experiments"
+_GRIDENV = _ROOT / "scripts" / "grid" / "gridenv.sh"
 _RUN_CELLS = _EXPERIMENTS / "calibration" / "run_cells.py"
 
 
@@ -179,7 +180,8 @@ def _source_gridenv(
     """
     tree = tmp_path / "wt"
     (tree / "scripts" / "experiments").mkdir(parents=True)
-    (tree / "gridenv.sh").write_text((_ROOT / "gridenv.sh").read_text(encoding="utf-8"), encoding="utf-8")
+    (tree / "scripts" / "grid").mkdir()
+    (tree / "scripts" / "grid" / "gridenv.sh").write_text(_GRIDENV.read_text(encoding="utf-8"), encoding="utf-8")
     (tree / "scripts" / "experiments" / "_expcommon.py").write_text(
         (_EXPERIMENTS / "_expcommon.py").read_text(encoding="utf-8"), encoding="utf-8"
     )
@@ -192,7 +194,7 @@ def _source_gridenv(
     base.update(VTS_PYTHON_MODULE="", VTS_VENV="", PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}", **env)
     show = f'printf %s "${{{var}-unset}}"'
     return subprocess.run(  # noqa: S603  # fixed argv, a scratch copy of the repo's script
-        ["bash", "-c", f'source "$1/gridenv.sh" && {show}', "_", str(tree)],  # noqa: S607
+        ["bash", "-c", f'source "$1/scripts/grid/gridenv.sh" && {show}', "_", str(tree)],  # noqa: S607
         capture_output=True,
         text=True,
         env=base,
@@ -202,7 +204,7 @@ def _source_gridenv(
 
 class TestGridenvAgrees:
     def test_openblas_pin(self):
-        src = (_ROOT / "gridenv.sh").read_text(encoding="utf-8")
+        src = _GRIDENV.read_text(encoding="utf-8")
         assert 'export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"' in src
 
     def test_the_l2_size_goes_with_haswell(self, expcommon, tmp_path):

@@ -22,10 +22,7 @@
     />
   } @else {
     <span class="name-cell">
-      {{ dataset().name }}
-      @if (importSiblings()?.length) {
-        <span class="badge-category" [title]="importSiblingsTitle">{{ capitalizeType(dataset().output_category || dataset().media_type) }}</span>
-      }
+      <span class="dataset-name" [attr.title]="importSiblingsTitle">{{ dataset().name }}</span>
       <button class="card-icon-btn edit-btn name-edit-btn" (click)="startRename($event)" aria-label="Rename dataset" title="Rename">
         <svg aria-hidden="true" [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M16.5 2.5a2.828 2.828 0 0 1 4 4L7.5 19.5L3 20L3.5 15.5L16.5 2.5z"></path>
@@ -87,7 +84,17 @@
         </td>
       }
       @case ('num_items') {
-        <td>{{ dataset().num_items != null ? (dataset().num_items | number) : '-' }}</td>
+        <td>
+          {{ dataset().num_items != null ? (dataset().num_items | number) : '-' }}
+          @if (dataset().num_dropped > 0) {
+            <button
+              type="button"
+              class="badge-warning dropped-badge"
+              (click)="onDroppedClick($event)"
+              [title]="dataset().num_dropped + ' item(s) were left out of this dataset because they had no vector. Open Stats to see which.'"
+            >{{ dataset().num_dropped | number }} dropped</button>
+          }
+        </td>
       }
       @case ('created_at') {
         <td>{{ formatDate(dataset().created_at) }}</td>

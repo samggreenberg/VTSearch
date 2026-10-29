@@ -22,6 +22,15 @@ what is on `dev` but not yet on `main`; each release dates that section
 
 ### Added
 
+- **New Detector's Pick from Dataset grid is usable on a large Face dataset** (issue #5465). The faces come in
+  similarity order, so one person's crops sit together: a 1-D UMAP of the face vectors, fit when a Face dataset is
+  built and kept beside it (a Face dataset built earlier is ordered the first time its grid opens). A search box keeps
+  the items whose name holds every word typed, so a photo's name finds all the faces cropped from it. The grid has the
+  same smaller/bigger thumbnail buttons as every other grid, remembered per media type. Its scrollbar is sized for the
+  whole dataset from the start, and a jump down the list loads only the thumbnails where it lands rather than every
+  row it passed. Face crops now carry a small precomputed thumbnail, so a tile no longer decodes and resizes its crop
+  on request; a Face dataset built before this gets its thumbnails on its next save.
+
 - **`--max-results N` writes a streamed run's best hits, sorted** (issue #5279). A `--stream-results` run writes each
   chunk's hits as it scores them, so its output is ordered by chunk and had to be sorted afterwards. With
   `--max-results N` the run keeps each detector's N highest-scoring hits as it goes and writes them sorted by score,
@@ -31,7 +40,41 @@ what is on `dev` but not yet on `main`; each release dates that section
   `max_results:`. It cannot be combined with `--resume`. See
   [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
+### Changed
+
+- **The helper scripts moved into folders by purpose** (issue #5408). `scripts/install.sh` stays where it was; the
+  other scripts that were loose in `scripts/` now live in `scripts/gates/` (the `run-tests.sh` checks),
+  `scripts/release/` (release and publishing), `scripts/install/` (model downloads and Docker image setup) and
+  `scripts/data/` (dataset builders and the face CLIs). A deployment that calls one by its old path needs the new
+  one: `scripts/install/download_models.sh`, `scripts/install/cache_gated_models.sh` and
+  `scripts/data/link-demo-cache.sh`. The old paths were not kept.
+- **A multi-dataset import's names no longer carry a badge** (issue #5461). Each dataset one import produced showed
+  a badge with its kind of media after its name, so a face dataset read "Photos – Face", then **Face**, then
+  **Face** again in the Type column. The badge is gone; hover the name to see the datasets it was imported with.
+
 ### Fixed
+
+- **Find Results lists its hits on a laptop screen again.** The dialog's list took whatever height the rest of the
+  dialog left over, and on a laptop screen a crowded dialog (a note about the run, an auto-export line, an exporter
+  with several fields) left none: the summary said there were hundreds of Good results while the list under it was
+  zero pixels tall, and so was the progress bar Browse shows in its place while it builds the map. The list now keeps
+  room for a few rows and the dialog scrolls for the rest.
+
+- **A dataset with an item one embedder could not read can be browsed again** (issue #3798). An import that runs
+  two embedders, or one embedder over vectors the importer shipped, kept an item one of them could not read as
+  long as the other gave it a vector, so the dataset was saved with a hole in one of its spaces, and Browse, sort
+  and Train failed on it with `has no embedding for embedder`, on every load. Such an item is now dropped at import
+  like any unreadable one, and a dataset already saved with one is repaired the next time it loads: the item is
+  removed, the dataset is saved without it, and a warning names it.
+- **Dropped items stay listed after the toast is gone** (issue #3798). The items an import drops (and any a load
+  repairs away) are kept with the dataset: its Dashboard row shows **N dropped**, which opens the Stats window, and
+  its new **Dropped items** row lists each one with its reason, with **Copy** to take the list elsewhere.
+
+- **A failed AutoFind export names its exporter and says where to fix it** (issue #5463). The toast and the Find
+  Results dialog said an export "via webhook" (or `email_smtp`, `server_json_file`) failed, by the exporter's
+  internal name. They now name it as the exporter picker does, **Webhook (HTTP POST)** say, and end with "Check the
+  exporter in Settings › AutoFind.", the tab where it is set up or paused. A successful export names it the same way.
+  `auto_export` in the API carries the new `exporter_display_name`.
 
 - **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**
   emailed the Good and Bad rows as one list with nothing to tell them apart, and so did a `--stream-results
@@ -141,7 +184,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   one, and Face turns on, with no restart. Without one, Face is left out of every picker, an import that asks for
   faces anyway fails naming what is missing, and the startup log says which
   ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#face-models)). `IMAGEKIT_FACE_PROVIDER` picks the backend. Two CLIs,
-  `scripts/detect_faces.py` and `scripts/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
+  `scripts/data/detect_faces.py` and `scripts/data/process_faces.py`, run the same pipeline over a folder. `onnxruntime` is
   now a runtime dependency.
 
 - **`--override-clipper` scores every detector at a granularity you choose** (issue #5282). A detector re-clips the
@@ -2965,7 +3008,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   separate `vtscore/` package. The user-facing application surface (the Flask
   app, the Angular SPA, the settings system, the auth layer) is unchanged.
   Internally, every library-candidate import path moved from `vtsearch.<lib>`
-  to `vtscore.<lib>`; `vtsearch/state/__init__.py` is now a thin app-tier shim
+  to `vtscore.<lib>`; `vtsearch.state` is now a thin app-tier shim
   that re-exports `vtscore.state` and layers the proxy view (`medias`,
   `good_votes`, …) on top. See
   [`vtscore/docs/architecture.md`](vtscore/docs/architecture.md) for the

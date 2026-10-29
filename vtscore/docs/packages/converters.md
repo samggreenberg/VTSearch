@@ -218,7 +218,7 @@ as are converters whose `target_type` isn't *target_media_type* - it:
 
 In *thin* mode each output also carries a `_lazy_source` marker; its
 bytes are stripped after embedding and re-derived on demand by
-`vtscore.media.lazy_clip`.
+`vtscore.media.clipping.lazy_clip`.
 
 ```python
 from pathlib import Path

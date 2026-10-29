@@ -46,7 +46,7 @@ export class DatasetCardComponent {
    *  type; enables the menu's "Run AutoFind" when non-zero. */
   readonly autofindDetectorCount = input(0);
   /** Names of the other datasets this one's multi-dataset import produced
-   *  (#4747); undefined when it has none left. Shows the category badge. */
+   *  (#4747); undefined when it has none left. Named in the name's tooltip. */
   readonly importSiblings = input<readonly string[] | undefined>(undefined);
 
   /** True while this row's delete-confirm dialog is open (driven by the
@@ -185,6 +185,12 @@ export class DatasetCardComponent {
     this.contextMenuOpen = false;
   }
 
+  /** The Items cell's "N dropped" badge opens the Stats window, which lists them. */
+  onDroppedClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.stats.emit();
+  }
+
   confirmRename(): void {
     const trimmed = this.editName.trim();
     if (trimmed && trimmed !== this.dataset().name) {
@@ -236,10 +242,12 @@ export class DatasetCardComponent {
     return formatTimestamp(timestamp);
   }
 
-  /** Tooltip for the category badge: which datasets came from the same import. */
-  get importSiblingsTitle(): string {
+  /** Tooltip for the name: which datasets came from the same import, or none
+   *  when the dataset has no siblings. The name already ends in its kind of
+   *  media and the Type column shows it too, so the name carries no badge (#5461). */
+  get importSiblingsTitle(): string | null {
     const siblings = this.importSiblings() ?? [];
-    return `Imported together with ${siblings.join(', ')}`;
+    return siblings.length ? `Imported together with ${siblings.join(', ')}` : null;
   }
 
   /** The Type cell's icon, as the media-type registry serves it (the

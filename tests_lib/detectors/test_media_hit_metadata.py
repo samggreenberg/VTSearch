@@ -12,7 +12,7 @@ import json
 
 import numpy as np
 
-from vtscore.utils.hits import build_media_hit, hit_custom_metadata
+from vtscore.datasets.labelset import build_media_hit, hit_custom_metadata
 
 
 class TestCustomMetadataOnHit:

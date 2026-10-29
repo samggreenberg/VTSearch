@@ -34,11 +34,8 @@ from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
 from vtscore.datasets.file_types import count_file_types
 from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY, parse_output_specs
 from vtscore.datasets.load_multi import _run_multi_output_load_in_background
-from vtscore.datasets.load_pipeline import (
-    STAGING_DIR,
-    _run_importer_in_background,
-    _stage_importer_in_background,
-)
+from vtscore.datasets.load_pipeline import _run_importer_in_background
+from vtscore.datasets.load_staging import STAGING_DIR, _stage_importer_in_background
 from vtscore.datasets.registry import (
     find_by_pkl_path as _reg_find_by_pkl,
     get_dataset as _reg_get,
@@ -51,19 +48,21 @@ from vtsearch.import_hooks import fire_dataset_imported
 from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
-from vtsearch.schemas.datasets import (
-    ClearStagingResponseSchema,
-    DatasetAvailableFilesResponseSchema,
-    DatasetCombineRequestSchema,
-    DatasetLoadStartedResponseSchema,
-    DatasetPromoteRequestSchema,
-    DatasetStageDemoRequestSchema,
-    DatasetStageFileResponseSchema,
-    DatasetStagingStartedResponseSchema,
+from vtsearch.schemas.datasets.importer_fields import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
     ImporterSuggestedNameRequestSchema,
     ImporterSuggestedNameResponseSchema,
+)
+from vtsearch.schemas.datasets.load import DatasetLoadStartedResponseSchema
+from vtsearch.schemas.datasets.staging import (
+    ClearStagingResponseSchema,
+    DatasetAvailableFilesResponseSchema,
+    DatasetCombineRequestSchema,
+    DatasetPromoteRequestSchema,
+    DatasetStageDemoRequestSchema,
+    DatasetStageFileResponseSchema,
+    DatasetStagingStartedResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
 from vtsearch.threading import spawn
@@ -118,7 +117,7 @@ def _abort_if_semantic_only(field_values: dict) -> None:
     (primary) and the ``embedders`` trio, which arrives as a JSON array string
     on multipart bodies and a real list on JSON ones.
     """
-    from vtscore.datasets.load_pipeline import _parse_embedder_list  # noqa: PLC0415
+    from vtscore.datasets.load_workers import _parse_embedder_list  # noqa: PLC0415
 
     names = [str(field_values.get("embedder") or "")]
     names.extend(_parse_embedder_list(field_values.get("embedders")) or [])
@@ -265,7 +264,7 @@ def _promote_in_background(
 ) -> str:
     """Build, write, and register the promoted dataset in a daemon thread.
 
-    Mirrors :func:`vtscore.datasets.load_pipeline._stage_importer_in_background`:
+    Mirrors :func:`vtscore.datasets.load_staging._stage_importer_in_background`:
     a dedicated per-task :class:`ProgressTracker` (via ``loading_tasks``) carries
     progress — including the coverage-atlas build, previously a long silent hang
     in the request thread — to the ``loading-tasks`` SSE channel, and the

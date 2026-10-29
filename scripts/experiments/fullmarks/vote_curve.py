@@ -212,7 +212,7 @@ def _mlp(cd: ClassData, templates: list[int], goods: list[int], bads: list[int])
 def _mlp_scores(model: Any, stats: np.ndarray) -> np.ndarray:
     import torch  # noqa: PLC0415
 
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import sigmoid_to_finite_scores  # noqa: PLC0415
 
     with torch.no_grad():
         dev = next(model.parameters()).device

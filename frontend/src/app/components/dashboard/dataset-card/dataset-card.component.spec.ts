@@ -93,6 +93,27 @@ describe('DatasetCardComponent', () => {
     expect(el.textContent).toContain('100');
   });
 
+  it('shows no dropped badge for a dataset that dropped nothing', () => {
+    expect(fixture.nativeElement.querySelector('.dropped-badge')).toBeFalsy();
+  });
+
+  // Issue #3798: a dataset that lost items says so on its row, after the toast is gone.
+  it('flags dropped items in the Items cell, and opens Stats without selecting the row', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, num_dropped: 4 });
+    await settleZoneless(fixture);
+    const statsSpy = vi.fn();
+    const rowSpy = vi.fn();
+    component.stats.subscribe(statsSpy);
+    component.rowClick.subscribe(rowSpy);
+
+    const badge = fixture.nativeElement.querySelector('.dropped-badge') as HTMLButtonElement;
+    expect(badge.textContent?.trim()).toBe('4 dropped');
+    badge.click();
+
+    expect(statsSpy).toHaveBeenCalledTimes(1);
+    expect(rowSpy).not.toHaveBeenCalled();
+  });
+
   it('should hide the load button when already loaded', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.load-btn')).toBeFalsy();
@@ -244,26 +265,27 @@ describe('DatasetCardComponent', () => {
     expect(btn.textContent?.trim()).toBe('Cancelling…');
   });
 
-  it('shows no category badge for a dataset with no import siblings', () => {
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.badge-category')).toBeFalsy();
+  it('gives the name no import tooltip for a dataset with no import siblings', () => {
+    const name = (fixture.nativeElement as HTMLElement).querySelector('.dataset-name') as HTMLElement;
+    expect(name.hasAttribute('title')).toBe(false);
   });
 
-  it('shows the import category, naming the siblings, for a multi-dataset import (#4747)', async () => {
+  it('names the siblings on hover, with no category badge, for a multi-dataset import (#4747, #5461)', async () => {
     fixture.componentRef.setInput('dataset', {
       ...mockDataset,
-      name: 'Photos – Document',
-      media_type: 'image',
+      name: 'Photos – Face',
+      media_type: 'face',
       import_group: 'g1',
-      output_category: 'document',
+      output_category: 'face',
     });
-    fixture.componentRef.setInput('importSiblings', ['Photos – Image', 'Photos – Face']);
+    fixture.componentRef.setInput('importSiblings', ['Photos – Image']);
     await settleZoneless(fixture);
 
-    const badge = (fixture.nativeElement as HTMLElement).querySelector('.badge-category') as HTMLElement;
-    expect(badge).toBeTruthy();
-    // The category, not the media type: the rendered pages are image media.
-    expect(badge.textContent?.trim()).toBe('Document');
-    expect(badge.title).toBe('Imported together with Photos – Image, Photos – Face');
+    const el = fixture.nativeElement as HTMLElement;
+    const name = el.querySelector('.dataset-name') as HTMLElement;
+    // The name already says "Face" and so does the Type column: no third copy.
+    expect(name.textContent?.trim()).toBe('Photos – Face');
+    expect(el.querySelector('.name-cell')?.textContent).not.toMatch(/Face\s*Face/);
+    expect(name.title).toBe('Imported together with Photos – Image');
   });
 });

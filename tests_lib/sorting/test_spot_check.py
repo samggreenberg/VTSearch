@@ -45,7 +45,7 @@ from vtscore.training.thresholds import (
     range_tail,
     rounds_for,
 )
-from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+from vtscore.training.thresholds.knobs import NON_FINITE_SCORE_SENTINEL
 
 #: (starting candidate, bands the walk audits before its first verdict, picks a band) at each preset balance.
 PRESETS = {0.5: (32, 3, 5), 1.0: (32, 3, 5), 2.0: (128, 5, 5)}

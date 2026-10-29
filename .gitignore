@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
-# Baseline of the last green incremental pyright run (scripts/pyright-incremental.py)
+# Baseline of the last green incremental pyright run (scripts/gates/pyright-incremental.py)
 .gates-cache/
 .venv/
 venv/
@@ -45,7 +45,7 @@ frontend/src/app/generated/
 # Build-baked version stamp (Docker build arg writes this; never commit it).
 vtsearch/_version.txt
 
-# Cached gated-model weights populated by scripts/cache_gated_models.sh.
+# Cached gated-model weights populated by scripts/install/cache_gated_models.sh.
 # Used by Dockerfile.image-embedders so the build doesn't need an HF token.
 # Never commit the weights themselves; they're large and licence-restricted.
 # (model_cache/.gitkeep is tracked so the dir exists for the Dockerfile COPY.)
@@ -70,7 +70,7 @@ slurm-*.out
 slides/_build/
 slides/_out/
 
-# GRID editable-install shadow shim, created by `source gridenv.sh` (#2846).
+# GRID editable-install shadow shim, created by `source scripts/grid/gridenv.sh` (#2846).
 # A no-op `__editable___vtsearch_0_1_0_finder.py` that neutralises the venv's
 # editable-install finder, which would otherwise resolve `import vtscore` to the
 # MAIN checkout while PYTHONPATH looks correct. It is per-worktree venv glue,

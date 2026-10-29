@@ -435,7 +435,7 @@ class AudioMediaType(MediaType):
         re-applying the source-relative ``clip_start`` / ``clip_end`` would
         slice a second time and render the wrong stretch of audio.
         """
-        from vtscore.media.lazy_clip import clip_recipe  # noqa: PLC0415
+        from vtscore.media.clipping.lazy_clip import clip_recipe  # noqa: PLC0415
 
         ref = media.get("archive_member")
         member = ref.get("member", "") if isinstance(ref, dict) else ""

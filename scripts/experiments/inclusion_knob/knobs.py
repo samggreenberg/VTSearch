@@ -133,7 +133,7 @@ def fold_orderings_for_treatment(
 
     import torch
 
-    from vtscore.utils.scores import sigmoid_to_finite_scores
+    from vtscore.training.thresholds.knobs import sigmoid_to_finite_scores
 
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(max(1, calibrate_count)):

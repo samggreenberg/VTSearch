@@ -77,7 +77,7 @@ while :; do
     out=$(bash -c "source $LAUNCHER plan >/dev/null 2>&1; rung_env $r; set_exp $r; link_prepare; \
       sbatch --parsable --job-name=\"\$CALIB_JOB_NAME\" --array=$spec%$thr --mem=\"\$CALIB_MEM\" --cpus-per-task=1 \
         --time=\"\$CALIB_TIME\" --partition=cpu --export=ALL --output=\"\$CALIB_EXP/logs/cells-%A_%a.out\" \
-        --wrap=\"source \$WT/gridenv.sh && \$ENVX && cd \$HERE && python run_cells.py\"" 2>&1 | tail -1)
+        --wrap=\"source \$WT/scripts/grid/gridenv.sh && \$ENVX && cd \$HERE && python run_cells.py\"" 2>&1 | tail -1)
     if [[ "$out" =~ ^[0-9]+$ ]]; then
       log "$r: submitted ${#list[@]} (${list[0]}..${list[-1]}) %$thr -> $out  [done $ndone]"
     else

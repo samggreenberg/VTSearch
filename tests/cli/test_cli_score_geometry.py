@@ -23,7 +23,8 @@ import torch
 import torch.nn as nn
 
 from vtscore.cli.scoring import _score_direct_all, _score_one_detector
-from vtscore.detectors.training import _score_all_media, scoring_rows_for_snap
+from vtscore.detectors.training import scoring_rows_for_snap
+from vtscore.detectors.training_scoring import _score_all_media
 from vtscore.embedding.matrix import media_score_rows
 
 DIM = 4

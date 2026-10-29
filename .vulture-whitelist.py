@@ -4,12 +4,12 @@ Vulture finds defined-but-never-referenced names. This file lists symbols
 that VTSearch DOES use, but only reflectively - so static analysis can't
 see the reference.
 
-**Do not run vulture by hand.** ``scripts/vulture-audit.py`` owns the
+**Do not run vulture by hand.** ``scripts/gates/vulture-audit.py`` owns the
 invocation (scan paths, excludes, ignore lists, confidence floor) and
 applies this file:
 
-    python scripts/vulture-audit.py                    # the pre-release audit
-    python scripts/vulture-audit.py --check-whitelist  # the run-tests.sh gate
+    python scripts/gates/vulture-audit.py                    # the pre-release audit
+    python scripts/gates/vulture-audit.py --check-whitelist  # the run-tests.sh gate
 
 The scan covers **every tier that defines or consumes first-party Python**:
 ``vtsearch/``, ``app.py``, ``tests/``, ``vtscore/``, ``tests_lib/``, and
@@ -34,7 +34,7 @@ never a deletion - removing one is a deliberate library break needing an
 See CLAUDE.md, "Dead code in ``vtscore/`` is a claim you cannot verify by
 grepping".
 
-Why the excludes / ignores (all configured in ``scripts/vulture-audit.py``):
+Why the excludes / ignores (all configured in ``scripts/gates/vulture-audit.py``):
 
 * ``vtsearch/schemas/*`` and ``vtsearch/settings_models.py`` are pure
   framework-managed declaration files. Every field assignment in a
@@ -91,16 +91,6 @@ DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in i
 option_string  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
-# their ``update_<tracker>_progress`` partners. The corresponding
-# trackers (``sort_progress``, ``find_progress``) are imported and read
-# directly in tests / routes; the helper wrappers stay for API symmetry
-# and are tabulated in ``vtscore/docs/packages/concurrency.md``.
-# ---------------------------------------------------------------------------
-get_sort_progress  # noqa: F821
-get_eval_progress  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Public module constants - referenced by callers via ``module.NAME`` or
 # settings lookup, which vulture treats as the only assignment.
 # ---------------------------------------------------------------------------
@@ -117,7 +107,7 @@ HELDOUT_READINGS  # noqa: F821 - vtscore.eval.step_trainers, the held-out Smart 
 # Per CLAUDE.md these keep their names; deleting one is a library break.
 # ---------------------------------------------------------------------------
 recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
-clear_dataset  # noqa: F821 - vtscore.datasets.load_pipeline
+clear_dataset  # noqa: F821 - vtscore.datasets.load_workers, re-exported from load_pipeline
 is_request_missing_context  # noqa: F821 - vtscore.state.core; docs/packages/state.md
 build_md5_lookup  # noqa: F821 - vtscore.state.media_lookup; docs/packages/state.md
 get_find_scores  # noqa: F821 - vtscore.state.votes; docs/packages/state.md

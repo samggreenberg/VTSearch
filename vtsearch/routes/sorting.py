@@ -473,7 +473,7 @@ def learned_sort(body: dict):
         run_learned_sort,
     )
     from vtscore.detectors.query_head import is_quota_head
-    from vtscore.detectors.training import _patch_space_for
+    from vtscore.detectors.training_calibration import _patch_space_for
     from vtscore.state.core import (
         detector_acquisition_threshold,
         detector_balance_state,
@@ -664,7 +664,7 @@ def _verified_votes_payload() -> dict:
     without copying the per-item dicts whole.
     """
     from vtscore.state.core import _state_lock, get_active_detector_context
-    from vtscore.utils.scores import finite_or  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import finite_or  # noqa: PLC0415
 
     with _state_lock:
         det_ctx = get_active_detector_context()
@@ -701,7 +701,7 @@ def get_votes(query: dict):
     verified this Find session; Find's Review tab polls that (#5115).
     """
     from vtscore.state.core import get_active_detector_context
-    from vtscore.utils.scores import finite_or  # noqa: PLC0415
+    from vtscore.training.thresholds.knobs import finite_or  # noqa: PLC0415
 
     if query["scope"] == "verified":
         return _verified_votes_payload()

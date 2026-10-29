@@ -153,7 +153,7 @@ def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
     3. Returns the model cache directory as a string.
     """
     from vtscore.config import MODELS_CACHE_DIR  # noqa: PLC0415
-    from vtscore.media.torch_setup import ensure_torch_configured  # noqa: PLC0415
+    from vtscore.media.torch_utils.torch_setup import ensure_torch_configured  # noqa: PLC0415
 
     ensure_torch_configured()
     on_progress("loading", message, 0, 0)

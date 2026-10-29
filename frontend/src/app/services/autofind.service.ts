@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { AutoDetectResultsData, AutoFindTaskInfo, LoadingTask } from '../models/api.models';
+import { autoExportFailure } from '../utils/auto-export-status';
 import { AuthService } from './auth.service';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
@@ -149,11 +150,12 @@ export class AutoFindService {
     const what = info.trigger === 'find' ? 'Find' : 'AutoFind';
     const found = hits > 0 ? `${hits.toLocaleString()} hit${hits === 1 ? '' : 's'}` : 'no hits';
     const message = `${what} finished on "${info.dataset_name}": ${found}`;
-    const exportFailed = info.auto_export?.success === false;
+    const ax = info.auto_export;
+    const exportFailed = ax?.success === false;
     const detail = exportFailed
-      ? `${detectorWord}. Sending the results via ${info.auto_export?.exporter} failed: ${info.auto_export?.error ?? 'unknown error'}`
-      : info.auto_export?.success
-        ? `${detectorWord}. ${info.auto_export.message ?? `Sent via ${info.auto_export.exporter}.`}`
+      ? `${detectorWord}. ${autoExportFailure(ax)}`
+      : ax?.success
+        ? `${detectorWord}. ${ax.message ?? `Sent via ${ax.exporter_display_name}.`}`
         : `${detectorWord}.`;
     const show = exportFailed ? this.toast.warning.bind(this.toast) : this.toast.success.bind(this.toast);
     show({

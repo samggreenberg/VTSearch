@@ -11,7 +11,7 @@
 # One command because the pieces have to agree: the report cites figure files by
 # name and contact sheets by cell, and a hand-run step that is skipped leaves a
 # report referencing something that is not there.  Reports here cite only
-# analysis code that is in the tree (scripts/check-docs.py enforces it for
+# analysis code that is in the tree (scripts/gates/check-docs.py enforces it for
 # docs/experiments/), which is the other reason this is a script rather than a
 # paragraph of instructions.
 set -uo pipefail
@@ -37,7 +37,7 @@ case "$MODE" in
 esac
 
 # shellcheck disable=SC1091
-source "$WT/gridenv.sh"
+source "$WT/scripts/grid/gridenv.sh"
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 cd "$HERE" || exit 2

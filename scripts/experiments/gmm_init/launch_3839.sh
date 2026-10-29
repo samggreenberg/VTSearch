@@ -44,7 +44,7 @@ gate)
   [[ -d "$CORPUS" ]] || { echo "no corpus at $CORPUS" >&2; exit 3; }
   submit gate --job-name=maxiter-3839-gate "${DEP_ARG[@]}" --array="0-$((SHARDS-1))" \
     --partition=cpu --mem=8G --cpus-per-task=1 --time=3:00:00 --output="$LOGS/gate-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $PIN && cd $HERE && python gate_3839.py --corpus $CORPUS --out $ANALYSIS --shard \$SLURM_ARRAY_TASK_ID/$SHARDS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && $PIN && cd $HERE && python gate_3839.py --corpus $CORPUS --out $ANALYSIS --shard \$SLURM_ARRAY_TASK_ID/$SHARDS"
   ;;
 
 ab)
@@ -67,14 +67,14 @@ abanalyze)
   for arm in $AB_ARMS; do
     submit "abanalyze_$arm" --job-name="maxiter-3839-abanalyze-$arm" "${DEP_ARG[@]}" --partition=cpu --mem=48G \
       --cpus-per-task=2 --time=2:00:00 --output="$LOGS/abanalyze-$arm-%j.out" \
-      --wrap="source $WT/gridenv.sh && export CALIB_AB_ON=$EXP/ab_$arm/results CALIB_AB_OFF=$OFF CALIB_AB_OUT=$ANALYSIS/ab_$arm && mkdir -p $ANALYSIS/ab_$arm && cd $CALIB && python analyze_ab.py && cd $HERE && python ab_summary_3839.py --paired $ANALYSIS/ab_$arm/agg/ab_paired_cells.csv --out $ANALYSIS/ab_$arm"
+      --wrap="source $WT/scripts/grid/gridenv.sh && export CALIB_AB_ON=$EXP/ab_$arm/results CALIB_AB_OFF=$OFF CALIB_AB_OUT=$ANALYSIS/ab_$arm && mkdir -p $ANALYSIS/ab_$arm && cd $CALIB && python analyze_ab.py && cd $HERE && python ab_summary_3839.py --paired $ANALYSIS/ab_$arm/agg/ab_paired_cells.csv --out $ANALYSIS/ab_$arm"
   done
   ;;
 
 analyse)
   submit analyse --job-name=maxiter-3839-analyse "${DEP_ARG[@]}" --partition=cpu --mem=16G --cpus-per-task=2 \
     --time=1:00:00 --output="$LOGS/analyse-%j.out" \
-    --wrap="source $WT/gridenv.sh && cd $HERE && python analyze_3839.py --analysis $ANALYSIS --shards $SHARDS && python figures_3839.py --analysis $ANALYSIS"
+    --wrap="source $WT/scripts/grid/gridenv.sh && cd $HERE && python analyze_3839.py --analysis $ANALYSIS --shards $SHARDS && python figures_3839.py --analysis $ANALYSIS"
   ;;
 
 status)

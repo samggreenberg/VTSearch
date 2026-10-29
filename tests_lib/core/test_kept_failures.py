@@ -14,7 +14,7 @@ import time
 
 from vtscore.concurrency.events import initial_snapshot, stream_progress_events
 from vtscore.concurrency.progress import CANCELLED_ERROR, LoadingTasksTracker, loading_tasks
-from vtscore.datasets.load_pipeline import _handle_load_failure, _start_import_task
+from vtscore.datasets.load_workers import _handle_load_failure, _start_import_task
 from vtscore.state.current_user import DEFAULT_USER, thread_user
 
 

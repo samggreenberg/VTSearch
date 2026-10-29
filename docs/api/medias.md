@@ -30,6 +30,25 @@ the client actually needs via [Batch fetch](#batch-fetch-metadata); this
 keeps the listing payload bounded even for datasets with tens of
 thousands of items.
 
+### List the example picker's items
+
+```
+GET /api/medias/picker?q=<words>
+X-Dataset-Id: <dataset id>
+```
+
+→ `{ "ids": [...], "total": N, "order": "similarity" | "dataset" }`: the ids
+New Detector's **Pick from Dataset** grid lists, in the order it lists them.
+A Face dataset's come in `similarity` order, look-alikes side by side: its ids
+sorted by a 1-D UMAP of their embeddings, fit when the dataset is built (or
+here, once, for a dataset built before that) and kept in its container. Every
+other dataset lists in `dataset` (import) order. `q` keeps only the items whose
+`filename` or `origin_name` holds every whitespace-separated word of it,
+ignoring case; a face's name starts with the photo it was cropped from, so a
+photo's name finds its faces. `total` counts the dataset's items, matching or
+not. Answers 400 without a dataset header. Names and thumbnails come from
+[Batch fetch](#batch-fetch-metadata) and the [thumbnail](#thumbnail) route.
+
 ### Batch fetch metadata
 
 ```

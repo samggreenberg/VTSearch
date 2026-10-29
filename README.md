@@ -88,7 +88,7 @@ The remaining top level:
 ├── docs/             # Extended documentation (see docs/ARCHITECTURE.md for the full map)
 ├── docker/           # Dockerfiles and docker/compose/ files
 ├── requirements/     # pip requirement sets (base, gpu, no-AGPL, slim image variants)
-├── scripts/          # install.sh, doc/lint gates, screenshot harness, SLURM helpers, experiments
+├── scripts/          # install.sh, plus gates/, release/, install/, data/, experiments/, screenshots/, slurm/
 ├── slides/           # Slide-deck sources and build tooling
 ├── run-tests.sh      # The test and lint gate
 └── pyproject.toml    # Project metadata and dependencies

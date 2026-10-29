@@ -42,11 +42,11 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 The number the user typed is not clickable, so hand them one that is. Right after step 1's assignment for an issue — or, for a pull request, which has no assignment step, as soon as the number resolves — write one line of text to the user linking the item:
 
 ```markdown
-Working on [#3421](https://github.com/samggreenberg/VTSearch/issues/3421): <title>
+Working on 🎫 [#3421](https://github.com/samggreenberg/VTSearch/issues/3421): <title>
 ```
 
 - **Now, not in the summary.** It goes out ahead of the evaluation, while you are still reading, so the user has the link from the first minute of the session; saved for the end-of-turn message, it is one link among many.
-- **Same form as every other reference** (see "Every `#N` you write to the user is a link" below): the `issues/N` URL serves a PR too, and the title is the GitHub title verbatim, from the lookup that resolved the number. Write it as prose, never inside a code span, where a link renders as literal brackets.
+- **Same form as every other reference** (see "Every `#N` you write to the user is a link" below): the `issues/N` URL serves a PR too, and the title is the GitHub title verbatim, from the lookup that resolved the number. That lookup also says which emoji leads the line: 🎫 for an issue, 🔧 for a PR (see "Status emojis in messages to the user" below). Write it as prose, never inside a code span, where a link renders as literal brackets.
 - **Every surface**, unlike the retitle below: a terminal renders the link as well as the web app does.
 - **Not a gate.** It is a line of text, not a tool call, and nothing waits on it.
 
@@ -81,7 +81,7 @@ When you mention a GitHub issue or PR in a message to the user, write it as a ma
 
 Keep `#3421` as the link text; the number is what the user reads and what they'd search for. Only the target is new.
 
-**You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N`, so the `issues` URL is correct for both; there is no lookup to do first, and "not sure which it is" never justifies leaving a reference bare.
+**You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N`, so the `issues` URL is correct for both; there is no lookup to do first, and "not sure which it is" never justifies leaving a reference bare. Only the emoji in front of the link depends on the type, and it is left off when you don't know (see "Status emojis in messages to the user" below).
 
 **Why every one, rather than the first mention.** The reference the user wants to click is rarely the first — it is the one in the summary table at the bottom, or the sentence saying *this is the issue that's still open* — and a mix of linked and bare copies implies a distinction that does not exist.
 
@@ -95,7 +95,7 @@ Four places, and the reason is the same each time: the link either doesn't rende
 
 - **Inside code fences and inline code spans.** A markdown link renders as literal brackets there. `git log --grep '#3421'` is a command, not a reference.
 - **Anything written to GitHub** — issue comments, PR titles and bodies, review replies. GitHub **autolinks `#N` natively** in those fields, so a markdown link adds a second URL to something that was already clickable. Write `Addressed in #3421`, as the sections below already say.
-- **Closing keywords, specifically.** `Closes #3421` — never `Closes [#3421](https://github.com/samggreenberg/VTSearch/issues/3421)`. That keyword is parsed by GitHub and by `scripts/reconcile-solved-labels.py`; both expect the bare form, and this is the one place where dressing up a reference can silently cost an issue its close. See "Linking the fix PR" under "Issue lifecycle" below for what rides on that keyword.
+- **Closing keywords, specifically.** `Closes #3421` — never `Closes [#3421](https://github.com/samggreenberg/VTSearch/issues/3421)`. That keyword is parsed by GitHub and by `scripts/release/reconcile-solved-labels.py`; both expect the bare form, and this is the one place where dressing up a reference can silently cost an issue its close. See "Linking the fix PR" under "Issue lifecycle" below for what rides on that keyword.
 - **Commit messages, branch names, and a cloud session's title.** No renderer, so a link is just noise in `git log` or the session list.
 
 Tracked markdown in the repo — this file, `docs/`, `docs/plans/` — is **out of scope** and keeps its bare `#N` convention (plan pointers like `- [ ] #2355 — …` stay exactly as documented below). This rule is about messages, not files.
@@ -108,7 +108,32 @@ While you're at it, prefer the `#N` spelling over "PR 3984" or "issue 3421" in t
 
 ### Trip-wire: scan your turn before sending
 
-Before sending, scan the turn for `#` followed by digits. **Every hit outside a code span is a link** — not the first hit, every hit. If you find a bare one, fix it before sending; you are already in the message, and re-editing it costs nothing, whereas the user reaching for a URL bar costs a round-trip.
+Before sending, scan the turn for `#` followed by digits. **Every hit outside a code span is a link** — not the first hit, every hit. If you find a bare one, fix it before sending; you are already in the message, and re-editing it costs nothing, whereas the user reaching for a URL bar costs a round-trip. The same pass puts 🎫 or 🔧 in front of each link whose type you know (see the next section).
+
+## Status emojis in messages to the user
+
+Eight emojis mark what the user scans a message for. Each goes **in front of** the existing words, never in place of them, and they follow the link rule's direction test: messages to the user get them; nothing bound for GitHub or git does (comments, PR titles and bodies, commit messages, branch names), and neither do code spans, code fences or a cloud session's title.
+
+| Emoji | Goes in front of | Only when |
+|---|---|---|
+| 🎫 | an issue link | this session already knows it is an issue |
+| 🔧 | a PR link | this session already knows it is a PR |
+| ⏱️ | an ETA | it estimates when something still running will finish |
+| ⚪ | the note that a test run started | you just started a `./run-tests.sh` run |
+| 🟢 | a test verdict | the last `./run-tests.sh` on this tree printed a `RUN PASSED` banner other than `RUN PASSED, EXCEPT …` |
+| 🟡 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN PASSED, EXCEPT …` |
+| 🔴 | a test verdict | the last `./run-tests.sh` on this tree printed `RUN FAILED` or `TESTS BLOCKED` |
+| 🔀 | the news that a PR merged into `dev` | GitHub reports it merged |
+
+```markdown
+🔧 [#4215](https://github.com/samggreenberg/VTSearch/issues/4215) fixes 🎫 [#4210](https://github.com/samggreenberg/VTSearch/issues/4210). 🟢 Full run passed. ⏱️ ~5 min until the eval finishes.
+```
+
+- **🎫 and 🔧: mark only what you already know.** The type is known when this session opened the item, read it, or ran a lookup that returned it. Otherwise leave the emoji off; never make a GitHub call just to pick one. An unmarked link only means its type wasn't checked. The emoji sits outside the link, so the link text stays `#N`.
+- **⚪ opens a run; 🟢, 🟡 or 🔴 closes it, read off the verdict banner rather than judged.** 🟢 means a complete gate passed: the full run, or a `slides`, `docs`, markdown-only or frontend-only run, each complete for its scope. 🟡 is a group run's `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN`: everything that ran passed, but it is not the full gate. A bare pytest or Vitest invocation is not a `./run-tests.sh` run and gets none of the four. An edit after the run voids its emoji until you run again.
+- **🔀 means merged, not opened.** An open PR is 🔧; 🔀 goes on only once GitHub shows the merge, whether you merged it or found it merged.
+- **⏱️ is for the future only.** "The run took 8 min" gets none.
+- **Reserved.** Never use these eight for anything else (no decorative 🟢 in a table, no 🔧 meaning "fix"), or scanning for them stops working.
 
 ## Branch Policy (CRITICAL)
 
@@ -135,7 +160,7 @@ This standing instruction **is** the explicit request that the remote-environmen
 **Use a normal merge commit: `gh pr merge <n> --merge`.** Never `--squash`, never
 `--rebase`.
 
-`scripts/release-prs.py` can read a squash too, but that is a backstop, not
+`scripts/release/release-prs.py` can read a squash too, but that is a backstop, not
 permission — a subject-line parse is a weaker thing for a release to rest on than
 a merge commit, and two costs are unrecoverable by any script:
 
@@ -176,10 +201,10 @@ Why each rule exists, the tracker views the four signals keep honest, and how th
 | **Filing** | Search for a duplicate first (see *Duplicates*). Labels at creation, never as a follow-up edit: `claude` always, `experiment` when it applies (see *The filing labels*). A recommended model in the body (see *A recommended model*). | `.claude/hooks/require-issue-labels.py` blocks a create missing `claude`, or missing `experiment` when the issue reads like a run, on `issue_write` and `gh issue create` alike |
 | **Starting work** | `assignees: ["samggreenberg"]` the moment you know which issue you are on: **before you read and evaluate it** (for a bare `#N` prompt that is step 1 above), whoever filed it, you included. If evaluation ends with you walking away, `assignees: []`. | Nothing: this half has no backstop |
 | **Opening the fix PR** | `Closes #N` in the PR body, or `Refs #N` if partial (see *Linking the fix PR*). Comment `Addressed in #M` on the issue. Then **one write** with `labels` = the issue's existing labels plus `solved`, and `assignees: []`. | The hook blocks an update whose `labels` include `solved` without `assignees: []` |
-| **Fix falls through** (the PR closes unmerged, or review finds the fix wrong) | Strip `solved`: the one removal a fix session makes itself. Re-assign only if you are the one picking it back up. | `scripts/reconcile-solved-labels.py` |
+| **Fix falls through** (the PR closes unmerged, or review finds the fix wrong) | Strip `solved`: the one removal a fix session makes itself. Re-assign only if you are the one picking it back up. | `scripts/release/reconcile-solved-labels.py` |
 | **Closing** | Not yours. The Dev2Main sweep ([`docs/RELEASE.md`](docs/RELEASE.md) step 6) closes it `completed` once the fix reaches `main`, passing `labels` minus `solved` and `assignees: []`. The only exception is a duplicate found after its fix shipped (see *Duplicates*). | The hook blocks a `completed` close that keeps `solved` or omits `labels` |
 
-**Write mechanics.** On `issue_write`, `labels` and `assignees` each **replace the whole set**. `[]` wipes it, so a write that touches labels lists every label the issue keeps (read the issue first if you don't know them). **Omitting** a field leaves it untouched, so an assignee-only write never disturbs labels and needs no read. Through `gh`, adding `solved` needs `--remove-assignee` in the **same** `gh issue edit` (`gh issue edit <n> --add-label solved --remove-assignee samggreenberg`); `--add-assignee` or a second chained edit does not count (#4144). A `gh issue close` on an issue that carries `solved` is blocked until you strip it: `gh issue edit <n> --remove-label solved && <your close command>`. The `gh` lookups let the call through whenever they cannot reach GitHub, so they catch mistakes but guarantee nothing. `scripts/reconcile-solved-labels.py` is the backstop for every rule here except assigning: it covers `solved`, clearing the assignee, and the `experiment` marker (`docs/RELEASE.md` step 6b).
+**Write mechanics.** On `issue_write`, `labels` and `assignees` each **replace the whole set**. `[]` wipes it, so a write that touches labels lists every label the issue keeps (read the issue first if you don't know them). **Omitting** a field leaves it untouched, so an assignee-only write never disturbs labels and needs no read. Through `gh`, adding `solved` needs `--remove-assignee` in the **same** `gh issue edit` (`gh issue edit <n> --add-label solved --remove-assignee samggreenberg`); `--add-assignee` or a second chained edit does not count (#4144). A `gh issue close` on an issue that carries `solved` is blocked until you strip it: `gh issue edit <n> --remove-label solved && <your close command>`. The `gh` lookups let the call through whenever they cannot reach GitHub, so they catch mistakes but guarantee nothing. `scripts/release/reconcile-solved-labels.py` is the backstop for every rule here except assigning: it covers `solved`, clearing the assignee, and the `experiment` marker (`docs/RELEASE.md` step 6b).
 
 ### The filing labels: `claude` and `experiment`
 
@@ -272,7 +297,7 @@ A plan file describes **work still owed**: a proposed feature, or the open parts
 - **Fully shipped, nothing left → delete the file.** Do not leave it behind marked "done" / "shipped" / "kept as reference." First fold any durable design rationale into `docs/ARCHITECTURE.md` / `docs/EXTENDING.md` (or their siblings) where permanent docs belong.
 - **Partly shipped → delete the shipped narrative, keep only what's still owed.** Remove "What shipped" sections, resolved-finding catalogs, phase-by-phase ship logs, strikethrough-completed checklists, and completion dates. What remains is the open work.
 - **Keep past context only when future work needs it.** If the remaining work can't be understood without some of what already shipped, keep a *short* "Background" note at the top — a paragraph, not a changelog. That is the single exception to "no records of past work."
-- **Grep the source tree before deleting, not just `docs/plans/`.** Module docstrings and inline comments cite plan files by path (`See docs/plans/<name>.md`) far more often than other plan files do. Before deleting `docs/plans/<name>.md`, run `grep -rl 'docs/plans/<name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .` (adjust extensions to what the repo actually cites from) and fix every hit in the same commit: either repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). A dangling citation left in source is a documentation regression, not a harmless leftover: it is the "why is this code shaped like this" pointer a future maintainer follows, and it now leads nowhere (`scripts/check-docs.py` fails on one).
+- **Grep the source tree before deleting, not just `docs/plans/`.** Module docstrings and inline comments cite plan files by path (`See docs/plans/<name>.md`) far more often than other plan files do. Before deleting `docs/plans/<name>.md`, run `grep -rl 'docs/plans/<name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .` (adjust extensions to what the repo actually cites from) and fix every hit in the same commit: either repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). A dangling citation left in source is a documentation regression, not a harmless leftover: it is the "why is this code shaped like this" pointer a future maintainer follows, and it now leads nowhere (`scripts/gates/check-docs.py` fails on one).
 
 **Follow-ups go in the plan file, not the PR body.** When you identify deferred scope or known limitations, record them as open work in the relevant plan under `docs/plans/` (the one that scoped the feature). Do **not** stash them in the PR description as the only record — PRs close, get archived, and stop surfacing in normal discovery. The PR body describes what landed; the plan tracks what's still owed.
 
@@ -418,7 +443,7 @@ If a feature seems to require persisting a vector or a trained head, push back: 
 `vtscore.eval` exists to measure **deviations** from the shipped algorithm, which only means something if its **default arm** *is* the shipped algorithm. When the app moves and the harness doesn't, every later experiment silently measures a detector nobody uses. So: **an app-side algorithm change is not finished until the eval framework has caught up.** The full design (delegated / ported / default-resolution mirrors, gate output, reason codes) is in [`docs/EVAL.md`](docs/EVAL.md#the-eval-default-arm-is-the-app); the rules:
 
 - **Prefer delegation** (the harness calling the app's function, as `MaxPatchStyle` does) over copying, every time — it is the only fix that can't rot. The two kinds of code that can't delegate are **ported** app logic (unreachable TypeScript, or lock-guarded interactive caches) and **default resolution** (`style=None`, `blend_schedule=None`, … resolving to the app's current default).
-- **The gate:** `scripts/check-eval-app-sync.py` (a `./run-tests.sh` gate) digests both sides of every mirror. `app-changed` means reconcile the harness copy to the app; `harness-changed` means re-read the two against each other (#2923 drifted that way with the gate green). After reconciling — or confirming nothing is owed — re-pin with `python scripts/check-eval-app-sync.py --update`. **Re-pinning without looking at the other side defeats the entire gate.**
+- **The gate:** `scripts/gates/check-eval-app-sync.py` (a `./run-tests.sh` gate) digests both sides of every mirror. `app-changed` means reconcile the harness copy to the app; `harness-changed` means re-read the two against each other (#2923 drifted that way with the gate green). After reconciling — or confirming nothing is owed — re-pin with `python scripts/gates/check-eval-app-sync.py --update`. **Re-pinning without looking at the other side defeats the entire gate.**
 - **When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. Record intentional differences in `divergence=`; a `ported` mirror may never opt out of the harness pin via `no_harness_pin=`; list every top-level name a multi-symbol harness side spans (`file.py::GOOD_TARGET,BAD_TARGET`).
 
 Named experiment arms (`whole_image`, `max_patch_hac`, …) are supposed to differ and are out of scope; this rule is about the **default** arm only.
@@ -432,7 +457,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters, snapshot checks and pyright run before pytest and stop the run on failure; pip-audit runs alongside it). There is no CI backstop (the repo's three GitHub Actions workflows only publish and gate nothing), so `./run-tests.sh` is the source of truth — do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/gates/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters, snapshot checks and pyright run before pytest and stop the run on failure; pip-audit runs alongside it). There is no CI backstop (the repo's three GitHub Actions workflows only publish and gate nothing), so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it, and file an issue for it unless one already exists (see "Work still owed goes in an issue" above). The default is **fix it**; skipping requires justification.
@@ -469,31 +494,31 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Run slow tests only**: `python -m pytest tests/ tests_lib/ -q --tb=short -m slow` (both trees — the slow tests do not all live under `tests/`; see [Test Markers](docs/TESTING.md#test-markers))
 - **Run GPU tests**: `python -m pytest tests_lib/gpu/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
 - **Run all tests (CPU + GPU)**: `python -m pytest tests/ tests_lib/ -q --tb=short -m ''`
-- **Regenerate the OpenAPI snapshot** (after any route/schema change, to clear the drift gate): `cd frontend && npm run regenerate-openapi-snapshot` (equivalently `python scripts/dump_openapi.py > frontend/openapi.json`), then commit `frontend/openapi.json`
+- **Regenerate the OpenAPI snapshot** (after any route/schema change, to clear the drift gate): `cd frontend && npm run regenerate-openapi-snapshot` (equivalently `python scripts/gates/dump_openapi.py > frontend/openapi.json`), then commit `frontend/openapi.json`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>` (add `--exporter <name> …` to write results, or `--importer <name> …` in place of `--dataset`; see [`docs/CLI.md`](docs/CLI.md))
-- **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
-- **Check for a stale tree**: `python scripts/check-phantom-base.py` (also the first `./run-tests.sh` gate; fails when the branch deletes files it never created, or carries none of what `dev` gained across two or more consecutive commits. Override a deliberate deletion with `VTSEARCH_ALLOW_DELETIONS=1`, a deliberate revert with `VTSEARCH_ALLOW_REVERTS=1`)
-- **Check documentation**: `python scripts/check-docs.py` (a `./run-tests.sh` gate; what it validates is in [`docs/TESTING.md`](docs/TESTING.md#the-stages). Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
-- **Check extension docs**: `python scripts/check-extension-docs.py` (a `./run-tests.sh` gate: the extension guides must name only members that exist on the plugin ABCs. Fix the doc, or register a new contract section in `SECTIONS`)
-- **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
+- **Check eval/app sync**: `python scripts/gates/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
+- **Check for a stale tree**: `python scripts/gates/check-phantom-base.py` (also the first `./run-tests.sh` gate; fails when the branch deletes files it never created, or carries none of what `dev` gained across two or more consecutive commits. Override a deliberate deletion with `VTSEARCH_ALLOW_DELETIONS=1`, a deliberate revert with `VTSEARCH_ALLOW_REVERTS=1`)
+- **Check documentation**: `python scripts/gates/check-docs.py` (a `./run-tests.sh` gate; what it validates is in [`docs/TESTING.md`](docs/TESTING.md#the-stages). Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
+- **Check extension docs**: `python scripts/gates/check-extension-docs.py` (a `./run-tests.sh` gate: the extension guides must name only members that exist on the plugin ABCs. Fix the doc, or register a new contract section in `SECTIONS`)
+- **Regenerate doc inventories**: `python scripts/gates/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu126`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
-- **Frontend audit**: `python scripts/npm-audit-gate.py` (the `./run-tests.sh` gate: `npm audit` over `frontend/`, minus the advisories in its `WAIVERS` table, which have no patched release anywhere; bare `cd frontend && npm audit` still lists those)
+- **Frontend audit**: `python scripts/gates/npm-audit-gate.py` (the `./run-tests.sh` gate: `npm audit` over `frontend/`, minus the advisories in its `WAIVERS` table, which have no patched release anywhere; bare `cd frontend && npm audit` still lists those)
 - **Frontend unit tests**: `cd frontend && npm run test:ci` (headless Vitest + jsdom, no browser; also run by `./run-tests.sh` and `./run-tests.sh frontend`). `npm test` is the watch-mode variant.
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
-- **Dead code audit** (manual, pre-release): `python scripts/vulture-audit.py` — the script owns the invocation. The **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
-- **Check the vulture whitelist**: `python scripts/vulture-audit.py --check-whitelist` (a `./run-tests.sh` lane; fails when an entry in `.vulture-whitelist.py` suppresses no finding). So adding an entry is not free: whitelist what is genuinely reflective, delete what is genuinely dead.
+- **Dead code audit** (manual, pre-release): `python scripts/gates/vulture-audit.py` — the script owns the invocation. The **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
+- **Check the vulture whitelist**: `python scripts/gates/vulture-audit.py --check-whitelist` (a `./run-tests.sh` lane; fails when an entry in `.vulture-whitelist.py` suppresses no finding). So adding an entry is not free: whitelist what is genuinely reflective, delete what is genuinely dead.
 
 ## Testing reference
 
 The gate chain, the test-group table, markers, fixture isolation and the flaky-test patterns live in [`docs/TESTING.md`](docs/TESTING.md). Read it before adding a test or a gate. The rules it spells out, in brief:
 
-- **A full `./run-tests.sh` is mandatory before pushing.** A group run skips the whole-repo gates; the only exceptions are the self-policing `slides` and `docs` scopes. Keep the gate table in `docs/TESTING.md` in step with `run-tests.sh` in the same commit (`scripts/check-docs.py` fails when their gate names disagree).
+- **A full `./run-tests.sh` is mandatory before pushing.** A group run skips the whole-repo gates; the only exceptions are the self-policing `slides` and `docs` scopes. Keep the gate table in `docs/TESTING.md` in step with `run-tests.sh` in the same commit (`scripts/gates/check-docs.py` fails when their gate names disagree).
 - **Put a test in `tests_lib/` if it touches no app-tier module**, otherwise in `tests/`. `tests_lib/` must be import-clean of Flask and of `vtsearch` entirely; add a library seam rather than reaching across the tier. Import helpers tier-qualified (`from tests.helpers import …` / `from tests_lib.helpers import …`).
 - **Do not add per-file autouse reset fixtures or end-of-test cleanup** — the conftests reset all global state before every test. Add a new library-tier global's reset to `tests_shared/state_reset.py`. Only `medias` needs save/restore (try/finally) if a test empties it.
 - **A test that reads a repo doc** goes in `tests_lib/meta/` or is registered in `tests_shared/markdown_surface.py`.

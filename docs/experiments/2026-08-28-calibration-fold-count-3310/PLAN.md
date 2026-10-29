@@ -152,7 +152,7 @@ Arms, three full runs (plus the Stage A K=2 run as the control trajectory):
   (`CALIB_FOLD_COUNT_SCHEDULE`), leaving `CALIBRATE_COUNT` untouched for
   every other study. If the schedule ever ships in the app, the constant
   becomes `production_fold_count_for(n_votes)` beside
-  `production_split_for`, and `scripts/check-eval-app-sync.py` gains the
+  `production_split_for`, and `scripts/gates/check-eval-app-sync.py` gains the
   mirror — same discipline as #3287's closing note.
 
 ## Metrics

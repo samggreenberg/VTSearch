@@ -8,7 +8,7 @@ top-level key (``_HEAVYWEIGHT_KEYS``) is blind to it, and the response
 schemas' free-form ``fields.Dict`` waves it straight through, so the numpy
 array reaches Flask's JSON encoder and 500s the whole request.
 
-:func:`vtscore.utils.hits.hit_custom_metadata` is the single filter every one
+:func:`vtscore.datasets.labelset.hit_custom_metadata` is the single filter every one
 of those surfaces now runs the dict through.  One test per surface, asserting
 the observable outcome: the caller's own keys survive, the vector doesn't.
 """

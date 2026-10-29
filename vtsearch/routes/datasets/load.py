@@ -36,11 +36,9 @@ from vtscore.config import DATA_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
 from vtscore.datasets.importers.base import OutputSpec, parse_output_specs
 from vtscore.datasets.load_multi import _run_multi_output_load_in_background
-from vtscore.datasets.load_pipeline import (
-    _parse_embedder_list,
-    _run_importer_in_background,
-    _run_origin_load_in_background,
-)
+from vtscore.datasets.load_origin import _run_origin_load_in_background
+from vtscore.datasets.load_pipeline import _run_importer_in_background
+from vtscore.datasets.load_workers import _parse_embedder_list
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
 from vtsearch.autofind import import_post_load
 from vtsearch.import_hooks import fire_dataset_imported
@@ -48,7 +46,7 @@ from vtsearch.routes._context import require_dataset_header
 from vtsearch.routes._http import format_exception_detail
 from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
-from vtsearch.schemas.datasets import (
+from vtsearch.schemas.datasets.load import (
     DatasetClearResponseSchema,
     DatasetLoadDemoRequestSchema,
     DatasetLoadSourceRequestSchema,
@@ -142,7 +140,7 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
     steps (they always run last, on the finished units).
     """
     from vtscore.datasets.clipper_chain import append_cleaner_steps
-    from vtscore.datasets.load_pipeline import _parse_chain_field
+    from vtscore.datasets.load_workers import _parse_chain_field
 
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
@@ -311,7 +309,7 @@ def import_local_folder():
     loader = _make_local_folder_loader(importer, field_values, upload_dir, media_type)
 
     from vtsearch.auth import get_current_user
-    from vtscore.datasets.load_pipeline import _normalize_media_type
+    from vtscore.datasets.load_workers import _normalize_media_type
 
     dataset_name = (request.form.get("dataset_name") or "").strip() or "Local folder upload"
     task_id = _run_origin_load_in_background(
@@ -424,7 +422,7 @@ def import_local_files():
     loader = _make_local_folder_loader(importer, field_values, upload_dir, media_type)
 
     from vtsearch.auth import get_current_user
-    from vtscore.datasets.load_pipeline import _normalize_media_type
+    from vtscore.datasets.load_workers import _normalize_media_type
 
     dataset_name = (request.form.get("dataset_name") or "").strip() or "Local files upload"
     task_id = _run_origin_load_in_background(

@@ -170,9 +170,9 @@ reason rather than re-derive it.
 | site | what the constant actually meets |
 |---|---|
 | `_THRESHOLDS = {"image": 4, "text": 4}` (`vtscore/media/near_dupes.py`) | Hamming distance out of 64 bits, over pHash/SimHash of **pixels and text**. The module docstring draws this line itself: a perceptual hash answers "these *are* the same thing", an embedding answers "these *mean* the same thing" |
-| `_LOWE_RATIO = 0.75` (`vtscore/media/structural.py`) | ratio of two SIFT descriptor **L2** distances — and a ratio at that |
-| `_LG_FILTER_THRESHOLD = 0.1` (`vtscore/media/structural_splg.py`) | LightGlue match confidence |
-| `_RANSAC_REPROJ_THRESHOLD = 0.02`, `_MIN_SANE_SCALE`/`_MAX_SANE_SCALE` (`vtscore/media/structural_geometry.py`) | normalised pixel reprojection error and a scale sanity band |
+| `_LOWE_RATIO = 0.75` (`vtscore/media/structural/__init__.py`) | ratio of two SIFT descriptor **L2** distances — and a ratio at that |
+| `_LG_FILTER_THRESHOLD = 0.1` (`vtscore/media/structural/structural_splg.py`) | LightGlue match confidence |
+| `_RANSAC_REPROJ_THRESHOLD = 0.02`, `_MIN_SANE_SCALE`/`_MAX_SANE_SCALE` (`vtscore/media/structural/structural_geometry.py`) | normalised pixel reprojection error and a scale sanity band |
 | `STRUCTURAL_DECISION_THRESHOLD = 0.5` (`vtscore/training/structural_similarity.py`) | a calibrated match **probability**; also the structural slot, a different embedder from the patch slot |
 | scene-cut threshold (`vtscore/media/video/clipper.py`) | Pearson correlation of hue×saturation **histograms** |
 | VAD threshold, `top_db` (`vtscore/media/audio/clipper.py`) | Silero speech probability; amplitude in dB |

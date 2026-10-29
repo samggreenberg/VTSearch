@@ -478,7 +478,7 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
     media_bytes = media.get("media_bytes")
     if media_bytes is not None:
         return media_bytes
-    from vtscore.media.lazy_clip import recipe_is_exclusive  # noqa: PLC0415
+    from vtscore.media.clipping.lazy_clip import recipe_is_exclusive  # noqa: PLC0415
 
     media_path = media.get("media_path")
     # A unit whose recipe no longer replays (a cleaned item, a converter

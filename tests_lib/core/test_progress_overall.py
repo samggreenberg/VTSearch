@@ -10,7 +10,8 @@ import time
 
 import pytest
 
-from vtscore.concurrency.progress import _ETA_LADDER, ProgressTracker, PROGRESS_COMMON_EXTRAS
+from vtscore.concurrency.progress import ProgressTracker, PROGRESS_COMMON_EXTRAS
+from vtscore.concurrency.progress_tracker import _ETA_LADDER
 
 
 def _tracker() -> ProgressTracker:
@@ -421,6 +422,9 @@ class TestFinalizeProgress:
         rec()
         fin.begin("projection")
         fin.update("loading", "Projection ready", current=1, total=1)
+        rec()
+        fin.begin("similarity_order")
+        fin.update("loading", "Similarity order ready", current=1, total=1)
         rec()
 
         # Never rewinds, starts no earlier than the finalize floor, ends full.

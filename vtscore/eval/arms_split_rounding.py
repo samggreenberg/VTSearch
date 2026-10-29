@@ -1,9 +1,9 @@
 """#4864's split rounding: the calibration split before #4864 (dithered), as an eval arm.
 
 The calibration folds hold out a share of each class
-(:func:`vtscore.training.thresholds.conformal._split_train_counts`).  Since
+(:func:`vtscore.training.thresholds.fold_orderings._split_train_counts`).  Since
 #4864 the app rounds each class's share to the nearest whole vote
-(:func:`~vtscore.training.thresholds.conformal.nearest_holdout`), with no coin,
+(:func:`~vtscore.training.thresholds.fold_orderings.nearest_holdout`), with no coin,
 so the labels line takes over at one count of Goods and stays.  Before it, the
 app sized the share over the whole labelset first and then per class, and
 rounded both counts stochastically, with a coin seeded from the labelset
@@ -29,7 +29,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.training.thresholds.conformal import nearest_holdout
+from vtscore.training.thresholds.fold_orderings import nearest_holdout
 
 #: The rules :func:`split_rounding` knows.  ``nearest`` is the app's.
 SPLIT_ROUNDINGS: tuple[str, ...] = ("nearest", "dither")
@@ -112,7 +112,7 @@ def _dithered_counts(
 def _dithered_train_counts(
     n: int, n_pos: int, n_neg: int, calibration_fraction: float, labelset: tuple[Any, Any] | None
 ) -> tuple[int, int] | None:
-    """:func:`~vtscore.training.thresholds.conformal._split_train_counts` under the dither: the rule before #4864.
+    """:func:`~vtscore.training.thresholds.fold_orderings._split_train_counts` under the dither: the rule before #4864.
 
     The coin is seeded from *labelset* (:func:`_split_dither_rng`), as the app
     seeded it.
@@ -139,11 +139,11 @@ def split_rounding(rule: str) -> Iterator[None]:
     if rule == "nearest":
         yield
         return
-    from vtscore.training.thresholds import conformal  # noqa: PLC0415
+    from vtscore.training.thresholds import fold_orderings  # noqa: PLC0415
 
-    shipped = conformal._split_train_counts
-    conformal._split_train_counts = _dithered_train_counts
+    shipped = fold_orderings._split_train_counts
+    fold_orderings._split_train_counts = _dithered_train_counts
     try:
         yield
     finally:
-        conformal._split_train_counts = shipped
+        fold_orderings._split_train_counts = shipped
