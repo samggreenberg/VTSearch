@@ -654,8 +654,7 @@ class TestResumeFromAnImporter:
         monkeypatch.setattr("vtscore.datasets.importers.get_importer", lambda _name: importer)
         embedded: list[int] = []
         monkeypatch.setattr(
-            cli_mod,
-            "_embed_loaded_medias",
+            "vtscore.cli.sources._embed_loaded_medias",
             lambda chunk: embedded.append(min(m["id"] for m in chunk.values())) or chunk,
         )
 
