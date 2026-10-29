@@ -1,4 +1,4 @@
-"""Tests for scripts/reconcile-solved-labels.py.
+"""Tests for scripts/release/reconcile-solved-labels.py.
 
 The script decides which open issues have no development left in them -- the
 problem is solved and only git merges remain -- and therefore carry the
@@ -43,7 +43,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "reconcile-solved-labels.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "release" / "reconcile-solved-labels.py"
 
 
 def _load():

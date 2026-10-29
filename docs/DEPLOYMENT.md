@@ -278,7 +278,7 @@ startup sequence runs at WSGI import time. See
 | `docker/Dockerfile.labbench` | `docker-compose.labbench.yml`, `docker-compose.labbench-audio.yml` | `python:3.12-slim` | The slim build for image and audio, or for one of them (`MEDIA_TYPE` build arg: unset, the default, for both; `image` or `audio` for one, locked to it): only those types' dependencies, each type's embedder locked, the embedders' weights baked under `/opt/vtsearch/models`, and every dataset expiring after 14 days. What it locks and hides, and why each LabBench variant needs its own data volume: [SETUP.md § LabBench](SETUP.md#labbench-slim-image-or-audio). |
 | `docker/Dockerfile.solo` | `docker-compose.audio.yml`, `docker-compose.video.yml` | `python:3.12-slim` | The full CPU build locked to the media type given as the required `MEDIA_TYPE` build arg, with that type's default embedder weights baked under `/opt/vtsearch/models`; see [SETUP.md § Single media type](SETUP.md#single-media-type-audio-only-video-only). |
 | `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
-| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
+| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.9.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/install/cache_gated_models.sh`. |
 
 All of them persist state in the volume mounted at `/app/data` (named
 `vtsearch-data` in the compose files); a container without that mount loses its
@@ -403,7 +403,7 @@ warms every embedder referenced by the dataset and detector registries
 so the first request that uses each embedder doesn't pay the cold-load
 cost. On an empty registry, nothing is preloaded.
 
-`scripts/download_models.sh` prefetches the most commonly used models for
+`scripts/install/download_models.sh` prefetches the most commonly used models for
 offline deployments:
 
 | Model | Media type | HuggingFace ID | Approx. size |
@@ -520,12 +520,12 @@ shared server — or any machine with several VTSearch checkouts — the multi-G
 demo sources only need to exist once: the downloaders skip a download whenever
 the dataset's extraction path already exists under the data dir, so a communal
 cache directory whose entries mirror that extraction layout can be symlinked
-into each data dir. [`scripts/link-demo-cache.sh`](../scripts/link-demo-cache.sh)
+into each data dir. [`scripts/data/link-demo-cache.sh`](../scripts/data/link-demo-cache.sh)
 does the wiring:
 
 ```bash
-scripts/link-demo-cache.sh /shared/vtsearch-demos ./data            # link cached demos in
-scripts/link-demo-cache.sh /shared/vtsearch-demos ./data --harvest  # donate demos this
+scripts/data/link-demo-cache.sh /shared/vtsearch-demos ./data            # link cached demos in
+scripts/data/link-demo-cache.sh /shared/vtsearch-demos ./data --harvest  # donate demos this
                                                                     # data dir downloaded, then link
 ```
 
@@ -575,7 +575,7 @@ VTSearch can run fully offline once models are cached. Follow these steps:
 Run the provided script on a machine with internet access:
 
 ```bash
-./scripts/download_models.sh [CACHE_DIR]
+./scripts/install/download_models.sh [CACHE_DIR]
 ```
 
 This downloads all five embedding models (CLAP General, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
@@ -627,7 +627,7 @@ containers):
 
 ```bash
 # Pre-download on host
-./scripts/download_models.sh /opt/vtsearch-models
+./scripts/install/download_models.sh /opt/vtsearch-models
 
 # Run with mount
 docker run -p 5000:5000 \

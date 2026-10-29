@@ -75,7 +75,8 @@ BETAS = (0.25, 1.0, 4.0)
 def _cell_arrays(args) -> list[tuple[dict, np.ndarray, np.ndarray]]:
     """``(key, scores best first, truth in that order, held-out Goods' and Bads' scores)`` per wanted snapshot."""
     from vtscore.eval.live_threshold_rules import head_count_recall
-    from vtscore.training.thresholds.labels_line import _finite_unit, head_count_cut
+    from vtscore.training.thresholds.class_model import _finite_unit
+    from vtscore.training.thresholds.labels_line import head_count_cut
 
     npz, run, wanted = args
     snaps = load_snapshots(npz)
@@ -162,7 +163,8 @@ def cmd_extract(a) -> None:
 def _face_cell(args) -> list[tuple[dict, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """The head-count snapshots of one FHIBE cell, as ``_cell_arrays`` gives them."""
     from vtscore.eval.live_threshold_rules import head_count_recall
-    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, _finite_unit, head_count_cut
+    from vtscore.training.thresholds.class_model import _finite_unit
+    from vtscore.training.thresholds.labels_line import HEAD_COUNT_GOODS, head_count_cut
 
     npz, run, beta = args
     z = np.load(npz, allow_pickle=False)

@@ -65,7 +65,7 @@ function sortedItems(rows: Array<Record<string, unknown>> | undefined): SortedIt
  *
  * The *rule* for which media to advance to stays a pure function in
  * `utils/auto-select-next` (digest-pinned against the eval harness by
- * `scripts/check-eval-app-sync.py`'s `autopilot.auto_select_next` mirror);
+ * `scripts/gates/check-eval-app-sync.py`'s `autopilot.auto_select_next` mirror);
  * {@link autoSelectNext} below is only the side-effecting half.
  *
  * ## A newer sort ends an older one

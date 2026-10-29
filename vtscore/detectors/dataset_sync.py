@@ -399,8 +399,8 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     Deliberately leaves ``label_embeddings`` and ``embedder`` alone:
 
     * The per-label embedding cache is invalidated lazily by
-      :func:`~vtscore.detectors.labelset_training._maybe_clear_cache_on_embedder_switch`
-      inside :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`,
+      :func:`~vtscore.detectors.labelset_embeddings._maybe_clear_cache_on_embedder_switch`
+      inside :func:`~vtscore.detectors.labelset_embeddings.populate_label_embeddings`,
       which is the only consumer.  Clearing it here would just shift the
       reset and risk surprising any caller that reads the cache directly.
     * ``det_ctx.embedder`` is the "what was the last training pass aligned
@@ -410,7 +410,7 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
       re-embed task.  The marker is restamped to *new_embedder* by the
       next training pass (via
       :func:`~vtscore.detectors.registry.record_detector_embedder`
-      in :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`
+      in :func:`~vtscore.detectors.labelset_embeddings.populate_label_embeddings`
       and the workflow path).
 
     Returns ``True`` when invalidation happened, ``False`` otherwise.

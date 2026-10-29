@@ -16,7 +16,7 @@ models against the live labelset, and the eval harness
 arms against held-out splits.  Those used to be three hand copies of the same
 FP/FN counting loop with nothing holding them together (issue #3414); a
 delegation cannot drift, which is the only fix that does not need a
-``Mirror(...)`` entry in ``scripts/check-eval-app-sync.py`` to stay honest.
+``Mirror(...)`` entry in ``scripts/gates/check-eval-app-sync.py`` to stay honest.
 
 Numpy only - no torch - so the eval tier stays unit-testable without the model
 stack.

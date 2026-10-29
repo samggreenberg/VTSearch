@@ -133,7 +133,7 @@ Do not write a phrase anywhere else, this page included.
    its path to `WATCHED_PATTERNS`, or the toast waits for the next refresh.
 3. **Test it** in `tests/core/test_achievements.py`.
 4. **Regenerate what is drawn from the catalog:** the User Guide's table
-   (`python scripts/gen-docs-inventories.py`, which `./run-tests.sh` checks),
+   (`python scripts/gates/gen-docs-inventories.py`, which `./run-tests.sh` checks),
    and the slide figures (`python slides/figs/src/make-achievement-figs.py`,
    which refuses to run until its `COUNTS` has a line for the new id). Then
    re-read the slides' notes, which say how many entries there are.

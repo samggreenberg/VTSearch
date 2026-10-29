@@ -12,7 +12,7 @@ and the two analysis scripts were untracked files, all living only in
 could not be reproduced, extended, or applied to the next dataset — and when the
 owner asked for *more* examples, step one was archaeology on a scratch checkout.
 
-**The doc gate said nothing, by design.** `scripts/check-docs.py` exempted
+**The doc gate said nothing, by design.** `scripts/gates/check-docs.py` exempted
 `docs/experiments/` from its PATH invariant, on the grounds that a run record
 cites the cluster scratch dir and the throwaway scripts that drove it. The scratch
 dirs never needed that exemption — they are absolute paths, or relative ones like

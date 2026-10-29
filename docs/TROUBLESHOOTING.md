@@ -119,7 +119,7 @@ the server.
 `ConnectionError` or `OSError: We couldn't connect to`.
 
 **Fix**: Ensure the machine has internet access to `huggingface.co`, or
-pre-download models with `./scripts/download_models.sh` and set
+pre-download models with `./scripts/install/download_models.sh` and set
 `HF_HUB_OFFLINE=1` (see [Offline deployment](DEPLOYMENT.md#offline-deployment)).
 
 ### Out of memory

@@ -1,7 +1,7 @@
 """Tests for :class:`PluginRegistry`'s read-only ``package`` / ``sentinel`` /
 ``entry_point_group`` properties.
 
-``scripts/gen-docs-inventories.py`` reads them off each family's registry to
+``scripts/gates/gen-docs-inventories.py`` reads them off each family's registry to
 generate the plugin-families table, reaching the registry through the bound
 ``list`` accessor :func:`make_plugin_registry` returns.  Both halves are
 pinned here: the properties echo the constructor without discovering, and the

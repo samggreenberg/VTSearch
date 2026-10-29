@@ -205,7 +205,8 @@ class FindLine:
     """Find's line on one corpus with no votes in it (the withheld half), as ``LabelsLine.on_corpus`` draws it."""
 
     def __init__(self, model, scores):
-        from vtscore.training.thresholds.labels_line import _finite_unit, corpus_sigma_floor
+        from vtscore.training.thresholds.class_model import _finite_unit
+        from vtscore.training.thresholds.labels_line import corpus_sigma_floor
 
         self.model = model
         s = np.asarray(scores, dtype=np.float64)

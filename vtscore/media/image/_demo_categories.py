@@ -1074,7 +1074,7 @@ VGGFACE2_CATEGORIES: list[str] = [name for _cid, name in VGGFACE2_IDENTITIES]
 # A photo's ``category`` is the person it was picked for; anyone else in it
 # goes unlabelled.  The photos per person are pinned in
 # ``vtscore/media/assets/celebrity_together.json``, which
-# ``scripts/build_celebrity_together_manifest.py`` builds from this list.
+# ``scripts/data/build_celebrity_together_manifest.py`` builds from this list.
 CELEBRITY_TOGETHER_CATEGORIES: list[str] = [
     "Aamir Khan",
     "Adam Driver",

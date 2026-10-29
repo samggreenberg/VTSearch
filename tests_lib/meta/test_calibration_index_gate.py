@@ -1,4 +1,4 @@
-"""The calibration script index gate itself: ``scripts/check-calibration-index.py``.
+"""The calibration script index gate itself: ``scripts/gates/check-calibration-index.py``.
 
 The gate keeps ``scripts/experiments/calibration/README.md``'s study -> files
 index total (#3409) and the directory closed to new study files (#5406).  The
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check-calibration-index.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "gates" / "check-calibration-index.py"
 
 
 def _load_gate():

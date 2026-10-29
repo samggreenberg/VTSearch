@@ -1,4 +1,4 @@
-"""Keep scripts/link-demo-cache.sh's DEMO_DIRS list in sync with the downloaders.
+"""Keep scripts/data/link-demo-cache.sh's DEMO_DIRS list in sync with the downloaders.
 
 The shared demo-cache script hardcodes the set of extraction directories the
 demo downloaders create directly under ``DATA_DIR``. That set lives as string
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "link-demo-cache.sh"
+SCRIPT = REPO_ROOT / "scripts" / "data" / "link-demo-cache.sh"
 DOWNLOADER_SOURCES = [
     *sorted((REPO_ROOT / "vtscore" / "datasets" / "downloader").glob("*.py")),
     REPO_ROOT / "vtscore" / "datasets" / "importers" / "demo" / "__init__.py",
@@ -36,7 +36,7 @@ def _expected_demo_dirs() -> set[str]:
 def _script_demo_dirs() -> set[str]:
     text = SCRIPT.read_text()
     match = re.search(r"DEMO_DIRS=\(\n(.*?)\n\)", text, re.DOTALL)
-    assert match, "DEMO_DIRS array not found in scripts/link-demo-cache.sh"
+    assert match, "DEMO_DIRS array not found in scripts/data/link-demo-cache.sh"
     return set(match.group(1).split())
 
 
@@ -46,9 +46,9 @@ def test_script_list_matches_downloader_sources():
     assert expected, "no DATA_DIR extraction literals found - did the downloaders move?"
     missing = expected - in_script
     stale = in_script - expected
-    assert not missing, f"add to scripts/link-demo-cache.sh DEMO_DIRS: {sorted(missing)}"
-    assert not stale, f"remove from scripts/link-demo-cache.sh DEMO_DIRS: {sorted(stale)}"
+    assert not missing, f"add to scripts/data/link-demo-cache.sh DEMO_DIRS: {sorted(missing)}"
+    assert not stale, f"remove from scripts/data/link-demo-cache.sh DEMO_DIRS: {sorted(stale)}"
 
 
 def test_script_is_executable():
-    assert SCRIPT.stat().st_mode & 0o111, "scripts/link-demo-cache.sh must be executable"
+    assert SCRIPT.stat().st_mode & 0o111, "scripts/data/link-demo-cache.sh must be executable"
