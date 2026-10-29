@@ -32,7 +32,7 @@ in the family's package; if you're shipping a separate distribution,
 declare an `importlib.metadata` entry point in the family's group. Both
 discovery paths converge on the same registry, and built-ins win on
 name clashes so a stray third-party package can't silently shadow a
-core plugin. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+core plugin. See [`vtscore/plugins/registry.py`](../../plugins/registry.py)
 for the registry and its entry-point loader (`PluginRegistry`), and the
 [plugins package doc](../packages/plugins.md) for the lower-level API
 surface.
@@ -115,7 +115,7 @@ third-party plugins.
 re-exports `PluginField` so you can import it alongside the family's
 base class. The frontend renders a form from `fields`, the CLI
 derives `argparse` flags from `fields`, and the marshmallow schema
-builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+builder validates POST bodies against `fields`. See [`vtscore/plugins/field.py`](../../plugins/field.py)
 for the full dataclass and the [plugins package doc](../packages/plugins.md#pluginfield)
 for the field-type matrix.
 

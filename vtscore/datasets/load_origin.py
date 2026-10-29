@@ -140,7 +140,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
     # serialize/disk-write window. See FinalizeProgress.
     fin = FinalizeProgress(pacer, spec.media_type)
     fin.begin("cleanup")
-    _drop_none_embeddings_stage(ctx, fin, embed_failures)
+    dropped_groups = _drop_none_embeddings_stage(ctx, fin, embed_failures)
     # Re-lazify clips from reference (thin) parents now that
     # embedding is done: strip their materialized bytes so the
     # dataset stores recipes, not duplicated clip payloads.
@@ -171,6 +171,7 @@ def _finish_dataset_load(ctx: DatasetContext, tracker, pacer, spec: _DatasetLoad
         spec.ingest_started_at,
         import_group=spec.import_group,
         output_category=spec.output_category,
+        dropped_groups=dropped_groups,
     )
     # Opt-in: compute + persist the 2-D Browse projection now,
     # so the Browse canvas opens instantly instead of building

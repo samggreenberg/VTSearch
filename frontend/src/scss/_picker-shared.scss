@@ -175,7 +175,7 @@
   }
 }
 
-.badge-ready, .badge-embedding, .badge-download, .badge-category {
+.badge-ready, .badge-embedding, .badge-download, .badge-category, .badge-warning {
   display: inline-block;
   padding: var(--space-2xs) var(--space-sm);
   font-size: var(--font-2xs);
@@ -194,6 +194,9 @@
 // Neutral info pill: the category a Dashboard dataset stands for within its
 // multi-dataset import (#4747). Same quiet pairing as `.badge-download`.
 .badge-category { background: var(--bg-secondary-btn); color: var(--text-secondary); }
+// Amber "something is off" pill: a Dashboard dataset that dropped items at
+// import (#3798). The amber chip pairing from the style guide's status surfaces.
+.badge-warning { background: var(--warning-bg); color: var(--text-warning); }
 
 // (The server folder browser chrome - breadcrumbs, list, items, path footer -
 // now lives in `vt-folder-browser`. See

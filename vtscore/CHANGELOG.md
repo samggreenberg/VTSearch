@@ -12,6 +12,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The load pipeline drops an item any of its embedders could not read** (issue #3798). In a multi-embedder load
+  an item one embedder declined kept another's vector (or the one its importer shipped), passed the finalize
+  stage's check for a primary vector, and was saved with a hole in one of the dataset's spaces, so
+  `get_embedding_matrix` raised for that embedder on every load. `_embed_missing_stage` now empties such an item
+  (keeping the reason its embedder recorded), and the finalize stage drops it with the rest. An embedder that
+  produced no vector for any item is not counted as one of the dataset's spaces, and a vector the load never ran
+  (one an importer shipped for a few items) marks nobody incomplete. `embed_missing` now returns the name of the
+  embedder it resolved and ran, or `None`.
+
 - **`vtscore.concurrency.progress` is split along its seams** (issue #5429). `ProgressTracker`,
   `CancelledError`, `PROGRESS_COMMON_EXTRAS` and the `sort_progress` / `eval_progress` / `find_progress`
   singletons now live in `vtscore.concurrency.progress_tracker`; `LoadingTasksTracker`, `CANCELLED_ERROR`,
@@ -92,6 +101,14 @@ instead, since every commit on `dev` is effectively a new app release.)
   helpers moved with their stage; a test that stubs one patches the module that looks it up, which for
   `_patch_space_for` is now `training_calibration` (the `training` module docstring says which). See
   `packages/detectors.md`.
+
+- **`vtscore.plugins` is split into `field`, `base` and `registry` modules** (issue #5417). `PluginField`,
+  its value types, `parse_checkbox` and `inactive_field_keys` now live in `vtscore.plugins.field`;
+  `PluginBase` in `vtscore.plugins.base`; `PluginRegistry`, `make_plugin_registry` and `EntryPointTombstone`
+  in `vtscore.plugins.registry`. Every name in `vtscore.plugins.__all__` still imports from
+  `vtscore.plugins` and behaves as before; only the moved classes' `__module__` changes. The private
+  name-derivation helpers (`_LEGACY_PLUGIN_NAME_SUFFIXES`, `_default_plugin_name`, `_snake_case`, ...) moved
+  to `vtscore.plugins.base` and are no longer reachable as `vtscore.plugins._name`. See `packages/plugins.md`.
 
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
@@ -1518,6 +1535,15 @@ instead, since every commit on `dev` is effectively a new app release.)
   should compare to `""` or wrap in `bool()`.
 
 ### Added
+
+- **Dropped items are recorded with the dataset** (issue #3798). `_drop_none_embeddings_stage` returns what it
+  dropped, grouped by reason (`DroppedGroup`: `reason`, exact `count`, `items` names capped at
+  `finalize.MAX_RECORDED_DROPS` across groups), and `register_dataset` takes it as `dropped_groups=`, storing it
+  with its total as `num_dropped`. `merge_dropped_groups` adds to a recorded list under the same cap.
+- **`drop_incomplete_medias(medias)` repairs a dataset saved with an incomplete item** (issue #3798). It removes
+  every media missing a vector that more than half of them carry, returns them grouped by reason, and removes
+  nothing when that would be half the dataset or more. `resave_registered_dataset(entry, medias, coverage_atlas)`
+  rewrites a registered dataset's file atomically, with the writer the import uses.
 
 - **`PluginRegistry.package`, `.sentinel` and `.entry_point_group`** (issue #5402): read-only properties echoing
   the constructor arguments, so tooling can say where a family's plugins come from without reaching into private

@@ -46,7 +46,7 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
 
     #: Abstract family base: no auto-derived metadata.  Its name is *not*
     #: strippable — ``SyncSource`` has never been in
-    #: :data:`~vtscore.plugins._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
+    #: :data:`~vtscore.plugins.base._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
     #: out-of-tree ``AcmeSyncSource`` derives ``acme_sync`` today and must keep
     #: doing so.
     _is_plugin_family_base = True
