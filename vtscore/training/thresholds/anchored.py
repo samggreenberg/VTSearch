@@ -185,7 +185,7 @@ def apply_vote_exclusion(
     ``applied=True`` the caller must put every other haystack in that step -
     each calibration fold's - through :func:`drop_voted` as well; when it
     returns ``False`` every haystack keeps its full population.  Both the app
-    (:func:`vtscore.detectors.training._fused_threshold`) and the eval
+    (:func:`vtscore.detectors.training_calibration._fused_threshold`) and the eval
     harness's default arm route through here, so the floor policy exists in one
     place and the "all-or-nothing, never partial" contract is structural rather
     than a rule each caller has to remember.

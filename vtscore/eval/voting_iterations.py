@@ -646,7 +646,7 @@ def _safe_threshold_for_step(
 
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then draws the line as
-    :func:`vtscore.detectors.training._fused_threshold` does: the labels' line
+    :func:`vtscore.detectors.training_calibration._fused_threshold` does: the labels' line
     under a balance (see below), else the fold-anchored cut via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
     production defaults (the ``FOLD_ANCHOR_*`` constants), called with the same
