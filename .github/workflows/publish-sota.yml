@@ -19,7 +19,7 @@
 #
 # A Pages deploy replaces the whole site, so anything else that ever wants to
 # live there has to be built by this same job, not a second workflow. The site
-# itself is built by scripts/publish-sota-site.py, which runs from a laptop too.
+# itself is built by scripts/release/publish-sota-site.py, which runs from a laptop too.
 name: Publish State of the App links
 
 on:
@@ -27,7 +27,7 @@ on:
     branches: [dev]
     paths:
       - 'docs/experiments/*state-of-the-app*/**'
-      - 'scripts/publish-sota-site.py'
+      - 'scripts/release/publish-sota-site.py'
       - '.github/workflows/publish-sota.yml'
   workflow_dispatch:
 
@@ -54,7 +54,7 @@ jobs:
       # Pure stdlib, so the runner's own python3 is enough.
       - name: Build the site
         run: >-
-          python3 scripts/publish-sota-site.py --out _site
+          python3 scripts/release/publish-sota-site.py --out _site
           --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" --sha "${{ github.sha }}"
 
       - uses: actions/upload-pages-artifact@v5

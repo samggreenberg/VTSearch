@@ -722,7 +722,7 @@ range comes only from those picks, never from a model.
   `kept_at_check`). `aim_words(state)` names the balance in a
   message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
+`scripts/gates/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
 ### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`

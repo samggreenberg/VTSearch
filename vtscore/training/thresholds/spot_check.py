@@ -50,8 +50,8 @@ The bands, the picks and the likely range are the ``grow-fine`` reference in
 ``scripts/experiments/calibration/analyze_line_estimate_4383.py``
 (``band_edges``, ``draw_audits``, ``Audits.union_estimate``), and the walk's
 stop is ``rule_fb_walk`` in ``analyze_fbeta_line_4411.py``;
-``scripts/check-eval-app-sync.py`` pins the schedule, the likely range and
-the walk against them.
+``scripts/gates/check-eval-app-sync.py`` pins the schedule, the likely range
+and the walk against them.
 
 The spot check is four modules, split along its seams in #5425, each reading
 only the ones before it: :mod:`~vtscore.training.thresholds.check_schedule`

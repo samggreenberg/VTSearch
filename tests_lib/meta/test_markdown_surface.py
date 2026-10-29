@@ -66,8 +66,10 @@ _REPO_ROOT_ANCHOR = re.compile(r"\bREPO_ROOT\b|parents\[\d+\]|^\s*ROOT\s*=", re.
 
 
 def _load_docs_gate():
-    """`scripts/check-docs.py`, for its tracked-file enumeration."""
-    spec = importlib.util.spec_from_file_location("_docs_gate_for_surface", REPO_ROOT / "scripts" / "check-docs.py")
+    """`scripts/gates/check-docs.py`, for its tracked-file enumeration."""
+    spec = importlib.util.spec_from_file_location(
+        "_docs_gate_for_surface", REPO_ROOT / "scripts" / "gates" / "check-docs.py"
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -85,7 +87,7 @@ def _code_strings(tree: ast.AST) -> list[str]:
     """Every string constant except docstrings.
 
     Docstrings are excluded because prose cites paths constantly — a test that
-    merely *mentions* `scripts/check-extension-docs.py` in its module docstring
+    merely *mentions* `scripts/gates/check-extension-docs.py` in its module docstring
     is not reading a doc, and flagging it would train people to route around
     this gate.  Comments never reach the AST at all.
     """
@@ -293,4 +295,4 @@ class TestTheRulesActuallyFire:
             "vtsearch.achievements_catalog",
         }
         # Scripts are loaded by path, never imported by a dotted name.
-        assert _reference_tokens("scripts/check-docs.py") == {"scripts/check-docs.py"}
+        assert _reference_tokens("scripts/gates/check-docs.py") == {"scripts/gates/check-docs.py"}
