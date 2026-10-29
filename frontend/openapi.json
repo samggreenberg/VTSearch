@@ -1920,6 +1920,10 @@
           "name": {
             "type": "string"
           },
+          "num_dropped": {
+            "description": "How many items the dataset lost because they had no vector: an embedder could not read them, or they were missing a vector the rest of the dataset has. The stats endpoint names them.",
+            "type": "integer"
+          },
           "num_dupes": {
             "description": "How many items were collapsed as near-duplicates.",
             "type": "integer"
@@ -2091,6 +2095,13 @@
           "created_by": {
             "type": "string"
           },
+          "dropped_groups": {
+            "description": "The left-out items grouped by reason, commonest first; empty when nothing was dropped (or the dataset predates the record).",
+            "items": {
+              "$ref": "#/components/schemas/DroppedItemsGroup"
+            },
+            "type": "array"
+          },
           "embedder": {
             "type": "string"
           },
@@ -2116,6 +2127,10 @@
           "name": {
             "type": "string"
           },
+          "num_dropped": {
+            "description": "How many items the dataset lost because they had no vector; see ``dropped_groups``.",
+            "type": "integer"
+          },
           "num_dupes": {
             "type": "integer"
           },
@@ -2140,10 +2155,12 @@
           "clipper",
           "coverage_atlas",
           "created_by",
+          "dropped_groups",
           "embedder",
           "file_type_counts",
           "media_type",
           "name",
+          "num_dropped",
           "num_dupes",
           "num_items",
           "origin",
@@ -3380,6 +3397,32 @@
         "required": [
           "label",
           "url"
+        ],
+        "type": "object"
+      },
+      "DroppedItemsGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "How many items were dropped for this reason; exact even when ``items`` is cut.",
+            "type": "integer"
+          },
+          "items": {
+            "description": "The dropped items' names (file name, plus where in the file for a clip). The names a dataset keeps are capped across all its groups, commonest reason first, so this can be shorter than ``count``.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "Why these items have no vector.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "items",
+          "reason"
         ],
         "type": "object"
       },

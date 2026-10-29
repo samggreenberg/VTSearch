@@ -87,7 +87,17 @@
         </td>
       }
       @case ('num_items') {
-        <td>{{ dataset().num_items != null ? (dataset().num_items | number) : '-' }}</td>
+        <td>
+          {{ dataset().num_items != null ? (dataset().num_items | number) : '-' }}
+          @if (dataset().num_dropped > 0) {
+            <button
+              type="button"
+              class="badge-warning dropped-badge"
+              (click)="onDroppedClick($event)"
+              [title]="dataset().num_dropped + ' item(s) were left out of this dataset because they had no vector. Open Stats to see which.'"
+            >{{ dataset().num_dropped | number }} dropped</button>
+          }
+        </td>
       }
       @case ('created_at') {
         <td>{{ formatDate(dataset().created_at) }}</td>

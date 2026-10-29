@@ -35,6 +35,8 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.datasets.load_pipeline import _warmup_embedder_async
 from vtscore.datasets.loader import load_dataset_from_pickle
+from vtscore.datasets.stages.finalize import DroppedGroup, drop_incomplete_medias, merge_dropped_groups
+from vtscore.datasets.stages.registry import resave_registered_dataset
 from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
     begin_load as _reg_begin_load,
@@ -110,6 +112,7 @@ def list_registered_datasets():
         ds_id = entry["id"]
         entry["loaded"] = ds_id in loaded_ids
         entry.setdefault("num_dupes", 0)
+        entry.setdefault("num_dropped", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
         entry.setdefault("import_group", None)
@@ -143,6 +146,44 @@ def list_registered_datasets():
                 except KeyError:
                     pass  # keep raw name if clipper not found
     return {"datasets": entries}
+
+
+def _save_load_repair(dataset_id: str, entry: dict, ctx: DatasetContext, repaired: list[DroppedGroup]) -> None:
+    """Keep a repair :func:`drop_incomplete_medias` made while loading, and say so.
+
+    The dataset's file is rewritten without the removed items, so the repair
+    happens once; only when that write lands are the items added to the
+    entry's dropped list, since a failed write means the next load removes
+    them again and would list them twice.  A warning toast names them either
+    way.
+    """
+    from vtscore.concurrency.notifications import notify
+
+    n_removed = sum(g["count"] for g in repaired)
+    try:
+        resave_registered_dataset(entry, ctx.medias, ctx.coverage_atlas)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Could not save dataset %s after removing incomplete media", dataset_id)
+        outcome = "Saving the repaired dataset failed, so they will be removed again on its next load."
+    else:
+        recorded = (_reg_get(dataset_id) or entry).get("dropped_groups") or []
+        groups = merge_dropped_groups(recorded, repaired)
+        _reg_update(dataset_id, dropped_groups=groups, num_dropped=sum(g["count"] for g in groups))
+        outcome = "The dataset was saved without them; its Stats window lists them."
+    items = [f"{item} — {g['reason']}" if len(repaired) > 1 else item for g in repaired for item in g["items"]]
+    reasons = " ".join(f"{g['reason']} ({g['count']:,} item(s))." for g in repaired)
+    notify(
+        f"Removed {n_removed} item(s) missing a vector",
+        level="warning",
+        detail=(
+            f"{entry.get('name', dataset_id)}: {n_removed:,} item(s) had no vector in one of the dataset's "
+            f"spaces, which kept it from being browsed, sorted or trained. {reasons} {outcome}"
+        ),
+        items=items,
+        source="Dataset load",
+    )
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
@@ -267,6 +308,12 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
                 tracker.check_cancelled()
 
+                # A dataset saved with an item missing one of its spaces'
+                # vectors cannot be browsed, sorted or trained (#3798): remove
+                # those items now, and rewrite the file below once the atlas is
+                # settled, so this happens on one load only.
+                repaired = drop_incomplete_medias(ctx.medias)
+
                 # Exact-MD5 dedup is part of loading (step 1): the pickle was
                 # already deduped at import, so on reload this is a near-instant
                 # no-op — keeping it out of step 2 stops it from pre-filling the
@@ -313,6 +360,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # bar reaches 100% cleanly instead of stalling at the step-1
                 # boundary when the tree restored without emitting any progress.
                 tracker.update("loading", "Finalizing…", current=1, total=1, step=2, total_steps=_LOAD_STEPS)
+                if repaired:
+                    # Before the context is published, so nothing else can be
+                    # writing to the file (a Browse layout) while it is replaced.
+                    tracker.update(
+                        "loading", "Saving the repaired dataset…", current=1, total=1, step=2, total_steps=_LOAD_STEPS
+                    )
+                    _save_load_repair(dataset_id, entry, ctx, repaired)
                 # Publish the fully-populated context, THEN flip the loaded flag,
                 # so there is never a moment where _loaded_ids says "loaded" but
                 # the context store lacks it (or holds a half-filled one).
@@ -779,6 +833,10 @@ def get_dataset_stats(dataset_id: str):
         "created_by": entry.get("created_by", ""),
         "readers": entry.get("readers") or [],
         "num_dupes": entry.get("num_dupes", 0),
+        # What the import left out for want of a vector (#3798): kept on the
+        # entry because the toast that announced it does not survive a reload.
+        "num_dropped": entry.get("num_dropped", 0),
+        "dropped_groups": entry.get("dropped_groups") or [],
         "file_type_counts": _repaired_file_type_counts(dataset_id, entry.get("file_type_counts") or {}),
         "ingest_started_at": entry.get("ingest_started_at"),
         "ingest_finished_at": entry.get("ingest_finished_at"),

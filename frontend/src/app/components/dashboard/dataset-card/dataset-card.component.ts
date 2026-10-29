@@ -185,6 +185,12 @@ export class DatasetCardComponent {
     this.contextMenuOpen = false;
   }
 
+  /** The Items cell's "N dropped" badge opens the Stats window, which lists them. */
+  onDroppedClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.stats.emit();
+  }
+
   confirmRename(): void {
     const trimmed = this.editName.trim();
     if (trimmed && trimmed !== this.dataset().name) {
