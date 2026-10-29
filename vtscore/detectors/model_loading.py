@@ -146,7 +146,7 @@ def resolve_or_train_detector(
     patch under it, floods a Bad element's patch rows as negatives, and
     calibrates per bag.  Returns ``(None, _, diag)`` when training is not
     possible; *diag* is
-    :func:`~vtscore.detectors.labelset_training.labelset_resolution_report`.
+    :func:`~vtscore.detectors.labelset_matrix.labelset_resolution_report`.
 
     **The head this returns is a MaxPatch head on a patch dataset**, so its
     callers score it through the ordinary max-pooled

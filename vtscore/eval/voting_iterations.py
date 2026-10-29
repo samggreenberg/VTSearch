@@ -3130,7 +3130,7 @@ def _fits_weigh_hard_views(fn: Any) -> Any:
     """Run *fn* (the session) with every head fit weighing a hard-view face's Good less (#5413).
 
     The app names its voted hard-view Goods to the fit
-    (:func:`vtscore.detectors.labelset_training.hard_view_good_vectors`); a session
+    (:func:`vtscore.detectors.labelset_matrix.hard_view_good_vectors`); a session
     names every hard-view face of its pool, which is the same rule, since only a
     voted Good is ever fitted on and :func:`~vtscore.training.svm_prior.hard_view_good_weights`
     weighs Goods alone.  A pool with no Face Quality verdicts names none.

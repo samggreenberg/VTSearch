@@ -833,7 +833,7 @@ def pool_box_from_media(
 
     Shared by the in-dataset vote path (:func:`_training_vec_for_vote`) and
     the cross-dataset labelset path
-    (:func:`vtscore.detectors.labelset_training._resolve_uncached_embedding`).
+    (:func:`vtscore.detectors.labelset_embeddings._resolve_uncached_embedding`).
     """
     if region_box is None:
         return None
