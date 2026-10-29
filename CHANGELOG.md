@@ -31,6 +31,16 @@ what is on `dev` but not yet on `main`; each release dates that section
   `max_results:`. It cannot be combined with `--resume`. See
   [`docs/CLI.md`](docs/CLI.md#large-datasets-chunking-and-streaming).
 
+### Changed
+
+- **Server log lines carry the new module names** (issue #5398). The loose top-level modules of `vtsearch/` moved
+  into `runtime/`, `cli/`, `openapi/` and `settings/`, and each logs under its module's name, so a filter or alert
+  keyed on a logger name needs the new one: the slow-request and request-phase lines that came from `vtsearch.hooks`
+  now come from `vtsearch.runtime.request_hooks`, and `vtsearch.autofind`, `vtsearch.import_hooks`,
+  `vtsearch.diagnose` and `vtsearch.settings_store` are `vtsearch.runtime.autofind`, `vtsearch.runtime.import_hooks`,
+  `vtsearch.runtime.diagnose` and `vtsearch.settings.store`. The cuML fallback warning moved from
+  `vtscore.gpu_backends` to `vtscore.config.gpu_backends`. Nothing else an operator sees changes.
+
 ### Fixed
 
 - **Send by Email shows which hits are Good and which are Bad** (issue #5382). A Find Results export of **Both**

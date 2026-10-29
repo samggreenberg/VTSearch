@@ -21,7 +21,7 @@ instead, since every commit on `dev` is effectively a new app release.)
   through either name is the one the library uses. `cuml_enabled`, `umap_fit_transform` and
   `kmeans_fit_predict` are also re-exported from `vtscore.config`, which stays numpy-free: the two fits
   import numpy when called. A test that stubs `cuml_enabled` for the fits patches
-  `vtscore.config.gpu_backends`. See `packages/utils.md`, `config.md` and `concurrency.md`; the
+  `vtscore.config.gpu_backends`, and the cuML fallback warning logs under that name. See `packages/utils.md`, `config.md` and `concurrency.md`; the
   `packages/runtime-modules.md` page is gone.
 
 - **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`

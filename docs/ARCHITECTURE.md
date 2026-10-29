@@ -174,14 +174,16 @@ VTSearch/
 │   └── docs/               The library's own doc set
 │
 ├── vtsearch/               Flask app tier (imports Flask; not library-safe)
-│   ├── hooks.py            before/after_request: user resolution, auth, dataset + detector binding
+│   ├── runtime/            What the server runs outside a route: request_hooks.py
+│   │                       (before/after_request: user resolution, auth, dataset + detector
+│   │                       binding), AutoFind runs, the admin's import hooks, context-carrying
+│   │                       threads, logging, the diagnostic preset, thread counts
 │   ├── errors.py           Error handlers + the one JSON error envelope
-│   ├── settings*.py        Two-tier settings; settings_models.py is the source of truth for
-│   │                       types, defaults and ranges
-│   ├── admin_overrides.py  Process-level admin overrides: one descriptor per knob (CLI flag,
-│   │                       env var, validator, /api/settings key)
-│   ├── cli_main.py         `python app.py` argparse + dispatch
-│   ├── autofind.py         Runs a user's AutoFind detectors on a dataset
+│   ├── settings/           Two-tier settings; models.py is the source of truth for types,
+│   │                       defaults and ranges, admin_overrides.py declares one descriptor per
+│   │                       admin override (CLI flag, env var, validator, /api/settings key)
+│   ├── cli/                `python app.py`: argparse + dispatch (main.py), the port preflight
+│   ├── openapi/            OpenAPI spec post-processing (operationIds for the generated client)
 │   ├── auth/               Flask-side login providers, the g.user resolver, session-secret checks
 │   ├── state/, state_proxies.py  App-side state shim and the active-context proxies
 │   ├── shim/               Flask glue: context resolvers, persistence hooks, achievement
