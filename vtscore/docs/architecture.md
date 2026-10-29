@@ -318,13 +318,9 @@ package has a guide in [`packages/`](README.md#package-reference).
 ```
 vtscore/
 ├── __init__.py                 # __version__ (manual semver)
-├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables
+├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables, cuML routing
 ├── cli/                        # autodetect CLI, one module per stage: entry points, YAML pipeline, text/NDJSON progress
-├── io.py                       # server-file JSON read + atomic-write helpers for plugins
-├── gpu_backends.py             # optional cuML routing
-├── single_instance.py          # the port lock
-├── host_seams.py               # snapshot/restore of every host hook (for tests)
-├── achievements_hooks.py       # no-op event hook the app fills in
+├── host/                       # the no-op achievement hook the app fills in; snapshot/restore of every host hook (for tests)
 ├── datasets/                   # origins, labelsets, loaders, registry, split, load pipeline
 │   ├── importers/              # DatasetImporter family (IMPORTER sentinel, one sub-package each)
 │   ├── sources/                # MediaSource family (SOURCE sentinel, one flat module each)
@@ -348,9 +344,9 @@ vtscore/
 ├── projection/                 # VTSBrowse UMAP layout, tile pyramid, signposts
 ├── timing/                     # per-step weights behind progress bars
 ├── sync/                       # SyncSource[L, S] ABC
-├── concurrency/                # namespace package: async jobs, memory budget, progress
+├── concurrency/                # namespace package: async jobs, memory budget, progress, the port lock
 ├── security/                   # namespace package: path / URL validation, safe pickle, login
-├── utils/                      # hit dicts, hashing, score sanitisation, synthetic media
+├── utils/                      # hit dicts, hashing, score sanitisation, plugin file I/O, synthetic media
 └── docs/                       # this directory
 ```
 
@@ -365,7 +361,7 @@ is the authority on where to import it from.
 
 | Package | How to import |
 |---------|---------------|
-| `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. |
+| `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. (`vtscore.gpu_backends` is a deprecated alias of `vtscore.config.gpu_backends`.) |
 | `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. Media sources: `vtscore.datasets.sources` (`MediaSource`, `MediaItem`, `get_source_for_origin`, `list_media_sources`; `FetchedItem` is in `vtscore.datasets.sources.base`). |
 | `vtscore.datasource_importers` | `DataSourceImporter`, `FetchedMediaItem`, `get_datasource_importer`, `list_datasource_importers`. |
 | `vtscore.seed_importers` | `SeedImporter`, `SeedMediaItem`, `get_seed_importer`, `list_seed_importers`. |
@@ -382,10 +378,11 @@ is the authority on where to import it from.
 | `vtscore.coverage` | `CoverageAtlas` and its constants. |
 | `vtscore.projection` / `vtscore.timing` | Both re-export their public surface from `__init__` (see [packages/projection.md](packages/projection.md), [packages/timing.md](packages/timing.md)). |
 | `vtscore.sync` | `SyncSource`. |
-| `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
+| `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`, `vtscore.concurrency.single_instance.acquire` (`vtscore.single_instance` is a deprecated alias of that last module). |
 | `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
-| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
+| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.io`, `vtscore.utils.scores`, `vtscore.utils.synthetic` (`vtscore.io` is a deprecated alias of `vtscore.utils.io`). |
 | `vtscore.cli` | The entry points: `autodetect_main` and its three siblings, `import_labels_into_detector`, `DetectorNotFoundError`. The stages are submodules: `vtscore.cli.pipeline`, `vtscore.cli.progress`, `vtscore.cli.resume`, … (`vtscore.cli_pipeline`, `cli_progress` and `cli_resume` are deprecated aliases of the first three). |
+| `vtscore.host` | **`__init__` is a docstring only - no re-exports.** `vtscore.host.achievements.register_achievement_recorder` / `record_achievement`; `vtscore.host.seams.capture_host_seams` / `restore_host_seams` (`vtscore.achievements_hooks` and `vtscore.host_seams` are deprecated aliases of the two). |
 
 ## Dependency direction
 
@@ -396,7 +393,7 @@ never the reverse.
 ┌─────────────────────────────────────────────┐
 │  vtsearch/  (Flask app)                     │
 │  ├── routes/                                │
-│  ├── settings.py                            │
+│  ├── settings/                              │
 │  ├── auth/                                  │
 │  ├── shim/   ← installs hooks into vtscore  │
 │  └── …                                      │
@@ -412,12 +409,12 @@ never the reverse.
 │  ├── datasource_importers / seed_importers  │
 │  ├── coverage / projection / timing         │
 │  ├── concurrency / security / utils         │
-│  └── cli / cli_pipeline / cli_progress      │
+│  └── cli / host                             │
 └─────────────────────────────────────────────┘
 ```
 
 The app uses six categories of hooks to inject app-side behaviour into
-the library without the library knowing (`vtscore/host_seams.py` keeps the
+the library without the library knowing (`vtscore/host/seams.py` keeps the
 complete list of host seams; `register_plugin_family` is deliberately not
 one of them, since the library registers its own families through it too):
 
@@ -447,7 +444,7 @@ one of them, since the library registers its own families through it too):
    [`packages/security.md`](packages/security.md)). Only the providers that
    read `flask.session` / request headers stay app-side in `vtsearch/auth/`.
 5. **Achievement recorders** -
-   `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
+   `vtscore.host.achievements.register_achievement_recorder(event, fn)`
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
    library raises. The counters are per-user settings state, so the
    recording itself lives in `vtsearch.achievements`. Wired in

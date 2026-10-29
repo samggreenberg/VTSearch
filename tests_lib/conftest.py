@@ -186,7 +186,7 @@ _test_medias_snapshot = {k: dict(v) for k, v in get_active_context().medias.item
 _patch_embed_audio.stop()
 
 # Record the host seams this conftest has just wired, so the per-test reset can
-# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+# put them back after a test installs its own (see :mod:`vtscore.host.seams`).
 capture_startup_host_seams()
 
 freeze_startup_heap()

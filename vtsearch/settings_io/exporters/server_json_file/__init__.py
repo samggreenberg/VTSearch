@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtscore.io import atomic_write_json
+from vtscore.utils.io import atomic_write_json
 from vtsearch.settings_io.exporters.base import SettingsExporter, PluginField
 
 

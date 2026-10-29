@@ -366,7 +366,7 @@ modules on the right.
 | `vtscore/projection/` | No | No (params) | **Yes**: numpy + UMAP over an (N, d) matrix |
 | `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
 | `vtscore/config/` | No | No | **Yes**: just constants |
-| `vtscore/io.py` + `gpu_backends.py` | No | No | **Yes**: file I/O / backend selection |
+| `vtscore/utils/io.py` + `gpu_backends.py` | No | No | **Yes**: file I/O / backend selection |
 | `vtscore/security/login.py` | No | No | **Yes**: `LoginProvider` ABC + `DefaultLoginProvider` |
 | `vtsearch/auth/` | Lazy (`session`, `g`) | No | Partially: the Flask-session providers need Flask |
 | `vtsearch/routes/` | **Yes** | **Yes** | No: Flask-specific |

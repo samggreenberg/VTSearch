@@ -1750,7 +1750,7 @@ checkpoint (beside the path `resumable_stream_path()` returns); the exporter
 keeps its destination in step with it:
 
 ```python
-from vtscore.io import commit_write_stream, resumable_write_stream
+from vtscore.utils.io import commit_write_stream, resumable_write_stream
 
 def resumable_stream_path(self, field_values):
     return str(field_values["filepath"])

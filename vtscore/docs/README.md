@@ -40,7 +40,7 @@ whose `__init__.py` re-exports nothing.
 
 | Package | Purpose | Doc |
 |---------|---------|-----|
-| `vtscore.config` | `CoreConfig` dataclass + environment-driven constants | [packages/config.md](packages/config.md) |
+| `vtscore.config` | `CoreConfig` dataclass + environment-driven constants, cuML routing for UMAP / k-means | [packages/config.md](packages/config.md) |
 | `vtscore.media` | `MediaType`, embedder, clipper + cleaner ABCs | [packages/media.md](packages/media.md) |
 | `vtscore.embedding` | Embedder loaders, torch runtime, cached `(N, D)` matrix | [packages/embedding.md](packages/embedding.md) |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources | [packages/datasets.md](packages/datasets.md) |
@@ -56,13 +56,13 @@ whose `__init__.py` re-exports nothing.
 | `vtscore.state` | `DatasetContext`, `DetectorContext`, vote / click ops | [packages/state.md](packages/state.md) |
 | `vtscore.coverage` | Coverage Atlas: hierarchical partition, evidence channels, typicality | [packages/coverage.md](packages/coverage.md) |
 | `vtscore.sync` | `SyncSource[L,S]` generic ABC | [packages/sync.md](packages/sync.md) |
-| `vtscore.concurrency` | Async jobs, memory budget, long-running progress | [packages/concurrency.md](packages/concurrency.md) |
+| `vtscore.concurrency` | Async jobs, memory budget, long-running progress, the single-instance port lock | [packages/concurrency.md](packages/concurrency.md) |
 | `vtscore.security` | Path / URL validation, allowlist pickle loader, the `LoginProvider` ABC | [packages/security.md](packages/security.md) |
 | `vtscore.projection` | VTSBrowse: UMAP layout, hex-tile pyramid, region signposts | [packages/projection.md](packages/projection.md) |
 | `vtscore.timing` | Shipped per-step weights behind every progress bar | [packages/timing.md](packages/timing.md) |
-| `vtscore.utils` | Hit dicts, content hashes, score sanitisation, synthetic media | [packages/utils.md](packages/utils.md) |
+| `vtscore.utils` | Hit dicts, content hashes, score sanitisation, server-side file I/O, synthetic media | [packages/utils.md](packages/utils.md) |
 | `vtscore.cli` | Flask-free CLI entry points (autodetect, pipeline, progress) | [packages/cli.md](packages/cli.md) |
-| `vtscore.io`, `.gpu_backends`, `.single_instance` | Top-level runtime modules: file I/O, cuML routing, the port lock | [packages/runtime-modules.md](packages/runtime-modules.md) |
+| `vtscore.host` | The host seams: achievement recorders, and the snapshot / restore of every seam | [architecture.md](architecture.md#dependency-direction), [integration.md](integration.md#putting-the-seams-back-in-tests) |
 
 ## Extending vtscore
 

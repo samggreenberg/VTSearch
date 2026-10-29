@@ -1,52 +1,28 @@
-"""Achievement-recording hook seam (app-side wiring; library default = no-op).
+"""Deprecated alias for :mod:`vtscore.host.achievements`.
 
-The achievement system itself is app-tier: it lives in
-:mod:`vtsearch.achievements` and persists counters into the current
-user's ``vtsearch.settings`` file.  A handful of library-tier events are
-worth crediting though - a vote landing, a dataset finishing its load, a
-detector import, a find run - and those events are raised from inside
-:mod:`vtscore`.
-
-Rather than have the library import the app (an inverted dependency that
-also drags Flask in at call time), each event is dispatched through a
-registry of **recorders**.  ``vtsearch/shim/register_app_achievement_recorders()``
-installs one per event at app startup; library-only callers leave the
-registry empty and :func:`record_achievement` is a no-op.
-
-This mirrors :func:`vtscore.state.register_setting_persister`.
+The loose top-level modules of ``vtscore`` moved into packages (#5398), and
+this one moved to :mod:`vtscore.host.achievements`.
+``import vtscore.achievements_hooks`` still works and hands back that very
+module, not a copy - so its state is shared - but it warns.  Import from
+:mod:`vtscore.host.achievements` instead.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+import sys
+import warnings
+from typing import TYPE_CHECKING
 
-#: Events the app may install a recorder for.  Registering an unknown
-#: event is a programming error (typo in the shim wiring), so it raises
-#: rather than silently never firing.
-KNOWN_EVENTS: frozenset[str] = frozenset({"vote", "dataset_load", "detector_import", "find"})
+from vtscore.host import achievements as _achievements
 
-_recorders: dict[str, Callable[..., Any]] = {}
+if TYPE_CHECKING:
+    from vtscore.host.achievements import *  # noqa: F403
 
+warnings.warn(
+    "vtscore.achievements_hooks has moved to vtscore.host.achievements; import from there instead. "
+    "This alias will be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-def register_achievement_recorder(event: str, fn: Callable[..., Any]) -> None:
-    """Install the app-side recorder for *event*.
-
-    Called by ``vtsearch/shim`` at app startup.  *event* must be one of
-    :data:`KNOWN_EVENTS`.
-    """
-    if event not in KNOWN_EVENTS:
-        raise ValueError(f"Unknown achievement event {event!r}; known events: {sorted(KNOWN_EVENTS)}")
-    _recorders[event] = fn
-
-
-def record_achievement(event: str, *args: Any, **kwargs: Any) -> None:
-    """Credit *event* via the registered recorder, or do nothing.
-
-    Arguments are forwarded verbatim to the recorder, so each event's
-    signature is whatever the matching ``vtsearch.achievements.record_*``
-    function takes.
-    """
-    fn = _recorders.get(event)
-    if fn is not None:
-        fn(*args, **kwargs)
+sys.modules[__name__] = _achievements

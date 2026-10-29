@@ -18,7 +18,7 @@
 # cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means
 # (~20-100x on large datasets); VTSearch auto-detects it at runtime and falls
 # back to the CPU umap-learn / scikit-learn paths when it's absent (see
-# vtscore/gpu_backends.py). `scripts/install.sh` installs it BY DEFAULT on GPU
+# vtscore/config/gpu_backends.py). `scripts/install.sh` installs it BY DEFAULT on GPU
 # hosts, but as a separate best-effort step (it's a multi-gigabyte RAPIDS stack
 # on a CUDA-major-pinned, separate index), so a failure there is non-fatal.
 #

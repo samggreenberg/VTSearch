@@ -315,10 +315,10 @@ def _record_vote_locked(count_streak: bool = True) -> None:
     *individual* hand-clicks).
 
     The achievement system is app-tier, so the credit goes through the
-    :mod:`vtscore.achievements_hooks` seam; with no app wired up this is a
+    :mod:`vtscore.host.achievements` seam; with no app wired up this is a
     no-op.
     """
-    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
+    from vtscore.host.achievements import record_achievement  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     record_achievement("vote", det_ctx.detector_id, media_type=det_ctx.media_type, count_streak=count_streak)

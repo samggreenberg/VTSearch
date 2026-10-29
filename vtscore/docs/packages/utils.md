@@ -7,12 +7,13 @@ There is a theme to what stays: each module is a **single chokepoint**
 for something that would otherwise be re-implemented at dozens of call
 sites and drift. One hit-dict shape, one place that declares MD5 as
 non-security, one non-finite score sentinel, one wording for the
-"AGPL extra not installed" error, one stat-free package-metadata walk.
+"AGPL extra not installed" error, one stat-free package-metadata walk, one atomic-write ritual.
 
 ## Contents
 
 | Module | Concern |
 |--------|---------|
+| `vtscore/utils/io.py` | Server-side file I/O for plugins: JSON reads, atomic and resumable writes, CSV-cell escaping, a cross-process file lock |
 | `vtscore/utils/hits.py` | `build_media_hit` - the scored-media hit-dict shape; `hit_custom_metadata` - the one filter for served importer metadata |
 | `vtscore/utils/hashing.py` | Content fingerprints (`content_md5`, `content_sha1`, `new_md5`, `file_md5`) |
 | `vtscore/utils/scores.py` | Non-finite score sanitisation, so a `NaN` logit can't produce invalid JSON |
@@ -396,6 +397,85 @@ def on_progress(status: str, message: str, current: int, total: int) -> None:
 generate_image_dataset(Path("synth"), count=8, on_progress=on_progress)
 ```
 
+## `vtscore.utils.io` - server-side file I/O
+
+Shared file I/O for plugins that read or write server-side files: one
+place for the read-and-report-errors dance and for the tmp-file + `fsync`
++ `os.replace` ritual, so a crash mid-write never leaves a half-written
+file. It was the top-level `vtscore/io.py` until #5398; that name is now a
+deprecated alias of this module.
+
+```python
+def read_server_bytes(path, *, missing_ok: bool = False) -> bytes | None: ...
+def read_server_json(path, *, missing_ok: bool = False) -> Any: ...
+def atomic_write_text(path, text: str) -> None: ...
+def atomic_write_bytes(path, data: bytes) -> None: ...
+def atomic_write_json(path, obj, *, indent: int = 2) -> None: ...
+def sanitize_csv_cell(value: str) -> str: ...
+def desanitize_csv_cell(value: str) -> str: ...
+
+@contextmanager
+def atomic_write_stream(path, *, encoding="utf-8", newline="") -> Iterator[IO[str]]: ...
+
+@contextmanager
+def resumable_write_stream(path, position: int | None, *, encoding="utf-8", newline="") -> Iterator[IO[str]]: ...
+def commit_write_stream(f: IO[str]) -> int: ...
+
+@contextmanager
+def file_lock(path) -> Iterator[None]: ...
+```
+
+**Reads.** Every failure a caller-supplied path can produce - missing,
+not a file, unreadable, (for JSON) unparseable - is raised as
+`ValueError` with standard text, so a host can map it to a client error.
+`missing_ok=True` returns `None` for a missing file instead. These are
+not confinement checks; path confinement happens earlier, in
+[field normalization](plugins.md#field-value-normalization).
+`read_server_bytes` is public but not in `__all__`.
+
+**Writes.** The `atomic_write_*` helpers write a sibling tmp file,
+`fsync` it, and `os.replace` it over the destination.
+
+**Streaming writes.** `atomic_write_stream` is the same ritual for a writer
+that has no finished string to hand `atomic_write_text` - a `csv` writer fed
+from a generator, an NDJSON export written row by row. It yields the open
+handle, `fsync`s and renames on a clean exit, and unlinks the tmp file if the
+block raises, so an export that dies halfway through its record iterator
+leaves the destination untouched rather than half-written.
+
+**Resumable writes.** `resumable_write_stream` is the opposite trade, for an
+export a later run must be able to continue (`--stream-results --resume`):
+it writes *in place*, so what was written outlives the process.
+`commit_write_stream(f)` flushes and `fsync`s the handle and returns its byte
+length, which the writer records somewhere durable. Passing that offset back
+as `position` cuts the file back to it - dropping anything a killed run wrote
+after its last commit - and appends; `position=None` starts the file afresh.
+A file that is missing or shorter than `position` raises `ValueError`, since
+what was committed is then gone. A reader can see the file mid-run.
+
+**CSV cells.** `sanitize_csv_cell` prefixes a value starting with `=`,
+`+`, `-`, `@`, tab or carriage return with a single quote, so a label
+someone typed cannot execute as a formula when the export is opened in a
+spreadsheet. `desanitize_csv_cell` reverses it on re-import, stripping a leading
+apostrophe only when the next character is one the sanitiser would have
+escaped. One ambiguity is inherent to the scheme and unresolvable by the
+reader: a value that genuinely begins `'-foo` is indistinguishable from
+the sanitised form of `-foo`, and loses its apostrophe.
+
+**`file_lock` locks a sibling, not the file.** The lock is taken on
+`<path>.lock` rather than on the data file, because an atomic write
+replaces the data file's inode via `os.replace` - any fd held against
+the old inode would be locking a file nobody can reach any more. The
+sibling's inode is stable.
+
+It takes an in-process `threading.Lock` first and *then* the POSIX
+`flock`, so threads within one process serialise even where `flock` is
+unavailable. `flock` releases when the process exits, so a crash never
+leaves a stale lock. On Windows (no `fcntl`) only the in-process lock
+applies and cross-process protection degrades silently.
+
+---
+
 ## What's *not* here
 
 Things you might expect to find under `vtscore.utils` based on the
@@ -422,4 +502,6 @@ package they belong to.
 - [`exporters.md`](exporters.md#resultsexporter-abc) - the `find_results` payload and streamed `records` whose hits have that shape.
 - [`training.md`](training.md#decision-thresholds) - the threshold estimators that drop unscorable media with `scored_only` / `scored_mask` before fitting.
 - [`datasets.md`](datasets.md#what-you-load-into) - the `md5` every loader stamps with `content_md5` / `file_md5`; the built-in [`synthetic` importer](datasets.md#built-in-importers) wraps `vtscore.utils.synthetic`.
+- [`exporters.md`](exporters.md#writing-a-custom-exporter) and [`labels.md`](labels.md#built-in-label-importers) - the file exporters, label importers and JSON source that read and write through `vtscore.utils.io`.
+- [`detectors.md`](detectors.md#registry) and [`datasets.md`](datasets.md#on-disk-dataset-registry) - the two registries whose index files are written with `atomic_write_json` under `file_lock`.
 - [`docs/DEPLOYMENT.md`](../../../docs/DEPLOYMENT.md#installing-without-the-agpl-dependencies) - the install that makes the `optional_deps` errors appear: what is unavailable without the AGPL extra.

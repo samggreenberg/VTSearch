@@ -113,7 +113,7 @@ class TestVtscoreDoesNotImportVtsearch:
             "vtscore must not import vtsearch (the dependency runs the other way).\n"
             + "\n".join(offenders)
             + "\n\nRoute app-tier behaviour through a registered hook instead - see "
-            "vtscore/state/current_user.py and vtscore/achievements_hooks.py for the pattern."
+            "vtscore/state/current_user.py and vtscore/host/achievements.py for the pattern."
         )
 
     def test_allowlist_has_no_stale_entries(self):

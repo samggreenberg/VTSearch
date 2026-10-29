@@ -182,14 +182,14 @@ apps.
 ### Putting the seams back in tests
 
 Every seam above is a process global, so a test that installs one leaks it
-into every test that follows in the same process. `vtscore.host_seams`
+into every test that follows in the same process. `vtscore.host.seams`
 snapshots the whole set so your test harness doesn't have to know which
 private module global backs each one (it covers Hooks 1-3 plus the
 current-user resolver and the other host seams listed in
 [architecture.md](architecture.md#dependency-direction)):
 
 ```python
-from vtscore.host_seams import capture_host_seams, restore_host_seams
+from vtscore.host.seams import capture_host_seams, restore_host_seams
 
 # Once, after your app has finished installing its seams.
 _STARTUP_SEAMS = capture_host_seams()

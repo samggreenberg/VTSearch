@@ -106,7 +106,7 @@ init_medias()
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 # Record the host seams this conftest has just wired, so the per-test reset can
-# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+# put them back after a test installs its own (see :mod:`vtscore.host.seams`).
 capture_startup_host_seams()
 
 freeze_startup_heap()
@@ -129,7 +129,7 @@ _stub_embedding_models = make_stub_embedding_models_fixture(_EMBED_AUDIO_FILE_TA
 # that collects tests/core/test_frontend.py would build while workers running
 # tests/api/test_dashboard.py read static/ before it exists (and several
 # workers could kick off concurrent ~16s npm builds).  A cross-process flock
-# (vtscore.io.file_lock) elects one builder; the others block until the build
+# (vtscore.utils.io.file_lock) elects one builder; the others block until the build
 # finishes, then see the bundle and return.
 # ---------------------------------------------------------------------------
 
@@ -164,7 +164,7 @@ def angular_bundle() -> None:
             "Run: cd frontend && npm install && npm run build:prod"
         )
 
-    from vtscore.io import file_lock
+    from vtscore.utils.io import file_lock
 
     # flock-based: releases automatically if the building process dies, so a
     # crashed builder can't wedge the other workers.

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.host_seams import HostSeams, restore_host_seams
+from vtscore.host.seams import HostSeams, restore_host_seams
 
 #: Training epochs for the whole test session (production default is 200; 30 is
 #: enough for the tiny epoch-trained heads to converge on the small test fixtures).
@@ -84,7 +84,7 @@ def capture_startup_host_seams() -> None:
     """
     global _startup_host_seams
 
-    from vtscore.host_seams import capture_host_seams
+    from vtscore.host.seams import capture_host_seams
 
     _startup_host_seams = capture_host_seams()
 

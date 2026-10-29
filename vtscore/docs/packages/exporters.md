@@ -165,7 +165,7 @@ A run with `--resume` writes through `export_cli_streaming_resumable()`
 instead, one list of hits per chunk plus a `StreamResume` naming where to
 pick up and how to commit progress, so an interrupted run can continue
 after its last completed chunk; `server_json_file` and `server_csv_file`
-implement it (with `vtscore.io.resumable_write_stream` and
+implement it (with `vtscore.utils.io.resumable_write_stream` and
 `commit_write_stream`), and `supports_resumable_streaming` is derived from
 overriding it. Neither is a payload kind. Every built-in that delivers a scored run streams
 both ways,
@@ -311,7 +311,7 @@ rather than shipping one from your own distribution:
   so there is no registration list to edit and no entry point to
   declare - the entry-point route in the guide is for out-of-tree
   distributions.
-- Write files through `vtscore.io.atomic_write_bytes` /
+- Write files through `vtscore.utils.io.atomic_write_bytes` /
   `atomic_write_text` - or `atomic_write_stream` when the exporter
   streams its rows - rather than hand-rolling the tmp-file +
   `os.replace` ritual, and default any path field under

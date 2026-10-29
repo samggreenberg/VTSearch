@@ -16,16 +16,16 @@ from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter, StreamResume
-from vtscore.io import atomic_write_json, atomic_write_stream, commit_write_stream, resumable_write_stream
+from vtscore.utils.io import atomic_write_json, atomic_write_stream, commit_write_stream, resumable_write_stream
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 
 
 # Re-export under the historical private name so any third-party exporter
 # that imported it directly keeps working.  New code should call
-# :func:`vtscore.io.atomic_write_text` or
-# :func:`vtscore.io.atomic_write_json` instead.
-from vtscore.io import atomic_write_text as _atomic_write_text  # noqa: E402, F401
+# :func:`vtscore.utils.io.atomic_write_text` or
+# :func:`vtscore.utils.io.atomic_write_json` instead.
+from vtscore.utils.io import atomic_write_text as _atomic_write_text  # noqa: E402, F401
 
 
 def _ndjson_meta(header: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +110,7 @@ class ServerJsonResultsExporter(ResultsExporter):
         The first line is a metadata object describing the run; every
         subsequent line is a single hit with its ``detector`` name merged in.
         Lines are flushed as they stream, so the full result set is never
-        held in memory.  :func:`~vtscore.io.atomic_write_stream` owns the
+        held in memory.  :func:`~vtscore.utils.io.atomic_write_stream` owns the
         tmp-file/``fsync``/rename ritual, so a crash mid-run cannot leave a
         half-written file at the destination and two concurrent exports to the
         same path can't clobber each other's temp file.

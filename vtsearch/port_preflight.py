@@ -140,7 +140,7 @@ def _acquire_single_instance_lock(port: int):
     load, so the duplicate dies in milliseconds. Returns a handle the caller
     must hold for the process lifetime.
     """
-    from vtscore.single_instance import AlreadyRunningError, acquire
+    from vtscore.concurrency.single_instance import AlreadyRunningError, acquire
 
     try:
         return acquire(port)

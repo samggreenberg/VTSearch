@@ -808,10 +808,10 @@ class ResultsExporter(PluginBase):
           ``resume.commit(position)``.  Never commit a chunk only partly
           written: the run then resumes after it and the rest is lost.
 
-        Write in place rather than through :func:`~vtscore.io.atomic_write_stream`,
+        Write in place rather than through :func:`~vtscore.utils.io.atomic_write_stream`,
         so what was committed outlives the process.
-        :func:`~vtscore.io.resumable_write_stream` and
-        :func:`~vtscore.io.commit_write_stream` do both halves for a text file,
+        :func:`~vtscore.utils.io.resumable_write_stream` and
+        :func:`~vtscore.utils.io.commit_write_stream` do both halves for a text file,
         with the position a byte offset.
 
         Args:
