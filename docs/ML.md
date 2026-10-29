@@ -222,7 +222,7 @@ The **GMM-based threshold** fits a 2-component Gaussian Mixture Model to a score
 
 | Site | What the seed decides | Does it move the detector? |
 |---|---|---|
-| `CALIBRATION_SPLIT_SEED` (`vtscore/training/thresholds/conformal.py`) | **which labels land on the Calibrate side** of each fold | **Yes.** Different splits leave different held-out scores, so the conformal quantile cuts somewhere else. This is the pipeline's one genuine draw. |
+| `CALIBRATION_SPLIT_SEED` (`vtscore/training/thresholds/fold_orderings.py`) | **which labels land on the Calibrate side** of each fold | **Yes.** Different splits leave different held-out scores, so the conformal quantile cuts somewhere else. This is the pipeline's one genuine draw. |
 | `fit_linear_svm_prior_head(seed=…)` → `LinearSVC(random_state=…)` | nothing: the shipped head is solved in liblinear's primal, which reads no seed | No. A convex solve with a unique optimum. (The plain SVM arm, `fit_linear_svm_head`, lets scikit-learn pick, which is the dual while votes are fewer than dimensions; there the seed permutes the path to the optimum, not the answer.) |
 | the `gmm_fit_array` subsample | which scores are kept above `_GMM_MAX_SAMPLES` | Rarely. A large uniform draw from a distribution whose quantiles are the only thing read off it. (The mixture fit itself has no seed since #3585: a deterministic 2-means init and our own EM, not `GaussianMixture(random_state=42)`.) |
 
@@ -486,7 +486,7 @@ report = domain_shift_report(np.stack(list(train_vectors.values())), np.stack(li
 - `vtscore/coverage/atlas.py`: `CoverageAtlas`
 - `vtscore/coverage/domain_shift.py`: `domain_shift_report`, `typicality_pvalues` (split-conformal kNN)
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
-- `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
+- `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold` and `conformal_threshold` (`conformal.py`), `compute_fold_orderings` (`fold_orderings.py`), `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training; its stages are `training_snap.py` (the embedding space), `training_scoring.py` (scoring a snapshot), `training_votes.py` (a vote's training rows) and `training_calibration.py` (the fold context, the split and the line)
 - `vtscore/detectors/label_quota.py`, `centroid_head.py`, `query_head.py`: the label quota, and the Goods' centroid and typed query's heads under it
 - `vtscore/training/thresholds/labels_line.py`, `spot_check.py`, `line_test.py`: the labels line, the spot check and Tune's test sample (reference: [`vtscore/docs/packages/training.md`](../vtscore/docs/packages/training.md)); the labels line draws on `class_model.py` (the labels' class model), `corpus_model.py` (the corpus fits and the cut) and `head_count.py` (the head's count line and Autopilot's cues)
