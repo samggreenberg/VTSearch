@@ -183,7 +183,7 @@ class TestAutofindDetectorsCLI:
         # The test fixture's medias have no clipper, so the detector's
         # sound_tiling(2.0) input_spec mismatches. It is kept (not skipped) and
         # its scoring info records the clipper to re-apply.
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         snap = dict(medias)
         trained = _load_and_train_detectors(["spec-mismatch"], "audio", snap)
@@ -295,7 +295,8 @@ class TestAutofindDetectorsCLI:
         dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["unreachable-tm"])
 
-        from vtscore.cli import _run_pipeline, _load_pickle_whole
+        from vtscore.cli.run import _run_pipeline
+        from vtscore.cli.sources import _load_pickle_whole
 
         with pytest.raises(ValueError) as exc:
             _run_pipeline(_load_pickle_whole(str(dataset_path)), settings_path=str(settings_path))
@@ -573,13 +574,13 @@ class TestLabelImportMediaType:
 
     @staticmethod
     def _resolve(det_name, spec, **kw):
-        from vtscore.cli import _label_import_media_type
+        from vtscore.cli.labels import _label_import_media_type
 
         kw.setdefault("create", True)
         return _label_import_media_type(det_name, spec, media_type_option="--detector-media-type", **kw)
 
     def test_pickle_metadata_supplies_it(self, client, tmp_path):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
         from vtscore.datasets.loader import export_dataset_to_file
 
         path = tmp_path / "typed.pkl"
@@ -587,20 +588,20 @@ class TestLabelImportMediaType:
         assert self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(path))) == "audio"
 
     def test_pickle_without_it_asks_for_the_flag(self, client, tmp_path):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         path = _make_dataset_file(tmp_path, medias)  # meta.json carries no media_type
         with pytest.raises(ValueError, match="--detector-media-type"):
             self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(path)))
 
     def test_missing_pickle_is_reported_as_missing(self, tmp_path):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         with pytest.raises(FileNotFoundError, match="Dataset file not found"):
             self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "nope.pkl")))
 
     def test_importer_field_supplies_it(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(
             kind="importer", importer_name="server_folder", field_values={"path": "/x", "media_type": "video"}
@@ -608,20 +609,20 @@ class TestLabelImportMediaType:
         assert self._resolve("New", spec) == "video"
 
     def test_importer_field_default_applies(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="importer", importer_name="server_folder", field_values={"path": "/x"})
         assert self._resolve("New", spec) == "audio"
 
     def test_importer_without_the_field_asks_for_the_flag(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
         with pytest.raises(ValueError, match="--detector-media-type"):
             self._resolve("New", spec)
 
     def test_explicit_media_type_wins(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(
             kind="importer", importer_name="server_folder", field_values={"path": "/x", "media_type": "video"}
@@ -629,20 +630,20 @@ class TestLabelImportMediaType:
         assert self._resolve("New", spec, media_type="image") == "image"
 
     def test_existing_detector_needs_none(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         _write_trainable_model("Existing", {"labels": []})
         spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
         assert self._resolve("Existing", spec) == ""
 
     def test_create_off_needs_none(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
         assert self._resolve("Missing", spec, create=False) == ""
 
     def test_unknown_explicit_media_type_rejected_even_for_existing_detector(self):
-        from vtscore.cli import _SourceSpec
+        from vtscore.cli.sources import _SourceSpec
 
         _write_trainable_model("Existing", {"labels": []})
         spec = _SourceSpec(kind="importer", importer_name="server_folder", field_values={"path": "/x"})

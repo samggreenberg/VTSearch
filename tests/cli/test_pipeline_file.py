@@ -135,13 +135,13 @@ def _trained_labelset(ext: str = "wav") -> dict:
 
 class TestLoadPipelineFile:
     def test_missing_file_raises_filenotfound(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         with pytest.raises(FileNotFoundError):
             load_pipeline_file(tmp_path / "nope.yaml")
 
     def test_non_mapping_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("- just\n- a\n- list\n")
@@ -149,7 +149,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_top_level_key_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("dataset: foo.pkl\nbogus_key: 1\n")
@@ -157,7 +157,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_neither_dataset_nor_importer_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("settings: settings.json\n")
@@ -165,7 +165,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_both_dataset_and_importer_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -180,7 +180,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_importer_name_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"importer": {"name": "no_such_importer"}}))
@@ -188,7 +188,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_exporter_name_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -203,7 +203,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_chunk_size_must_be_positive_int(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 0}))
@@ -211,7 +211,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_detectors_must_be_list_of_strings(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "detectors": "not-a-list"}))
@@ -219,7 +219,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_stream_results_requires_chunk_size(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "stream_results": True}))
@@ -227,7 +227,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_keep_negatives_requires_stream_results(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "keep_negatives": True}))
@@ -235,7 +235,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_as_labelset_requires_stream_results(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "as_labelset": True}))
@@ -243,7 +243,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_as_labelset_must_be_bool(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -255,7 +255,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_stream_results_must_be_bool(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": "yes"}))
@@ -263,7 +263,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_stream_results_and_keep_negatives_round_trip(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -285,7 +285,7 @@ class TestLoadPipelineFile:
         assert cfg["tempimport"] is True
 
     def test_resume_requires_stream_results(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "resume": True}))
@@ -293,7 +293,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_resume_refuses_a_labelset_stream(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "as_labelset": True, "resume": True}
@@ -302,7 +302,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_resume_must_be_bool(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "resume": "yes"}
@@ -311,7 +311,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_resume_round_trips(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "resume": True}
@@ -319,7 +319,7 @@ class TestLoadPipelineFile:
         assert load_pipeline_file(p)["resume"] is True
 
     def test_max_results_round_trips(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "max_results": 50}
@@ -327,7 +327,7 @@ class TestLoadPipelineFile:
         assert load_pipeline_file(p)["max_results"] == 50
 
     def test_max_results_defaults_to_none(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -337,7 +337,7 @@ class TestLoadPipelineFile:
 
     @pytest.mark.parametrize("value", [0, -1, True, "10", 2.5])
     def test_max_results_must_be_a_positive_integer(self, tmp_path, value):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "max_results": value}
@@ -346,7 +346,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_max_results_requires_stream_results(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "max_results": 5}))
@@ -354,7 +354,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_max_results_refuses_resume(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         flags = {"stream_results": True, "tempimport": True, "resume": True, "max_results": 5}
@@ -365,7 +365,7 @@ class TestLoadPipelineFile:
     def test_stream_results_requires_tempimport(self, tmp_path):
         """A streamed run never holds the whole dataset, so it cannot be the
         saved one (#4226): the file must say it is temporary."""
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True}))
@@ -373,7 +373,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_tempimport_must_be_bool(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "tempimport": "yes"}))
@@ -381,7 +381,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_tempimport_defaults_to_saving(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl"}))
@@ -390,7 +390,7 @@ class TestLoadPipelineFile:
     def test_import_labels_default_importer_requires_filepath(self, tmp_path):
         """The default ``server_json_file`` importer still needs a path, via
         either ``file:`` or ``importer.fields.filepath``."""
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "import_labels": {"detector": "d"}}))
@@ -398,7 +398,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_import_labels_flat_form_maps_file_to_filepath(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -421,7 +421,7 @@ class TestLoadPipelineFile:
     def test_import_labels_accepts_plugin_mapping(self, tmp_path):
         """``import_labels.importer`` takes the same ``{name, fields}`` shape
         as ``importer:`` / ``exporter:``."""
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -448,7 +448,7 @@ class TestLoadPipelineFile:
         """Issue #4174: a label importer whose fields are not a file path must
         not be forced to carry ``file:``."""
         import vtscore.labels.importers as li_mod
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         plugin = _FilelessLabelImporter()
         real_get = li_mod.get_label_importer
@@ -476,7 +476,7 @@ class TestLoadPipelineFile:
         }
 
     def test_import_labels_unknown_field_key_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -494,7 +494,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_import_labels_file_and_filepath_field_conflict(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -516,7 +516,7 @@ class TestLoadPipelineFile:
     def test_every_declared_plugin_field_is_accepted(self, tmp_path, family):
         """Every field a registered plugin declares is a legal YAML key for it,
         so no plugin field is unreachable from a pipeline file."""
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
         from vtscore.datasets.importers import list_importers
         from vtscore.exporters import list_exporters
         from vtscore.labels.importers import list_label_importers
@@ -545,7 +545,7 @@ class TestLoadPipelineFile:
     def test_unknown_importer_field_key_raises(self, tmp_path):
         """A typo in importer.fields surfaces at load time, like argparse
         rejects unknown CLI flags."""
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -562,7 +562,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_exporter_field_key_raises(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -577,7 +577,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_minimal_valid_config_round_trips(self, tmp_path):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "data/sounds.pkl"}))
@@ -600,7 +600,7 @@ class TestImporterOutputs:
     """``importer.outputs``: several datasets from the one importer run (#4707)."""
 
     def _load(self, tmp_path, config: dict):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump(config))
@@ -723,7 +723,7 @@ class TestRunPipelineFile:
             )
         )
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(pipeline_path)
 
@@ -759,7 +759,7 @@ class TestRunPipelineFile:
             )
         )
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(pipeline_path)
 
@@ -812,7 +812,7 @@ class TestRunPipelineFile:
             )
         )
 
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         run_pipeline_file(pipeline_path)
 
@@ -835,14 +835,14 @@ class TestRunPipelineFile:
             assert pics["dataset"]["id"] == entries["fake-pics"]["id"]
 
     def test_missing_file_exits_with_nonzero_status(self, tmp_path):
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         with pytest.raises(SystemExit) as exc:
             run_pipeline_file(tmp_path / "nope.yaml")
         assert exc.value.code == 1
 
     def test_bad_schema_exits_with_nonzero_status(self, tmp_path):
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("dataset: 123\n")  # dataset must be a string
@@ -856,7 +856,7 @@ class TestDispatchImportLabels:
         """_dispatch hands the whole field mapping, not just a file path, to
         the label import (issue #4174)."""
         import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen = {}
 
@@ -865,8 +865,8 @@ class TestDispatchImportLabels:
             return (1, 0)
 
         monkeypatch.setattr(vtcli, "import_labels_into_detector", _fake_import)
-        monkeypatch.setattr(vtcli, "_load_pickle_whole", lambda path: [])
-        monkeypatch.setattr(vtcli, "_run_pipeline", lambda *a, **k: None)
+        monkeypatch.setattr("vtscore.cli.sources._load_pickle_whole", lambda path: [])
+        monkeypatch.setattr("vtscore.cli.run._run_pipeline", lambda *a, **k: None)
         _dispatch(
             {
                 "dataset": "foo.pkl",
@@ -890,11 +890,11 @@ class TestDispatchDetectorSelection:
 
     def _dispatch_capturing(self, monkeypatch, detectors):
         import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen = {}
         monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a, **k: (1, 0))
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
                 "dataset": "foo.pkl",
@@ -923,11 +923,10 @@ class TestDispatchDetectorSelection:
 class TestDispatchStreamingFlags:
     def test_as_labelset_reaches_the_run(self, monkeypatch):
         """``as_labelset:`` is handed to the run, not dropped between parse and dispatch."""
-        import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen = {}
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
                 "dataset": "foo.pkl",
@@ -949,11 +948,10 @@ class TestDispatchStreamingFlags:
         assert seen["as_labelset"] is True
 
     def test_resume_reaches_the_run(self, monkeypatch):
-        import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen = {}
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
                 "dataset": "foo.pkl",
@@ -974,11 +972,10 @@ class TestDispatchStreamingFlags:
         assert seen["resume"] is True
 
     def test_max_results_reaches_the_run(self, monkeypatch):
-        import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen = {}
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
                 "dataset": "foo.pkl",
@@ -1004,7 +1001,7 @@ class TestImportLabelsCreate:
 
     @staticmethod
     def _parse(block):
-        from vtscore.cli_pipeline import _parse_import_labels
+        from vtscore.cli.pipeline import _parse_import_labels
 
         return _parse_import_labels({"detector": "Dogs", "file": "labels.json", **block})
 
@@ -1028,10 +1025,9 @@ class TestImportLabelsCreate:
 
     @staticmethod
     def _dispatch(monkeypatch, import_labels):
-        import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: None)
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: None)
         _dispatch(
             {
                 "dataset": None,
@@ -1082,11 +1078,11 @@ class TestProgressFormat:
 
     def test_label_import_is_a_labels_imported_event(self, monkeypatch, capsys):
         import vtscore.cli as vtcli
-        from vtscore import cli_progress
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli import progress as cli_progress
+        from vtscore.cli.pipeline import _dispatch
 
         monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a, **k: (3, 1))
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: None)
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: None)
         cli_progress.set_format("json")
         _dispatch(
             {
@@ -1107,8 +1103,8 @@ class TestProgressFormat:
         assert (event["detector"], event["applied"], event["skipped"], event["created"]) == ("Dogs", 3, 1, False)
 
     def test_error_is_an_error_event_on_stdout(self, tmp_path, capsys):
-        from vtscore import cli_progress
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli import progress as cli_progress
+        from vtscore.cli.pipeline import run_pipeline_file
 
         cli_progress.set_format("json")
         with pytest.raises(SystemExit) as exc:
@@ -1122,14 +1118,13 @@ class TestProgressFormat:
 
     def test_any_failure_in_the_run_is_an_error_event(self, monkeypatch, tmp_path, capsys):
         """Not just a bad file: whatever the run raises ends as an ``error`` event, never a traceback."""
-        import vtscore.cli as vtcli
-        from vtscore import cli_progress
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli import progress as cli_progress
+        from vtscore.cli.pipeline import run_pipeline_file
 
         def _boom(spec, **kw):
             raise RuntimeError("exporter went away")
 
-        monkeypatch.setattr(vtcli, "_run_source", _boom)
+        monkeypatch.setattr("vtscore.cli.run._run_source", _boom)
         p = tmp_path / "p.yaml"
         p.write_text("dataset: foo.pkl\n")
         cli_progress.set_format("json")
@@ -1141,7 +1136,7 @@ class TestProgressFormat:
         assert event["message"] == "exporter went away"
 
     def test_text_error_stays_on_stderr(self, tmp_path, capsys):
-        from vtscore.cli_pipeline import run_pipeline_file
+        from vtscore.cli.pipeline import run_pipeline_file
 
         with pytest.raises(SystemExit):
             run_pipeline_file(tmp_path / "nope.yaml")

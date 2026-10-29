@@ -73,7 +73,7 @@ class TestTraining:
     """What ``_load_and_train_detectors`` records for scoring under an override."""
 
     def test_overrides_the_detectors_own_input_spec(self, client, label_files):
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         _write_detector("dogs", input_spec=TWO_S)
         trained = _load_and_train_detectors(["dogs"], "audio", dict(medias), override_clipper=HALF_S)
@@ -82,7 +82,7 @@ class TestTraining:
         assert trained["dogs"]["clipper_params"] == HALF_S["clipper_params"]
 
     def test_a_detector_with_no_input_spec_is_reclipped_too(self, client, label_files):
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         _write_detector("dogs")
         trained = _load_and_train_detectors(["dogs"], "audio", dict(medias), override_clipper=HALF_S)
@@ -90,7 +90,7 @@ class TestTraining:
         assert trained["dogs"]["clipper"] == "sound_tiling"
 
     def test_without_an_override_the_input_spec_decides(self, client, label_files):
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         _write_detector("dogs", input_spec=TWO_S)
         trained = _load_and_train_detectors(["dogs"], "audio", dict(medias))
@@ -99,7 +99,7 @@ class TestTraining:
 
     def test_a_clipper_for_another_type_stops_the_run_before_training(self, client, label_files, monkeypatch):
         import vtscore.detectors.labelset_training as training
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         monkeypatch.setattr(training, "train_from_labelset", lambda *a, **k: pytest.fail("trained anyway"))
         _write_detector("dogs")
@@ -110,7 +110,7 @@ class TestTraining:
 
     def test_a_detector_skipped_for_its_type_is_not_held_to_it(self, client, label_files):
         """A video detector has no route from an audio dataset: it is skipped, not refused."""
-        from vtscore.cli import _load_and_train_detectors
+        from vtscore.cli.detectors import _load_and_train_detectors
 
         _write_detector("clips", media_type="video")
         _write_detector("dogs")
@@ -123,7 +123,7 @@ class TestScoredRun:
     def test_every_scoring_pass_reads_the_override(self, client, tmp_path, label_files, monkeypatch, capsys):
         """The override travels from the entry point to the routing that scores the run."""
         import vtscore.detectors.converter_routing as cr
-        from vtscore import cli_progress
+        from vtscore.cli import progress as cli_progress
         from vtscore.cli import autodetect_main
 
         clippers: list[tuple[str, dict]] = []

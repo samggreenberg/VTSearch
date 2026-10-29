@@ -12,6 +12,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.cli` is a package, one module per stage** (issue #5397). The 3,800-line `vtscore.cli`
+  module is now the `vtscore/cli/` package: `autodetect` (the four entry points), `run`, `sources`, `detectors`, `scoring`,
+  `export`, `streaming`, `resumable`, `datasets`, `dry_run` and `labels`, with `cli_pipeline`,
+  `cli_progress` and `cli_resume` moved in as `vtscore.cli.pipeline`, `.progress` and `.resume`. The
+  public names - `autodetect_main`, `autodetect_importer_main`, `autodetect_main_chunked`,
+  `autodetect_importer_main_chunked`, `import_labels_into_detector`,
+  `import_labels_into_detector_from_file` and `DetectorNotFoundError` - still import from `vtscore.cli`
+  and behave as before. The private helpers (`_SourceSpec`, `_run_source`, `_load_and_train_detectors`,
+  ...) moved to their stage's module and are no longer reachable as `vtscore.cli._name`; a test that
+  stubs one patches the module that calls it (the package docstring says which that is). See
+  `packages/cli.md`.
+
 - **The trained head weighs a hard-view face's Good at ¼** (issue #5413). A face under its space's Face
   Quality cut (`imagekit_bridge.is_hard_view`) that is voted Good now counts
   `svm_prior.HARD_VIEW_GOOD_WEIGHT` (0.25) in the head's fit, while some other Good is clear: in the loss
@@ -2548,6 +2560,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   practical limit.
 
 ### Deprecated
+
+- **`vtscore.cli_progress`, `vtscore.cli_resume` and `vtscore.cli_pipeline`** (issue #5397), now
+  `vtscore.cli.progress`, `vtscore.cli.resume` and `vtscore.cli.pipeline`. Each old name still imports, and
+  is the new module itself rather than a copy, so a format set or a stub patched through either name is
+  the one the CLI uses. Importing it emits a `DeprecationWarning`.
 
 - **The per-environment timing profile and the ingest-ETA switch are no-ops** (issue #4667).
   Dataset imports, staging imports and labelset missing-media fetches now build their trackers

@@ -254,7 +254,7 @@ def reset_shared_state(medias_snapshot) -> None:
 
     # Reset CLI progress format so a test that flips it to "json" can't leak the
     # choice into the next test.
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
 
     cli_progress.set_format("text")
 

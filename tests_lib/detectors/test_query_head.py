@@ -378,7 +378,8 @@ class TestTheQueryHold:
     @pytest.mark.usefixtures("single_vector")
     def test_the_cli_says_the_hold_not_the_quota(self, world, capsys):
         """3 Goods and 4 Bads meet the quota: the CLI names the hold and what it owes, not "under the quota" (#4889)."""
-        from vtscore import cli, cli_progress
+        from vtscore.cli import detectors as cli_detectors
+        from vtscore.cli import progress as cli_progress
 
         snap, _proto, make, _embedded = world
         ctx = _ctx()
@@ -387,7 +388,7 @@ class TestTheQueryHold:
         previous = cli_progress.get_format()
         cli_progress.set_format("text")
         try:
-            cli._report_centroid("held", ctx, ls)
+            cli_detectors._report_centroid("held", ctx, ls)
         finally:
             cli_progress.set_format(previous)
         line = capsys.readouterr().out.strip()
