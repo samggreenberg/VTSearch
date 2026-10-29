@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-03-balance-line-4458.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/chosen.json": {
+     "bytes": 367,
+     "oid": "9caa45c773e23fca400fbe1d3a19af3a5d2f829c"
+    },
+    "measurements/cuts.json": {
+     "bytes": 114,
+     "oid": "4e50596c8b0485712ac6cfd97838a2e4507c4e77"
+    },
+    "measurements/round2/cv.json": {
+     "bytes": 1463,
+     "oid": "7246557e28bf69bad829530287d98d7b9db6d555"
+    },
+    "measurements/search.csv": {
+     "bytes": 47300,
+     "oid": "41f32622356f08889614efd56ab8493aaa9a5aca"
+    }
+   }
+  }
+ ]
+}

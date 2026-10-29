@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-07-calsplit-4583.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/curves.csv": {
+     "bytes": 17138,
+     "oid": "e067406fd7f7a51eb34dc17abfb8b5a98ffe7973"
+    },
+    "tables/levels.csv": {
+     "bytes": 1387,
+     "oid": "1abf29f9b37979cf06958b89ecfa34a85490b716"
+    },
+    "tables/paired.csv": {
+     "bytes": 61109,
+     "oid": "1ffacca4dc28a7d6b01e6b40cd4f62d5579cca76"
+    },
+    "tables/provenance.json": {
+     "bytes": 2673,
+     "oid": "df105c1db8639959f7b12a8071673fdc23a82e78"
+    },
+    "tables/run_deltas.csv.gz": {
+     "bytes": 61333,
+     "oid": "43869fb5d0a5f6f6006c82558825cc1e16d22744"
+    },
+    "tables/sigma.csv": {
+     "bytes": 3124,
+     "oid": "0a276eda87ba03a41817803b7ceb8ab85513dcc1"
+    },
+    "tables/sigma_ab_window.csv": {
+     "bytes": 1915,
+     "oid": "b0167b12abe0bfcca6001258303116d9df233991"
+    }
+   }
+  }
+ ]
+}

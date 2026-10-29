@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-centroid-unvoted-4779.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "click0_summary.csv": {
+     "bytes": 2038,
+     "oid": "6ac3d484e79359e7b86a030ba532a7a5638f3bea"
+    },
+    "summary.csv": {
+     "bytes": 15433,
+     "oid": "eda9b3443c9d42559420782bbd4474547f3a7022"
+    }
+   }
+  }
+ ]
+}

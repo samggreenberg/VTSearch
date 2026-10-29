@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-24-state-of-the-app-region-photo.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/cost_over_clicks.png": {
+     "bytes": 60623,
+     "oid": "d6eb5a1af958518d342618f4971325bbe2ba3266"
+    },
+    "figures/f1_over_clicks.png": {
+     "bytes": 71276,
+     "oid": "8280ae9d634c3e263c4f277074e64c1e6d41c3d7"
+    }
+   }
+  }
+ ]
+}

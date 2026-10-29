@@ -1,0 +1,55 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-08-state-of-the-app-binary-photo.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "objective_by_click.csv": {
+     "bytes": 33081,
+     "oid": "c356af8f8654fc155ab7ade11beef3c168389f85"
+    },
+    "precision_recall_path.csv": {
+     "bytes": 1584,
+     "oid": "48ec2c6293fd088e512ec53685136aad76fcaeed"
+    },
+    "stopping_by_preset.csv": {
+     "bytes": 2500,
+     "oid": "39a00037a5d181495c632666015a3d840534fe0b"
+    },
+    "why/confusers_bench.jpg": {
+     "bytes": 50361,
+     "oid": "7ca9a22c5db828b4e4c9fb0e70fab1a8f41ce9aa"
+    },
+    "why/confusers_book.jpg": {
+     "bytes": 49615,
+     "oid": "015116586ad0254656f3ea8958585f4465fb5448"
+    },
+    "why/confusers_bottle.jpg": {
+     "bytes": 44833,
+     "oid": "5649824fb478dfa836cc081c6324d36096fd4938"
+    },
+    "why/confusers_dining_table.jpg": {
+     "bytes": 47121,
+     "oid": "25445f9454db115dc9ce5eeffe6d7b903cf70d86"
+    },
+    "why/confusers_enclosed_road_vehicle.jpg": {
+     "bytes": 53684,
+     "oid": "ee6ff78b1d17b65969733c0008e7bdcca6bbd7d9"
+    },
+    "why/confusers_fork.jpg": {
+     "bytes": 42234,
+     "oid": "ab59cde7a6c98fd49fc8be6487f4cfa1cadabca9"
+    },
+    "why/confusers_spoon.jpg": {
+     "bytes": 41021,
+     "oid": "bcba7fe947dec83952ee12fae160b8063e6d3368"
+    },
+    "why/why.csv": {
+     "bytes": 1428,
+     "oid": "8e337e15b68b538ceef0cdaca016b40950b965e0"
+    }
+   }
+  }
+ ]
+}

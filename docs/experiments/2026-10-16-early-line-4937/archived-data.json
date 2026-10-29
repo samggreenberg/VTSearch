@@ -1,0 +1,119 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-16-early-line-4937.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/binary/examples_b025_vote40.png": {
+     "bytes": 277388,
+     "oid": "7fd72e8eb356822e7cefcec4ce307220159f5378"
+    },
+    "figures/binary/examples_b1_vote40.png": {
+     "bytes": 280096,
+     "oid": "ef5ef3734f53a7f4907002e71c6e10addf6d7657"
+    },
+    "figures/region/good_component.png": {
+     "bytes": 80964,
+     "oid": "3292e5810725f8ed8ec2b20fef2d03202ba63db7"
+    },
+    "figures/region/per_session.png": {
+     "bytes": 92829,
+     "oid": "59b8d13ee804eaa534adabaf317081c634786c4d"
+    },
+    "figures/region/swaps.png": {
+     "bytes": 142219,
+     "oid": "91d11b0d7023de693cdc3c0a498793575915aa67"
+    },
+    "figures/region/symptom.png": {
+     "bytes": 114266,
+     "oid": "970bb1d30d4c5aa3a6e0eb56a6d4f262a35c1226"
+    },
+    "tables/binary/by_band.csv": {
+     "bytes": 5386,
+     "oid": "a01507c5962596649199df8f09db2d5bf5df66fe"
+    },
+    "tables/binary/chances.csv": {
+     "bytes": 1923,
+     "oid": "98db89afa9b2f76be2a5dd3a4af2bcdbba5cc874"
+    },
+    "tables/binary/examples_b025_vote40.csv": {
+     "bytes": 692,
+     "oid": "bf8b0200f6e85ff12ee4c0e8e0f58212720b14d3"
+    },
+    "tables/binary/examples_b1_vote40.csv": {
+     "bytes": 696,
+     "oid": "8e62ebcbe222dc8e826f82d22fcaaaf1d8ad70c9"
+    },
+    "tables/binary/examples_b4_vote40.csv": {
+     "bytes": 689,
+     "oid": "4434d0c6c05886f84f6e9e31d4acc359a74d3bb1"
+    },
+    "tables/binary/good.csv": {
+     "bytes": 3619,
+     "oid": "01a89c11986330d2e504aa408c4a48da95e77372"
+    },
+    "tables/binary/head_count.csv": {
+     "bytes": 2238,
+     "oid": "77dc8550672eeb55fb8effe5e7765fc478199cd2"
+    },
+    "tables/binary/head_count_examples.csv": {
+     "bytes": 707,
+     "oid": "072956dc2e55fb9367d049b9dea0a640f38ef36a"
+    },
+    "tables/binary/ladder.csv": {
+     "bytes": 6539,
+     "oid": "80e431a30c2eb66e3e0a8ce26810426583746d32"
+    },
+    "tables/binary/prevalence.csv": {
+     "bytes": 1133,
+     "oid": "a9c2fa96979f0520719b47ee884146316d12277d"
+    },
+    "tables/binary/sizes.csv": {
+     "bytes": 5297,
+     "oid": "2aebeb06cdc7acfe4737efdc0b310786f8b8fe58"
+    },
+    "tables/binary/symptom.csv": {
+     "bytes": 2033,
+     "oid": "2902a8e0679363c6aeb6e083587317e1efe07fa3"
+    },
+    "tables/region/by_band.csv": {
+     "bytes": 1879,
+     "oid": "28d4cd4a694811f508c87a3bd5394675cb53ca63"
+    },
+    "tables/region/chances.csv": {
+     "bytes": 725,
+     "oid": "897be7c0e36121805e0393df8b64dd118bafd586"
+    },
+    "tables/region/good.csv": {
+     "bytes": 1289,
+     "oid": "2c049971e6461f40dd2954207b6ccd555813aa8e"
+    },
+    "tables/region/head_count.csv": {
+     "bytes": 788,
+     "oid": "53d316cdaa0932f147689f77e9f2765140169abf"
+    },
+    "tables/region/head_count_examples.csv": {
+     "bytes": 312,
+     "oid": "8b7372d8207167044a3221b233db5892bab28450"
+    },
+    "tables/region/ladder.csv": {
+     "bytes": 2407,
+     "oid": "64128cc98802d517ebdac3ab2c3af7e023e915e8"
+    },
+    "tables/region/prevalence.csv": {
+     "bytes": 436,
+     "oid": "49dd4ccf179fc530f09ef8b9c6217af6707919c9"
+    },
+    "tables/region/sizes.csv": {
+     "bytes": 1867,
+     "oid": "c14fe34d5eaff040175fabe8c02120f4387149f8"
+    },
+    "tables/region/symptom.csv": {
+     "bytes": 709,
+     "oid": "e1296ae7ae2e71c8a9c1c8e839d19b02df321a0c"
+    }
+   }
+  }
+ ]
+}

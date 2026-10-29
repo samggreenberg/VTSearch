@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-11-head-start-region-4785.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "region_ab.csv": {
+     "bytes": 1022,
+     "oid": "cb14337090f7a93c5c8b5916dfc75ad5df1afd28"
+    },
+    "region_curves.csv": {
+     "bytes": 13064,
+     "oid": "4c2547c7cf60591138b821007b0f9f2b1fa95584"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-30-fullmarks-tiled-stage1-app-3928.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/per_class_m.png": {
+     "bytes": 36291,
+     "oid": "4bcbc727ab64f557fed2a5154211cbdf45307911"
+    }
+   }
+  }
+ ]
+}

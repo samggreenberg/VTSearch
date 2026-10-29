@@ -1,0 +1,51 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-27-logreg-head-4114.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/average_precision_vs_clicks.csv": {
+     "bytes": 47464,
+     "oid": "7a46a68ee6a1c599eb745c1ac412560819848cef"
+    },
+    "figures/average_precision_vs_clicks.png": {
+     "bytes": 79676,
+     "oid": "1a9bde249d4bd88328aca50436cd7adc4639cda1"
+    },
+    "figures/average_precision_vs_clicks_runs__coco_better.png": {
+     "bytes": 490315,
+     "oid": "f1f0f13016fd394a4c5c5a237012ab1e157de6e1"
+    },
+    "figures/cost_vs_clicks.csv": {
+     "bytes": 47452,
+     "oid": "7e0efac161496c355974856e8884ab05f1e66e94"
+    },
+    "figures/oracle_cost_vs_clicks.csv": {
+     "bytes": 47798,
+     "oid": "57b227cc1c0a8428df7df089f080ea6bad65ec2c"
+    },
+    "figures/oracle_cost_vs_clicks.png": {
+     "bytes": 81158,
+     "oid": "1797535ed9def54b16f9476bf7e6fcd4afa6d319"
+    },
+    "figures/oracle_cost_vs_clicks_runs__coco_better.png": {
+     "bytes": 449729,
+     "oid": "046bfc24edb61a2357dde810238cafddda89a0c9"
+    },
+    "figures/paired_delta_by_band.csv": {
+     "bytes": 252540,
+     "oid": "2ba65938476b27d984f244cd79bd9b2ee039e26b"
+    },
+    "stageB_levels.csv": {
+     "bytes": 2855,
+     "oid": "894b7b9d1fc7da7756bc996fd371f9c11234bc46"
+    },
+    "stageB_paired.csv": {
+     "bytes": 42821,
+     "oid": "9fd791fe5cde358a5f3fd512ca86f5851fe0ca17"
+    }
+   }
+  }
+ ]
+}

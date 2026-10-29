@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-fullmarks-food-3914.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/hits.json": {
+     "bytes": 12870,
+     "oid": "50e1ca3875517f13874676a738793e5ca927c567"
+    },
+    "measurements/meta_hits.json": {
+     "bytes": 1081,
+     "oid": "58e73e1e2c1e29015e8bfe726bbdacdbd8f3ad62"
+    }
+   }
+  }
+ ]
+}

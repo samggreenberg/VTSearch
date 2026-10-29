@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-02-stoplist-cheap-4432.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/rep1-gated-steps.csv": {
+     "bytes": 328936,
+     "oid": "702ea3f871ffa68d8f9a11288582b51c05478ec9"
+    },
+    "measurements/rep1-off-steps.csv": {
+     "bytes": 330152,
+     "oid": "a7828d556e93a6c19e267fd7c03597ec7c3eb648"
+    },
+    "measurements/rep2-gated-steps.csv": {
+     "bytes": 315211,
+     "oid": "c4eef2614e159bdb90be15489d1233b3868f90b4"
+    },
+    "measurements/rep2-off-steps.csv": {
+     "bytes": 315376,
+     "oid": "514df64fac6bb50fc0f190d3d87fb1f80815c503"
+    }
+   }
+  }
+ ]
+}

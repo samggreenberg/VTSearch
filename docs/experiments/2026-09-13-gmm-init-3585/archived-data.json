@@ -1,0 +1,51 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-13-gmm-init-3585.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/ab_window_by_arm.csv": {
+     "bytes": 58250,
+     "oid": "610f8b61253600a8addbae32bdfbfc5948237d88"
+    },
+    "agg/bench_by_n.csv": {
+     "bytes": 3548,
+     "oid": "9d3defe965a0cb71973c7be1dbae4e120c78169a"
+    },
+    "agg/fits_by_arm.csv": {
+     "bytes": 1901,
+     "oid": "ec12ceaa5c0a564e0378a2e6811b0e992c9ae9aa"
+    },
+    "agg/gate_by_arm.csv": {
+     "bytes": 2441,
+     "oid": "00418cc9b99fa33a0af90fd2739a205d210ff6ec"
+    },
+    "agg/gate_by_env.csv": {
+     "bytes": 16729,
+     "oid": "fd9ba92c052aefaa9013cc77f7ed7e2c38601c70"
+    },
+    "agg/sort_latency.csv": {
+     "bytes": 1068,
+     "oid": "c777409e9073534a7f216a69116ff6bc14dfa214"
+    },
+    "agg/summary_3585.json": {
+     "bytes": 257,
+     "oid": "1a90649a670087d154151b642e6a091e2f23a6bb"
+    },
+    "figures/ab_cost_vs_votes.png": {
+     "bytes": 433150,
+     "oid": "ebf0524f3a537ef78ee664b977a2d971bdcbf2a4"
+    },
+    "figures/ab_degenerate_vs_votes.png": {
+     "bytes": 216796,
+     "oid": "09611397778a39de90ceccfd7d2b3e91392ce83d"
+    },
+    "figures/ab_fnr_vs_votes.png": {
+     "bytes": 526496,
+     "oid": "522cc57a2c42ff5ce0153df2ae5f661862ce81d2"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-25-region-styles-4711.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/rs4711_counts.json": {
+     "bytes": 54,
+     "oid": "2db7293cc65905263a659294158de8a6e8777350"
+    },
+    "tables/rs4711_curves.csv": {
+     "bytes": 194074,
+     "oid": "25abc51a709cb0d94b0a03e2877045fc84434080"
+    },
+    "tables/rs4711_per_run.csv": {
+     "bytes": 23719,
+     "oid": "7c1ccef380112a8c88adf2e67ac112b814eb37de"
+    },
+    "tables/rs4711_summary.csv": {
+     "bytes": 11090,
+     "oid": "7fe55c3c467cc821074a0d09686f83e2755d4f6b"
+    }
+   }
+  }
+ ]
+}

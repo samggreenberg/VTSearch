@@ -1,0 +1,23 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-13-disagree-judge-4816.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "bias.csv": {
+     "bytes": 5682,
+     "oid": "9169cd9fe66ea111a42b3050f1643a6699dae6c0"
+    },
+    "crossfit.csv": {
+     "bytes": 29559,
+     "oid": "c7eeb09876eb1865d46ede47036ee68d8635ef3e"
+    },
+    "diagnose.csv": {
+     "bytes": 30651,
+     "oid": "1b537affcdf3c5fddf149d89457ac7f4482bb1bc"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-06-cross-class-negatives-3667.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/negative-difficulty.png": {
+     "bytes": 138945,
+     "oid": "0bb620ecea713549873d5b6413173a2bdb1938fc"
+    }
+   }
+  }
+ ]
+}

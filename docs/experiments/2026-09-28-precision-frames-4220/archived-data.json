@@ -1,0 +1,39 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-28-precision-frames-4220.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "estimators_by_t.csv": {
+     "bytes": 36687,
+     "oid": "c1bdeb24a4e0830c3a7a401a1cfc31f225121f25"
+    },
+    "estimators_summary.csv": {
+     "bytes": 23253,
+     "oid": "af39fd438f6b322f491e26f82f89aa1e3c90e2e0"
+    },
+    "fig_calpos.csv": {
+     "bytes": 105532,
+     "oid": "180c839a930f4a07a697e8f500063b7b54c87b70"
+    },
+    "fig_violation_by_calpos.csv": {
+     "bytes": 2355,
+     "oid": "59f5b16461fcb0da25365942de51a03d4401b62c"
+    },
+    "gate_table.csv": {
+     "bytes": 6334,
+     "oid": "5f224326297aecf127cb1a3cb945dc568f0f9e59"
+    },
+    "provenance.json": {
+     "bytes": 207,
+     "oid": "41ac1e2c98de7656796792b02343b2f48b7cc465"
+    },
+    "reference_cuts.csv": {
+     "bytes": 5745,
+     "oid": "8343679e45f06db332446313e825adfe727b01f6"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-18-logreg-region-4278.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/lr4278_counts.json": {
+     "bytes": 28,
+     "oid": "03588b85ada88f81cd4c65bb94b79d2f1ab1e9df"
+    },
+    "tables/lr4278_curves.csv": {
+     "bytes": 187704,
+     "oid": "3213bf74318e3e24808383c2f1b1be95d14cca04"
+    },
+    "tables/lr4278_per_run.csv": {
+     "bytes": 36672,
+     "oid": "de2ef145a9fd63355c91030df4330fcbd58b0364"
+    },
+    "tables/lr4278_summary.csv": {
+     "bytes": 15959,
+     "oid": "617f53b9e16b9b624729b92273a12d2dc280feb3"
+    }
+   }
+  }
+ ]
+}

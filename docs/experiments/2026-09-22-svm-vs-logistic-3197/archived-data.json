@@ -1,0 +1,59 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-svm-vs-logistic-3197.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "A_base_levels.csv": {
+     "bytes": 6142,
+     "oid": "afcbb09ba98144025f4853311f6c5d15a123076e"
+    },
+    "A_bestC_picks.csv": {
+     "bytes": 813,
+     "oid": "c400b2d07258045c65253b4fdc37ce787ffd7bb3"
+    },
+    "A_levels.csv": {
+     "bytes": 28052,
+     "oid": "768cbecf6b18e988b02f6299643d4863bb4ece85"
+    },
+    "figures/average_precision_vs_clicks.png": {
+     "bytes": 219543,
+     "oid": "80cf8ba65ba42967d9d66912420fa718a0cfded0"
+    },
+    "figures/average_precision_vs_clicks_runs__caltech101_m.png": {
+     "bytes": 140138,
+     "oid": "415c0f7f80cd6f72868fe4ba2d4b7b6b9a326cf0"
+    },
+    "figures/average_precision_vs_clicks_runs__coco_val.png": {
+     "bytes": 1072653,
+     "oid": "3be4776ed355208829b0f877504c9739f7c7675a"
+    },
+    "figures/average_precision_vs_clicks_runs__visual_genome_m.png": {
+     "bytes": 1298293,
+     "oid": "31dd2d44811378b911fa1851b20a517388796820"
+    },
+    "figures/oracle_cost_vs_clicks_runs__caltech101_m.png": {
+     "bytes": 140797,
+     "oid": "29c0b3d8941c49f77e1c20f8c1df837697128d81"
+    },
+    "figures/oracle_cost_vs_clicks_runs__coco_val.png": {
+     "bytes": 866070,
+     "oid": "fd2d265ad8e1e98b52016d3b84e4ee65ffb65aee"
+    },
+    "figures/oracle_cost_vs_clicks_runs__visual_genome_m.png": {
+     "bytes": 1305835,
+     "oid": "430e000920a7aee69c70a32f5b21deb7fdcc5897"
+    },
+    "figures/stageB_ranking_gap_by_click.png": {
+     "bytes": 58092,
+     "oid": "85d84e8a69e95dea4874655dd995897dc3eb2c1d"
+    },
+    "stageB_levels.csv": {
+     "bytes": 5075,
+     "oid": "2473620fdf1275ec908d7ac1a7b86d8bcd409f9d"
+    }
+   }
+  }
+ ]
+}

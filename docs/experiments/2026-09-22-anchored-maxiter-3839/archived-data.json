@@ -1,0 +1,47 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-anchored-maxiter-3839.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "agg/ab_summary.json": {
+     "bytes": 4854,
+     "oid": "07a1305bac11ec64ced3892681ed9053feff0670"
+    },
+    "agg/capped.csv": {
+     "bytes": 1908,
+     "oid": "6bf7a4ffe63c8f473906c3d18acf5dd7c7b0dab3"
+    },
+    "agg/env.csv": {
+     "bytes": 996,
+     "oid": "b2f5f330fc4358b8b8e7dba5f2acaf4653daa125"
+    },
+    "agg/examples.csv": {
+     "bytes": 1007,
+     "oid": "e5a9f1eb6b6ad0748618a59acafe20497d649569"
+    },
+    "agg/fits.csv": {
+     "bytes": 2500,
+     "oid": "da9b49302331df25123a6ae970de18125ffef2de"
+    },
+    "agg/gate_vs_limit.csv": {
+     "bytes": 1841,
+     "oid": "31f9f4d94fa6f7956ff73abc0b077f7b6d1dbff9"
+    },
+    "agg/gate_vs_shipped.csv": {
+     "bytes": 1695,
+     "oid": "aa79fefd5747dc4f51373df0678b0964beffbc9b"
+    },
+    "agg/summary.json": {
+     "bytes": 771,
+     "oid": "99ebd86826f75aca5bd5e0b19def7ebff71a0783"
+    },
+    "agg/worked_case.txt": {
+     "bytes": 2877,
+     "oid": "97242b481e0ad25c01e0bc43506ae2a2cc520c83"
+    }
+   }
+  }
+ ]
+}

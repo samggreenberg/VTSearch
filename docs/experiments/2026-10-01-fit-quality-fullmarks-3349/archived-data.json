@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-01-fit-quality-fullmarks-3349.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "figures/distributions-s.png": {
+     "bytes": 87032,
+     "oid": "5f1d7bae6cc447ada023b929c11624c6a90436d5"
+    },
+    "measurements/auc-m.csv": {
+     "bytes": 1184,
+     "oid": "2dd8c1eb4c8bf7c8a8cd07fbdeaa6434f2bfe04e"
+    },
+    "measurements/auc-s.csv": {
+     "bytes": 1183,
+     "oid": "7afedd82705b206076906b7332dc6d7af0eb4554"
+    },
+    "measurements/per_class_auc-m.csv": {
+     "bytes": 8031,
+     "oid": "bccb5500f053cdd70ccbff885ff6da92a0228931"
+    },
+    "measurements/per_class_auc-s.csv": {
+     "bytes": 7294,
+     "oid": "e6fed3cd4ad6612ad21b24e6a173b6e9ca46dccb"
+    }
+   }
+  }
+ ]
+}

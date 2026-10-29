@@ -1,0 +1,35 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-15-weak-repeat-4909.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/repeat_counts.json": {
+     "bytes": 127,
+     "oid": "15e0ef21fb23b8c54acdf066d45c6c8462e5e9d2"
+    },
+    "tables/repeat_curves.csv": {
+     "bytes": 33021,
+     "oid": "5f357e465ebde4d4556f32236a986a2204bcaa92"
+    },
+    "tables/repeat_examples.csv": {
+     "bytes": 7462,
+     "oid": "3eab37cb66dc5ca53f81c05cd31fad6361f3d1c0"
+    },
+    "tables/repeat_gains.csv": {
+     "bytes": 44102,
+     "oid": "dfb451d523dc72aec4d8b1600d7b13cdde5ae445"
+    },
+    "tables/repeat_splits.csv": {
+     "bytes": 31683,
+     "oid": "98dda79f90b3364b4ce9b5fbeeff7c12c755ce6a"
+    },
+    "tables/repeat_summary.csv": {
+     "bytes": 10031,
+     "oid": "958fb38711bb553e9ab394d05a0fd7fc06441ce0"
+    }
+   }
+  }
+ ]
+}

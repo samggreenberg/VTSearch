@@ -1,0 +1,15 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-22-atlas-rebuild-3595.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/rows.jsonl": {
+     "bytes": 24234,
+     "oid": "94753b545e53b133aad692f05858416bd80a852e"
+    }
+   }
+  }
+ ]
+}

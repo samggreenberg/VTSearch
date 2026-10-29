@@ -1,0 +1,19 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-14-fullmarks-separations-3837.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "breaches.csv": {
+     "bytes": 38845,
+     "oid": "c3f490d25a16e26a475e9a378fe3c857a972d020"
+    },
+    "separations.csv": {
+     "bytes": 2775,
+     "oid": "e9809904762b4794bb8d3596a653a2b77ee37180"
+    }
+   }
+  }
+ ]
+}

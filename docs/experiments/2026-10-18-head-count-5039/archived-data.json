@@ -1,0 +1,79 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-10-18-head-count-5039.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "tables/ab_counts.json": {
+     "bytes": 57,
+     "oid": "5e2136f6d700a5a9a50c80c98a4776c4a306634d"
+    },
+    "tables/ab_curves.csv": {
+     "bytes": 12993,
+     "oid": "678edc1a827fd990a5e0aef28ea9b0eeb4a9ff59"
+    },
+    "tables/ab_examples.csv": {
+     "bytes": 2587,
+     "oid": "62ab5df7a9725107acd3d058e57539e031e15824"
+    },
+    "tables/ab_gains.csv": {
+     "bytes": 16840,
+     "oid": "ab55d3d8b2a1548ebf7c3475a7bdf4efe6ed0c5f"
+    },
+    "tables/ab_splits.csv": {
+     "bytes": 3010,
+     "oid": "b5abea025efc9c11aaea32b631e0033ba6b7cfe3"
+    },
+    "tables/ab_summary.csv": {
+     "bytes": 4346,
+     "oid": "d183f5fcf11320d9afc4fdf1562ed12dc5e75712"
+    },
+    "tables/bulk_z3.csv": {
+     "bytes": 288,
+     "oid": "606439ddc797114a741288870224886996e2def9"
+    },
+    "tables/empty_b4.csv": {
+     "bytes": 564,
+     "oid": "7905b5c6f93635f7a6de85b6208697ce95e3fd70"
+    },
+    "tables/examples_e13z275.csv": {
+     "bytes": 946,
+     "oid": "b751bc83f81c2966d61ce3676355d2d623323b4d"
+    },
+    "tables/faces_ab.csv": {
+     "bytes": 1985,
+     "oid": "1ff09bddf0a44ec6851f2650d72639a8005eb2fe"
+    },
+    "tables/faces_ab_curves.csv": {
+     "bytes": 53834,
+     "oid": "f299ccf2e1edc9ca8b2cb01ff33322d8657b0fab"
+    },
+    "tables/gate_b4.csv": {
+     "bytes": 1058,
+     "oid": "66c1db5cdadaead25e534cf3b59edf2f97ad2166"
+    },
+    "tables/grid_best.csv": {
+     "bytes": 2590,
+     "oid": "988f9054f077265f4fd5059b0dfa31b498866779"
+    },
+    "tables/grid_check.csv": {
+     "bytes": 32,
+     "oid": "bee227770365e88057f338a5883e3d88e8c97e53"
+    },
+    "tables/offline_b4.csv": {
+     "bytes": 1745,
+     "oid": "bc2c93055eed25103e90f67c10a4bc881cf8e732"
+    },
+    "tables/offline_windows.csv": {
+     "bytes": 2511,
+     "oid": "2a7e8954a25d9a8f921792ec5257bc4645c56650"
+    },
+    "tables/unchanged_low.csv": {
+     "bytes": 92,
+     "oid": "0ae2923279c7b8d6f030492790637bf1d143550f"
+    }
+   }
+  }
+ ]
+}

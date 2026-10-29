@@ -1,0 +1,31 @@
+{
+ "release": "experiments-data",
+ "batches": [
+  {
+   "asset": "2026-09-17-fullmarks-tiled-vlad-3928.894f5a3d9f87.tar.gz",
+   "source_commit": "894f5a3d9f8786cfb3aa665953610d4ce25d3f8b",
+   "files": {
+    "measurements/sift_rank_m_8192.csv": {
+     "bytes": 35857,
+     "oid": "ea18a85abdeef7314d4ae568fd1d8e92f31f8a99"
+    },
+    "measurements/sift_rank_s_8192.csv": {
+     "bytes": 37191,
+     "oid": "d3c052252a94988a597571451a675eaebaf352d5"
+    },
+    "measurements/tiles_m_8192.csv": {
+     "bytes": 14911,
+     "oid": "8cf5ec57c4f4432f975c6b0d61cf6bbf0d116e6a"
+    },
+    "measurements/tiles_s_8192.csv": {
+     "bytes": 14130,
+     "oid": "77f85565d98bd7a886abdacd6938cc307c939c67"
+    },
+    "measurements/tiles_s_8192_both_layouts.csv": {
+     "bytes": 25865,
+     "oid": "f9e1dacce3b333b3de67bf25a6925064d61f9a6c"
+    }
+   }
+  }
+ ]
+}
