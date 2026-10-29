@@ -1,7 +1,7 @@
 """The app must answer every library setting from ``vtsearch.settings`` (#4997).
 
 Library code reads its knobs with :func:`vtscore.config.get_setting`, and
-``vtsearch.shim.register_app_setting_getters()`` installs one getter per knob
+``vtsearch.seam_wiring.register_app_setting_getters()`` installs one getter per knob
 at startup.  A knob the shim forgets is not a loud failure: ``get_setting``
 quietly falls through to the ``CoreConfig`` field default, so the app would
 ignore that setting.  These tests are the thing that notices.

@@ -236,7 +236,7 @@ class TestAppSchemaCoversTheModels:
         "default_labelset_source",
         "labelset_source_push_interval_seconds",
         # Server-tier UMAP knobs, consumed into ``CoreConfig`` by
-        # ``vtsearch.shim``. Operator-tuned via the settings file; no frontend
+        # ``vtsearch.seam_wiring``. Operator-tuned via the settings file; no frontend
         # code reads them.
         "projection_n_neighbors",
         "projection_min_dist",

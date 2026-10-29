@@ -59,7 +59,7 @@ DOC_FOR: dict[str, str] = {
     "seed_importers": "seed-importers.md",
     "single_instance.py": "runtime-modules.md",
     "state": "state.md",
-    "sync": "sync.md",
+    "sync.py": "sync.md",
     "timing": "timing.md",
     "training": "training.md",
     "utils": "utils.md",

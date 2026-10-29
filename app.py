@@ -94,9 +94,9 @@ from vtscore.embedding import initialize_models, preload_predicted_embedders  # 
 #
 # This block runs BEFORE blueprint modules are imported so that any
 # module-level code in a route that reads a setting through ``get_setting()``
-# (or any other shim-backed hook) finds the getters already installed.
+# (or any other hook ``vtsearch.seam_wiring`` installs) finds the getters already installed.
 # See logical-bug-audit M24.
-from vtsearch.shim import (  # noqa: E402
+from vtsearch.seam_wiring import (  # noqa: E402
     register_app_achievement_recorders,
     register_app_persistence_hooks,
     register_app_plugin_families,

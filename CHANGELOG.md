@@ -2965,7 +2965,7 @@ what is on `dev` but not yet on `main`; each release dates that section
   separate `vtscore/` package. The user-facing application surface (the Flask
   app, the Angular SPA, the settings system, the auth layer) is unchanged.
   Internally, every library-candidate import path moved from `vtsearch.<lib>`
-  to `vtscore.<lib>`; `vtsearch/state/__init__.py` is now a thin app-tier shim
+  to `vtscore.<lib>`; `vtsearch.state` is now a thin app-tier shim
   that re-exports `vtscore.state` and layers the proxy view (`medias`,
   `good_votes`, …) on top. See
   [`vtscore/docs/architecture.md`](vtscore/docs/architecture.md) for the

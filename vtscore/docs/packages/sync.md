@@ -1,13 +1,13 @@
 # `vtscore.sync`
 
-A single-class package: the generic `SyncSource[LoadT, SaveT]` ABC that
+A single-class module: the generic `SyncSource[LoadT, SaveT]` ABC that
 backs every bidirectional sync plugin in VTSearch. A *sync source* is a
 plugin that knows how to both pull data **in** from an external target
 (`load`, like an importer) and push data back **out** to it (`save`,
 like an exporter), so applications can keep external storage and
 in-memory state automatically aligned.
 
-The package is intentionally minimal - it owns only the contract.
+The module is intentionally minimal - it owns only the contract.
 Concrete subclasses live wherever the data domain does:
 
 - [`vtscore.labels.sources.base.LabelsetSource`](../../labels/sources/base.py) -
@@ -25,11 +25,11 @@ tier that can host it.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/sync/__init__.py` | `SyncSource`, `LoadT`, `SaveT` (only `SyncSource` is in `__all__`) |
+| `vtscore/sync.py` | `SyncSource`, `LoadT`, `SaveT` (only `SyncSource` is in `__all__`) |
 
 ## The class
 
-`vtscore/sync/__init__.py` defines:
+`vtscore/sync.py` defines:
 
 ```python
 from typing import Any, Generic, TypeVar
@@ -174,7 +174,7 @@ an entry point - see [`plugins.md`](plugins.md) - and the standard
 `get_labelset_source("sqlite")` / `list_labelset_sources()` accessors
 pick it up.
 
-## What this package does *not* do
+## What this module does *not* do
 
 - **It does not auto-sync.** The ABC defines the `load` / `save` pair;
   the caller decides when to call them. For labelsets, the

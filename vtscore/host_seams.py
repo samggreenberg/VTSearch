@@ -5,7 +5,7 @@ library needs something only a host application can answer - "is this a
 Flask request?", "which dataset did this request name?", "persist this
 user preference" - it holds a module-level slot with a library default
 and exposes a ``register_*`` function for the host to fill it.
-``vtsearch/shim/`` fills all of them at app startup (see ``app.py``).
+``vtsearch/seam_wiring.py`` fills all of them at app startup (see ``app.py``).
 
 Each seam is deliberately declared next to the code that *calls* it, so
 this module does not own them; it owns the one thing no single seam can

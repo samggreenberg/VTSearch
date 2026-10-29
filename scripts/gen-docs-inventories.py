@@ -83,7 +83,7 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
 
 def _inventory() -> dict:
     """Full plugin inventory: library families plus the app-tier settings families."""
-    from vtsearch.shim import register_app_plugin_families
+    from vtsearch.seam_wiring import register_app_plugin_families
     from vtscore.plugins.inventory import gather_plugins
 
     register_app_plugin_families()
@@ -207,7 +207,7 @@ def build_plugin_families() -> str:
         f"(`python app.py --list-plugins`): {len(library)} library families self-register "
         f"when the library imports, and {len(app)} app-tier families (settings "
         f"importers/exporters/sources) are added by "
-        f"`vtsearch.shim.register_app_plugin_families()` at app startup — "
+        f"`vtsearch.seam_wiring.register_app_plugin_families()` at app startup — "
         f"{len(FAMILIES)} in total. Counts below are the built-in plugins shipped "
         f"in-tree; third-party entry-point plugins add to them."
     )
