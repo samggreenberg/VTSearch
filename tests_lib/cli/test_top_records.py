@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.cli._top_records``, the bounded heap behind ``--max-results`` (#5279).
+"""Tests for ``vtscore.cli.streaming._top_records``, the bounded heap behind ``--max-results`` (#5279).
 
 A ``--stream-results`` run writes each chunk's hits as it scores them, so its
 output is chunk-ordered.  ``--max-results N`` keeps each detector's N best
@@ -16,8 +16,9 @@ from collections.abc import Iterator
 
 import pytest
 
-from vtscore import cli_progress
-from vtscore.cli import _check_max_results, _top_records
+from vtscore.cli import progress as cli_progress
+from vtscore.cli.run import _check_max_results
+from vtscore.cli.streaming import _top_records
 
 
 class _Hit(dict):

@@ -236,7 +236,7 @@ def _log_mixed_space_drops(
     *should* leave out the media that live in another, rather than abort a long
     run or (worse, pre-#3650) stack their vectors into the wrong matrix.  But a
     quietly short haystack is exactly what hid that bug: the callers that
-    report skips (``vtscore.cli._emit_skipped_medias``) see a count, not a
+    report skips (``vtscore.cli.scoring._emit_skipped_medias``) see a count, not a
     reason, and library-tier callers see nothing at all.  So the layer that
     knows *why* says so, once per call rather than once per media.
 

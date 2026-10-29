@@ -281,7 +281,7 @@ the *pickle* loader, which still reads the whole file at once.
 
 ### S20: CLI autodetect scores every item, serial label resolution per detector
 
-**Files:** `vtscore/cli.py` (`_train_detectors_for_first_chunk`, serial
+**Files:** `vtscore/cli/detectors.py` (`_train_detectors_for_first_chunk`, serial
 `for det_name in detector_names:` loop), `vtsearch/routes/detectors/scoring.py`
 
 **Partly shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):

@@ -128,8 +128,6 @@ def _stub_split_training(monkeypatch):
     import torch
     from torch import nn
 
-    import vtscore.cli as cli_mod
-
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None, override_clipper=None):
         linear = nn.Linear(2, 1)
         with torch.no_grad():
@@ -139,7 +137,7 @@ def _stub_split_training(monkeypatch):
         mlp.eval()
         return {name: {"mlp": mlp, "threshold": 0.5} for name in detector_names}
 
-    monkeypatch.setattr(cli_mod, "_load_and_train_detectors", _fake_load_and_train)
+    monkeypatch.setattr("vtscore.cli.detectors._load_and_train_detectors", _fake_load_and_train)
 
 
 def _read_ndjson(path: Path) -> tuple[dict, list[dict]]:
@@ -182,9 +180,9 @@ class TestStreamingNdjsonExport:
 
     def test_the_header_carries_each_detectors_balance_state(self, client, tmp_path, monkeypatch, _stub_split_training):
         """Each detector's balance state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272, #4413)."""
-        import vtscore.cli as cli_mod
+        import vtscore.cli.detectors as cli_detectors
 
-        stub = cli_mod._load_and_train_detectors
+        stub = cli_detectors._load_and_train_detectors
         balance = {
             "beta": 1.0,
             "status": "unchecked",
@@ -195,7 +193,7 @@ class TestStreamingNdjsonExport:
             "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
         monkeypatch.setattr(
-            cli_mod,
+            cli_detectors,
             "_load_and_train_detectors",
             lambda *a, **k: {name: {**info, "balance": balance} for name, info in stub(*a, **k).items()},
         )
@@ -286,7 +284,7 @@ class TestStreamingSettingsExporterFallback:
 
 class TestStreamingExporterGuard:
     def test_non_streaming_exporter_raises(self):
-        from vtscore.cli import _run_streaming_pipeline
+        from vtscore.cli.streaming import _run_streaming_pipeline
 
         # open_url is a registered exporter with no incremental (streaming) mode.
         with pytest.raises(ValueError, match="does not support --stream-results"):
@@ -483,7 +481,7 @@ class TestStreamingAsLabelset:
         assert all(e["origin"] == {"importer": "stub_ds", "params": {}} for e in entries)
 
     def test_exporter_that_cannot_stream_a_labelset_is_refused(self):
-        from vtscore.cli import _run_streaming_pipeline
+        from vtscore.cli.streaming import _run_streaming_pipeline
 
         with pytest.raises(ValueError, match="cannot stream a labelset") as exc:
             _run_streaming_pipeline(
@@ -499,7 +497,8 @@ class TestStreamingAsLabelset:
         assert "server_json_file" in str(exc.value)
 
     def test_as_labelset_without_stream_results_is_refused(self, tmp_path):
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"))
         with pytest.raises(ValueError, match="requires stream_results"):
@@ -532,7 +531,8 @@ class TestStreamingAsLabelset:
         ds_path = tmp_path / "ds.pkl"
         _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
 
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="pickle", dataset_path=str(ds_path), chunk_size=2)
         with pytest.raises(ValueError, match="cannot stream a labelset"):
@@ -687,14 +687,16 @@ class TestStreamingMaxResults:
         assert "each detector's top 10 by score written to the exporter after the last chunk" in capsys.readouterr().out
 
     def test_without_stream_results_it_is_refused(self, tmp_path):
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"))
         with pytest.raises(ValueError, match="requires --stream-results"):
             _run_source(spec, save_dataset=False, dry_run=True, max_results=5)
 
     def test_with_resume_it_is_refused(self, tmp_path):
-        from vtscore.cli import _run_source, _SourceSpec
+        from vtscore.cli.run import _run_source
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "ds.pkl"), chunk_size=2)
         with pytest.raises(ValueError, match="cannot be combined with --resume"):

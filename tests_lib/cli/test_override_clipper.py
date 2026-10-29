@@ -14,8 +14,9 @@ import json
 
 import pytest
 
-from vtscore import cli_progress
-from vtscore.cli import _emit_dry_run_plan, _override_reclip, _resolve_override_clipper
+from vtscore.cli import progress as cli_progress
+from vtscore.cli.detectors import _override_reclip, _resolve_override_clipper
+from vtscore.cli.dry_run import _emit_dry_run_plan
 from vtscore.detectors.input_spec import resolve_clipper_spec
 
 FIVE_S = resolve_clipper_spec("sound_tiling", {"duration": "5"})
@@ -95,7 +96,7 @@ class TestOverrideReclip:
 
 class TestPipelineFileKey:
     def _load(self, tmp_path, block: str):
-        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.cli.pipeline import load_pipeline_file
 
         path = tmp_path / "flow.yaml"
         path.write_text(f"dataset: foo.pkl\n{block}")
@@ -128,11 +129,10 @@ class TestPipelineFileKey:
             self._load(tmp_path, block)
 
     def test_dispatch_hands_it_to_the_run(self, monkeypatch):
-        import vtscore.cli as vtcli
-        from vtscore.cli_pipeline import _dispatch
+        from vtscore.cli.pipeline import _dispatch
 
         seen: dict = {}
-        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        monkeypatch.setattr("vtscore.cli.run._run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
                 "dataset": "foo.pkl",

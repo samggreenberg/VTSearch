@@ -131,7 +131,7 @@ def _json_events(out: str) -> list[dict]:
 
 @contextmanager
 def _json_progress():
-    from vtscore import cli_progress
+    from vtscore.cli import progress as cli_progress
 
     cli_progress.set_format("json")
     try:
@@ -515,7 +515,8 @@ class TestSourceMediaType:
     """``--create-detector`` without ``--detector-media-type`` takes the type the outputs share."""
 
     def test_shared_type_is_the_sources(self):
-        from vtscore.cli import _source_media_type, _SourceSpec
+        from vtscore.cli.labels import _source_media_type
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="importer", importer_name="server_folder", outputs=(OutputSpec("image"),))
         assert _source_media_type(spec) == "image"
@@ -527,7 +528,8 @@ class TestSourceMediaType:
         assert _source_media_type(two) == "image"
 
     def test_mixed_types_declare_none(self):
-        from vtscore.cli import _source_media_type, _SourceSpec
+        from vtscore.cli.labels import _source_media_type
+        from vtscore.cli.sources import _SourceSpec
 
         spec = _SourceSpec(kind="importer", importer_name="server_folder", outputs=tuple(_outputs()))
         assert _source_media_type(spec) == ""

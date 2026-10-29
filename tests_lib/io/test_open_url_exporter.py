@@ -13,8 +13,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from vtscore import cli_progress
-from vtscore.cli import _run_exporter
+from vtscore.cli import progress as cli_progress
+from vtscore.cli.export import _run_exporter
 from vtscore.exporters import get_exporter
 from vtscore.exporters.open_url import MAX_URL_LENGTH, OpenUrlResultsExporter
 

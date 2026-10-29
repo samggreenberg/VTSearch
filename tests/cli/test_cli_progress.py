@@ -2,7 +2,7 @@
 
 Covers two layers:
 
-1. The :mod:`vtscore.cli_progress` module itself; format toggle, text /
+1. The :mod:`vtscore.cli.progress` module itself; format toggle, text /
    JSON output shape, error routing.
 2. End-to-end behaviour via :func:`vtscore.cli.autodetect_main`; the
    pipeline emits the documented events when invoked with the JSON format
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import make_dataset_file as _make_dataset_file
-from vtscore import cli_progress
+from vtscore.cli import progress as cli_progress
 
 from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.settings import get_detectors_dir
