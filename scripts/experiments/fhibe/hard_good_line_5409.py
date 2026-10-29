@@ -25,6 +25,7 @@ import atexit
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +46,7 @@ class Tags:
         self.hard_of = hard_of
         self.goods: list[tuple[float, bool]] = []
         self.n_labels: int | None = None
+        self.n_good: int | None = None
         self.stats = {"fold_calls": 0, "cuts": 0, "reach_hard_only": 0, "unmatched": 0, "missing_rows": 0}
 
     def folds(self, original):
@@ -115,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def fit_labels_line(orderings, corpus_scores, corpus_ids=None, labels=None):
         tags.n_labels = len(labels or {})
+        tags.n_good = sum(bool(v) for v in (labels or {}).values())
         return fit_line(orderings, corpus_scores, corpus_ids, labels)
 
     voting_iterations.fit_labels_line = fit_labels_line
@@ -145,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
         if log is not None:
             rec = {
                 "n_labels": tags.n_labels,
+                "n_good": tags.n_good,
+                "site": [f.name for f in traceback.extract_stack(limit=6)[:-2]],
                 "beta": float(beta),
                 "n_unvoted": int(s.size),
                 "standouts": standouts,
