@@ -21,7 +21,7 @@ import type { AutoFindExportStatus } from '../generated/api-client/models/auto-f
 import type { Hit } from '../generated/api-client/models/hit';
 
 // Plugin-metadata and listing payloads, all described by nested Marshmallow
-// schemas in `vtsearch/schemas/datasets.py` and `vtsearch/schemas/eval.py`.
+// schemas in `vtsearch/schemas/datasets/` and `vtsearch/schemas/eval.py`.
 export type { EmbedderInfo } from '../generated/api-client/models/embedder-info';
 export type { MediaTypeInfo } from '../generated/api-client/models/media-type-info';
 export type { ConverterInfo } from '../generated/api-client/models/converter-info';
