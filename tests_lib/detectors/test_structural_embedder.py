@@ -288,7 +288,7 @@ class TestSiftVladEmbedder:
     def _fresh_embedder(self):
         # Construct a fresh instance so the session-wide _stub_embedding_models
         # fixture (which patches the *registered* singletons) doesn't apply.
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
 
         return ImageSiftVladEmbedder()
 
@@ -430,7 +430,7 @@ class TestOneDetectionPerImage:
         return [{"media_path": m["media_path"]} for m in medias.values()]
 
     def test_the_embed_stage_detects_each_image_once(self, tmp_path, monkeypatch):
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
 
         medias = self._medias(tmp_path)
         calls = self._count_detections(monkeypatch)
@@ -442,7 +442,7 @@ class TestOneDetectionPerImage:
             assert m["local_features"].count > 0
 
     def test_vectors_and_features_equal_the_two_pass_outputs(self, tmp_path):
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
 
         medias = self._medias(tmp_path)
         ref_vectors, ref_features = self._two_pass_reference(self._copies(medias), ImageSiftVladEmbedder)
@@ -458,7 +458,7 @@ class TestOneDetectionPerImage:
 
     def test_the_backfill_still_covers_an_already_embedded_media(self, tmp_path, monkeypatch):
         """A pickle reload brings the vector back without the features; the back-fill derives them."""
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
 
         medias = self._medias(tmp_path, n=2)
         _, ref_features = self._two_pass_reference(self._copies(medias), ImageSiftVladEmbedder)
@@ -480,8 +480,8 @@ class TestOneDetectionPerImage:
         """A reference clip is embedded through a copy (``embed_view``); its features still reach the media."""
         from PIL import Image
 
-        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
-        from vtscore.media.lazy_clip import embed_view
+        from vtscore.media.image.embedders.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.clipping.lazy_clip import embed_view
 
         source = tmp_path / "source.png"
         Image.fromarray(_textured_image(seed=20, size=300), mode="L").save(source)
@@ -510,8 +510,8 @@ class TestOneDetectionPerImage:
 
     def test_document_tile_vectors_are_unchanged(self, tmp_path, monkeypatch):
         """``sift_vlad_doc`` derives its tiles from ``local_features``, so they must not move either."""
-        import vtscore.media.structural_tiles as st
-        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        import vtscore.media.structural.structural_tiles as st
+        from vtscore.media.image.embedders.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
 
         from tests_lib.detectors.test_structural_tiles import _cache_projection
 

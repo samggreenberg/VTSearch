@@ -52,7 +52,7 @@ class TestRegistration:
             assert emb.description_wrappers == []
 
     def test_image_to_dict(self):
-        from vtscore.media.image.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
+        from vtscore.media.image.embedders.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
 
         assert ImageEmbeddingGemma2Embedder().to_dict() == {
             "name": "embeddinggemma2",
@@ -67,7 +67,7 @@ class TestRegistration:
         }
 
     def test_image_batch_defaults_small_but_env_wins(self, monkeypatch):
-        from vtscore.media.image.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
+        from vtscore.media.image.embedders.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
 
         monkeypatch.delenv("VTSEARCH_EMBED_BATCH_SIZE", raising=False)
         assert ImageEmbeddingGemma2Embedder().embed_batch_size == 8
@@ -131,7 +131,7 @@ class TestPooledForward:
         assert m[0]["content"] == [{"type": "image", "image": "PIL"}]
 
     def test_image_text_query_goes_through_the_prefix(self):
-        from vtscore.media.image.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
+        from vtscore.media.image.embedders.embedder_embeddinggemma2 import ImageEmbeddingGemma2Embedder
 
         emb = ImageEmbeddingGemma2Embedder()
         emb._model = _FakeModel(torch.ones((1, 2, 4)))

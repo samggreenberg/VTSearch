@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from vtscore.concurrency.progress import ProgressTracker
-from vtscore.datasets.load_pipeline import _TOTAL_STAGE_STEPS, _make_staging_progress
+from vtscore.datasets.load_staging import _TOTAL_STAGE_STEPS, _make_staging_progress
 
 _STAGE_EXTRAS = {"step": None, "total_steps": None, "overall": None, "eta_seconds": None, "error": None}
 

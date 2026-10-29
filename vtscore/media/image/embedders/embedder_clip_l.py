@@ -14,7 +14,7 @@ app, and an eval arm that leaks into the picker is a model users can choose on
 the strength of a study that never asked whether it is *good*, only whether it
 *agrees*.
 
-Why ``patch14`` and not the already-shipped :mod:`~vtscore.media.image.embedder_clip`
+Why ``patch14`` and not the already-shipped :mod:`~vtscore.media.image.embedders.embedder_clip`
 (``clip-vit-base-patch32``): this checkpoint emits **768-d** vectors, exactly
 like ``siglip``, which takes output dimensionality off the table as an
 explanation for any difference.  The base/32 arm is run *beside* it rather than
@@ -37,7 +37,7 @@ from vtscore.media.embedder import (
     timed_progress,
     to_compute_device,
 )
-from vtscore.media.image._cross_modal_shared import _CrossModalHFEmbedder
+from vtscore.media.image.embedders._cross_modal_shared import _CrossModalHFEmbedder
 
 
 class ImageClipLargeEmbedder(_CrossModalHFEmbedder):

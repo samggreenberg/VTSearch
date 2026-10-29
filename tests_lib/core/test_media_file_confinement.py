@@ -144,14 +144,14 @@ class TestLazyClipSourceConfinement:
     """A clip recipe must not be a way around the ``media_path`` guard."""
 
     def test_escaping_source_path_reads_nothing(self, multi_user, tmp_path):
-        from vtscore.media.lazy_clip import _read_source_bytes
+        from vtscore.media.clipping.lazy_clip import _read_source_bytes
 
         secret = tmp_path / "secret.bin"
         secret.write_bytes(b"classified")
         assert _read_source_bytes({"media_path": str(secret)}) is None
 
     def test_confined_source_path_is_read(self, multi_user):
-        from vtscore.media.lazy_clip import _read_source_bytes
+        from vtscore.media.clipping.lazy_clip import _read_source_bytes
 
         user_dir, _ = multi_user
         source = user_dir / "source.wav"

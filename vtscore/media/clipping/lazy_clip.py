@@ -28,13 +28,13 @@ Three recipe families participate:
   ``converter_n_out`` / ``converter_content_hash``) via the shared
   :func:`~vtscore.datasets.clipper_chain._select_chain_output` selector.
 
-* **chain replays** - some :class:`~vtscore.media.cleaner.MediaCleaner`
+* **chain replays** - some :class:`~vtscore.media.clipping.cleaner.MediaCleaner`
   rewrote the payload (a silence trim, an edge trim, a whitespace pass), which
   no slice of the source reproduces, or a clipper cut a converter's output (a
   rendered page tiled, a document's text split into sentences), which the
   converter alone does not.  The recipe is the unit's whole chain trail
   (``origin.params['clipper_chain']``), led for a converter output by the
-  converter itself (:func:`~vtscore.media.clip_recipe.converter_trail`): the
+  converter itself (:func:`~vtscore.media.clipping.clip_recipe.converter_trail`): the
   source is loaded the way the import hydrated it (:func:`load_reference_source`)
   or handed it to the converter, every recorded step is re-run via
   :func:`~vtscore.datasets.clipper_chain.replay_chain_on_media`, and the
@@ -67,7 +67,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
-from vtscore.media.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
+from vtscore.media.clipping.clip_recipe import converter_trail, parse_clip_box, parse_converter_recipe
 
 log = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ def _converter_recipe(params: dict[str, Any]) -> tuple | None:
     """Build a hashable converter recipe from ``origin.params``, or ``None``.
 
     Parsing is shared with the resolver's replay path via
-    :func:`~vtscore.media.clip_recipe.parse_converter_recipe`; what stays local
+    :func:`~vtscore.media.clipping.clip_recipe.parse_converter_recipe`; what stays local
     is the *gate*.  A recipe with no sub-output disambiguator cannot pick the
     right output, so it is treated here as "not a lazy converter media"
     (``None``) and the caller falls through to its normal resolution order,
@@ -187,7 +187,7 @@ def _converter_output_recipe(params: dict[str, Any], media_type: Any) -> tuple |
     A unit that *is* the converter's output - nothing after the converter cut
     or rewrote it - replays the converter alone (:func:`_converter_recipe`).
     One a clipper cut or a cleaner rewrote replays the converter and then the
-    rest of its trail (:func:`~vtscore.media.clip_recipe.converter_trail`),
+    rest of its trail (:func:`~vtscore.media.clipping.clip_recipe.converter_trail`),
     checked like any chain replay.  ``None`` when that trail cannot be read or
     checked (a type outside :data:`CHAIN_REPLAY_TYPES`, no recorded content
     hash): the converter alone would rebuild the whole page, not the tile.
@@ -423,7 +423,7 @@ def _replay_source(path: Path, media_type: str, steps: list[dict[str, Any]]) -> 
     """Rebuild, from the reference source at *path*, what the first of *steps* saw at import.
 
     A converter-led trail (a flat converter output, see
-    :func:`~vtscore.media.clip_recipe.converter_trail`) starts from what a
+    :func:`~vtscore.media.clipping.clip_recipe.converter_trail`) starts from what a
     reference import's ``run_converters_on_folder`` handed the converter: the
     file's name and path, which the converter reads itself.  Any other trail
     starts from the parent the import hydrated (:func:`load_reference_source`).

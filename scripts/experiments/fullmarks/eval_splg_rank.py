@@ -87,7 +87,7 @@ def rank_splg_siglip(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media import get_embedder  # noqa: PLC0415
-    from vtscore.media.structural_splg import SplgMatcher  # noqa: PLC0415
+    from vtscore.media.structural.structural_splg import SplgMatcher  # noqa: PLC0415
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)

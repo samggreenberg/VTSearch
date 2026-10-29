@@ -15,7 +15,7 @@ from vtscore.media.embedder import (
     timed_progress,
     to_compute_device,
 )
-from vtscore.media.image._cross_modal_shared import _CrossModalHFEmbedder
+from vtscore.media.image.embedders._cross_modal_shared import _CrossModalHFEmbedder
 
 
 class ImageSiglipEmbedder(_CrossModalHFEmbedder):
@@ -57,7 +57,7 @@ class ImageSiglipEmbedder(_CrossModalHFEmbedder):
 
         #3127 measured enrichment on/off over the image eval corpora and every
         one of the four non-identity templates inherited from
-        :class:`~vtscore.media.image._cross_modal_shared._CrossModalHFEmbedder`
+        :class:`~vtscore.media.image.embedders._cross_modal_shared._CrossModalHFEmbedder`
         scored *below* the typed query here; the ensemble only netted out to
         -0.001 +/- 0.002 AP because the bare ``"{text}"`` template averages the
         plain query back in.  Dropping them makes the Enrich Sort Descriptions

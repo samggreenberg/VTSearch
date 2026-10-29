@@ -38,7 +38,7 @@ Seam                                    Declared in
 ``core_config_builder``                 :mod:`vtscore.config.core_config`
 ``setting_getters`` (keyed)             :mod:`vtscore.config.core_config`
 ``settings_path_redirect``              :mod:`vtscore.config.core_config`
-``last_embedder_persistence_hook``      :mod:`vtscore.datasets.load_pipeline`
+``last_embedder_persistence_hook``      :mod:`vtscore.datasets.load_workers`
 ``setting_persisters`` (keyed)          :mod:`vtscore.state`
 ``achievement_recorders`` (keyed)       :mod:`vtscore.achievements_hooks`
 ======================================  ============================================
@@ -95,7 +95,7 @@ def capture_host_seams() -> HostSeams:
     """
     import vtscore.achievements_hooks as achievements_hooks  # noqa: PLC0415
     import vtscore.config.core_config as core_config  # noqa: PLC0415
-    import vtscore.datasets.load_pipeline as load_pipeline  # noqa: PLC0415
+    import vtscore.datasets.load_workers as load_workers  # noqa: PLC0415
     import vtscore.state as state  # noqa: PLC0415
     import vtscore.state.core as state_core  # noqa: PLC0415
     import vtscore.state.current_user as current_user  # noqa: PLC0415
@@ -108,7 +108,7 @@ def capture_host_seams() -> HostSeams:
         core_config_builder=core_config._core_config_builder,
         setting_getters=dict(core_config._setting_getters),
         settings_path_redirect=core_config._settings_path_redirect,
-        last_embedder_persistence_hook=load_pipeline._last_embedder_persistence_hook,
+        last_embedder_persistence_hook=load_workers._last_embedder_persistence_hook,
         setting_persisters=dict(state._setting_persisters),
         achievement_recorders=dict(achievements_hooks._recorders),
     )
@@ -124,7 +124,7 @@ def restore_host_seams(seams: HostSeams) -> None:
     """
     import vtscore.achievements_hooks as achievements_hooks  # noqa: PLC0415
     import vtscore.config.core_config as core_config  # noqa: PLC0415
-    import vtscore.datasets.load_pipeline as load_pipeline  # noqa: PLC0415
+    import vtscore.datasets.load_workers as load_workers  # noqa: PLC0415
     import vtscore.state as state  # noqa: PLC0415
     import vtscore.state.core as state_core  # noqa: PLC0415
     import vtscore.state.current_user as current_user  # noqa: PLC0415
@@ -135,7 +135,7 @@ def restore_host_seams(seams: HostSeams) -> None:
     current_user._request_user_resolver = seams.request_user_resolver
     core_config._core_config_builder = seams.core_config_builder
     core_config._settings_path_redirect = seams.settings_path_redirect
-    load_pipeline._last_embedder_persistence_hook = seams.last_embedder_persistence_hook
+    load_workers._last_embedder_persistence_hook = seams.last_embedder_persistence_hook
 
     core_config._setting_getters.clear()
     core_config._setting_getters.update(seams.setting_getters)

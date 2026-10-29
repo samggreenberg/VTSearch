@@ -51,7 +51,7 @@ def _attach_optional_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
     """Copy the sometimes-present per-media fields onto a batch payload *out*.
 
     ``has_original`` marks an item some
-    :class:`~vtscore.media.cleaner.MediaCleaner` actually rewrote at load time
+    :class:`~vtscore.media.clipping.cleaner.MediaCleaner` actually rewrote at load time
     (it kept a pre-clean snapshot), which is what gates the detail viewer's
     Clean/Original toggle and the byte routes' ``?variant=original``.
     """

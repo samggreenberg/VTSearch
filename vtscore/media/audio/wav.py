@@ -1,7 +1,7 @@
 """WAV byte-level helpers: duration and slicing, without decoding to a waveform.
 
 These are the low-level primitives the audio clipper, the silence cleaner and
-the two clip-replay paths (:mod:`vtscore.media.lazy_clip`,
+the two clip-replay paths (:mod:`vtscore.media.clipping.lazy_clip`,
 :mod:`vtscore.detectors.resolver`) all need: read a WAV byte string's duration,
 and cut a sub-range out of it *as WAV bytes*.  They live here rather than in the
 clipper because three modules outside that clipper — two of them in other
