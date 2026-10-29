@@ -93,6 +93,27 @@ describe('DatasetCardComponent', () => {
     expect(el.textContent).toContain('100');
   });
 
+  it('shows no dropped badge for a dataset that dropped nothing', () => {
+    expect(fixture.nativeElement.querySelector('.dropped-badge')).toBeFalsy();
+  });
+
+  // Issue #3798: a dataset that lost items says so on its row, after the toast is gone.
+  it('flags dropped items in the Items cell, and opens Stats without selecting the row', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, num_dropped: 4 });
+    await settleZoneless(fixture);
+    const statsSpy = vi.fn();
+    const rowSpy = vi.fn();
+    component.stats.subscribe(statsSpy);
+    component.rowClick.subscribe(rowSpy);
+
+    const badge = fixture.nativeElement.querySelector('.dropped-badge') as HTMLButtonElement;
+    expect(badge.textContent?.trim()).toBe('4 dropped');
+    badge.click();
+
+    expect(statsSpy).toHaveBeenCalledTimes(1);
+    expect(rowSpy).not.toHaveBeenCalled();
+  });
+
   it('should hide the load button when already loaded', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.load-btn')).toBeFalsy();
