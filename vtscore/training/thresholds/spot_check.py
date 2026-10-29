@@ -152,7 +152,7 @@ class LineRanking:
     """The ranking a detector's line is drawn over: the haystack the last retrain scored, sorted.
 
     *ids* and *scores* are aligned and sorted by score descending (ties by id),
-    with unscorable media (:func:`~vtscore.utils.scores.scored_mask`) left out.
+    with unscorable media (:func:`~vtscore.training.thresholds.knobs.scored_mask`) left out.
     *voted* names the items the trainer held as voted - the labelset's items
     resolved into the haystack - which never enter a candidate; the caller adds
     the live votes cast since (:meth:`unvoted_ids`).
@@ -172,7 +172,7 @@ class LineRanking:
     def from_scores(
         cls, ids: Sequence[int], scores: Sequence[float] | np.ndarray, voted: Iterable[int] | None = None
     ) -> "LineRanking":
-        from vtscore.utils.scores import scored_mask  # noqa: PLC0415
+        from vtscore.training.thresholds.knobs import scored_mask  # noqa: PLC0415
 
         id_arr = np.asarray(list(ids), dtype=np.int64)
         score_arr = np.asarray(scores, dtype=np.float64)

@@ -60,7 +60,7 @@ whose `__init__.py` re-exports nothing.
 | `vtscore.security` | Path / URL validation, allowlist pickle loader, the `LoginProvider` ABC | [packages/security.md](packages/security.md) |
 | `vtscore.projection` | VTSBrowse: UMAP layout, hex-tile pyramid, region signposts | [packages/projection.md](packages/projection.md) |
 | `vtscore.timing` | Shipped per-step weights behind every progress bar | [packages/timing.md](packages/timing.md) |
-| `vtscore.utils` | Hit dicts, content hashes, score sanitisation, server-side file I/O, synthetic media | [packages/utils.md](packages/utils.md) |
+| `vtscore.utils` | Content hashes, AGPL opt-out errors, server-side file I/O, synthetic media | [packages/utils.md](packages/utils.md) |
 | `vtscore.cli` | Flask-free CLI entry points (autodetect, pipeline, progress) | [packages/cli.md](packages/cli.md) |
 | `vtscore.host` | The host seams: achievement recorders, and the snapshot / restore of every seam | [architecture.md](architecture.md#dependency-direction), [integration.md](integration.md#putting-the-seams-back-in-tests) |
 

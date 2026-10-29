@@ -113,7 +113,7 @@ deliver an empty export.
 }
 ```
 
-Each hit is built by `vtscore.utils.hits.build_media_hit`; the
+Each hit is built by `vtscore.datasets.labelset.build_media_hit`; the
 `ResultsExporter.export_find_results` docstring has the full key list
 (origin, `custom_metadata`, clip bounds) and what `balance` holds.
 

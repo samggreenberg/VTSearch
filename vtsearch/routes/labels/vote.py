@@ -28,9 +28,8 @@ from vtsearch.state import (
     get_active_detector_context,
     resolve_media_ids,
 )
-from vtscore.datasets.labelset import imported_region_box
+from vtscore.datasets.labelset import build_media_hit, hit_custom_metadata, imported_region_box
 from vtscore.datasets.vote_provenance import read_provenance
-from vtscore.utils.hits import build_media_hit, hit_custom_metadata
 
 logger = logging.getLogger(__name__)
 

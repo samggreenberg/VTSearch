@@ -10,15 +10,18 @@ Remaining here:
   content fingerprints. Use these instead of ``hashlib`` directly so the
   non-security declaration stays in one place (keeps MD5 working on
   FIPS-enabled hosts).
-- :mod:`vtscore.utils.hits` - ``build_media_hit`` helper for scoring/route hit dicts.
-- :mod:`vtscore.utils.import_metadata` - ``seed_packages_distributions``, the
-  stat-free stand-in for ``importlib.metadata.packages_distributions`` that
-  keeps transformers' module-level call from walking every installed
-  distribution's file list at startup.
+- :mod:`vtscore.utils.io` - server-side file I/O for plugins: JSON reads,
+  atomic and resumable writes, CSV-cell escaping, a cross-process file lock.
+  It was the top-level ``vtscore.io`` (#5398), now a deprecated alias of it.
 - :mod:`vtscore.utils.optional_deps` - actionable messages for the opt-out AGPL
   packages (``ultralytics``, ``PyMuPDF``), which a default install has but an
   ``VTSEARCH_NO_AGPL=1`` install deliberately lacks.
-- :mod:`vtscore.utils.scores` - ``sigmoid_to_finite_scores``/``finite_or`` for
-  JSON-safe head scoring (no NaN/Infinity leaks to strict clients).
 - :mod:`vtscore.utils.synthetic` - Synthetic media generators for the offline demo importer.
+
+Deprecated aliases (#5399), each handing back the module its helpers were
+folded into:
+
+- :mod:`vtscore.utils.hits` - now :mod:`vtscore.datasets.labelset`.
+- :mod:`vtscore.utils.import_metadata` - now :mod:`vtscore.media.torch_utils.torch_setup`.
+- :mod:`vtscore.utils.scores` - now :mod:`vtscore.training.thresholds.knobs`.
 """

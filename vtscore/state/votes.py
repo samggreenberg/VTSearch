@@ -1,4 +1,4 @@
-"""Vote management, label history, text-sort suggestions, and learned scores.
+"""Vote management, click times, label history, text-sort suggestions, and learned scores.
 
 Also contains compound vote operations (toggle_vote, apply_label) that
 coordinate across vote dicts, click tracking, and the coverage atlas.
@@ -15,13 +15,37 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.state.clicks import assign_click_time, remove_click_time
 from vtscore.state.core import (
     _state_lock,
     get_active_context,
     get_active_detector_context,
 )
 from vtscore.state.coverage import coverage_atlas_label, coverage_atlas_unlabel
+
+
+def assign_click_time(media_id: int) -> int:
+    """Assign the next click-time ordinal to a media and return it.
+
+    Each call increments the active detector's counter so click-times are
+    unique and monotonically increasing within that detector's session.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        ctx.click_counter += 1
+        ctx.vote_click_times[media_id] = ctx.click_counter
+        return ctx.click_counter
+
+
+def remove_click_time(media_id: int) -> None:
+    """Remove the click-time entry for a media (e.g. when unlabelling)."""
+    with _state_lock:
+        get_active_detector_context().vote_click_times.pop(media_id, None)
+
+
+def get_vote_click_times() -> dict[int, int]:
+    """Return a copy of the click-time mapping."""
+    with _state_lock:
+        return get_active_detector_context().vote_click_times.copy()
 
 
 def clear_votes() -> None:

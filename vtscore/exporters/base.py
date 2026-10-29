@@ -350,7 +350,7 @@ class ResultsExporter(PluginBase):
                          }
 
                      Each hit comes from
-                     :func:`vtscore.utils.hits.build_media_hit`: ``id``,
+                     :func:`vtscore.datasets.labelset.build_media_hit`: ``id``,
                      ``filename``, ``category``, ``score``, plus ``origin`` /
                      ``origin_name`` / ``md5``, the importer-supplied
                      ``custom_metadata`` (when the media carries any - this is
@@ -686,7 +686,7 @@ class ResultsExporter(PluginBase):
                 the header, detector by detector, each one's sorted by score,
                 highest first, all of them once the last chunk is scored.
                 Each *hit* is the dict from
-                :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
+                :func:`vtscore.datasets.labelset.build_media_hit` plus a ``"label"``
                 key (``"good"`` for above-threshold, ``"bad"`` otherwise).
             field_values: Mapping of :attr:`PluginField.key` → value.
 

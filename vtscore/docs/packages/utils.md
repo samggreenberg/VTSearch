@@ -5,140 +5,19 @@ Small cross-cutting helpers with no better topical home. The package
 
 There is a theme to what stays: each module is a **single chokepoint**
 for something that would otherwise be re-implemented at dozens of call
-sites and drift. One hit-dict shape, one place that declares MD5 as
-non-security, one non-finite score sentinel, one wording for the
-"AGPL extra not installed" error, one stat-free package-metadata walk, one atomic-write ritual.
+sites and drift. One place that declares MD5 as non-security, one
+wording for the "AGPL extra not installed" error, and one atomic-write
+ritual.
 
 ## Contents
 
 | Module | Concern |
 |--------|---------|
 | `vtscore/utils/io.py` | Server-side file I/O for plugins: JSON reads, atomic and resumable writes, CSV-cell escaping, a cross-process file lock |
-| `vtscore/utils/hits.py` | `build_media_hit` - the scored-media hit-dict shape; `hit_custom_metadata` - the one filter for served importer metadata |
 | `vtscore/utils/hashing.py` | Content fingerprints (`content_md5`, `content_sha1`, `new_md5`, `file_md5`) |
-| `vtscore/utils/scores.py` | Non-finite score sanitisation, so a `NaN` logit can't produce invalid JSON |
 | `vtscore/utils/optional_deps.py` | Actionable errors when an opt-out AGPL dependency isn't installed |
-| `vtscore/utils/import_metadata.py` | `seed_packages_distributions` / `fast_packages_distributions` - a stat-free `importlib.metadata.packages_distributions` |
 | `vtscore/utils/synthetic/` | Offline synthetic media generators (`audio.py`, `images.py`, `video.py`) |
-
-## `vtscore.utils.hits.build_media_hit`
-
-The single source of truth for the scored-media hit-dict shape, used
-wherever scored rows are assembled (e.g. `vtscore.cli` autodetect
-results). If you score a media against a detector and want to
-return the result, build the row through this function rather than
-constructing the dict by hand - that's how new optional fields
-(clip boundaries, MD5, origin) get picked up automatically.
-
-```python
-def build_media_hit(
-    cid: int,
-    media: dict[str, Any],
-    score: float,
-    **extra: Any,
-) -> dict[str, Any]:
-```
-
-Defined in `vtscore/utils/hits.py`.
-
-### Shape
-
-The returned dict always has these keys:
-
-| Key        | Type    | Source                                                       |
-|------------|---------|--------------------------------------------------------------|
-| `id`       | `int`   | the *cid* argument                                           |
-| `filename` | `str`   | `media["filename"]`, falling back to `f"media_{cid}"`        |
-| `category` | `str`   | `media["category"]`, falling back to `"unknown"`             |
-| `score`    | `float` | `round(score, 4)`                                            |
-
-Optional keys are added only when the corresponding field is present
-on *media*:
-
-| Key               | Added when…                                        |
-|-------------------|----------------------------------------------------|
-| `custom_metadata` | `media["custom_metadata"]` is a non-empty dict      |
-| `origin`          | `media["origin"] is not None`                      |
-| `origin_name`     | `media["origin_name"]` is truthy                   |
-| `md5`             | `media["md5"]` is truthy                           |
-| `clip_start`      | `media["clip_start"] is not None`                  |
-| `clip_end`        | `media["clip_end"] is not None`                    |
-| `clip_box`        | `media["clip_box"] is not None`                    |
-| `clip_index`      | `media["clip_index"] is not None`                  |
-
-`custom_metadata` is the importer-supplied metadata the media carries
-(asset ids, catalogue rows, whatever the source system attached), and
-it is what lets an exporter correlate a hit back to that system. It is
-a fresh dict, so mutating it cannot reach back into the loaded media,
-and the `embedding` key is stripped: that key is the pre-computed
-vector channel of `custom_metadata_map`, consumed at load time, and a
-numpy array has no business in an export.
-
-The `clip_*` keys are how sub-medias produced by a clipper round-trip
-through scoring. They are passed through unchanged so the consumer
-can reconstruct the time-range / spatial-region the score applies
-to.
-
-### Example
-
-```python
-from vtscore.utils.hits import build_media_hit
-
-media = {
-    "filename": "talk_01.wav",
-    "category": "podcast",
-    "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
-    "origin_name": "/srv/sounds/talk_01.wav",
-    "md5": "abc123",
-    "custom_metadata": {"asset_id": "XY-7"},
-    "clip_start": 12.5,
-    "clip_end": 17.5,
-    "clip_index": 2,
-}
-
-hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
-
-# hit == {
-#     "id": 42,
-#     "filename": "talk_01.wav",
-#     "category": "podcast",
-#     "score": 0.873,
-#     "custom_metadata": {"asset_id": "XY-7"},
-#     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
-#     "origin_name": "/srv/sounds/talk_01.wav",
-#     "md5": "abc123",
-#     "clip_start": 12.5,
-#     "clip_end": 17.5,
-#     "clip_index": 2,
-#     "label": "good",
-# }
-```
-
-Extra keyword arguments are merged in last, so callers can attach
-detector-specific or call-site-specific fields (`label="good"`,
-`detector="my-detector"`) without needing to extend this function.
-
-## `vtscore.utils.hits.hit_custom_metadata`
-
-```python
-def hit_custom_metadata(media: dict[str, Any]) -> dict[str, Any]:
-```
-
-The filter `build_media_hit` applies to `media["custom_metadata"]`, exposed
-on its own for every other surface that serves that dict to an outside
-caller. Returns a **fresh** dict - mutating it cannot reach back into the
-loaded media - carrying the importer's metadata minus the `embedding` key,
-and `{}` when the media has no `custom_metadata` (or a non-dict one).
-
-Reach for it anywhere a media's `custom_metadata` leaves the process: an
-export row, an API response, a payload handed to a plugin. Filtering the
-media's *top-level* keys is not enough, because `custom_metadata_map` lets
-an importer ship a pre-computed vector **nested inside** `custom_metadata`
-(see `vtscore.datasets.loader_folder.load_dataset_from_folder`). That vector
-is consumed at load time and is a numpy array, so left in it breaks
-`json.dumps` - and persisting it would be exactly the vector persistence the
-[no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule)
-forbids.
+| `vtscore/utils/hits.py`, `scores.py`, `import_metadata.py` | Deprecated aliases (#5399) for the modules their helpers were folded into; see the table below |
 
 ## `vtscore.utils.hashing` - content fingerprints
 
@@ -166,55 +45,6 @@ non-security use and those builds then allow the digest.
 Call these instead of `hashlib` directly for anything that fingerprints
 content, so the declaration is made in one place and the next
 environment quirk is a one-file change.
-
----
-
-## `vtscore.utils.scores` - non-finite score sanitisation
-
-```python
-NON_FINITE_SCORE_SENTINEL: float = -1.0
-
-def sigmoid_to_finite_scores(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> list[float]: ...
-def sigmoid_to_finite_array(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> np.ndarray: ...
-def finite_or(value, default=NON_FINITE_SCORE_SENTINEL) -> float: ...
-def scored_mask(scores) -> np.ndarray: ...
-def scored_only(scores) -> np.ndarray: ...
-```
-
-A trained head can emit `NaN` logits when training destabilises - bad
-optimisation, corrupted input embeddings, AMP overflow on CUDA, an
-extreme class-weight shift. `torch.sigmoid(NaN)` is `NaN`, and
-`json.dumps` will happily emit the bare token `NaN` (and
-`Infinity` / `-Infinity`), which is invalid JSON per RFC 7159 and is
-rejected by every browser's `JSON.parse`.
-
-So every score-emitting path routes through one sentinel. `-1.0` sits
-*outside* the `[0, 1]` sigmoid range, which buys two things: `score >=
-threshold` is always `False` for a sanitised score, so broken items fall
-deterministically to the bottom of any sort; and a UI that renders a
-missing score as `-1` shows it exactly like "no score yet".
-
-Use `sigmoid_to_finite_scores` in place of
-`torch.sigmoid(model(X)).squeeze(1).cpu().tolist()` at any site whose
-output reaches a JSON response. Use `sigmoid_to_finite_array` where the
-output feeds straight into numpy math (e.g. segmented max-pool): it ends
-in `.numpy()` instead of `.tolist()`, avoiding a pure-Python,
-GIL-holding O(N) pass that matters on the background training thread.
-`finite_or` is the defensive guard for already-stored floats such as
-`DetectorContext.last_learned_scores`.
-
-`scored_mask` / `scored_only` are the other side of the sentinel: they
-say which entries of a score list are *observations* at all. The
-sentinel means "this media could not be scored", which is a different
-statement from "this media scored low", so anything that fits a
-distribution - every threshold estimator in
-`vtscore.training.thresholds` - drops it first. Skipping that step is
-not a rounding error but a sign flip: a spike a full unit below the
-sigmoid range pulls the fitted cut under zero, where every real score
-clears it and the detector reports the whole dataset as a hit.
-`scored_mask` returns the mask rather than the filtered array so
-a caller holding a score list *and* its labels (a calibration ordering)
-drops the same positions from both.
 
 ---
 
@@ -251,26 +81,6 @@ except ImportError as exc:
 
 Raise it `from` the original so a genuinely broken install stays
 distinguishable from a deliberately absent one.
-
----
-
-## `vtscore.utils.import_metadata` - stat-free package metadata
-
-```python
-def fast_packages_distributions() -> Mapping[str, list[str]]: ...
-def seed_packages_distributions() -> bool: ...
-```
-
-`transformers` calls `importlib.metadata.packages_distributions()` at
-module import time, and the stdlib implementation `stat()`s every file
-recorded by every installed distribution - tens of thousands of calls,
-which on an NFS-mounted venv can stall startup for minutes.
-`fast_packages_distributions` builds the same mapping from each
-distribution's `top_level.txt` (falling back to parsing `RECORD` as text)
-without touching the recorded files. `seed_packages_distributions()`
-installs it over the stdlib function; call it once, early, **before
-anything imports `transformers`**. It is idempotent and best-effort
-(returns `False` when the swap could not be made).
 
 ---
 
@@ -490,6 +300,9 @@ name alone, and where they actually live:
 | path / URL / pickle safety | `vtscore.security`                           |
 | audio helpers (wav, resample) | `vtscore.media.audio`                     |
 | runtime config            | `vtscore.config`                              |
+| hit dicts (`build_media_hit`, `hit_custom_metadata`) | `vtscore.datasets.labelset` ([`datasets.md`](datasets.md#hits)); `vtscore.utils.hits` is a deprecated alias |
+| non-finite score sentinel, `scored_only` / `scored_mask` | `vtscore.training.thresholds.knobs` ([`training.md`](training.md#unscorable-media-non_finite_score_sentinel-scored_only)); `vtscore.utils.scores` is a deprecated alias |
+| the stat-free `packages_distributions` seed | `vtscore.media.torch_utils.torch_setup` ([`media.md`](media.md#stat-free-package-metadata)); `vtscore.utils.import_metadata` is a deprecated alias |
 
 This package is small on purpose: new helpers should land in the topical
 package they belong to.
@@ -498,9 +311,6 @@ package they belong to.
 
 ## Cross-references
 
-- [`cli.md`](cli.md) - the autodetect pipeline, which builds every result row through `build_media_hit`.
-- [`exporters.md`](exporters.md#resultsexporter-abc) - the `find_results` payload and streamed `records` whose hits have that shape.
-- [`training.md`](training.md#decision-thresholds) - the threshold estimators that drop unscorable media with `scored_only` / `scored_mask` before fitting.
 - [`datasets.md`](datasets.md#what-you-load-into) - the `md5` every loader stamps with `content_md5` / `file_md5`; the built-in [`synthetic` importer](datasets.md#built-in-importers) wraps `vtscore.utils.synthetic`.
 - [`exporters.md`](exporters.md#writing-a-custom-exporter) and [`labels.md`](labels.md#built-in-label-importers) - the file exporters, label importers and JSON source that read and write through `vtscore.utils.io`.
 - [`detectors.md`](detectors.md#registry) and [`datasets.md`](datasets.md#on-disk-dataset-registry) - the two registries whose index files are written with `atomic_write_json` under `file_lock`.

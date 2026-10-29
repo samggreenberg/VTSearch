@@ -503,7 +503,7 @@ def fit_linear_svm_head(
 
     Scores stay comparable to the logistic head's because both end in
     ``sigmoid(w·x + b)``: production applies the sigmoid downstream
-    (:func:`vtscore.utils.scores.sigmoid_to_finite_scores`), which reproduces
+    (:func:`vtscore.training.thresholds.knobs.sigmoid_to_finite_scores`), which reproduces
     :meth:`SVMClassifier.predict_proba`'s ``decision_sigmoid`` mode value for
     value.  Neither head's output is a calibrated probability - the decision
     point is the separately calibrated threshold, not 0.5.

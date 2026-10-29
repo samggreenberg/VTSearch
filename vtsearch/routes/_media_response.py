@@ -13,7 +13,7 @@ from flask import make_response, request, send_file
 
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtscore.utils.hashing import content_md5, new_md5
-from vtscore.utils.hits import hit_custom_metadata
+from vtscore.datasets.labelset import hit_custom_metadata
 
 
 def _sniff_image_mimetype(data: bytes) -> str:
@@ -122,7 +122,7 @@ def media_info_for_response(media: dict) -> dict:
     Two filters, because one is not enough.  The top-level
     :data:`_HEAVYWEIGHT_KEYS` sweep drops the vectors and the raw bytes, and
     then ``custom_metadata`` is re-derived through
-    :func:`vtscore.utils.hits.hit_custom_metadata`: an importer may ship a
+    :func:`vtscore.datasets.labelset.hit_custom_metadata`: an importer may ship a
     pre-computed vector *nested* inside it via ``custom_metadata_map``, which
     a top-level key filter cannot see and which the free-form
     ``fields.Dict`` in the response schemas waves straight through.  Left in,
